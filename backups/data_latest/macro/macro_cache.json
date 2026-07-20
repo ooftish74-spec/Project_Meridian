@@ -1,0 +1,10 @@
+{
+  "collected_at": "2026-07-05T06:00:21.563123",
+  "rows": 272,
+  "cols": [
+    "high_yield_spread",
+    "copper_gold_ratio",
+    "cboe_skew",
+    "gscpi"
+  ]
+}

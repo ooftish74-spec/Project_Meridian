@@ -1,0 +1,307 @@
+{
+  "timestamp": "2026-05-14T15:41:45.656109",
+  "n_tickers": 300,
+  "n_features": 34,
+  "feature_ic": {
+    "lag_1": {
+      "mean_ic": 0.2099,
+      "std_ic": 0.1558,
+      "ir": 1.3466,
+      "t_stat": 23.2851,
+      "pct_positive": 0.91,
+      "n_tickers": 299
+    },
+    "lag_2": {
+      "mean_ic": 0.1984,
+      "std_ic": 0.1559,
+      "ir": 1.273,
+      "t_stat": 22.0124,
+      "pct_positive": 0.896,
+      "n_tickers": 299
+    },
+    "lag_3": {
+      "mean_ic": 0.1855,
+      "std_ic": 0.1554,
+      "ir": 1.1932,
+      "t_stat": 20.6326,
+      "pct_positive": 0.88,
+      "n_tickers": 299
+    },
+    "lag_4": {
+      "mean_ic": 0.1846,
+      "std_ic": 0.154,
+      "ir": 1.1983,
+      "t_stat": 20.7206,
+      "pct_positive": 0.893,
+      "n_tickers": 299
+    },
+    "lag_5": {
+      "mean_ic": 0.1801,
+      "std_ic": 0.156,
+      "ir": 1.1544,
+      "t_stat": 19.9621,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "rmean_3": {
+      "mean_ic": 0.2155,
+      "std_ic": 0.1583,
+      "ir": 1.3616,
+      "t_stat": 23.544,
+      "pct_positive": 0.91,
+      "n_tickers": 299
+    },
+    "rmean_7": {
+      "mean_ic": 0.2051,
+      "std_ic": 0.1614,
+      "ir": 1.2703,
+      "t_stat": 21.9656,
+      "pct_positive": 0.896,
+      "n_tickers": 299
+    },
+    "rstd_7": {
+      "mean_ic": 0.0664,
+      "std_ic": 0.1437,
+      "ir": 0.4623,
+      "t_stat": 7.9938,
+      "pct_positive": 0.682,
+      "n_tickers": 299
+    },
+    "rmean_14": {
+      "mean_ic": 0.1918,
+      "std_ic": 0.1618,
+      "ir": 1.1853,
+      "t_stat": 20.4957,
+      "pct_positive": 0.88,
+      "n_tickers": 299
+    },
+    "rmean_30": {
+      "mean_ic": 0.1416,
+      "std_ic": 0.1574,
+      "ir": 0.8998,
+      "t_stat": 15.5587,
+      "pct_positive": 0.829,
+      "n_tickers": 299
+    },
+    "ema_30": {
+      "mean_ic": 0.1776,
+      "std_ic": 0.1625,
+      "ir": 1.0929,
+      "t_stat": 18.8987,
+      "pct_positive": 0.86,
+      "n_tickers": 299
+    },
+    "rsi_14": {
+      "mean_ic": 0.0821,
+      "std_ic": 0.1428,
+      "ir": 0.5751,
+      "t_stat": 9.9445,
+      "pct_positive": 0.736,
+      "n_tickers": 299
+    },
+    "price_ma_ratio_30": {
+      "mean_ic": 0.1008,
+      "std_ic": 0.1575,
+      "ir": 0.6399,
+      "t_stat": 11.0651,
+      "pct_positive": 0.732,
+      "n_tickers": 299
+    },
+    "trend_golden_cross": {
+      "mean_ic": 0.1136,
+      "std_ic": 0.1358,
+      "ir": 0.8368,
+      "t_stat": 12.8275,
+      "pct_positive": 0.834,
+      "n_tickers": 235
+    },
+    "trend_dist_high_52w": {
+      "mean_ic": 0.104,
+      "std_ic": 0.1579,
+      "ir": 0.6584,
+      "t_stat": 11.3845,
+      "pct_positive": 0.722,
+      "n_tickers": 299
+    },
+    "trend_price_position": {
+      "mean_ic": 0.0919,
+      "std_ic": 0.1534,
+      "ir": 0.5992,
+      "t_stat": 10.3604,
+      "pct_positive": 0.699,
+      "n_tickers": 299
+    },
+    "mtf_vs_ma100": {
+      "mean_ic": 0.1346,
+      "std_ic": 0.141,
+      "ir": 0.9542,
+      "t_stat": 16.4996,
+      "pct_positive": 0.839,
+      "n_tickers": 299
+    },
+    "mtf_weekly_rsi": {
+      "mean_ic": 0.0968,
+      "std_ic": 0.1604,
+      "ir": 0.6032,
+      "t_stat": 10.4311,
+      "pct_positive": 0.712,
+      "n_tickers": 299
+    },
+    "rsi_x_vol": {
+      "mean_ic": 0.0893,
+      "std_ic": 0.1596,
+      "ir": 0.5595,
+      "t_stat": 9.6755,
+      "pct_positive": 0.719,
+      "n_tickers": 299
+    },
+    "ma_spread": {
+      "mean_ic": 0.1023,
+      "std_ic": 0.1599,
+      "ir": 0.6396,
+      "t_stat": 11.0589,
+      "pct_positive": 0.742,
+      "n_tickers": 299
+    },
+    "bb_x_vol": {
+      "mean_ic": 0.0921,
+      "std_ic": 0.1537,
+      "ir": 0.5992,
+      "t_stat": 10.3617,
+      "pct_positive": 0.732,
+      "n_tickers": 299
+    },
+    "bear_downside_vol_ratio": {
+      "mean_ic": 0.0984,
+      "std_ic": 0.1587,
+      "ir": 0.6198,
+      "t_stat": 10.7168,
+      "pct_positive": 0.736,
+      "n_tickers": 299
+    },
+    "alt_pc_ratio_zscore": {
+      "mean_ic": 0.0833,
+      "std_ic": 0.1486,
+      "ir": 0.5605,
+      "t_stat": 9.6911,
+      "pct_positive": 0.732,
+      "n_tickers": 299
+    },
+    "alt_greed_flag": {
+      "mean_ic": 0.0818,
+      "std_ic": 0.1128,
+      "ir": 0.7252,
+      "t_stat": 12.4977,
+      "pct_positive": 0.758,
+      "n_tickers": 297
+    },
+    "opt_iv_skew": {
+      "mean_ic": 0.1016,
+      "std_ic": 0.1697,
+      "ir": 0.5987,
+      "t_stat": 10.3525,
+      "pct_positive": 0.722,
+      "n_tickers": 299
+    },
+    "flow_short_proxy_score": {
+      "mean_ic": 0.0626,
+      "std_ic": 0.1144,
+      "ir": 0.5474,
+      "t_stat": 9.3855,
+      "pct_positive": 0.714,
+      "n_tickers": 294
+    },
+    "id_vwap_ratio": {
+      "mean_ic": -0.0615,
+      "std_ic": 0.1344,
+      "ir": -0.458,
+      "t_stat": -2.5087,
+      "pct_positive": 0.3,
+      "n_tickers": 30
+    },
+    "id_vol_am_pm": {
+      "mean_ic": -0.0529,
+      "std_ic": 0.1449,
+      "ir": -0.365,
+      "t_stat": -1.9992,
+      "pct_positive": 0.367,
+      "n_tickers": 30
+    },
+    "id_vol_climax": {
+      "mean_ic": -0.0592,
+      "std_ic": 0.1332,
+      "ir": -0.4441,
+      "t_stat": -2.4326,
+      "pct_positive": 0.3,
+      "n_tickers": 30
+    },
+    "id_opening_mom": {
+      "mean_ic": 0.003,
+      "std_ic": 0.1328,
+      "ir": 0.0224,
+      "t_stat": 0.1226,
+      "pct_positive": 0.533,
+      "n_tickers": 30
+    },
+    "idx_climax_trend": {
+      "mean_ic": -0.0636,
+      "std_ic": 0.1336,
+      "ir": -0.476,
+      "t_stat": -2.607,
+      "pct_positive": 0.3,
+      "n_tickers": 30
+    },
+    "idx_intraday_reversal": {
+      "mean_ic": 0.0059,
+      "std_ic": 0.129,
+      "ir": 0.046,
+      "t_stat": 0.2521,
+      "pct_positive": 0.5,
+      "n_tickers": 30
+    },
+    "macd_hist": {
+      "mean_ic": 0.0315,
+      "std_ic": 0.2104,
+      "ir": 0.1495,
+      "t_stat": 0.3343,
+      "pct_positive": 0.6,
+      "n_tickers": 5
+    },
+    "id_closing_mom": {
+      "mean_ic": 0.0476,
+      "std_ic": 0.1247,
+      "ir": 0.382,
+      "t_stat": 0.7641,
+      "pct_positive": 0.75,
+      "n_tickers": 4
+    }
+  },
+  "top_features": [
+    "rmean_3",
+    "lag_1",
+    "rmean_7",
+    "lag_2",
+    "rmean_14",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "ema_30",
+    "rmean_30",
+    "mtf_vs_ma100",
+    "trend_golden_cross",
+    "trend_dist_high_52w",
+    "ma_spread",
+    "opt_iv_skew"
+  ],
+  "noise_features": [
+    "idx_intraday_reversal",
+    "id_opening_mom"
+  ],
+  "reverse_features": [
+    "idx_climax_trend",
+    "id_vwap_ratio",
+    "id_vol_climax",
+    "id_vol_am_pm"
+  ],
+  "date": "2026-05-14"
+}

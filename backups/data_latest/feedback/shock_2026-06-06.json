@@ -1,0 +1,11 @@
+{
+  "shock_level": "MODERATE",
+  "shock_score": 40,
+  "direction_bias": -0.3,
+  "confidence_penalty": 0.65,
+  "signals": [
+    "S&P500(yf) -2.6% (MODERATE)",
+    "USD/KRW +6.7% (원화 급락)"
+  ],
+  "recommendation": "⚠️ 주의 — 양수 예측 30% 감쇠, CI 1.5x 확대"
+}

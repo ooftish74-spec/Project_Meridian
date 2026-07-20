@@ -1,0 +1,47 @@
+{
+  "self_learning": {
+    "moved_to": "evening_phase"
+  },
+  "online_learner": {
+    "moved_to": "evening_phase"
+  },
+  "macro_integration": {
+    "n_features": 15,
+    "sources": [
+      "FRED",
+      "CrossMarket",
+      "NewsSentiment"
+    ]
+  },
+  "drift_guard": {
+    "n_drifted": 5,
+    "n_critical": 5,
+    "n_warning": 0,
+    "mean_psi": 0.7359,
+    "weighted_risk": 0.9991,
+    "drift_ratio": 0.0943,
+    "confidence_discount": 0.906,
+    "resolved": true,
+    "resolved_by": "retrain_weekly"
+  },
+  "conformal": {
+    "reason": "insufficient_positions_0"
+  },
+  "morning_fusion": {
+    "regime_adj": 0.0,
+    "conflicts": 0,
+    "risk_flags": 0,
+    "confidence": 0.7
+  },
+  "shap_daily": {
+    "error": "'CalibratedClassifierCV' object has no attribute 'feature_importances_'"
+  },
+  "morning_retrain": {
+    "trigger": "weekly",
+    "val_acc": 0.7502485583615033,
+    "val_auc": 0.8130367962847292,
+    "elapsed_sec": 133.9
+  },
+  "elapsed_sec": 134.7,
+  "timestamp": "2026-07-13T07:32:19.808293"
+}

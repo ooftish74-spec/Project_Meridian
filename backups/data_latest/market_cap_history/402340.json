@@ -1,0 +1,41 @@
+{
+  "ticker": "402340",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 74905747980288,
+      "shares": 131876313,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 76488258879488,
+      "shares": 131876313,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 87697746034688,
+      "shares": 131876313,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 89939643465728,
+      "shares": 131876313,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 89939643465728,
+      "shares": 131876313,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 94950947553280,
+      "shares": 131710016,
+      "source": "yfinance"
+    }
+  ]
+}

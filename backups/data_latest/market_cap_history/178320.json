@@ -1,0 +1,41 @@
+{
+  "ticker": "178320",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2540694929408,
+      "shares": 56147954,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2678257352704,
+      "shares": 56147954,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2880390037504,
+      "shares": 56147954,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2818627076096,
+      "shares": 56147954,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2818627076096,
+      "shares": 56147954,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2987071111168,
+      "shares": 56147954,
+      "source": "yfinance"
+    }
+  ]
+}

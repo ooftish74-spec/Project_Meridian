@@ -1,0 +1,122 @@
+{
+  "investor_flow": {
+    "foreign_net_5d": 0.2758641687301045,
+    "foreign_net_20d": -1.3618877486200576,
+    "inst_net_5d": 0.2758641687235944,
+    "inst_net_20d": -1.3618877485993564,
+    "flow_momentum": 0.17633401026412857,
+    "foreign_streak": 2.0,
+    "supply_demand_score": 0.2308322874429888,
+    "collected_at": "2026-07-10T16:30:20.297350",
+    "n_tickers": 4,
+    "by_ticker": {
+      "122630": {
+        "foreign_net_5d": -0.05187097038781194,
+        "foreign_net_20d": -1.0114172555707053,
+        "inst_net_5d": -0.05187097038670965,
+        "inst_net_20d": -1.0114172555523793,
+        "flow_momentum": 0.023589848013574388,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.02114146921038681
+      },
+      "069500": {
+        "foreign_net_5d": 0.2758641687301045,
+        "foreign_net_20d": -1.3618877486200576,
+        "inst_net_5d": 0.2758641687235944,
+        "inst_net_20d": -1.3618877485993564,
+        "flow_momentum": 0.17633401026412857,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.2308322874429888
+      },
+      "133690": {
+        "foreign_net_5d": 0.28247441074053914,
+        "foreign_net_20d": 0.5668527242049709,
+        "inst_net_5d": 0.2824744106150224,
+        "inst_net_20d": 0.5668527239431685,
+        "flow_momentum": 0.06543919511719606,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.20086896388032502
+      },
+      "252670": {
+        "foreign_net_5d": 0.7047501528222913,
+        "foreign_net_20d": 1.0746350097627093,
+        "inst_net_5d": 0.704750152778229,
+        "inst_net_20d": 1.0746350097193451,
+        "flow_momentum": 0.18041339969070108,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.4064990963095435
+      }
+    }
+  },
+  "last_overnight_update": "2026-07-12T17:10:37.308036",
+  "kr_factor_composite": -0.134,
+  "kr_factor_foreign": -0.238,
+  "kr_factor_lcap": -0.269,
+  "kr_stream_adjustments": {
+    "S1": 0.98,
+    "S2": 0.976,
+    "S3": 1.018,
+    "S4": 0.973
+  },
+  "stock_technicals": {
+    "005930": {
+      "rsi_14": 37.1,
+      "volume_ratio": 0.64,
+      "name": "삼성전자",
+      "macd_hist": -11589.77,
+      "close": 285000.0
+    },
+    "000660": {
+      "rsi_14": 33.2,
+      "volume_ratio": 0.81,
+      "name": "SK하이닉스",
+      "macd_hist": -31471.07,
+      "close": 2180000.0
+    }
+  },
+  "kospi200": 1196.68994140625,
+  "kospi_close": 1196.68994140625,
+  "vix": 20.34,
+  "vix_prev": 20.81,
+  "dxy": 28.39,
+  "dxy_prev": 28.36,
+  "us10y": 93.63,
+  "us10y_prev": 93.71,
+  "wti": 108.7,
+  "wti_prev": 109.01,
+  "gold": 377.01,
+  "gold_prev": 378.18,
+  "usdkrw": 1498.8769,
+  "usdkrw_prev": 1498.8769,
+  "sp500": 754.95,
+  "nasdaq": 725.51,
+  "ois": 83.0,
+  "ois_price": 100.0,
+  "ois_sentiment": 15.0,
+  "ois_threshold_adj": -5,
+  "overnight_intel": {
+    "sp500_change_pct": 0.00013702513856905796,
+    "nasdaq_change_pct": -0.7963100679955204,
+    "sox_change_pct": -0.9555720815946245,
+    "sp500_change": 0.00013702513856905796,
+    "nasdaq_change": -0.7963100679955204,
+    "us_sentiment": "slightly_bearish",
+    "timestamp": "2026-07-12T05:15:20.695525"
+  },
+  "us_regime": "neutral",
+  "us_regime_score": 0.1014,
+  "us_regime_confidence": 0.383,
+  "sox_change": -0.9555720815946245,
+  "upcoming_events": 2,
+  "next_event": "FOMC 금리 결정 (전일)",
+  "event_confidence_adj": 0.3,
+  "cross_asset_direction": "neutral",
+  "cross_asset_score": 0,
+  "EWY": 183.52,
+  "FLKR": 60.04,
+  "FXI": 33.48,
+  "last_update": "2026-07-12T22:30:18.551802",
+  "vkospi": 12.78,
+  "put_call_ratio": 1.0,
+  "timestamp": "2026-07-13T03:29:15.626390+09:00"
+}

@@ -1,0 +1,57 @@
+{
+  "ois": 58.5,
+  "ois_price": 66.3,
+  "ois_sentiment": 15.6,
+  "sentiment": "slightly_bullish",
+  "threshold_adj": -1,
+  "components": {
+    "nxt_premarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "kospi_intraday": {
+      "score": 43.2,
+      "detail": "KOSPI -0.75%, VK=14",
+      "raw": {
+        "kospi": 130030.0,
+        "kospi_prev": 131010.0,
+        "kospi_ma20": 135770.75,
+        "vkospi": 13.85
+      }
+    },
+    "sgx_futures": {
+      "score": 50.0,
+      "detail": "EWY(Macro) +0.00%",
+      "raw": {
+        "sgx_proxy_components": {
+          "ewy": 0,
+          "nq": 0,
+          "sox": 0,
+          "dxy_inv": 0
+        },
+        "sgx_proxy_source": "ensemble",
+        "sgx_proxy_score": 50.0
+      },
+      "source": "overnight_macro"
+    },
+    "us_market": {
+      "score": 100.0,
+      "detail": "S&P/NQ avg +37.62%",
+      "raw": {
+        "changes": [
+          37.61755485893416
+        ]
+      }
+    },
+    "nxt_aftermarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "vix_fear": {
+      "score": 15.6,
+      "detail": "F&G=16"
+    }
+  },
+  "timestamp": "2026-07-07T07:45:12.270226",
+  "include_premarket": true
+}

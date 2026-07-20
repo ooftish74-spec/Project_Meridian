@@ -1,0 +1,41 @@
+{
+  "ticker": "083650",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2815734317056,
+      "shares": 30942134,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2815734317056,
+      "shares": 30942134,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2899278036992,
+      "shares": 30942134,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 3053988610048,
+      "shares": 30942134,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 3053988610048,
+      "shares": 30942134,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 3038517657600,
+      "shares": 30942134,
+      "source": "yfinance"
+    }
+  ]
+}

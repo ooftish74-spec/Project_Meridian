@@ -1,0 +1,41 @@
+{
+  "ticker": "078340",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 389697863680,
+      "shares": 11444871,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 381114220544,
+      "shares": 11444871,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 381114220544,
+      "shares": 11444871,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 383975424000,
+      "shares": 11444871,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 383975424000,
+      "shares": 11444871,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 387981115392,
+      "shares": 11444871,
+      "source": "yfinance"
+    }
+  ]
+}

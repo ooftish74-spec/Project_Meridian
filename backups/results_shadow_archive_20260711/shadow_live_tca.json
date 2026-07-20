@@ -1,0 +1,115 @@
+[
+  {
+    "date": "2026-07-02",
+    "timestamp": "2026-07-02T23:23:40.641991",
+    "regime": "bull",
+    "mode": "shadow_live (mock)",
+    "n_fills": 6,
+    "fills": [
+      {
+        "ticker": "396500",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 43880.075999999994,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      },
+      {
+        "ticker": "192090",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 14696.748,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      },
+      {
+        "ticker": "005930",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 286228.8,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      },
+      {
+        "ticker": "000270",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 145316.15999999997,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      },
+      {
+        "ticker": "009540",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 362789.99999999994,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      },
+      {
+        "ticker": "015760",
+        "action": "buy",
+        "stream": "",
+        "signal_price": 0,
+        "fill_price": 38180.52,
+        "quantity": 0,
+        "amount_krw": 0,
+        "slippage_bps": 0,
+        "slippage_krw": 0.0,
+        "commission": 0.0,
+        "algo": "market",
+        "exchange": "SOR",
+        "fill_probability": 1.0
+      }
+    ],
+    "summary": {
+      "total_amount_krw": 0,
+      "total_slippage_krw": 0,
+      "total_commission_krw": 0,
+      "avg_slippage_bps": 0.0,
+      "total_cost_bps": 0.0,
+      "stream_breakdown": {
+        "": {
+          "n": 6,
+          "avg_slip_bps": 0.0,
+          "total_amount": 0
+        }
+      }
+    }
+  }
+]

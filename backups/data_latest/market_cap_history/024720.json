@@ -1,0 +1,41 @@
+{
+  "ticker": "024720",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 309009317888,
+      "shares": 34296259,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 309352267776,
+      "shares": 34296259,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 314496712704,
+      "shares": 34296259,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 325128552448,
+      "shares": 34296259,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 325128552448,
+      "shares": 34296259,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 322384855040,
+      "shares": 34296259,
+      "source": "yfinance"
+    }
+  ]
+}

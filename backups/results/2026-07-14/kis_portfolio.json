@@ -1,0 +1,231 @@
+{
+  "date": "2026-07-13",
+  "timestamp": "2026-07-13T15:35:05.288366",
+  "kis_mode": "shadow",
+  "account": {
+    "number": "4422****01",
+    "type": "Main (종합 위탁)",
+    "initial_capital": 1000000.0,
+    "nav": 999332.08,
+    "cash": 108772.07999999996,
+    "invested": 890560,
+    "invest_pct": 89.1
+  },
+  "regime": "bull",
+  "streams": {
+    "S1": {
+      "name": "Directional ETF",
+      "tradeable_sessions": [
+        "regular"
+      ],
+      "exchange": "SOR",
+      "asset_type": "ETF",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [],
+      "n_signals": 0,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S2": {
+      "name": "ML Alpha (개별주)",
+      "tradeable_sessions": [
+        "pre",
+        "regular",
+        "after"
+      ],
+      "exchange": "auto (NXT pre/after, SOR regular)",
+      "asset_type": "STOCK",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [
+        {
+          "ticker": "_SYS_META",
+          "name": "_시스템메타",
+          "action": "HOLD",
+          "confidence": 0.8941,
+          "score": 0,
+          "type": "STOCK"
+        }
+      ],
+      "n_signals": 1,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S3": {
+      "name": "Sector Rotation ETF",
+      "tradeable_sessions": [
+        "regular"
+      ],
+      "exchange": "SOR",
+      "asset_type": "ETF",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [
+        {
+          "ticker": "379800",
+          "name": "KODEX 미국S&P500",
+          "action": "BUY",
+          "confidence": 0.616,
+          "score": 0,
+          "type": "ETF"
+        },
+        {
+          "ticker": "227550",
+          "name": "TIGER 200 산업재",
+          "action": "BUY",
+          "confidence": 0.648,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "453870",
+          "name": "TIGER 인도니프티50",
+          "action": "BUY",
+          "confidence": 0.601,
+          "score": 0,
+          "type": "ETF"
+        },
+        {
+          "ticker": "192090",
+          "name": "TIGER 차이나CSI300",
+          "action": "BUY",
+          "confidence": 0.601,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "091160",
+          "name": "KODEX 반도체",
+          "action": "BUY",
+          "confidence": 0.488,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000660",
+          "name": "SK하이닉스",
+          "action": "BUY",
+          "confidence": 0.58,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000270",
+          "name": "기아",
+          "action": "BUY",
+          "confidence": 0.511,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "009540",
+          "name": "HD한국조선해양",
+          "action": "BUY",
+          "confidence": 0.505,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000810",
+          "name": "삼성화재",
+          "action": "BUY",
+          "confidence": 0.461,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "030200",
+          "name": "KT",
+          "action": "BUY",
+          "confidence": 0.453,
+          "score": 0,
+          "type": "STOCK"
+        }
+      ],
+      "n_signals": 10,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S4": {
+      "name": "Quality-Value (개별주)",
+      "tradeable_sessions": [
+        "pre",
+        "regular",
+        "after"
+      ],
+      "exchange": "auto (NXT pre/after, SOR regular)",
+      "asset_type": "STOCK",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [],
+      "n_signals": 0,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    }
+  },
+  "summary": {
+    "total_positions": 0,
+    "total_signals": 11,
+    "total_realized_pnl": 0,
+    "total_unrealized_pnl": 0,
+    "total_pnl": 0,
+    "cash_pct": 10.9
+  }
+}

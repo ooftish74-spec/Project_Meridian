@@ -1,0 +1,10 @@
+{
+  "shock_level": "NONE",
+  "shock_score": 20,
+  "direction_bias": 0.0,
+  "confidence_penalty": 1.0,
+  "signals": [
+    "USD/KRW +3.1% (원화 급락)"
+  ],
+  "recommendation": "정상 시장 — 기본 예측 유지"
+}

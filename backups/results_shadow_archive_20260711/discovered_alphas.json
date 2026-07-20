@@ -1,0 +1,395 @@
+[
+    {
+        "id": "alpha_20260614_1752",
+        "formula": "X0",
+        "fitness": 0.038255480993593834,
+        "sharpe_ratio": 1.8,
+        "features_used": [
+            "exog_kospi_index",
+            "zscore_14",
+            "exog_pc_ratio_ma5",
+            "exog_finbert_score",
+            "exog_sc_semi"
+        ],
+        "discovered_at": "2026-06-14T17:52:33.450594",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260614_2140",
+        "formula": "Abs(2*Abs(x1) - 0.002582863)/x1",
+        "fitness": 0.5167252421379089,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-14T21:40:38.732698+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260615_1916",
+        "formula": "-x1 + x1/0.26892528 - (x0 - (x1 + (x1 + x1)/0.14556214)/0.27319098) + 0.14503755",
+        "fitness": 1.0541925430297852,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-15T19:16:02.165741+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260616_1915",
+        "formula": "0.198364970000000",
+        "fitness": 0.6814019083976746,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-16T19:15:32.102656+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260617_2226",
+        "formula": "X0",
+        "fitness": 0.036851647846719675,
+        "sharpe_ratio": 2.29,
+        "features_used": [
+            "exog_kospi_index",
+            "zscore_14",
+            "exog_pc_ratio_ma5",
+            "exog_finbert_score",
+            "exog_sc_semi"
+        ],
+        "discovered_at": "2026-06-17T22:26:03.079970",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260617_1915",
+        "formula": "x1 - Abs(2872.7832466888*x1 + 0.464988578869708*log(x1) - 27.894249) + 26.970201",
+        "fitness": 0.710015058517456,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-17T19:15:18.422682+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260618_1915",
+        "formula": "Abs(x0 + x1 + x1 + x1 + x1 + x1 + x1 + x1/0.017355746 + 0.10289324)",
+        "fitness": 0.6766939163208008,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-18T19:15:20.411467+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260619_1915",
+        "formula": "Abs(13.2124971239755*(x1 + 10.580906)*Abs(x1) - 0.0134677744596581)",
+        "fitness": 0.19647717475891113,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-19T19:15:20.981088+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260620_0846",
+        "formula": "X4",
+        "fitness": 0.0788954462995335,
+        "sharpe_ratio": 0.69,
+        "features_used": [
+            "exog_kr_trend_환율",
+            "exog_sc_semi",
+            "exog_bok_export_chg3",
+            "exog_sc_shipping",
+            "exog_xm_gold_oil_ratio",
+            "exog_bok_export_level",
+            "exog_sc_lithium",
+            "exog_kr_trend_부동산",
+            "exog_sc_dram",
+            "exog_kr_trend_반도체",
+            "exog_gt_real_estate",
+            "exog_kr_trend_etf",
+            "exog_gt_gold",
+            "exog_kr_export_yoy",
+            "exog_kr_trend_금값",
+            "exog_kr_trend_자동차",
+            "exog_kr_trend_주식"
+        ],
+        "discovered_at": "2026-06-20T08:46:29.442178",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260620_1915",
+        "formula": "x1 - (-x1 - 3.684273) + Abs(x1 + Abs(x1) + 2.18290128186949*Abs(Abs(x1))) - 1*(-2.9817011) - 0.009446498/x1",
+        "fitness": -0.706672191619873,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-20T19:15:19.569043+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260621_1915",
+        "formula": "4.13124724626551*Abs(log(-x0 + 331.615421701412*x1*exp(0.78978837*exp(re(x0)) - 0.867422654177779*re(x0)) + x1))",
+        "fitness": -0.35666435956954956,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-21T19:15:23.561271+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260622_1915",
+        "formula": "(0.47605035 + x1/x1)*Abs(2*x1 + (x0 - 0.47252128)*0.3793678 - 2.260529 + 0.0034049707/x1)",
+        "fitness": -0.05222281813621521,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-22T19:15:18.715245+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260623_1915",
+        "formula": "Abs(x0 - 2*x1 + 0.502809334414839*log(x1) + 3.50445695422644)",
+        "fitness": -0.19359147548675537,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-23T19:15:22.660274+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260624_1915",
+        "formula": "x1 - 1*(-0.21125264)",
+        "fitness": -0.21124428510665894,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-24T19:15:24.704997+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260625_1915",
+        "formula": "x1*141.33005",
+        "fitness": 1.3178576231002808,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-25T19:15:25.057548+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260626_1915",
+        "formula": "Abs(x1*(x1 - 1*(-135.95912)) - x1)",
+        "fitness": 1.668927550315857,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-26T19:15:22.827893+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260627_1915",
+        "formula": "Abs(x1/(-(-x1 + x1/0.08741492) - 0.30278987 + 0.32789648) - (-0.09993708)*(0.543287 - x0) + 2*Abs(Abs(x1)))",
+        "fitness": 1.3778889179229736,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-27T19:15:22.723577+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260628_1915",
+        "formula": "Abs(-0.17393494*x1 + log(24.146954*x1**2) + 10.0549101)",
+        "fitness": 0.47395598888397217,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-28T19:15:21.719237+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260629_1915",
+        "formula": "x1 + Abs(x0 + x1) + Abs(2*x1 + log(0.378814628655938*exp(x1)) + 746.2846*Abs(x1))",
+        "fitness": 0.3484508693218231,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-29T19:15:20.027695+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260630_1915",
+        "formula": "0.220809830000000",
+        "fitness": -0.9095864295959473,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-06-30T19:15:22.717009+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260701_1915",
+        "formula": "(-(-x1/0.10450448 - 2.5360138) + 3.622555 - 0.008977697/x1)/0.80978954 + Abs(x1)",
+        "fitness": 0.03688429296016693,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-01T19:15:22.782113+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260702_1915",
+        "formula": "-x1 - x1 + 0.20955418",
+        "fitness": -0.314391553401947,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-02T19:15:21.633051+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260703_1915",
+        "formula": "-2*x1 + Abs(x1 - Abs(4209.681*x1 - Abs(2*x1 - Abs(log(x1) - Abs(x1)))))",
+        "fitness": 0.1047903299331665,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-03T19:15:23.938601+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260704_1915",
+        "formula": "exp(x1*(-1062.4612))",
+        "fitness": 0.8522319793701172,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-04T19:15:18.965753+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260705_1915",
+        "formula": "0.232607280000000",
+        "fitness": 0.22882944345474243,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-05T19:15:23.430079+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260706_1915",
+        "formula": "0.228148420000000",
+        "fitness": -0.26631200313568115,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-06T19:15:21.276956+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260707_1915",
+        "formula": "Abs(log(2*Abs(x1)) + 5.5850353)",
+        "fitness": -1.2040605545043945,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-07T19:15:21.126176+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260708_1915",
+        "formula": "1.27846736105428*Abs(Abs(x1 + x1*4.365897 - 0.17446302))",
+        "fitness": -0.9680088758468628,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-08T19:15:17.425247+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260709_1915",
+        "formula": "Abs(log(0.124413244*Abs(log(x1))))",
+        "fitness": 0.6219751834869385,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-09T19:15:19.661780+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260710_0319",
+        "formula": "0.250302550000000",
+        "fitness": 0.8915438652038574,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-10T03:19:40.026116+00:00",
+        "status": "inactive"
+    },
+    {
+        "id": "alpha_20260710_1915",
+        "formula": "log((-x0 + x1)/(-x0 - x1 + 0.005560683)) + 1.2422409",
+        "fitness": -0.6002945899963379,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-10T19:15:19.689697+00:00",
+        "status": "active"
+    }
+]

@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-07-16T15:10:08.231488",
+  "trigger": "closing",
+  "regime": "bull",
+  "previous_regime": "bull",
+  "portfolio_value": 1000000.0,
+  "current_weights": {
+    "S2": 0.2686,
+    "S0": 0.1913,
+    "S4": 0.0,
+    "S1": 0.3391,
+    "S3": 0.2011
+  },
+  "turnover_check": {
+    "allowed": true,
+    "reason": "ok",
+    "daily_count": 1,
+    "monthly_count": 3,
+    "limit_reached": false
+  },
+  "target_exposure": 0.726,
+  "raw_weights": {
+    "S0": 0.1905,
+    "S1": 0.3283,
+    "S2": 0.2657,
+    "S3": 0.2156
+  },
+  "scaled_weights": {
+    "S0": 0.1905,
+    "S1": 0.3282,
+    "S2": 0.2657,
+    "S3": 0.2156
+  },
+  "cvar_check": {
+    "violated": false,
+    "reason": "insufficient_data",
+    "warning": "cvar_check_skipped_no_data"
+  },
+  "cvar_adjusted": false,
+  "target_weights": {
+    "S0": 0.1905,
+    "S1": 0.3282,
+    "S2": 0.2657,
+    "S3": 0.2156
+  },
+  "tx_check": {
+    "should_rebalance": false,
+    "trade_cost": 0.0,
+    "turnover": 0,
+    "n_trades": 0,
+    "expected_profit": 0.0,
+    "dynamic_override": false
+  },
+  "action": "hold",
+  "reason": "no_trade_zone",
+  "final_weights": {
+    "S2": 0.2686,
+    "S0": 0.1913,
+    "S4": 0.0,
+    "S1": 0.3391,
+    "S3": 0.2011
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "regime": "caution",
+  "confidence": 0.7,
+  "rationale": "하락 시작: 5일=-1.4%, 변동성=3.34% | hmm_pending_calibration(sideways,rule=caution,days=0/30)",
+  "invest_ratio": 0.45,
+  "prev_regime": "recovery",
+  "indicators": {
+    "ret_1d": 0.0858,
+    "ret_5d": -0.0144,
+    "ret_20d": 0.2697,
+    "ret_60d": 0.4155,
+    "vol_20d": 0.03338,
+    "dist_ma20": 0.1088,
+    "dist_ma200": 0.8153,
+    "rebound_from_low": 0.2647,
+    "consecutive_up": "False",
+    "ma20": 110985.5,
+    "ma200": 67791.45,
+    "current_price": 123060.0
+  },
+  "market_prices": {
+    "kospi": 123060.0,
+    "sp500": 745.64,
+    "vix": 16.7,
+    "usdkrw": 1520.1
+  },
+  "based_on_date": "2026-05-25",
+  "forecast_date": "2026-05-26",
+  "model": "rule_based_v2_with_overnight",
+  "overnight_signal": "neutral",
+  "overnight_score": 0.0004,
+  "timestamp": "2026-05-25T17:03:21.776483",
+  "type": "predictive"
+}

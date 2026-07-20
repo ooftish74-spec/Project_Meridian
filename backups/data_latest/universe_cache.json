@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-05-25T17:02:47.006123",
+  "universe": {
+    "005930": {
+      "name": "삼성전자",
+      "sector": "반도체",
+      "type": "equity",
+      "score": 1.0,
+      "marketcap": 1750960443096000
+    },
+    "000660": {
+      "name": "SK하이닉스",
+      "sector": "반도체",
+      "type": "equity",
+      "score": 0.5302,
+      "marketcap": 1382642588100000
+    },
+    "066570": {
+      "name": "LG전자",
+      "sector": "etc",
+      "type": "equity",
+      "score": 0.0719,
+      "marketcap": 38277889930000
+    },
+    "005380": {
+      "name": "현대차",
+      "sector": "자동차",
+      "type": "equity",
+      "score": 0.0681,
+      "marketcap": 136368672156000
+    },
+    "402340": {
+      "name": "SK스퀘어",
+      "sector": "etc",
+      "type": "equity",
+      "score": 0.0638,
+      "marketcap": 155578937094000
+    },
+    "000270": {
+      "name": "기아",
+      "sector": "자동차",
+      "type": "equity",
+      "score": 0.0405,
+      "marketcap": 65550342364200
+    },
+    "028260": {
+      "name": "삼성물산",
+      "sector": "유통/소비재",
+      "type": "equity",
+      "score": 0.0308,
+      "marketcap": 67867132648500
+    },
+    "105560": {
+      "name": "KB금융",
+      "sector": "금융",
+      "type": "equity",
+      "score": 0.0291,
+      "marketcap": 58090100889000
+    },
+    "055550": {
+      "name": "신한지주",
+      "sector": "금융",
+      "type": "equity",
+      "score": 0.0254,
+      "marketcap": 44997233422800
+    },
+    "042660": {
+      "name": "한화오션",
+      "sector": "소재/화학",
+      "type": "equity",
+      "score": 0.0243,
+      "marketcap": 34808561558400
+    },
+    "035420": {
+      "name": "NAVER",
+      "sector": "IT/소프트웨어",
+      "type": "equity",
+      "score": 0.0203
+    },
+    "006400": {
+      "name": "삼성SDI",
+      "sector": "2차전지",
+      "type": "equity",
+      "score": 0.0227
+    },
+    "068270": {
+      "name": "셀트리온",
+      "sector": "바이오/헬스",
+      "type": "equity",
+      "score": 0.023
+    },
+    "069500": {
+      "name": "KODEX 200",
+      "sector": "인덱스",
+      "type": "etf",
+      "score": 0.5
+    },
+    "148070": {
+      "name": "KOSEF 국고채10년",
+      "sector": "채권",
+      "type": "bond_etf",
+      "score": 0.5
+    },
+    "305720": {
+      "name": "KODEX 2차전지산업",
+      "sector": "2차전지ETF",
+      "type": "etf",
+      "score": 0.5
+    },
+    "470460": {
+      "name": "KODEX 삼성전자 인버스",
+      "sector": "directional",
+      "type": "etf"
+    },
+    "470490": {
+      "name": "TIGER SK하이닉스 인버스",
+      "sector": "directional",
+      "type": "etf"
+    }
+  }
+}

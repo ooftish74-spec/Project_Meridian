@@ -1,0 +1,4 @@
+depreciation,ppe_net,prev_ppe_net,retained_earnings,revenue,prev_revenue,interest_expense,income_tax,sga_expense,prev_sga,cash,short_term_debt,long_term_debt,capex,cash_from_operations,roe,debt_ratio,opm,year,total_assets,total_equity,total_liabilities,net_income,operating_income,prev_operating_income
+10703752824357,,,3859277463156,,,,,,,1243955519519,,,-291738515388,-2147455863609,,,,2023,,,,,,
+11854779631406,,,4537202318950,,,,,,,1588864178854,,,-179704361906,-4971288994546,,,,2024,,,,,,
+15802595736013,,,5340394221493,,,,,,,1721766401695,,,-1519877081653,-6399934098932,,,,2025,81173768149523.0,6722405133984.0,74451363015539.0,1114974212697.0,1488239956012.0,1098240303737.0

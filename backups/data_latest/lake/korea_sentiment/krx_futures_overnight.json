@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-05-25T06:02:36.409728",
+  "date": "20260521",
+  "close": 1176.75,
+  "change": 50.8,
+  "change_pct": 4.5117,
+  "overnight_gap": 4.5117,
+  "name": "코스피200 F 202606 (야간)",
+  "direction": "up",
+  "source": "KRX_Futures_API"
+}

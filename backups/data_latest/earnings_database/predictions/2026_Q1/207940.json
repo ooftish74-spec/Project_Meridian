@@ -1,0 +1,22 @@
+{
+  "ticker": "207940",
+  "company": "207940",
+  "market": "KR",
+  "sector": "바이오",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 2300444261,
+  "operating_profit": 775198138594,
+  "net_income": 596306260457,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 65,
+  "surprise_direction": "beat",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.593660"
+}

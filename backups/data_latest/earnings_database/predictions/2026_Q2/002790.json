@@ -1,0 +1,22 @@
+{
+  "ticker": "002790",
+  "company": "002790",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 1224791092626,
+  "operating_profit": 58227959885,
+  "net_income": 44790738373,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.849525"
+}

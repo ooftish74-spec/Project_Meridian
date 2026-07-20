@@ -1,0 +1,12 @@
+{
+  "ticker": "000660",
+  "period": "2026 Q1",
+  "revenue_surprise_pct": 76.35,
+  "pred_revenue": 29657732525160,
+  "actual_revenue": 52300000000000.0,
+  "op_surprise_pct": 64.86,
+  "pred_op": 23353382792412,
+  "actual_op": 38500000000000.0,
+  "direction_correct": false,
+  "compared_at": "2026-04-22T07:27:03.758522"
+}

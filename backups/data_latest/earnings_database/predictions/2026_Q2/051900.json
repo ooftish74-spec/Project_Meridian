@@ -1,0 +1,22 @@
+{
+  "ticker": "051900",
+  "company": "051900",
+  "market": "KR",
+  "sector": "화학",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 1514349439764,
+  "operating_profit": null,
+  "net_income": -117909065,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.887919"
+}

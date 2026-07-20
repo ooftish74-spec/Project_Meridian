@@ -1,0 +1,25 @@
+{
+  "vix": 16.700000762939453,
+  "vkospi": 18.0,
+  "usdkrw": 1520.9300537109375,
+  "usdkrw_prev": 1504.4000244140625,
+  "kospi": 2700,
+  "kospi_ma20": 2700,
+  "ois": 50.0,
+  "sector_momentum": {},
+  "stock_technicals": {
+    "005930": {
+      "rsi_14": 70.59,
+      "macd_hist": 885.2597,
+      "volume_ratio": 0.7,
+      "name": "삼성전자"
+    },
+    "000660": {
+      "rsi_14": 75.23,
+      "macd_hist": 7964.3514,
+      "volume_ratio": 0.83,
+      "name": "SK하이닉스"
+    }
+  },
+  "timestamp": "2026-05-27T01:53:11.005023"
+}

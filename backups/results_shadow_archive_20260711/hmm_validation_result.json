@@ -1,0 +1,84 @@
+{
+  "validated_at": "2026-07-10T12:05:19.469588",
+  "data_range": "2016-06-24 ~ 2026-07-09",
+  "n_samples": 2463,
+  "n_features": 5,
+  "features_used": [
+    "ret_1d",
+    "ret_5d",
+    "vol_20d",
+    "trend",
+    "vix"
+  ],
+  "2state": {
+    "stability": {
+      "transition_rate": 0.0271,
+      "avg_duration_days": 35.2,
+      "balance_ratio": 0.9825,
+      "regime_counts": {
+        "0": 427,
+        "1": 312
+      }
+    },
+    "log_likelihood": -4990538.47,
+    "bic": 9981499.68,
+    "aic": 9981204.94
+  },
+  "4state": {
+    "stability": {
+      "transition_rate": 0.0433,
+      "avg_duration_days": 22.4,
+      "balance_ratio": 0.8899,
+      "regime_counts": {
+        "0": 242,
+        "1": 35,
+        "2": 255,
+        "3": 207
+      }
+    },
+    "log_likelihood": -3723654.73,
+    "bic": 7448207.77,
+    "aic": 7447581.45,
+    "regime_analysis": {
+      "0": {
+        "label": "crash",
+        "count": 759,
+        "pct": 30.8,
+        "ann_return": 21.9,
+        "ann_vol": 19.7,
+        "avg_drawdown": -14.3,
+        "avg_vix": 22.3
+      },
+      "1": {
+        "label": "caution",
+        "count": 583,
+        "pct": 23.7,
+        "ann_return": 12.5,
+        "ann_vol": 10.5,
+        "avg_drawdown": -6.4,
+        "avg_vix": 12.2
+      },
+      "2": {
+        "label": "crash",
+        "count": 824,
+        "pct": 33.5,
+        "ann_return": 9.0,
+        "ann_vol": 14.2,
+        "avg_drawdown": -12.3,
+        "avg_vix": 16.9
+      },
+      "3": {
+        "label": "caution",
+        "count": 297,
+        "pct": 12.1,
+        "ann_return": 65.9,
+        "ann_vol": 44.7,
+        "avg_drawdown": -9.7,
+        "avg_vix": 25.9
+      }
+    }
+  },
+  "bic_improvement_pct": 25.38,
+  "recommended_n_states": 4,
+  "recommendation": "4-state 권장 (BIC 25.4% 개선)"
+}

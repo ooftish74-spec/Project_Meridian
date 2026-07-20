@@ -1,0 +1,3628 @@
+{
+  "date": "2026-04-02",
+  "signals": {
+    "005930": {
+      "up_probability": 0.4205,
+      "prediction": "down",
+      "confidence": 0.199,
+      "current_price": 189600.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3794,
+        "lightgbm": 0.7477,
+        "lstm": 0.2689,
+        "ridge": 0.5352
+      },
+      "family_probs": {
+        "A_tree": 0.5636,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5352
+      },
+      "disagreement": 0.1798,
+      "regime_prob": 0.5208,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "000660": {
+      "up_probability": 0.4302,
+      "prediction": "down",
+      "confidence": 0.1795,
+      "current_price": 893000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4166,
+        "lightgbm": 0.6276,
+        "lstm": 0.2689,
+        "ridge": 0.4509
+      },
+      "family_probs": {
+        "A_tree": 0.5221,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4509
+      },
+      "disagreement": 0.1276,
+      "regime_prob": 0.5726,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "005380": {
+      "up_probability": 0.4297,
+      "prediction": "down",
+      "confidence": 0.1806,
+      "current_price": 488000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4108,
+        "lightgbm": 0.7141,
+        "lstm": 0.2689,
+        "ridge": 0.5539
+      },
+      "family_probs": {
+        "A_tree": 0.5624,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5539
+      },
+      "disagreement": 0.1654,
+      "regime_prob": 0.5293,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "373220": {
+      "up_probability": 0.4272,
+      "prediction": "down",
+      "confidence": 0.1856,
+      "current_price": 410000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3756,
+        "lightgbm": 0.5059,
+        "lstm": 0.2689,
+        "ridge": 0.5153
+      },
+      "family_probs": {
+        "A_tree": 0.4407,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5153
+      },
+      "disagreement": 0.1015,
+      "regime_prob": 0.5342,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "207940": {
+      "up_probability": 0.4106,
+      "prediction": "down",
+      "confidence": 0.2188,
+      "current_price": 1530000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4207,
+        "lightgbm": 0.4882,
+        "lstm": 0.2689,
+        "ridge": 0.6308
+      },
+      "family_probs": {
+        "A_tree": 0.4544,
+        "B_sequential": 0.2689,
+        "C_linear": 0.6308
+      },
+      "disagreement": 0.1302,
+      "regime_prob": 0.4911,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "034020": {
+      "up_probability": 0.3819,
+      "prediction": "down",
+      "confidence": 0.2761,
+      "current_price": 94200.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4308,
+        "lightgbm": 0.3791,
+        "lstm": 0.2689,
+        "ridge": 0.3975
+      },
+      "family_probs": {
+        "A_tree": 0.4049,
+        "B_sequential": 0.2689,
+        "C_linear": 0.3975
+      },
+      "disagreement": 0.0607,
+      "regime_prob": 0.476,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "000270": {
+      "up_probability": 0.4768,
+      "prediction": "down",
+      "confidence": 0.0863,
+      "current_price": 155300.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3988,
+        "lightgbm": 0.8127,
+        "lstm": 0.2689,
+        "ridge": 0.5472
+      },
+      "family_probs": {
+        "A_tree": 0.6057,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5472
+      },
+      "disagreement": 0.2021,
+      "regime_prob": 0.5386,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.7552,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "105560": {
+      "up_probability": 0.3924,
+      "prediction": "down",
+      "confidence": 0.2553,
+      "current_price": 145900.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3977,
+        "lightgbm": 0.659,
+        "lstm": 0.2689,
+        "ridge": 0.511
+      },
+      "family_probs": {
+        "A_tree": 0.5283,
+        "B_sequential": 0.2689,
+        "C_linear": 0.511
+      },
+      "disagreement": 0.1437,
+      "regime_prob": 0.4729,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "028260": {
+      "up_probability": 0.4295,
+      "prediction": "down",
+      "confidence": 0.1811,
+      "current_price": 259500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4047,
+        "lightgbm": 0.582,
+        "lstm": 0.2689,
+        "ridge": 0.5485
+      },
+      "family_probs": {
+        "A_tree": 0.4933,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5485
+      },
+      "disagreement": 0.1244,
+      "regime_prob": 0.5288,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "068270": {
+      "up_probability": 0.4461,
+      "prediction": "down",
+      "confidence": 0.1478,
+      "current_price": 201500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4179,
+        "lightgbm": 0.685,
+        "lstm": 0.2689,
+        "ridge": 0.5587
+      },
+      "family_probs": {
+        "A_tree": 0.5515,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5587
+      },
+      "disagreement": 0.1554,
+      "regime_prob": 0.5621,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "032830": {
+      "up_probability": 0.421,
+      "prediction": "down",
+      "confidence": 0.1981,
+      "current_price": 219500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4246,
+        "lightgbm": 0.6902,
+        "lstm": 0.2689,
+        "ridge": 0.5239
+      },
+      "family_probs": {
+        "A_tree": 0.5574,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5239
+      },
+      "disagreement": 0.153,
+      "regime_prob": 0.5217,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "055550": {
+      "up_probability": 0.3947,
+      "prediction": "down",
+      "confidence": 0.2506,
+      "current_price": 90500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4412,
+        "lightgbm": 0.6609,
+        "lstm": 0.2689,
+        "ridge": 0.5205
+      },
+      "family_probs": {
+        "A_tree": 0.551,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5205
+      },
+      "disagreement": 0.1416,
+      "regime_prob": 0.4692,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "042660": {
+      "up_probability": 0.3924,
+      "prediction": "down",
+      "confidence": 0.2551,
+      "current_price": 118200.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3941,
+        "lightgbm": 0.5809,
+        "lstm": 0.2689,
+        "ridge": 0.4148
+      },
+      "family_probs": {
+        "A_tree": 0.4875,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4148
+      },
+      "disagreement": 0.111,
+      "regime_prob": 0.497,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "012330": {
+      "up_probability": 0.4344,
+      "prediction": "down",
+      "confidence": 0.1711,
+      "current_price": 398000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3946,
+        "lightgbm": 0.6822,
+        "lstm": 0.2689,
+        "ridge": 0.6096
+      },
+      "family_probs": {
+        "A_tree": 0.5384,
+        "B_sequential": 0.2689,
+        "C_linear": 0.6096
+      },
+      "disagreement": 0.1652,
+      "regime_prob": 0.5388,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "006800": {
+      "up_probability": 0.3709,
+      "prediction": "down",
+      "confidence": 0.2981,
+      "current_price": 62700.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4448,
+        "lightgbm": 0.4769,
+        "lstm": 0.2689,
+        "ridge": 0.429
+      },
+      "family_probs": {
+        "A_tree": 0.4609,
+        "B_sequential": 0.2689,
+        "C_linear": 0.429
+      },
+      "disagreement": 0.0804,
+      "regime_prob": 0.454,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "035420": {
+      "up_probability": 0.4417,
+      "prediction": "down",
+      "confidence": 0.1567,
+      "current_price": 207000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4382,
+        "lightgbm": 0.3154,
+        "lstm": 0.2689,
+        "ridge": 0.5436
+      },
+      "family_probs": {
+        "A_tree": 0.3768,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5436
+      },
+      "disagreement": 0.1074,
+      "regime_prob": 0.5631,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "009150": {
+      "up_probability": 0.3808,
+      "prediction": "down",
+      "confidence": 0.2784,
+      "current_price": 429000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3886,
+        "lightgbm": 0.6059,
+        "lstm": 0.2689,
+        "ridge": 0.4858
+      },
+      "family_probs": {
+        "A_tree": 0.4972,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4858
+      },
+      "disagreement": 0.124,
+      "regime_prob": 0.4737,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "010130": {
+      "up_probability": 0.4313,
+      "prediction": "down",
+      "confidence": 0.1774,
+      "current_price": 1478000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4317,
+        "lightgbm": 0.5485,
+        "lstm": 0.2689,
+        "ridge": 0.7011
+      },
+      "family_probs": {
+        "A_tree": 0.4901,
+        "B_sequential": 0.2689,
+        "C_linear": 0.7011
+      },
+      "disagreement": 0.1583,
+      "regime_prob": 0.5325,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "006400": {
+      "up_probability": 0.4129,
+      "prediction": "down",
+      "confidence": 0.2143,
+      "current_price": 412500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4064,
+        "lightgbm": 0.6416,
+        "lstm": 0.2689,
+        "ridge": 0.5362
+      },
+      "family_probs": {
+        "A_tree": 0.524,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5362
+      },
+      "disagreement": 0.1398,
+      "regime_prob": 0.5055,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "015760": {
+      "up_probability": 0.413,
+      "prediction": "down",
+      "confidence": 0.214,
+      "current_price": 42200.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.381,
+        "lightgbm": 0.4459,
+        "lstm": 0.2689,
+        "ridge": 0.5125
+      },
+      "family_probs": {
+        "A_tree": 0.4135,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5125
+      },
+      "disagreement": 0.0898,
+      "regime_prob": 0.5111,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.3043
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "086790": {
+      "up_probability": 0.4033,
+      "prediction": "down",
+      "confidence": 0.2333,
+      "current_price": 107200.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.409,
+        "lightgbm": 0.6135,
+        "lstm": 0.2689,
+        "ridge": 0.5342
+      },
+      "family_probs": {
+        "A_tree": 0.5113,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5342
+      },
+      "disagreement": 0.1305,
+      "regime_prob": 0.4865,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "042700": {
+      "up_probability": 0.3915,
+      "prediction": "down",
+      "confidence": 0.2569,
+      "current_price": 260500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4412,
+        "lightgbm": 0.383,
+        "lstm": 0.2689,
+        "ridge": 0.5376
+      },
+      "family_probs": {
+        "A_tree": 0.4121,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5376
+      },
+      "disagreement": 0.0973,
+      "regime_prob": 0.4629,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "005490": {
+      "up_probability": 0.4482,
+      "prediction": "down",
+      "confidence": 0.1435,
+      "current_price": 346000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.387,
+        "lightgbm": 0.6523,
+        "lstm": 0.2689,
+        "ridge": 0.533
+      },
+      "family_probs": {
+        "A_tree": 0.5196,
+        "B_sequential": 0.2689,
+        "C_linear": 0.533
+      },
+      "disagreement": 0.145,
+      "regime_prob": 0.5763,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "034730": {
+      "up_probability": 0.408,
+      "prediction": "down",
+      "confidence": 0.2241,
+      "current_price": 324500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3941,
+        "lightgbm": 0.671,
+        "lstm": 0.2689,
+        "ridge": 0.5241
+      },
+      "family_probs": {
+        "A_tree": 0.5325,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5241
+      },
+      "disagreement": 0.1495,
+      "regime_prob": 0.4957,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "316140": {
+      "up_probability": 0.4041,
+      "prediction": "down",
+      "confidence": 0.2318,
+      "current_price": 32450.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.405,
+        "lightgbm": 0.5313,
+        "lstm": 0.2689,
+        "ridge": 0.532
+      },
+      "family_probs": {
+        "A_tree": 0.4682,
+        "B_sequential": 0.2689,
+        "C_linear": 0.532
+      },
+      "disagreement": 0.1086,
+      "regime_prob": 0.488,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "010140": {
+      "up_probability": 0.3993,
+      "prediction": "down",
+      "confidence": 0.2415,
+      "current_price": 24500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4058,
+        "lightgbm": 0.6306,
+        "lstm": 0.2689,
+        "ridge": 0.4328
+      },
+      "family_probs": {
+        "A_tree": 0.5182,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4328
+      },
+      "disagreement": 0.1291,
+      "regime_prob": 0.5106,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "051910": {
+      "up_probability": 0.4177,
+      "prediction": "down",
+      "confidence": 0.2046,
+      "current_price": 322000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4188,
+        "lightgbm": 0.6326,
+        "lstm": 0.2689,
+        "ridge": 0.5173
+      },
+      "family_probs": {
+        "A_tree": 0.5257,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5173
+      },
+      "disagreement": 0.1335,
+      "regime_prob": 0.5152,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "000810": {
+      "up_probability": 0.4269,
+      "prediction": "down",
+      "confidence": 0.1863,
+      "current_price": 445500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3897,
+        "lightgbm": 0.7392,
+        "lstm": 0.2689,
+        "ridge": 0.5906
+      },
+      "family_probs": {
+        "A_tree": 0.5645,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5906
+      },
+      "disagreement": 0.1809,
+      "regime_prob": 0.5236,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "035720": {
+      "up_probability": 0.414,
+      "prediction": "down",
+      "confidence": 0.212,
+      "current_price": 47100.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4645,
+        "lightgbm": 0.4079,
+        "lstm": 0.2689,
+        "ridge": 0.5111
+      },
+      "family_probs": {
+        "A_tree": 0.4362,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5111
+      },
+      "disagreement": 0.0909,
+      "regime_prob": 0.5162,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "267250": {
+      "up_probability": 0.422,
+      "prediction": "down",
+      "confidence": 0.1959,
+      "current_price": 246000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4335,
+        "lightgbm": 0.5807,
+        "lstm": 0.2689,
+        "ridge": 0.5666
+      },
+      "family_probs": {
+        "A_tree": 0.5071,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5666
+      },
+      "disagreement": 0.1256,
+      "regime_prob": 0.514,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "011200": {
+      "up_probability": 0.3763,
+      "prediction": "down",
+      "confidence": 0.2873,
+      "current_price": 19550.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4088,
+        "lightgbm": 0.5389,
+        "lstm": 0.2689,
+        "ridge": 0.4791
+      },
+      "family_probs": {
+        "A_tree": 0.4739,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4791
+      },
+      "disagreement": 0.1006,
+      "regime_prob": 0.4648,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "066570": {
+      "up_probability": 0.4099,
+      "prediction": "down",
+      "confidence": 0.2203,
+      "current_price": 108300.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4218,
+        "lightgbm": 0.6996,
+        "lstm": 0.2689,
+        "ridge": 0.5239
+      },
+      "family_probs": {
+        "A_tree": 0.5607,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5239
+      },
+      "disagreement": 0.1566,
+      "regime_prob": 0.4995,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "096770": {
+      "up_probability": 0.402,
+      "prediction": "down",
+      "confidence": 0.2361,
+      "current_price": 113400.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.432,
+        "lightgbm": 0.6697,
+        "lstm": 0.2689,
+        "ridge": 0.5105
+      },
+      "family_probs": {
+        "A_tree": 0.5509,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5105
+      },
+      "disagreement": 0.1444,
+      "regime_prob": 0.4921,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "024110": {
+      "up_probability": 0.393,
+      "prediction": "down",
+      "confidence": 0.254,
+      "current_price": 22000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4022,
+        "lightgbm": 0.6255,
+        "lstm": 0.2689,
+        "ridge": 0.5229
+      },
+      "family_probs": {
+        "A_tree": 0.5138,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5229
+      },
+      "disagreement": 0.1333,
+      "regime_prob": 0.4658,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "033780": {
+      "up_probability": 0.4079,
+      "prediction": "down",
+      "confidence": 0.2241,
+      "current_price": 157100.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3949,
+        "lightgbm": 0.7151,
+        "lstm": 0.2689,
+        "ridge": 0.5682
+      },
+      "family_probs": {
+        "A_tree": 0.555,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5682
+      },
+      "disagreement": 0.1693,
+      "regime_prob": 0.4858,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "003670": {
+      "up_probability": 0.4268,
+      "prediction": "down",
+      "confidence": 0.1865,
+      "current_price": 214500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4176,
+        "lightgbm": 0.7079,
+        "lstm": 0.2689,
+        "ridge": 0.5282
+      },
+      "family_probs": {
+        "A_tree": 0.5628,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5282
+      },
+      "disagreement": 0.1602,
+      "regime_prob": 0.5333,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "047810": {
+      "up_probability": 0.3926,
+      "prediction": "down",
+      "confidence": 0.2548,
+      "current_price": 174200.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4226,
+        "lightgbm": 0.7364,
+        "lstm": 0.2689,
+        "ridge": 0.4724
+      },
+      "family_probs": {
+        "A_tree": 0.5795,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4724
+      },
+      "disagreement": 0.1685,
+      "regime_prob": 0.4973,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "086280": {
+      "up_probability": 0.4377,
+      "prediction": "down",
+      "confidence": 0.1646,
+      "current_price": 215500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4302,
+        "lightgbm": 0.7414,
+        "lstm": 0.2689,
+        "ridge": 0.5892
+      },
+      "family_probs": {
+        "A_tree": 0.5858,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5892
+      },
+      "disagreement": 0.1763,
+      "regime_prob": 0.5453,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "000720": {
+      "up_probability": 0.3955,
+      "prediction": "down",
+      "confidence": 0.2491,
+      "current_price": 148400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4158,
+        "lightgbm": 0.5698,
+        "lstm": 0.2689,
+        "ridge": 0.4503
+      },
+      "family_probs": {
+        "A_tree": 0.4928,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4503
+      },
+      "disagreement": 0.1073,
+      "regime_prob": 0.503,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "017670": {
+      "up_probability": 0.4054,
+      "prediction": "down",
+      "confidence": 0.2292,
+      "current_price": 78300.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3994,
+        "lightgbm": 0.5943,
+        "lstm": 0.2689,
+        "ridge": 0.5309
+      },
+      "family_probs": {
+        "A_tree": 0.4969,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5309
+      },
+      "disagreement": 0.1252,
+      "regime_prob": 0.4906,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "030200": {
+      "up_probability": 0.4423,
+      "prediction": "down",
+      "confidence": 0.1554,
+      "current_price": 60800.0,
+      "n_models": 6,
+      "model_agreement": 0.6,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4047,
+        "lightgbm": 0.5615,
+        "lstm": 0.2689,
+        "ridge": 0.4707,
+        "calibrated_svc": 1.0
+      },
+      "family_probs": {
+        "A_tree": 0.4831,
+        "B_sequential": 0.2689,
+        "C_linear": 0.7353
+      },
+      "disagreement": 0.2485,
+      "regime_prob": 0.4998,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143,
+        "calibrated_svc": 0.8605
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "079550": {
+      "up_probability": 0.3797,
+      "prediction": "down",
+      "confidence": 0.2806,
+      "current_price": 686000.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4072,
+        "lightgbm": 0.4528,
+        "lstm": 0.2689,
+        "ridge": 0.4862
+      },
+      "family_probs": {
+        "A_tree": 0.43,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4862
+      },
+      "disagreement": 0.0828,
+      "regime_prob": 0.4715,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "003550": {
+      "up_probability": 0.404,
+      "prediction": "down",
+      "confidence": 0.232,
+      "current_price": 84800.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4079,
+        "lightgbm": 0.6953,
+        "lstm": 0.2689,
+        "ridge": 0.5413
+      },
+      "family_probs": {
+        "A_tree": 0.5516,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5413
+      },
+      "disagreement": 0.158,
+      "regime_prob": 0.4878,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "047050": {
+      "up_probability": 0.3856,
+      "prediction": "down",
+      "confidence": 0.2689,
+      "current_price": 75400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4094,
+        "lightgbm": 0.5588,
+        "lstm": 0.2689,
+        "ridge": 0.4358
+      },
+      "family_probs": {
+        "A_tree": 0.4841,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4358
+      },
+      "disagreement": 0.103,
+      "regime_prob": 0.4832,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "352820": {
+      "up_probability": 0.4557,
+      "prediction": "down",
+      "confidence": 0.1287,
+      "current_price": 302500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4025,
+        "lightgbm": 0.7212,
+        "lstm": 0.2689,
+        "ridge": 0.5648
+      },
+      "family_probs": {
+        "A_tree": 0.5618,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5648
+      },
+      "disagreement": 0.17,
+      "regime_prob": 0.5812,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "010950": {
+      "up_probability": 0.4064,
+      "prediction": "down",
+      "confidence": 0.2272,
+      "current_price": 110100.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4129,
+        "lightgbm": 0.6272,
+        "lstm": 0.2689,
+        "ridge": 0.5566
+      },
+      "family_probs": {
+        "A_tree": 0.52,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5566
+      },
+      "disagreement": 0.1377,
+      "regime_prob": 0.4827,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "018260": {
+      "up_probability": 0.4124,
+      "prediction": "down",
+      "confidence": 0.2151,
+      "current_price": 153300.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4222,
+        "lightgbm": 0.6686,
+        "lstm": 0.2689,
+        "ridge": 0.5246
+      },
+      "family_probs": {
+        "A_tree": 0.5454,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5246
+      },
+      "disagreement": 0.1459,
+      "regime_prob": 0.5047,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "071050": {
+      "up_probability": 0.4142,
+      "prediction": "down",
+      "confidence": 0.2116,
+      "current_price": 210000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3982,
+        "lightgbm": 0.5847,
+        "lstm": 0.2689,
+        "ridge": 0.5164
+      },
+      "family_probs": {
+        "A_tree": 0.4914,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5164
+      },
+      "disagreement": 0.1202,
+      "regime_prob": 0.5082,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "323410": {
+      "up_probability": 0.3711,
+      "prediction": "down",
+      "confidence": 0.2978,
+      "current_price": 24400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4284,
+        "lightgbm": 0.6745,
+        "lstm": 0.2689,
+        "ridge": 0.4925
+      },
+      "family_probs": {
+        "A_tree": 0.5514,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4925
+      },
+      "disagreement": 0.1453,
+      "regime_prob": 0.4543,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "259960": {
+      "up_probability": 0.3943,
+      "prediction": "down",
+      "confidence": 0.2513,
+      "current_price": 250500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3826,
+        "lightgbm": 0.6212,
+        "lstm": 0.2689,
+        "ridge": 0.4991
+      },
+      "family_probs": {
+        "A_tree": 0.5019,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4991
+      },
+      "disagreement": 0.1312,
+      "regime_prob": 0.5008,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "039490": {
+      "up_probability": 0.4072,
+      "prediction": "down",
+      "confidence": 0.2255,
+      "current_price": 411000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.425,
+        "lightgbm": 0.5454,
+        "lstm": 0.2689,
+        "ridge": 0.5072
+      },
+      "family_probs": {
+        "A_tree": 0.4852,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5072
+      },
+      "disagreement": 0.1061,
+      "regime_prob": 0.5027,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "003490": {
+      "up_probability": 0.3964,
+      "prediction": "down",
+      "confidence": 0.2471,
+      "current_price": 24700.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4023,
+        "lightgbm": 0.7269,
+        "lstm": 0.2689,
+        "ridge": 0.5002
+      },
+      "family_probs": {
+        "A_tree": 0.5646,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5002
+      },
+      "disagreement": 0.1672,
+      "regime_prob": 0.5005,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2294
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "000880": {
+      "up_probability": 0.3864,
+      "prediction": "down",
+      "confidence": 0.2672,
+      "current_price": 109300.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4035,
+        "lightgbm": 0.5885,
+        "lstm": 0.2689,
+        "ridge": 0.488
+      },
+      "family_probs": {
+        "A_tree": 0.496,
+        "B_sequential": 0.2689,
+        "C_linear": 0.488
+      },
+      "disagreement": 0.1172,
+      "regime_prob": 0.4849,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "016360": {
+      "up_probability": 0.3903,
+      "prediction": "down",
+      "confidence": 0.2593,
+      "current_price": 94700.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4075,
+        "lightgbm": 0.6262,
+        "lstm": 0.2689,
+        "ridge": 0.474
+      },
+      "family_probs": {
+        "A_tree": 0.5169,
+        "B_sequential": 0.2689,
+        "C_linear": 0.474
+      },
+      "disagreement": 0.1285,
+      "regime_prob": 0.4928,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "180640": {
+      "up_probability": 0.3884,
+      "prediction": "down",
+      "confidence": 0.2632,
+      "current_price": 112500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4047,
+        "lightgbm": 0.7558,
+        "lstm": 0.2689,
+        "ridge": 0.4883
+      },
+      "family_probs": {
+        "A_tree": 0.5803,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4883
+      },
+      "disagreement": 0.1777,
+      "regime_prob": 0.4889,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "090430": {
+      "up_probability": 0.4116,
+      "prediction": "down",
+      "confidence": 0.2168,
+      "current_price": 140400.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4149,
+        "lightgbm": 0.5959,
+        "lstm": 0.2689,
+        "ridge": 0.5224
+      },
+      "family_probs": {
+        "A_tree": 0.5054,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5224
+      },
+      "disagreement": 0.123,
+      "regime_prob": 0.503,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "009830": {
+      "up_probability": 0.3716,
+      "prediction": "down",
+      "confidence": 0.2968,
+      "current_price": 36600.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4172,
+        "lightgbm": 0.5108,
+        "lstm": 0.2689,
+        "ridge": 0.4339
+      },
+      "family_probs": {
+        "A_tree": 0.464,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4339
+      },
+      "disagreement": 0.0875,
+      "regime_prob": 0.4553,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "326030": {
+      "up_probability": 0.4111,
+      "prediction": "down",
+      "confidence": 0.2177,
+      "current_price": 97400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4216,
+        "lightgbm": 0.4019,
+        "lstm": 0.2689,
+        "ridge": 0.5209
+      },
+      "family_probs": {
+        "A_tree": 0.4118,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5209
+      },
+      "disagreement": 0.0898,
+      "regime_prob": 0.5021,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "377300": {
+      "up_probability": 0.3854,
+      "prediction": "down",
+      "confidence": 0.2693,
+      "current_price": 50800.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4309,
+        "lightgbm": 0.5581,
+        "lstm": 0.2689,
+        "ridge": 0.4723
+      },
+      "family_probs": {
+        "A_tree": 0.4945,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4723
+      },
+      "disagreement": 0.105,
+      "regime_prob": 0.4828,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "161390": {
+      "up_probability": 0.4131,
+      "prediction": "down",
+      "confidence": 0.2139,
+      "current_price": 55000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4263,
+        "lightgbm": 0.6424,
+        "lstm": 0.2689,
+        "ridge": 0.5208
+      },
+      "family_probs": {
+        "A_tree": 0.5344,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5208
+      },
+      "disagreement": 0.1365,
+      "regime_prob": 0.5059,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "029780": {
+      "up_probability": 0.4035,
+      "prediction": "down",
+      "confidence": 0.233,
+      "current_price": 53800.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3919,
+        "lightgbm": 0.712,
+        "lstm": 0.2689,
+        "ridge": 0.5559
+      },
+      "family_probs": {
+        "A_tree": 0.552,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5559
+      },
+      "disagreement": 0.1672,
+      "regime_prob": 0.4769,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "032640": {
+      "up_probability": 0.3852,
+      "prediction": "down",
+      "confidence": 0.2695,
+      "current_price": 15400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.42,
+        "lightgbm": 0.5667,
+        "lstm": 0.2689,
+        "ridge": 0.4997
+      },
+      "family_probs": {
+        "A_tree": 0.4933,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4997
+      },
+      "disagreement": 0.111,
+      "regime_prob": 0.4826,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "128940": {
+      "up_probability": 0.4018,
+      "prediction": "down",
+      "confidence": 0.2365,
+      "current_price": 524000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4114,
+        "lightgbm": 0.6048,
+        "lstm": 0.2689,
+        "ridge": 0.5088
+      },
+      "family_probs": {
+        "A_tree": 0.5081,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5088
+      },
+      "disagreement": 0.1242,
+      "regime_prob": 0.4917,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "078930": {
+      "up_probability": 0.4063,
+      "prediction": "down",
+      "confidence": 0.2274,
+      "current_price": 65900.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4342,
+        "lightgbm": 0.5652,
+        "lstm": 0.2689,
+        "ridge": 0.5137
+      },
+      "family_probs": {
+        "A_tree": 0.4997,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5137
+      },
+      "disagreement": 0.1121,
+      "regime_prob": 0.4924,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "052690": {
+      "up_probability": 0.3889,
+      "prediction": "down",
+      "confidence": 0.2623,
+      "current_price": 155200.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3806,
+        "lightgbm": 0.4599,
+        "lstm": 0.2689,
+        "ridge": 0.3923
+      },
+      "family_probs": {
+        "A_tree": 0.4203,
+        "B_sequential": 0.2689,
+        "C_linear": 0.3923
+      },
+      "disagreement": 0.0685,
+      "regime_prob": 0.4898,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "001040": {
+      "up_probability": 0.4119,
+      "prediction": "down",
+      "confidence": 0.2162,
+      "current_price": 198600.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4185,
+        "lightgbm": 0.6399,
+        "lstm": 0.2689,
+        "ridge": 0.5246
+      },
+      "family_probs": {
+        "A_tree": 0.5292,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5246
+      },
+      "disagreement": 0.1367,
+      "regime_prob": 0.5036,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "241560": {
+      "up_probability": 0.3863,
+      "prediction": "down",
+      "confidence": 0.2674,
+      "current_price": 58200.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4155,
+        "lightgbm": 0.5218,
+        "lstm": 0.2689,
+        "ridge": 0.4294
+      },
+      "family_probs": {
+        "A_tree": 0.4687,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4294
+      },
+      "disagreement": 0.0906,
+      "regime_prob": 0.4847,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "034220": {
+      "up_probability": 0.378,
+      "prediction": "down",
+      "confidence": 0.2839,
+      "current_price": 11140.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4224,
+        "lightgbm": 0.5849,
+        "lstm": 0.2689,
+        "ridge": 0.4659
+      },
+      "family_probs": {
+        "A_tree": 0.5037,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4659
+      },
+      "disagreement": 0.1131,
+      "regime_prob": 0.4682,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "138930": {
+      "up_probability": 0.3925,
+      "prediction": "down",
+      "confidence": 0.255,
+      "current_price": 18250.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4439,
+        "lightgbm": 0.385,
+        "lstm": 0.2689,
+        "ridge": 0.5134
+      },
+      "family_probs": {
+        "A_tree": 0.4145,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5134
+      },
+      "disagreement": 0.0897,
+      "regime_prob": 0.4656,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.3195
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "088980": {
+      "up_probability": 0.3952,
+      "prediction": "down",
+      "confidence": 0.2496,
+      "current_price": 11340.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4355,
+        "lightgbm": 0.6821,
+        "lstm": 0.2689,
+        "ridge": 0.5542
+      },
+      "family_probs": {
+        "A_tree": 0.5588,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5542
+      },
+      "disagreement": 0.1523,
+      "regime_prob": 0.4603,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "271560": {
+      "up_probability": 0.4049,
+      "prediction": "down",
+      "confidence": 0.2303,
+      "current_price": 127000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4174,
+        "lightgbm": 0.6011,
+        "lstm": 0.2689,
+        "ridge": 0.5106
+      },
+      "family_probs": {
+        "A_tree": 0.5092,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5106
+      },
+      "disagreement": 0.1228,
+      "regime_prob": 0.4979,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "021240": {
+      "up_probability": 0.4083,
+      "prediction": "down",
+      "confidence": 0.2235,
+      "current_price": 72500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3915,
+        "lightgbm": 0.5264,
+        "lstm": 0.2689,
+        "ridge": 0.499
+      },
+      "family_probs": {
+        "A_tree": 0.459,
+        "B_sequential": 0.2689,
+        "C_linear": 0.499
+      },
+      "disagreement": 0.1015,
+      "regime_prob": 0.5286,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "004020": {
+      "up_probability": 0.3983,
+      "prediction": "down",
+      "confidence": 0.2435,
+      "current_price": 34200.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3976,
+        "lightgbm": 0.6078,
+        "lstm": 0.2689,
+        "ridge": 0.5074
+      },
+      "family_probs": {
+        "A_tree": 0.5027,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5074
+      },
+      "disagreement": 0.1261,
+      "regime_prob": 0.4847,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "036570": {
+      "up_probability": 0.3985,
+      "prediction": "down",
+      "confidence": 0.243,
+      "current_price": 222000.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3753,
+        "lightgbm": 0.4525,
+        "lstm": 0.2689,
+        "ridge": 0.4592
+      },
+      "family_probs": {
+        "A_tree": 0.4139,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4592
+      },
+      "disagreement": 0.0768,
+      "regime_prob": 0.5091,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "002380": {
+      "up_probability": 0.4073,
+      "prediction": "down",
+      "confidence": 0.2254,
+      "current_price": 500000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4376,
+        "lightgbm": 0.6482,
+        "lstm": 0.2689,
+        "ridge": 0.539
+      },
+      "family_probs": {
+        "A_tree": 0.5429,
+        "B_sequential": 0.2689,
+        "C_linear": 0.539
+      },
+      "disagreement": 0.1396,
+      "regime_prob": 0.4944,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "251270": {
+      "up_probability": 0.3959,
+      "prediction": "down",
+      "confidence": 0.2482,
+      "current_price": 49750.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3904,
+        "lightgbm": 0.5998,
+        "lstm": 0.2689,
+        "ridge": 0.4773
+      },
+      "family_probs": {
+        "A_tree": 0.4951,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4773
+      },
+      "disagreement": 0.1209,
+      "regime_prob": 0.5039,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "035250": {
+      "up_probability": 0.3854,
+      "prediction": "down",
+      "confidence": 0.2692,
+      "current_price": 17990.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3843,
+        "lightgbm": 0.5033,
+        "lstm": 0.2689,
+        "ridge": 0.5033
+      },
+      "family_probs": {
+        "A_tree": 0.4438,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5033
+      },
+      "disagreement": 0.0973,
+      "regime_prob": 0.459,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "011170": {
+      "up_probability": 0.3999,
+      "prediction": "down",
+      "confidence": 0.2401,
+      "current_price": 82100.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4192,
+        "lightgbm": 0.6769,
+        "lstm": 0.2689,
+        "ridge": 0.5516
+      },
+      "family_probs": {
+        "A_tree": 0.5481,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5516
+      },
+      "disagreement": 0.1518,
+      "regime_prob": 0.4698,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "036460": {
+      "up_probability": 0.3855,
+      "prediction": "down",
+      "confidence": 0.269,
+      "current_price": 35100.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3941,
+        "lightgbm": 0.5233,
+        "lstm": 0.2689,
+        "ridge": 0.485
+      },
+      "family_probs": {
+        "A_tree": 0.4587,
+        "B_sequential": 0.2689,
+        "C_linear": 0.485
+      },
+      "disagreement": 0.0979,
+      "regime_prob": 0.4831,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "011780": {
+      "up_probability": 0.4251,
+      "prediction": "down",
+      "confidence": 0.1898,
+      "current_price": 120400.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4168,
+        "lightgbm": 0.567,
+        "lstm": 0.2689,
+        "ridge": 0.5649
+      },
+      "family_probs": {
+        "A_tree": 0.4919,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5649
+      },
+      "disagreement": 0.1232,
+      "regime_prob": 0.5201,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "302440": {
+      "up_probability": 0.4251,
+      "prediction": "down",
+      "confidence": 0.1899,
+      "current_price": 42300.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4503,
+        "lightgbm": 0.4531,
+        "lstm": 0.2689,
+        "ridge": 0.5509
+      },
+      "family_probs": {
+        "A_tree": 0.4517,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5509
+      },
+      "disagreement": 0.1019,
+      "regime_prob": 0.52,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "097950": {
+      "up_probability": 0.3825,
+      "prediction": "down",
+      "confidence": 0.2751,
+      "current_price": 217500.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3914,
+        "lightgbm": 0.5678,
+        "lstm": 0.2689,
+        "ridge": 0.4943
+      },
+      "family_probs": {
+        "A_tree": 0.4796,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4943
+      },
+      "disagreement": 0.1124,
+      "regime_prob": 0.477,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "004170": {
+      "up_probability": 0.414,
+      "prediction": "down",
+      "confidence": 0.212,
+      "current_price": 309000.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4043,
+        "lightgbm": 0.6047,
+        "lstm": 0.2689,
+        "ridge": 0.5692
+      },
+      "family_probs": {
+        "A_tree": 0.5045,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5692
+      },
+      "disagreement": 0.1346,
+      "regime_prob": 0.4979,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "023530": {
+      "up_probability": 0.3827,
+      "prediction": "down",
+      "confidence": 0.2746,
+      "current_price": 107400.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4115,
+        "lightgbm": 0.5245,
+        "lstm": 0.2689,
+        "ridge": 0.4743
+      },
+      "family_probs": {
+        "A_tree": 0.468,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4743
+      },
+      "disagreement": 0.0959,
+      "regime_prob": 0.4775,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "051600": {
+      "up_probability": 0.4113,
+      "prediction": "down",
+      "confidence": 0.2174,
+      "current_price": 57400.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4393,
+        "lightgbm": 0.3295,
+        "lstm": 0.2689,
+        "ridge": 0.4511
+      },
+      "family_probs": {
+        "A_tree": 0.3844,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4511
+      },
+      "disagreement": 0.0762,
+      "regime_prob": 0.5347,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "001450": {
+      "up_probability": 0.4125,
+      "prediction": "down",
+      "confidence": 0.2151,
+      "current_price": 31100.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4187,
+        "lightgbm": 0.7137,
+        "lstm": 0.2689,
+        "ridge": 0.5371
+      },
+      "family_probs": {
+        "A_tree": 0.5662,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5371
+      },
+      "disagreement": 0.1629,
+      "regime_prob": 0.5047,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "139480": {
+      "up_probability": 0.3831,
+      "prediction": "down",
+      "confidence": 0.2738,
+      "current_price": 98000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.41,
+        "lightgbm": 0.6208,
+        "lstm": 0.2689,
+        "ridge": 0.4907
+      },
+      "family_probs": {
+        "A_tree": 0.5154,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4907
+      },
+      "disagreement": 0.1276,
+      "regime_prob": 0.4783,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "204320": {
+      "up_probability": 0.4104,
+      "prediction": "down",
+      "confidence": 0.2192,
+      "current_price": 49750.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4074,
+        "lightgbm": 0.4871,
+        "lstm": 0.2689,
+        "ridge": 0.5176
+      },
+      "family_probs": {
+        "A_tree": 0.4473,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5176
+      },
+      "disagreement": 0.0962,
+      "regime_prob": 0.5006,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "383220": {
+      "up_probability": 0.4118,
+      "prediction": "down",
+      "confidence": 0.2164,
+      "current_price": 63400.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4545,
+        "lightgbm": 0.5948,
+        "lstm": 0.2689,
+        "ridge": 0.5625
+      },
+      "family_probs": {
+        "A_tree": 0.5247,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5625
+      },
+      "disagreement": 0.1273,
+      "regime_prob": 0.4935,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "081660": {
+      "up_probability": 0.4871,
+      "prediction": "down",
+      "confidence": 0.0657,
+      "current_price": 40350.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4073,
+        "lightgbm": 0.8015,
+        "lstm": 0.2689,
+        "ridge": 0.6396
+      },
+      "family_probs": {
+        "A_tree": 0.6044,
+        "B_sequential": 0.2689,
+        "C_linear": 0.6396
+      },
+      "disagreement": 0.2055,
+      "regime_prob": 0.5836,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.633,
+        "lstm": 0.3043,
+        "ridge": 0.355
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "192820": {
+      "up_probability": 0.3842,
+      "prediction": "down",
+      "confidence": 0.2716,
+      "current_price": 192100.0,
+      "n_models": 5,
+      "model_agreement": 1.0,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4445,
+        "lightgbm": 0.4937,
+        "lstm": 0.2689,
+        "ridge": 0.4796
+      },
+      "family_probs": {
+        "A_tree": 0.4691,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4796
+      },
+      "disagreement": 0.09,
+      "regime_prob": 0.4805,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "002790": {
+      "up_probability": 0.4095,
+      "prediction": "down",
+      "confidence": 0.221,
+      "current_price": 28500.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3808,
+        "lightgbm": 0.5955,
+        "lstm": 0.2689,
+        "ridge": 0.5154
+      },
+      "family_probs": {
+        "A_tree": 0.4881,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5154
+      },
+      "disagreement": 0.1251,
+      "regime_prob": 0.4988,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.322
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "008770": {
+      "up_probability": 0.4004,
+      "prediction": "down",
+      "confidence": 0.2393,
+      "current_price": 45050.0,
+      "n_models": 5,
+      "model_agreement": 0.5,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.3686,
+        "lightgbm": 0.5225,
+        "lstm": 0.2689,
+        "ridge": 0.5115
+      },
+      "family_probs": {
+        "A_tree": 0.4455,
+        "B_sequential": 0.2689,
+        "C_linear": 0.5115
+      },
+      "disagreement": 0.1053,
+      "regime_prob": 0.4889,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2941
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "100840": {
+      "up_probability": 0.4013,
+      "prediction": "down",
+      "confidence": 0.2375,
+      "current_price": 51000.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4398,
+        "lightgbm": 0.5732,
+        "lstm": 0.2689,
+        "ridge": 0.3975
+      },
+      "family_probs": {
+        "A_tree": 0.5065,
+        "B_sequential": 0.2689,
+        "C_linear": 0.3975
+      },
+      "disagreement": 0.1086,
+      "regime_prob": 0.5146,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    },
+    "195870": {
+      "up_probability": 0.3947,
+      "prediction": "down",
+      "confidence": 0.2506,
+      "current_price": 50300.0,
+      "n_models": 5,
+      "model_agreement": 0.75,
+      "tier": "diverse+regime",
+      "model_probs": {
+        "catboost": 0.4134,
+        "lightgbm": 0.5051,
+        "lstm": 0.2689,
+        "ridge": 0.4892
+      },
+      "family_probs": {
+        "A_tree": 0.4592,
+        "B_sequential": 0.2689,
+        "C_linear": 0.4892
+      },
+      "disagreement": 0.0934,
+      "regime_prob": 0.5015,
+      "ensemble_method": "calibrated_isotonic_weighted",
+      "effective_threshold": 0.52,
+      "calibrated_probs": {
+        "catboost": 0.3316,
+        "lightgbm": 0.3298,
+        "lstm": 0.3043,
+        "ridge": 0.2143
+      },
+      "excluded_models": [
+        "lightgbm",
+        "calibrated_svc",
+        "catboost",
+        "lstm",
+        "ridge",
+        "regime"
+      ]
+    }
+  },
+  "weights": {},
+  "gate_pass": false,
+  "gate_reasons": [
+    "매수 시그널 없음"
+  ],
+  "regime": "caution",
+  "result": {
+    "n_trades": 0,
+    "total_value": 30000000,
+    "return_pct": 0.0
+  }
+}

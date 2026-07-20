@@ -1,0 +1,20 @@
+{
+  "ticker": "005930",
+  "target_price": 501458,
+  "current_price": 286000,
+  "recomm_mean": 4.04,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "삼성전자",
+  "latest_research": {
+    "title": "2Q26 Preview 그럼에도 불구하고 믿음의 실적",
+    "broker": "교보증권",
+    "date": "20260701"
+  }
+}

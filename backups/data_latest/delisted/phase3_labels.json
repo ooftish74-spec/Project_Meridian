@@ -1,0 +1,864 @@
+{
+  "generated_at": "2026-04-12T05:30:23.198945",
+  "n_positive": 52,
+  "n_negative": 90,
+  "total": 142,
+  "labeling_method": {
+    "positive": "DART_distressed (TLTA>0.85+NI<0 or NI<0+OI<0 or eq<0) + KNOWN_DELISTED",
+    "negative": "DART_healthy (NI>0 + TLTA<0.70 + eq>0 + parquet_2025-12+)"
+  },
+  "labels": [
+    {
+      "ticker": "008770",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+11_oi=0e+00"
+    },
+    {
+      "ticker": "009420",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-6e+09_oi=-9e+08"
+    },
+    {
+      "ticker": "010060",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.40_ni=-1e+11_oi=-6e+10"
+    },
+    {
+      "ticker": "018880",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+11_oi=3e+11"
+    },
+    {
+      "ticker": "020150",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+11_oi=0e+00"
+    },
+    {
+      "ticker": "028300",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.47_ni=-2e+11_oi=-1e+11"
+    },
+    {
+      "ticker": "032820",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-4e+09_oi=-5e+09"
+    },
+    {
+      "ticker": "047040",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.74_ni=-9e+11_oi=-8e+11"
+    },
+    {
+      "ticker": "048410",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+10_oi=-2e+10"
+    },
+    {
+      "ticker": "060310",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.34_ni=-1e+10_oi=-6e+09"
+    },
+    {
+      "ticker": "066970",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-5e+11_oi=-2e+11"
+    },
+    {
+      "ticker": "085660",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.68_ni=-1e+11_oi=-5e+10"
+    },
+    {
+      "ticker": "086520",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-1e+11_oi=2e+11"
+    },
+    {
+      "ticker": "090710",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+10_oi=-2e+10"
+    },
+    {
+      "ticker": "097950",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-4e+11_oi=1e+12"
+    },
+    {
+      "ticker": "112040",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+10_oi=1e+10"
+    },
+    {
+      "ticker": "115180",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+10_oi=-3e+10"
+    },
+    {
+      "ticker": "140410",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+10_oi=-2e+10"
+    },
+    {
+      "ticker": "160190",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-7e+09_oi=-9e+09"
+    },
+    {
+      "ticker": "178320",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-1e+11_oi=1e+09"
+    },
+    {
+      "ticker": "222160",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+10_oi=-1e+10"
+    },
+    {
+      "ticker": "222800",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+11_oi=1e+10"
+    },
+    {
+      "ticker": "226950",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+10_oi=-3e+10"
+    },
+    {
+      "ticker": "263750",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-8e+09_oi=0e+00"
+    },
+    {
+      "ticker": "293490",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.55_ni=-1e+11_oi=-4e+10"
+    },
+    {
+      "ticker": "298380",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.44_ni=-4e+10_oi=-4e+10"
+    },
+    {
+      "ticker": "302440",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-6e+10_oi=-1e+11"
+    },
+    {
+      "ticker": "310210",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-4e+10_oi=-5e+10"
+    },
+    {
+      "ticker": "323280",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+09_oi=-3e+09"
+    },
+    {
+      "ticker": "328130",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.63_ni=-5e+10_oi=-8e+10"
+    },
+    {
+      "ticker": "336260",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-1e+11_oi=-1e+11"
+    },
+    {
+      "ticker": "347850",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-2e+10_oi=-3e+10"
+    },
+    {
+      "ticker": "361610",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.41_ni=-2e+11_oi=-2e+11"
+    },
+    {
+      "ticker": "376900",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+09_oi=5e+08"
+    },
+    {
+      "ticker": "417200",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-1e+09_oi=-1e+08"
+    },
+    {
+      "ticker": "445680",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-3e+10_oi=-1e+10"
+    },
+    {
+      "ticker": "454910",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=1.00_ni=-6e+10_oi=-6e+10"
+    },
+    {
+      "ticker": "475830",
+      "y": 1,
+      "label": "distressed_active",
+      "reason": "tlta=0.23_ni=-4e+10_oi=-5e+10"
+    },
+    {
+      "ticker": "018290",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "037440",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "006400",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "093240",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "044490",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "003575",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "012170",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "011043",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "038700",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "037740",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "041660",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "002585",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "140270",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "000545",
+      "y": 1,
+      "label": "known_delisted",
+      "reason": "manual"
+    },
+    {
+      "ticker": "000100",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.27_ni_pos"
+    },
+    {
+      "ticker": "000120",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.57_ni_pos"
+    },
+    {
+      "ticker": "000150",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.63_ni_pos"
+    },
+    {
+      "ticker": "000270",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.38_ni_pos"
+    },
+    {
+      "ticker": "000500",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.65_ni_pos"
+    },
+    {
+      "ticker": "000660",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.31_ni_pos"
+    },
+    {
+      "ticker": "001040",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.64_ni_pos"
+    },
+    {
+      "ticker": "001120",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.62_ni_pos"
+    },
+    {
+      "ticker": "001430",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.50_ni_pos"
+    },
+    {
+      "ticker": "002380",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.53_ni_pos"
+    },
+    {
+      "ticker": "002790",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.17_ni_pos"
+    },
+    {
+      "ticker": "003550",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.11_ni_pos"
+    },
+    {
+      "ticker": "003570",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.29_ni_pos"
+    },
+    {
+      "ticker": "004020",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.42_ni_pos"
+    },
+    {
+      "ticker": "004370",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.26_ni_pos"
+    },
+    {
+      "ticker": "005290",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.45_ni_pos"
+    },
+    {
+      "ticker": "005380",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.65_ni_pos"
+    },
+    {
+      "ticker": "005490",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.41_ni_pos"
+    },
+    {
+      "ticker": "005850",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.34_ni_pos"
+    },
+    {
+      "ticker": "005930",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.23_ni_pos"
+    },
+    {
+      "ticker": "006260",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.69_ni_pos"
+    },
+    {
+      "ticker": "008930",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.36_ni_pos"
+    },
+    {
+      "ticker": "009540",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.57_ni_pos"
+    },
+    {
+      "ticker": "010120",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.57_ni_pos"
+    },
+    {
+      "ticker": "010950",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.67_ni_pos"
+    },
+    {
+      "ticker": "011070",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.52_ni_pos"
+    },
+    {
+      "ticker": "011170",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.43_ni_pos"
+    },
+    {
+      "ticker": "011200",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.21_ni_pos"
+    },
+    {
+      "ticker": "011210",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.42_ni_pos"
+    },
+    {
+      "ticker": "011780",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.26_ni_pos"
+    },
+    {
+      "ticker": "012510",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.44_ni_pos"
+    },
+    {
+      "ticker": "012750",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.28_ni_pos"
+    },
+    {
+      "ticker": "017670",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.57_ni_pos"
+    },
+    {
+      "ticker": "018260",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.24_ni_pos"
+    },
+    {
+      "ticker": "018670",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.61_ni_pos"
+    },
+    {
+      "ticker": "023530",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.56_ni_pos"
+    },
+    {
+      "ticker": "028050",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.56_ni_pos"
+    },
+    {
+      "ticker": "028260",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.34_ni_pos"
+    },
+    {
+      "ticker": "030200",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.55_ni_pos"
+    },
+    {
+      "ticker": "030530",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.34_ni_pos"
+    },
+    {
+      "ticker": "031210",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.45_ni_pos"
+    },
+    {
+      "ticker": "031980",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.13_ni_pos"
+    },
+    {
+      "ticker": "032640",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.54_ni_pos"
+    },
+    {
+      "ticker": "033780",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.34_ni_pos"
+    },
+    {
+      "ticker": "034020",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.56_ni_pos"
+    },
+    {
+      "ticker": "034730",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.60_ni_pos"
+    },
+    {
+      "ticker": "035760",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.60_ni_pos"
+    },
+    {
+      "ticker": "035900",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.27_ni_pos"
+    },
+    {
+      "ticker": "038500",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.46_ni_pos"
+    },
+    {
+      "ticker": "042660",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.69_ni_pos"
+    },
+    {
+      "ticker": "047050",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.00_ni_pos"
+    },
+    {
+      "ticker": "052690",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.29_ni_pos"
+    },
+    {
+      "ticker": "058610",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.40_ni_pos"
+    },
+    {
+      "ticker": "060370",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.15_ni_pos"
+    },
+    {
+      "ticker": "062040",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.14_ni_pos"
+    },
+    {
+      "ticker": "064350",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.67_ni_pos"
+    },
+    {
+      "ticker": "064400",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.44_ni_pos"
+    },
+    {
+      "ticker": "066570",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.58_ni_pos"
+    },
+    {
+      "ticker": "068270",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.22_ni_pos"
+    },
+    {
+      "ticker": "068760",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.45_ni_pos"
+    },
+    {
+      "ticker": "071970",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.40_ni_pos"
+    },
+    {
+      "ticker": "081660",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.53_ni_pos"
+    },
+    {
+      "ticker": "082740",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.67_ni_pos"
+    },
+    {
+      "ticker": "090430",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.21_ni_pos"
+    },
+    {
+      "ticker": "100840",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.38_ni_pos"
+    },
+    {
+      "ticker": "101490",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.23_ni_pos"
+    },
+    {
+      "ticker": "111770",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.28_ni_pos"
+    },
+    {
+      "ticker": "112610",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.63_ni_pos"
+    },
+    {
+      "ticker": "120110",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.47_ni_pos"
+    },
+    {
+      "ticker": "128940",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.33_ni_pos"
+    },
+    {
+      "ticker": "180640",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.17_ni_pos"
+    },
+    {
+      "ticker": "195940",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.37_ni_pos"
+    },
+    {
+      "ticker": "204320",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.60_ni_pos"
+    },
+    {
+      "ticker": "207940",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.33_ni_pos"
+    },
+    {
+      "ticker": "237690",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.24_ni_pos"
+    },
+    {
+      "ticker": "241560",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.41_ni_pos"
+    },
+    {
+      "ticker": "257720",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.36_ni_pos"
+    },
+    {
+      "ticker": "259960",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.24_ni_pos"
+    },
+    {
+      "ticker": "278470",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.42_ni_pos"
+    },
+    {
+      "ticker": "282330",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.63_ni_pos"
+    },
+    {
+      "ticker": "298040",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.66_ni_pos"
+    },
+    {
+      "ticker": "319660",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.17_ni_pos"
+    },
+    {
+      "ticker": "322000",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.21_ni_pos"
+    },
+    {
+      "ticker": "329180",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.64_ni_pos"
+    },
+    {
+      "ticker": "373220",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.56_ni_pos"
+    },
+    {
+      "ticker": "383800",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.15_ni_pos"
+    },
+    {
+      "ticker": "443060",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.35_ni_pos"
+    },
+    {
+      "ticker": "457190",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.64_ni_pos"
+    },
+    {
+      "ticker": "462870",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.15_ni_pos"
+    },
+    {
+      "ticker": "489790",
+      "y": 0,
+      "label": "healthy",
+      "reason": "tlta=0.52_ni_pos"
+    }
+  ]
+}

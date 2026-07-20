@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-12T05:33:26.529081",
+  "status": "success",
+  "n_v5_records": 8908,
+  "n_da_history": 1,
+  "n_gap_feedback": 6,
+  "n_shock_events": 18,
+  "weight_stats": {
+    "mean": 1.2283,
+    "max": 2.0,
+    "min": 0.5
+  },
+  "retrain": null,
+  "cooldown_hours": 12
+}

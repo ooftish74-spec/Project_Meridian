@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "date": "2026-04-22",
+    "generated_at": "2026-04-22T06:00:17.133751",
+    "version": "1.0"
+  },
+  "collect_module1_morning": {
+    "status": "ok",
+    "rows": 44,
+    "latency_ms": 0,
+    "recorded_at": "2026-04-22T17:08:28.295825",
+    "total": 44,
+    "phase": "morning",
+    "stale_count": 19
+  },
+  "collect_module1_evening": {
+    "status": "ok",
+    "rows": 2,
+    "latency_ms": 0.0,
+    "recorded_at": "2026-04-22T20:01:58.188274",
+    "total": 2,
+    "phase": "evening"
+  },
+  "usa_collector": {
+    "status": "ok",
+    "rows": 20,
+    "latency_ms": 0.1,
+    "recorded_at": "2026-04-22T06:34:05.435898",
+    "categories": [
+      "indices",
+      "treasuries",
+      "currencies",
+      "commodities"
+    ]
+  },
+  "collect_short_interest": {
+    "status": "ok",
+    "rows": 236,
+    "latency_ms": 0.0,
+    "recorded_at": "2026-04-22T17:12:48.095223",
+    "source": "unknown"
+  }
+}

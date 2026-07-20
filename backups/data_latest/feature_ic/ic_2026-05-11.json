@@ -1,0 +1,287 @@
+{
+  "timestamp": "2026-05-11T15:42:11.877007",
+  "n_tickers": 300,
+  "n_features": 32,
+  "feature_ic": {
+    "lag_1": {
+      "mean_ic": 0.1967,
+      "std_ic": 0.1532,
+      "ir": 1.2841,
+      "t_stat": 22.2034,
+      "pct_positive": 0.9,
+      "n_tickers": 299
+    },
+    "lag_2": {
+      "mean_ic": 0.1848,
+      "std_ic": 0.1533,
+      "ir": 1.2056,
+      "t_stat": 20.8462,
+      "pct_positive": 0.89,
+      "n_tickers": 299
+    },
+    "lag_3": {
+      "mean_ic": 0.1716,
+      "std_ic": 0.1521,
+      "ir": 1.1282,
+      "t_stat": 19.5082,
+      "pct_positive": 0.886,
+      "n_tickers": 299
+    },
+    "lag_4": {
+      "mean_ic": 0.1707,
+      "std_ic": 0.1506,
+      "ir": 1.1336,
+      "t_stat": 19.6011,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "lag_5": {
+      "mean_ic": 0.1663,
+      "std_ic": 0.1523,
+      "ir": 1.0918,
+      "t_stat": 18.8791,
+      "pct_positive": 0.893,
+      "n_tickers": 299
+    },
+    "rmean_3": {
+      "mean_ic": 0.2027,
+      "std_ic": 0.1552,
+      "ir": 1.3061,
+      "t_stat": 22.5844,
+      "pct_positive": 0.9,
+      "n_tickers": 299
+    },
+    "rmean_7": {
+      "mean_ic": 0.1919,
+      "std_ic": 0.1574,
+      "ir": 1.2187,
+      "t_stat": 21.0739,
+      "pct_positive": 0.893,
+      "n_tickers": 299
+    },
+    "rstd_7": {
+      "mean_ic": 0.0615,
+      "std_ic": 0.143,
+      "ir": 0.4303,
+      "t_stat": 7.4413,
+      "pct_positive": 0.649,
+      "n_tickers": 299
+    },
+    "rmean_14": {
+      "mean_ic": 0.1786,
+      "std_ic": 0.1582,
+      "ir": 1.1289,
+      "t_stat": 19.5212,
+      "pct_positive": 0.89,
+      "n_tickers": 299
+    },
+    "rstd_14": {
+      "mean_ic": 0.0663,
+      "std_ic": 0.1664,
+      "ir": 0.3987,
+      "t_stat": 6.8946,
+      "pct_positive": 0.659,
+      "n_tickers": 299
+    },
+    "rmean_30": {
+      "mean_ic": 0.1279,
+      "std_ic": 0.1549,
+      "ir": 0.8253,
+      "t_stat": 14.27,
+      "pct_positive": 0.789,
+      "n_tickers": 299
+    },
+    "ema_30": {
+      "mean_ic": 0.163,
+      "std_ic": 0.1578,
+      "ir": 1.033,
+      "t_stat": 17.8623,
+      "pct_positive": 0.863,
+      "n_tickers": 299
+    },
+    "rsi_14": {
+      "mean_ic": 0.0769,
+      "std_ic": 0.1417,
+      "ir": 0.5426,
+      "t_stat": 9.383,
+      "pct_positive": 0.726,
+      "n_tickers": 299
+    },
+    "macd_hist": {
+      "mean_ic": 0.0618,
+      "std_ic": 0.1493,
+      "ir": 0.4138,
+      "t_stat": 7.1559,
+      "pct_positive": 0.679,
+      "n_tickers": 299
+    },
+    "price_ma_ratio_30": {
+      "mean_ic": 0.0978,
+      "std_ic": 0.1537,
+      "ir": 0.6364,
+      "t_stat": 11.0051,
+      "pct_positive": 0.742,
+      "n_tickers": 299
+    },
+    "trend_golden_cross": {
+      "mean_ic": 0.1,
+      "std_ic": 0.1355,
+      "ir": 0.7378,
+      "t_stat": 11.3342,
+      "pct_positive": 0.801,
+      "n_tickers": 236
+    },
+    "trend_dist_high_52w": {
+      "mean_ic": 0.1047,
+      "std_ic": 0.1509,
+      "ir": 0.6937,
+      "t_stat": 11.9951,
+      "pct_positive": 0.759,
+      "n_tickers": 299
+    },
+    "trend_price_position": {
+      "mean_ic": 0.093,
+      "std_ic": 0.1461,
+      "ir": 0.6367,
+      "t_stat": 11.0089,
+      "pct_positive": 0.729,
+      "n_tickers": 299
+    },
+    "mtf_vs_ma100": {
+      "mean_ic": 0.1342,
+      "std_ic": 0.1344,
+      "ir": 0.998,
+      "t_stat": 17.2579,
+      "pct_positive": 0.856,
+      "n_tickers": 299
+    },
+    "mtf_weekly_rsi": {
+      "mean_ic": 0.0877,
+      "std_ic": 0.1544,
+      "ir": 0.5679,
+      "t_stat": 9.8198,
+      "pct_positive": 0.696,
+      "n_tickers": 299
+    },
+    "rsi_x_vol": {
+      "mean_ic": 0.0856,
+      "std_ic": 0.1588,
+      "ir": 0.5393,
+      "t_stat": 9.3253,
+      "pct_positive": 0.696,
+      "n_tickers": 299
+    },
+    "ma_spread": {
+      "mean_ic": 0.0947,
+      "std_ic": 0.1552,
+      "ir": 0.6105,
+      "t_stat": 10.5563,
+      "pct_positive": 0.726,
+      "n_tickers": 299
+    },
+    "bb_x_vol": {
+      "mean_ic": 0.0898,
+      "std_ic": 0.1532,
+      "ir": 0.5863,
+      "t_stat": 10.1382,
+      "pct_positive": 0.732,
+      "n_tickers": 299
+    },
+    "bear_downside_vol_ratio": {
+      "mean_ic": 0.0907,
+      "std_ic": 0.1547,
+      "ir": 0.5861,
+      "t_stat": 10.1342,
+      "pct_positive": 0.729,
+      "n_tickers": 299
+    },
+    "alt_pc_ratio_zscore": {
+      "mean_ic": 0.0374,
+      "std_ic": 0.1492,
+      "ir": 0.2505,
+      "t_stat": 4.3318,
+      "pct_positive": 0.609,
+      "n_tickers": 299
+    },
+    "alt_greed_flag": {
+      "mean_ic": 0.0858,
+      "std_ic": 0.1153,
+      "ir": 0.7445,
+      "t_stat": 12.8307,
+      "pct_positive": 0.754,
+      "n_tickers": 297
+    },
+    "id_vwap_ratio": {
+      "mean_ic": -0.0808,
+      "std_ic": 0.122,
+      "ir": -0.6618,
+      "t_stat": -1.3236,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "id_vol_climax": {
+      "mean_ic": -0.0716,
+      "std_ic": 0.126,
+      "ir": -0.5686,
+      "t_stat": -1.1372,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "id_opening_mom": {
+      "mean_ic": 0.0995,
+      "std_ic": 0.1425,
+      "ir": 0.6981,
+      "t_stat": 1.3962,
+      "pct_positive": 0.75,
+      "n_tickers": 4
+    },
+    "id_closing_mom": {
+      "mean_ic": 0.0677,
+      "std_ic": 0.1179,
+      "ir": 0.5739,
+      "t_stat": 1.1479,
+      "pct_positive": 0.75,
+      "n_tickers": 4
+    },
+    "idx_climax_trend": {
+      "mean_ic": -0.1034,
+      "std_ic": 0.0979,
+      "ir": -1.0562,
+      "t_stat": -2.1125,
+      "pct_positive": 0.25,
+      "n_tickers": 4
+    },
+    "idx_intraday_reversal": {
+      "mean_ic": 0.0114,
+      "std_ic": 0.1321,
+      "ir": 0.0859,
+      "t_stat": 0.1718,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    }
+  },
+  "top_features": [
+    "rmean_3",
+    "lag_1",
+    "rmean_7",
+    "lag_2",
+    "rmean_14",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "ema_30",
+    "mtf_vs_ma100",
+    "rmean_30",
+    "trend_dist_high_52w",
+    "idx_climax_trend",
+    "trend_golden_cross",
+    "id_opening_mom"
+  ],
+  "noise_features": [],
+  "reverse_features": [
+    "idx_climax_trend",
+    "id_vwap_ratio",
+    "id_vol_climax"
+  ],
+  "date": "2026-05-11"
+}

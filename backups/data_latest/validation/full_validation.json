@@ -1,0 +1,436 @@
+{
+  "walk_forward": {
+    "ticker": "005930",
+    "n_folds": 28,
+    "avg_test_direction_acc": 0.561,
+    "avg_overfit_gap": 0.008,
+    "folds": [
+      {
+        "train_start": "2016-01-05",
+        "train_end": "2019-01-05",
+        "test_end": "2019-04-05",
+        "train_dir_acc": 0.573,
+        "test_dir_acc": 0.623,
+        "overfit_gap": -0.05,
+        "test_return": 23.27,
+        "test_vol": 26.5
+      },
+      {
+        "train_start": "2016-04-05",
+        "train_end": "2019-04-05",
+        "test_end": "2019-07-05",
+        "train_dir_acc": 0.585,
+        "test_dir_acc": 0.603,
+        "overfit_gap": -0.018,
+        "test_return": -2.24,
+        "test_vol": 21.5
+      },
+      {
+        "train_start": "2016-07-05",
+        "train_end": "2019-07-05",
+        "test_end": "2019-10-05",
+        "train_dir_acc": 0.59,
+        "test_dir_acc": 0.694,
+        "overfit_gap": -0.104,
+        "test_return": 4.84,
+        "test_vol": 22.0
+      },
+      {
+        "train_start": "2016-10-05",
+        "train_end": "2019-10-05",
+        "test_end": "2020-01-05",
+        "train_dir_acc": 0.606,
+        "test_dir_acc": 0.459,
+        "overfit_gap": 0.147,
+        "test_return": 15.06,
+        "test_vol": 20.9
+      },
+      {
+        "train_start": "2017-01-05",
+        "train_end": "2020-01-05",
+        "test_end": "2020-04-05",
+        "train_dir_acc": 0.593,
+        "test_dir_acc": 0.619,
+        "overfit_gap": -0.026,
+        "test_return": -14.18,
+        "test_vol": 44.6
+      },
+      {
+        "train_start": "2017-04-05",
+        "train_end": "2020-04-05",
+        "test_end": "2020-07-05",
+        "train_dir_acc": 0.595,
+        "test_dir_acc": 0.541,
+        "overfit_gap": 0.054,
+        "test_return": 14.31,
+        "test_vol": 31.3
+      },
+      {
+        "train_start": "2017-07-05",
+        "train_end": "2020-07-05",
+        "test_end": "2020-10-05",
+        "train_dir_acc": 0.589,
+        "test_dir_acc": 0.548,
+        "overfit_gap": 0.041,
+        "test_return": 9.93,
+        "test_vol": 26.3
+      },
+      {
+        "train_start": "2017-10-05",
+        "train_end": "2020-10-05",
+        "test_end": "2021-01-05",
+        "train_dir_acc": 0.585,
+        "test_dir_acc": 0.54,
+        "overfit_gap": 0.045,
+        "test_return": 37.59,
+        "test_vol": 27.3
+      },
+      {
+        "train_start": "2018-01-05",
+        "train_end": "2021-01-05",
+        "test_end": "2021-04-05",
+        "train_dir_acc": 0.585,
+        "test_dir_acc": 0.548,
+        "overfit_gap": 0.036,
+        "test_return": 3.85,
+        "test_vol": 28.9
+      },
+      {
+        "train_start": "2018-04-05",
+        "train_end": "2021-04-05",
+        "test_end": "2021-07-05",
+        "train_dir_acc": 0.581,
+        "test_dir_acc": 0.5,
+        "overfit_gap": 0.081,
+        "test_return": -5.08,
+        "test_vol": 14.0
+      },
+      {
+        "train_start": "2018-07-05",
+        "train_end": "2021-07-05",
+        "test_end": "2021-10-05",
+        "train_dir_acc": 0.581,
+        "test_dir_acc": 0.565,
+        "overfit_gap": 0.017,
+        "test_return": -9.77,
+        "test_vol": 19.9
+      },
+      {
+        "train_start": "2018-10-05",
+        "train_end": "2021-10-05",
+        "test_end": "2022-01-05",
+        "train_dir_acc": 0.568,
+        "test_dir_acc": 0.523,
+        "overfit_gap": 0.044,
+        "test_return": 6.16,
+        "test_vol": 21.5
+      },
+      {
+        "train_start": "2019-01-05",
+        "train_end": "2022-01-05",
+        "test_end": "2022-04-05",
+        "train_dir_acc": 0.563,
+        "test_dir_acc": 0.533,
+        "overfit_gap": 0.03,
+        "test_return": -12.47,
+        "test_vol": 18.1
+      },
+      {
+        "train_start": "2019-04-05",
+        "train_end": "2022-04-05",
+        "test_end": "2022-07-05",
+        "train_dir_acc": 0.556,
+        "test_dir_acc": 0.619,
+        "overfit_gap": -0.063,
+        "test_return": -18.63,
+        "test_vol": 20.9
+      },
+      {
+        "train_start": "2019-07-05",
+        "train_end": "2022-07-05",
+        "test_end": "2022-10-05",
+        "train_dir_acc": 0.556,
+        "test_dir_acc": 0.54,
+        "overfit_gap": 0.016,
+        "test_return": -1.18,
+        "test_vol": 25.0
+      },
+      {
+        "train_start": "2019-10-05",
+        "train_end": "2022-10-05",
+        "test_end": "2023-01-05",
+        "train_dir_acc": 0.544,
+        "test_dir_acc": 0.585,
+        "overfit_gap": -0.041,
+        "test_return": 6.21,
+        "test_vol": 26.8
+      },
+      {
+        "train_start": "2020-01-05",
+        "train_end": "2023-01-05",
+        "test_end": "2023-04-05",
+        "train_dir_acc": 0.555,
+        "test_dir_acc": 0.581,
+        "overfit_gap": -0.026,
+        "test_return": 10.65,
+        "test_vol": 22.4
+      },
+      {
+        "train_start": "2020-04-05",
+        "train_end": "2023-04-05",
+        "test_end": "2023-07-05",
+        "train_dir_acc": 0.553,
+        "test_dir_acc": 0.597,
+        "overfit_gap": -0.044,
+        "test_return": 12.88,
+        "test_vol": 19.7
+      },
+      {
+        "train_start": "2020-07-05",
+        "train_end": "2023-07-05",
+        "test_end": "2023-10-05",
+        "train_dir_acc": 0.557,
+        "test_dir_acc": 0.5,
+        "overfit_gap": 0.057,
+        "test_return": -8.45,
+        "test_vol": 21.9
+      },
+      {
+        "train_start": "2020-10-05",
+        "train_end": "2023-10-05",
+        "test_end": "2024-01-05",
+        "train_dir_acc": 0.554,
+        "test_dir_acc": 0.587,
+        "overfit_gap": -0.033,
+        "test_return": 13.12,
+        "test_vol": 19.3
+      },
+      {
+        "train_start": "2021-01-05",
+        "train_end": "2024-01-05",
+        "test_end": "2024-04-05",
+        "train_dir_acc": 0.558,
+        "test_dir_acc": 0.508,
+        "overfit_gap": 0.05,
+        "test_return": 10.6,
+        "test_vol": 25.3
+      },
+      {
+        "train_start": "2021-04-05",
+        "train_end": "2024-04-05",
+        "test_end": "2024-07-05",
+        "train_dir_acc": 0.556,
+        "test_dir_acc": 0.557,
+        "overfit_gap": -0.002,
+        "test_return": 3.02,
+        "test_vol": 28.0
+      },
+      {
+        "train_start": "2021-07-05",
+        "train_end": "2024-07-05",
+        "test_end": "2024-10-05",
+        "train_dir_acc": 0.561,
+        "test_dir_acc": 0.583,
+        "overfit_gap": -0.023,
+        "test_return": -31.62,
+        "test_vol": 37.2
+      },
+      {
+        "train_start": "2021-10-05",
+        "train_end": "2024-10-05",
+        "test_end": "2025-01-05",
+        "train_dir_acc": 0.562,
+        "test_dir_acc": 0.574,
+        "overfit_gap": -0.011,
+        "test_return": -9.27,
+        "test_vol": 35.8
+      },
+      {
+        "train_start": "2022-01-05",
+        "train_end": "2025-01-05",
+        "test_end": "2025-04-05",
+        "train_dir_acc": 0.566,
+        "test_dir_acc": 0.45,
+        "overfit_gap": 0.116,
+        "test_return": 4.12,
+        "test_vol": 29.9
+      },
+      {
+        "train_start": "2022-04-05",
+        "train_end": "2025-04-05",
+        "test_end": "2025-07-05",
+        "train_dir_acc": 0.56,
+        "test_dir_acc": 0.533,
+        "overfit_gap": 0.026,
+        "test_return": 13.28,
+        "test_vol": 32.1
+      },
+      {
+        "train_start": "2022-07-05",
+        "train_end": "2025-07-05",
+        "test_end": "2025-10-05",
+        "train_dir_acc": 0.552,
+        "test_dir_acc": 0.635,
+        "overfit_gap": -0.083,
+        "test_return": 35.34,
+        "test_vol": 31.0
+      },
+      {
+        "train_start": "2022-10-05",
+        "train_end": "2025-10-05",
+        "test_end": "2026-01-05",
+        "train_dir_acc": 0.559,
+        "test_dir_acc": 0.576,
+        "overfit_gap": -0.017,
+        "test_return": 46.67,
+        "test_vol": 47.4
+      }
+    ],
+    "verdict": "stable"
+  },
+  "transaction_cost": {
+    "round_trip_cost": "0.41%",
+    "trades_per_year": 390,
+    "annual_cost_pct": 10.7,
+    "warning": "연간 거래비용 약 10.7% — 수익에서 차감 필요"
+  },
+  "benchmark": {
+    "kospi_bh_return": 45.2,
+    "kospi_bh_sharpe": 3.41,
+    "excess_return": -45.2,
+    "outperforms_benchmark": false
+  },
+  "ablation": {
+    "models": {
+      "CatBoost": {
+        "category": "core",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "low"
+      },
+      "LSTM": {
+        "category": "core",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "low"
+      },
+      "GNN": {
+        "category": "auxiliary",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "TFT": {
+        "category": "auxiliary",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "BNN": {
+        "category": "uncertainty",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "FinBERT": {
+        "category": "sentiment",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "Causal ML": {
+        "category": "causal",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "RLHF": {
+        "category": "feedback",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "RL Portfolio": {
+        "category": "portfolio",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      },
+      "ESG": {
+        "category": "esg",
+        "has_output": false,
+        "contribution": "unverified",
+        "ablation_priority": "high"
+      }
+    },
+    "recommendation": [
+      "CatBoost + LSTM만으로 baseline 성능 측정 (core-only 테스트)",
+      "GNN/TFT/BNN 하나씩 추가하며 Sharpe 변화 측정",
+      "Sharpe 개선 <0.05인 모델은 제거 고려"
+    ]
+  },
+  "signal_ic": {
+    "weight_optimization": {
+      "method": "ridge_regression_on_returns",
+      "min_data_needed": 30,
+      "current_data": 1,
+      "ready": false
+    }
+  },
+  "feature_optimization": {
+    "ticker": "005930",
+    "total_features": 8,
+    "non_zero_features": 0,
+    "optimal_alpha": 0.000892,
+    "ranking": [
+      [
+        "ret_1d",
+        0.0
+      ],
+      [
+        "ret_5d",
+        0.0
+      ],
+      [
+        "ret_20d",
+        0.0
+      ],
+      [
+        "vol_20d",
+        0.0
+      ],
+      [
+        "rsi_14",
+        0.0
+      ],
+      [
+        "ma20_ratio",
+        0.0
+      ],
+      [
+        "ma60_ratio",
+        0.0
+      ],
+      [
+        "vol_ratio",
+        0.0
+      ]
+    ],
+    "recommendation": "L1 기준 유의 피처: 0개 (target: 25개)"
+  },
+  "alpha_decay": {
+    "ticker": "005930",
+    "ic_by_horizon": {
+      "1d": 0.0266,
+      "5d": 0.0701,
+      "10d": 0.0999,
+      "20d": 0.1309,
+      "40d": 0.1041,
+      "60d": 0.1831
+    },
+    "best_horizon": "60d",
+    "half_life": "1d",
+    "optimal_rebalance": "60d",
+    "recommendation": "리밸런싱 주기: 60d 권장 (IC peak)"
+  }
+}

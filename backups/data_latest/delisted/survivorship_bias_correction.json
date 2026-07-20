@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-04-12T05:16:31.189619",
+  "total_tickers": 1,
+  "early_end_tickers": [
+    {
+      "ticker": "204420",
+      "last_date": "2019-06-21",
+      "rows": 849,
+      "potential_delisted": true
+    }
+  ],
+  "bias_correction": {
+    "2016": {
+      "active_tickers": 1,
+      "current_tickers": 1,
+      "survival_ratio": 1.0,
+      "return_haircut_pct": 0
+    },
+    "2017": {
+      "active_tickers": 1,
+      "current_tickers": 1,
+      "survival_ratio": 1.0,
+      "return_haircut_pct": 0
+    },
+    "2018": {
+      "active_tickers": 1,
+      "current_tickers": 1,
+      "survival_ratio": 1.0,
+      "return_haircut_pct": 0
+    },
+    "2019": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2020": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2021": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2022": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2023": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2024": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2025": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    },
+    "2026": {
+      "active_tickers": 0,
+      "current_tickers": 1,
+      "survival_ratio": 0.0,
+      "return_haircut_pct": 200.0
+    }
+  },
+  "method": "survival_ratio_haircut",
+  "description": "return_haircut_pct를 백테스트 연간수익률에서 차감하여 생존편향 보정"
+}

@@ -1,0 +1,41 @@
+{
+  "ticker": "383220",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2514971525120,
+      "shares": 37536888,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2379838652416,
+      "shares": 37536888,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2447405219840,
+      "shares": 37536888,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2511217885184,
+      "shares": 37536888,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2511217885184,
+      "shares": 37536888,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2514971525120,
+      "shares": 37536888,
+      "source": "yfinance"
+    }
+  ]
+}

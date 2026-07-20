@@ -1,0 +1,640 @@
+{
+  "type": "what_if_backtest",
+  "period": "2026-04-13 ~ 2026-07-03",
+  "initial_capital": 232000000,
+  "trading_days": [
+    "2026-04-13",
+    "2026-04-14",
+    "2026-04-15",
+    "2026-04-16",
+    "2026-04-17",
+    "2026-04-20",
+    "2026-04-21",
+    "2026-04-22",
+    "2026-04-23",
+    "2026-04-24",
+    "2026-04-27",
+    "2026-04-28",
+    "2026-04-29",
+    "2026-04-30",
+    "2026-05-01",
+    "2026-05-04",
+    "2026-05-05",
+    "2026-05-06",
+    "2026-05-07",
+    "2026-05-08",
+    "2026-05-11",
+    "2026-05-12",
+    "2026-05-13",
+    "2026-05-14",
+    "2026-05-15",
+    "2026-05-18",
+    "2026-05-19",
+    "2026-05-20",
+    "2026-05-21",
+    "2026-05-22",
+    "2026-05-25",
+    "2026-05-26",
+    "2026-05-27",
+    "2026-05-28",
+    "2026-05-29",
+    "2026-06-01",
+    "2026-06-02",
+    "2026-06-03",
+    "2026-06-04",
+    "2026-06-05",
+    "2026-06-08",
+    "2026-06-09",
+    "2026-06-10",
+    "2026-06-11",
+    "2026-06-12",
+    "2026-06-15",
+    "2026-06-16",
+    "2026-06-17",
+    "2026-06-18",
+    "2026-06-19",
+    "2026-06-22",
+    "2026-06-23",
+    "2026-06-24",
+    "2026-06-25",
+    "2026-06-26",
+    "2026-06-29",
+    "2026-06-30",
+    "2026-07-01",
+    "2026-07-02",
+    "2026-07-03"
+  ],
+  "day_results": [
+    {
+      "date": "2026-04-13",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-14",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-15",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-16",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-17",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-20",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-21",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-22",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-23",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-24",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-27",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-28",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-29",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-04-30",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-01",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-04",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-05",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-06",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-07",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-08",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-11",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-12",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-13",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-14",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-15",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-18",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-19",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-20",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-21",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-22",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-25",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-26",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-27",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-28",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-05-29",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-01",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-02",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-03",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-04",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-05",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-08",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-09",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-10",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-11",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-12",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-15",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-16",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-17",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-18",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-19",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-22",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-23",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-24",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-25",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-26",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-29",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-06-30",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-07-01",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-07-02",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    },
+    {
+      "date": "2026-07-03",
+      "nav": 232000000,
+      "n_positions": 0,
+      "cash": 232000000,
+      "n_snapshots": 0,
+      "n_trades": 0
+    }
+  ],
+  "metrics": {
+    "me": {
+      "da": 0.0,
+      "da_n": 1,
+      "da_correct": 0,
+      "da_total": 1,
+      "da_held": null,
+      "da_realized": null,
+      "alpha_pct": -24.408,
+      "alpha_vs_bench": -24.408,
+      "cumulative_return_pct": 0.0,
+      "benchmark_return_pct": 24.422,
+      "ic": null,
+      "ic_p_value": null,
+      "ic_n": 0,
+      "ic_method": "spearman",
+      "sharpe": 0.0,
+      "max_drawdown_pct": 0.0,
+      "annualized_vol_pct": 0.0,
+      "sortino": 0.0,
+      "calmar": 0.0,
+      "portfolio_beta": 1.0,
+      "nav": 232000000,
+      "total_days": 38,
+      "n_days": 38,
+      "realized_pnl_krw": 0,
+      "realized_win_rate": 0.0,
+      "realized_trades": 0,
+      "avg_pnl_pct": null,
+      "brier_skill": 0.0,
+      "grade": "C",
+      "verdict": "EARLY_STAGE_CONDITIONAL",
+      "icir": null,
+      "calmar_ratio": null,
+      "win_loss_ratio": null,
+      "profit_factor": null,
+      "realized_kelly": null,
+      "avg_win_pct": null,
+      "avg_loss_pct": null,
+      "expectancy_pct": null,
+      "market_effect": 0,
+      "sector_effect": 0,
+      "stock_selection_alpha": 0,
+      "timing_effect": 0,
+      "selection_alpha": -24.422,
+      "selection_return": 0.0,
+      "allocation_effect": -24.408,
+      "nav_alpha": -24.422,
+      "avg_invest_pct": 0.0,
+      "risk_free_rate": 3.5,
+      "rolling_da": 0.0,
+      "da_min_positions": 5,
+      "da_valid_days": 0,
+      "per_stream": {
+        "A1_DIRECTIONAL": {
+          "win_rate": 0,
+          "total_trades": 0,
+          "realized_pnl": 0,
+          "active_positions": 0,
+          "market_value": 0,
+          "sharpe": null,
+          "alpha": null
+        },
+        "A2_SECTOR": {
+          "win_rate": 0,
+          "total_trades": 0,
+          "realized_pnl": 0,
+          "active_positions": 0,
+          "market_value": 0,
+          "sharpe": null,
+          "alpha": null
+        },
+        "A3_ALPHA": {
+          "win_rate": 0.0,
+          "total_trades": 0,
+          "realized_pnl": 0,
+          "active_positions": 0,
+          "market_value": 0,
+          "sharpe": null,
+          "alpha": null
+        }
+      }
+    },
+    "gonogo": {
+      "legacy": "PENDING",
+      "meridian": "PENDING",
+      "shadow_days": 38
+    }
+  },
+  "elapsed_sec": 61.594457149505615,
+  "timestamp": "2026-07-03T23:32:02.274555"
+}

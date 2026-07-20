@@ -1,0 +1,20 @@
+{
+  "ticker": "006800",
+  "target_price": 78688,
+  "current_price": 57800,
+  "recomm_mean": 3.29,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "미래에셋증권",
+  "latest_research": {
+    "title": "해외법인 체력 개선 확인. 지속성 검증 구간",
+    "broker": "SK증권",
+    "date": "20260521"
+  }
+}

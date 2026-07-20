@@ -1,0 +1,63 @@
+# ══════════════════════════════════════════════
+# Project Meridian — .gitignore
+# ══════════════════════════════════════════════
+
+# 환경변수 / API 키
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+
+# 가상환경
+venv/
+.venv/
+
+# ML 모델 아티팩트
+*.pkl
+*.joblib
+*.h5
+*.onnx
+
+# 런타임 상태 (재생성 가능)
+results/*.json
+results/models/
+results/shadow_trades/
+results/pa_results/
+results/reports/
+results/logs/
+results/archive_*/
+
+# 데이터 (대용량, 별도 관리)
+data/
+!data/.gitkeep
+
+# CatBoost 학습 캐시
+catboost_info/
+
+# Streamlit
+.streamlit/
+
+# pytest
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# 로그
+logs/
+*.log

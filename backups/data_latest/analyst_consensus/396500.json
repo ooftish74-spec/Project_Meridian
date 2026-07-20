@@ -1,0 +1,15 @@
+{
+  "ticker": "396500",
+  "target_price": 0,
+  "current_price": 43845,
+  "recomm_mean": 0.0,
+  "buy": 0,
+  "hold": 0,
+  "sell": 0,
+  "eps_revision_up": 0,
+  "eps_revision_down": 0,
+  "research_count": 0,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "TIGER 반도체TOP10"
+}

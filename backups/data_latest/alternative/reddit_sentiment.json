@@ -1,0 +1,1899 @@
+{
+  "last_updated": "2026-05-25",
+  "subreddits": {
+    "wallstreetbets": {
+      "avg_upvote_ratio": 0.897,
+      "avg_score": 1432,
+      "n_posts": 25,
+      "sentiment": "bullish",
+      "top_tickers": {
+        "AMD": 1
+      }
+    },
+    "investing": {
+      "avg_upvote_ratio": 0.68,
+      "avg_score": 64,
+      "n_posts": 25,
+      "sentiment": "neutral",
+      "top_tickers": {}
+    },
+    "stocks": {
+      "avg_upvote_ratio": 0.736,
+      "avg_score": 160,
+      "n_posts": 25,
+      "sentiment": "neutral",
+      "top_tickers": {
+        "NVDA": 5,
+        "AMD": 1,
+        "GOOG": 1,
+        "META": 1
+      }
+    }
+  },
+  "history": [
+    {
+      "date": "2026-03-08",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.921,
+          "avg_score": 2000,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.616,
+          "avg_score": 197,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.838,
+          "avg_score": 236,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-09",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.93,
+          "avg_score": 2279,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.635,
+          "avg_score": 201,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.818,
+          "avg_score": 233,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-10",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.937,
+          "avg_score": 3095,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.677,
+          "avg_score": 104,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.842,
+          "avg_score": 278,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-03-11",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.907,
+          "avg_score": 1936,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.684,
+          "avg_score": 187,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.824,
+          "avg_score": 503,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-12",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.912,
+          "avg_score": 1099,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.696,
+          "avg_score": 144,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.836,
+          "avg_score": 537,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 2,
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-13",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.917,
+          "avg_score": 1511,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.684,
+          "avg_score": 41,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.784,
+          "avg_score": 163,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-16",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.912,
+          "avg_score": 4572,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "AAPL": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.72,
+          "avg_score": 43,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.731,
+          "avg_score": 153,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-17",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.9,
+          "avg_score": 1164,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.642,
+          "avg_score": 83,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.835,
+          "avg_score": 146,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-18",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.91,
+          "avg_score": 1339,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.623,
+          "avg_score": 55,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.85,
+          "avg_score": 185,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2,
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-19",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.928,
+          "avg_score": 1420,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.604,
+          "avg_score": 38,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.855,
+          "avg_score": 214,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "NVDA": 1,
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-20",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.936,
+          "avg_score": 1396,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.593,
+          "avg_score": 82,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.871,
+          "avg_score": 289,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-23",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.899,
+          "avg_score": 3118,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.721,
+          "avg_score": 115,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.84,
+          "avg_score": 511,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-03-24",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.891,
+          "avg_score": 3755,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.786,
+          "avg_score": 102,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.842,
+          "avg_score": 543,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-03-25",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.882,
+          "avg_score": 1443,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.732,
+          "avg_score": 235,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "META": 2
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.829,
+          "avg_score": 372,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-26",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.9,
+          "avg_score": 1227,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.784,
+          "avg_score": 234,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.807,
+          "avg_score": 238,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-27",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.914,
+          "avg_score": 865,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.782,
+          "avg_score": 75,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.81,
+          "avg_score": 216,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-30",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.93,
+          "avg_score": 1904,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.743,
+          "avg_score": 75,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.779,
+          "avg_score": 313,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "AMZN": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-03-31",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.92,
+          "avg_score": 631,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.784,
+          "avg_score": 71,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.825,
+          "avg_score": 376,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-01",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.937,
+          "avg_score": 1073,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.815,
+          "avg_score": 105,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "AMZN": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.887,
+          "avg_score": 448,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-04-02",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.923,
+          "avg_score": 1278,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.735,
+          "avg_score": 73,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.841,
+          "avg_score": 448,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-04-03",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.916,
+          "avg_score": 1142,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMZN": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.754,
+          "avg_score": 76,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.848,
+          "avg_score": 211,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-04-06",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.879,
+          "avg_score": 1719,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.698,
+          "avg_score": 50,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.792,
+          "avg_score": 133,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-07",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.877,
+          "avg_score": 1016,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "TSLA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.753,
+          "avg_score": 65,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.779,
+          "avg_score": 136,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-08",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.903,
+          "avg_score": 1143,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.74,
+          "avg_score": 85,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.806,
+          "avg_score": 235,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "TSLA": 1,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-09",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.924,
+          "avg_score": 2689,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.7,
+          "avg_score": 81,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.796,
+          "avg_score": 296,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "META": 1,
+            "AMD": 1,
+            "TSLA": 1,
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-10",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.894,
+          "avg_score": 1695,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1,
+            "META": 1,
+            "AMZN": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.633,
+          "avg_score": 104,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.806,
+          "avg_score": 285,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-11",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.915,
+          "avg_score": 2170,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "AMD": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.695,
+          "avg_score": 115,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "MSFT": 2
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.832,
+          "avg_score": 217,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-13",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.921,
+          "avg_score": 5284,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.647,
+          "avg_score": 39,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.79,
+          "avg_score": 390,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "TSLA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-14",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.921,
+          "avg_score": 3020,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.745,
+          "avg_score": 66,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.782,
+          "avg_score": 366,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-15",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.935,
+          "avg_score": 1466,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMZN": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.649,
+          "avg_score": 84,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.812,
+          "avg_score": 292,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 2,
+            "MSFT": 1,
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-16",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.91,
+          "avg_score": 1796,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.736,
+          "avg_score": 124,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.805,
+          "avg_score": 324,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-17",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.934,
+          "avg_score": 1840,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1,
+            "NVDA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.71,
+          "avg_score": 131,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.819,
+          "avg_score": 364,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-18",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.944,
+          "avg_score": 1810,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.692,
+          "avg_score": 133,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.748,
+          "avg_score": 216,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-04-19",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.931,
+          "avg_score": 2987,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 1,
+            "MSFT": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.685,
+          "avg_score": 226,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.742,
+          "avg_score": 273,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-04-20",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.936,
+          "avg_score": 2792,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.658,
+          "avg_score": 202,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.728,
+          "avg_score": 219,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-21",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.91,
+          "avg_score": 918,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.667,
+          "avg_score": 166,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.748,
+          "avg_score": 96,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 2
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-22",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.9,
+          "avg_score": 2388,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.662,
+          "avg_score": 48,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.836,
+          "avg_score": 179,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-23",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.925,
+          "avg_score": 1203,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.76,
+          "avg_score": 84,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "AMZN": 1,
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.852,
+          "avg_score": 398,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-24",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.944,
+          "avg_score": 887,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 2
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.736,
+          "avg_score": 66,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "MSFT": 1,
+            "AMZN": 1,
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.851,
+          "avg_score": 137,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 2
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-27",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.915,
+          "avg_score": 3273,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 2,
+            "GOOG": 1,
+            "NVDA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.688,
+          "avg_score": 86,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "AAPL": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.726,
+          "avg_score": 180,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 3,
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-28",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.921,
+          "avg_score": 484,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.633,
+          "avg_score": 99,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.772,
+          "avg_score": 116,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 2,
+            "META": 1,
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-29",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.937,
+          "avg_score": 2254,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "AMD": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.643,
+          "avg_score": 55,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.762,
+          "avg_score": 104,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 2,
+            "META": 2,
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-04-30",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.94,
+          "avg_score": 2357,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 2,
+            "GOOG": 2,
+            "AMZN": 1,
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.666,
+          "avg_score": 39,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.863,
+          "avg_score": 96,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 3,
+            "GOOG": 3,
+            "MSFT": 2,
+            "AMZN": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-01",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.939,
+          "avg_score": 3398,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 3,
+            "MSFT": 1,
+            "GOOG": 1,
+            "AMZN": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.633,
+          "avg_score": 14,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.883,
+          "avg_score": 219,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "META": 4,
+            "AAPL": 2,
+            "GOOG": 2,
+            "MSFT": 2,
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-04",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.919,
+          "avg_score": 1875,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "TSLA": 1,
+            "MSFT": 1,
+            "AMZN": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.678,
+          "avg_score": 68,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "AMD": 1,
+            "MSFT": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.797,
+          "avg_score": 197,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-05",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.891,
+          "avg_score": 2505,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.714,
+          "avg_score": 102,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1,
+            "AMD": 1,
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.775,
+          "avg_score": 148,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-05-06",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.922,
+          "avg_score": 1210,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 2,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.706,
+          "avg_score": 62,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.793,
+          "avg_score": 91,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-05-07",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.941,
+          "avg_score": 1817,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 8,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.705,
+          "avg_score": 85,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.866,
+          "avg_score": 206,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 2,
+            "GOOG": 2,
+            "NVDA": 1,
+            "AMZN": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-08",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.947,
+          "avg_score": 2445,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.748,
+          "avg_score": 154,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.855,
+          "avg_score": 217,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-11",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.931,
+          "avg_score": 886,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.617,
+          "avg_score": 41,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.698,
+          "avg_score": 128,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-12",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.924,
+          "avg_score": 1506,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 2,
+            "TSLA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.66,
+          "avg_score": 73,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.82,
+          "avg_score": 102,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1,
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-13",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.935,
+          "avg_score": 2163,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.66,
+          "avg_score": 104,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.863,
+          "avg_score": 183,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 2,
+            "MSFT": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-14",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.946,
+          "avg_score": 1941,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.69,
+          "avg_score": 79,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "META": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.853,
+          "avg_score": 221,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        }
+      }
+    },
+    {
+      "date": "2026-05-15",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.915,
+          "avg_score": 1314,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.737,
+          "avg_score": 81,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "NVDA": 1,
+            "AAPL": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.772,
+          "avg_score": 192,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-18",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.919,
+          "avg_score": 677,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.698,
+          "avg_score": 106,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.758,
+          "avg_score": 257,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "GOOG": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-19",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.934,
+          "avg_score": 2025,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {}
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.67,
+          "avg_score": 74,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.75,
+          "avg_score": 106,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "MSFT": 1,
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-20",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.911,
+          "avg_score": 2189,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 1,
+            "GOOG": 1,
+            "META": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.697,
+          "avg_score": 69,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.769,
+          "avg_score": 1006,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "GOOG": 1,
+            "NVDA": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-21",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.94,
+          "avg_score": 2102,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 5,
+            "GOOG": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.655,
+          "avg_score": 27,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.804,
+          "avg_score": 1142,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 3,
+            "GOOG": 1,
+            "AMD": 1
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-22",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.943,
+          "avg_score": 1755,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "TSLA": 1,
+            "GOOG": 1,
+            "NVDA": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.662,
+          "avg_score": 31,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "GOOG": 1
+          }
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.83,
+          "avg_score": 222,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "NVDA": 3
+          }
+        }
+      }
+    },
+    {
+      "date": "2026-05-25",
+      "data": {
+        "wallstreetbets": {
+          "avg_upvote_ratio": 0.897,
+          "avg_score": 1432,
+          "n_posts": 25,
+          "sentiment": "bullish",
+          "top_tickers": {
+            "AMD": 1
+          }
+        },
+        "investing": {
+          "avg_upvote_ratio": 0.68,
+          "avg_score": 64,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {}
+        },
+        "stocks": {
+          "avg_upvote_ratio": 0.736,
+          "avg_score": 160,
+          "n_posts": 25,
+          "sentiment": "neutral",
+          "top_tickers": {
+            "NVDA": 5,
+            "AMD": 1,
+            "GOOG": 1,
+            "META": 1
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "ic_alert": {
+    "error": "\ud53c\ucc98 IC \uacc4\uc0b0 \uc2e4\ud328 - \ub370\uc774\ud130 \ubd80\uc871"
+  },
+  "ab_test": {
+    "today_accuracy": 0.6667,
+    "cumulative_accuracy": 0.6667,
+    "total_days": 2,
+    "n_predictions": 3,
+    "results": [
+      {
+        "ticker": "005930",
+        "predicted": "up",
+        "up_prob": 0.6806,
+        "actual_return": -0.078108,
+        "correct": false
+      },
+      {
+        "ticker": "000660",
+        "predicted": "down",
+        "up_prob": 0.4281,
+        "actual_return": -0.095238,
+        "correct": "True"
+      },
+      {
+        "ticker": "035420",
+        "predicted": "down",
+        "up_prob": 0.4031,
+        "actual_return": -0.017978,
+        "correct": "True"
+      }
+    ]
+  },
+  "regime": {
+    "regime": "BEAR",
+    "composite_score": -0.6,
+    "action": "\ucd5c\uc18c (20% \ud22c\uc790)",
+    "invest_ratio": 0.2,
+    "scores": {
+      "trend": -0.5,
+      "ret_20d": -13.53,
+      "price_vs_ma20": -4.08,
+      "vix": 27.0,
+      "vix_score": -0.5,
+      "kr_vs_us": -8.02
+    },
+    "timestamp": "2026-03-25T15:50:27.004198"
+  },
+  "optimal_weights": {
+    "006400": 0.0245,
+    "010130": 0.0237,
+    "035720": 0.0362,
+    "051910": 0.0264,
+    "207940": 0.0592,
+    "373220": 0.0301
+  }
+}

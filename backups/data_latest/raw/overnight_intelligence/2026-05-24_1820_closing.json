@@ -1,0 +1,43 @@
+{
+  "ois": 48.8,
+  "ois_price": 53.9,
+  "ois_sentiment": 16.7,
+  "sentiment": "neutral",
+  "threshold_adj": 0,
+  "components": {
+    "sgx_futures": {
+      "score": 59.06,
+      "detail": "SGX +0.36%",
+      "raw": {
+        "timestamp": "2026-05-24T16:20:16.734403",
+        "date": "20260522",
+        "close": 1232.45,
+        "change": 4.45,
+        "change_pct": 0.3624,
+        "overnight_gap": 0.3624,
+        "name": "\ucf54\uc2a4\ud53c200 F 202606 (\uc57c\uac04)",
+        "direction": "up",
+        "source": "KRX_Futures_API"
+      }
+    },
+    "us_market": {
+      "score": 50.0,
+      "detail": "S&P/NQ avg +0.00%",
+      "raw": {
+        "changes": [
+          0.0
+        ]
+      }
+    },
+    "nxt_aftermarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "vix_fear": {
+      "score": 16.7,
+      "detail": "F&G=17"
+    }
+  },
+  "timestamp": "2026-05-24T18:20:50.145541",
+  "include_premarket": false
+}

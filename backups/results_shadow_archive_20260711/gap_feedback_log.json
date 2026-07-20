@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-07-03T08:25:19.998493",
+  "status": "completed",
+  "enabled": true,
+  "gap_n_trades": 84,
+  "n_adjustments": 3,
+  "adjustments": [
+    {
+      "rule": "high_confidence_miss",
+      "key": "s2.min_confidence",
+      "old": 0.55,
+      "new": 0.57,
+      "reason": "고신뢰도 실패 비율 31% > 30%"
+    },
+    {
+      "rule": "stream_concentration",
+      "key": "sizer.stream_scale.S3",
+      "old": 1.0,
+      "new": 0.9,
+      "reason": "S3 실패율 62%"
+    },
+    {
+      "rule": "consecutive_losses",
+      "key": "exit.sl_atr_multiplier",
+      "old": 2.0,
+      "new": 1.9,
+      "reason": "연속 10건 손실"
+    }
+  ],
+  "retrain_needed": true,
+  "retrain_trigger": "gap_da_failure_43%"
+}

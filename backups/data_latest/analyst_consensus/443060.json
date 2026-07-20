@@ -1,0 +1,20 @@
+{
+  "ticker": "443060",
+  "target_price": 326667,
+  "current_price": 225000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "HD현대마린솔루션",
+  "latest_research": {
+    "title": "FDC 사업역량 부각 기대",
+    "broker": "미래에셋증권",
+    "date": "20260610"
+  }
+}

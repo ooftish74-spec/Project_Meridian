@@ -1,0 +1,20 @@
+{
+  "ticker": "005490",
+  "target_price": 582765,
+  "current_price": 399000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "POSCO홀딩스",
+  "latest_research": {
+    "title": "리튬사업에 동이 튼다!",
+    "broker": "키움증권",
+    "date": "20260507"
+  }
+}

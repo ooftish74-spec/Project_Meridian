@@ -1,0 +1,20 @@
+{
+  "ticker": "030200",
+  "target_price": 75500,
+  "current_price": 54800,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-12",
+  "stock_name": "KT",
+  "latest_research": {
+    "title": "6월 전략 - 이젠 장기 매수 전략이 차라리 나을 듯",
+    "broker": "하나증권",
+    "date": "20260528"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "ticker": "100840",
+  "target_price": 66000,
+  "current_price": 33900,
+  "recomm_mean": 4.0,
+  "buy": 1,
+  "hold": 2,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 0,
+  "research_count": 3,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-05",
+  "stock_name": "SNT에너지",
+  "latest_research": {
+    "title": "미국 수주 확대로 밸류에이션 리레이팅 될 듯",
+    "broker": "iM증권",
+    "date": "20260406"
+  }
+}

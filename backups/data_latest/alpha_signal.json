@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-07-18T19:15:18.489455+00:00",
+  "S1_signal": {
+    "contagion_alert": "CRITICAL",
+    "vix_spike": false
+  },
+  "S2_signal": {
+    "pysr_macro_feature_value": -0.09483452886343002
+  },
+  "S3_signal": {
+    "sector_forecast": {
+      "semi": 5.2,
+      "auto": -1.1
+    }
+  },
+  "S4_signal": {
+    "macro_cycle": "Late-Cycle (Real ML Data Processed)"
+  },
+  "raw_alpha": {
+    "best_formula": "149.208167177605*Abs(x1)"
+  }
+}

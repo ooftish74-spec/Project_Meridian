@@ -1,0 +1,41 @@
+{
+  "ticker": "036570",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 4654412333056,
+      "shares": 19393383,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 4635018919936,
+      "shares": 19393383,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 4799862407168,
+      "shares": 19393383,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 5090763079680,
+      "shares": 19393383,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 5090763079680,
+      "shares": 19393383,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 5333180743680,
+      "shares": 19393383,
+      "source": "yfinance"
+    }
+  ]
+}

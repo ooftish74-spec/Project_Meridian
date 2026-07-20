@@ -1,0 +1,66 @@
+{
+  "updated": "2026-07-15T23:37:17.437419+09:00",
+  "n_days": 3,
+  "regime": "caution",
+  "go_nogo": {
+    "verdict": "CONDITIONAL_GO",
+    "n_days": 3,
+    "sharpe": -5.343,
+    "win_rate": 0.6667,
+    "max_dd": 0.0,
+    "criteria": {
+      "sharpe_pass": false,
+      "winrate_pass": true,
+      "dd_pass": true
+    },
+    "daily_returns": [
+      -0.0006679200000000419,
+      8.005346931322369e-05,
+      0.0002001176531706521
+    ]
+  },
+  "daily_stats": [
+    {
+      "date": "2026-07-13",
+      "n_runs": 2,
+      "n_orders": 2,
+      "n_filled": 1,
+      "total_buy": 890560.0,
+      "total_sell": 0.0,
+      "net_flow": -890560.0,
+      "regime": "crash",
+      "nav": 999332.08
+    },
+    {
+      "date": "2026-07-14",
+      "n_runs": 2,
+      "n_orders": 2,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "crash",
+      "nav": 999412.08
+    },
+    {
+      "date": "2026-07-15",
+      "n_runs": 1,
+      "n_orders": 1,
+      "n_filled": 1,
+      "total_buy": 0.0,
+      "total_sell": 890840.0,
+      "net_flow": 890840.0,
+      "regime": "crash",
+      "nav": 999612.08
+    }
+  ],
+  "nav": 999612.08,
+  "cash": 999612.08,
+  "hwm": 999612.08,
+  "initial_capital": 1000000.0,
+  "n_positions": 0,
+  "realized_pnl": 0,
+  "unrealized_pnl": 0,
+  "total_commission": 0,
+  "total_return_pct": -0.0388
+}

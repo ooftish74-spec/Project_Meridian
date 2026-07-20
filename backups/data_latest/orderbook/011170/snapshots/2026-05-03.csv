@@ -1,0 +1,2 @@
+ticker,ask_price_1,ask_vol_1,ask_price_2,ask_vol_2,ask_price_3,ask_vol_3,ask_price_4,ask_vol_4,ask_price_5,ask_vol_5,bid_price_1,bid_vol_1,bid_price_2,bid_vol_2,bid_price_3,bid_vol_3,bid_price_4,bid_vol_4,bid_price_5,bid_vol_5,total_ask_vol,total_bid_vol,order_imbalance,spread,spread_pct,bid_depth_ratio,timestamp
+011170,114000,236,114100,865,114200,193,114300,178,114400,358,113900,2090,113800,62,113700,65,113600,89,113500,63,1830,2369,0.12836389616544805,100,0.08779631255486499,0.8822287885146382,2026-05-03 18:24:11

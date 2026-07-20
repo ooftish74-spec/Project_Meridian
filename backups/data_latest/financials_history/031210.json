@@ -1,0 +1,53 @@
+{
+  "ticker": "031210",
+  "updated_at": "2026-04-19T03:10:13.010511",
+  "years": [
+    2025
+  ],
+  "annual": [
+    {
+      "depreciation": 3016219366,
+      "total_assets": 9408732397027,
+      "ppe_net": 141323735979,
+      "prev_ppe_net": 138378474347,
+      "total_equity": 5195172983650,
+      "retained_earnings": 5044592761744,
+      "total_liabilities": 4213559413377,
+      "interest_expense": -5860480215,
+      "revenue": 445475884681,
+      "prev_revenue": 461580178965,
+      "income_tax": -105971704925,
+      "net_income": 268410960714,
+      "operating_income": 375701743924,
+      "prev_operating_income": 279662786859,
+      "cash": 173384495828,
+      "capex": -209467414540,
+      "cash_from_operations": 387231449456,
+      "roe": 5.1665,
+      "debt_ratio": 81.11,
+      "opm": 84.34,
+      "year": 2025,
+      "shares_outstanding": 69821598
+    }
+  ],
+  "computed": {
+    "roe_2yr_avg": null,
+    "roe_5yr_avg": null,
+    "eps_5yr_cagr": null,
+    "ni_volatility": null,
+    "fcf_avg_3yr": 177764034916.0,
+    "debt_ratio_latest": 81.1,
+    "revenue_10yr_cagr": null,
+    "eps_10yr_cagr": null,
+    "ebitda_avg_3yr": 378717963290.0,
+    "altman_z": 1.055,
+    "roic_proxy_5yr": 3.99,
+    "accrual_pct_latest": -1.262874569368614,
+    "accrual_pct_3yr_avg": -1.26,
+    "net_debt_latest": 4040174917549,
+    "cash_latest": 173384495828,
+    "fcf_yield_proxy": 1.89,
+    "data_years": 1,
+    "year_range": "2025~2025"
+  }
+}

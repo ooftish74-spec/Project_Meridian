@@ -1,0 +1,20 @@
+{
+  "ticker": "138930",
+  "target_price": 24382,
+  "current_price": 17170,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "BNK금융지주",
+  "latest_research": {
+    "title": "중기적인 관점의 투자 매력이 높은 상태",
+    "broker": "한화투자증권",
+    "date": "20260504"
+  }
+}

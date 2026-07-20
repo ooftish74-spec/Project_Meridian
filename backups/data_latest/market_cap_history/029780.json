@@ -1,0 +1,41 @@
+{
+  "ticker": "029780",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 5869088538624,
+      "shares": 106710695,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 5666337980416,
+      "shares": 106710695,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 5794390605824,
+      "shares": 106710695,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 5805061963776,
+      "shares": 106710695,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 5805061963776,
+      "shares": 106710695,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 5773048414208,
+      "shares": 106710695,
+      "source": "yfinance"
+    }
+  ]
+}

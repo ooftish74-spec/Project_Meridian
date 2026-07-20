@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/Library/Frameworks/Python.framework/Versions/3.12/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+		<key>PYTHONPATH</key>
+		<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+	</dict>
+	<key>Label</key>
+	<string>com.project.meridian.alpha_miner</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/venv/bin/python3</string>
+		<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/run_alpha_miner.py</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/alpha_miner_launchd.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/alpha_miner_launchd.out</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>0</integer>
+		<key>Minute</key>
+		<integer>15</integer>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+</dict>
+</plist>

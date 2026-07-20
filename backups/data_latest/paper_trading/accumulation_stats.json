@@ -1,0 +1,11 @@
+{
+  "total_days": 71,
+  "signal_failures": 6,
+  "kill_switch_days": 0,
+  "rebalance_days": 26,
+  "hold_days": 39,
+  "first_day": "2026-04-01",
+  "last_day": "2026-05-25",
+  "accumulation_progress": 1.0,
+  "sufficient": true
+}

@@ -1,0 +1,199 @@
+{
+  "updated": "2026-06-03T08:50:42.407003",
+  "n_days": 6,
+  "regime": "bull",
+  "nav": 151129341.0,
+  "cash": 88053551.0,
+  "hwm": 151618906.0,
+  "initial_capital": 150000000,
+  "n_positions": 27,
+  "realized_pnl": -1158654,
+  "unrealized_pnl": 2299365.0,
+  "total_commission": 36359,
+  "total_return_pct": 0.753,
+  "go_nogo": {
+    "verdict": "PENDING",
+    "n_days": 6,
+    "target_days": 4,
+    "sharpe": 4.737,
+    "win_rate": 0.0,
+    "max_dd": -0.0032,
+    "da": 0.6296,
+    "alpha": -14.022,
+    "ic": -0.2469,
+    "total_return": 0.753,
+    "realized_pnl": -1158654,
+    "realized_trades": 12,
+    "criteria": {
+      "shadow_days": {
+        "value": 6,
+        "threshold": 4,
+        "pass": true,
+        "detail": "6/4일"
+      },
+      "s1_trades": {
+        "value": 0,
+        "threshold": 1,
+        "pass": false,
+        "detail": "S1 0/1건"
+      },
+      "s2_trades": {
+        "value": 17,
+        "threshold": 1,
+        "pass": true,
+        "detail": "S2 17/1건"
+      },
+      "s3_trades": {
+        "value": 3,
+        "threshold": 1,
+        "pass": true,
+        "detail": "S3 3/1건"
+      },
+      "s4_trades": {
+        "value": 31,
+        "threshold": 1,
+        "pass": true,
+        "detail": "S4 31/1건"
+      },
+      "total_return": {
+        "value": 0.75,
+        "threshold": 0,
+        "pass": true
+      },
+      "s1_return": {
+        "value": 0.0,
+        "threshold": "info",
+        "pass": true,
+        "detail": "S1 PnL=0원 (+0.00%)"
+      },
+      "s2_return": {
+        "value": 0.0,
+        "threshold": "info",
+        "pass": true,
+        "detail": "S2 PnL=0원 (+0.00%)"
+      },
+      "s3_return": {
+        "value": 0.0,
+        "threshold": "info",
+        "pass": true,
+        "detail": "S3 PnL=0원 (+0.00%)"
+      },
+      "s4_return": {
+        "value": 0.0,
+        "threshold": "info",
+        "pass": true,
+        "detail": "S4 PnL=0원 (+0.00%)"
+      },
+      "win_rate": {
+        "value": 0.0,
+        "threshold": 45,
+        "pass": true
+      },
+      "mdd": {
+        "value": -0.32,
+        "threshold": 10.0,
+        "pass": true
+      },
+      "da": {
+        "value": 63.0,
+        "threshold": 52,
+        "pass": true,
+        "detail": "63.0% (27건)"
+      },
+      "ic": {
+        "value": "PENDING (D6/20)",
+        "threshold": "p<0.10",
+        "pass": true,
+        "detail": "거래일 부족 (6/20일)",
+        "pending": true
+      },
+      "net_alpha": {
+        "value": "PENDING (D6/20)",
+        "threshold": 0,
+        "pass": true,
+        "detail": "거래일 부족 (6/20일), 현재 Alpha=+0.75%",
+        "pending": true
+      }
+    }
+  },
+  "daily_stats": [
+    {
+      "date": "2026-05-26",
+      "nav": 149994631.0,
+      "daily_return": -0.0036
+    },
+    {
+      "date": "2026-05-27",
+      "nav": 149979345.0,
+      "daily_return": -0.0102
+    },
+    {
+      "date": "2026-05-28",
+      "nav": 149623855.0,
+      "daily_return": -0.237
+    },
+    {
+      "date": "2026-05-29",
+      "nav": 150988201.0,
+      "daily_return": 0.9119
+    },
+    {
+      "date": "2026-06-01",
+      "nav": 151616984.0,
+      "daily_return": 0.4164
+    },
+    {
+      "date": "2026-06-02",
+      "nav": 151129341.0,
+      "daily_return": -0.3216
+    }
+  ],
+  "data_date": "2026-06-02",
+  "display_date": "2026-06-03",
+  "is_holiday": true,
+  "holiday_note": "6/3 지방선거일 휴장 — 데이터는 6/2(최종 거래일) 기준",
+  "whatif_comparison": {
+    "timestamp": "2026-06-03T08:50:42.406996",
+    "period": "2026-05-26 ~ 2026-06-02",
+    "improvements": [
+      "P1: Take Profit (+15%)",
+      "P1: Trailing Stop (고점-3%)",
+      "P2: Position HWM 추적",
+      "P3: ATR 적응형 손절",
+      "P4: IC 고정conf 제외",
+      "P5: Alpha PENDING (20일)",
+      "P6: S4 ETF conf 동적화",
+      "P7: Time Decay 매도"
+    ],
+    "before": {
+      "nav": 151129341,
+      "return_pct": 0.75,
+      "realized_pnl": -1158654,
+      "win_rate": 0.0,
+      "profit_factor": 0.0,
+      "alpha_pct": -14.02,
+      "sells_total": 12,
+      "sells_tp": 0,
+      "sells_trailing": 0,
+      "sells_sl": 12
+    },
+    "after": {
+      "nav": 150944503,
+      "return_pct": 0.63,
+      "realized_pnl": 666883,
+      "win_rate": 0.333,
+      "profit_factor": 1.44,
+      "alpha_pct": 0.5,
+      "sells_total": 21,
+      "sells_tp": 5,
+      "sells_trailing": 2,
+      "sells_sl": 14
+    },
+    "delta": {
+      "realized_pnl": 1825537,
+      "win_rate": 0.333,
+      "profit_factor": 1.44,
+      "alpha_pct": 14.52
+    }
+  }
+}

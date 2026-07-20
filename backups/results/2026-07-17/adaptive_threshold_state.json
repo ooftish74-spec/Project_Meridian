@@ -1,0 +1,43 @@
+{
+  "ois_history": [
+    50.0
+  ],
+  "us_change_history": [
+    0.0
+  ],
+  "vix_history": [
+    20.66
+  ],
+  "pcr_history": [
+    1.0
+  ],
+  "sentiment_history": [
+    0.0
+  ],
+  "last_computed": {
+    "gap_min_us_change_pct": 0.696,
+    "ois_long_threshold": 0.571,
+    "ois_short_threshold": 0.429,
+    "single_stock_min_score": 0.68,
+    "single_stock_max_inv_score": 0.262,
+    "pcr_extreme_threshold": 1.531,
+    "vix_assurance_threshold": 25.0,
+    "sentiment_risk_threshold": -0.15,
+    "sentiment_extreme_threshold": -0.3,
+    "method": "adaptive_v1",
+    "vix_scale_factor": 1.069,
+    "regime": "caution",
+    "regime_adjustments": {
+      "base_long_shift": 0.0,
+      "base_short_shift": 0.0,
+      "tanh_scale": 0.987,
+      "long_shift": 0.0,
+      "short_shift": 0.0
+    },
+    "confidence": "low",
+    "history_depth": 1,
+    "neutral_band_width": 0.141,
+    "timestamp": "2026-07-16T23:36:29.403365"
+  },
+  "updated": "2026-07-16T23:36:29.403372"
+}

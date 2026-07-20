@@ -1,0 +1,40 @@
+{
+  "timestamp": "2026-07-21T00:15:47.873033",
+  "data_status": {
+    "n_trades": 0,
+    "n_days": 0,
+    "sufficient_trades": false,
+    "sufficient_days": false,
+    "data_ready": false
+  },
+  "performance": {},
+  "cost_analysis": {},
+  "strategy_breakdown": {},
+  "signal_quality": {
+    "total_signals_generated": 2,
+    "ev_filter_passed": 2,
+    "ev_pass_rate": 1.0,
+    "avg_ev": 0.061329,
+    "avg_confidence": 0.8009
+  },
+  "verdict": {
+    "decision": "BOOTSTRAP_GO",
+    "recommendation": "부트스트랩 진입 (50% 축소) — EV/슬리피지 양호, 15거래 누적 후 본 검증 전환 (현재 0거래 / 0일)",
+    "criteria": {
+      "data_sufficient": false,
+      "win_rate_pass": false,
+      "sharpe_pass": false,
+      "slippage_pass": true,
+      "ev_pass_rate_ok": true
+    },
+    "score": "2/5",
+    "thresholds": {
+      "min_win_rate": 0.53,
+      "min_sharpe": 0.5,
+      "max_slippage_pct": 0.2,
+      "min_ev_pass_rate": 0.3,
+      "min_trades": 15,
+      "min_days": 20
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "ticker": "039200",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2027524325376,
+      "shares": 38255176,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2111685656576,
+      "shares": 38255176,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2188196052992,
+      "shares": 38255176,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2092558188544,
+      "shares": 38255176,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2092558188544,
+      "shares": 38255176,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1947188461568,
+      "shares": 38255176,
+      "source": "yfinance"
+    }
+  ]
+}

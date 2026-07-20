@@ -1,0 +1,22 @@
+{
+  "ticker": "085660",
+  "company": "085660",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 21269307809,
+  "operating_profit": null,
+  "net_income": -269872739091,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.906838"
+}

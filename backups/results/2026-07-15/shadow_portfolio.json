@@ -1,0 +1,177 @@
+{
+  "initial_capital": 1000000.0,
+  "virtual_nav": 999412.08,
+  "cash": 108772.07999999996,
+  "positions": {
+    "S_YIELD:449170": {
+      "ticker": "449170",
+      "name": "KODEX KOFR금리액티브(합성)",
+      "entry_price": 111320.0,
+      "avg_price": 111320.0,
+      "price": 111320.0,
+      "quantity": 8,
+      "amount": 890560.0,
+      "entry_date": "2026-07-13",
+      "strategy": "S_YIELD",
+      "up_prob": 1.0,
+      "exits": {},
+      "high_water_mark": 111320.0,
+      "cost": 667.92,
+      "current_price": 111330,
+      "market_value": 890640,
+      "unrealized_pnl": 80.0,
+      "pnl_pct": 0.01,
+      "hwm_price": 111335,
+      "stream_id": "S_YIELD",
+      "current_value": 890640,
+      "unrealized_pnl_pct": 9e-05,
+      "max_pnl_pct": 0.01,
+      "max_pnl_date": "2026-07-14"
+    }
+  },
+  "trade_history": [
+    {
+      "date": "2026-07-13",
+      "action": "BUY",
+      "ticker": "449170",
+      "name": "KODEX KOFR금리액티브(합성)",
+      "price": 111320.0,
+      "quantity": 8,
+      "amount": 890560.0,
+      "cost": 667.92,
+      "stream": "S_YIELD",
+      "strategy": "S_YIELD"
+    }
+  ],
+  "daily_records": [
+    {
+      "date": "2026-07-13",
+      "virtual_nav": 999332.08,
+      "nav": 999332.08,
+      "cash": 108772.07999999996,
+      "n_positions": 1,
+      "n_trades": 0,
+      "position_scale": 1.0,
+      "return_pct": -0.0668,
+      "daily_return_pct": -0.0668,
+      "bench_pct": 2.4681,
+      "regime": "bull",
+      "alpha_pct": -2.5349,
+      "hit_count": 0,
+      "total_count": 0,
+      "held_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "sell_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "ic": {}
+    },
+    {
+      "date": "2026-07-14",
+      "virtual_nav": 999412.08,
+      "nav": 999412.08,
+      "cash": 108772.07999999996,
+      "n_positions": 1,
+      "n_trades": 0,
+      "position_scale": 0.809,
+      "return_pct": 0.008,
+      "daily_return_pct": 0.008,
+      "bench_pct": 0.8271,
+      "regime": "bull",
+      "alpha_pct": -0.8191,
+      "hit_count": 0,
+      "total_count": 0,
+      "held_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "sell_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "ic": {}
+    }
+  ],
+  "cumulative": {
+    "total_pnl": 0,
+    "total_trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "total_cost": 667.92
+  },
+  "strategy_pnl": {},
+  "created": "2026-07-13T05:27:01.718035",
+  "last_updated": "2026-07-14T09:05:14.993295",
+  "daily_snapshots": [
+    {
+      "date": "2026-07-13",
+      "timestamp": "2026-07-13T15:35:05.178763",
+      "nav": 999332.08,
+      "cash": 108772.07999999996,
+      "market_value": 890560.0,
+      "n_positions": 1,
+      "regime": "bull",
+      "position_scale": 1.0,
+      "daily_return_pct": -0.0668,
+      "total_return_pct": -0.0668,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0.0,
+      "hwm": 999372.08,
+      "drawdown_pct": -0.0,
+      "n_buys": 0,
+      "n_sells": 0,
+      "total_commission": 0,
+      "sub_accounts": {},
+      "data_confidence_score": 100.0
+    },
+    {
+      "date": "2026-07-14",
+      "timestamp": "2026-07-14T23:56:59.076820",
+      "nav": 999412.08,
+      "cash": 108772.07999999996,
+      "market_value": 890640.0,
+      "n_positions": 1,
+      "regime": "bull",
+      "position_scale": 0.809,
+      "daily_return_pct": 0.008,
+      "total_return_pct": -0.0588,
+      "realized_pnl": 0,
+      "unrealized_pnl": 80.0,
+      "hwm": 999452.08,
+      "drawdown_pct": -0.0,
+      "n_buys": 0,
+      "n_sells": 0,
+      "total_commission": 0,
+      "sub_accounts": {},
+      "data_confidence_score": 100.0
+    }
+  ],
+  "realized_pnl": 0,
+  "total_commission": 0,
+  "hwm": 999452.08,
+  "cumulative_return_pct": 0.0,
+  "daily_pnl": 0,
+  "consecutive_loss_days": 0,
+  "max_drawdown_pct": 0.0,
+  "drawdown_pct": 0.0,
+  "unrealized_pnl": 80.0,
+  "daily_returns": [
+    -0.0006679200000000419,
+    8.005346931322369e-05
+  ],
+  "total_return_pct": 0.0,
+  "sub_accounts": {},
+  "sleeve_a_nav": 599647.25,
+  "sleeve_b_nav": 399764.83,
+  "sleeve_a_hwm": 599671.25,
+  "sleeve_b_hwm": 399780.83,
+  "total_nav": 999412.08,
+  "updated": "2026-07-14T23:56:59.077566",
+  "daily_returns_dates": [
+    "2026-07-13",
+    "2026-07-14"
+  ]
+}

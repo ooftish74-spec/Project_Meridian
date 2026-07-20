@@ -1,0 +1,155 @@
+{
+  "Semiconductor": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "AI": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Software": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Finance": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Healthcare": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Energy": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Materials": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Consumer": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Utilities": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Telecom": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Defense": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "RealEstate": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Shipbuilding": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Automotive": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "Battery": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "Lagged pts: 0"
+  },
+  "Robotics": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  },
+  "QuantumComputing": {
+    "beta": 0.3,
+    "correlation": 0.3,
+    "lagged_corr": 0.3,
+    "same_day_corr": 0.1,
+    "us_5d_return": 0,
+    "data_available": false,
+    "note": "US or KR ETF missing"
+  }
+}

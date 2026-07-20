@@ -1,0 +1,312 @@
+{
+  "generated_at": "2026-03-13T17:04:11.444831",
+  "total_sources": 17,
+  "total_datasets": 89,
+  "categories": {
+    "한국/주가지수": [
+      "korea_stock_indices"
+    ],
+    "한국/개별종목": [
+      "korea_individual_stocks"
+    ],
+    "한국/경제지표": [
+      "korea_economic"
+    ],
+    "한국/업종별": [
+      "korea_sector"
+    ],
+    "한국/환율": [
+      "korea_fx"
+    ],
+    "미국/주가지수": [
+      "usa_indices"
+    ],
+    "미국/경제지표": [
+      "usa_economic"
+    ],
+    "미국/채권": [
+      "usa_treasuries"
+    ],
+    "미국/개별종목": [
+      "usa_stocks"
+    ],
+    "글로벌/주가지수": [
+      "global_indices"
+    ],
+    "글로벌/환율": [
+      "global_fx"
+    ],
+    "글로벌/원자재": [
+      "commodities"
+    ],
+    "글로벌/암호화폐": [
+      "crypto"
+    ],
+    "EU/경제지표": [
+      "eu_economic"
+    ],
+    "EU/주가지수": [
+      "eu_indices"
+    ],
+    "글로벌/변동성": [
+      "volatility"
+    ],
+    "미국/섹터ETF": [
+      "us_sector_etf"
+    ]
+  },
+  "sources": {
+    "korea_stock_indices": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "pykrx",
+      "fallback": [
+        "FinanceDataReader",
+        "yfinance"
+      ],
+      "datasets": [
+        "KOSPI",
+        "KOSDAQ"
+      ],
+      "frequency": "daily",
+      "category": "한국/주가지수"
+    },
+    "korea_individual_stocks": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "pykrx",
+      "fallback": [],
+      "datasets": [
+        "Dynamic top 30 KOSPI + 10 KOSDAQ"
+      ],
+      "frequency": "daily",
+      "category": "한국/개별종목"
+    },
+    "korea_economic": {
+      "collector": "bok_economic_updater.py",
+      "primary_api": "BOK ECOS",
+      "fallback": [
+        "KOSIS"
+      ],
+      "datasets": [
+        "KOR_Base_Rate",
+        "KOR_CPI",
+        "KOR_M2",
+        "KOR_CSI",
+        "KOR_PPI",
+        "KOR_Current_Account",
+        "KOR_Housing_Price",
+        "KOR_Export",
+        "KOR_Import",
+        "KOR_Unemployment",
+        "KOR_GDP",
+        "KOR_Treasury_3Y",
+        "KOR_Treasury_10Y",
+        "KOR_CD_91D"
+      ],
+      "frequency": "monthly/daily",
+      "category": "한국/경제지표"
+    },
+    "korea_sector": {
+      "collector": "korean_sector_collector.py",
+      "primary_api": "pykrx",
+      "fallback": [],
+      "datasets": [
+        "KOSPI sectors",
+        "Foreign/Institutional trading"
+      ],
+      "frequency": "daily",
+      "category": "한국/업종별"
+    },
+    "korea_fx": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "BOK API",
+      "fallback": [
+        "FinanceDataReader",
+        "yfinance"
+      ],
+      "datasets": [
+        "USD_KRW",
+        "EUR_KRW",
+        "GBP_KRW"
+      ],
+      "frequency": "daily",
+      "category": "한국/환율"
+    },
+    "usa_indices": {
+      "collector": "usa_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "S&P500",
+        "DJIA",
+        "NASDAQ",
+        "Russell 2000"
+      ],
+      "frequency": "daily",
+      "category": "미국/주가지수"
+    },
+    "usa_economic": {
+      "collector": "usa_collector.py",
+      "primary_api": "FRED",
+      "fallback": [],
+      "datasets": [
+        "GDP",
+        "Real_GDP",
+        "GDP_Per_Capita",
+        "CPI",
+        "Core_CPI",
+        "PCE",
+        "Unemployment",
+        "Nonfarm_Payrolls",
+        "Fed_Funds_Rate",
+        "Industrial_Production",
+        "Retail_Sales",
+        "Housing_Starts",
+        "Consumer_Sentiment",
+        "M1",
+        "M2",
+        "Trade_Balance"
+      ],
+      "frequency": "monthly/quarterly",
+      "category": "미국/경제지표"
+    },
+    "usa_treasuries": {
+      "collector": "usa_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "US_2Y",
+        "US_5Y",
+        "US_10Y",
+        "US_30Y"
+      ],
+      "frequency": "daily",
+      "category": "미국/채권"
+    },
+    "usa_stocks": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "Dynamic S&P 500 top 30"
+      ],
+      "frequency": "daily",
+      "category": "미국/개별종목"
+    },
+    "global_indices": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "DAX",
+        "CAC40",
+        "FTSE100",
+        "NIKKEI",
+        "HANGSENG"
+      ],
+      "frequency": "daily",
+      "category": "글로벌/주가지수"
+    },
+    "global_fx": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "EUR_USD",
+        "USD_JPY",
+        "GBP_USD",
+        "USD_CNY"
+      ],
+      "frequency": "daily",
+      "category": "글로벌/환율"
+    },
+    "commodities": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "Gold",
+        "Silver",
+        "Crude_Oil",
+        "Natural_Gas",
+        "Copper"
+      ],
+      "frequency": "daily",
+      "category": "글로벌/원자재"
+    },
+    "crypto": {
+      "collector": "crypto_collector.py",
+      "primary_api": "CoinGecko",
+      "fallback": [],
+      "datasets": [
+        "BTC",
+        "ETH",
+        "BNB",
+        "SOL",
+        "XRP",
+        "ADA"
+      ],
+      "frequency": "daily",
+      "category": "글로벌/암호화폐"
+    },
+    "eu_economic": {
+      "collector": "eu_economic_updater.py",
+      "primary_api": "Eurostat",
+      "fallback": [
+        "OECD"
+      ],
+      "datasets": [
+        "EU_Unemployment",
+        "EU_HICP",
+        "Germany_CPI",
+        "EU_Industrial"
+      ],
+      "frequency": "monthly",
+      "category": "EU/경제지표"
+    },
+    "eu_indices": {
+      "collector": "eu_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "STOXX50E",
+        "STOXX600",
+        "DAX",
+        "CAC40",
+        "FTSE100"
+      ],
+      "frequency": "daily",
+      "category": "EU/주가지수"
+    },
+    "volatility": {
+      "collector": "enhanced_data_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "VIX",
+        "VKOSPI"
+      ],
+      "frequency": "daily",
+      "category": "글로벌/변동성"
+    },
+    "us_sector_etf": {
+      "collector": "us_sector_etf_collector.py",
+      "primary_api": "yfinance",
+      "fallback": [],
+      "datasets": [
+        "XLF",
+        "XLK",
+        "XLE",
+        "XLV",
+        "XLI",
+        "XLP",
+        "XLU",
+        "XLY",
+        "XLRE",
+        "XLB",
+        "XLC"
+      ],
+      "frequency": "daily",
+      "category": "미국/섹터ETF"
+    }
+  }
+}

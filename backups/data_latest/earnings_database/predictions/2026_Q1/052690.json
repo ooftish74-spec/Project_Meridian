@@ -1,0 +1,22 @@
+{
+  "ticker": "052690",
+  "company": "052690",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 29549715445,
+  "operating_profit": 33725679251,
+  "net_income": 25942830193,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 65,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.584919"
+}

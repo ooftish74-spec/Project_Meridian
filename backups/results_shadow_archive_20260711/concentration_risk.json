@@ -1,0 +1,16 @@
+{
+  "concentration_scale": 0.5,
+  "orthogonality_score": 0.2833,
+  "avg_abs_correlation": 0.7167,
+  "high_corr_pairs": [
+    {
+      "pair": "114800-000660",
+      "correlation": -0.9277
+    }
+  ],
+  "high_corr_count": 1,
+  "n_positions": 3,
+  "n_observations": 60,
+  "sufficient_data": true,
+  "timestamp": "2026-07-03T23:27:03.098764"
+}

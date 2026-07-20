@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-07-10T16:57:31.714431",
+  "regime": "caution",
+  "total_positions": 0,
+  "exit_count": 0,
+  "hold_count": 0,
+  "dynamic_thresholds": {
+    "vix": 15.8100004196167,
+    "qv_threshold": 39.2,
+    "dynamic_sl_pct": -5.0,
+    "max_per_sector": 2,
+    "max_hold_days": 130,
+    "portfolio_vol": 0.02,
+    "crash_prob": 0.0,
+    "vix_scale": 0.962,
+    "sl_multiplier": 2.5,
+    "regime": "caution"
+  },
+  "rules_summary": {
+    "qv_decay": 0,
+    "value_trap": 0,
+    "sector_concentration": 0,
+    "momentum_exhaustion": 0
+  },
+  "exit_candidates": []
+}

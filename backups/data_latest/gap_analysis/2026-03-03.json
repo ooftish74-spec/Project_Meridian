@@ -1,0 +1,108 @@
+{
+  "date": "2026-03-03",
+  "gaps": [
+    {
+      "name": "삼성전자",
+      "ticker": "005930",
+      "predicted": 198287.0,
+      "actual": 195100,
+      "gap": -3187.0,
+      "gap_pct": -1.61,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -9.88452655889146,
+      "predicted_return": 0.016334
+    },
+    {
+      "name": "SK하이닉스",
+      "ticker": "000660",
+      "predicted": 946714.0,
+      "actual": 939000,
+      "gap": -7714.0,
+      "gap_pct": -0.81,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -11.49858623939679,
+      "predicted_return": 0.008215
+    },
+    {
+      "name": "현대차",
+      "ticker": "005380",
+      "predicted": 611916.0,
+      "actual": 595000,
+      "gap": -16916.0,
+      "gap_pct": -2.76,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -11.72106824925816,
+      "predicted_return": 0.02843
+    },
+    {
+      "name": "포스코홀딩스",
+      "ticker": "003490",
+      "predicted": 25759.0,
+      "actual": 25200,
+      "gap": -559.0,
+      "gap_pct": -2.17,
+      "direction": false,
+      "in_ci": false,
+      "actual_change": -10.320284697508896,
+      "predicted_return": 0.022197
+    },
+    {
+      "name": "CJ ENM",
+      "ticker": "035760",
+      "predicted": 69704.0,
+      "actual": 67900,
+      "gap": -1804.0,
+      "gap_pct": -2.59,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -6.473829201101933,
+      "predicted_return": 0.026569
+    },
+    {
+      "name": "미래에셋증권",
+      "ticker": "006800",
+      "predicted": 67413.0,
+      "actual": 66600,
+      "gap": -813.0,
+      "gap_pct": -1.21,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -7.499999999999996,
+      "predicted_return": 0.012209
+    },
+    {
+      "name": "NAVER",
+      "ticker": "035420",
+      "predicted": 237359.0,
+      "actual": 236000,
+      "gap": -1359.0,
+      "gap_pct": -0.57,
+      "direction": false,
+      "in_ci": true,
+      "actual_change": -7.269155206286837,
+      "predicted_return": 0.005756
+    },
+    {
+      "name": "KODEX 200",
+      "ticker": "069500",
+      "predicted": 89109.0,
+      "actual": 86705,
+      "gap": -2404.0,
+      "gap_pct": -2.7,
+      "direction": false,
+      "in_ci": false,
+      "actual_change": -7.878240543986403,
+      "predicted_return": 0.02773
+    }
+  ],
+  "summary": {
+    "avg_gap_pct": 1.8,
+    "avg_signed_gap_pct": -1.8,
+    "direction_accuracy": 0.0,
+    "ci_coverage": 75.0,
+    "n_stocks": 8
+  }
+}

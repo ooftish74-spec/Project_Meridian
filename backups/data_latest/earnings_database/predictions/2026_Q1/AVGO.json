@@ -1,0 +1,20 @@
+{
+  "ticker": "AVGO",
+  "company": "AVGO",
+  "market": "US",
+  "sector": "Semiconductor",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": null,
+  "operating_profit": null,
+  "net_income": null,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 30.0,
+  "surprise_direction": "neutral",
+  "method_scores": {},
+  "predicted_at": "2026-04-22T07:22:13.602348"
+}

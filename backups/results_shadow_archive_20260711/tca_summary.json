@@ -1,0 +1,48 @@
+{
+  "n_trades": 55,
+  "total_amount": 256651769.55,
+  "avg_is_bps": 7.98,
+  "avg_vwap_slippage_bps": 0.0,
+  "avg_market_impact_bps": 7.98,
+  "avg_total_cost_bps": 8.86,
+  "worst_trade": {
+    "ticker": "329200",
+    "action": "sell",
+    "implementation_shortfall_bps": 8.01,
+    "vwap_slippage_bps": 0,
+    "explicit_cost_bps": 0.88,
+    "timing_cost_bps": -0.0,
+    "market_impact_bps": 8.01,
+    "opportunity_cost_bps": 288.43,
+    "total_cost_bps": 8.89,
+    "total_cost_krw": 345,
+    "quality_grade": "C",
+    "timestamp": "2026-06-19T18:44:24.231250"
+  },
+  "best_trade": {
+    "ticker": "396500",
+    "action": "buy",
+    "implementation_shortfall_bps": 7.2,
+    "vwap_slippage_bps": 0,
+    "explicit_cost_bps": 0.53,
+    "timing_cost_bps": 0.0,
+    "market_impact_bps": 7.2,
+    "opportunity_cost_bps": -7.19,
+    "total_cost_bps": 7.73,
+    "total_cost_krw": 2453,
+    "quality_grade": "C",
+    "timestamp": "2026-06-19T18:44:24.231358"
+  },
+  "total_cost_krw": 227458,
+  "grade_distribution": {
+    "A": 0,
+    "B": 0,
+    "C": 55,
+    "D": 0,
+    "F": 0
+  },
+  "date": "2026-06-19",
+  "enriched": true,
+  "n_enriched_vwap": 111,
+  "timestamp": "2026-06-19T18:44:24.231456"
+}

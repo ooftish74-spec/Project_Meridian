@@ -1,0 +1,678 @@
+{
+  "updated_at": "2026-03-25T10:54:07.643356",
+  "criteria": {
+    "min_market_cap_억": 3000,
+    "min_trading_value_억": 30,
+    "min_data_days": 250,
+    "max_universe_size": 200,
+    "refresh_interval_days": 7
+  },
+  "n_stocks": 95,
+  "universe": [
+    {
+      "ticker": "005930",
+      "name": "삼성전자",
+      "market_cap_억": 11229553,
+      "trading_value_억": 48354,
+      "data_days": 2505
+    },
+    {
+      "ticker": "000660",
+      "name": "SK하이닉스",
+      "market_cap_억": 7027245,
+      "trading_value_억": 42375,
+      "data_days": 2505
+    },
+    {
+      "ticker": "005380",
+      "name": "현대차",
+      "market_cap_억": 1007408,
+      "trading_value_억": 5343,
+      "data_days": 2505
+    },
+    {
+      "ticker": "373220",
+      "name": "LG에너지솔루션",
+      "market_cap_억": 918450,
+      "trading_value_억": 2519,
+      "data_days": 1012
+    },
+    {
+      "ticker": "207940",
+      "name": "삼성바이오로직스",
+      "market_cap_억": 716121,
+      "trading_value_억": 427,
+      "data_days": 2295
+    },
+    {
+      "ticker": "034020",
+      "name": "두산에너빌리티",
+      "market_cap_억": 641202,
+      "trading_value_억": 5118,
+      "data_days": 2500
+    },
+    {
+      "ticker": "000270",
+      "name": "기아",
+      "market_cap_억": 616462,
+      "trading_value_억": 2437,
+      "data_days": 2505
+    },
+    {
+      "ticker": "105560",
+      "name": "KB금융",
+      "market_cap_억": 547717,
+      "trading_value_억": 1641,
+      "data_days": 2505
+    },
+    {
+      "ticker": "028260",
+      "name": "삼성물산",
+      "market_cap_억": 478484,
+      "trading_value_억": 949,
+      "data_days": 2500
+    },
+    {
+      "ticker": "068270",
+      "name": "셀트리온",
+      "market_cap_억": 461172,
+      "trading_value_억": 1356,
+      "data_days": 2505
+    },
+    {
+      "ticker": "032830",
+      "name": "삼성생명",
+      "market_cap_억": 444000,
+      "trading_value_억": 692,
+      "data_days": 2500
+    },
+    {
+      "ticker": "055550",
+      "name": "신한지주",
+      "market_cap_억": 427189,
+      "trading_value_억": 1468,
+      "data_days": 2505
+    },
+    {
+      "ticker": "042660",
+      "name": "한화오션",
+      "market_cap_억": 374744,
+      "trading_value_억": 970,
+      "data_days": 2500
+    },
+    {
+      "ticker": "012330",
+      "name": "현대모비스",
+      "market_cap_억": 356125,
+      "trading_value_억": 921,
+      "data_days": 2505
+    },
+    {
+      "ticker": "006800",
+      "name": "미래에셋증권",
+      "market_cap_억": 339298,
+      "trading_value_억": 1943,
+      "data_days": 2505
+    },
+    {
+      "ticker": "035420",
+      "name": "NAVER",
+      "market_cap_억": 334880,
+      "trading_value_억": 998,
+      "data_days": 2505
+    },
+    {
+      "ticker": "009150",
+      "name": "삼성전기",
+      "market_cap_억": 326411,
+      "trading_value_억": 2374,
+      "data_days": 2500
+    },
+    {
+      "ticker": "010130",
+      "name": "고려아연",
+      "market_cap_억": 322070,
+      "trading_value_억": 389,
+      "data_days": 2505
+    },
+    {
+      "ticker": "006400",
+      "name": "삼성SDI",
+      "market_cap_억": 320327,
+      "trading_value_억": 2095,
+      "data_days": 2505
+    },
+    {
+      "ticker": "015760",
+      "name": "한국전력",
+      "market_cap_억": 300118,
+      "trading_value_억": 781,
+      "data_days": 2500
+    },
+    {
+      "ticker": "086790",
+      "name": "하나금융지주",
+      "market_cap_억": 296417,
+      "trading_value_억": 759,
+      "data_days": 2500
+    },
+    {
+      "ticker": "042700",
+      "name": "한미반도체",
+      "market_cap_억": 282601,
+      "trading_value_억": 2522,
+      "data_days": 2505
+    },
+    {
+      "ticker": "005490",
+      "name": "POSCO홀딩스",
+      "market_cap_억": 274767,
+      "trading_value_억": 996,
+      "data_days": 2505
+    },
+    {
+      "ticker": "034730",
+      "name": "SK",
+      "market_cap_억": 249047,
+      "trading_value_억": 568,
+      "data_days": 2500
+    },
+    {
+      "ticker": "316140",
+      "name": "우리금융지주",
+      "market_cap_억": 237107,
+      "trading_value_억": 502,
+      "data_days": 1736
+    },
+    {
+      "ticker": "010140",
+      "name": "삼성중공업",
+      "market_cap_억": 232320,
+      "trading_value_억": 950,
+      "data_days": 2500
+    },
+    {
+      "ticker": "051910",
+      "name": "LG화학",
+      "market_cap_억": 221660,
+      "trading_value_억": 1046,
+      "data_days": 2505
+    },
+    {
+      "ticker": "000810",
+      "name": "삼성화재",
+      "market_cap_억": 221084,
+      "trading_value_억": 587,
+      "data_days": 2500
+    },
+    {
+      "ticker": "035720",
+      "name": "카카오",
+      "market_cap_억": 213413,
+      "trading_value_억": 624,
+      "data_days": 2505
+    },
+    {
+      "ticker": "267250",
+      "name": "HD현대",
+      "market_cap_억": 201432,
+      "trading_value_억": 349,
+      "data_days": 2169
+    },
+    {
+      "ticker": "011200",
+      "name": "HMM",
+      "market_cap_억": 187987,
+      "trading_value_억": 382,
+      "data_days": 2500
+    },
+    {
+      "ticker": "066570",
+      "name": "LG전자",
+      "market_cap_억": 186179,
+      "trading_value_억": 744,
+      "data_days": 2500
+    },
+    {
+      "ticker": "096770",
+      "name": "SK이노베이션",
+      "market_cap_억": 186127,
+      "trading_value_억": 365,
+      "data_days": 2500
+    },
+    {
+      "ticker": "024110",
+      "name": "기업은행",
+      "market_cap_억": 184604,
+      "trading_value_억": 276,
+      "data_days": 2500
+    },
+    {
+      "ticker": "033780",
+      "name": "KT&G",
+      "market_cap_억": 180730,
+      "trading_value_억": 250,
+      "data_days": 2500
+    },
+    {
+      "ticker": "003670",
+      "name": "포스코퓨처엠",
+      "market_cap_억": 174690,
+      "trading_value_억": 784,
+      "data_days": 2500
+    },
+    {
+      "ticker": "047810",
+      "name": "한국항공우주",
+      "market_cap_억": 171849,
+      "trading_value_억": 740,
+      "data_days": 2500
+    },
+    {
+      "ticker": "086280",
+      "name": "현대글로비스",
+      "market_cap_억": 167250,
+      "trading_value_억": 291,
+      "data_days": 2500
+    },
+    {
+      "ticker": "000720",
+      "name": "현대건설",
+      "market_cap_억": 166922,
+      "trading_value_억": 2544,
+      "data_days": 2500
+    },
+    {
+      "ticker": "017670",
+      "name": "SK텔레콤",
+      "market_cap_억": 164529,
+      "trading_value_억": 359,
+      "data_days": 2500
+    },
+    {
+      "ticker": "030200",
+      "name": "KT",
+      "market_cap_억": 149449,
+      "trading_value_억": 252,
+      "data_days": 2500
+    },
+    {
+      "ticker": "079550",
+      "name": "LIG넥스원",
+      "market_cap_억": 141020,
+      "trading_value_억": 1716,
+      "data_days": 2500
+    },
+    {
+      "ticker": "003550",
+      "name": "LG",
+      "market_cap_억": 134944,
+      "trading_value_억": 191,
+      "data_days": 2500
+    },
+    {
+      "ticker": "047050",
+      "name": "포스코인터내셔널",
+      "market_cap_억": 133525,
+      "trading_value_억": 485,
+      "data_days": 2500
+    },
+    {
+      "ticker": "352820",
+      "name": "하이브",
+      "market_cap_억": 126189,
+      "trading_value_억": 1879,
+      "data_days": 1332
+    },
+    {
+      "ticker": "010950",
+      "name": "S-Oil",
+      "market_cap_억": 122040,
+      "trading_value_억": 522,
+      "data_days": 2500
+    },
+    {
+      "ticker": "018260",
+      "name": "삼성에스디에스",
+      "market_cap_억": 121561,
+      "trading_value_억": 143,
+      "data_days": 2500
+    },
+    {
+      "ticker": "071050",
+      "name": "한국금융지주",
+      "market_cap_억": 117582,
+      "trading_value_억": 745,
+      "data_days": 2500
+    },
+    {
+      "ticker": "323410",
+      "name": "카카오뱅크",
+      "market_cap_억": 113536,
+      "trading_value_억": 194,
+      "data_days": 1126
+    },
+    {
+      "ticker": "259960",
+      "name": "크래프톤",
+      "market_cap_억": 112112,
+      "trading_value_억": 231,
+      "data_days": 1124
+    },
+    {
+      "ticker": "039490",
+      "name": "키움증권",
+      "market_cap_억": 104847,
+      "trading_value_억": 743,
+      "data_days": 2500
+    },
+    {
+      "ticker": "003490",
+      "name": "대한항공",
+      "market_cap_억": 91503,
+      "trading_value_억": 533,
+      "data_days": 2505
+    },
+    {
+      "ticker": "000880",
+      "name": "한화",
+      "market_cap_억": 85903,
+      "trading_value_억": 234,
+      "data_days": 2500
+    },
+    {
+      "ticker": "016360",
+      "name": "삼성증권",
+      "market_cap_억": 84478,
+      "trading_value_억": 383,
+      "data_days": 2500
+    },
+    {
+      "ticker": "180640",
+      "name": "한진칼",
+      "market_cap_억": 80983,
+      "trading_value_억": 107,
+      "data_days": 2500
+    },
+    {
+      "ticker": "090430",
+      "name": "아모레퍼시픽",
+      "market_cap_억": 79375,
+      "trading_value_억": 182,
+      "data_days": 2500
+    },
+    {
+      "ticker": "009830",
+      "name": "한화솔루션",
+      "market_cap_억": 77352,
+      "trading_value_억": 1615,
+      "data_days": 2500
+    },
+    {
+      "ticker": "326030",
+      "name": "SK바이오팜",
+      "market_cap_억": 74398,
+      "trading_value_억": 181,
+      "data_days": 1402
+    },
+    {
+      "ticker": "377300",
+      "name": "카카오페이",
+      "market_cap_억": 72886,
+      "trading_value_억": 583,
+      "data_days": 1069
+    },
+    {
+      "ticker": "161390",
+      "name": "한국타이어앤테크놀로지",
+      "market_cap_억": 69370,
+      "trading_value_억": 144,
+      "data_days": 2500
+    },
+    {
+      "ticker": "029780",
+      "name": "삼성카드",
+      "market_cap_억": 68588,
+      "trading_value_억": 89,
+      "data_days": 2500
+    },
+    {
+      "ticker": "032640",
+      "name": "LG유플러스",
+      "market_cap_억": 65635,
+      "trading_value_억": 113,
+      "data_days": 2500
+    },
+    {
+      "ticker": "128940",
+      "name": "한미약품",
+      "market_cap_억": 65464,
+      "trading_value_억": 287,
+      "data_days": 2500
+    },
+    {
+      "ticker": "078930",
+      "name": "GS",
+      "market_cap_억": 62904,
+      "trading_value_억": 157,
+      "data_days": 2500
+    },
+    {
+      "ticker": "052690",
+      "name": "한전기술",
+      "market_cap_억": 60311,
+      "trading_value_억": 470,
+      "data_days": 2500
+    },
+    {
+      "ticker": "001040",
+      "name": "CJ",
+      "market_cap_억": 59521,
+      "trading_value_억": 498,
+      "data_days": 2500
+    },
+    {
+      "ticker": "241560",
+      "name": "두산밥캣",
+      "market_cap_억": 57514,
+      "trading_value_억": 184,
+      "data_days": 2289
+    },
+    {
+      "ticker": "034220",
+      "name": "LG디스플레이",
+      "market_cap_억": 57250,
+      "trading_value_억": 359,
+      "data_days": 2500
+    },
+    {
+      "ticker": "138930",
+      "name": "BNK금융지주",
+      "market_cap_억": 55859,
+      "trading_value_억": 108,
+      "data_days": 2500
+    },
+    {
+      "ticker": "088980",
+      "name": "맥쿼리인프라",
+      "market_cap_억": 54932,
+      "trading_value_억": 137,
+      "data_days": 2495
+    },
+    {
+      "ticker": "271560",
+      "name": "오리온",
+      "market_cap_억": 52741,
+      "trading_value_억": 118,
+      "data_days": 2128
+    },
+    {
+      "ticker": "021240",
+      "name": "코웨이",
+      "market_cap_억": 51165,
+      "trading_value_억": 141,
+      "data_days": 2500
+    },
+    {
+      "ticker": "004020",
+      "name": "현대제철",
+      "market_cap_억": 47040,
+      "trading_value_억": 218,
+      "data_days": 2500
+    },
+    {
+      "ticker": "036570",
+      "name": "엔씨소프트",
+      "market_cap_억": 46858,
+      "trading_value_억": 90,
+      "data_days": 2500
+    },
+    {
+      "ticker": "002380",
+      "name": "KCC",
+      "market_cap_억": 45943,
+      "trading_value_억": 91,
+      "data_days": 2500
+    },
+    {
+      "ticker": "251270",
+      "name": "넷마블",
+      "market_cap_억": 42046,
+      "trading_value_억": 76,
+      "data_days": 2166
+    },
+    {
+      "ticker": "035250",
+      "name": "강원랜드",
+      "market_cap_억": 38766,
+      "trading_value_억": 115,
+      "data_days": 2500
+    },
+    {
+      "ticker": "011170",
+      "name": "롯데케미칼",
+      "market_cap_억": 34391,
+      "trading_value_억": 129,
+      "data_days": 2500
+    },
+    {
+      "ticker": "036460",
+      "name": "한국가스공사",
+      "market_cap_억": 33187,
+      "trading_value_억": 94,
+      "data_days": 2500
+    },
+    {
+      "ticker": "011780",
+      "name": "금호석유화학",
+      "market_cap_억": 33164,
+      "trading_value_억": 92,
+      "data_days": 2500
+    },
+    {
+      "ticker": "302440",
+      "name": "SK바이오사이언스",
+      "market_cap_억": 33060,
+      "trading_value_억": 46,
+      "data_days": 1225
+    },
+    {
+      "ticker": "097950",
+      "name": "CJ제일제당",
+      "market_cap_억": 32743,
+      "trading_value_억": 268,
+      "data_days": 2500
+    },
+    {
+      "ticker": "004170",
+      "name": "신세계",
+      "market_cap_억": 30913,
+      "trading_value_억": 151,
+      "data_days": 2500
+    },
+    {
+      "ticker": "023530",
+      "name": "롯데쇼핑",
+      "market_cap_억": 29703,
+      "trading_value_억": 96,
+      "data_days": 2500
+    },
+    {
+      "ticker": "051600",
+      "name": "한전KPS",
+      "market_cap_억": 27900,
+      "trading_value_억": 254,
+      "data_days": 2500
+    },
+    {
+      "ticker": "001450",
+      "name": "현대해상",
+      "market_cap_억": 27490,
+      "trading_value_억": 87,
+      "data_days": 2500
+    },
+    {
+      "ticker": "139480",
+      "name": "이마트",
+      "market_cap_억": 26299,
+      "trading_value_억": 371,
+      "data_days": 2500
+    },
+    {
+      "ticker": "204320",
+      "name": "HL만도",
+      "market_cap_억": 24746,
+      "trading_value_억": 137,
+      "data_days": 2500
+    },
+    {
+      "ticker": "383220",
+      "name": "F&F",
+      "market_cap_억": 23597,
+      "trading_value_억": 57,
+      "data_days": 1181
+    },
+    {
+      "ticker": "081660",
+      "name": "미스토홀딩스",
+      "market_cap_억": 22431,
+      "trading_value_억": 56,
+      "data_days": 2500
+    },
+    {
+      "ticker": "192820",
+      "name": "코스맥스",
+      "market_cap_억": 21961,
+      "trading_value_억": 165,
+      "data_days": 2500
+    },
+    {
+      "ticker": "002790",
+      "name": "아모레퍼시픽홀딩스",
+      "market_cap_억": 21217,
+      "trading_value_억": 32,
+      "data_days": 2500
+    },
+    {
+      "ticker": "008770",
+      "name": "호텔신라",
+      "market_cap_억": 16916,
+      "trading_value_억": 51,
+      "data_days": 2500
+    },
+    {
+      "ticker": "100840",
+      "name": "SNT에너지",
+      "market_cap_억": 10227,
+      "trading_value_억": 474,
+      "data_days": 2500
+    },
+    {
+      "ticker": "195870",
+      "name": "해성디에스",
+      "market_cap_억": 9350,
+      "trading_value_억": 40,
+      "data_days": 2381
+    }
+  ]
+}

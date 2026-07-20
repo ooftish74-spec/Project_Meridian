@@ -1,0 +1,76 @@
+{
+  "report_date": "2026-07-19",
+  "tracking_start": "2026-05-26",
+  "tracking_days": 55,
+  "target_days": 14,
+  "portfolio": {
+    "initial_capital": 1601718.0,
+    "current_nav": 1601718.0,
+    "total_return_pct": 0.0,
+    "daily_returns": [
+      -0.0668,
+      0.008,
+      0.02,
+      0.0
+    ],
+    "sharpe": -3.954,
+    "max_drawdown_pct": -0.0668,
+    "win_rate": 0.0
+  },
+  "streams": {
+    "S1": {
+      "n_trades": 0,
+      "return_pct": 0,
+      "win_rate": 0.0,
+      "sharpe": null,
+      "n_positions": 0,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0
+    },
+    "S2": {
+      "n_trades": 0,
+      "return_pct": 0,
+      "win_rate": 0.0,
+      "sharpe": null,
+      "n_positions": 0,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0
+    },
+    "S3": {
+      "n_trades": 0,
+      "return_pct": 0,
+      "win_rate": 0.0,
+      "sharpe": null,
+      "n_positions": 0,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0
+    },
+    "S4": {
+      "n_trades": 0,
+      "return_pct": 0,
+      "win_rate": 0.0,
+      "sharpe": null,
+      "n_positions": 0,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0
+    }
+  },
+  "risk": {
+    "var_current": 6.991,
+    "var_limit": 1.5,
+    "max_dd": -0.0668,
+    "dd_limit": -10
+  },
+  "go_nogo": {
+    "verdict": "NOGO",
+    "conditions_met": [
+      "Max DD > -8.0% (현재: -0.0668%)",
+      "14일 이상 추적 (현재: 55일)"
+    ],
+    "conditions_pending": [
+      "Sharpe ≥ 0.5 (현재: -3.954)",
+      "Win Rate ≥ 50% (현재: 0.0%)",
+      "활성 스트림 ≥ 3 (현재: 0개)"
+    ]
+  }
+}

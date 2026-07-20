@@ -1,0 +1,41 @@
+{
+  "ticker": "099320",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1651452674048,
+      "shares": 10951278,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1858431877120,
+      "shares": 10951278,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1886905171968,
+      "shares": 10951278,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2053364645888,
+      "shares": 10951278,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2053364645888,
+      "shares": 10951278,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1967944630272,
+      "shares": 10951278,
+      "source": "yfinance"
+    }
+  ]
+}

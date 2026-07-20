@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-07-19T03:30:04.203991",
+  "results": {
+    "status": "ok",
+    "files": 86,
+    "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/backups/results/2026-07-19"
+  },
+  "data": {
+    "status": "ok"
+  },
+  "config": {
+    "status": "ok",
+    "files": 48
+  },
+  "rotation": {
+    "deleted": 2,
+    "retention_days": 7
+  }
+}

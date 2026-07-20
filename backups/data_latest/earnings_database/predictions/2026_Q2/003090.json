@@ -1,0 +1,22 @@
+{
+  "ticker": "003090",
+  "company": "003090",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 143692119097268,
+  "operating_profit": 193823722374,
+  "net_income": 149095171057,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 65,
+  "surprise_direction": "beat",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.849771"
+}

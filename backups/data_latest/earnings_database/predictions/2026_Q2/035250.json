@@ -1,0 +1,22 @@
+{
+  "ticker": "035250",
+  "company": "035250",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 69205760214,
+  "operating_profit": 81437336062,
+  "net_income": 62644104663,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.871886"
+}

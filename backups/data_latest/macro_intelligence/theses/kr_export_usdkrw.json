@@ -1,0 +1,37 @@
+{
+  "id": "kr_export_usdkrw",
+  "title": "한국 수출 구조 + USD/KRW 환율",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "regional_macro",
+  "confidence": 0.75,
+  "horizon": "3-6 months",
+  "thesis": {
+    "summary": "반도체 수출 비중 확대로 KOSPI와 HBM 사이클 높은 상관. 원화 약세 시 수출 실적 개선.",
+    "kr_export_structure": {
+      "semiconductor_share": "전체 수출의 약 20% → AI 수요로 역대 최고",
+      "top_items": [
+        "반도체 (20%)",
+        "자동차 (12%)",
+        "석유화학 (8%)",
+        "디스플레이 (5%)"
+      ],
+      "destination": [
+        "중국 (25%)",
+        "미국 (17%)",
+        "ASEAN (15%)",
+        "EU (10%)"
+      ]
+    },
+    "usdkrw": {
+      "current_level": "약 1,350~1,370원",
+      "impact": "원화 약세 → 수출 기업 실적 개선 → KOSPI 상승 지지",
+      "risk": "급격한 원화 강세 (1,250원 이하) → 수출 경쟁력 하락"
+    }
+  },
+  "system_impact": {
+    "L1": "USD/KRW 야간 데이터 → 레짐 감지 보조 지표",
+    "L2": "ML 특성에 환율 변동 포함",
+    "L3": "달러 슬리브 비중 조절"
+  }
+}

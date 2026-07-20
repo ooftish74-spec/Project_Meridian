@@ -1,0 +1,20 @@
+{
+  "ticker": "011200",
+  "target_price": 22300,
+  "current_price": 19510,
+  "recomm_mean": 3.17,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 1,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "HMM",
+  "latest_research": {
+    "title": "상승하는 운임, 비용 증가 상쇄 기대",
+    "broker": "미래에셋증권",
+    "date": "20260514"
+  }
+}

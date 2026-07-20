@@ -1,0 +1,26 @@
+{
+  "regime": "bull",
+  "confidence": 0.417,
+  "scores": {
+    "bull": 0.43,
+    "caution": 0.42,
+    "bear": 0.0,
+    "crash": 0.18
+  },
+  "method": "regime_engine_ssot",
+  "measurements": {
+    "vix": 20.34,
+    "kospi_trend": "sideways",
+    "kospi_ma20_dist": -18.18,
+    "kospi_ma60_dist": -10.72,
+    "kospi_volatility": 78.49,
+    "usdkrw": 1497.6648,
+    "usdkrw_prev": 1497.6648,
+    "vkospi": 13.96,
+    "ois": 26.8,
+    "macro_composite": -0.254
+  },
+  "macro_composite": -0.254,
+  "timestamp": "2026-07-14T07:50:07.599257",
+  "data_source": "regime_engine"
+}

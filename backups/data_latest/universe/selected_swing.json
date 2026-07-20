@@ -1,0 +1,49 @@
+{
+  "strategy": "swing",
+  "regime": "caution",
+  "tickers": [
+    "005935",
+    "028670",
+    "161390",
+    "003550",
+    "023530"
+  ],
+  "details": [
+    {
+      "ticker": "005935",
+      "name": "삼성전자우",
+      "score": 75.6,
+      "direction": "strong_buy",
+      "sector": "Electronics"
+    },
+    {
+      "ticker": "028670",
+      "name": "팬오션",
+      "score": 69.2,
+      "direction": "strong_buy",
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "161390",
+      "name": "한국타이어앤테크놀로지",
+      "score": 68.6,
+      "direction": "strong_buy",
+      "sector": "Automotive"
+    },
+    {
+      "ticker": "003550",
+      "name": "LG",
+      "score": 66.2,
+      "direction": "strong_buy",
+      "sector": "Electronics"
+    },
+    {
+      "ticker": "023530",
+      "name": "롯데쇼핑",
+      "score": 64.2,
+      "direction": "strong_buy",
+      "sector": "Consumer"
+    }
+  ],
+  "timestamp": "2026-05-22T08:10:24.689822"
+}

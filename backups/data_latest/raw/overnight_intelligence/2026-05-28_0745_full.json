@@ -1,0 +1,44 @@
+{
+  "ois": 42.0,
+  "ois_price": 44.8,
+  "ois_sentiment": 16.3,
+  "sentiment": "slightly_bearish",
+  "threshold_adj": 2,
+  "components": {
+    "nxt_premarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "sgx_futures": {
+      "score": 31.375,
+      "detail": "SGX -0.74%",
+      "raw": {
+        "timestamp": "2026-05-28T06:02:51.812142",
+        "date": "20260526",
+        "close": 1219.0,
+        "change": -9.15,
+        "change_pct": -0.745,
+        "direction": "down"
+      }
+    },
+    "us_market": {
+      "score": 50.0,
+      "detail": "S&P/NQ avg +0.00%",
+      "raw": {
+        "changes": [
+          0.0
+        ]
+      }
+    },
+    "nxt_aftermarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "vix_fear": {
+      "score": 16.3,
+      "detail": "F&G=16"
+    }
+  },
+  "timestamp": "2026-05-28T07:45:11.850146",
+  "include_premarket": true
+}

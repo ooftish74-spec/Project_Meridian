@@ -1,0 +1,73 @@
+{
+  "Semiconductor": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Battery": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Automotive": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Bio": {
+    "score": 50.0,
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "N/A",
+    "percentile_rank": 50.0
+  },
+  "Finance": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Energy": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Defense": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Consumer": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  },
+  "Capital_Goods": {
+    "foreign_net": 0,
+    "inst_net": 0,
+    "signal": "순매도",
+    "stocks": [],
+    "score": 50.0,
+    "percentile_rank": 50.0
+  }
+}

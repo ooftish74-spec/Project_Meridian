@@ -1,0 +1,22 @@
+{
+  "ticker": "097230",
+  "company": "097230",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 1778876827,
+  "operating_profit": 120245525587,
+  "net_income": 92496558144,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 65,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.912377"
+}

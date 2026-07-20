@@ -1,0 +1,41 @@
+{
+  "ticker": "298020",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1991426310144,
+      "shares": 4291867,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2154517233664,
+      "shares": 4291867,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2145933459456,
+      "shares": 4291867,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2092285165568,
+      "shares": 4291867,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2092285165568,
+      "shares": 4291867,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2278981369856,
+      "shares": 4291867,
+      "source": "yfinance"
+    }
+  ]
+}

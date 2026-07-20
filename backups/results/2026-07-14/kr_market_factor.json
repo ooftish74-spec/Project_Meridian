@@ -1,0 +1,14 @@
+{
+  "foreign_score": -0.4,
+  "inst_score": 0.03,
+  "composite_score": -0.256,
+  "large_cap_momentum": -0.296,
+  "foreign_streak": 0.0,
+  "stream_adjustments": {
+    "S1": 0.962,
+    "S2": 0.96,
+    "S3": 1.002,
+    "S4": 0.97
+  },
+  "timestamp": "2026-07-13T16:30:28.071421"
+}

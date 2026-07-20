@@ -1,0 +1,41 @@
+{
+  "ticker": "005940",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 12776081719296,
+      "shares": 356344369,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 12701039329280,
+      "shares": 356344369,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 13263861448704,
+      "shares": 356344369,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 13245101375488,
+      "shares": 356344369,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 13245101375488,
+      "shares": 356344369,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 13357666009088,
+      "shares": 356344369,
+      "source": "yfinance"
+    }
+  ]
+}

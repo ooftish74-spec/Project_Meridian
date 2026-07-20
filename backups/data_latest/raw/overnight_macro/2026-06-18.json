@@ -1,0 +1,136 @@
+{
+  "date": "2026-06-18",
+  "timestamp": "2026-06-18T05:15:17.370878",
+  "us_futures": {
+    "sp500_futures": {
+      "name": "S&P500 선물",
+      "symbol": "ES=F",
+      "prev_close": 7518.5,
+      "last_close": 7497.5,
+      "change_pct": -0.2793,
+      "vs_5d_avg_pct": -0.0741
+    },
+    "nasdaq_futures": {
+      "name": "NASDAQ 선물",
+      "symbol": "NQ=F",
+      "prev_close": 29995.0,
+      "last_close": 30044.5,
+      "change_pct": 0.165,
+      "vs_5d_avg_pct": -0.0688
+    },
+    "dow_futures": {
+      "name": "다우 선물",
+      "symbol": "YM=F",
+      "prev_close": 52044.0,
+      "last_close": 51968.0,
+      "change_pct": -0.146,
+      "vs_5d_avg_pct": 0.4305
+    }
+  },
+  "sgx_proxy": {
+    "ewy": {
+      "name": "EWY (iShares MSCI South Korea)",
+      "prev_close": 205.91,
+      "last_close": 205.08,
+      "change_pct": -0.4031,
+      "vs_ma20_pct": 4.9203,
+      "proxy_for": "SGX KOSPI200 Futures",
+      "correlation_note": "KOSPI와 상관계수 0.95+"
+    },
+    "flkr": {
+      "name": "FLKR (Franklin FTSE South Korea)",
+      "prev_close": 66.32,
+      "last_close": 66.67,
+      "change_pct": 0.5277
+    },
+    "sgx_proxy_components": {
+      "ewy": -0.403,
+      "nq": 0.165,
+      "sox": 0,
+      "dxy_inv": -0.951
+    },
+    "sgx_proxy_source": "ensemble",
+    "sgx_proxy_score": 47.4
+  },
+  "macro_indicators": {
+    "vix": {
+      "name": "VIX (공포지수)",
+      "symbol": "^VIX",
+      "prev_close": 16.41,
+      "last_close": 18.42,
+      "change_pct": 12.2486,
+      "impact_direction": "negative"
+    },
+    "dxy": {
+      "name": "DXY (달러인덱스)",
+      "symbol": "DX-Y.NYB",
+      "prev_close": 99.54,
+      "last_close": 100.487,
+      "change_pct": 0.9514,
+      "impact_direction": "negative"
+    },
+    "us10y": {
+      "name": "미국 10년물 국채",
+      "symbol": "^TNX",
+      "prev_close": 4.487,
+      "last_close": 4.463,
+      "change_pct": -0.5349,
+      "impact_direction": "negative"
+    },
+    "wti_oil": {
+      "name": "WTI 원유",
+      "symbol": "CL=F",
+      "prev_close": 76.05,
+      "last_close": 75.36,
+      "change_pct": -0.9073,
+      "impact_direction": "positive"
+    },
+    "gold": {
+      "name": "금 선물",
+      "symbol": "GC=F",
+      "prev_close": 4330.8999,
+      "last_close": 4261.0,
+      "change_pct": -1.614,
+      "impact_direction": "positive"
+    },
+    "usdkrw": {
+      "name": "원/달러 환율",
+      "symbol": "KRW=X",
+      "prev_close": 1513.3101,
+      "last_close": 1529.23,
+      "change_pct": 1.052,
+      "impact_direction": "negative"
+    }
+  },
+  "overnight_score": {
+    "overnight_score": 50.4,
+    "direction": "neutral",
+    "label": "⚪ 중립",
+    "component_scores": {
+      "us_futures": 49.1,
+      "sgx_proxy": 47.4,
+      "vix": 63.2,
+      "dxy": 31.0,
+      "us10y": 58.0,
+      "oil": 54.5
+    },
+    "weights": {
+      "us_futures": 0.3,
+      "sgx_proxy": 0.25,
+      "vix": 0.15,
+      "dxy": 0.1,
+      "us10y": 0.1,
+      "oil": 0.1
+    }
+  },
+  "kospi_gap_estimate": {
+    "estimated_gap_pct": -1.13,
+    "ewy_raw_chg": -0.4,
+    "prev_kospi_chg": 1.8,
+    "net_overnight": -2.2,
+    "ewy_contribution": -1.1,
+    "us_contribution": -0.03,
+    "vix_adjustment": 0,
+    "confidence": "high"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "ticker": "032830",
+  "target_price": 361700,
+  "current_price": 480000,
+  "recomm_mean": 3.6,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 1,
+  "eps_revision_down": 2,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "삼성생명",
+  "latest_research": {
+    "title": "1Q26Review: 목표주가 33만원 상향, Trading Buy 제시",
+    "broker": "교보증권",
+    "date": "20260518"
+  }
+}

@@ -1,0 +1,304 @@
+{
+  "investor_flow": {
+    "foreign_net_5d": 0.09854566130210587,
+    "foreign_net_20d": -1.4195992171647411,
+    "inst_net_5d": 0.09854566129944396,
+    "inst_net_20d": -1.4195992171439493,
+    "flow_momentum": 0.09679392525596635,
+    "foreign_streak": 1.0,
+    "supply_demand_score": 0.09831100822731047,
+    "collected_at": "2026-07-15T07:42:28.530420",
+    "n_tickers": 4,
+    "by_ticker": {
+      "122630": {
+        "foreign_net_5d": -0.990245130405613,
+        "foreign_net_20d": -1.9395171328488925,
+        "inst_net_5d": -0.9902451303836555,
+        "inst_net_20d": -1.939517132820836,
+        "flow_momentum": -0.2221751475305994,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -0.5417751094575948
+      },
+      "069500": {
+        "foreign_net_5d": 0.09854566130210587,
+        "foreign_net_20d": -1.4195992171647411,
+        "inst_net_5d": 0.09854566129944396,
+        "inst_net_20d": -1.4195992171439493,
+        "flow_momentum": 0.09679392525596635,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.09831100822731047
+      },
+      "133690": {
+        "foreign_net_5d": -0.19020432845077448,
+        "foreign_net_20d": -0.31590141058535,
+        "inst_net_5d": -0.19020432836356255,
+        "inst_net_20d": -0.31590141043780917,
+        "flow_momentum": 0.002136624450003351,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.09446117687294384
+      },
+      "252670": {
+        "foreign_net_5d": -0.5759642207467869,
+        "foreign_net_20d": 1.2489569273034826,
+        "inst_net_5d": -0.5759642207089192,
+        "inst_net_20d": 1.2489569272543364,
+        "flow_momentum": -0.1955491670904675,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.3466468604929601
+      }
+    }
+  },
+  "last_overnight_update": "2026-07-15T07:52:38.667972",
+  "kr_factor_composite": -0.233,
+  "kr_factor_foreign": -0.357,
+  "kr_factor_lcap": -0.329,
+  "kr_stream_adjustments": {
+    "S1": 0.965,
+    "S2": 0.964,
+    "S3": 1.008,
+    "S4": 0.967
+  },
+  "stock_technicals": {
+    "005930": {
+      "rsi_14": 33.3,
+      "macd_hist": -8851.6526,
+      "volume_ratio": 1.22,
+      "close": 263000.0,
+      "name": "삼성전자"
+    },
+    "000660": {
+      "rsi_14": 35.0,
+      "macd_hist": -97521.698,
+      "volume_ratio": 1.61,
+      "close": 1913000.0,
+      "name": "SK하이닉스"
+    }
+  },
+  "kospi200": 116800.0,
+  "kospi_close": 116800.0,
+  "vix": 20.69,
+  "vix_prev": 21.02,
+  "dxy": 28.39,
+  "dxy_prev": 28.5,
+  "us10y": 93.55,
+  "us10y_prev": 93.29,
+  "wti": 120.14,
+  "wti_prev": 117.79,
+  "gold": 372.09,
+  "gold_prev": 367.13,
+  "usdkrw": 1488.1,
+  "usdkrw_prev": 1488.41941879,
+  "sp500": 751.86,
+  "nasdaq": 719.69,
+  "ois": 35.0,
+  "ois_price": 38.3,
+  "ois_sentiment": 17.2,
+  "ois_threshold_adj": 5,
+  "overnight_intel": {
+    "sp500_change_pct": 0.00013702513856905796,
+    "nasdaq_change_pct": -0.7963100679955204,
+    "sox_change_pct": -0.9555720815946245,
+    "sp500_change": 0.00013702513856905796,
+    "nasdaq_change": -0.7963100679955204,
+    "us_sentiment": "slightly_bearish",
+    "timestamp": "2026-07-15T07:26:44.876542"
+  },
+  "us_regime": "neutral",
+  "us_regime_score": 0.0841,
+  "us_regime_confidence": 0.376,
+  "sox_change": -0.9555720815946245,
+  "upcoming_events": 0,
+  "next_event": "",
+  "event_confidence_adj": 0.0,
+  "cross_asset_direction": "neutral",
+  "cross_asset_score": 0,
+  "EWY": 176.98,
+  "FLKR": 57.78,
+  "FXI": 33.77,
+  "last_update": "2026-07-15T07:53:09.066888",
+  "vkospi": 14.03,
+  "put_call_ratio": 1.0,
+  "timestamp": "2026-07-16T03:29:53.100924+09:00",
+  "macro_features": {
+    "fred_unemployment": -0.1,
+    "fred_fed_rate": 0.435,
+    "fred_gdp_growth": 0.418,
+    "fred_consumer_sentiment": -0.673,
+    "fred_ig_spread": 0.48,
+    "cross_usjp_spread": 1.74,
+    "cross_usjp_change": -0.075,
+    "cross_usjp_signal": 0.13,
+    "cross_yield_curve": 0.36,
+    "yield_curve_inverted": 0,
+    "cross_yield_signal": 0.36,
+    "cross_caixin_pmi": 50.1,
+    "cross_caixin_signal": 0.02,
+    "news_llm_sentiment": 0.0,
+    "news_realtime_sentiment": -1.0
+  },
+  "cpi": 332.568,
+  "unemployment_rate": 4.2,
+  "federal_funds_rate": 3.63,
+  "consumer_sentiment": 44.8,
+  "ig_credit_spread": 0.78,
+  "industrial_production": 102.6475,
+  "retail_sales": 662752.0,
+  "gdp_growth": 2.09,
+  "fear_greed_index": 43.1,
+  "news_sentiment": -0.1907,
+  "macro_features_ts": "2026-07-15T07:30:05.946238",
+  "morning_fusion": {
+    "regime_adjustment": 0.0,
+    "sector_overrides": {},
+    "risk_flags": [],
+    "overnight_context": {
+      "ois": 35.0,
+      "us_regime": "neutral",
+      "us_regime_confidence": 0.376,
+      "sp500_change": 0.0001,
+      "nasdaq_change": -0.7963,
+      "sox_change": -0.9555720815946245,
+      "vix": 20.69,
+      "vkospi": 14.69,
+      "usdkrw": 1488.3862,
+      "ewy_change": -8.4459,
+      "dxy_change": 0,
+      "copper_change": 0,
+      "usdjpy_change": 0,
+      "taiex_change": 0,
+      "nikkei_change": 0,
+      "hangseng_change": 0
+    },
+    "fusion_confidence": 0.7,
+    "conflicts": [],
+    "timestamp": "2026-07-15T07:30:06.077135"
+  },
+  "regime_adjustment": 0.0,
+  "ois_premarket": true,
+  "usdkrw_change_1d": 0.0874,
+  "tier1_refresh_ts": "2026-07-15T15:26:04.585074",
+  "ewy": 176.98,
+  "ewy_change_1d": 5.3327,
+  "flkr": 57.78,
+  "flkr_change_1d": 4.655,
+  "fxi": 33.77,
+  "fxi_change_1d": 0.9868,
+  "tier2_refresh_ts": "2026-07-15T15:04:05.761195",
+  "kospi_prev_close": 109720.0,
+  "kospi_change_1d": 6.4528,
+  "kospi_ma20": 130239.5,
+  "kosdaq_close": 14335.0,
+  "kosdaq_prev_close": 13410.0,
+  "kosdaq_change_1d": 6.8978,
+  "kosdaq_ma20": 15427.0,
+  "kospi200_prev_close": 109720.0,
+  "kr_refresh_ts": "2026-07-15T15:26:04.973492",
+  "macro_refresh_ts": "2026-07-15T15:26:00.805119",
+  "intraday_range_pct": 3.3562,
+  "realtime_mtm": {
+    "last_updated": "2026-07-15T17:58:37.856235",
+    "session": "after",
+    "n_tickers": 1
+  },
+  "kr_regime": "bull",
+  "kospi": 6806.93017578125,
+  "sector_momentum": {
+    "091160": {
+      "momentum_1m": -22.475,
+      "momentum_3m": 29.251,
+      "momentum_6m": 89.852
+    },
+    "395160": {
+      "momentum_1m": -24.58,
+      "momentum_3m": 45.717,
+      "momentum_6m": 103.896
+    },
+    "139260": {
+      "momentum_1m": -25.992,
+      "momentum_3m": 54.443,
+      "momentum_6m": 118.646
+    },
+    "117700": {
+      "momentum_1m": -30.58,
+      "momentum_3m": -32.754,
+      "momentum_6m": 40.266
+    },
+    "305720": {
+      "momentum_1m": -27.742,
+      "momentum_3m": -26.456,
+      "momentum_6m": -4.898
+    },
+    "091180": {
+      "momentum_1m": -25.589,
+      "momentum_3m": -5.004,
+      "momentum_6m": 11.274
+    },
+    "227550": {
+      "momentum_1m": -23.05,
+      "momentum_3m": -26.724,
+      "momentum_6m": 0.227
+    },
+    "091170": {
+      "momentum_1m": -0.879,
+      "momentum_3m": 4.305,
+      "momentum_6m": 32.849
+    },
+    "244580": {
+      "momentum_1m": -20.783,
+      "momentum_3m": -34.03,
+      "momentum_6m": -38.575
+    },
+    "133690": {
+      "momentum_1m": -4.822,
+      "momentum_3m": 18.126,
+      "momentum_6m": 18.716
+    },
+    "409820": {
+      "momentum_1m": -7.942,
+      "momentum_3m": 35.512,
+      "momentum_6m": 26.398
+    },
+    "371160": {
+      "momentum_1m": -0.773,
+      "momentum_3m": -2.098,
+      "momentum_6m": -14.729
+    },
+    "411060": {
+      "momentum_1m": -7.659,
+      "momentum_3m": -15.314,
+      "momentum_6m": -7.834
+    },
+    "195930": {
+      "momentum_1m": 0.328,
+      "momentum_3m": 8.229,
+      "momentum_6m": 6.844
+    },
+    "192090": {
+      "momentum_1m": -3.902,
+      "momentum_3m": 4.9,
+      "momentum_6m": 7.162
+    }
+  },
+  "alpha_factory": {
+    "s5_overnight_score": 2.15,
+    "formula": "Abs(2*x1*(0.73843086*x1 + 0.535496546387262) + 0.21130157*x1 - log(x1**2) - 13.215123)",
+    "fitness": 0.510762095451355,
+    "discovered_at": "2026-07-14T19:15:21.949807+00:00"
+  },
+  "alpha_signals": {
+    "status": "FALLBACK_MODE",
+    "S1_signal": {
+      "contagion_alert": "NORMAL",
+      "vix_spike": false
+    },
+    "S2_signal": {
+      "pysr_macro_feature_value": 0.0
+    },
+    "S3_signal": {
+      "sector_forecast": {}
+    },
+    "S4_signal": {
+      "macro_cycle": "Neutral"
+    }
+  }
+}

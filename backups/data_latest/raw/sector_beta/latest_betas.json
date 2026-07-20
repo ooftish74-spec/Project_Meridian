@@ -1,0 +1,9 @@
+{
+  "date": "2026-07-19",
+  "lookback_days": 60,
+  "betas": {
+    "semiconductor": 1.117,
+    "auto": -0.018,
+    "finance": 0.147
+  }
+}

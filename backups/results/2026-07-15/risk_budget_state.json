@@ -1,0 +1,25 @@
+{
+  "last_daily_budget": {
+    "daily_loss_limit": -5000.0,
+    "realized_pnl": 0.0,
+    "utilization_pct": -0.0,
+    "halted": false,
+    "reason": null,
+    "timestamp": "2026-07-14T23:56:59.071087"
+  },
+  "last_consecutive_loss": {
+    "braked": false,
+    "scale": 1.0,
+    "consecutive_losses": 0,
+    "lookback": 3,
+    "brake_scale": 0.5,
+    "timestamp": "2026-07-14T23:56:59.071090"
+  },
+  "last_position_scale": {
+    "scale": 1.0,
+    "reason": "normal",
+    "regime": "bull",
+    "timestamp": "2026-07-14T23:56:59.070982"
+  },
+  "last_saved": "2026-07-14T23:56:59.071096"
+}

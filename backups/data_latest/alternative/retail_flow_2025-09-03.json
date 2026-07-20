@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-05T11:30:31.626051",
+  "features": {
+    "flow_dix_latest": 0.5029,
+    "flow_dix_5d_avg": 0.4765,
+    "flow_dix_signal": 0.0264,
+    "flow_dix_20d_avg": 0.4807,
+    "flow_dix_mom_delta": -0.0013,
+    "flow_hidden_vol_signal": 80.0
+  }
+}

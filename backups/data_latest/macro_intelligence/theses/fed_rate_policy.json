@@ -1,0 +1,34 @@
+{
+  "id": "fed_rate_policy",
+  "title": "Fed 금리 동결~인하 사이클",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "monetary_policy",
+  "confidence": 0.7,
+  "horizon": "6-12 months",
+  "thesis": {
+    "summary": "Fed 금리 동결 유지 중. 인플레 안정화 시 2026 하반기 인하 기대.",
+    "scenarios": {
+      "base": "금리 동결 유지 → 2026 Q4 첫 인하 (25bp)",
+      "dovish": "인플레 2% 접근 → 2026 Q3 조기 인하 → 성장주 강세",
+      "hawkish": "인플레 재발 → 인하 무기한 연기 → 성장주 약세"
+    }
+  },
+  "signals": {
+    "dovish": [
+      "CPI < 2.5% (3개월 연속)",
+      "PCE < 2.2%",
+      "FOMC 비둘기파 발언"
+    ],
+    "hawkish": [
+      "CPI > 3%",
+      "Core PCE 반등",
+      "고용 과열 지속"
+    ]
+  },
+  "system_impact": {
+    "L1": "인하 시 TQQQ 롱 강화, 동결 시 중립",
+    "L3": "AllWeather 채권 슬리브 비중 조절",
+    "L4_ISA": "인하 시 배당주 매력 상대적 하락 → 성장 ETF 전환 검토"
+  }
+}

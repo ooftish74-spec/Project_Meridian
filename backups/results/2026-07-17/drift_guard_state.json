@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-07-16T20:02:34.793666+09:00",
+  "drifted": false,
+  "retrain_needed": false,
+  "mean_psi": 0.0,
+  "n_drifted": 0,
+  "n_unavailable": 0,
+  "n_sparse_tolerated": 0,
+  "drifted_features": [],
+  "sparse_tolerated": [],
+  "unavailable_features": [],
+  "psi_scores": {},
+  "sparse_features": {},
+  "resolved_by": "retrain_weekly",
+  "resolved_at": "2026-07-16T20:02:34.793671+09:00",
+  "model_acc": 0.7371,
+  "model_auc": 0.7839
+}

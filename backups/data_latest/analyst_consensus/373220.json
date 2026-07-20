@@ -1,0 +1,20 @@
+{
+  "ticker": "373220",
+  "target_price": 576409,
+  "current_price": 442500,
+  "recomm_mean": 3.95,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "LG에너지솔루션",
+  "latest_research": {
+    "title": "ESS 수주가 다 찼다",
+    "broker": "iM증권",
+    "date": "20260511"
+  }
+}

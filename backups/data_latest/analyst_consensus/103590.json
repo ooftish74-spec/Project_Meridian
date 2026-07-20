@@ -1,0 +1,20 @@
+{
+  "ticker": "103590",
+  "target_price": 123750,
+  "current_price": 81200,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-05",
+  "stock_name": "일진전기",
+  "latest_research": {
+    "title": "OPM 10%, 이익 체력이 달라졌다",
+    "broker": "유안타증권",
+    "date": "20260518"
+  }
+}

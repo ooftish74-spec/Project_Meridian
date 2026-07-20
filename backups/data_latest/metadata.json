@@ -1,0 +1,17 @@
+{
+  "last_update_date": "2020-12-31",
+  "last_update_time": "2026-03-02T10:14:30.777340",
+  "start_date": "2020-01-01",
+  "end_date": "2020-12-31",
+  "num_datasets": 46,
+  "sources": [
+    "usa",
+    "asian_indices",
+    "korean_sector",
+    "us_sector_etf",
+    "crypto",
+    "bok_economic",
+    "eu_economic",
+    "enhanced"
+  ]
+}

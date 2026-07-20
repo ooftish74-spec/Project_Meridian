@@ -1,0 +1,22 @@
+{
+  "ticker": "298020",
+  "company": "298020",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 131304249209705,
+  "operating_profit": 5529549856,
+  "net_income": 4253499890,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 65,
+  "surprise_direction": "beat",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.939078"
+}

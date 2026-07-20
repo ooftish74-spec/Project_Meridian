@@ -1,0 +1,2077 @@
+{
+  "date": "2026-05-14",
+  "timestamp": "2026-05-14T20:27:06.519443",
+  "signals": {
+    "000100": {
+      "prediction": "up",
+      "up_probability": 0.5796,
+      "confidence": 0.3711,
+      "expected_return": -0.013806,
+      "ensemble_method": "catboost"
+    },
+    "000660": {
+      "prediction": "up",
+      "up_probability": 0.6172,
+      "confidence": 0.3993,
+      "expected_return": 0.024724,
+      "ensemble_method": "catboost"
+    },
+    "000240": {
+      "prediction": "down",
+      "up_probability": 0.3469,
+      "confidence": 0.2636,
+      "expected_return": -0.014576,
+      "ensemble_method": "lightgbm_test"
+    },
+    "000500": {
+      "prediction": "up",
+      "up_probability": 0.4791,
+      "confidence": 0.3679,
+      "expected_return": 0.061559,
+      "ensemble_method": "lightgbm_test"
+    },
+    "000720": {
+      "prediction": "up",
+      "up_probability": 0.5543,
+      "confidence": 0.4234,
+      "expected_return": 0.008362,
+      "ensemble_method": "trend_bull_test"
+    },
+    "000150": {
+      "prediction": "up",
+      "up_probability": 0.5613,
+      "confidence": 0.3936,
+      "expected_return": 0.01915,
+      "ensemble_method": "catboost_test"
+    },
+    "000270": {
+      "prediction": "down",
+      "up_probability": 0.3134,
+      "confidence": 0.3165,
+      "expected_return": 0.000539,
+      "ensemble_method": "lightgbm_test"
+    },
+    "000120": {
+      "prediction": "down",
+      "up_probability": 0.4638,
+      "confidence": 0.31,
+      "expected_return": -0.017413,
+      "ensemble_method": "trend_bear"
+    },
+    "000810": {
+      "prediction": "down",
+      "up_probability": 0.2009,
+      "confidence": 0.3516,
+      "expected_return": -0.007343,
+      "ensemble_method": "catboost"
+    },
+    "000880": {
+      "prediction": "down",
+      "up_probability": 0.2691,
+      "confidence": 0.2582,
+      "expected_return": 0.002637,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "000990": {
+      "prediction": "up",
+      "up_probability": 0.5041,
+      "confidence": 0.4629,
+      "expected_return": 0.019629,
+      "ensemble_method": "trend_bear"
+    },
+    "001120": {
+      "prediction": "neutral",
+      "up_probability": 0.5439,
+      "confidence": 0.3465,
+      "expected_return": -0.003849,
+      "ensemble_method": "vol_high_vol"
+    },
+    "001040": {
+      "prediction": "down",
+      "up_probability": 0.2182,
+      "confidence": 0.3511,
+      "expected_return": -0.006635,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "001450": {
+      "prediction": "neutral",
+      "up_probability": 0.481,
+      "confidence": 0.3689,
+      "expected_return": -0.005796,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "001720": {
+      "prediction": "up",
+      "up_probability": 0.6205,
+      "confidence": 0.4363,
+      "expected_return": -0.004431,
+      "ensemble_method": "lightgbm"
+    },
+    "001430": {
+      "prediction": "up",
+      "up_probability": 0.7681,
+      "confidence": 0.425,
+      "expected_return": -0.007443,
+      "ensemble_method": "catboost"
+    },
+    "001800": {
+      "prediction": "neutral",
+      "up_probability": 0.4814,
+      "confidence": 0.3507,
+      "expected_return": -0.004972,
+      "ensemble_method": "catboost"
+    },
+    "002380": {
+      "prediction": "up",
+      "up_probability": 0.5576,
+      "confidence": 0.483,
+      "expected_return": 0.002675,
+      "ensemble_method": "lightgbm_test"
+    },
+    "002790": {
+      "prediction": "down",
+      "up_probability": 0.4654,
+      "confidence": 0.3136,
+      "expected_return": -0.016683,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "003380": {
+      "prediction": "down",
+      "up_probability": 0.5293,
+      "confidence": 0.2927,
+      "expected_return": -0.013276,
+      "ensemble_method": "vol_high_vol"
+    },
+    "003230": {
+      "prediction": "neutral",
+      "up_probability": 0.5007,
+      "confidence": 0.3514,
+      "expected_return": -0.000992,
+      "ensemble_method": "lightgbm_test"
+    },
+    "003490": {
+      "prediction": "down",
+      "up_probability": 0.2278,
+      "confidence": 0.313,
+      "expected_return": -0.002642,
+      "ensemble_method": "catboost"
+    },
+    "003090": {
+      "prediction": "up",
+      "up_probability": 0.4589,
+      "confidence": 0.4379,
+      "expected_return": -0.01257,
+      "ensemble_method": "lightgbm_test"
+    },
+    "003550": {
+      "prediction": "neutral",
+      "up_probability": 0.4802,
+      "confidence": 0.3549,
+      "expected_return": 0.000605,
+      "ensemble_method": "lightgbm"
+    },
+    "003570": {
+      "prediction": "down",
+      "up_probability": 0.2342,
+      "confidence": 0.3374,
+      "expected_return": -0.004026,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "003670": {
+      "prediction": "neutral",
+      "up_probability": 0.5178,
+      "confidence": 0.35,
+      "expected_return": -0.000261,
+      "ensemble_method": "walk_forward"
+    },
+    "003690": {
+      "prediction": "up",
+      "up_probability": 0.5088,
+      "confidence": 0.3719,
+      "expected_return": -0.009471,
+      "ensemble_method": "trend_bull_test"
+    },
+    "004020": {
+      "prediction": "down",
+      "up_probability": 0.1363,
+      "confidence": 0.3499,
+      "expected_return": 0.007169,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "004800": {
+      "prediction": "up",
+      "up_probability": 0.5346,
+      "confidence": 0.4009,
+      "expected_return": 0.014426,
+      "ensemble_method": "stacking"
+    },
+    "004370": {
+      "prediction": "up",
+      "up_probability": 0.4536,
+      "confidence": 0.45,
+      "expected_return": -0.012465,
+      "ensemble_method": "trend_bull"
+    },
+    "004170": {
+      "prediction": "down",
+      "up_probability": 0.1934,
+      "confidence": 0.2737,
+      "expected_return": 0.005662,
+      "ensemble_method": "direction_clf_test"
+    },
+    "005070": {
+      "prediction": "neutral",
+      "up_probability": 0.497,
+      "confidence": 0.3654,
+      "expected_return": -0.001789,
+      "ensemble_method": "lightgbm_test"
+    },
+    "004990": {
+      "prediction": "up",
+      "up_probability": 0.4642,
+      "confidence": 0.4025,
+      "expected_return": -0.010694,
+      "ensemble_method": "walk_forward"
+    },
+    "005290": {
+      "prediction": "neutral",
+      "up_probability": 0.5015,
+      "confidence": 0.3983,
+      "expected_return": 0.000851,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "005380": {
+      "prediction": "up",
+      "up_probability": 0.8029,
+      "confidence": 0.4049,
+      "expected_return": 0.009498,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "005440": {
+      "prediction": "up",
+      "up_probability": 0.4937,
+      "confidence": 0.384,
+      "expected_return": 0.007166,
+      "ensemble_method": "stacking"
+    },
+    "005490": {
+      "prediction": "neutral",
+      "up_probability": 0.5142,
+      "confidence": 0.3304,
+      "expected_return": 0.003923,
+      "ensemble_method": "stacking"
+    },
+    "005850": {
+      "prediction": "neutral",
+      "up_probability": 0.4929,
+      "confidence": 0.3612,
+      "expected_return": 0.004002,
+      "ensemble_method": "catboost"
+    },
+    "005830": {
+      "prediction": "up",
+      "up_probability": 0.733,
+      "confidence": 0.3993,
+      "expected_return": -0.007277,
+      "ensemble_method": "walk_forward"
+    },
+    "005940": {
+      "prediction": "up",
+      "up_probability": 0.7468,
+      "confidence": 0.3639,
+      "expected_return": 0.001898,
+      "ensemble_method": "stacking"
+    },
+    "005930": {
+      "prediction": "down",
+      "up_probability": 0.1949,
+      "confidence": 0.304,
+      "expected_return": 0.014355,
+      "ensemble_method": "stacking"
+    },
+    "006040": {
+      "prediction": "up",
+      "up_probability": 0.6335,
+      "confidence": 0.4677,
+      "expected_return": -0.011749,
+      "ensemble_method": "vol_high_vol"
+    },
+    "006260": {
+      "prediction": "up",
+      "up_probability": 0.8402,
+      "confidence": 0.4766,
+      "expected_return": 0.025753,
+      "ensemble_method": "trend_bear_test"
+    },
+    "006280": {
+      "prediction": "up",
+      "up_probability": 0.4736,
+      "confidence": 0.4049,
+      "expected_return": -0.012191,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "006360": {
+      "prediction": "up",
+      "up_probability": 0.5647,
+      "confidence": 0.4218,
+      "expected_return": 0.013473,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "006400": {
+      "prediction": "up",
+      "up_probability": 0.5457,
+      "confidence": 0.3582,
+      "expected_return": 0.013564,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "007310": {
+      "prediction": "up",
+      "up_probability": 0.4871,
+      "confidence": 0.388,
+      "expected_return": -0.010627,
+      "ensemble_method": "catboost"
+    },
+    "006800": {
+      "prediction": "up",
+      "up_probability": 0.6545,
+      "confidence": 0.4202,
+      "expected_return": 0.009073,
+      "ensemble_method": "vol_high_vol"
+    },
+    "007070": {
+      "prediction": "down",
+      "up_probability": 0.3868,
+      "confidence": 0.2975,
+      "expected_return": 0.000154,
+      "ensemble_method": "catboost_test"
+    },
+    "007340": {
+      "prediction": "up",
+      "up_probability": 0.7012,
+      "confidence": 0.4162,
+      "expected_return": 0.013202,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "007660": {
+      "prediction": "down",
+      "up_probability": 0.219,
+      "confidence": 0.3195,
+      "expected_return": 0.004034,
+      "ensemble_method": "stacking"
+    },
+    "008770": {
+      "prediction": "neutral",
+      "up_probability": 0.4849,
+      "confidence": 0.3626,
+      "expected_return": 0.002093,
+      "ensemble_method": "trend_bear"
+    },
+    "008930": {
+      "prediction": "down",
+      "up_probability": 0.5056,
+      "confidence": 0.3415,
+      "expected_return": -0.013384,
+      "ensemble_method": "trend_bear"
+    },
+    "009150": {
+      "prediction": "up",
+      "up_probability": 0.5559,
+      "confidence": 0.4242,
+      "expected_return": 0.038566,
+      "ensemble_method": "lightgbm_test"
+    },
+    "009240": {
+      "prediction": "up",
+      "up_probability": 0.7016,
+      "confidence": 0.4419,
+      "expected_return": -0.014137,
+      "ensemble_method": "lightgbm"
+    },
+    "009420": {
+      "prediction": "up",
+      "up_probability": 0.4593,
+      "confidence": 0.4436,
+      "expected_return": -0.010556,
+      "ensemble_method": "lightgbm_test"
+    },
+    "009830": {
+      "prediction": "neutral",
+      "up_probability": 0.5277,
+      "confidence": 0.3654,
+      "expected_return": -0.004281,
+      "ensemble_method": "vol_low_vol"
+    },
+    "009540": {
+      "prediction": "down",
+      "up_probability": 0.1383,
+      "confidence": 0.3213,
+      "expected_return": 0.000893,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "009970": {
+      "prediction": "up",
+      "up_probability": 0.5596,
+      "confidence": 0.4766,
+      "expected_return": -0.010396,
+      "ensemble_method": "lightgbm_test"
+    },
+    "010060": {
+      "prediction": "up",
+      "up_probability": 0.791,
+      "confidence": 0.45,
+      "expected_return": 0.026423,
+      "ensemble_method": "trend_bear_test"
+    },
+    "010120": {
+      "prediction": "up",
+      "up_probability": 0.8113,
+      "confidence": 0.3767,
+      "expected_return": -0.008061,
+      "ensemble_method": "stacking"
+    },
+    "010950": {
+      "prediction": "neutral",
+      "up_probability": 0.5041,
+      "confidence": 0.371,
+      "expected_return": 0.001357,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "010130": {
+      "prediction": "down",
+      "up_probability": 0.4998,
+      "confidence": 0.329,
+      "expected_return": -0.008482,
+      "ensemble_method": "trend_bull_test"
+    },
+    "010140": {
+      "prediction": "down",
+      "up_probability": 0.1718,
+      "confidence": 0.3326,
+      "expected_return": -0.000514,
+      "ensemble_method": "catboost_test"
+    },
+    "011070": {
+      "prediction": "up",
+      "up_probability": 0.5252,
+      "confidence": 0.3872,
+      "expected_return": 0.035898,
+      "ensemble_method": "catboost"
+    },
+    "011170": {
+      "prediction": "down",
+      "up_probability": 0.1494,
+      "confidence": 0.3409,
+      "expected_return": 0.00124,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "011200": {
+      "prediction": "neutral",
+      "up_probability": 0.4749,
+      "confidence": 0.3962,
+      "expected_return": -0.005006,
+      "ensemble_method": "lightgbm"
+    },
+    "011210": {
+      "prediction": "up",
+      "up_probability": 0.5621,
+      "confidence": 0.4492,
+      "expected_return": 0.001449,
+      "ensemble_method": "lightgbm_test"
+    },
+    "011780": {
+      "prediction": "down",
+      "up_probability": 0.17,
+      "confidence": 0.3344,
+      "expected_return": -0.00403,
+      "ensemble_method": "stacking"
+    },
+    "012450": {
+      "prediction": "down",
+      "up_probability": 0.3428,
+      "confidence": 0.2933,
+      "expected_return": -0.000165,
+      "ensemble_method": "walk_forward"
+    },
+    "011790": {
+      "prediction": "down",
+      "up_probability": 0.1187,
+      "confidence": 0.3374,
+      "expected_return": 0.006492,
+      "ensemble_method": "lightgbm_test"
+    },
+    "012330": {
+      "prediction": "down",
+      "up_probability": 0.4114,
+      "confidence": 0.3213,
+      "expected_return": 0.009866,
+      "ensemble_method": "direction_3class_test"
+    },
+    "012510": {
+      "prediction": "neutral",
+      "up_probability": 0.5494,
+      "confidence": 0.3458,
+      "expected_return": 0.006251,
+      "ensemble_method": "direction_3class_test"
+    },
+    "012630": {
+      "prediction": "neutral",
+      "up_probability": 0.5391,
+      "confidence": 0.3255,
+      "expected_return": 0.000218,
+      "ensemble_method": "stacking"
+    },
+    "012750": {
+      "prediction": "down",
+      "up_probability": 0.4015,
+      "confidence": 0.3082,
+      "expected_return": -0.013866,
+      "ensemble_method": "catboost"
+    },
+    "014680": {
+      "prediction": "neutral",
+      "up_probability": 0.5105,
+      "confidence": 0.3654,
+      "expected_return": 0.000782,
+      "ensemble_method": "direction_3class_test"
+    },
+    "015760": {
+      "prediction": "down",
+      "up_probability": 0.1771,
+      "confidence": 0.3243,
+      "expected_return": -0.018359,
+      "ensemble_method": "catboost_test"
+    },
+    "017800": {
+      "prediction": "down",
+      "up_probability": 0.1412,
+      "confidence": 0.3249,
+      "expected_return": -0.009692,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "017670": {
+      "prediction": "up",
+      "up_probability": 0.5119,
+      "confidence": 0.3961,
+      "expected_return": 0.007279,
+      "ensemble_method": "trend_bull_test"
+    },
+    "016360": {
+      "prediction": "up",
+      "up_probability": 0.5408,
+      "confidence": 0.4741,
+      "expected_return": 0.007454,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "017960": {
+      "prediction": "up",
+      "up_probability": 0.6396,
+      "confidence": 0.4902,
+      "expected_return": 0.004086,
+      "ensemble_method": "catboost"
+    },
+    "018260": {
+      "prediction": "down",
+      "up_probability": 0.1384,
+      "confidence": 0.3344,
+      "expected_return": -0.002514,
+      "ensemble_method": "trend_bull_test"
+    },
+    "018880": {
+      "prediction": "neutral",
+      "up_probability": 0.463,
+      "confidence": 0.357,
+      "expected_return": 0.000453,
+      "ensemble_method": "catboost_test"
+    },
+    "018670": {
+      "prediction": "down",
+      "up_probability": 0.2672,
+      "confidence": 0.2802,
+      "expected_return": 0.00178,
+      "ensemble_method": "stacking"
+    },
+    "020150": {
+      "prediction": "down",
+      "up_probability": 0.1865,
+      "confidence": 0.2933,
+      "expected_return": 0.010771,
+      "ensemble_method": "walk_forward"
+    },
+    "020560": {
+      "prediction": "up",
+      "up_probability": 0.4511,
+      "confidence": 0.3735,
+      "expected_return": -0.01096,
+      "ensemble_method": "stacking"
+    },
+    "022100": {
+      "prediction": "up",
+      "up_probability": 0.4552,
+      "confidence": 0.3961,
+      "expected_return": -0.009025,
+      "ensemble_method": "walk_forward"
+    },
+    "021240": {
+      "prediction": "down",
+      "up_probability": 0.2546,
+      "confidence": 0.2927,
+      "expected_return": -0.000879,
+      "ensemble_method": "vol_low_vol"
+    },
+    "023530": {
+      "prediction": "up",
+      "up_probability": 0.6064,
+      "confidence": 0.4146,
+      "expected_return": 0.012228,
+      "ensemble_method": "trend_bear_test"
+    },
+    "023590": {
+      "prediction": "up",
+      "up_probability": 0.56,
+      "confidence": 0.4709,
+      "expected_return": -0.010981,
+      "ensemble_method": "trend_bull_test"
+    },
+    "026960": {
+      "prediction": "down",
+      "up_probability": 0.2577,
+      "confidence": 0.2975,
+      "expected_return": -0.009603,
+      "ensemble_method": "walk_forward"
+    },
+    "024110": {
+      "prediction": "up",
+      "up_probability": 0.8829,
+      "confidence": 0.3953,
+      "expected_return": -0.009688,
+      "ensemble_method": "trend_bull"
+    },
+    "024720": {
+      "prediction": "down",
+      "up_probability": 0.1504,
+      "confidence": 0.3011,
+      "expected_return": -0.006303,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "028050": {
+      "prediction": "down",
+      "up_probability": 0.2828,
+      "confidence": 0.3362,
+      "expected_return": 0.012665,
+      "ensemble_method": "trend_bear"
+    },
+    "028260": {
+      "prediction": "up",
+      "up_probability": 0.526,
+      "confidence": 0.3421,
+      "expected_return": 0.006869,
+      "ensemble_method": "lightgbm_test"
+    },
+    "028300": {
+      "prediction": "up",
+      "up_probability": 0.7314,
+      "confidence": 0.4226,
+      "expected_return": -0.00402,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "029780": {
+      "prediction": "up",
+      "up_probability": 0.4646,
+      "confidence": 0.4492,
+      "expected_return": -0.012527,
+      "ensemble_method": "vol_low_vol"
+    },
+    "028670": {
+      "prediction": "neutral",
+      "up_probability": 0.4667,
+      "confidence": 0.35,
+      "expected_return": 0.002194,
+      "ensemble_method": "walk_forward"
+    },
+    "030530": {
+      "prediction": "up",
+      "up_probability": 0.6988,
+      "confidence": 0.4025,
+      "expected_return": -0.007927,
+      "ensemble_method": "walk_forward"
+    },
+    "030000": {
+      "prediction": "up",
+      "up_probability": 0.6467,
+      "confidence": 0.4379,
+      "expected_return": -0.010738,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "030200": {
+      "prediction": "down",
+      "up_probability": 0.1368,
+      "confidence": 0.2898,
+      "expected_return": -0.006153,
+      "ensemble_method": "trend_bull_test"
+    },
+    "030610": {
+      "prediction": "down",
+      "up_probability": 0.34,
+      "confidence": 0.2779,
+      "expected_return": -0.001434,
+      "ensemble_method": "lightgbm"
+    },
+    "032350": {
+      "prediction": "down",
+      "up_probability": 0.2289,
+      "confidence": 0.2618,
+      "expected_return": -0.016635,
+      "ensemble_method": "lightgbm_test"
+    },
+    "032640": {
+      "prediction": "down",
+      "up_probability": 0.1715,
+      "confidence": 0.2963,
+      "expected_return": -0.00678,
+      "ensemble_method": "stacking"
+    },
+    "031980": {
+      "prediction": "up",
+      "up_probability": 0.5195,
+      "confidence": 0.4218,
+      "expected_return": 0.019095,
+      "ensemble_method": "direction_clf_test"
+    },
+    "032820": {
+      "prediction": "up",
+      "up_probability": 0.7801,
+      "confidence": 0.4476,
+      "expected_return": 0.023913,
+      "ensemble_method": "stacking"
+    },
+    "032830": {
+      "prediction": "up",
+      "up_probability": 0.5523,
+      "confidence": 0.4548,
+      "expected_return": 0.011172,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "033780": {
+      "prediction": "down",
+      "up_probability": 0.2027,
+      "confidence": 0.257,
+      "expected_return": -0.003263,
+      "ensemble_method": "lightgbm_test"
+    },
+    "034020": {
+      "prediction": "up",
+      "up_probability": 0.7912,
+      "confidence": 0.392,
+      "expected_return": 0.00398,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "034220": {
+      "prediction": "up",
+      "up_probability": 0.586,
+      "confidence": 0.3808,
+      "expected_return": 0.003421,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "034730": {
+      "prediction": "up",
+      "up_probability": 0.5432,
+      "confidence": 0.4597,
+      "expected_return": 0.013166,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "034230": {
+      "prediction": "up",
+      "up_probability": 0.6948,
+      "confidence": 0.45,
+      "expected_return": -0.016653,
+      "ensemble_method": "trend_bear_test"
+    },
+    "035250": {
+      "prediction": "up",
+      "up_probability": 0.4603,
+      "confidence": 0.4025,
+      "expected_return": -0.010768,
+      "ensemble_method": "catboost"
+    },
+    "035420": {
+      "prediction": "down",
+      "up_probability": 0.4941,
+      "confidence": 0.3112,
+      "expected_return": -0.013335,
+      "ensemble_method": "catboost_test"
+    },
+    "035720": {
+      "prediction": "down",
+      "up_probability": 0.5196,
+      "confidence": 0.2868,
+      "expected_return": -0.015286,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "035900": {
+      "prediction": "down",
+      "up_probability": 0.4957,
+      "confidence": 0.3011,
+      "expected_return": -0.013323,
+      "ensemble_method": "vol_low_vol"
+    },
+    "035760": {
+      "prediction": "down",
+      "up_probability": 0.4761,
+      "confidence": 0.2957,
+      "expected_return": -0.024584,
+      "ensemble_method": "catboost_test"
+    },
+    "036460": {
+      "prediction": "up",
+      "up_probability": 0.4818,
+      "confidence": 0.3977,
+      "expected_return": -0.009179,
+      "ensemble_method": "vol_high_vol"
+    },
+    "036930": {
+      "prediction": "up",
+      "up_probability": 0.6887,
+      "confidence": 0.4653,
+      "expected_return": 0.04234,
+      "ensemble_method": "vol_low_vol"
+    },
+    "036570": {
+      "prediction": "neutral",
+      "up_probability": 0.4957,
+      "confidence": 0.4459,
+      "expected_return": 0.003842,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "038500": {
+      "prediction": "down",
+      "up_probability": 0.3227,
+      "confidence": 0.3368,
+      "expected_return": -0.002075,
+      "ensemble_method": "catboost"
+    },
+    "039030": {
+      "prediction": "up",
+      "up_probability": 0.854,
+      "confidence": 0.4524,
+      "expected_return": 0.004294,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "039200": {
+      "prediction": "down",
+      "up_probability": 0.2254,
+      "confidence": 0.2951,
+      "expected_return": -0.005794,
+      "ensemble_method": "walk_forward"
+    },
+    "041510": {
+      "prediction": "down",
+      "up_probability": 0.1324,
+      "confidence": 0.2832,
+      "expected_return": -0.015319,
+      "ensemble_method": "catboost_test"
+    },
+    "039490": {
+      "prediction": "up",
+      "up_probability": 0.903,
+      "confidence": 0.4653,
+      "expected_return": -0.00614,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "042660": {
+      "prediction": "down",
+      "up_probability": 0.1542,
+      "confidence": 0.2975,
+      "expected_return": -0.006764,
+      "ensemble_method": "walk_forward"
+    },
+    "042700": {
+      "prediction": "up",
+      "up_probability": 0.5584,
+      "confidence": 0.4025,
+      "expected_return": 0.022732,
+      "ensemble_method": "walk_forward"
+    },
+    "044820": {
+      "prediction": "up",
+      "up_probability": 0.4822,
+      "confidence": 0.388,
+      "expected_return": 0.008886,
+      "ensemble_method": "stacking"
+    },
+    "043260": {
+      "prediction": "up",
+      "up_probability": 0.5756,
+      "confidence": 0.4524,
+      "expected_return": 0.018243,
+      "ensemble_method": "trend_bull"
+    },
+    "047040": {
+      "prediction": "down",
+      "up_probability": 0.2051,
+      "confidence": 0.3136,
+      "expected_return": 0.05026,
+      "ensemble_method": "stacking"
+    },
+    "047050": {
+      "prediction": "neutral",
+      "up_probability": 0.5355,
+      "confidence": 0.3633,
+      "expected_return": 3.2e-05,
+      "ensemble_method": "lightgbm"
+    },
+    "047810": {
+      "prediction": "down",
+      "up_probability": 0.2566,
+      "confidence": 0.2916,
+      "expected_return": -0.003501,
+      "ensemble_method": "stacking"
+    },
+    "051600": {
+      "prediction": "down",
+      "up_probability": 0.2252,
+      "confidence": 0.2898,
+      "expected_return": -0.007034,
+      "ensemble_method": "walk_forward"
+    },
+    "048410": {
+      "prediction": "neutral",
+      "up_probability": 0.5052,
+      "confidence": 0.3801,
+      "expected_return": 0.002704,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "051900": {
+      "prediction": "down",
+      "up_probability": 0.1783,
+      "confidence": 0.3219,
+      "expected_return": -0.007425,
+      "ensemble_method": "catboost"
+    },
+    "051910": {
+      "prediction": "down",
+      "up_probability": 0.2911,
+      "confidence": 0.3201,
+      "expected_return": 0.002461,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "052690": {
+      "prediction": "down",
+      "up_probability": 0.2072,
+      "confidence": 0.2892,
+      "expected_return": -0.00295,
+      "ensemble_method": "walk_forward"
+    },
+    "055550": {
+      "prediction": "up",
+      "up_probability": 0.5502,
+      "confidence": 0.4379,
+      "expected_return": -0.006636,
+      "ensemble_method": "vol_high_vol"
+    },
+    "058470": {
+      "prediction": "up",
+      "up_probability": 0.6898,
+      "confidence": 0.3985,
+      "expected_return": 0.001343,
+      "ensemble_method": "walk_forward"
+    },
+    "058610": {
+      "prediction": "neutral",
+      "up_probability": 0.484,
+      "confidence": 0.3409,
+      "expected_return": -0.003687,
+      "ensemble_method": "lightgbm"
+    },
+    "062040": {
+      "prediction": "up",
+      "up_probability": 0.5336,
+      "confidence": 0.4331,
+      "expected_return": 0.021115,
+      "ensemble_method": "catboost"
+    },
+    "060310": {
+      "prediction": "down",
+      "up_probability": 0.1458,
+      "confidence": 0.3142,
+      "expected_return": 0.003092,
+      "ensemble_method": "vol_low_vol"
+    },
+    "060370": {
+      "prediction": "down",
+      "up_probability": 0.1257,
+      "confidence": 0.291,
+      "expected_return": 0.007412,
+      "ensemble_method": "walk_forward"
+    },
+    "064350": {
+      "prediction": "down",
+      "up_probability": 0.2032,
+      "confidence": 0.3195,
+      "expected_return": -0.001397,
+      "ensemble_method": "trend_bull_test"
+    },
+    "064760": {
+      "prediction": "up",
+      "up_probability": 0.5199,
+      "confidence": 0.4001,
+      "expected_return": 0.012943,
+      "ensemble_method": "walk_forward"
+    },
+    "065350": {
+      "prediction": "down",
+      "up_probability": 0.4581,
+      "confidence": 0.3237,
+      "expected_return": -0.016771,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "066570": {
+      "prediction": "up",
+      "up_probability": 0.5453,
+      "confidence": 0.4122,
+      "expected_return": 0.017632,
+      "ensemble_method": "vol_high_vol"
+    },
+    "066970": {
+      "prediction": "up",
+      "up_probability": 0.7446,
+      "confidence": 0.3631,
+      "expected_return": 0.00943,
+      "ensemble_method": "trend_bull_test"
+    },
+    "068270": {
+      "prediction": "up",
+      "up_probability": 0.4982,
+      "confidence": 0.3961,
+      "expected_return": -0.011348,
+      "ensemble_method": "trend_bull_test"
+    },
+    "067310": {
+      "prediction": "neutral",
+      "up_probability": 0.5281,
+      "confidence": 0.3619,
+      "expected_return": 0.005135,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "068760": {
+      "prediction": "down",
+      "up_probability": 0.4888,
+      "confidence": 0.3195,
+      "expected_return": -0.015982,
+      "ensemble_method": "stacking"
+    },
+    "069620": {
+      "prediction": "up",
+      "up_probability": 0.7854,
+      "confidence": 0.4548,
+      "expected_return": -0.013954,
+      "ensemble_method": "catboost"
+    },
+    "069960": {
+      "prediction": "down",
+      "up_probability": 0.1821,
+      "confidence": 0.2993,
+      "expected_return": -0.003078,
+      "ensemble_method": "catboost"
+    },
+    "071050": {
+      "prediction": "up",
+      "up_probability": 0.5547,
+      "confidence": 0.3767,
+      "expected_return": 0.001508,
+      "ensemble_method": "trend_bear"
+    },
+    "071970": {
+      "prediction": "down",
+      "up_probability": 0.2408,
+      "confidence": 0.3171,
+      "expected_return": -0.002963,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "078340": {
+      "prediction": "up",
+      "up_probability": 0.454,
+      "confidence": 0.4798,
+      "expected_return": -0.010955,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "073240": {
+      "prediction": "down",
+      "up_probability": 0.2763,
+      "confidence": 0.313,
+      "expected_return": -0.018681,
+      "ensemble_method": "vol_low_vol"
+    },
+    "077970": {
+      "prediction": "up",
+      "up_probability": 0.5123,
+      "confidence": 0.417,
+      "expected_return": 0.011977,
+      "ensemble_method": "lightgbm"
+    },
+    "078600": {
+      "prediction": "down",
+      "up_probability": 0.0974,
+      "confidence": 0.2666,
+      "expected_return": 0.012791,
+      "ensemble_method": "catboost"
+    },
+    "078930": {
+      "prediction": "down",
+      "up_probability": 0.1966,
+      "confidence": 0.31,
+      "expected_return": -0.003241,
+      "ensemble_method": "trend_bull_test"
+    },
+    "079550": {
+      "prediction": "down",
+      "up_probability": 0.2107,
+      "confidence": 0.2672,
+      "expected_return": 0.02188,
+      "ensemble_method": "lightgbm_test"
+    },
+    "080220": {
+      "prediction": "up",
+      "up_probability": 0.8928,
+      "confidence": 0.4902,
+      "expected_return": 0.005946,
+      "ensemble_method": "trend_bear"
+    },
+    "081660": {
+      "prediction": "up",
+      "up_probability": 0.5998,
+      "confidence": 0.4291,
+      "expected_return": -0.019579,
+      "ensemble_method": "vol_low_vol"
+    },
+    "082270": {
+      "prediction": "down",
+      "up_probability": 0.4568,
+      "confidence": 0.2969,
+      "expected_return": -0.026228,
+      "ensemble_method": "catboost_test"
+    },
+    "082740": {
+      "prediction": "up",
+      "up_probability": 0.5183,
+      "confidence": 0.4105,
+      "expected_return": 0.009122,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "083650": {
+      "prediction": "up",
+      "up_probability": 0.5633,
+      "confidence": 0.4242,
+      "expected_return": 0.000443,
+      "ensemble_method": "stacking"
+    },
+    "084370": {
+      "prediction": "up",
+      "up_probability": 0.5301,
+      "confidence": 0.4283,
+      "expected_return": 0.007651,
+      "ensemble_method": "trend_bear"
+    },
+    "085620": {
+      "prediction": "up",
+      "up_probability": 0.5699,
+      "confidence": 0.38,
+      "expected_return": 0.0186,
+      "ensemble_method": "direction_3class_test"
+    },
+    "085660": {
+      "prediction": "down",
+      "up_probability": 0.5019,
+      "confidence": 0.3076,
+      "expected_return": -0.016226,
+      "ensemble_method": "trend_bear_test"
+    },
+    "086520": {
+      "prediction": "up",
+      "up_probability": 0.5645,
+      "confidence": 0.5007,
+      "expected_return": -0.00839,
+      "ensemble_method": "vol_low_vol"
+    },
+    "086280": {
+      "prediction": "down",
+      "up_probability": 0.1763,
+      "confidence": 0.3326,
+      "expected_return": 0.000661,
+      "ensemble_method": "trend_bear"
+    },
+    "086790": {
+      "prediction": "neutral",
+      "up_probability": 0.5228,
+      "confidence": 0.3738,
+      "expected_return": -0.005167,
+      "ensemble_method": "trend_bear_test"
+    },
+    "088350": {
+      "prediction": "up",
+      "up_probability": 0.7429,
+      "confidence": 0.4009,
+      "expected_return": 0.004298,
+      "ensemble_method": "walk_forward"
+    },
+    "087010": {
+      "prediction": "neutral",
+      "up_probability": 0.483,
+      "confidence": 0.3444,
+      "expected_return": -0.002031,
+      "ensemble_method": "walk_forward"
+    },
+    "088980": {
+      "prediction": "up",
+      "up_probability": 0.7155,
+      "confidence": 0.3639,
+      "expected_return": -0.006495,
+      "ensemble_method": "trend_bull_test"
+    },
+    "089030": {
+      "prediction": "down",
+      "up_probability": 0.2584,
+      "confidence": 0.2927,
+      "expected_return": 0.005279,
+      "ensemble_method": "walk_forward"
+    },
+    "090430": {
+      "prediction": "down",
+      "up_probability": 0.4742,
+      "confidence": 0.2814,
+      "expected_return": -0.016054,
+      "ensemble_method": "catboost"
+    },
+    "090710": {
+      "prediction": "down",
+      "up_probability": 0.2668,
+      "confidence": 0.3338,
+      "expected_return": -0.006887,
+      "ensemble_method": "lightgbm"
+    },
+    "090460": {
+      "prediction": "up",
+      "up_probability": 0.5084,
+      "confidence": 0.4621,
+      "expected_return": 0.008044,
+      "ensemble_method": "catboost_test"
+    },
+    "095340": {
+      "prediction": "up",
+      "up_probability": 0.7251,
+      "confidence": 0.4065,
+      "expected_return": 0.00989,
+      "ensemble_method": "direction_3class_test"
+    },
+    "096770": {
+      "prediction": "down",
+      "up_probability": 0.1842,
+      "confidence": 0.2993,
+      "expected_return": 0.0009,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "097230": {
+      "prediction": "up",
+      "up_probability": 0.558,
+      "confidence": 0.4886,
+      "expected_return": -0.002013,
+      "ensemble_method": "catboost"
+    },
+    "097950": {
+      "prediction": "down",
+      "up_probability": 0.3677,
+      "confidence": 0.3201,
+      "expected_return": -0.008603,
+      "ensemble_method": "catboost"
+    },
+    "099320": {
+      "prediction": "up",
+      "up_probability": 0.6763,
+      "confidence": 0.3936,
+      "expected_return": -0.007736,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "098460": {
+      "prediction": "up",
+      "up_probability": 0.4859,
+      "confidence": 0.4597,
+      "expected_return": 0.007003,
+      "ensemble_method": "trend_bear"
+    },
+    "100840": {
+      "prediction": "down",
+      "up_probability": 0.165,
+      "confidence": 0.2927,
+      "expected_return": 0.002267,
+      "ensemble_method": "walk_forward"
+    },
+    "101490": {
+      "prediction": "down",
+      "up_probability": 0.229,
+      "confidence": 0.2951,
+      "expected_return": -0.00338,
+      "ensemble_method": "walk_forward"
+    },
+    "103140": {
+      "prediction": "down",
+      "up_probability": 0.158,
+      "confidence": 0.2975,
+      "expected_return": -0.011658,
+      "ensemble_method": "walk_forward"
+    },
+    "103590": {
+      "prediction": "up",
+      "up_probability": 0.5439,
+      "confidence": 0.4444,
+      "expected_return": 0.020862,
+      "ensemble_method": "lightgbm_test"
+    },
+    "105560": {
+      "prediction": "down",
+      "up_probability": 0.2251,
+      "confidence": 0.3112,
+      "expected_return": -0.006329,
+      "ensemble_method": "lightgbm_test"
+    },
+    "108490": {
+      "prediction": "down",
+      "up_probability": 0.2175,
+      "confidence": 0.3094,
+      "expected_return": 0.006414,
+      "ensemble_method": "vol_high_vol"
+    },
+    "112040": {
+      "prediction": "down",
+      "up_probability": 0.4896,
+      "confidence": 0.2832,
+      "expected_return": -0.015444,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "111770": {
+      "prediction": "up",
+      "up_probability": 0.5191,
+      "confidence": 0.3953,
+      "expected_return": -0.012643,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "112610": {
+      "prediction": "down",
+      "up_probability": 0.2451,
+      "confidence": 0.3362,
+      "expected_return": 0.005465,
+      "ensemble_method": "trend_bull_test"
+    },
+    "115180": {
+      "prediction": "down",
+      "up_probability": 0.2915,
+      "confidence": 0.2969,
+      "expected_return": -0.009063,
+      "ensemble_method": "direction_clf_test"
+    },
+    "120110": {
+      "prediction": "up",
+      "up_probability": 0.4945,
+      "confidence": 0.4001,
+      "expected_return": 0.007693,
+      "ensemble_method": "direction_clf_test"
+    },
+    "124500": {
+      "prediction": "down",
+      "up_probability": 0.2109,
+      "confidence": 0.3165,
+      "expected_return": 0.001602,
+      "ensemble_method": "stacking"
+    },
+    "128940": {
+      "prediction": "down",
+      "up_probability": 0.2176,
+      "confidence": 0.2844,
+      "expected_return": -0.014008,
+      "ensemble_method": "catboost"
+    },
+    "131970": {
+      "prediction": "up",
+      "up_probability": 0.7841,
+      "confidence": 0.3671,
+      "expected_return": 0.034785,
+      "ensemble_method": "catboost_test"
+    },
+    "139480": {
+      "prediction": "neutral",
+      "up_probability": 0.4724,
+      "confidence": 0.3465,
+      "expected_return": -0.005481,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "138040": {
+      "prediction": "down",
+      "up_probability": 0.1776,
+      "confidence": 0.2951,
+      "expected_return": -0.010101,
+      "ensemble_method": "walk_forward"
+    },
+    "138930": {
+      "prediction": "up",
+      "up_probability": 0.6178,
+      "confidence": 0.3969,
+      "expected_return": -0.009193,
+      "ensemble_method": "stacking"
+    },
+    "139130": {
+      "prediction": "up",
+      "up_probability": 0.7619,
+      "confidence": 0.4009,
+      "expected_return": -0.006,
+      "ensemble_method": "stacking"
+    },
+    "140410": {
+      "prediction": "down",
+      "up_probability": 0.5265,
+      "confidence": 0.2707,
+      "expected_return": -0.025843,
+      "ensemble_method": "direction_3class_test"
+    },
+    "140860": {
+      "prediction": "neutral",
+      "up_probability": 0.4609,
+      "confidence": 0.3934,
+      "expected_return": -0.000418,
+      "ensemble_method": "stacking"
+    },
+    "141080": {
+      "prediction": "neutral",
+      "up_probability": 0.4908,
+      "confidence": 0.3437,
+      "expected_return": -2.7e-05,
+      "ensemble_method": "walk_forward"
+    },
+    "145020": {
+      "prediction": "down",
+      "up_probability": 0.4499,
+      "confidence": 0.2927,
+      "expected_return": -0.002382,
+      "ensemble_method": "lightgbm"
+    },
+    "160190": {
+      "prediction": "down",
+      "up_probability": 0.161,
+      "confidence": 0.2523,
+      "expected_return": -0.019811,
+      "ensemble_method": "lightgbm_test"
+    },
+    "161390": {
+      "prediction": "up",
+      "up_probability": 0.4837,
+      "confidence": 0.4629,
+      "expected_return": -0.010161,
+      "ensemble_method": "catboost"
+    },
+    "161890": {
+      "prediction": "down",
+      "up_probability": 0.114,
+      "confidence": 0.2933,
+      "expected_return": 0.004663,
+      "ensemble_method": "walk_forward"
+    },
+    "174900": {
+      "prediction": "up",
+      "up_probability": 0.5588,
+      "confidence": 0.4411,
+      "expected_return": -0.016661,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "175330": {
+      "prediction": "up",
+      "up_probability": 0.8201,
+      "confidence": 0.4741,
+      "expected_return": -0.011474,
+      "ensemble_method": "trend_bull"
+    },
+    "178320": {
+      "prediction": "up",
+      "up_probability": 0.4978,
+      "confidence": 0.454,
+      "expected_return": 0.020049,
+      "ensemble_method": "vol_high_vol"
+    },
+    "180640": {
+      "prediction": "down",
+      "up_probability": 0.1157,
+      "confidence": 0.304,
+      "expected_return": -0.004901,
+      "ensemble_method": "stacking"
+    },
+    "192820": {
+      "prediction": "down",
+      "up_probability": 0.1216,
+      "confidence": 0.2916,
+      "expected_return": -0.008343,
+      "ensemble_method": "trend_bear_test"
+    },
+    "189300": {
+      "prediction": "down",
+      "up_probability": 0.2804,
+      "confidence": 0.3118,
+      "expected_return": 0.009094,
+      "ensemble_method": "direction_clf_test"
+    },
+    "195940": {
+      "prediction": "up",
+      "up_probability": 0.4773,
+      "confidence": 0.4371,
+      "expected_return": -0.00829,
+      "ensemble_method": "trend_bear_test"
+    },
+    "195870": {
+      "prediction": "up",
+      "up_probability": 0.5068,
+      "confidence": 0.4782,
+      "expected_return": 0.007923,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "196170": {
+      "prediction": "up",
+      "up_probability": 0.5163,
+      "confidence": 0.3663,
+      "expected_return": -0.006961,
+      "ensemble_method": "lightgbm_test"
+    },
+    "204320": {
+      "prediction": "down",
+      "up_probability": 0.1992,
+      "confidence": 0.3213,
+      "expected_return": -0.00171,
+      "ensemble_method": "trend_bull_test"
+    },
+    "207940": {
+      "prediction": "down",
+      "up_probability": 0.2457,
+      "confidence": 0.2755,
+      "expected_return": -0.012192,
+      "ensemble_method": "lightgbm"
+    },
+    "214150": {
+      "prediction": "down",
+      "up_probability": 0.4585,
+      "confidence": 0.3094,
+      "expected_return": -0.0137,
+      "ensemble_method": "catboost"
+    },
+    "214370": {
+      "prediction": "down",
+      "up_probability": 0.2097,
+      "confidence": 0.3034,
+      "expected_return": -0.008888,
+      "ensemble_method": "catboost"
+    },
+    "214450": {
+      "prediction": "up",
+      "up_probability": 0.4617,
+      "confidence": 0.388,
+      "expected_return": -0.007425,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "222160": {
+      "prediction": "neutral",
+      "up_probability": 0.466,
+      "confidence": 0.3829,
+      "expected_return": -0.006368,
+      "ensemble_method": "direction_3class_test"
+    },
+    "222800": {
+      "prediction": "up",
+      "up_probability": 0.876,
+      "confidence": 0.4379,
+      "expected_return": 0.024242,
+      "ensemble_method": "direction_clf_test"
+    },
+    "218410": {
+      "prediction": "up",
+      "up_probability": 0.5972,
+      "confidence": 0.4476,
+      "expected_return": 0.026893,
+      "ensemble_method": "vol_low_vol"
+    },
+    "226950": {
+      "prediction": "neutral",
+      "up_probability": 0.5133,
+      "confidence": 0.35,
+      "expected_return": 0.003892,
+      "ensemble_method": "walk_forward"
+    },
+    "232140": {
+      "prediction": "up",
+      "up_probability": 0.5244,
+      "confidence": 0.4114,
+      "expected_return": -0.006949,
+      "ensemble_method": "lightgbm"
+    },
+    "241560": {
+      "prediction": "neutral",
+      "up_probability": 0.5207,
+      "confidence": 0.3976,
+      "expected_return": -8.6e-05,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "237690": {
+      "prediction": "up",
+      "up_probability": 0.5154,
+      "confidence": 0.4154,
+      "expected_return": -0.00657,
+      "ensemble_method": "direction_3class_test"
+    },
+    "240810": {
+      "prediction": "up",
+      "up_probability": 0.5404,
+      "confidence": 0.4395,
+      "expected_return": 0.006743,
+      "ensemble_method": "trend_bear_test"
+    },
+    "247540": {
+      "prediction": "neutral",
+      "up_probability": 0.5473,
+      "confidence": 0.3444,
+      "expected_return": -0.004771,
+      "ensemble_method": "walk_forward"
+    },
+    "251270": {
+      "prediction": "down",
+      "up_probability": 0.4671,
+      "confidence": 0.379,
+      "expected_return": -0.014125,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "257720": {
+      "prediction": "up",
+      "up_probability": 0.4781,
+      "confidence": 0.3719,
+      "expected_return": -0.006937,
+      "ensemble_method": "stacking"
+    },
+    "259960": {
+      "prediction": "down",
+      "up_probability": 0.4478,
+      "confidence": 0.329,
+      "expected_return": 0.001089,
+      "ensemble_method": "vol_low_vol"
+    },
+    "263750": {
+      "prediction": "down",
+      "up_probability": 0.1356,
+      "confidence": 0.2933,
+      "expected_return": -0.001968,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "267260": {
+      "prediction": "down",
+      "up_probability": 0.3781,
+      "confidence": 0.3171,
+      "expected_return": 0.00421,
+      "ensemble_method": "vol_high_vol"
+    },
+    "267250": {
+      "prediction": "down",
+      "up_probability": 0.3052,
+      "confidence": 0.2933,
+      "expected_return": 0.001967,
+      "ensemble_method": "catboost_test"
+    },
+    "267270": {
+      "prediction": "neutral",
+      "up_probability": 0.5387,
+      "confidence": 0.4032,
+      "expected_return": 0.006396,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "271560": {
+      "prediction": "down",
+      "up_probability": 0.1993,
+      "confidence": 0.2797,
+      "expected_return": -0.003295,
+      "ensemble_method": "trend_bear"
+    },
+    "277810": {
+      "prediction": "down",
+      "up_probability": 0.1494,
+      "confidence": 0.3195,
+      "expected_return": 0.006183,
+      "ensemble_method": "stacking"
+    },
+    "278470": {
+      "prediction": "up",
+      "up_probability": 0.5621,
+      "confidence": 0.4548,
+      "expected_return": 0.008367,
+      "ensemble_method": "catboost"
+    },
+    "272210": {
+      "prediction": "down",
+      "up_probability": 0.35,
+      "confidence": 0.3011,
+      "expected_return": 0.001098,
+      "ensemble_method": "direction_3class_test"
+    },
+    "282330": {
+      "prediction": "neutral",
+      "up_probability": 0.4708,
+      "confidence": 0.3612,
+      "expected_return": -0.003123,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "293490": {
+      "prediction": "up",
+      "up_probability": 0.7191,
+      "confidence": 0.4242,
+      "expected_return": -0.018086,
+      "ensemble_method": "lightgbm"
+    },
+    "290650": {
+      "prediction": "up",
+      "up_probability": 0.8094,
+      "confidence": 0.4323,
+      "expected_return": -0.016664,
+      "ensemble_method": "direction_clf_test"
+    },
+    "298040": {
+      "prediction": "up",
+      "up_probability": 0.5629,
+      "confidence": 0.4001,
+      "expected_return": 0.015777,
+      "ensemble_method": "catboost"
+    },
+    "294870": {
+      "prediction": "up",
+      "up_probability": 0.7135,
+      "confidence": 0.3808,
+      "expected_return": -0.006395,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "302440": {
+      "prediction": "down",
+      "up_probability": 0.1731,
+      "confidence": 0.3713,
+      "expected_return": -0.011686,
+      "ensemble_method": "catboost"
+    },
+    "298020": {
+      "prediction": "down",
+      "up_probability": 0.1625,
+      "confidence": 0.291,
+      "expected_return": 0.001822,
+      "ensemble_method": "direction_clf_test"
+    },
+    "298380": {
+      "prediction": "down",
+      "up_probability": 0.4904,
+      "confidence": 0.3029,
+      "expected_return": -0.017011,
+      "ensemble_method": "direction_clf_test"
+    },
+    "307950": {
+      "prediction": "up",
+      "up_probability": 0.5927,
+      "confidence": 0.4645,
+      "expected_return": 0.014123,
+      "ensemble_method": "vol_low_vol"
+    },
+    "310210": {
+      "prediction": "neutral",
+      "up_probability": 0.5158,
+      "confidence": 0.3556,
+      "expected_return": 0.00365,
+      "ensemble_method": "direction_3class_test"
+    },
+    "316140": {
+      "prediction": "down",
+      "up_probability": 0.2613,
+      "confidence": 0.3088,
+      "expected_return": -0.00938,
+      "ensemble_method": "stacking"
+    },
+    "319400": {
+      "prediction": "down",
+      "up_probability": 0.2336,
+      "confidence": 0.3094,
+      "expected_return": 0.010717,
+      "ensemble_method": "catboost"
+    },
+    "319660": {
+      "prediction": "up",
+      "up_probability": 0.7681,
+      "confidence": 0.3864,
+      "expected_return": 0.02122,
+      "ensemble_method": "lightgbm"
+    },
+    "322000": {
+      "prediction": "up",
+      "up_probability": 0.8149,
+      "confidence": 0.3727,
+      "expected_return": 0.035458,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "323280": {
+      "prediction": "down",
+      "up_probability": 0.414,
+      "confidence": 0.2999,
+      "expected_return": -0.002444,
+      "ensemble_method": "catboost"
+    },
+    "323410": {
+      "prediction": "up",
+      "up_probability": 0.5336,
+      "confidence": 0.4363,
+      "expected_return": -0.011213,
+      "ensemble_method": "trend_bear"
+    },
+    "326030": {
+      "prediction": "down",
+      "up_probability": 0.1465,
+      "confidence": 0.2933,
+      "expected_return": -0.00858,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "328130": {
+      "prediction": "down",
+      "up_probability": 0.4486,
+      "confidence": 0.3052,
+      "expected_return": -0.02718,
+      "ensemble_method": "catboost"
+    },
+    "347850": {
+      "prediction": "up",
+      "up_probability": 0.5168,
+      "confidence": 0.3824,
+      "expected_return": -0.008291,
+      "ensemble_method": "lightgbm_test"
+    },
+    "329180": {
+      "prediction": "down",
+      "up_probability": 0.0991,
+      "confidence": 0.2933,
+      "expected_return": 0.006219,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "336260": {
+      "prediction": "up",
+      "up_probability": 0.8038,
+      "confidence": 0.3639,
+      "expected_return": 0.033194,
+      "ensemble_method": "trend_bull_test"
+    },
+    "347700": {
+      "prediction": "up",
+      "up_probability": 0.8479,
+      "confidence": 0.3864,
+      "expected_return": 0.00277,
+      "ensemble_method": "lightgbm"
+    },
+    "352820": {
+      "prediction": "down",
+      "up_probability": 0.4564,
+      "confidence": 0.313,
+      "expected_return": -0.021623,
+      "ensemble_method": "lightgbm_test"
+    },
+    "353200": {
+      "prediction": "up",
+      "up_probability": 0.8744,
+      "confidence": 0.3961,
+      "expected_return": 0.028745,
+      "ensemble_method": "direction_3class_test"
+    },
+    "357780": {
+      "prediction": "down",
+      "up_probability": 0.1792,
+      "confidence": 0.2957,
+      "expected_return": 0.002386,
+      "ensemble_method": "walk_forward"
+    },
+    "373220": {
+      "prediction": "up",
+      "up_probability": 0.8053,
+      "confidence": 0.4226,
+      "expected_return": -0.001606,
+      "ensemble_method": "vol_high_vol_test"
+    },
+    "361610": {
+      "prediction": "down",
+      "up_probability": 0.1689,
+      "confidence": 0.3237,
+      "expected_return": -0.009654,
+      "ensemble_method": "trend_bear_test"
+    },
+    "375500": {
+      "prediction": "up",
+      "up_probability": 0.5539,
+      "confidence": 0.4001,
+      "expected_return": 0.016008,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "377300": {
+      "prediction": "up",
+      "up_probability": 0.5236,
+      "confidence": 0.4025,
+      "expected_return": -0.011236,
+      "ensemble_method": "walk_forward"
+    },
+    "395400": {
+      "prediction": "neutral",
+      "up_probability": 0.4933,
+      "confidence": 0.3402,
+      "expected_return": -0.003849,
+      "ensemble_method": "catboost_test"
+    },
+    "383800": {
+      "prediction": "down",
+      "up_probability": 0.1455,
+      "confidence": 0.2737,
+      "expected_return": -0.005281,
+      "ensemble_method": "stacking"
+    },
+    "383220": {
+      "prediction": "neutral",
+      "up_probability": 0.4548,
+      "confidence": 0.3822,
+      "expected_return": -0.002215,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "397030": {
+      "prediction": "neutral",
+      "up_probability": 0.5232,
+      "confidence": 0.3444,
+      "expected_return": 0.005158,
+      "ensemble_method": "walk_forward"
+    },
+    "417200": {
+      "prediction": "up",
+      "up_probability": 0.7714,
+      "confidence": 0.3751,
+      "expected_return": 0.009903,
+      "ensemble_method": "direction_clf_test"
+    },
+    "419080": {
+      "prediction": "down",
+      "up_probability": 0.4576,
+      "confidence": 0.2737,
+      "expected_return": -0.014859,
+      "ensemble_method": "vol_low_vol"
+    },
+    "403870": {
+      "prediction": "neutral",
+      "up_probability": 0.5101,
+      "confidence": 0.4368,
+      "expected_return": 0.004152,
+      "ensemble_method": "trend_bull_test"
+    },
+    "437730": {
+      "prediction": "neutral",
+      "up_probability": 0.5035,
+      "confidence": 0.3549,
+      "expected_return": -0.001902,
+      "ensemble_method": "stacking"
+    },
+    "443060": {
+      "prediction": "up",
+      "up_probability": 0.4556,
+      "confidence": 0.4089,
+      "expected_return": 0.011251,
+      "ensemble_method": "lightgbm_test"
+    },
+    "402340": {
+      "prediction": "up",
+      "up_probability": 0.8866,
+      "confidence": 0.4355,
+      "expected_return": 0.02412,
+      "ensemble_method": "stacking"
+    },
+    "440110": {
+      "prediction": "up",
+      "up_probability": 0.5359,
+      "confidence": 0.417,
+      "expected_return": 0.025599,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "445680": {
+      "prediction": "down",
+      "up_probability": 0.1785,
+      "confidence": 0.2975,
+      "expected_return": -0.00751,
+      "ensemble_method": "walk_forward"
+    },
+    "450080": {
+      "prediction": "neutral",
+      "up_probability": 0.4777,
+      "confidence": 0.3591,
+      "expected_return": 0.002609,
+      "ensemble_method": "lightgbm_test"
+    },
+    "466100": {
+      "prediction": "down",
+      "up_probability": 0.2011,
+      "confidence": 0.2785,
+      "expected_return": -0.014677,
+      "ensemble_method": "catboost"
+    },
+    "454910": {
+      "prediction": "neutral",
+      "up_probability": 0.5027,
+      "confidence": 0.3703,
+      "expected_return": -0.003463,
+      "ensemble_method": "vol_low_vol_test"
+    },
+    "462870": {
+      "prediction": "up",
+      "up_probability": 0.4843,
+      "confidence": 0.3687,
+      "expected_return": -0.006476,
+      "ensemble_method": "stacking"
+    },
+    "489790": {
+      "prediction": "neutral",
+      "up_probability": 0.49,
+      "confidence": 0.378,
+      "expected_return": 0.004362,
+      "ensemble_method": "stacking"
+    },
+    "458870": {
+      "prediction": "down",
+      "up_probability": 0.226,
+      "confidence": 0.2695,
+      "expected_return": -0.00992,
+      "ensemble_method": "lightgbm_test"
+    },
+    "457190": {
+      "prediction": "neutral",
+      "up_probability": 0.531,
+      "confidence": 0.3283,
+      "expected_return": -0.000129,
+      "ensemble_method": "trend_bull"
+    },
+    "950160": {
+      "prediction": "up",
+      "up_probability": 0.4966,
+      "confidence": 0.45,
+      "expected_return": 0.00856,
+      "ensemble_method": "catboost"
+    },
+    "KOSPI": {
+      "prediction": "up",
+      "up_probability": 0.8864,
+      "confidence": 0.4725,
+      "expected_return": 0.010102,
+      "ensemble_method": "trend_bull_test"
+    },
+    "KOSDAQ": {
+      "prediction": "neutral",
+      "up_probability": 0.1024,
+      "confidence": 0.3787,
+      "expected_return": -0.004128,
+      "ensemble_method": "vol_low_vol_test"
+    }
+  },
+  "summary": {
+    "total": 295,
+    "up": 130,
+    "down": 119,
+    "neutral": 46
+  }
+}

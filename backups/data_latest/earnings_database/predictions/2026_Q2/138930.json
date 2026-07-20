@@ -1,0 +1,22 @@
+{
+  "ticker": "138930",
+  "company": "138930",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 81790618539,
+  "operating_profit": 293610243969,
+  "net_income": 225854033822,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 60,
+  "surprise_direction": "beat",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.918789"
+}

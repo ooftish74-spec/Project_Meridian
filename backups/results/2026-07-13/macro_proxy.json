@@ -1,0 +1,63 @@
+{
+  "cached_at": "2026-07-13T03:13:24.344570",
+  "source": "yfinance",
+  "copper": {
+    "symbol": "HG=F",
+    "name": "구리 선물",
+    "unit": "$/lb",
+    "close": 6.282,
+    "chg_1d_pct": 1.078,
+    "chg_5d_pct": 2.7394,
+    "date": "2026-07-10"
+  },
+  "dollar_index": {
+    "symbol": "DX-Y.NYB",
+    "name": "달러 인덱스",
+    "unit": "index",
+    "close": 100.97,
+    "chg_1d_pct": 0.0297,
+    "chg_5d_pct": 0.1091,
+    "date": "2026-07-10"
+  },
+  "bdi_proxy": {
+    "symbol": "BDRY",
+    "name": "BDI ETF(Breakwave 드라이 벌크)",
+    "unit": "USD",
+    "close": 12.89,
+    "chg_1d_pct": -0.4633,
+    "chg_5d_pct": 5.053,
+    "date": "2026-07-10"
+  },
+  "nq_futures": {
+    "symbol": "NQ=F",
+    "name": "나스닥100 선물",
+    "unit": "points",
+    "close": 30032.25,
+    "chg_1d_pct": 0.3182,
+    "chg_5d_pct": 1.6113,
+    "date": "2026-07-10"
+  },
+  "wti_crude": {
+    "symbol": "CL=F",
+    "name": "WTI 원유",
+    "unit": "$/bbl",
+    "close": 71.41,
+    "chg_1d_pct": -0.9295,
+    "chg_5d_pct": 3.9598,
+    "date": "2026-07-10"
+  },
+  "sector_scores": {
+    "semiconductor": 0.5788,
+    "battery": 0.5947,
+    "industrial": 0.6716,
+    "construction": 0.6082,
+    "us_tech": 0.4978,
+    "us_broad": 0.4984,
+    "us_semiconductor": 0.4978,
+    "finance": 0.5011,
+    "auto": 0.5744,
+    "energy": 0.6351
+  },
+  "nq_chg_1d_pct": 0.3182,
+  "nq_chg_5d_pct": 1.6113
+}

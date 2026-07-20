@@ -1,0 +1,136 @@
+{
+  "date": "2026-06-10",
+  "timestamp": "2026-06-10T05:15:16.418928",
+  "us_futures": {
+    "sp500_futures": {
+      "name": "S&P500 \uc120\ubb3c",
+      "symbol": "ES=F",
+      "prev_close": 7416.0,
+      "last_close": 7396.0,
+      "change_pct": -0.2697,
+      "vs_5d_avg_pct": -0.7698
+    },
+    "nasdaq_futures": {
+      "name": "NASDAQ \uc120\ubb3c",
+      "symbol": "NQ=F",
+      "prev_close": 29454.75,
+      "last_close": 29175.0,
+      "change_pct": -0.9498,
+      "vs_5d_avg_pct": -1.2227
+    },
+    "dow_futures": {
+      "name": "\ub2e4\uc6b0 \uc120\ubb3c",
+      "symbol": "YM=F",
+      "prev_close": 50856.0,
+      "last_close": 50894.0,
+      "change_pct": 0.0747,
+      "vs_5d_avg_pct": -0.3822
+    }
+  },
+  "sgx_proxy": {
+    "ewy": {
+      "name": "EWY (iShares MSCI South Korea)",
+      "prev_close": 185.64,
+      "last_close": 184.05,
+      "change_pct": -0.8565,
+      "vs_ma20_pct": -4.1468,
+      "proxy_for": "SGX KOSPI200 Futures",
+      "correlation_note": "KOSPI\uc640 \uc0c1\uad00\uacc4\uc218 0.95+"
+    },
+    "flkr": {
+      "name": "FLKR (Franklin FTSE South Korea)",
+      "prev_close": 59.75,
+      "last_close": 59.47,
+      "change_pct": -0.4686
+    },
+    "sgx_proxy_components": {
+      "ewy": -0.857,
+      "nq": -0.95,
+      "sox": 0,
+      "dxy_inv": 0.093
+    },
+    "sgx_proxy_source": "ensemble",
+    "sgx_proxy_score": 44.3
+  },
+  "macro_indicators": {
+    "vix": {
+      "name": "VIX (\uacf5\ud3ec\uc9c0\uc218)",
+      "symbol": "^VIX",
+      "prev_close": 18.92,
+      "last_close": 19.73,
+      "change_pct": 4.2812,
+      "impact_direction": "negative"
+    },
+    "dxy": {
+      "name": "DXY (\ub2ec\ub7ec\uc778\ub371\uc2a4)",
+      "symbol": "DX-Y.NYB",
+      "prev_close": 100.05,
+      "last_close": 99.957,
+      "change_pct": -0.093,
+      "impact_direction": "negative"
+    },
+    "us10y": {
+      "name": "\ubbf8\uad6d 10\ub144\ubb3c \uad6d\ucc44",
+      "symbol": "^TNX",
+      "prev_close": 4.552,
+      "last_close": 4.528,
+      "change_pct": -0.5272,
+      "impact_direction": "negative"
+    },
+    "wti_oil": {
+      "name": "WTI \uc6d0\uc720",
+      "symbol": "CL=F",
+      "prev_close": 91.3,
+      "last_close": 88.34,
+      "change_pct": -3.2421,
+      "impact_direction": "positive"
+    },
+    "gold": {
+      "name": "\uae08 \uc120\ubb3c",
+      "symbol": "GC=F",
+      "prev_close": 4335.8999,
+      "last_close": 4284.2002,
+      "change_pct": -1.1924,
+      "impact_direction": "positive"
+    },
+    "usdkrw": {
+      "name": "\uc6d0/\ub2ec\ub7ec \ud658\uc728",
+      "symbol": "KRW=X",
+      "prev_close": 1554.48,
+      "last_close": 1521.1899,
+      "change_pct": -2.1416,
+      "impact_direction": "negative"
+    }
+  },
+  "overnight_score": {
+    "overnight_score": 51.6,
+    "direction": "neutral",
+    "label": "\u26aa \uc911\ub9bd",
+    "component_scores": {
+      "us_futures": 46.2,
+      "sgx_proxy": 44.3,
+      "vix": 60.5,
+      "dxy": 51.9,
+      "us10y": 57.9,
+      "oil": 66.2
+    },
+    "weights": {
+      "us_futures": 0.3,
+      "sgx_proxy": 0.25,
+      "vix": 0.15,
+      "dxy": 0.1,
+      "us10y": 0.1,
+      "oil": 0.1
+    }
+  },
+  "kospi_gap_estimate": {
+    "estimated_gap_pct": -4.96,
+    "ewy_raw_chg": -0.86,
+    "prev_kospi_chg": 8.84,
+    "net_overnight": -9.7,
+    "ewy_contribution": -4.85,
+    "us_contribution": -0.11,
+    "vix_adjustment": 0,
+    "confidence": "high"
+  }
+}

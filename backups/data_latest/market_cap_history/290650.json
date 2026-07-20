@@ -1,0 +1,41 @@
+{
+  "ticker": "290650",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1694867652608,
+      "shares": 24316610,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1775112552448,
+      "shares": 24316610,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1794565865472,
+      "shares": 24316610,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1738637574144,
+      "shares": 24316610,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1738637574144,
+      "shares": 24316610,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1636507844608,
+      "shares": 24316610,
+      "source": "yfinance"
+    }
+  ]
+}

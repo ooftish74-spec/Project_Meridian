@@ -1,0 +1,148 @@
+{
+  "verdict": "NO-GO",
+  "criteria": {
+    "shadow_days": {
+      "value": 0,
+      "threshold": 4,
+      "pass": false,
+      "detail": "0/4일"
+    },
+    "s1_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S1 0/1건"
+    },
+    "s2_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S2 0/1건"
+    },
+    "s3_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S3 0/1건"
+    },
+    "s4_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S4 0/1건"
+    },
+    "s6-a_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S6-A 0/1건"
+    },
+    "s6-b_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S6-B 0/1건"
+    },
+    "total_return": {
+      "value": 0.0,
+      "threshold": 0,
+      "pass": true
+    },
+    "s1_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S1 PnL=0원 (+0.00%)"
+    },
+    "s2_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S2 PnL=0원 (+0.00%)"
+    },
+    "s3_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S3 PnL=0원 (+0.00%)"
+    },
+    "s4_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S4 PnL=0원 (+0.00%)"
+    },
+    "s6-a_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S6-A PnL=0원 (+0.00%)"
+    },
+    "s6-b_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S6-B PnL=0원 (+0.00%)"
+    },
+    "win_rate": {
+      "value": 0.0,
+      "threshold": 45.0,
+      "pass": true,
+      "detail": "0/0건 승리 (0.0%)"
+    },
+    "mdd": {
+      "value": 0,
+      "threshold": 10.0,
+      "pass": true
+    },
+    "da": {
+      "value": "PENDING (1건)",
+      "threshold": 52,
+      "pass": true,
+      "detail": "데이터 부족 (1/10건)",
+      "pending": true
+    },
+    "ic": {
+      "value": "PENDING (D0/20)",
+      "threshold": "p<0.10",
+      "pass": true,
+      "detail": "거래일 부족 (0/20일)",
+      "pending": true
+    },
+    "net_alpha": {
+      "value": "PENDING (D0/20)",
+      "threshold": 0,
+      "pass": true,
+      "detail": "거래일 부족 (0/20일), 현재 Alpha=+0.00%",
+      "pending": true
+    }
+  },
+  "has_pending": true,
+  "strategy_summary": {
+    "S1": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S2": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S3": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S4": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S6-A": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S6-B": {
+      "trades": 0,
+      "pnl": 0
+    }
+  },
+  "timestamp": "2026-07-10T15:35:03.788921+09:00"
+}

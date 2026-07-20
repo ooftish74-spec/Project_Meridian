@@ -1,0 +1,41 @@
+{
+  "ticker": "003570",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1330382766080,
+      "shares": 23630243,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1328019668992,
+      "shares": 23630243,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1285485232128,
+      "shares": 23630243,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1297300455424,
+      "shares": 23630243,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1297300455424,
+      "shares": 23630243,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1354012950528,
+      "shares": 23630243,
+      "source": "yfinance"
+    }
+  ]
+}

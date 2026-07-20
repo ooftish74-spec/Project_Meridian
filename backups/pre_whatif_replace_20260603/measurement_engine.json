@@ -1,0 +1,250 @@
+{
+  "date": "2026-06-03",
+  "timestamp": "2026-06-03T08:50:43.382365",
+  "engine_version": "v2.0",
+  "official": {
+    "da": 0.6296,
+    "da_n": 27,
+    "da_correct": 17,
+    "da_total": 27,
+    "da_held": 0.6296,
+    "da_realized": 0.0,
+    "alpha_pct": -14.022,
+    "cumulative_return_pct": 0.753,
+    "benchmark_return_pct": 14.775,
+    "ic": -0.2469,
+    "ic_p_value": 0.4161,
+    "ic_n": 13,
+    "ic_method": "spearman",
+    "sharpe": 4.737,
+    "max_drawdown_pct": -0.32,
+    "nav": 151129341.0,
+    "total_days": 6,
+    "realized_pnl_krw": -1158654,
+    "realized_win_rate": 0.0,
+    "realized_trades": 12,
+    "grade": "C",
+    "icir": null,
+    "calmar_ratio": 98.817,
+    "win_loss_ratio": 0.0,
+    "profit_factor": 0.0,
+    "realized_kelly": null,
+    "avg_win_pct": null,
+    "avg_loss_pct": -7.659,
+    "expectancy_pct": -7.6592,
+    "market_effect": 0,
+    "sector_effect": 0,
+    "stock_selection_alpha": 0,
+    "timing_effect": 0
+  },
+  "views": {
+    "portfolio": {
+      "da": 0.6296,
+      "da_correct": 17,
+      "da_total": 27,
+      "da_held": 0.6296,
+      "da_realized": 0.0,
+      "rolling_da": 0.0,
+      "rolling_da_n": 0,
+      "rolling_da_window": 20,
+      "alpha_pct": -14.022,
+      "cumulative_return_pct": 0.753,
+      "benchmark_return_pct": 14.775,
+      "nav": 151129341.0,
+      "total_days": 6,
+      "ic": -0.2469,
+      "ic_p_value": 0.4161,
+      "ic_n": 13,
+      "ic_method": "spearman",
+      "realized_pnl_krw": -1158654,
+      "realized_win_rate": 0.0,
+      "realized_trades": 12
+    },
+    "risk": {
+      "sharpe": 4.737,
+      "sharpe_confidence": "low",
+      "annualized_vol_pct": 6.7,
+      "max_drawdown_pct": -0.32,
+      "nav": 151129341.0,
+      "hwm": 151616984.0,
+      "consecutive_loss_days": 1,
+      "n_return_days": 6
+    },
+    "sleeves": {
+      "S2": {
+        "active_positions": 5,
+        "market_value": 8449000.0,
+        "unrealized_pnl": 991200.0,
+        "realized_pnl": -758228,
+        "total_trades": 6,
+        "win_rate": 0.0,
+        "source": "shadow_portfolio → positions + trade_history"
+      },
+      "S3": {
+        "active_positions": 3,
+        "market_value": 7605935.0,
+        "unrealized_pnl": 289805.0,
+        "realized_pnl": 0,
+        "total_trades": 0,
+        "win_rate": 0.0,
+        "source": "shadow_portfolio → positions + trade_history"
+      },
+      "S4": {
+        "active_positions": 19,
+        "market_value": 47020855.0,
+        "unrealized_pnl": 1018360.0,
+        "realized_pnl": -400426,
+        "total_trades": 6,
+        "win_rate": 0.0,
+        "source": "shadow_portfolio → positions + trade_history"
+      }
+    },
+    "attribution": {
+      "daily": {},
+      "cumulative_30d": {},
+      "sleeve_alpha": {},
+      "history_days": 0,
+      "source": "BHB (error)"
+    },
+    "signal_quality": {
+      "ic_mean": -0.2469,
+      "ic_ir": 0.0,
+      "ic_rolling_7d": -0.2469,
+      "ic_positive_pct": 0.0,
+      "ic_halflife": null,
+      "brier_score": 0.268,
+      "brier_skill": -0.1492,
+      "quintile_spread": 10.946,
+      "hit_rate_by_conviction": {
+        "low": null,
+        "mid": 1.0,
+        "high": 0.615
+      },
+      "n_days": 6,
+      "n_ic_obs": 1,
+      "da": 0.6296,
+      "da_n": 27,
+      "alpha_pct": -14.022,
+      "ic_method": "spearman",
+      "ic_n": 13
+    },
+    "model_health": {
+      "prediction_fresh": true,
+      "prediction_date": "2026-06-02",
+      "prediction_age_days": 1,
+      "retrain_overdue": false,
+      "days_since_retrain": 0,
+      "last_retrain_date": null,
+      "total_retrains": 1,
+      "ic_degradation": 0.0,
+      "ic_degrading": false,
+      "feature_drift_mean": 0.0,
+      "feature_drift_alert": false
+    },
+    "execution": {
+      "l1_traded_days": 0,
+      "l1_skipped_days": 6,
+      "l1_activity_rate": 0.0,
+      "l1_total_trades": 51,
+      "l1_win_rate": 0.0,
+      "l1_realized_trades": 12,
+      "l1_realized_wins": 0
+    },
+    "regime": {
+      "regime_conditional_alpha": {
+        "unknown": {
+          "mean_alpha": 0.0,
+          "std_alpha": 0.0,
+          "win_rate": 0.0,
+          "count": 6
+        }
+      },
+      "regime_da_hi_conf": 0.6296,
+      "regime_da_lo_conf": {}
+    },
+    "quant_metrics": {
+      "icir": null,
+      "calmar_ratio": 98.817,
+      "win_loss_ratio": 0.0,
+      "profit_factor": 0.0,
+      "realized_kelly": null,
+      "avg_win_pct": null,
+      "avg_loss_pct": -7.659,
+      "expectancy_pct": -7.6592,
+      "n_wins": 0,
+      "n_losses": 12,
+      "total_profit_krw": 0,
+      "total_loss_krw": -1158654,
+      "win_rate": 0.0,
+      "n_ic_observations": 0
+    }
+  },
+  "daily_series": [
+    {
+      "date": "2026-05-26",
+      "daily_return_pct": -0.0036,
+      "cumulative_return_pct": -0.0036,
+      "nav": 149994631.0,
+      "cash": 114217221.0,
+      "n_positions": 13,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    },
+    {
+      "date": "2026-05-27",
+      "daily_return_pct": -0.0102,
+      "cumulative_return_pct": -0.0138,
+      "nav": 149979345.0,
+      "cash": 91640230.0,
+      "n_positions": 23,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    },
+    {
+      "date": "2026-05-28",
+      "daily_return_pct": -0.237,
+      "cumulative_return_pct": -0.2508,
+      "nav": 149623855.0,
+      "cash": 87813950.0,
+      "n_positions": 27,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    },
+    {
+      "date": "2026-05-29",
+      "daily_return_pct": 0.9119,
+      "cumulative_return_pct": 0.6588,
+      "nav": 150988201.0,
+      "cash": 87770101.0,
+      "n_positions": 27,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    },
+    {
+      "date": "2026-06-01",
+      "daily_return_pct": 0.4164,
+      "cumulative_return_pct": 1.078,
+      "nav": 151616984.0,
+      "cash": 87975659.0,
+      "n_positions": 27,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    },
+    {
+      "date": "2026-06-02",
+      "daily_return_pct": -0.3216,
+      "cumulative_return_pct": 0.7529,
+      "nav": 151129341.0,
+      "cash": 88053551.0,
+      "n_positions": 27,
+      "regime": "",
+      "drawdown_pct": 0,
+      "max_drawdown_pct": 0
+    }
+  ]
+}

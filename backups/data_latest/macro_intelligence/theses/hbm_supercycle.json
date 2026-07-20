@@ -1,0 +1,70 @@
+{
+  "id": "hbm_supercycle",
+  "title": "HBM 슈퍼사이클 (공급부족 ~2027)",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "structural_trend",
+  "confidence": 0.9,
+  "horizon": "6-18 months",
+  "thesis": {
+    "summary": "AI 학습/추론 → HBM 수요 폭증. 공급은 3사(SK/삼성/Micron) 과점. 2027년까지 공급부족 지속.",
+    "supply_demand": {
+      "demand_driver": "NVIDIA H200/B200 + AMD MI300X/MI350 → HBM3E 탑재량 2배↑",
+      "supply_bottleneck": "TSV 공정 수율, CoWoS 패키징 병목",
+      "price_trend": "HBM3E 12H ASP $20+ → ASP 상승 지속"
+    },
+    "players": {
+      "SK하이닉스": {
+        "share": "53%",
+        "edge": "HBM3E 12H 수율 1위, NVIDIA 1st vendor"
+      },
+      "삼성전자": {
+        "share": "38%",
+        "edge": "HBM4 양산 준비, 메모리+파운드리 수직 통합"
+      },
+      "Micron": {
+        "share": "9%",
+        "edge": "HBM3E 진입, 미국 CHIPS Act 보조금"
+      }
+    }
+  },
+  "signals": {
+    "bullish": [
+      "HBM ASP 상승",
+      "NVIDIA 가이던스 상향",
+      "CoWoS CAPA 증설 발표"
+    ],
+    "bearish": [
+      "HBM 재고 축적",
+      "DDR5 가격 급락",
+      "AI 투자 둔화"
+    ],
+    "monitoring": [
+      "HBM3E/HBM4 가격",
+      "DRAM 계약가격",
+      "NVIDIA 매출 가이던스"
+    ]
+  },
+  "tickers": {
+    "primary": [
+      "000660",
+      "005930"
+    ],
+    "secondary": [
+      "009150",
+      "166090"
+    ],
+    "etf": [
+      "091160",
+      "364690"
+    ]
+  },
+  "system_impact": {
+    "V7.1_factor": "삼성전자 2위, SK하이닉스 8위 (벨류에이션 고평가 주의)",
+    "L2_ML": "삼성전자 UP +1.71%, SK하이닉스 UP +2.21% (up_prob 99%)",
+    "position": {
+      "005930": "적극 보유 (~17%)",
+      "000660": "보유 유지 (~5.8%, 추가매수 보류 — val_gap +44.5%)"
+    }
+  }
+}

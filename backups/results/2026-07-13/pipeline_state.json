@@ -1,0 +1,20 @@
+{
+  "us_regime": "neutral",
+  "us_prev_regime": "neutral",
+  "us_regime_confidence": 0.383,
+  "us_regime_score": 0.1014,
+  "us_regime_source": "us_market_regime",
+  "kr_regime": null,
+  "kr_prev_regime": null,
+  "kr_regime_confidence": null,
+  "kr_regime_scores": null,
+  "ois": 83.0,
+  "ois_label": "strong_bullish",
+  "ois_threshold_adj": -5,
+  "intraday_regime": "normal",
+  "operating_regime": null,
+  "updated_at": "2026-07-12T05:15:28.329526",
+  "updated_by": "daily_pipeline.overnight",
+  "regime": "neutral",
+  "intraday_updated_at": "2026-07-13T03:29:15.619394"
+}

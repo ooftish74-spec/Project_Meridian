@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-07-10T15:10:16.172649",
+  "portfolio_value": 150000000.0,
+  "current_weights": {
+    "S6-B": 0.073,
+    "S5": 0.087,
+    "S9": 0.0708,
+    "S10": 0.0785,
+    "S4": 0.0,
+    "S1": 0.1996,
+    "S6-A": 0.0708,
+    "S0": 0.0634,
+    "S7": 0.0785,
+    "S3": 0.091,
+    "S2": 0.1875
+  },
+  "streams": {
+    "S1": {
+      "weight": 0.1996,
+      "stream_return": 0,
+      "weighted_return": 0.0,
+      "holding_pnl": 0.0,
+      "trading_cost": 0.0,
+      "risk_pnl": 0.0,
+      "total_pnl": 0.0,
+      "contribution_pct": 0,
+      "sharpe_contribution": 0,
+      "volatility": 0,
+      "trade_count": 0,
+      "n_days": 0
+    },
+    "S2": {
+      "weight": 0.1875,
+      "stream_return": 0,
+      "weighted_return": 0.0,
+      "holding_pnl": 0.0,
+      "trading_cost": 0.0,
+      "risk_pnl": 0.0,
+      "total_pnl": 0.0,
+      "contribution_pct": 0,
+      "sharpe_contribution": 0,
+      "volatility": 0,
+      "trade_count": 0,
+      "n_days": 0
+    },
+    "S3": {
+      "weight": 0.091,
+      "stream_return": 0,
+      "weighted_return": 0.0,
+      "holding_pnl": 0.0,
+      "trading_cost": 0.0,
+      "risk_pnl": 0.0,
+      "total_pnl": 0.0,
+      "contribution_pct": 0,
+      "sharpe_contribution": 0,
+      "volatility": 0,
+      "trade_count": 0,
+      "n_days": 0
+    },
+    "S4": {
+      "weight": 0.0,
+      "stream_return": 0,
+      "weighted_return": 0.0,
+      "holding_pnl": 0.0,
+      "trading_cost": 0.0,
+      "risk_pnl": 0.0,
+      "total_pnl": 0.0,
+      "contribution_pct": 0,
+      "sharpe_contribution": 0,
+      "volatility": 0,
+      "trade_count": 0,
+      "n_days": 0
+    }
+  },
+  "summary": {
+    "total_pnl": 0.0,
+    "total_return_pct": 0.0,
+    "best_stream": "S1",
+    "worst_stream": "S1"
+  },
+  "brinson": {
+    "stream_effects": {
+      "S1": {
+        "allocation_effect": -0.0,
+        "selection_effect": 0.0,
+        "interaction_effect": 0.0,
+        "total_effect": 0.0
+      },
+      "S2": {
+        "allocation_effect": -0.0,
+        "selection_effect": 0.0,
+        "interaction_effect": 0.0,
+        "total_effect": 0.0
+      },
+      "S3": {
+        "allocation_effect": -0.0,
+        "selection_effect": 0.0,
+        "interaction_effect": 0.0,
+        "total_effect": 0.0
+      },
+      "S4": {
+        "allocation_effect": -0.0,
+        "selection_effect": 0.0,
+        "interaction_effect": 0.0,
+        "total_effect": 0.0
+      }
+    },
+    "total_allocation": 0.0,
+    "total_selection": 0.0,
+    "total_interaction": 0.0
+  }
+}

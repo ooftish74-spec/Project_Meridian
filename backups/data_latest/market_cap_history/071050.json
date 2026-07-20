@@ -1,0 +1,41 @@
+{
+  "ticker": "071050",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 14102818717696,
+      "shares": 52738513,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 14365604446208,
+      "shares": 52738513,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 14891174854656,
+      "shares": 52738513,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 15007968395264,
+      "shares": 52738513,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 15007968395264,
+      "shares": 52738513,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 15066364641280,
+      "shares": 52738513,
+      "source": "yfinance"
+    }
+  ]
+}

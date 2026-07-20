@@ -1,0 +1,74 @@
+{
+  "ois": 44.2,
+  "ois_price": 48.5,
+  "ois_sentiment": 19.9,
+  "sentiment": "slightly_bearish",
+  "threshold_adj": 2,
+  "components": {
+    "kospi_intraday": {
+      "score": 50.0,
+      "detail": "KOSPI/MA20 +nan%, VK=18",
+      "raw": {
+        "kospi": NaN,
+        "kospi_prev": 0,
+        "kospi_ma20": 8160.58984375,
+        "vkospi": 18.0
+      }
+    },
+    "sgx_futures": {
+      "score": 95.0,
+      "detail": "EWY(Macro) +11.48%",
+      "raw": {
+        "ewy": {
+          "name": "EWY (iShares MSCI South Korea)",
+          "prev_close": 178.45,
+          "last_close": 198.94,
+          "change_pct": 11.4822,
+          "vs_ma20_pct": 3.7915,
+          "proxy_for": "SGX KOSPI200 Futures",
+          "correlation_note": "KOSPI\uc640 \uc0c1\uad00\uacc4\uc218 0.95+"
+        },
+        "flkr": {
+          "name": "FLKR (Franklin FTSE South Korea)",
+          "prev_close": 57.38,
+          "last_close": 63.93,
+          "change_pct": 11.4151
+        },
+        "sgx_proxy_components": {
+          "ewy": 11.482,
+          "nq": 3.23,
+          "sox": 0,
+          "dxy_inv": 0.302
+        },
+        "sgx_proxy_source": "ensemble",
+        "sgx_proxy_score": 95
+      },
+      "source": "overnight_macro"
+    },
+    "us_market": {
+      "score": 0.0,
+      "detail": "S&P/NQ avg -18.10%",
+      "raw": {
+        "changes": [
+          -18.100890207715135
+        ]
+      }
+    },
+    "nxt_aftermarket": {
+      "score": 50.0,
+      "detail": "no data"
+    },
+    "vix_fear": {
+      "score": 19.9,
+      "detail": "F&G=20"
+    }
+  },
+  "timestamp": "2026-06-12T05:15:15.936533",
+  "include_premarket": false,
+  "sp500_change_pct": 0.13787731821359728,
+  "nasdaq_change_pct": 0.29833665249607844,
+  "sox_change_pct": 0.3580039829952941,
+  "sp500_change": 0.13787731821359728,
+  "nasdaq_change": 0.29833665249607844,
+  "us_sentiment": "neutral"
+}

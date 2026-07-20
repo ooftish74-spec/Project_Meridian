@@ -1,0 +1,98 @@
+{
+  "timestamp": "2026-07-09T17:30:24.040254",
+  "phase": "us_premarket",
+  "session": "premarket",
+  "stream_id": "S6-B",
+  "orders": [
+    {
+      "ticker": "QQQ",
+      "name": "QQQ",
+      "direction": "long",
+      "amount_krw": 20000000.0,
+      "quantity": 18,
+      "price_usd": 711.44,
+      "usdkrw": 1505.9,
+      "stream_id": "S6-B",
+      "strategy": "us_direct_gearshift",
+      "signal": "RISK_ON",
+      "vix_gear": "QQQ",
+      "vix_current": 16.7,
+      "order_source": "us_direct",
+      "lever_mult": 1.69,
+      "position_size": 30,
+      "reason": "[Phase 37] VIX=16.7 → QQQ (budget=₩20,000,000)",
+      "timestamp": "2026-07-09T17:30:24.040164"
+    }
+  ],
+  "signal": {
+    "stream_id": "S6-B",
+    "strategy": "us_dual_momentum",
+    "signal": "RISK_ON",
+    "selected_asset": "QQQ",
+    "alloc_breakdown": {
+      "QQQ": 15.0,
+      "SPY": 0.0,
+      "TLT": 0.0
+    },
+    "momentum_scores": {
+      "QQQ": 13.3246,
+      "SPY": 8.6369,
+      "TLT": -1.4246
+    },
+    "absolute_filter": true,
+    "spy_price": 745.64,
+    "spy_ma200": 676.405,
+    "vix_current": 16.7,
+    "vix_ma60": 21.19,
+    "vix_ratio": 0.7881,
+    "vix_block_threshold": 1.3,
+    "vix_dynamic_block": false,
+    "vix_regime": "NORMAL",
+    "isa_mode": true,
+    "ketf_mapping": {
+      "ticker": "490330",
+      "name": "TIGER 미국나스닥100레버리지(합성)",
+      "leverage_active": true,
+      "leverage_ratio": 2,
+      "vix_regime": "SAFE (VIX=16.7 < 18.0)"
+    },
+    "leverage_active": true,
+    "ketf_ticker": "490330",
+    "ketf_name": "TIGER 미국나스닥100레버리지(합성)",
+    "reason": "국면 배분(Bull 100.0%), 주식 QQQ, VIX 감쇠(×1.00)",
+    "ticker_detail": {
+      "QQQ": {
+        "price": 711.44,
+        "ma200": 635.3707,
+        "above_ma200": true,
+        "ret_1m": 1.0158,
+        "ret_3m": 21.0047,
+        "ret_6m": 15.3934,
+        "ret_12m": 29.4977,
+        "vol_20d": 30.7848
+      },
+      "SPY": {
+        "price": 745.64,
+        "ma200": 676.405,
+        "above_ma200": true,
+        "ret_1m": 5.2495,
+        "ret_3m": 9.1953,
+        "ret_6m": 11.2796,
+        "ret_12m": 27.381,
+        "vol_20d": 10.3049
+      },
+      "TLT": {
+        "price": 84.36,
+        "ma200": 86.375,
+        "above_ma200": false,
+        "ret_1m": -0.4567,
+        "ret_3m": -1.9111,
+        "ret_6m": -1.7437,
+        "ret_12m": 1.9953,
+        "vol_20d": 10.4442
+      }
+    },
+    "timestamp": "2026-07-09T17:30:19.744336"
+  },
+  "dst": true
+}

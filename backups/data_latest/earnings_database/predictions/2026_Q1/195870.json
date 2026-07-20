@@ -1,0 +1,22 @@
+{
+  "ticker": "195870",
+  "company": "195870",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 159074524700,
+  "operating_profit": 4160048375,
+  "net_income": 3200037211,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "beat",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.593356"
+}

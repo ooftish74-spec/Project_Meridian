@@ -1,0 +1,41 @@
+{
+  "ticker": "457190",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2897989861376,
+      "shares": 30218872,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2901011595264,
+      "shares": 30218872,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 3169959542784,
+      "shares": 30218872,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 3369404203008,
+      "shares": 30218872,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 3369404203008,
+      "shares": 30218872,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 3931475279872,
+      "shares": 30218872,
+      "source": "yfinance"
+    }
+  ]
+}

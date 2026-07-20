@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-07-14T19:56:33.489156",
+  "market_date": "20260714",
+  "flow_unit_krw": 1000000,
+  "tickers": {
+    "449170": {
+      "institution_net_qty": 0,
+      "foreign_net_qty": 0,
+      "institution_net_krw": 0.0,
+      "foreign_net_krw": 0.0,
+      "combined_net_krw": 0.0,
+      "today_volume": 0,
+      "prev_volume": 0,
+      "volume_ratio": 0.0,
+      "current_price": 0,
+      "flow_unit_krw": 1000000
+    },
+    "000660": {
+      "institution_net_qty": 0,
+      "foreign_net_qty": 0,
+      "institution_net_krw": 0.0,
+      "foreign_net_krw": 0.0,
+      "combined_net_krw": 0.0,
+      "today_volume": 0,
+      "prev_volume": 0,
+      "volume_ratio": 0.0,
+      "current_price": 0,
+      "flow_unit_krw": 1000000
+    },
+    "005930": {
+      "institution_net_qty": 0,
+      "foreign_net_qty": 0,
+      "institution_net_krw": 0.0,
+      "foreign_net_krw": 0.0,
+      "combined_net_krw": 0.0,
+      "today_volume": 0,
+      "prev_volume": 0,
+      "volume_ratio": 0.0,
+      "current_price": 0,
+      "flow_unit_krw": 1000000
+    }
+  }
+}

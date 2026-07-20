@@ -1,0 +1,20 @@
+{
+  "ticker": "015760",
+  "target_price": 56667,
+  "current_price": 38150,
+  "recomm_mean": 3.81,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "한국전력",
+  "latest_research": {
+    "title": "1Q26 Review: 원전 예방 정비에 따른 연료비 상승",
+    "broker": "교보증권",
+    "date": "20260519"
+  }
+}

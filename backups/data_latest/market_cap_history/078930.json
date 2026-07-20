@@ -1,0 +1,41 @@
+{
+  "ticker": "078930",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 6788209442816,
+      "shares": 92895495,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 6882884845568,
+      "shares": 92895495,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 6845014474752,
+      "shares": 92895495,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 6807144628224,
+      "shares": 92895495,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 6807144628224,
+      "shares": 92895495,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 6703001632768,
+      "shares": 92895495,
+      "source": "yfinance"
+    }
+  ]
+}

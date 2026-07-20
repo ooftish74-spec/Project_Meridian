@@ -1,0 +1,41 @@
+{
+  "ticker": "443060",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 8356560896000,
+      "shares": 44831335,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 8275864584192,
+      "shares": 44831335,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 8266898210816,
+      "shares": 44831335,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 8473122701312,
+      "shares": 44831335,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 8473122701312,
+      "shares": 44831335,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 10423285841920,
+      "shares": 44831335,
+      "source": "yfinance"
+    }
+  ]
+}

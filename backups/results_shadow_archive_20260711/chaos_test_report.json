@@ -1,0 +1,72 @@
+{
+  "scenario": "NAV -10% 폭락 (regime=crash)",
+  "initial_nav": 154000000.0,
+  "crashed_nav": 138600000.0,
+  "nav_drop_pct": 0.1,
+  "test_timestamp": "2026-06-20T13:04:29.426099",
+  "all_passed": true,
+  "summary": "3/3 모듈 통과 — 전체 PASS ✅",
+  "results": [
+    {
+      "module": "KillSwitch",
+      "passed": true,
+      "elapsed_ms": 1.366,
+      "latency_ok": true,
+      "exposure_scale": 0.0,
+      "action": "halt_all",
+      "triggered": true,
+      "details": {
+        "dd_pct": -10.0,
+        "today_return_pct": -10.0,
+        "triggers": [
+          "daily_loss",
+          "crash_weekly"
+        ],
+        "safe": false,
+        "regime": "crash"
+      },
+      "error": null
+    },
+    {
+      "module": "CrashDefense",
+      "passed": true,
+      "elapsed_ms": 0.47,
+      "latency_ok": true,
+      "exposure_scale": 0.0,
+      "action": "crash_protocol",
+      "triggered": true,
+      "details": {
+        "stress_score": 100,
+        "stress_level": "crash",
+        "action_names": [
+          "crash_protocol",
+          "fx_hedge_rebalance"
+        ],
+        "vix": 50.0,
+        "fx_change_pct": 8.21,
+        "regime": "crash"
+      },
+      "error": null
+    },
+    {
+      "module": "DrawdownGuard",
+      "passed": true,
+      "elapsed_ms": 0.07,
+      "latency_ok": true,
+      "exposure_scale": 0.4,
+      "action": "tail_risk_hedge",
+      "triggered": true,
+      "details": {
+        "dd_pct": -10.0,
+        "dd_stage": 2,
+        "target_exposure": 0.5,
+        "scale_multiplier": 0.4,
+        "actions": [
+          "tail_risk_hedge"
+        ],
+        "regime": "crash"
+      },
+      "error": null
+    }
+  ]
+}

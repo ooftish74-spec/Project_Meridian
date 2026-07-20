@@ -1,0 +1,29 @@
+{
+  "regime_adjustment": -0.05,
+  "sector_overrides": {
+    "steel": 0.027,
+    "energy": 0.018
+  },
+  "risk_flags": [],
+  "overnight_context": {
+    "ois": 28.6,
+    "us_regime": "neutral",
+    "us_regime_confidence": 0.381,
+    "sp500_change": 0.0001,
+    "nasdaq_change": -0.7963,
+    "sox_change": -0.9555720815946245,
+    "vix": 21.23,
+    "vkospi": 14.08,
+    "usdkrw": 1505.4233,
+    "ewy_change": 0.7888,
+    "dxy_change": -0.003,
+    "copper_change": 1.7908,
+    "usdjpy_change": -0.7395,
+    "taiex_change": 0.078,
+    "nikkei_change": 1.4708,
+    "hangseng_change": 1.2795
+  },
+  "fusion_confidence": 0.7,
+  "conflicts": [],
+  "timestamp": "2026-07-10T07:30:07.217114"
+}

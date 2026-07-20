@@ -1,0 +1,20 @@
+{
+  "ticker": "055550",
+  "target_price": 127556,
+  "current_price": 96400,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "신한지주",
+  "latest_research": {
+    "title": "주주환원에 대한 자신감과 의지",
+    "broker": "키움증권",
+    "date": "20260427"
+  }
+}

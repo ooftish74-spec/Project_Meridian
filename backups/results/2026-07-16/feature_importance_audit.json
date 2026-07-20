@@ -1,0 +1,75 @@
+{
+  "date": "2026-07-14T20:00:08.204306",
+  "ensemble_importance": {
+    "volatility_20d": 37.742786,
+    "return_1d": 36.966646,
+    "high_low_range": 34.337374,
+    "log_return_skew_20d": 32.840201,
+    "volume_ratio_20d": 31.971896,
+    "overnight_return": 30.620689,
+    "return_3d": 29.678657,
+    "bb_position": 27.233761,
+    "volume_trend": 26.789803,
+    "log_return_kurtosis_20d": 26.663076,
+    "obv_slope_20d": 26.308765,
+    "rsi_14": 25.868103,
+    "macd_signal": 25.572415,
+    "rsi_slope_5d": 24.753336,
+    "foreign_ratio_feat": 24.524621,
+    "price_ma_ratio_20_60": 24.524402,
+    "close_to_high_20d": 22.431269,
+    "short_proxy_score": 22.286386,
+    "atr_pct": 21.508036,
+    "ma5_dist": 19.897659,
+    "return_5d": 19.617837,
+    "debt_ratio_latest": 18.610886,
+    "return_20d": 18.338204,
+    "ma60_dist": 16.123857,
+    "ma20_dist": 15.093883,
+    "intraday_return": 14.207539,
+    "earnings_surprise_latest": 12.753743,
+    "mean_reversion": 10.036926,
+    "price_ma_ratio_5_20": 9.047157,
+    "vol_ratio_5_20": 8.379402,
+    "revenue_yoy_latest": 7.113164,
+    "adx_proxy": 2.957522
+  },
+  "drift_risk_features": [],
+  "low_importance_candidates": [
+    "intraday_return",
+    "earnings_surprise_latest",
+    "mean_reversion",
+    "price_ma_ratio_5_20",
+    "vol_ratio_5_20",
+    "revenue_yoy_latest",
+    "adx_proxy"
+  ],
+  "data_absent_features": [],
+  "active_weak_features": [
+    "intraday_return",
+    "earnings_surprise_latest",
+    "mean_reversion",
+    "price_ma_ratio_5_20",
+    "vol_ratio_5_20",
+    "revenue_yoy_latest",
+    "adx_proxy"
+  ],
+  "recommendations": [
+    {
+      "action": "RETRAIN_WITHOUT_NOISE",
+      "priority": "LOW",
+      "features": [
+        "intraday_return",
+        "price_ma_ratio_5_20",
+        "adx_proxy",
+        "mean_reversion",
+        "vol_ratio_5_20",
+        "revenue_yoy_latest",
+        "earnings_surprise_latest"
+      ],
+      "reason": "활성 약세 7개 피처 제외 후 재학습 검토"
+    }
+  ],
+  "psi_scores": {},
+  "removal_candidates": []
+}

@@ -1,0 +1,31 @@
+{
+  "date": "2026-03-21",
+  "signals": {
+    "005930": {
+      "up_probability": 0.6806,
+      "prediction": "up",
+      "confidence": 0.3612,
+      "current_price": 181200.0
+    },
+    "000660": {
+      "up_probability": 0.4281,
+      "prediction": "down",
+      "confidence": 0.1438,
+      "current_price": 880000.0
+    },
+    "035420": {
+      "up_probability": 0.4031,
+      "prediction": "down",
+      "confidence": 0.1938,
+      "current_price": 252500.0
+    }
+  },
+  "weights": {
+    "005930": 0.8
+  },
+  "result": {
+    "n_trades": 1,
+    "total_value": 29931298.96,
+    "return_pct": -0.23
+  }
+}

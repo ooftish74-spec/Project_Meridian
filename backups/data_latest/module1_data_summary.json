@@ -1,0 +1,2419 @@
+{
+  "scan_date": "2026-02-19T06:20:52.696870",
+  "base_directory": "data/raw",
+  "categories": {
+    "asian_indices": {
+      "files": {
+        "china.csv": {
+          "rows": 3916,
+          "columns": 3,
+          "size_bytes": 193162,
+          "columns_list": [
+            "Shanghai Composite",
+            "Shenzhen Component",
+            "CSI 300"
+          ],
+          "date_range": null,
+          "null_count": 2722
+        },
+        "japan.csv": {
+          "rows": 3943,
+          "columns": 1,
+          "size_bytes": 102259,
+          "columns_list": [
+            "Nikkei 225"
+          ],
+          "date_range": null,
+          "null_count": 1
+        }
+      },
+      "total_files": 2,
+      "total_size_bytes": 295421,
+      "total_rows": 7859
+    },
+    "china_economic": {
+      "files": {
+        "CHN_CPI.csv": {
+          "rows": 388,
+          "columns": 1,
+          "size_bytes": 7892,
+          "columns_list": [
+            "CHN_CPI"
+          ],
+          "date_range": {
+            "start": "1993-01-01",
+            "end": "2025-04-01"
+          },
+          "null_count": 0
+        },
+        "CHN_GDP.csv": {
+          "rows": 35,
+          "columns": 1,
+          "size_bytes": 1003,
+          "columns_list": [
+            "MKTGDPCNA646NWDB"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2024-01-01"
+          },
+          "null_count": 0
+        },
+        "CHN_Unemployment.csv": {
+          "rows": 21,
+          "columns": 1,
+          "size_bytes": 354,
+          "columns_list": [
+            "CHN_Unemployment"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2010-01-01"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 3,
+      "total_size_bytes": 9249,
+      "total_rows": 444
+    },
+    "commodities": {
+      "files": {
+        "Copper.csv": {
+          "rows": 6396,
+          "columns": 5,
+          "size_bytes": 661212,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Corn.csv": {
+          "rows": 6402,
+          "columns": 5,
+          "size_bytes": 368491,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Gold.csv": {
+          "rows": 6391,
+          "columns": 5,
+          "size_bytes": 572118,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "NaturalGas.csv": {
+          "rows": 6397,
+          "columns": 5,
+          "size_bytes": 669342,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Oil_Brent.csv": {
+          "rows": 4618,
+          "columns": 5,
+          "size_bytes": 469526,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Oil_WTI.csv": {
+          "rows": 6400,
+          "columns": 5,
+          "size_bytes": 654215,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Palladium.csv": {
+          "rows": 6430,
+          "columns": 5,
+          "size_bytes": 528902,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Platinum.csv": {
+          "rows": 6419,
+          "columns": 5,
+          "size_bytes": 536894,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Silver.csv": {
+          "rows": 6393,
+          "columns": 5,
+          "size_bytes": 647152,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Soybeans.csv": {
+          "rows": 6394,
+          "columns": 5,
+          "size_bytes": 376593,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Wheat.csv": {
+          "rows": 6414,
+          "columns": 5,
+          "size_bytes": 365011,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 11,
+      "total_size_bytes": 5849456,
+      "total_rows": 68654
+    },
+    "crypto": {
+      "files": {
+        "Bitcoin.csv": {
+          "rows": 4173,
+          "columns": 5,
+          "size_bytes": 414373,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "2014-09-17",
+            "end": "2026-02-18"
+          },
+          "null_count": 0
+        },
+        "Ethereum.csv": {
+          "rows": 3024,
+          "columns": 5,
+          "size_bytes": 326665,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "2017-11-09",
+            "end": "2026-02-18"
+          },
+          "null_count": 0
+        },
+        "coin_prices_ADA.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14293,
+          "columns_list": [
+            "ADA"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_AVAX.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14163,
+          "columns_list": [
+            "AVAX"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_BNB.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 13905,
+          "columns_list": [
+            "BNB"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_BTC.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14043,
+          "columns_list": [
+            "BTC"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_DOGE.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14534,
+          "columns_list": [
+            "DOGE"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_DOT.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14059,
+          "columns_list": [
+            "DOT"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_ETH.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14098,
+          "columns_list": [
+            "ETH"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_MATIC.csv": {
+          "rows": 247,
+          "columns": 1,
+          "size_bytes": 9779,
+          "columns_list": [
+            "MATIC"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2025-10-18"
+          },
+          "null_count": 0
+        },
+        "coin_prices_SOL.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14174,
+          "columns_list": [
+            "SOL"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "coin_prices_XRP.csv": {
+          "rows": 366,
+          "columns": 1,
+          "size_bytes": 14136,
+          "columns_list": [
+            "XRP"
+          ],
+          "date_range": {
+            "start": "2025-02-15",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        },
+        "market_data.csv": {
+          "rows": 100,
+          "columns": 10,
+          "size_bytes": 10349,
+          "columns_list": [
+            "id",
+            "symbol",
+            "name",
+            "current_price",
+            "market_cap",
+            "market_cap_rank",
+            "total_volume",
+            "price_change_percentage_24h",
+            "circulating_supply",
+            "total_supply"
+          ],
+          "date_range": {
+            "start": "1970-01-01",
+            "end": "1970-01-01"
+          },
+          "null_count": 1
+        }
+      },
+      "total_files": 13,
+      "total_size_bytes": 888571,
+      "total_rows": 10838
+    },
+    "currencies": {
+      "files": {
+        "AUD_USD.csv": {
+          "rows": 5140,
+          "columns": 5,
+          "size_bytes": 531313,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "CAD_USD.csv": {
+          "rows": 5832,
+          "columns": 5,
+          "size_bytes": 602634,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "CHF_USD.csv": {
+          "rows": 5830,
+          "columns": 5,
+          "size_bytes": 600115,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "CNY_USD.csv": {
+          "rows": 6166,
+          "columns": 5,
+          "size_bytes": 638825,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "EUR_USD.csv": {
+          "rows": 5764,
+          "columns": 5,
+          "size_bytes": 592142,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "GBP_USD.csv": {
+          "rows": 5776,
+          "columns": 5,
+          "size_bytes": 593020,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "JPY_USD.csv": {
+          "rows": 7598,
+          "columns": 5,
+          "size_bytes": 786849,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "KRW_USD.csv": {
+          "rows": 5762,
+          "columns": 5,
+          "size_bytes": 596746,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 8,
+      "total_size_bytes": 4941644,
+      "total_rows": 47868
+    },
+    "economic_indicators": {
+      "files": {
+        "CHN_GDP.csv": {
+          "rows": 35,
+          "columns": 1,
+          "size_bytes": 1003,
+          "columns_list": [
+            "MKTGDPCNA646NWDB"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2024-01-01"
+          },
+          "null_count": 0
+        },
+        "EU_CPI.csv": {
+          "rows": 360,
+          "columns": 1,
+          "size_bytes": 6239,
+          "columns_list": [
+            "CP0000EZ19M086NEST"
+          ],
+          "date_range": {
+            "start": "1996-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "EU_GDP.csv": {
+          "rows": 124,
+          "columns": 1,
+          "size_bytes": 2632,
+          "columns_list": [
+            "CLVMNACSCAB1GQEU272020"
+          ],
+          "date_range": {
+            "start": "1995-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "EU_Unemployment.csv": {
+          "rows": 391,
+          "columns": 1,
+          "size_bytes": 6427,
+          "columns_list": [
+            "LRHUTTTTEZM156S"
+          ],
+          "date_range": {
+            "start": "1990-07-01",
+            "end": "2023-01-01"
+          },
+          "null_count": 0
+        },
+        "KOR_GDP.csv": {
+          "rows": 143,
+          "columns": 1,
+          "size_bytes": 4294,
+          "columns_list": [
+            "KOR_GDP"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "USA_10Y_Treasury.csv": {
+          "rows": 9424,
+          "columns": 1,
+          "size_bytes": 149847,
+          "columns_list": [
+            "DGS10"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2026-02-12"
+          },
+          "null_count": 0
+        },
+        "USA_CPI.csv": {
+          "rows": 433,
+          "columns": 1,
+          "size_bytes": 7809,
+          "columns_list": [
+            "CPIAUCSL"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2026-01-01"
+          },
+          "null_count": 0
+        },
+        "USA_FedFunds.csv": {
+          "rows": 433,
+          "columns": 1,
+          "size_bytes": 6892,
+          "columns_list": [
+            "FEDFUNDS"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2026-01-01"
+          },
+          "null_count": 0
+        },
+        "USA_GDP.csv": {
+          "rows": 143,
+          "columns": 1,
+          "size_bytes": 2949,
+          "columns_list": [
+            "GDP"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "USA_Unemployment.csv": {
+          "rows": 433,
+          "columns": 1,
+          "size_bytes": 6512,
+          "columns_list": [
+            "UNRATE"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2026-01-01"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 10,
+      "total_size_bytes": 194604,
+      "total_rows": 11919
+    },
+    "eu": {
+      "files": {
+        "bonds.csv": {
+          "rows": 4148,
+          "columns": 2,
+          "size_bytes": 196087,
+          "columns_list": [
+            "Germany 10Y",
+            "EU Bonds"
+          ],
+          "date_range": null,
+          "null_count": 172
+        },
+        "commodities.csv": {
+          "rows": 4025,
+          "columns": 3,
+          "size_bytes": 183930,
+          "columns_list": [
+            "Brent Crude",
+            "Natural Gas EU",
+            "EU Carbon"
+          ],
+          "date_range": null,
+          "null_count": 4566
+        },
+        "currencies.csv": {
+          "rows": 4201,
+          "columns": 4,
+          "size_bytes": 360689,
+          "columns_list": [
+            "EUR/USD",
+            "EUR/GBP",
+            "EUR/JPY",
+            "EUR/CHF"
+          ],
+          "date_range": null,
+          "null_count": 12
+        },
+        "economic_EU_CPI.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3391,
+          "columns_list": [
+            "EU_CPI"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_EU_GDP.csv": {
+          "rows": 64,
+          "columns": 1,
+          "size_bytes": 1356,
+          "columns_list": [
+            "EU_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "economic_EU_Unemployment.csv": {
+          "rows": 157,
+          "columns": 1,
+          "size_bytes": 2456,
+          "columns_list": [
+            "EU_Unemployment"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2023-01-01"
+          },
+          "null_count": 0
+        },
+        "economic_France_GDP.csv": {
+          "rows": 64,
+          "columns": 1,
+          "size_bytes": 1296,
+          "columns_list": [
+            "France_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "economic_Germany_CPI.csv": {
+          "rows": 183,
+          "columns": 1,
+          "size_bytes": 3663,
+          "columns_list": [
+            "Germany_CPI"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-03-01"
+          },
+          "null_count": 0
+        },
+        "economic_Germany_GDP.csv": {
+          "rows": 64,
+          "columns": 1,
+          "size_bytes": 1297,
+          "columns_list": [
+            "Germany_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "economic_UK_GDP.csv": {
+          "rows": 43,
+          "columns": 1,
+          "size_bytes": 872,
+          "columns_list": [
+            "UK_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2020-07-01"
+          },
+          "null_count": 0
+        },
+        "indices.csv": {
+          "rows": 4139,
+          "columns": 6,
+          "size_bytes": 395485,
+          "columns_list": [
+            "STOXX 50",
+            "DAX",
+            "CAC 40",
+            "FTSE 100",
+            "IBEX 35",
+            "FTSE MIB"
+          ],
+          "date_range": null,
+          "null_count": 289
+        }
+      },
+      "total_files": 11,
+      "total_size_bytes": 1150522,
+      "total_rows": 17280
+    },
+    "google_trends": {
+      "files": {
+        "economic_trends_1.csv": {
+          "rows": 262,
+          "columns": 3,
+          "size_bytes": 5004,
+          "columns_list": [
+            "recession",
+            "inflation",
+            "unemployment"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        },
+        "economic_trends_2.csv": {
+          "rows": 262,
+          "columns": 3,
+          "size_bytes": 4885,
+          "columns_list": [
+            "stock market",
+            "bitcoin",
+            "gold"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        },
+        "economic_trends_3.csv": {
+          "rows": 262,
+          "columns": 3,
+          "size_bytes": 5275,
+          "columns_list": [
+            "real estate",
+            "mortgage",
+            "housing"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 3,
+      "total_size_bytes": 15164,
+      "total_rows": 786
+    },
+    "india": {
+      "files": {
+        "currencies.csv": {
+          "rows": 4200,
+          "columns": 3,
+          "size_bytes": 271169,
+          "columns_list": [
+            "USD/INR",
+            "EUR/INR",
+            "GBP/INR"
+          ],
+          "date_range": null,
+          "null_count": 6
+        },
+        "economic_India_CPI.csv": {
+          "rows": 183,
+          "columns": 1,
+          "size_bytes": 3790,
+          "columns_list": [
+            "India_CPI"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-03-01"
+          },
+          "null_count": 0
+        },
+        "economic_India_Exports.csv": {
+          "rows": 191,
+          "columns": 1,
+          "size_bytes": 4835,
+          "columns_list": [
+            "India_Exports"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-11-01"
+          },
+          "null_count": 0
+        },
+        "economic_India_GDP.csv": {
+          "rows": 15,
+          "columns": 1,
+          "size_bytes": 431,
+          "columns_list": [
+            "India_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2024-01-01"
+          },
+          "null_count": 0
+        },
+        "economic_India_Imports.csv": {
+          "rows": 191,
+          "columns": 1,
+          "size_bytes": 4858,
+          "columns_list": [
+            "India_Imports"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-11-01"
+          },
+          "null_count": 0
+        },
+        "indices.csv": {
+          "rows": 3972,
+          "columns": 3,
+          "size_bytes": 212250,
+          "columns_list": [
+            "NIFTY 50",
+            "SENSEX",
+            "NIFTY Bank"
+          ],
+          "date_range": null,
+          "null_count": 307
+        }
+      },
+      "total_files": 6,
+      "total_size_bytes": 497333,
+      "total_rows": 8752
+    },
+    "indices": {
+      "files": {
+        "CAC40.csv": {
+          "rows": 9134,
+          "columns": 5,
+          "size_bytes": 871875,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "DAX.csv": {
+          "rows": 9140,
+          "columns": 5,
+          "size_bytes": 893686,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "DOW.csv": {
+          "rows": 8592,
+          "columns": 5,
+          "size_bytes": 833587,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "FTSE100.csv": {
+          "rows": 9126,
+          "columns": 5,
+          "size_bytes": 851911,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "HANGSENG.csv": {
+          "rows": 8917,
+          "columns": 5,
+          "size_bytes": 825004,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "1990-01-02",
+            "end": "2026-02-16"
+          },
+          "null_count": 0
+        },
+        "KOSDAQ.csv": {
+          "rows": 6244,
+          "columns": 7,
+          "size_bytes": 680259,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "Dividends",
+            "Stock Splits"
+          ],
+          "date_range": {
+            "start": "2000-10-16",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "KOSPI.csv": {
+          "rows": 7184,
+          "columns": 5,
+          "size_bytes": 733111,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "1996-12-11",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "NASDAQ.csv": {
+          "rows": 9098,
+          "columns": 5,
+          "size_bytes": 939084,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "NIKKEI225.csv": {
+          "rows": 8866,
+          "columns": 5,
+          "size_bytes": 828254,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "1990-01-04",
+            "end": "2026-02-18"
+          },
+          "null_count": 0
+        },
+        "RUSSELL2000.csv": {
+          "rows": 9098,
+          "columns": 5,
+          "size_bytes": 971960,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "SP500.csv": {
+          "rows": 9098,
+          "columns": 5,
+          "size_bytes": 961465,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "SSE_Composite.csv": {
+          "rows": 6936,
+          "columns": 5,
+          "size_bytes": 699593,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": {
+            "start": "1997-07-02",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "VIX.csv": {
+          "rows": 9099,
+          "columns": 5,
+          "size_bytes": 912139,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 13,
+      "total_size_bytes": 11001928,
+      "total_rows": 110532
+    },
+    "japan_economic": {
+      "files": {
+        "JPN_10Y_Treasury.csv": {
+          "rows": 432,
+          "columns": 1,
+          "size_bytes": 7261,
+          "columns_list": [
+            "IRLTLT01JPM156N"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "JPN_BaseRate.csv": {
+          "rows": 432,
+          "columns": 1,
+          "size_bytes": 7640,
+          "columns_list": [
+            "IRSTCI01JPM156N"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "JPN_CPI.csv": {
+          "rows": 378,
+          "columns": 1,
+          "size_bytes": 7730,
+          "columns_list": [
+            "JPNCPIALLMINMEI"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2021-06-01"
+          },
+          "null_count": 0
+        },
+        "JPN_GDP.csv": {
+          "rows": 128,
+          "columns": 1,
+          "size_bytes": 2576,
+          "columns_list": [
+            "JPNRGDPEXP"
+          ],
+          "date_range": {
+            "start": "1994-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "JPN_PPI.csv": {
+          "rows": 411,
+          "columns": 1,
+          "size_bytes": 8184,
+          "columns_list": [
+            "JPNPROINDMISMEI"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2024-03-01"
+          },
+          "null_count": 0
+        },
+        "JPN_Unemployment.csv": {
+          "rows": 431,
+          "columns": 1,
+          "size_bytes": 6515,
+          "columns_list": [
+            "LRUN64TTJPM156S"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-11-01"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 6,
+      "total_size_bytes": 39906,
+      "total_rows": 2212
+    },
+    "korea": {
+      "files": {
+        "currencies.csv": {
+          "rows": 4199,
+          "columns": 3,
+          "size_bytes": 268397,
+          "columns_list": [
+            "USD/KRW",
+            "EUR/KRW",
+            "JPY/KRW"
+          ],
+          "date_range": null,
+          "null_count": 11
+        },
+        "foreign_trading_kosdaq.csv": {
+          "rows": 3970,
+          "columns": 12,
+          "size_bytes": 565878,
+          "columns_list": [
+            "\uae08\uc735\ud22c\uc790",
+            "\ubcf4\ud5d8",
+            "\ud22c\uc2e0",
+            "\uc0ac\ubaa8",
+            "\uc740\ud589",
+            "\uae30\ud0c0\uae08\uc735",
+            "\uc5f0\uae30\uae08",
+            "\uae30\ud0c0\ubc95\uc778",
+            "\uac1c\uc778",
+            "\uc678\uad6d\uc778",
+            "\uae30\ud0c0\uc678\uad6d\uc778",
+            "\uc804\uccb4"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "foreign_trading_kospi.csv": {
+          "rows": 3970,
+          "columns": 12,
+          "size_bytes": 588087,
+          "columns_list": [
+            "\uae08\uc735\ud22c\uc790",
+            "\ubcf4\ud5d8",
+            "\ud22c\uc2e0",
+            "\uc0ac\ubaa8",
+            "\uc740\ud589",
+            "\uae30\ud0c0\uae08\uc735",
+            "\uc5f0\uae30\uae08",
+            "\uae30\ud0c0\ubc95\uc778",
+            "\uac1c\uc778",
+            "\uc678\uad6d\uc778",
+            "\uae30\ud0c0\uc678\uad6d\uc778",
+            "\uc804\uccb4"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "indices.csv": {
+          "rows": 3967,
+          "columns": 2,
+          "size_bytes": 180206,
+          "columns_list": [
+            "KOSPI",
+            "KOSDAQ"
+          ],
+          "date_range": null,
+          "null_count": 4
+        },
+        "stocks.csv": {
+          "rows": 3000,
+          "columns": 30,
+          "size_bytes": 587097,
+          "columns_list": [
+            "005930",
+            "000660",
+            "005935",
+            "005380",
+            "373220",
+            "207940",
+            "402340",
+            "000270",
+            "105560",
+            "034020",
+            "329180",
+            "012450",
+            "068270",
+            "028260",
+            "055550",
+            "032830",
+            "042660",
+            "035420",
+            "012330",
+            "015760",
+            "086790",
+            "006800",
+            "010130",
+            "267260",
+            "005490",
+            "006400",
+            "316140",
+            "009540",
+            "000810",
+            "035720"
+          ],
+          "date_range": {
+            "start": "2013-11-26",
+            "end": "2026-02-13"
+          },
+          "null_count": 9013
+        }
+      },
+      "total_files": 5,
+      "total_size_bytes": 2189665,
+      "total_rows": 19106
+    },
+    "korea_economic": {
+      "files": {
+        "KOR_10Y_Treasury.csv": {
+          "rows": 328,
+          "columns": 1,
+          "size_bytes": 8705,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "1998-11-30",
+            "end": "2026-02-28"
+          },
+          "null_count": 0
+        },
+        "KOR_3Y_Treasury.csv": {
+          "rows": 313,
+          "columns": 1,
+          "size_bytes": 8483,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "2000-02-29",
+            "end": "2026-02-28"
+          },
+          "null_count": 0
+        },
+        "KOR_BaseRate.csv": {
+          "rows": 320,
+          "columns": 1,
+          "size_bytes": 4947,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "1999-05-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "KOR_CPI.csv": {
+          "rows": 433,
+          "columns": 1,
+          "size_bytes": 7759,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2026-01-01"
+          },
+          "null_count": 0
+        },
+        "KOR_Lf.csv": {
+          "rows": 177,
+          "columns": 1,
+          "size_bytes": 3551,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2004-09-01"
+          },
+          "null_count": 0
+        },
+        "KOR_M2.csv": {
+          "rows": 267,
+          "columns": 1,
+          "size_bytes": 5583,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "2003-10-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "KOR_PPI.csv": {
+          "rows": 432,
+          "columns": 1,
+          "size_bytes": 7439,
+          "columns_list": [
+            "Value"
+          ],
+          "date_range": {
+            "start": "1990-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "KOR_Spread.csv": {
+          "rows": 320,
+          "columns": 1,
+          "size_bytes": 9494,
+          "columns_list": [
+            "Spread"
+          ],
+          "date_range": {
+            "start": "1999-05-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 8,
+      "total_size_bytes": 55961,
+      "total_rows": 2590
+    },
+    "korean_sector": {
+      "files": {
+        "sector_foreign_trading.csv": {
+          "rows": 3970,
+          "columns": 12,
+          "size_bytes": 588087,
+          "columns_list": [
+            "\uae08\uc735\ud22c\uc790",
+            "\ubcf4\ud5d8",
+            "\ud22c\uc2e0",
+            "\uc0ac\ubaa8",
+            "\uc740\ud589",
+            "\uae30\ud0c0\uae08\uc735",
+            "\uc5f0\uae30\uae08",
+            "\uae30\ud0c0\ubc95\uc778",
+            "\uac1c\uc778",
+            "\uc678\uad6d\uc778",
+            "\uae30\ud0c0\uc678\uad6d\uc778",
+            "\uc804\uccb4"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Capital_Goods.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75062,
+          "columns_list": [
+            "Capital_Goods"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Consumer.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75056,
+          "columns_list": [
+            "Consumer"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Energy.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 71115,
+          "columns_list": [
+            "Energy"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Finance.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75049,
+          "columns_list": [
+            "Finance"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Healthcare.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 71057,
+          "columns_list": [
+            "Healthcare"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_IT.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75031,
+          "columns_list": [
+            "IT"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Materials.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75065,
+          "columns_list": [
+            "Materials"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Telecom.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 77096,
+          "columns_list": [
+            "Telecom"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_indices_Utilities.csv": {
+          "rows": 3970,
+          "columns": 1,
+          "size_bytes": 75054,
+          "columns_list": [
+            "Utilities"
+          ],
+          "date_range": {
+            "start": "2010-01-04",
+            "end": "2026-02-13"
+          },
+          "null_count": 0
+        },
+        "sector_market_cap.csv": {
+          "rows": 9,
+          "columns": 5,
+          "size_bytes": 321,
+          "columns_list": [
+            "Sector",
+            "Market_Cap",
+            "Trading_Volume",
+            "Trading_Value",
+            "Stock_Count"
+          ],
+          "date_range": {
+            "start": "2026-02-14",
+            "end": "2026-02-14"
+          },
+          "null_count": 0
+        }
+      },
+      "total_files": 11,
+      "total_size_bytes": 1257993,
+      "total_rows": 39709
+    },
+    "sector_etfs": {
+      "files": {
+        "Communication.csv": {
+          "rows": 1926,
+          "columns": 5,
+          "size_bytes": 204639,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "ConsumerDiscretionary.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 733185,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "ConsumerStaples.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 733983,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Energy.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 738245,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Financial.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 741555,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Healthcare.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 732954,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Industrial.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 732816,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Materials.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 734500,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "RealEstate.csv": {
+          "rows": 2604,
+          "columns": 5,
+          "size_bytes": 279072,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Technology.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 734018,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "Utilities.csv": {
+          "rows": 6829,
+          "columns": 5,
+          "size_bytes": 734619,
+          "columns_list": [
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 11,
+      "total_size_bytes": 7099586,
+      "total_rows": 65991
+    },
+    "sentiment": {
+      "files": {
+        "market_regime_indicator.csv": {
+          "rows": 8899,
+          "columns": 9,
+          "size_bytes": 1644506,
+          "columns_list": [
+            "Price",
+            "SMA_50",
+            "SMA_200",
+            "Price_vs_SMA50",
+            "Price_vs_SMA200",
+            "RSI_14",
+            "Momentum_20",
+            "Volatility_20",
+            "Market_Regime"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "sentiment_economic_trends_1.csv": {
+          "rows": 262,
+          "columns": 4,
+          "size_bytes": 12396,
+          "columns_list": [
+            "recession_sentiment",
+            "inflation_sentiment",
+            "unemployment_sentiment",
+            "overall_sentiment"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        },
+        "sentiment_economic_trends_2.csv": {
+          "rows": 262,
+          "columns": 4,
+          "size_bytes": 10971,
+          "columns_list": [
+            "stock market_sentiment",
+            "bitcoin_sentiment",
+            "gold_sentiment",
+            "overall_sentiment"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        },
+        "sentiment_economic_trends_3.csv": {
+          "rows": 262,
+          "columns": 4,
+          "size_bytes": 11092,
+          "columns_list": [
+            "real estate_sentiment",
+            "mortgage_sentiment",
+            "housing_sentiment",
+            "overall_sentiment"
+          ],
+          "date_range": {
+            "start": "2021-02-14",
+            "end": "2026-02-15"
+          },
+          "null_count": 0
+        },
+        "vix_fear_greed_index.csv": {
+          "rows": 8848,
+          "columns": 6,
+          "size_bytes": 1135034,
+          "columns_list": [
+            "VIX",
+            "VIX_SMA_20",
+            "VIX_SMA_50",
+            "VIX_Percentile",
+            "Fear_Greed_Score",
+            "Sentiment_Label"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 5,
+      "total_size_bytes": 2813999,
+      "total_rows": 18533
+    },
+    "us_sector_etf": {
+      "files": {
+        "etf_info.csv": {
+          "rows": 11,
+          "columns": 12,
+          "size_bytes": 1080,
+          "columns_list": [
+            "Ticker",
+            "Sector",
+            "Price",
+            "Volume",
+            "Market_Cap",
+            "PE_Ratio",
+            "PB_Ratio",
+            "Dividend_Yield",
+            "Expense_Ratio",
+            "Beta",
+            "52W_High",
+            "52W_Low"
+          ],
+          "date_range": {
+            "start": "1970-01-01",
+            "end": "1970-01-01"
+          },
+          "null_count": 13
+        },
+        "etf_prices_Communication_Services.csv": {
+          "rows": 1925,
+          "columns": 1,
+          "size_bytes": 84782,
+          "columns_list": [
+            "Communication_Services"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Consumer_Discretionary.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 179450,
+          "columns_list": [
+            "Consumer_Discretionary"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Consumer_Staples.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 179171,
+          "columns_list": [
+            "Consumer_Staples"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Energy.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 180418,
+          "columns_list": [
+            "Energy"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Financials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 180124,
+          "columns_list": [
+            "Financials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Healthcare.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 179580,
+          "columns_list": [
+            "Healthcare"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Industrials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 179127,
+          "columns_list": [
+            "Industrials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Materials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 180460,
+          "columns_list": [
+            "Materials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Real_Estate.csv": {
+          "rows": 2603,
+          "columns": 1,
+          "size_bytes": 115474,
+          "columns_list": [
+            "Real_Estate"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Technology.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 179963,
+          "columns_list": [
+            "Technology"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_prices_Utilities.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 180475,
+          "columns_list": [
+            "Utilities"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Communication_Services.csv": {
+          "rows": 1925,
+          "columns": 1,
+          "size_bytes": 65486,
+          "columns_list": [
+            "Communication_Services"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Consumer_Discretionary.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 139844,
+          "columns_list": [
+            "Consumer_Discretionary"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Consumer_Staples.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 139816,
+          "columns_list": [
+            "Consumer_Staples"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Energy.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 141961,
+          "columns_list": [
+            "Energy"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Financials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 142402,
+          "columns_list": [
+            "Financials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Healthcare.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 139185,
+          "columns_list": [
+            "Healthcare"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Industrials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 140090,
+          "columns_list": [
+            "Industrials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Materials.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 140461,
+          "columns_list": [
+            "Materials"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Real_Estate.csv": {
+          "rows": 2603,
+          "columns": 1,
+          "size_bytes": 87953,
+          "columns_list": [
+            "Real_Estate"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Technology.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 141408,
+          "columns_list": [
+            "Technology"
+          ],
+          "date_range": null,
+          "null_count": 0
+        },
+        "etf_volume_Utilities.csv": {
+          "rows": 4054,
+          "columns": 1,
+          "size_bytes": 141701,
+          "columns_list": [
+            "Utilities"
+          ],
+          "date_range": null,
+          "null_count": 0
+        }
+      },
+      "total_files": 23,
+      "total_size_bytes": 3240411,
+      "total_rows": 82039
+    },
+    "usa": {
+      "files": {
+        "commodities.csv": {
+          "rows": 4056,
+          "columns": 4,
+          "size_bytes": 330887,
+          "columns_list": [
+            "Gold",
+            "Silver",
+            "Crude Oil",
+            "Natural Gas"
+          ],
+          "date_range": null,
+          "null_count": 9
+        },
+        "currencies.csv": {
+          "rows": 4203,
+          "columns": 4,
+          "size_bytes": 353185,
+          "columns_list": [
+            "DXY",
+            "USD/JPY",
+            "USD/EUR",
+            "USD/GBP"
+          ],
+          "date_range": null,
+          "null_count": 169
+        },
+        "economic_CPI.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3625,
+          "columns_list": [
+            "CPI"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 1
+        },
+        "economic_Consumer_Sentiment.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3097,
+          "columns_list": [
+            "Consumer_Sentiment"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_Core_CPI.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3628,
+          "columns_list": [
+            "Core_CPI"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 1
+        },
+        "economic_Fed_Funds_Rate.csv": {
+          "rows": 5886,
+          "columns": 1,
+          "size_bytes": 93553,
+          "columns_list": [
+            "Fed_Funds_Rate"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2026-02-11"
+          },
+          "null_count": 0
+        },
+        "economic_GDP.csv": {
+          "rows": 63,
+          "columns": 1,
+          "size_bytes": 1319,
+          "columns_list": [
+            "GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "economic_Housing_Starts.csv": {
+          "rows": 190,
+          "columns": 1,
+          "size_bytes": 3383,
+          "columns_list": [
+            "Housing_Starts"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-10-01"
+          },
+          "null_count": 0
+        },
+        "economic_Industrial_Production.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3748,
+          "columns_list": [
+            "Industrial_Production"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_M1_Money_Supply.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3541,
+          "columns_list": [
+            "M1_Money_Supply"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_M1_Velocity.csv": {
+          "rows": 63,
+          "columns": 1,
+          "size_bytes": 1080,
+          "columns_list": [
+            "M1_Velocity"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "economic_M2_Money_Supply.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3636,
+          "columns_list": [
+            "M2_Money_Supply"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_M2_Velocity.csv": {
+          "rows": 63,
+          "columns": 1,
+          "size_bytes": 1073,
+          "columns_list": [
+            "M2_Velocity"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "economic_Real_GDP.csv": {
+          "rows": 63,
+          "columns": 1,
+          "size_bytes": 1322,
+          "columns_list": [
+            "Real_GDP"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-07-01"
+          },
+          "null_count": 0
+        },
+        "economic_Retail_Sales.csv": {
+          "rows": 192,
+          "columns": 1,
+          "size_bytes": 3854,
+          "columns_list": [
+            "Retail_Sales"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-12-01"
+          },
+          "null_count": 0
+        },
+        "economic_Trade_Balance.csv": {
+          "rows": 191,
+          "columns": 1,
+          "size_bytes": 3838,
+          "columns_list": [
+            "Trade_Balance"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2025-11-01"
+          },
+          "null_count": 0
+        },
+        "economic_Unemployment.csv": {
+          "rows": 193,
+          "columns": 1,
+          "size_bytes": 2910,
+          "columns_list": [
+            "Unemployment"
+          ],
+          "date_range": {
+            "start": "2010-01-01",
+            "end": "2026-01-01"
+          },
+          "null_count": 1
+        },
+        "indices.csv": {
+          "rows": 4055,
+          "columns": 5,
+          "size_bytes": 382555,
+          "columns_list": [
+            "S&P 500",
+            "Dow Jones",
+            "NASDAQ",
+            "Russell 2000",
+            "VIX"
+          ],
+          "date_range": null,
+          "null_count": 5
+        },
+        "treasuries.csv": {
+          "rows": 4053,
+          "columns": 3,
+          "size_bytes": 271055,
+          "columns_list": [
+            "US 10Y",
+            "US 2Y",
+            "US 30Y"
+          ],
+          "date_range": null,
+          "null_count": 3
+        }
+      },
+      "total_files": 19,
+      "total_size_bytes": 1471289,
+      "total_rows": 24423
+    }
+  },
+  "total_files": 168,
+  "total_size_bytes": 43012702,
+  "total_rows": 539535
+}

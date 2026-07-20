@@ -1,0 +1,281 @@
+{
+  "raw_data": {
+    "S1": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S2": {
+      "daily_returns": [
+        -0.07814930480401554,
+        -0.004699999999999999,
+        0.6701999999999999,
+        0.0361
+      ],
+      "daily_costs": [
+        18701,
+        0,
+        0,
+        0
+      ],
+      "regimes": [
+        "caution",
+        "caution",
+        "caution",
+        "caution"
+      ],
+      "n_trades": 17,
+      "sharpe": 8.254
+    },
+    "S3": {
+      "daily_returns": [
+        0.0005,
+        0.0431,
+        0.0833
+      ],
+      "daily_costs": [
+        0,
+        0,
+        0
+      ],
+      "regimes": [
+        "caution",
+        "caution",
+        "caution"
+      ],
+      "n_trades": 3,
+      "sharpe": 19.862
+    },
+    "S4": {
+      "daily_returns": [
+        -0.07535224983557753,
+        0.0037,
+        0.0218,
+        -0.0256,
+        -0.0235,
+        0.1501,
+        0.1533,
+        -0.0123,
+        -0.0009,
+        0.010700000000000001,
+        0.0102,
+        0.0006,
+        0.0707,
+        0.0044,
+        0.0282,
+        0.019,
+        0.0274,
+        -0.01
+      ],
+      "daily_costs": [
+        16560,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "regimes": [
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution",
+        "caution"
+      ],
+      "n_trades": 31,
+      "sharpe": 5.68
+    },
+    "S5": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    }
+  },
+  "metrics": {
+    "sharpes": {
+      "S1": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S2": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S3": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S4": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S5": {
+        "20": null,
+        "60": null,
+        "120": null
+      }
+    },
+    "correlation_matrix": {
+      "S1_S2": 0.0,
+      "S1_S3": 0.0,
+      "S1_S4": 0.0,
+      "S1_S5": 0.0,
+      "S2_S3": 0.071,
+      "S2_S4": 0.303,
+      "S2_S5": 0.0,
+      "S3_S4": -0.728,
+      "S3_S5": 0.0,
+      "S4_S5": 0.0
+    },
+    "cost_efficiency": {
+      "S1": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S2": {
+        "total_return_pct": 62.345,
+        "total_cost_krw": 18701,
+        "cost_pct": 0.0125,
+        "efficiency": 5000.67,
+        "n_days": 4
+      },
+      "S3": {
+        "total_return_pct": 12.69,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 3
+      },
+      "S4": {
+        "total_return_pct": 35.245,
+        "total_cost_krw": 16560,
+        "cost_pct": 0.011,
+        "efficiency": 3192.46,
+        "n_days": 18
+      },
+      "S5": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      }
+    },
+    "regime_conditional": {
+      "S1": {},
+      "S2": {
+        "caution": {
+          "mean_return_pct": 15.5863,
+          "std_pct": 29.9762,
+          "sharpe": 8.254,
+          "win_rate": 0.5,
+          "n_days": 4
+        }
+      },
+      "S3": {
+        "caution": {
+          "mean_return_pct": 4.23,
+          "std_pct": 3.3808,
+          "sharpe": 19.862,
+          "win_rate": 1.0,
+          "n_days": 3
+        }
+      },
+      "S4": {
+        "caution": {
+          "mean_return_pct": 1.958,
+          "std_pct": 5.4722,
+          "sharpe": 5.68,
+          "win_rate": 0.667,
+          "n_days": 18
+        }
+      },
+      "S5": {}
+    },
+    "stream_summary": {
+      "S1": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S2": {
+        "n_positions": 5,
+        "n_buys": 11,
+        "n_sells": 6,
+        "win_rate": 0.0,
+        "total_invested": 7457800,
+        "unrealized_pnl": 991200,
+        "realized_pnl": -758228
+      },
+      "S3": {
+        "n_positions": 3,
+        "n_buys": 3,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 7316130,
+        "unrealized_pnl": 289805,
+        "realized_pnl": 0
+      },
+      "S4": {
+        "n_positions": 19,
+        "n_buys": 25,
+        "n_sells": 6,
+        "win_rate": 0.0,
+        "total_invested": 46002495,
+        "unrealized_pnl": 1018360,
+        "realized_pnl": -400426
+      },
+      "S5": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      }
+    },
+    "tracking_start": "2026-05-26",
+    "last_updated": "2026-06-03T08:50:43.387557"
+  }
+}

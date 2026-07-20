@@ -1,0 +1,41 @@
+{
+  "ticker": "195870",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 933300011008,
+      "shares": 17000000,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 969000026112,
+      "shares": 17000000,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 960500006912,
+      "shares": 17000000,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1028500029440,
+      "shares": 17000000,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1028500029440,
+      "shares": 17000000,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1164500008960,
+      "shares": 17000000,
+      "source": "yfinance"
+    }
+  ]
+}

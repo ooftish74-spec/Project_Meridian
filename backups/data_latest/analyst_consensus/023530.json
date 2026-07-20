@@ -1,0 +1,20 @@
+{
+  "ticker": "023530",
+  "target_price": 205667,
+  "current_price": 179900,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 1,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "롯데쇼핑",
+  "latest_research": {
+    "title": "백화점이 이끌고, 계열사가 따라오고",
+    "broker": "대신증권",
+    "date": "20260618"
+  }
+}

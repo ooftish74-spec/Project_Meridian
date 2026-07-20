@@ -1,0 +1,41 @@
+{
+  "ticker": "007070",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1850977812480,
+      "shares": 83565590,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1842621317120,
+      "shares": 83565590,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1913652117504,
+      "shares": 83565590,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1955434856448,
+      "shares": 83565590,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1955434856448,
+      "shares": 83565590,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1934543421440,
+      "shares": 83565590,
+      "source": "yfinance"
+    }
+  ]
+}

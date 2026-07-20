@@ -1,0 +1,41 @@
+{
+  "ticker": "009830",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 7039014141952,
+      "shares": 169348279,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 6781174546432,
+      "shares": 169348279,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 7288258560000,
+      "shares": 169348279,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 7571882115072,
+      "shares": 169348279,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 7573235826688,
+      "shares": 169348279,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 8173507313664,
+      "shares": 169348279,
+      "source": "yfinance"
+    }
+  ]
+}

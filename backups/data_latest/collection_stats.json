@@ -1,0 +1,157 @@
+{
+  "sources": {
+    "india": {
+      "total_calls": 4,
+      "successes": 4,
+      "failures": 0,
+      "total_rows": 38,
+      "avg_duration": 8.333466708660126,
+      "avg_quality": 0,
+      "history": [
+        {
+          "timestamp": "2026-02-25T00:14:25.315523",
+          "rows": 33,
+          "duration": 4.66,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-25T07:00:18.523959",
+          "rows": 2,
+          "duration": 12.27,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-26T07:00:17.666788",
+          "rows": 1,
+          "duration": 8.0,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-27T07:00:14.102623",
+          "rows": 2,
+          "duration": 8.4,
+          "success": true,
+          "quality": 0
+        }
+      ]
+    },
+    "usa": {
+      "total_calls": 4,
+      "successes": 4,
+      "failures": 0,
+      "total_rows": 75,
+      "avg_duration": 21.826779901981354,
+      "avg_quality": 0,
+      "history": [
+        {
+          "timestamp": "2026-02-25T00:14:28.388545",
+          "rows": 68,
+          "duration": 7.73,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-25T07:00:31.649492",
+          "rows": 2,
+          "duration": 25.4,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-26T07:00:28.707609",
+          "rows": 2,
+          "duration": 19.04,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-27T07:00:40.833392",
+          "rows": 3,
+          "duration": 35.14,
+          "success": true,
+          "quality": 0
+        }
+      ]
+    },
+    "eu": {
+      "total_calls": 4,
+      "successes": 4,
+      "failures": 0,
+      "total_rows": 77,
+      "avg_duration": 27.618475914001465,
+      "avg_quality": 0,
+      "history": [
+        {
+          "timestamp": "2026-02-25T00:14:35.710135",
+          "rows": 70,
+          "duration": 15.05,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-25T07:00:37.457020",
+          "rows": 3,
+          "duration": 31.2,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-26T07:00:43.989687",
+          "rows": 2,
+          "duration": 34.32,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-27T07:00:35.591288",
+          "rows": 2,
+          "duration": 29.89,
+          "success": true,
+          "quality": 0
+        }
+      ]
+    },
+    "korea": {
+      "total_calls": 4,
+      "successes": 4,
+      "failures": 0,
+      "total_rows": 1531,
+      "avg_duration": 90.18416607379913,
+      "avg_quality": 0,
+      "history": [
+        {
+          "timestamp": "2026-02-25T00:15:40.254374",
+          "rows": 1509,
+          "duration": 79.6,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-25T07:01:08.252043",
+          "rows": 7,
+          "duration": 62.0,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-26T07:01:59.711685",
+          "rows": 8,
+          "duration": 110.05,
+          "success": true,
+          "quality": 0
+        },
+        {
+          "timestamp": "2026-02-27T07:01:54.792240",
+          "rows": 7,
+          "duration": 109.09,
+          "success": true,
+          "quality": 0
+        }
+      ]
+    }
+  },
+  "last_updated": "2026-02-27T07:01:54.792251"
+}

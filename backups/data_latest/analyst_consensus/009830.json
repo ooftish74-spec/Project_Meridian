@@ -1,0 +1,20 @@
+{
+  "ticker": "009830",
+  "target_price": 54921,
+  "current_price": 40800,
+  "recomm_mean": 3.57,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "한화솔루션",
+  "latest_research": {
+    "title": "2026년 유상증자 꼭 필요하다!",
+    "broker": "유안타증권",
+    "date": "20260601"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "updated": "2026-05-02",
+  "source": "data/raw/korea_economic/*.csv",
+  "series_count": 15,
+  "series": {
+    "KOR_10Y_Treasury": {
+      "date": "2026-04-30",
+      "current": 3.923,
+      "prev": 3.843,
+      "change_pct": 2.082,
+      "change_20d_pct": 4.697
+    },
+    "KOR_3Y_Treasury": {
+      "date": "2026-04-30",
+      "current": 3.595,
+      "prev": 3.525,
+      "change_pct": 1.986,
+      "change_20d_pct": 4.263
+    },
+    "KOR_BaseRate": {
+      "date": "2026-04-28",
+      "current": 2.5,
+      "prev": 2.5,
+      "change_pct": 0.0,
+      "change_20d_pct": 0.0
+    },
+    "KOR_CPI": {
+      "date": "2026-03-01",
+      "current": 127.91,
+      "prev": 129.12,
+      "change_pct": -0.937,
+      "change_20d_pct": 11.673
+    },
+    "KOR_ConsumerConf": {
+      "date": "2026-04-01",
+      "current": 99.2,
+      "prev": 107.0,
+      "change_pct": -7.29,
+      "change_20d_pct": -0.601
+    },
+    "KOR_CurrentAccount": {
+      "date": "2026-02-01",
+      "current": 23192.7,
+      "prev": 13259.1,
+      "change_pct": 74.919,
+      "change_20d_pct": 157.051
+    },
+    "KOR_ExchangeRate": {
+      "date": "2026-04-30",
+      "current": 1476.1,
+      "prev": 1473.3,
+      "change_pct": 0.19,
+      "change_20d_pct": -2.811
+    },
+    "KOR_Export": {
+      "date": "2026-02-01",
+      "current": 70366.6,
+      "prev": 65511.3,
+      "change_pct": 7.411,
+      "change_20d_pct": -100.0
+    },
+    "KOR_HousingPrice": {
+      "date": "2026-04-01",
+      "current": 100.022,
+      "prev": 100.014,
+      "change_pct": 0.008,
+      "change_20d_pct": -31.785
+    },
+    "KOR_Import": {
+      "date": "2026-02-01",
+      "current": 47003.0,
+      "prev": 50338.0,
+      "change_pct": -6.625,
+      "change_20d_pct": -100.0
+    },
+    "KOR_IndustrialProd": {
+      "date": "2026-03-01",
+      "current": 108.3,
+      "prev": 105.4,
+      "change_pct": 2.751,
+      "change_20d_pct": 0.0
+    },
+    "KOR_Lf": {
+      "date": "2026-03-01",
+      "current": 29678.7,
+      "prev": 29405.8,
+      "change_pct": 0.928,
+      "change_20d_pct": 1.069
+    },
+    "KOR_M2": {
+      "date": "2026-02-01",
+      "current": 4112230.2,
+      "prev": 4105513.1,
+      "change_pct": 0.164,
+      "change_20d_pct": 7.502
+    },
+    "KOR_PPI": {
+      "date": "2026-03-01",
+      "current": 125.24,
+      "prev": 123.28,
+      "change_pct": 1.59,
+      "change_20d_pct": 4.909
+    },
+    "KOR_Spread": {
+      "date": "2026-04-30",
+      "current": 0.328,
+      "prev": 0.318,
+      "change_pct": 3.145,
+      "change_20d_pct": 9.699
+    }
+  }
+}

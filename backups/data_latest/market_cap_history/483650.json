@@ -1,0 +1,41 @@
+{
+  "ticker": "483650",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2209560657920,
+      "shares": 12343915,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2328062328832,
+      "shares": 12343915,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2345343909888,
+      "shares": 12343915,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2441626517504,
+      "shares": 12343915,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2441626517504,
+      "shares": 12343915,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2629253988352,
+      "shares": 12343915,
+      "source": "yfinance"
+    }
+  ]
+}

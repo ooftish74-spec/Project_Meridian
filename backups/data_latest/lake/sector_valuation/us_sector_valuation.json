@@ -1,0 +1,946 @@
+{
+  "IT": {
+    "sector": "IT",
+    "avg_PER": 39.93,
+    "avg_PBR": 19.797,
+    "total_market_cap": 13216145358848,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "AAPL",
+        "name": "Apple Inc.",
+        "PER": 33.49114,
+        "PBR": 44.111366,
+        "DIV": 0.4,
+        "market_cap": 3888777003008,
+        "revenue_growth": 0.157,
+        "profit_margin": 0.27037
+      },
+      {
+        "ticker": "MSFT",
+        "name": "Microsoft Corporation",
+        "PER": 24.857948,
+        "PBR": 7.549748,
+        "DIV": 0.91,
+        "market_cap": 2952363507712,
+        "revenue_growth": 0.167,
+        "profit_margin": 0.39044
+      },
+      {
+        "ticker": "NVDA",
+        "name": "NVIDIA Corporation",
+        "PER": 46.98515,
+        "PBR": 38.802124,
+        "DIV": 0.02,
+        "market_cap": 4621547864064,
+        "revenue_growth": 0.625,
+        "profit_margin": 0.53007
+      },
+      {
+        "ticker": "AVGO",
+        "name": "Broadcom Inc.",
+        "PER": 69.59205,
+        "PBR": 5.617095,
+        "DIV": 0.78,
+        "market_cap": 1577184657408,
+        "revenue_growth": 0.164,
+        "profit_margin": 0.36198002
+      },
+      {
+        "ticker": "CRM",
+        "name": "Salesforce, Inc.",
+        "PER": 24.720963,
+        "PBR": 2.9059749,
+        "DIV": 0.9,
+        "market_cap": 176272326656,
+        "revenue_growth": 0.086,
+        "profit_margin": 0.17913
+      }
+    ]
+  },
+  "Finance": {
+    "sector": "Finance",
+    "avg_PER": 15.75,
+    "avg_PBR": 2.172,
+    "total_market_cap": 2069921366016,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "JPM",
+        "name": "JP Morgan Chase & Co.",
+        "PER": 15.523976,
+        "PBR": 2.4473968,
+        "DIV": 1.95,
+        "market_cap": 846051934208,
+        "revenue_growth": 0.025,
+        "profit_margin": 0.3391
+      },
+      {
+        "ticker": "BAC",
+        "name": "Bank of America Corporation",
+        "PER": 13.92651,
+        "PBR": 1.3802971,
+        "DIV": 2.08,
+        "market_cap": 387470426112,
+        "revenue_growth": 0.132,
+        "profit_margin": 0.28401
+      },
+      {
+        "ticker": "WFC",
+        "name": "Wells Fargo & Company",
+        "PER": 14.169328,
+        "PBR": 1.6674812,
+        "DIV": 2.06,
+        "market_cap": 278436773888,
+        "revenue_growth": 0.05,
+        "profit_margin": 0.26659
+      },
+      {
+        "ticker": "GS",
+        "name": "Goldman Sachs Group, Inc. (The)",
+        "PER": 17.96688,
+        "PBR": 2.579988,
+        "DIV": 1.96,
+        "market_cap": 279181492224,
+        "revenue_growth": 0.152,
+        "profit_margin": 0.28917998
+      },
+      {
+        "ticker": "MS",
+        "name": "Morgan Stanley",
+        "PER": 17.163404,
+        "PBR": 2.7850373,
+        "DIV": 2.29,
+        "market_cap": 278780739584,
+        "revenue_growth": 0.11,
+        "profit_margin": 0.23986
+      }
+    ]
+  },
+  "Healthcare": {
+    "sector": "Healthcare",
+    "avg_PER": 40.56,
+    "avg_PBR": 11.368,
+    "total_market_cap": 2348257705984,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "UNH",
+        "name": "UnitedHealth Group Incorporated",
+        "PER": 21.936459,
+        "PBR": 2.6366274,
+        "DIV": 3.05,
+        "market_cap": 262693191680,
+        "revenue_growth": 0.123,
+        "profit_margin": 0.02694
+      },
+      {
+        "ticker": "JNJ",
+        "name": "Johnson & Johnson",
+        "PER": 21.964674,
+        "PBR": 7.16049,
+        "DIV": 2.11,
+        "market_cap": 584376451072,
+        "revenue_growth": 0.091,
+        "profit_margin": 0.28456
+      },
+      {
+        "ticker": "LLY",
+        "name": "Eli Lilly and Company",
+        "PER": 44.045376,
+        "PBR": 34.042152,
+        "DIV": 0.61,
+        "market_cap": 952338219008,
+        "revenue_growth": 0.426,
+        "profit_margin": 0.31667
+      },
+      {
+        "ticker": "PFE",
+        "name": "Pfizer, Inc.",
+        "PER": 19.595589,
+        "PBR": 1.6328657,
+        "DIV": 6.4,
+        "market_cap": 151524114432,
+        "revenue_growth": -0.012,
+        "profit_margin": 0.124180004
+      },
+      {
+        "ticker": "ABBV",
+        "name": "AbbVie Inc.",
+        "PER": 95.25848,
+        "PBR": -150.37457,
+        "DIV": 2.96,
+        "market_cap": 397325729792,
+        "revenue_growth": 0.1,
+        "profit_margin": 0.0691
+      }
+    ]
+  },
+  "Energy": {
+    "sector": "Energy",
+    "avg_PER": 20.2,
+    "avg_PBR": 2.306,
+    "total_market_cap": 1268667654144,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "name": "Exxon Mobil Corporation",
+        "PER": 21.98209,
+        "PBR": 2.372843,
+        "DIV": 2.73,
+        "market_cap": 621104136192,
+        "revenue_growth": -0.013,
+        "profit_margin": 0.089049995
+      },
+      {
+        "ticker": "CVX",
+        "name": "Chevron Corporation",
+        "PER": 27.74208,
+        "PBR": 1.9370838,
+        "DIV": 3.85,
+        "market_cap": 367741108224,
+        "revenue_growth": -0.06,
+        "profit_margin": 0.06611
+      },
+      {
+        "ticker": "COP",
+        "name": "ConocoPhillips",
+        "PER": 17.4063,
+        "PBR": 2.0999336,
+        "DIV": 3.01,
+        "market_cap": 136583938048,
+        "revenue_growth": -0.068,
+        "profit_margin": 0.13252
+      },
+      {
+        "ticker": "SLB",
+        "name": "SLB Limited",
+        "PER": 21.638298,
+        "PBR": 2.9123712,
+        "DIV": 2.29,
+        "market_cap": 76037603328,
+        "revenue_growth": 0.05,
+        "profit_margin": 0.09449001
+      },
+      {
+        "ticker": "EOG",
+        "name": "EOG Resources, Inc.",
+        "PER": 12.222444,
+        "PBR": 2.2099726,
+        "DIV": 3.29,
+        "market_cap": 67200868352,
+        "revenue_growth": -0.024,
+        "profit_margin": 0.24410999
+      }
+    ]
+  },
+  "Materials": {
+    "sector": "Materials",
+    "avg_PER": 30.1,
+    "avg_PBR": 7.669,
+    "total_market_cap": 611883192320,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "LIN",
+        "name": "Linde plc",
+        "PER": 33.98426,
+        "PBR": 6.053007,
+        "DIV": 1.22,
+        "market_cap": 232818278400,
+        "revenue_growth": 0.058,
+        "profit_margin": 0.20297001
+      },
+      {
+        "ticker": "APD",
+        "name": "Air Products and Chemicals, Inc",
+        "PER": 20.061602,
+        "PBR": 4.062355,
+        "DIV": 2.58,
+        "market_cap": 62606413824,
+        "revenue_growth": 0.058,
+        "profit_margin": -0.02733
+      },
+      {
+        "ticker": "SHW",
+        "name": "Sherwin-Williams Company (The)",
+        "PER": 35.149124,
+        "PBR": 19.324295,
+        "DIV": 0.89,
+        "market_cap": 89917071360,
+        "revenue_growth": 0.056,
+        "profit_margin": 0.108950004
+      },
+      {
+        "ticker": "FCX",
+        "name": "Freeport-McMoRan, Inc.",
+        "PER": 42.328945,
+        "PBR": 4.8886857,
+        "DIV": 0.96,
+        "market_cap": 92387770368,
+        "revenue_growth": -0.015,
+        "profit_margin": 0.08505
+      },
+      {
+        "ticker": "NEM",
+        "name": "Newmont Corporation",
+        "PER": 18.99378,
+        "PBR": 4.017566,
+        "DIV": 0.8,
+        "market_cap": 134153658368,
+        "revenue_growth": 0.2,
+        "profit_margin": 0.33423
+      }
+    ]
+  },
+  "Consumer": {
+    "sector": "Consumer",
+    "avg_PER": 34.66,
+    "avg_PBR": 10.702,
+    "total_market_cap": 2362668695552,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "PG",
+        "name": "Procter & Gamble Company (The)",
+        "PER": 23.81926,
+        "PBR": 7.1480017,
+        "DIV": 2.67,
+        "market_cap": 375699996672,
+        "revenue_growth": 0.015,
+        "profit_margin": 0.19299999
+      },
+      {
+        "ticker": "KO",
+        "name": "Coca-Cola Company (The)",
+        "PER": 26.263157,
+        "PBR": 10.676651,
+        "DIV": 2.59,
+        "market_cap": 343440457728,
+        "revenue_growth": 0.024,
+        "profit_margin": 0.2734
+      },
+      {
+        "ticker": "PEP",
+        "name": "Pepsico, Inc.",
+        "PER": 27.44426,
+        "PBR": 11.049035,
+        "DIV": 3.46,
+        "market_cap": 225529085952,
+        "revenue_growth": 0.056,
+        "profit_margin": 0.08773
+      },
+      {
+        "ticker": "COST",
+        "name": "Costco Wholesale Corporation",
+        "PER": 52.7729,
+        "PBR": 14.433653,
+        "DIV": 0.53,
+        "market_cap": 437418196992,
+        "revenue_growth": 0.083,
+        "profit_margin": 0.02961
+      },
+      {
+        "ticker": "WMT",
+        "name": "Walmart Inc.",
+        "PER": 43.003498,
+        "PBR": 10.203252,
+        "DIV": 0.79,
+        "market_cap": 980580958208,
+        "revenue_growth": 0.058,
+        "profit_margin": 0.03259
+      }
+    ]
+  },
+  "Capital_Goods": {
+    "sector": "Capital_Goods",
+    "avg_PER": 48.71,
+    "avg_PBR": 14.435,
+    "total_market_cap": 1156816551936,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "CAT",
+        "name": "Caterpillar, Inc.",
+        "PER": 40.43321,
+        "PBR": 16.582054,
+        "DIV": 0.79,
+        "market_cap": 355542794240,
+        "revenue_growth": 0.18,
+        "profit_margin": 0.13144
+      },
+      {
+        "ticker": "HON",
+        "name": "Honeywell International Inc.",
+        "PER": 32.271164,
+        "PBR": 11.147309,
+        "DIV": 1.98,
+        "market_cap": 164403986432,
+        "revenue_growth": -0.033,
+        "profit_margin": 0.1263
+      },
+      {
+        "ticker": "RTX",
+        "name": "RTX Corporation",
+        "PER": 41.39798,
+        "PBR": 4.2158537,
+        "DIV": 1.32,
+        "market_cap": 275061571584,
+        "revenue_growth": 0.121,
+        "profit_margin": 0.07598
+      },
+      {
+        "ticker": "DE",
+        "name": "Deere & Company",
+        "PER": 35.868435,
+        "PBR": 6.8088055,
+        "DIV": 0.98,
+        "market_cap": 179584122880,
+        "revenue_growth": 0.13,
+        "profit_margin": 0.10302
+      },
+      {
+        "ticker": "BA",
+        "name": "Boeing Company (The)",
+        "PER": 93.560486,
+        "PBR": 33.419273,
+        "DIV": 0,
+        "market_cap": 182224076800,
+        "revenue_growth": 0.571,
+        "profit_margin": 0.02498
+      }
+    ]
+  },
+  "Telecom": {
+    "sector": "Telecom",
+    "avg_PER": 22.58,
+    "avg_PBR": 6.559,
+    "total_market_cap": 6188148015104,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "META",
+        "name": "Meta Platforms, Inc.",
+        "PER": 27.936089,
+        "PBR": 7.635762,
+        "DIV": 0.33,
+        "market_cap": 1658528202752,
+        "revenue_growth": 0.238,
+        "profit_margin": 0.30084
+      },
+      {
+        "ticker": "GOOGL",
+        "name": "Alphabet Inc.",
+        "PER": 29.137835,
+        "PBR": 9.168922,
+        "DIV": 0.28,
+        "market_cap": 3810313371648,
+        "revenue_growth": 0.18,
+        "profit_margin": 0.32810003
+      },
+      {
+        "ticker": "DIS",
+        "name": "Walt Disney Company (The)",
+        "PER": 15.549337,
+        "PBR": 1.7285811,
+        "DIV": 1.42,
+        "market_cap": 187234205696,
+        "revenue_growth": 0.052,
+        "profit_margin": 0.128
+      },
+      {
+        "ticker": "NFLX",
+        "name": "Netflix, Inc.",
+        "PER": 31.094862,
+        "PBR": 12.479378,
+        "DIV": 0,
+        "market_cap": 333709443072,
+        "revenue_growth": 0.176,
+        "profit_margin": 0.24304001
+      },
+      {
+        "ticker": "T",
+        "name": "AT&T Inc.",
+        "PER": 9.203947,
+        "PBR": 1.7814847,
+        "DIV": 3.98,
+        "market_cap": 198362791936,
+        "revenue_growth": 0.036,
+        "profit_margin": 0.17472
+      }
+    ]
+  },
+  "Utilities": {
+    "sector": "Utilities",
+    "avg_PER": 22.49,
+    "avg_PBR": 2.538,
+    "total_market_cap": 520780505088,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "NEE",
+        "name": "NextEra Energy, Inc.",
+        "PER": 27.933334,
+        "PBR": 3.5161734,
+        "DIV": 2.72,
+        "market_cap": 192059047936,
+        "revenue_growth": 0.207,
+        "profit_margin": 0.24934
+      },
+      {
+        "ticker": "SO",
+        "name": "Southern Company (The)",
+        "PER": 23.457712,
+        "PBR": 2.8774564,
+        "DIV": 3.11,
+        "market_cap": 103834198016,
+        "revenue_growth": 0.101,
+        "profit_margin": 0.14689
+      },
+      {
+        "ticker": "DUK",
+        "name": "Duke Energy Corporation (Holdin",
+        "PER": 20.091917,
+        "PBR": 1.9390063,
+        "DIV": 3.37,
+        "market_cap": 98591891456,
+        "revenue_growth": 0.144,
+        "profit_margin": 0.15411
+      },
+      {
+        "ticker": "AEP",
+        "name": "American Electric Power Company",
+        "PER": 19.424925,
+        "PBR": 2.2471383,
+        "DIV": 2.96,
+        "market_cap": 69971247104,
+        "revenue_growth": 0.132,
+        "profit_margin": 0.16364999
+      },
+      {
+        "ticker": "D",
+        "name": "Dominion Energy, Inc.",
+        "PER": 21.555555,
+        "PBR": 2.1097074,
+        "DIV": 4.08,
+        "market_cap": 56324120576,
+        "revenue_growth": 0.149,
+        "profit_margin": 0.16790001
+      }
+    ]
+  },
+  "Semiconductor": {
+    "sector": "Semiconductor",
+    "avg_PER": 54.66,
+    "avg_PBR": 21.513,
+    "total_market_cap": 8667204108288,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "NVDA",
+        "name": "NVIDIA Corporation",
+        "PER": 46.98515,
+        "PBR": 38.802124,
+        "DIV": 0.02,
+        "market_cap": 4621547864064,
+        "revenue_growth": 0.625,
+        "profit_margin": 0.53007
+      },
+      {
+        "ticker": "TSM",
+        "name": "Taiwan Semiconductor Manufactur",
+        "PER": 35.22243,
+        "PBR": 56.037365,
+        "DIV": 0.98,
+        "market_cap": 1921807548416,
+        "revenue_growth": 0.205,
+        "profit_margin": 0.45099998
+      },
+      {
+        "ticker": "AVGO",
+        "name": "Broadcom Inc.",
+        "PER": 69.59205,
+        "PBR": 5.617095,
+        "DIV": 0.78,
+        "market_cap": 1577184657408,
+        "revenue_growth": 0.164,
+        "profit_margin": 0.36198002
+      },
+      {
+        "ticker": "AMD",
+        "name": "Advanced Micro Devices, Inc.",
+        "PER": 76.98077,
+        "PBR": 5.178525,
+        "DIV": 0,
+        "market_cap": 326326714368,
+        "revenue_growth": 0.341,
+        "profit_margin": 0.12515001
+      },
+      {
+        "ticker": "INTC",
+        "name": "Intel Corporation",
+        "PER": 44.502514,
+        "PBR": 1.9275476,
+        "DIV": 0,
+        "market_cap": 220337324032,
+        "revenue_growth": -0.041,
+        "profit_margin": -0.00505
+      }
+    ]
+  },
+  "AI": {
+    "sector": "AI",
+    "avg_PER": 31.64,
+    "avg_PBR": 13.728,
+    "total_market_cap": 15298267185152,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "NVDA",
+        "name": "NVIDIA Corporation",
+        "PER": 46.98515,
+        "PBR": 38.802124,
+        "DIV": 0.02,
+        "market_cap": 4621547864064,
+        "revenue_growth": 0.625,
+        "profit_margin": 0.53007
+      },
+      {
+        "ticker": "MSFT",
+        "name": "Microsoft Corporation",
+        "PER": 24.857948,
+        "PBR": 7.549748,
+        "DIV": 0.91,
+        "market_cap": 2952363507712,
+        "revenue_growth": 0.167,
+        "profit_margin": 0.39044
+      },
+      {
+        "ticker": "GOOGL",
+        "name": "Alphabet Inc.",
+        "PER": 29.137835,
+        "PBR": 9.168922,
+        "DIV": 0.28,
+        "market_cap": 3810313371648,
+        "revenue_growth": 0.18,
+        "profit_margin": 0.32810003
+      },
+      {
+        "ticker": "META",
+        "name": "Meta Platforms, Inc.",
+        "PER": 27.936089,
+        "PBR": 7.635762,
+        "DIV": 0.33,
+        "market_cap": 1658528202752,
+        "revenue_growth": 0.238,
+        "profit_margin": 0.30084
+      },
+      {
+        "ticker": "AMZN",
+        "name": "Amazon.com, Inc.",
+        "PER": 29.304045,
+        "PBR": 5.4850416,
+        "DIV": 0,
+        "market_cap": 2255514238976,
+        "revenue_growth": 0.136,
+        "profit_margin": 0.108339995
+      }
+    ]
+  },
+  "Defense": {
+    "sector": "Defense",
+    "avg_PER": 42.65,
+    "avg_PBR": 13.986,
+    "total_market_cap": 807892467712,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "LMT",
+        "name": "Lockheed Martin Corporation",
+        "PER": 30.673813,
+        "PBR": 22.428703,
+        "DIV": 2.03,
+        "market_cap": 152319918080,
+        "revenue_growth": 0.091,
+        "profit_margin": 0.06685
+      },
+      {
+        "ticker": "RTX",
+        "name": "RTX Corporation",
+        "PER": 41.39798,
+        "PBR": 4.2158537,
+        "DIV": 1.32,
+        "market_cap": 275061571584,
+        "revenue_growth": 0.121,
+        "profit_margin": 0.07598
+      },
+      {
+        "ticker": "NOC",
+        "name": "Northrop Grumman Corporation",
+        "PER": 24.856062,
+        "PBR": 6.1618905,
+        "DIV": 1.25,
+        "market_cap": 103266525184,
+        "revenue_growth": 0.096,
+        "profit_margin": 0.09968001
+      },
+      {
+        "ticker": "GD",
+        "name": "General Dynamics Corporation",
+        "PER": 22.745632,
+        "PBR": 3.702978,
+        "DIV": 1.69,
+        "market_cap": 95020376064,
+        "revenue_growth": 0.078,
+        "profit_margin": 0.08011
+      },
+      {
+        "ticker": "BA",
+        "name": "Boeing Company (The)",
+        "PER": 93.560486,
+        "PBR": 33.419273,
+        "DIV": 0,
+        "market_cap": 182224076800,
+        "revenue_growth": 0.571,
+        "profit_margin": 0.02498
+      }
+    ]
+  },
+  "RealEstate": {
+    "sector": "RealEstate",
+    "avg_PER": 42.63,
+    "avg_PBR": 9.071,
+    "total_market_cap": 447144841216,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "PLD",
+        "name": "Prologis, Inc.",
+        "PER": 39.75,
+        "PBR": 2.4748163,
+        "DIV": 3.08,
+        "market_cap": 131443965952,
+        "revenue_growth": 0.04,
+        "profit_margin": 0.36205003
+      },
+      {
+        "ticker": "AMT",
+        "name": "American Tower Corporation (REI",
+        "PER": 29.921724,
+        "PBR": 22.190498,
+        "DIV": 3.68,
+        "market_cap": 87708139520,
+        "revenue_growth": 0.077,
+        "profit_margin": 0.28106
+      },
+      {
+        "ticker": "EQIX",
+        "name": "Equinix, Inc.",
+        "PER": 67.40087,
+        "PBR": 6.4400206,
+        "DIV": 2.09,
+        "market_cap": 91191377920,
+        "revenue_growth": 0.081,
+        "profit_margin": 0.14579001
+      },
+      {
+        "ticker": "SPG",
+        "name": "Simon Property Group, Inc.",
+        "PER": 14.24435,
+        "PBR": 12.693518,
+        "DIV": 4.33,
+        "market_cap": 76077842432,
+        "revenue_growth": 0.131,
+        "profit_margin": 0.72792
+      },
+      {
+        "ticker": "O",
+        "name": "Realty Income Corporation",
+        "PER": 61.81308,
+        "PBR": 1.5580316,
+        "DIV": 4.95,
+        "market_cap": 60723515392,
+        "revenue_growth": 0.103,
+        "profit_margin": 0.17135
+      }
+    ]
+  },
+  "Automotive": {
+    "sector": "Automotive",
+    "avg_PER": 107.62,
+    "avg_PBR": 7.63,
+    "total_market_cap": 2008499585024,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "TSLA",
+        "name": "Tesla, Inc.",
+        "PER": 384.87848,
+        "PBR": 18.807144,
+        "DIV": 0,
+        "market_cap": 1545326559232,
+        "revenue_growth": -0.031,
+        "profit_margin": 0.040009998
+      },
+      {
+        "ticker": "GM",
+        "name": "General Motors Company",
+        "PER": 24.926607,
+        "PBR": 1.205591,
+        "DIV": 0.88,
+        "market_cap": 76037529600,
+        "revenue_growth": -0.051,
+        "profit_margin": 0.014579999
+      },
+      {
+        "ticker": "F",
+        "name": "Ford Motor Company",
+        "PER": 7.76259,
+        "PBR": 1.5544215,
+        "DIV": 4.35,
+        "market_cap": 55892549632,
+        "revenue_growth": -0.048,
+        "profit_margin": -0.04369
+      },
+      {
+        "ticker": "RIVN",
+        "name": "Rivian Automotive, Inc.",
+        "PER": -8.00793,
+        "PBR": 4.147203,
+        "DIV": 0,
+        "market_cap": 18949914624,
+        "revenue_growth": -0.258,
+        "profit_margin": -0.67681
+      },
+      {
+        "ticker": "TM",
+        "name": "Toyota Motor Corporation",
+        "PER": 12.895587,
+        "PBR": 12.433858,
+        "DIV": 2.37,
+        "market_cap": 312293031936,
+        "revenue_growth": 0.086,
+        "profit_margin": 0.073249996
+      }
+    ]
+  },
+  "Robotics": {
+    "sector": "Robotics",
+    "avg_PER": 49.12,
+    "avg_PBR": 5.925,
+    "total_market_cap": 262693551965,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "ISRG",
+        "name": "Intuitive Surgical, Inc.",
+        "PER": 63.884663,
+        "PBR": 10.042037,
+        "DIV": 0,
+        "market_cap": 179003392000,
+        "revenue_growth": 0.188,
+        "profit_margin": 0.28375998
+      },
+      {
+        "ticker": "ROK",
+        "name": "Rockwell Automation, Inc.",
+        "PER": 45.628147,
+        "PBR": 11.961308,
+        "DIV": 1.4,
+        "market_cap": 44837228544,
+        "revenue_growth": 0.119,
+        "profit_margin": 0.11557
+      },
+      {
+        "ticker": "ABB",
+        "name": "ABB",
+        "PER": 0,
+        "PBR": 0,
+        "DIV": 0,
+        "market_cap": 0,
+        "revenue_growth": 0,
+        "profit_margin": 0
+      },
+      {
+        "ticker": "FANUY",
+        "name": "Fanuc Corporation",
+        "PER": 37.83636,
+        "PBR": 1.6785787,
+        "DIV": 1.63,
+        "market_cap": 38838087680,
+        "revenue_growth": 0.095,
+        "profit_margin": 0.19348
+      },
+      {
+        "ticker": "IRBT",
+        "name": "iRobot Corporation",
+        "PER": -1.4133333,
+        "PBR": 0.017574137,
+        "DIV": 0,
+        "market_cap": 14843741,
+        "revenue_growth": -0.246,
+        "profit_margin": 0.01942
+      }
+    ]
+  },
+  "Battery": {
+    "sector": "Battery",
+    "avg_PER": 24.67,
+    "avg_PBR": 3.271,
+    "total_market_cap": 58635722240,
+    "stock_count": 5,
+    "stocks": [
+      {
+        "ticker": "ALB",
+        "name": "Albemarle Corporation",
+        "PER": 19.371313,
+        "PBR": 2.7164953,
+        "DIV": 0.96,
+        "market_cap": 19847827456,
+        "revenue_growth": 0.159,
+        "profit_margin": -0.09929
+      },
+      {
+        "ticker": "ENPH",
+        "name": "Enphase Energy, Inc.",
+        "PER": 36.093025,
+        "PBR": 5.6143737,
+        "DIV": 0,
+        "market_cap": 6092828160,
+        "revenue_growth": -0.103,
+        "profit_margin": 0.11686
+      },
+      {
+        "ticker": "QS",
+        "name": "QuantumScape Corporation",
+        "PER": -12.047982,
+        "PBR": 3.5592344,
+        "DIV": 0,
+        "market_cap": 4137014272,
+        "revenue_growth": 0,
+        "profit_margin": 0
+      },
+      {
+        "ticker": "PLUG",
+        "name": "Plug Power, Inc.",
+        "PER": -5.992245,
+        "PBR": 1.5847459,
+        "DIV": 0,
+        "market_cap": 2602357760,
+        "revenue_growth": 0.019,
+        "profit_margin": 0
+      },
+      {
+        "ticker": "FSLR",
+        "name": "First Solar, Inc.",
+        "PER": 18.54908,
+        "PBR": 2.8790784,
+        "DIV": 0,
+        "market_cap": 25955694592,
+        "revenue_growth": 0.797,
+        "profit_margin": 0.27728
+      }
+    ]
+  }
+}

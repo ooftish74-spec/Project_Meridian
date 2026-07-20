@@ -1,0 +1,3999 @@
+
+--- src/interface/report_generator.py ---
+L71: cum_return = sum(returns) * 100 if returns else 0.0
+L142: if len(sigs) > 5:
+L213: | Shadow Days | **{n_days}** | ≥ 14 | {'✅ PASS' if n_days >= 14 else '⏳ ' + str(14 - n_days) + ' days left'} |
+L225: cum += r * 100
+L227: report += f"| D{i+1} | {icon} {r*100:+.2f}% | {cum:+.2f}% |\n"
+L245: avg = sum(rets) / len(rets) * 100 if rets else 0
+L246: total = sum(rets) * 100
+L320: vix_status = '🟢 Safe' if vix < 20 else '🟡 Caution' if vix < 30 else '🔴 Danger'
+L330: | Crash Defense | {'🟢 Safe' if vix < 30 else '🔴 Active'} | VIX {vix:.1f} |
+
+--- src/interface/telegram_notifier.py ---
+L418: vix_status = '🟢 Safe' if vix < 20 else '🟡 Caution' if vix < 30 else '🔴 Danger'
+L434: avg = sum(returns) / len(returns) * 100 if returns else 0
+L501: if resp.status_code != 200:
+
+--- src/infra/alert_manager.py ---
+L36: if len(alerts) > 100:
+
+--- src/infra/data_freshness_validator.py ---
+L47: if _fred_delayed > 14:
+
+--- src/analysis/genetic_feature_generator.py ---
+L26: ('div',          lambda a, b: np.where(np.abs(b) > 1e-8, a / b, 0.0)),
+L28: ('zscore',       lambda a, _: (a - a.mean()) / (a.std() + 1e-8)),
+L100: _survivors = [f for _, f in _scored[:max(1, len(_scored) // 2)]]
+L140: if len(_parts) < 2:
+
+--- src/analysis/walk_forward_validator.py ---
+L52: max_uni = 300
+L69: if len(all_dates) < 500:
+L77: test_end = len(all_dates) - split * int(step_months * 21)
+L78: test_start = test_end - int(test_months * 21)
+L80: train_start = train_end - int(train_months * 21)
+L91: if len(train_X) < 50 or len(test_X) < 10:
+L106: acc = accuracy_score(test_y_arr, (preds >= 0.5).astype(int))
+L113: if mask.sum() > 5:
+L161: if n < 300:
+L183: _threshold = 3.0
+L191: for idx in range(260, n - 5, 5):
+L205: future_end = min(idx + 6, n)
+L208: max_ret = (np.max(high[idx+1:future_end]) / close[idx] - 1) * 100
+
+--- src/analysis/automl_feature_generator.py ---
+L46: if len(df) < 260:
+L70: feat_df[f'ma{w}_dist'] = (close / ma - 1) * 100
+L85: feat_df[f'return_{w}d'] = close.pct_change(periods=w, fill_method=None) * 100
+L86: if w >= 5:
+L89: close.ffill().pct_change(fill_method=None).rolling(window=w).std()
+L94: feat_df['high_low_range'] = (df['high'].rolling(20).max() - df['low'].rolling(20).min()) / close * 100
+L95: feat_df['close_to_high_20d'] = (close / df['high'].rolling(20).max() - 1) * 100
+L98: feat_df['overnight_return'] = (opn / close.shift(1) - 1) * 100
+L99: feat_df['intraday_return'] = (close / opn - 1) * 100
+L110: feat_df[f'macro_{col}_chg_20d'] = macro_aligned[col].pct_change(periods=20, fill_method=None) * 100
+
+--- src/analysis/ic_analyzer.py ---
+L34: if len(valid) < 5:
+L61: 'pct_positive': round(float((ic > 0).mean()) * 100, 1),
+L63: 'significant': abs(t_stat) > 2.0,
+L110: 'significant': pval < 0.05 if not np.isnan(pval) else False,
+
+--- src/analysis/polars_analyzer.py ---
+L114: stats['avg_slippage_bp'] = round(sum(slippage_list) / len(slippage_list) * 10000, 2)
+L115: stats['max_slippage_bp'] = round(max(slippage_list) * 10000, 2)
+L140: if len(nav_rows) < 2:
+L151: if len(navs) < 2:
+L170: std_r  = math.sqrt(sum((r - mean_r) ** 2 for r in rets) / max(len(rets) - 1, 1))
+L173: sharpe  = ((mean_r - rf_daily) / std_r) * math.sqrt(self._trading_days) if std_r > 1e-9 else 0.0
+L177: dn_std = math.sqrt(sum((r - rf_daily) ** 2 for r in dn) / max(len(dn) - 1, 1)) if dn else 1e-9
+L184: 'cagr':    round(cagr * 100, 2),
+L185: 'mdd':     round(mdd * 100, 2),
+
+--- src/analysis/shap_temporal.py ---
+L65: weak_features = [f for f, v in sorted_imp if abs(v) < 0.01]
+L94: if len(self.history) < 2:
+L127: if imp >= 0.01 or in_stable:
+
+--- src/analysis/fundamental_filter.py ---
+L162: prev = financials[-2] if len(financials) >= 2 else {}
+L174: result['roe'] = (ni / eq) * 100
+L179: result['opm'] = (op_inc / rev) * 100
+L234: SIZE = math.log(max(ta / 1e9, 0.001))
+L245: o_logit = (-1.32 - 0.407 * SIZE + 6.03 * TLTA - 1.43 * WCTA
+L246: + 0.076 * CLCA - 1.72 * OENEG - 2.37 * NITA
+L247: - 1.83 * FUTL + 0.285 * INTWO - 0.521 * CHIN)
+L297: m_score = (-4.84 + 0.920 * dsri + 0.528 * gmi + 0.404 * aqi
+L298: + 0.892 * sgi + 0.115 * sgai)
+L510: if qv_score >= 70:
+L512: elif qv_score < 30:
+
+--- src/measurement/stream_tracker.py ---
+L87: max_days = 500
+L110: var = sum((r - mean_r) ** 2 for r in recent) / n
+L167: 'total_return_pct': round(total_return * 100, 3),
+L169: 'cost_pct': round(cost_pct * 100, 4),
+L201: var = sum((r - mean_r) ** 2 for r in rets) / n
+L207: 'mean_return_pct': round(mean_r * 100, 4),
+L208: 'std_pct': round(std * 100, 4),
+L289: if n < 5:
+L298: std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
+L299: std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y) / n)
+
+--- src/measurement/stat_validator.py ---
+L64: var = sum((r - mean_r) ** 2 for r in excess) / (n - 1)
+L72: sharpe_se = math.sqrt((1 + 0.5 * sharpe ** 2) / n)
+L85: if abs(sharpe) > 1e-6 else float('inf'))
+L83: min_trl = (1 + (1 + 0.5 * sharpe ** 2) *
+L84: (z_alpha / sharpe) ** 2 / ann
+L94: 'min_track_record_months': round(min_trl * 12, 1),
+L124: var_s = sum((r - mean_s) ** 2 for r in sample) / (n - 1)
+L136: ci_lo = int(n_bootstrap * 0.025)
+L137: ci_hi = int(n_bootstrap * 0.975)
+L147: boot_sharpes[n_bootstrap // 2], 4),
+L178: var = sum((r - mean_r) ** 2 for r in returns) / (n - 1)
+L183: skew = (sum((r - mean_r) ** 3 for r in returns) /
+L184: (n * (std ** 3 + 1e-12)))
+L187: kurt = (sum((r - mean_r) ** 4 for r in returns) /
+L188: (n * (std ** 4 + 1e-12)) - 3)
+L191: euler_gamma = 0.5772156649
+L193: expected_max_sr = math.sqrt(2 * math.log(n_strategies_tested))
+L196: (2 * math.sqrt(2 * math.log(n_strategies_tested))))
+L201: se_inner = (1 - skew * sharpe + (kurt - 1) / 4 * sharpe ** 2) / max(n - 1, 1)
+L210: dsr_pvalue = 0.5
+L233: return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+L241: if p <= 0.5:
+L248: return t - (c0 + c1 * t + c2 * t ** 2) / (
+L249: 1 + d1 * t + d2 * t ** 2 + d3 * t ** 3)
+
+--- src/measurement/pnl_attribution.py ---
+L83: (exit_price / entry_price - 1) * 100
+L121: round(stream_total / total_pnl * 100, 2)
+L125: round(wins / len(pnls) * 100, 1) if pnls else 0),
+L140: round(strat_total / total_pnl * 100, 2)
+L144: round(wins / len(pnls) * 100, 1) if pnls else 0),
+L165: if len(sorted_tickers) > 5 else [])
+L172: (d - mean_daily) ** 2 for d in daily_values) / len(daily_values)
+L173: std_daily = var_daily ** 0.5
+L223: 'win_rate': round(wins / len(pnls) * 100, 1),
+
+--- src/measurement/beta_tracker.py ---
+L155: if var_b < 1e-10:
+
+--- src/measurement/walk_forward.py ---
+L94: if len(_sig.parameters) >= 2:
+L150: if abs(oos_sharpe_avg) > 1e-6 else float('inf'))
+L155: if abs(is_sharpe_avg) > 1e-6 else 0)
+L154: (is_sharpe_avg - oos_sharpe_avg) / abs(is_sharpe_avg) * 100
+L168: 'is_overfit': overfitting_ratio > 2.0,
+L183: if n < 2:
+L189: var = sum((r - mean_r) ** 2 for r in returns) / n
+
+--- src/measurement/shadow_recorder.py ---
+L159: if len(daily) < 2:
+L188: dd_threshold = cfg.get('go.max_dd.safe', -5.0) / 100.0  # -5% -> -0.05
+L197: if len(daily) >= min_days and n_pass == 3:
+L199: elif len(daily) >= min_days and n_pass >= 2:
+L379: (portfolio_snapshot['nav'] / initial - 1) * 100, 4)
+
+--- src/measurement/measurement_engine.py ---
+L307: cutoff = base_date - timedelta(days=lookback * 2)  # 거래일 여유
+L312: recent_s2 = sorted(recent_s2, key=lambda t: str(t.get('date', '')))[-lookback * 5:]
+L329: if len(ic_pairs) >= 3:
+L450: cumulative_return_pct = (virtual_nav / initial_capital - 1) * 100
+L477: if len(_bdf) >= 2:
+L481: bench_pct = round((_last_close / _base_close - 1) * 100, 4)
+L495: _rf_period = _rf_annual / 252 * _total_days  # 기간 무위험수익률
+L518: _selection_return = _total_pnl / _avg_invested_capital * 100
+L581: if len(_members) / _total > 0.40:
+L601: if conf_var < 1e-9:
+L711: if abs(ret_pct) < 1e-6 and prev_nav > 0:
+L713: if abs(calc_ret) > 1e-8:
+L717: daily_returns.append(ret_pct / 100.0)  # % → 소수
+L734: sharpe_confidence = 'reliable' if len(daily_returns) >= 20 else 'low'
+L737: var = sum((r - mean_ret) ** 2 for r in daily_returns) / len(daily_returns)
+L739: volatility = round(std * math.sqrt(252) * 100, 2)
+L747: downside_std = math.sqrt(sum(r ** 2 for r in downside_returns) / len(downside_returns))
+L759: dd = (nav_val / hwm - 1) * 100 if hwm > 0 else 0
+L768: ann_return = total_return_dec * (252 / max(len(daily_returns), 1))
+L769: calmar = round(ann_return / abs(max_dd / 100), 3)  # max_dd is in % form
+L776: max_dd = (current_nav / hwm - 1) * 100 if hwm > 0 else 0
+L920: var = sum((r - mean_ret) ** 2 for r in rets) / n_days
+L929: var = sum((r - mean_ret) ** 2 for r in rets) / n_days
+L961: dd = (nav / hwm - 1) * 100 if hwm > 0 else 0
+L975: sum(r ** 2 for r in downside_rets) / len(downside_rets)
+L989: sum(r ** 2 for r in downside_rets) / len(downside_rets)
+L1029: alpha = round((stream_ann - bench_ann) * 100, 3)
+L1034: alpha = round((stream_total - bench_total) * 100, 3)
+L1041: alpha = round((stream_total - bench_total) * 100, 3)
+L1087: conf = 0.5
+L1089: if conf > 0.5 and sell_price > avg_price:
+L1091: elif conf <= 0.5 and sell_price < avg_price:
+L1129: if conf_range > 1e-9:
+L1156: (bench[i] - mean_b) ** 2
+L1208: bench_returns.append(br / 100.0 if abs(br) > 1 else br)
+L1212: bench_returns.append(br / 100.0 if abs(br) > 1 else br)
+L1220: max_days = 30
+L1222: _start = (_dt.now() - _td(days=max_days * 2)).strftime('%Y%m%d')
+L1224: if len(_bdf) >= 2:
+L1241: if n < 2:
+L1253: d_sq = sum((rx[i] - ry[i]) ** 2 for i in range(n))
+L1254: rho = 1 - (6 * d_sq) / (n * (n ** 2 - 1))
+L1315: if len(ic_values) >= 2:
+L1316: var = sum((v - ic_mean) ** 2 for v in ic_values) / len(ic_values)
+L1328: if len(ic_values) >= 10:
+L1336: var_sum = sum((v - mean_ic) ** 2 for v in ic_values)
+L1355: brier_skill = 1 - (brier_score / 0.25) if brier_score > 0 else 0
+L1382: if len(confidences) >= 10:
+L1385: (confidences[i] - actuals[i]) ** 2 for i in range(n)
+L1388: (sum(actuals) / n - actuals[i]) ** 2 for i in range(n)
+L1414: if len(_pos_conf_pnl) >= 10:
+L1416: q_size = max(len(_pos_conf_pnl) // 5, 1)
+L1431: if conf < 0.55:
+L1433: elif conf < 0.65:
+L1530: prediction_fresh = prediction_age_days <= 3
+L1549: retrain_overdue = days_since_retrain > 14
+L1566: if len(ic_values) >= 5:
+L1568: recent = ic_values[-7:] if len(ic_values) >= 7 else ic_values
+L1570: x_mean = (n - 1) / 2
+L1573: denom = sum((i - x_mean) ** 2 for i in range(n))
+L1677: if n >= 2:
+L1678: var = sum((a - mean_alpha) ** 2 for a in alphas) / n
+L1712: if held_total >= 10:
+L1749: if _conf is not None and _conf >= 0.6:
+L1799: bench_returns.append(bench_ret / 100.0 if abs(bench_ret) > 1 else bench_ret)
+L1803: bench_returns.append(bench_ret / 100.0 if abs(bench_ret) > 1 else bench_ret)
+L1811: n_days = max(len(daily_returns), 1) + 5
+L1813: _start = (_dt.now() - _td(days=n_days * 2)).strftime('%Y%m%d')
+L1840: var_b = sum((bench[i] - mean_b) ** 2 for i in range(min_len)) / min_len
+L1891: day_return = ((nav_val / prev_nav) - 1) * 100 if prev_nav > 0 else 0
+L1968: if len(_ic_list) >= 3:
+L1971: _var = sum((v - _mean) ** 2 for v in _vals) / len(_vals)
+L1988: if len(ic_values) >= 3:
+L1990: _var = sum((v - _mean) ** 2 for v in ic_values) / len(ic_values)
+L2005: _x_mean = (_n - 1) / 2
+L2008: _denom = sum((i - _x_mean) ** 2 for i in range(_n))
+L2075: if len(ic_values) >= 3:
+L2077: ic_var = sum((v - ic_mean) ** 2 for v in ic_values) / len(ic_values)
+L2092: if total_days >= 5 and risk.get('max_drawdown_pct', 0) < 0:
+L2094: ann_return = total_return * (252 / total_days)
+L2095: calmar = round(ann_return / abs(risk['max_drawdown_pct'] / 100), 3)
+L2123: if wl_ratio and wl_ratio > 0 and len(exits) >= 5:
+L2128: if len(exits) >= 5:
+L2243: if sharpe > base_sharpe * 1.5: score += 15
+L2244: elif sharpe > base_sharpe * 0.8: score += 10
+L2248: if win_rate > base_wr * 1.2: score += 15
+L2250: elif win_rate < base_wr * 0.8: score -= 10
+L2254: if max_dd_pct > base_mdd * 0.6: score += 10
+L2255: elif max_dd_pct < base_mdd * 1.6: score -= 15
+L2260: if n_days < 5: return '?'
+L2261: if score >= 35: return 'A'
+L2262: if score >= 20: return 'B'
+L2263: if score >= 5: return 'C'
+L2314: if passed == 4:
+L2316: elif passed >= 2 and sharpe > 0:
+L2373: 'value': round(wr * 100, 1),
+L2374: 'threshold': target_wr * 100,
+L2385: 'value': round(da * 100, 1) if da else 0,
+L2386: 'threshold': target_da * 100,
+L2424: daily_returns.append(dr / 100)  # % → 비율
+
+--- src/measurement/alpha_decay.py ---
+L67: decay_rate = 1 - 2 ** (-1.0 / half_life)
+L72: if abs(current_alpha) > 1e-6 and decay_rate > 0:
+L74: time_to_zero = (-math.log(0.001 / abs(current_alpha)) /
+L181: if n < 10:
+L193: var_x = sum((x[i] - mean_x) ** 2 for i in range(m)) / m
+L195: if var_x < 1e-12:
+
+--- src/measurement/data_quality.py ---
+L56: if missing['score'] < 0.95:
+L57: issues.append(f"결측값: {missing['missing_ratio']*100:.1f}%")
+L121: if n < 5:
+L134: sum((r - mean_r) ** 2 for r in returns) / len(returns))
+L167: rough_diff = (y2 - y1) * 365 + (m2 - m1) * 30 + (d2_ - d1_)
+
+--- src/data_collection/bok_economic_updater.py ---
+L159: if cycle == 'M' and len(t) == 6:
+L161: elif cycle == 'D' and len(t) == 8:
+L165: date = pd.Timestamp(f"{y}-{(q-1)*3+1:02d}-01")
+L166: elif cycle == 'A' and len(t) == 4:
+L213: if not val or val == '-' or len(prd) != 6:
+
+--- src/data_collection/krx_api_client.py ---
+L83: self._rate_limit_delay = 0.5
+L150: if resp.status_code == 200:
+L159: elif resp.status_code == 401:
+L162: elif resp.status_code == 429:
+L495: if 'close' in df.columns and len(df) >= 60:
+L508: if d.weekday() >= 5:
+
+--- src/data_collection/usa_collector.py ---
+L449: if len(data) < 5:
+L457: max_nan = 0.5
+
+--- src/data_collection/investor_flow_collector.py ---
+L87: start_date = end_date - timedelta(days=lookback_days + 30)
+L158: }).tail(lookback_days + 30)
+L160: if len(df) >= 20:
+L167: csv_files = sorted(supply_dir.glob('kis_investor_*.csv'), reverse=True)[:lookback_days + 30]
+L201: result = result.tail(lookback_days + 30)
+L202: if len(result) < 5:
+L222: if len(_df) >= 20:
+L255: df = df.tail(lookback_days + 30)
+L262: foreign_proxy = ret * vol_chg.abs() * df['Close'] * df['Volume'] / 1e9
+L263: inst_proxy = foreign_proxy * 0.7  # 기관은 외국인의 ~70% 규모
+L294: if flow is None or len(flow) < 20:
+L309: feat[col] = (feat[col] - mean) / (std + 1e-8)
+L315: feat['flow_momentum'] = (short_flow - long_flow) / (flow_std + 1e-8)
+L329: feat['foreign_net_5d'] * 0.3 +
+L330: feat['inst_net_5d'] * 0.2 +
+L331: feat['flow_momentum'] * 0.3 +
+L332: (feat['foreign_streak'] / 10).clip(-1, 1) * 0.2
+
+--- src/data_collection/sector_batch_collector.py ---
+L128: chg_1m = float((close.iloc[-1] / close.iloc[-22] - 1) * 100) if len(close) > 22 else 0
+L129: chg_3m = float((close.iloc[-1] / close.iloc[-66] - 1) * 100) if len(close) > 66 else 0
+L130: chg_1y = float((close.iloc[-1] / close.iloc[0] - 1) * 100)
+L176: if not test.empty and len(test) > 100:
+L186: start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y%m%d')
+L193: if df.empty or len(df) < 20:
+L196: if len(pers) < 20:
+L200: percentile = float((pers < current).mean() * 100)
+L250: if us_hist.empty or len(us_hist) < 60:
+L255: if kr_hist.empty or len(kr_hist) < 60:
+L281: if len(lagged_merged) < 20:
+L292: same_corr = float(same_merged['us'].corr(same_merged['kr'])) if len(same_merged) > 20 else 0
+L297: elif len(same_merged) > 20:
+L302: us_5d = float(us_ret.tail(5).sum() * 100)
+
+--- src/data_collection/cross_market_collector.py ---
+L87: _t.sleep(1.5 ** attempt)  # 1s, 1.5s, 2.25s
+L122: datetime.now() - timedelta(days=lookback_years * 365)
+L135: datetime.now() - timedelta(days=lookback_years * 365)
+L155: / (combined['US_JP_Spread'].rolling(60).std() + 1e-10)
+L340: start = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
+L399: kospi_ret = kospi_df['close'].pct_change().dropna().tail(lookback_days * 2)
+L421: if 'close' not in sec_df.columns or len(sec_df) < 30:
+L430: if len(aligned) < 20:
+L434: beta = cov[0, 1] / (cov[1, 1] + 1e-10)
+
+--- src/data_collection/feature_store.py ---
+L286: start = (datetime.now() - timedelta(days=n_days + 5)).strftime('%Y-%m-%d')
+L342: null_count / max(stats['total_rows'], 1) * 100, 2)
+L345: db_size = os.path.getsize(self.db_path) / (1024 * 1024)
+L357: start = (datetime.now() - timedelta(days=last_n_days + 5)).strftime('%Y-%m-%d')
+L366: 'coverage_pct': (df.notna().sum() / len(df) * 100).round(1),
+L381: start = (pd.to_datetime(date) - timedelta(days=window + 30)).strftime('%Y-%m-%d')
+L384: if len(df) < 10:
+L395: if len(hist_vals) < 5:
+L405: if hist_std < 1e-10:
+L471: def delete_old(self, days: int = 365 * 3) -> int:
+
+--- src/data_collection/dart_daily_collector.py ---
+L398: for yr in range(year, year - 5, -1):
+L520: major_signal = float(np.clip(net_change * 0.1, -1, 1))
+L543: insider_signal * 0.35 +
+L544: buyback_signal * 0.25 +
+L545: major_signal * 0.15 +
+L546: earnings_signal * 0.25
+
+--- src/data_collection/customs_api.py ---
+L67: self._rate_limit_delay = 0.3
+L107: if resp.status_code != 200:
+L248: if semi is not None and 'expDlr' in semi.columns and len(semi) >= 4:
+L254: mid_point = len(total) // 2
+L270: if auto is not None and 'expDlr' in auto.columns and len(auto) >= 4:
+L272: mid_point = len(total) // 2
+
+--- src/data_collection/feature_store_v2.py ---
+L448: std = (sum((x - mean) ** 2 for x in close_hist)
+L473: std = (sum((x - mean) ** 2 for x in history)
+L475: if std < 1e-10:
+L516: age_hours = (now - updated_dt).total_seconds() / 3600
+L745: start=(datetime.now() - timedelta(days=n_days + 5)
+
+--- src/data_collection/alt_data_pipeline.py ---
+L86: if data is not None and len(data) >= 2:
+L95: if len(closes) >= 5:
+L156: if len(kospi200) >= 2:
+L182: features['vol_regime'] = 2  # 고변동성
+L184: features['vol_regime'] = 3  # 극단적
+L326: if len(vals) >= 2:
+L592: if v > 10.0:
+L595: clipped[k] = 10.0
+
+--- src/data_collection/unified_collector.py ---
+L200: df = collect_kr_ohlcv(ticker, days=days_since + 5)
+L279: df = collect_kr_ohlcv(ticker, days=days_since + 5)
+L315: if i % 20 == 0:
+L500: while d.weekday() >= 5:
+L765: if i % 100 == 0:
+L792: age_h = (now - datetime.fromtimestamp(f.stat().st_mtime)).total_seconds() / 3600
+L834: _elapsed_h = (now - _prev_date).total_seconds() / 3600
+L841: stale_h = 72.0   # 3일 보수적 fallback
+L850: stale_h = 65.0 if _wd == 0 else (48.0 if _wd >= 5 else _default_stale_h)
+L862: age_h = (now - datetime.fromtimestamp(f.stat().st_mtime)).total_seconds() / 3600
+L897: age_h = (now - datetime.fromtimestamp(f.stat().st_mtime)).total_seconds() / 3600
+L1107: stale_threshold_h = 20  # 당일 수집 기준 (20시간 이상 = 미갱신)
+L1110: age_h = (datetime.now() -
+L1379: if real_gdp is not None and hasattr(real_gdp, 'iloc') and len(real_gdp) >= 2:
+L1386: annualized = ((1 + qoq) ** 4 - 1) * 100
+L1625: age_h = (datetime.now() -
+
+--- src/data_collection/motie_collector.py ---
+L45: _RETRY_COUNT = 3
+L46: _TIMEOUT = 20
+L223: time.sleep(2 ** attempt)
+L315: month = int(sys.argv[2]) if len(sys.argv) > 2 else today.month
+
+--- src/data_collection/intraday_flow_collector.py ---
+L114: scale = 1_000_000 / flow_unit
+L187: data.get("volume_ratio", 0) * 100)
+L248: _combined_m = round(_strong * 1.2 / _unit, 1)
+L259: "institution_net_krw": round(_combined_m * 0.625, 1),
+L260: "foreign_net_krw":     round(_combined_m * 0.375, 1),
+
+--- src/data_collection/ss_etf_liquidity_collector.py ---
+L119: time.sleep(1.5 * (attempt + 1))
+
+--- src/data_collection/macro_realtime_refresher.py ---
+L276: if df is not None and len(df) >= 2:
+L288: (today_close / prev_close - 1) * 100, 4)
+L299: (today_high - today_low) / today_close * 100, 4)
+L308: if len(closes) >= 20:
+L344: if df is not None and len(df) >= 2:
+L354: (today_close / prev_close - 1) * 100, 4)
+L355: if len(closes) >= 20:
+L442: chg = round((nav_val / prev - 1) * 100, 4)
+L478: if 900 < val < 2000:  # 합리적인 환율 범위
+L485: if 900 < val < 2000:
+L522: if closes is not None and len(closes) >= 2:
+L526: chg = round((last_val / prev_val - 1) * 100, 4)
+L535: and prev > 0 and abs(last_val - prev) > 1e-8):
+L536: chg = round((last_val / prev - 1) * 100, 4)
+L638: (nav_val / prev - 1) * 100, 4)
+L681: if now.weekday() >= 5:
+
+--- src/data_collection/supply_chain_graph.py ---
+L101: transferred_impact = current_impact * edge_weight * 0.8
+
+--- src/data_collection/market_data_prefetch.py ---
+L95: if t and len(t) == 6:
+L170: period = f'{min(window // 252 + 1, 3)}y'
+L174: if df is None or df.empty or len(df) < 20:
+L283: days_old = 99
+L284: if days_old > 3:
+L333: hours_old = (datetime.now() - saved_at).total_seconds() / 3600
+L369: if df is None or df.empty or len(df) < 15:
+L377: if len(prices) < 15:
+
+--- src/data_collection/ss_etf_feature_engine.py ---
+L307: if current.weekday() >= 5:
+L413: start_dt = end_dt - timedelta(days=window * 2)  # 여유분
+L421: if df is None or len(df) < 2:
+L444: if len(hl_pct) < 2:
+L480: time.sleep(1.5 * (attempt + 1))
+
+--- src/data_collection/market_breadth_collector.py ---
+L62: vkospi = round(vix_now * 0.85, 2)
+L67: 'vkospi_prev': round(vix_prev * 0.85, 2),
+L68: 'vkospi_change': round((vix_now / vix_prev - 1) * 100, 2),
+L69: 'vkospi_ma20': round(vix_ma20 * 0.85, 2),
+L75: if vkospi >= 30:
+L77: elif vkospi >= 25:
+L79: elif vkospi >= 18:
+L81: elif vkospi >= 12:
+L103: if len(close) >= 20:
+L104: realized = float(close.pct_change().tail(20).std() * np.sqrt(252) * 100)
+L105: estimated = realized * 1.15  # 내재변동성 ≈ 실현변동성 × 1.15
+L156: std = 0.001
+L169: if z_score > 2.0:
+L234: if _dxy is not None and len(_dxy) >= 20:
+L249: if 'KOSPI' not in prices or len(prices) < 3:
+L278: if sp_corr > 0.5 and dxy_corr < -0.2:
+L280: elif sp_corr < 0.2 or dxy_corr > 0.3:
+L290: cg_ret = float(cg.iloc[-1] / cg.iloc[-20] - 1) if len(cg) > 20 else 0
+L334: if col and len(df) >= 12:
+L336: if len(values) >= 12:
+L365: 'positive_surprise' if esi > 0.5 else
+L416: vkospi_score = max(0, min(100, 100 - (vkospi - 10) * 3.3))
+L422: pc_score = max(0, min(100, 100 - (pc - 0.6) * 100))
+L434: esi_score = max(0, min(100, 50 + esi * 25))
+L443: if composite >= 75:
+L445: elif composite >= 60:
+L447: elif composite >= 40:
+L449: elif composite >= 25:
+L509: if (datetime.now() - cached_time).total_seconds() < 86400:
+
+--- src/data_collection/realtime_sentiment_collector.py ---
+L103: if resp.status_code == 200:
+L127: if resp.status_code == 200:
+L151: score = max(0, min(100, 100 - (v - 12) / 23 * 100))
+L152: rating = 'Extreme Fear' if score < 25 else 'Fear' if score < 45 else 'Neutral' if score < 55 else 'Greed' if score < 75 else 'Extreme Greed'
+L184: pos = sum(1 for s in sentiments if s['sentiment'] > 0.1)
+L223: if resp.status_code == 200:
+L274: if resp.status_code == 200:
+L387: 'direction': 'up' if night['return'] > 0.002 else 'down' if night['return'] < -0.002 else 'flat',
+L400: 'change_pct': round(night['return'] * 100, 4),
+L401: 'overnight_gap': round(night['return'] * 100, 4),
+L446: 'direction': 'up' if ewy['return'] > 0.002 else 'down' if ewy['return'] < -0.002 else 'flat',
+L481: 'panic_level': 'extreme' if v > 35 else 'high' if v > 25 else 'elevated' if v > 20 else 'normal',
+L533: score = min(100, high * 15 + medium * 5 + low * 1)
+L534: level = 'critical' if score >= 60 else 'elevated' if score >= 30 else 'moderate' if score >= 10 else 'low'
+L602: if resp.status_code == 200:
+L614: pos = sum(1 for s in all_sentiments if s > 0.1)
+L659: if resp.status_code == 200:
+L666: weighted = score * (0.5 + upvote_ratio)
+L810: 'RSI_14': 50 + row['news_sentiment'] * 30,
+L811: 'Volatility_20': row['vix'] / 100,
+
+--- src/data_collection/earnings_surprise.py ---
+L75: for y in range(year, year - 3, -1):
+L96: if len(quarters) < 4:
+L102: prev_y = q[-5]['value'] if len(q) >= 5 else q[-4]['value']
+L110: 'revenue_yoy': float((latest / prev_y - 1) * 100) if prev_y != 0 else 0,
+L111: 'earnings_qoq': float((latest / prev_q - 1) * 100) if prev_q != 0 else 0,
+L144: if (datetime.now() - cached_date).days < 30:
+
+--- src/data_collection/realtime_collector.py ---
+L130: f"  {sector:18s} 외인:{total_foreign/1e8:+,.0f}억 기관:{total_inst/1e8:+,.0f}억"
+L148: pct = (below + 0.5 * equal) / len(all_values) * 100
+L154: results[sector]['score'] = 50.0
+L155: results[sector]['percentile_rank'] = 50.0
+L231: if not test.empty and len(test) > 100:
+L349: scores['fwd_pe'] = max(0, min(100, 120 - m * 1.7))
+L351: scores['fwd_pe'] = max(0, min(100, 100 - m * 3))
+L353: scores['fwd_pe'] = max(0, min(100, 110 - m * 3))
+L355: scores['fwd_pe'] = 50
+L358: pegs = [s['peg_ratio'] for s in stocks if s.get('peg_ratio') and 0 < s['peg_ratio'] < 10]
+L359: scores['peg'] = max(0, min(100, 100 - (np.median(pegs) - 0.5) * 40)) if pegs else 50
+L365: scores['ev_rev'] = max(0, min(100, 100 - (m - 3) * 8)) if cat == 'tech' else max(0, min(100, 100 - m * 15))
+L367: scores['ev_rev'] = 50
+L370: eveb = [s['ev_to_ebitda'] for s in stocks if s.get('ev_to_ebitda') and 0 < s['ev_to_ebitda'] < 200]
+L373: scores['ev_eb'] = max(0, min(100, 100 - (m - 10) * 3)) if cat == 'tech' else max(0, min(100, 100 - (m - 5) * 5))
+L375: scores['ev_eb'] = 50
+L379: scores['growth'] = max(0, min(100, 50 + np.median(rgs) * 200)) if rgs else 50
+L383: scores['margin'] = max(0, min(100, 30 + np.median(margins) * 200)) if margins else 50
+L386: pbrs = [s['price_to_book'] for s in stocks if s.get('price_to_book') and 0 < s['price_to_book'] < 100]
+L389: scores['pbr_roe'] = max(0, min(100, 50 + (np.median(roes) * 10 - np.median(pbrs)) * 20))
+L391: scores['pbr_roe'] = max(0, min(100, 80 - np.median(pbrs) * 15))
+L393: scores['pbr_roe'] = 50
+L397: scores['div'] = max(0, min(100, np.median(divs) * 100 * 15)) if divs else 30
+L401: scores['fcf'] = max(0, min(100, np.median(fcfs) * 100 * 10)) if fcfs else 50
+L417: relative_score = max(0, min(100, 100 - np.mean(pcts)))
+L418: final_score = cat_score * 0.8 + relative_score * 0.2
+L421: relative_score = 50
+L424: relative_score = 50
+
+--- src/data_collection/pool_collector.py ---
+L96: if current_hour < 9:
+L158: if current.weekday() < 5:
+L227: f"(거래대금≥{min_trading_value/1e8:.0f}억, "
+L228: f"시총≥{min_market_cap/1e8:.0f}억, "
+L293: 'total_size_mb': sum(f.stat().st_size for f in files) / 1e6,
+
+--- src/data_collection/krx_parsers.py ---
+L26: KRX_DBG_DATA_READY_HOUR = 8  # 08:00 KST 이후 전날 데이터 게재
+L64: if now.hour < 16:
+L66: while d.weekday() >= 5:  # 주말 건너뜀
+L79: while d.weekday() >= 5:
+L91: while d.weekday() >= 5:
+
+--- src/data_collection/naver_news_sentiment.py ---
+L270: if resp.status_code == 200:
+L330: score = float(np.tanh(total / 3.0))
+L414: if df.empty or len(df) < 2:
+L429: if nan_ratio > 0.8:
+
+--- src/data_collection/kis_data_collector.py ---
+L46: _MIN_INTERVAL = 0.12  # 초당 약 8건 (KIS 제한: 초당 10건)
+L136: if resp.status_code == 200 and resp.text:
+L396: premium_pct = round((price - etf_inav) / etf_inav * 100, 3)
+
+--- src/data_collection/unified_sentiment_collector.py ---
+L306: combined = 0.6 * news_score + 0.4 * social_score
+L309: 'is_extreme': abs(combined) > 0.3,
+L310: 'contrarian': round(-combined, 4) if abs(combined) > 0.3 else 0,
+L330: if resp.status_code == 200:
+L348: score = max(0, min(100, 100 - (v - 12) / 23 * 100))
+L349: rating = ('Extreme Fear' if score < 25 else 'Fear' if score < 45
+L350: else 'Neutral' if score < 55 else 'Greed' if score < 75
+L375: pos = sum(1 for s in sentiments if s['sentiment'] > 0.1)
+L391: if resp.status_code == 200:
+L409: if resp.status_code == 200:
+L494: 'direction': 'up' if ret > 0.002 else 'down' if ret < -0.002 else 'flat',
+L503: 'change_pct': round(ret * 100, 4),
+L522: 'direction': 'up' if ret > 0.002 else 'down' if ret < -0.002 else 'flat',
+L546: 'panic': 'extreme' if v > 35 else 'high' if v > 25
+L547: else 'elevated' if v > 20 else 'normal'}
+L564: score = min(100, high * 15 + medium * 5 + low * 1)
+L565: level = ('critical' if score >= 60 else 'elevated' if score >= 30
+L566: else 'moderate' if score >= 10 else 'low')
+L603: 'positive': sum(1 for s in scores if s > 0.1),
+L614: if resp.status_code == 200:
+L620: scores.append(s * (0.5 + up))
+L758: vix_norm = max(0, min(100, (50 - vix) * 2))
+L759: news_norm = (news + 1) * 50
+L760: social_norm = (social + 1) * 50
+L761: geo_norm = max(0, 100 - geo)
+L763: composite = (0.30 * fg + 0.25 * news_norm + 0.20 * vix_norm
+L764: + 0.15 * social_norm + 0.10 * geo_norm)
+L765: classification = ('Extreme Fear' if composite < 25 else 'Fear' if composite < 45
+L766: else 'Neutral' if composite < 55 else 'Greed' if composite < 75
+L785: if resp.status_code == 200:
+L806: return float(np.tanh(total / 3.0)), pc, nc
+L934: if df.empty or len(df) < 2:
+L941: > 2 * std.clip(lower=0.01)).astype(float)
+L944: df['news_volume_surge'] = (df['news_count'] > 2 * vol_mean).astype(float)
+L958: if features.isna().mean().mean() > 0.8:
+
+--- src/data_collection/av_macro_cache.py ---
+L90: age_h = (time.time() - p.stat().st_mtime) / 3600
+L212: ann        = math.sqrt(252) * 100
+L236: pk_var = (ln_hl ** 2).rolling(vol_win).mean() / (4 * math.log(2))
+L242: gk_var = (0.5 * ln_hl**2 - (2*math.log(2)-1) * ln_co**2).rolling(vol_win).mean()
+L243: gk_rv  = (gk_var.clip(lower=0) ** 0.5) * ann
+L252: k_coef  = 0.34 / (1.34 + (vol_win+1) / max(vol_win-1, 1))      # 동적 k
+L253: yz_var  = (log_on**2).rolling(vol_win).mean() + \
+L254: k_coef * (log_oc**2).rolling(vol_win).mean() + \
+L256: yz_rv   = (yz_var.clip(lower=0) ** 0.5) * ann
+L262: 'pk': float(pk_rv.dropna().std()) + 1e-9,
+L263: 'gk': float(gk_rv.dropna().std()) + 1e-9,
+L264: 'yz': float(yz_rv.dropna().std()) + 1e-9,
+L343: if len(sub) < 2:
+L367: up_days = float((spy_sub.pct_change() > 0).mean() * 100) if len(spy_sub) > 1 else 50.0
+
+--- src/data_collection/macro_collector.py ---
+L121: if _proxies.empty or len(_proxies) < 10:
+L184: hyg_ret = hyg.pct_change().rolling(self._hy_rolling).std() * np.sqrt(252) * 100  # [Phase 70] cfg 연동
+L185: ief_ret = ief.pct_change().rolling(self._hy_rolling).std() * np.sqrt(252) * 100  # [Phase 70] cfg 연동
+
+--- src/data_collection/dart_collector.py ---
+L114: if resp.status_code == 200:
+L306: signal = 0.5 * (net_increase - net_decrease)
+
+--- src/data_collection/realtime_news_sentiment.py ---
+L142: combined_score = 50
+L232: combined = (title_s * 2 + desc_s) / 3 if article['summary'] else title_s
+L237: score = min(100, max(0, (avg + 1) * 50))
+L308: avg_sentiment = consensus_ratio * 0.6 + target_direction * 0.4
+L309: score = min(100, max(0, (avg_sentiment + 1) * 50))
+L327: if len(keywords) >= 2:
+L367: combined = (title_s * 2 + desc_s) / 3 if desc else title_s
+L372: score = min(100, max(0, (avg + 1) * 50))
+L417: combined = (title_score * 2 + desc_score) / 3 if desc else title_score
+L423: score = min(100, max(0, (avg + 1) * 50))
+
+--- src/data_collection/pykrx_compat.py ---
+L329: 'PBR': round(pbr, 2) if pbr and 0 < pbr < 50  else None,
+L330: 'PER': round(per, 2) if per and 0 < per < 500 else None,
+L369: batch_size = 20
+L386: 'DIV': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0,
+L463: if len(tickers) > 100:
+
+--- src/data_collection/realtime_data_bus.py ---
+L246: sleep_time = min(cap, base * (2 ** attempt))
+L503: f"{cached.age_seconds()/60:.0f}분 전 데이터 "
+L736: if age < 600:  # 10분 이내
+L830: if total < 1e-9:
+L839: if abs(w - base) > 0.05:
+
+--- src/data_collection/kosis_collector_enhanced.py ---
+L117: start_quarter = (start_dt.month - 1) // 3 + 1
+L118: end_quarter = (end_dt.month - 1) // 3 + 1
+L150: if response.status_code == 200:
+L208: if len(date_str) == 4:  # YYYY
+L210: elif len(date_str) == 6:  # YYYYMM
+L214: elif len(date_str) == 8:  # YYYYMMDD
+
+--- src/data_collection/alpha_vantage_collector.py ---
+L167: if resp.status_code == 200:
+L202: if resp.status_code == 200:
+
+--- src/data_collection/us_stock_collector.py ---
+L183: if len(df) < 20:
+L203: if (success + failed) % 50 == 0:
+L226: if len(df) >= 20:
+L265: if len(df) < 50:
+L293: if len(df) < 50:
+L306: ret_5d = (latest / close.iloc[-6] - 1) if len(close) > 5 else 0
+L307: ret_20d = (latest / close.iloc[-21] - 1) if len(close) > 20 else 0
+L308: ret_60d = (latest / close.iloc[-61] - 1) if len(close) > 60 else 0
+L313: sma_200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else sma_50
+L320: rsi_14 = 100 - (100 / (1 + rs))
+L341: bb_upper = bb_mid + 2 * bb_std
+L342: bb_lower = bb_mid - 2 * bb_std
+L349: high_52w = high.iloc[-252:].max() if len(high) >= 252 else high.max()
+L350: low_52w = low.iloc[-252:].min() if len(low) >= 252 else low.min()
+
+--- src/data_collection/krx_collectors.py ---
+
+--- src/data_collection/pykrx_fetcher.py ---
+L74: wait = 2 ** attempt  # 1, 2, 4초
+
+--- src/data_collection/kis_websocket.py ---
+L88: MAX_SUBSCRIPTIONS = 40  # KIS 제한
+L400: self._reconnect_base * (2 ** self._reconnect_attempt))
+L454: if len(parts) < 4:
+L566: if len(fields) < 21:
+L625: if len(fields) < 45:
+L635: 'price': float(fields[3 + i]),
+L636: 'volume': int(fields[23 + i]),
+L639: 'price': float(fields[13 + i]),
+L640: 'volume': int(fields[33 + i]),
+L643: total_ask = int(fields[43]) if len(fields) > 43 else 0
+L644: total_bid = int(fields[44]) if len(fields) > 44 else 0
+L656: (asks[0]['price'] - bids[0]['price']) /
+L699: if len(fields) < 10:
+L704: 'ticker': fields[2] if len(fields) > 2 else '',
+L705: 'side': fields[4] if len(fields) > 4 else '',
+L706: 'price': float(fields[5]) if len(fields) > 5 else 0,
+L707: 'quantity': int(fields[6]) if len(fields) > 6 else 0,
+L708: 'status': fields[8] if len(fields) > 8 else '',
+L759: 'change_pct': round(change_pct * 100, 2),
+L761: 'open': round(base * 0.999),
+L762: 'high': round(base * 1.005),
+L763: 'low': round(base * 0.995),
+L764: 'ask1': round(new_price * 1.001),
+L765: 'bid1': round(new_price * 0.999),
+
+--- src/data_collection/data_qa_gate.py ---
+L30: self.ffill_limit = 3
+
+--- src/data_collection/alt_sources/logistics.py ---
+L52: _TIMEOUT_SEC = 10
+L55: _LOOKBACK_DAYS = 90
+L79: if resp.status_code != 200:
+L85: if len(lines) < 2:
+L93: if len(parts) >= 2:
+L140: if resp.status_code != 200:
+L147: if len(parts) >= 2:
+L155: if len(values) >= 2:
+L158: return round((curr - prev) / abs(prev) * 100, 4)
+L210: max(0.0, min(100.0, 50.0 + gscpi * 10.0)), 2
+
+--- src/data_collection/alt_sources/nlp_sentiment.py ---
+L52: _CACHE_TTL_SEC = 10800
+L74: _MAX_ARTICLES = 20
+L166: if resp.status_code != 200:
+L240: 'nlp_finbert_hawkish_proxy':  round(bear_avg * 100, 2),   # 0~100
+
+--- src/data_collection/alt_sources/web_traffic.py ---
+L47: _CACHE_TTL_SEC = 3600
+L143: if len(series) >= 30:
+L147: mom_delta = round((recent_avg - month_ago) / month_ago * 100, 2)
+
+--- src/data_collection/alt_sources/naver_argus_engine.py ---
+L117: results[feature_key] = 0.5  # 중립값으로 대체
+L198: return max(0.0, min(1.0, 1.0 - rate / 5.0))
+L206: return max(0.0, min(1.0, (yoy + 30) / 60))
+L214: return max(0.0, min(1.0, cpi / 5.0))
+L290: return round(max(0.0, min(1.0, (raw + 1) / 2)), 4)
+L299: age_h = (datetime.now() - datetime.fromisoformat(
+L302: if age_h < 48:  # 48시간 이내만 사용
+L344: bar = '█' * int(v * 20)
+
+--- src/data_collection/alt_sources/retail_flow.py ---
+L60: _CACHE_TTL_SEC = 86400
+L67: _TIMEOUT_SEC = 15
+L70: _SHORT_WINDOW = 5
+L71: _LONG_WINDOW  = 20
+L94: if resp.status_code == 403:
+L101: if resp.status_code != 200:
+L198: if len(series) >= 30:
+L199: recent_avg    = sum(series[-5:]) / 5
+L200: month_ago_avg = sum(series[-30:-25]) / 5
+L234: if len(series) >= 30:
+L235: recent_avg    = sum(series[-5:]) / 5
+L236: month_ago_avg = sum(series[-30:-25]) / 5
+L262: pressure = 50.0  # 중립 시작
+L266: dix_pressure = max(0.0, min(50.0, (45.0 - dix) * 2.5))
+L267: pressure += dix_pressure * 0.6  # 가중치 60%
+L271: gex_pressure = max(0.0, min(50.0, -gex / 2.0)) if gex < 0 else 0.0
+L272: pressure += gex_pressure * 0.4  # 가중치 40%
+
+--- src/intelligence/stat_arb_engine.py ---
+L44: if corr_matrix.loc[t1, t2] > 0.7:
+L50: if len(series1.dropna()) > 60:
+L76: is_large_cap = current_aum > 100e8  # 100억 초과 시 기관급 라우팅
+L86: if np.var(x) < 1e-8 or np.var(y) < 1e-8:
+L105: if adf_result[1] > 0.05:
+
+--- src/intelligence/conformal_predictor.py ---
+L71: 'lower': (y_pred - 1.645 * std).tolist(),
+L72: 'upper': (y_pred + 1.645 * std).tolist(),
+L73: 'width': float(2 * 1.645 * std),
+L88: width = float(2 * q_val)
+L113: if len(self.coverage_history) >= 20:
+L120: elif gap > 0.05:
+L136: if len(self.width_history) >= 20:
+L177: _MIN_SAMPLES = 30
+
+--- src/intelligence/cross_asset_signals.py ---
+L109: composite = composite * 0.85 + macro_adj * 0.15
+L130: if len(comp_hist) >= 20:
+L139: dyn_thresh = max(0.3, abs(spy_vol) * 1.5)
+L146: if composite > 0.3:
+L240: if len(result) < 3:  # Source 1~3에서 충분한 데이터를 못 얻었을 때
+L279: sp_chg = float(sc['sp500_change_1m']) / 21
+L287: nq_chg = float(sc['nasdaq_change_1m']) / 21
+L299: gold_chg = float(sc['gold_us_change_1m']) / 21
+L304: wti_chg = float(sc['wti_change_1m']) / 21
+L312: tlt_chg = float(sc['us10y_change_1m']) / 21
+L320: hyg_chg = -vix_1m / 21 * 0.3  # VIX→HY 스케일 조정
+L328: usdkrw_chg = float(sc.get('usdkrw_change_1m', 0)) / 21
+L331: ewy_ret = -usdkrw_chg * 0.5  # 원화 약세 → EWY 하락
+L338: fxi_chg = -float(sc['dxy_change_1m']) / 21 * 0.5
+L378: hy_signal = float(np.clip(-hy_zscore / 2.0, -1.0, 1.0))  # 부호 반전: 스프레드↑ = BEAR = 음수
+L442: signal = np.clip(change_pct / 3.0, -1.0, 1.0)
+
+--- src/intelligence/signal_quality_gate.py ---
+L124: if n_samples < max(3, min_samples // 2):
+L137: if np.std(confidences) < 1e-10 or np.std(pnl_pcts) < 1e-10:
+L194: _decay  = min(0.90, (_excess - 1.0) * 0.25)
+L209: if final < 0.5:
+
+--- src/intelligence/performance_feedback.py ---
+L150: if sum_losses > 1e-10:
+L177: stream_id, rolling_wr * 100, rolling_pf, avg_pnl, len(pnl_arr),
+L258: min_samples = cfg.get('feedback.rolling_window', 20) // 2
+L451: min_analysis_samples = 10
+L483: adjustment_suggested = (sl_diff_pct > 0.10) or (tp_diff_pct > 0.10)
+
+--- src/intelligence/regime_engine.py ---
+L43: _MIN_SAMPLES = 60
+L78: v  = float(obs.get('kospi_volatility', 15.0)) / 100.0
+L138: 'volatility': measurements.get('kospi_volatility', 15.0) / 100.0,
+L228: m['kospi_ma20_dist'] = round((cur / ma20 - 1) * 100, 2)
+L229: m['kospi_ma60_dist'] = round((cur / ma60 - 1) * 100, 2)
+L238: m['kospi_volatility'] = round(ret.tail(20).std() * np.sqrt(252) * 100, 2)
+L240: m['kospi_volatility'] = 15.0
+L299: scores['caution'] += w_trend * 0.5
+L300: scores['bull'] += w_trend * 0.5
+L302: scores['crash'] += w_trend * 0.5
+L303: scores['bear'] += w_trend * 0.5
+L332: def is_extreme(cv, hist, z, p): return abs(cv) > 0.3
+L389: scores['bear'] += w_mc * min(mc / 3.0, 1.0)
+L390: scores['caution'] += w_mc * 0.3
+L392: scores['caution'] += w_mc * (mc / 1.5)
+L394: scores['bull'] += w_mc * min(abs(mc) / 3.0, 1.0)
+L396: scores['bull'] += w_mc * 0.5
+L402: fx_pct = (usdkrw - usdkrw_prev) / usdkrw_prev * 100
+L410: scores['caution'] += w_fx * 0.5
+L412: scores['bull'] += w_fx * 0.5
+L422: scores['bear'] += w_vk * 0.5
+L581: if hist and len(hist) >= 20:
+L591: if len(files) < 10:
+L632: if fx_series is not None and len(fx_series) >= 60:
+L647: if _vix_hist and len(_vix_hist) >= 20:
+L649: if len(_arr) >= 10:
+L670: hy_z = hy * 2.0  # fallback
+L671: credit_z = np.clip(hy_z + credit_stress * 3.0, -3, 3)  # 범위 제한
+L677: usjp_z = -usjp_change * 5.0  # 금리차 축소 = 엔캐리 청산 = risk
+L683: ois_z = -(ois - 50) / 20.0  # 50 중립, 낮을수록 risk
+L689: event_z = event_adj * 3.0  # 0.3 → 0.9 risk score
+L738: if s >= 0.7:  return 'bull'
+L749: overall_score = 0.4 * us_score + 0.6 * kr_score
+
+--- src/intelligence/s3_factor_combiner.py ---
+L25: return (port.mean() / std * ann**0.5) if std > 1e-9 else 0.0
+L39: grad[i] = (_numpy_sharpe(factor_returns, _softmax(r_), ann) - s) / 0.01
+L55: if T < 20 or n != len(self._factors):
+L65: loss = -(port.mean() / (port.std() + 1e-8)) * (self._ann**0.5)
+
+--- src/intelligence/macro_feature_integrator.py ---
+L117: np.clip((4.0 - unemp) / 2.0, -1, 1), 3)
+L125: np.clip((4.5 - ffr) / 2.0, -1, 1), 3)
+L132: np.clip(gdp / 5.0, -1, 1), 3)
+L139: np.clip((cs - 65) / 30, -1, 1), 3)
+L147: np.clip((4.0 - hy) / 3.0, -1, 1), 3)
+L149: features['credit_stress'] = 1 if hy > 5.0 else 0
+L156: np.clip((1.5 - ig) / 1.5, -1, 1), 3)
+L179: if len(df) >= 2:
+L189: np.clip((2.0 - spread) / 2.0, -1, 1), 3)
+L227: if prod is not None and len(df) >= 2:
+L230: pmi_proxy = 50 + (float(prod) / float(prev_prod) - 1) * 500
+L236: np.clip((pmi - 50) / 10, -1, 1), 3)
+L252: if proxy is not None and len(df) >= 2:
+L255: cpmi = round(50 + (float(proxy) / float(prev_proxy) - 1) * 500, 1)
+L260: np.clip((cpmi - 50) / 5, -1, 1), 3)
+L326: float(np.clip(avg / 50 - 1, -1, 1)), 3)
+L342: float(np.clip(market_sent / 50 - 1, -1, 1)), 3)
+L391: position = (current_per - avg_per * 0.7) / (
+L392: avg_per * 0.6) if avg_per else 0.5
+L427: float(np.clip(risk / 100, 0, 1)), 3)
+L455: float(np.clip((5 - market_ratio) / 5, -1, 1)), 3)
+L462: if s.get('ratio', 0) > 10])
+
+--- src/intelligence/overnight_intelligence.py ---
+L153: _score = 50.0
+L154: comp['score'] = 50.0
+L163: ois = 50.0
+L167: if ois >= 70:
+L170: elif ois >= 60:
+L173: elif ois >= 55:
+L176: elif ois >= 45:
+L179: elif ois >= 40:
+L181: threshold_adj = 2
+L182: elif ois >= 30:
+L184: threshold_adj = 5
+L187: threshold_adj = 7
+L287: chg_pct = (kospi / kospi_prev - 1) * 100
+L288: chg_score = 50 + chg_pct * (50 / _chg_scale)
+L294: ma_ratio = (kospi / kospi_ma20 - 1) * 100
+L295: ma_score = 50 + ma_ratio * (50 / _ma_scale)
+L371: score = 50 + avg_chg * (50 / 3)
+L424: score = 50 + chg * (50 / 2)
+L435: score = 50 + chg * (50 / 3)
+L453: if 'close' in df.columns and len(df) >= 2:
+L456: chg = (last_close / prev_close - 1) * 100
+L457: score = 50 + chg * (50 / 3)
+L469: if len(rows) >= 2:
+L473: nasdaq = float(last[2]) if len(last) > 2 else 0
+L474: avg = (sp500 + nasdaq) / 2 if sp500 and nasdaq else 0
+L475: score = 50 + avg * (50 / 2)
+L590: if (datetime.now() - ts).total_seconds() < 86400:
+L604: if len(rows) >= 2:
+L606: prev = rows[-2] if len(rows) >= 3 else last
+L614: chg = (now_val / prev_val - 1) * 100
+L621: score = 50 + avg * (50 / 3)
+L641: if 'close' in df.columns and len(df) >= 2:
+L642: chg = (float(df['close'].iloc[-1]) / float(df['close'].iloc[-2]) - 1) * 100
+L643: score = 50 + chg * (50 / 2)
+L663: if len(rows) >= 2:
+L665: prev = rows[-2] if len(rows) >= 3 else last
+L672: vix_now = float(last[8]) if len(last) > 8 else None
+L673: vix_prev = float(prev[8]) if len(prev) > 8 else None
+L675: vix_chg = (vix_now / vix_prev - 1) * 100
+L677: if vix_now < 15:
+L678: vix_score = 75
+L679: elif vix_now < 20:
+L680: vix_score = 62
+L681: elif vix_now < 25:
+L682: vix_score = 48
+L683: elif vix_now < 30:
+L684: vix_score = 35
+L686: vix_score = 20
+L688: vix_score -= min(15, max(-10, vix_chg * 2))
+L695: fg = float(last[9]) if len(last) > 9 else None
+
+--- src/intelligence/macro_cascade.py ---
+L104: macro['rate_direction'] = 'up' if rate_change > 0.1 else (
+L107: macro['oil_direction'] = 'up' if oil_change > 5 else (
+
+--- src/intelligence/defensive_alpha.py ---
+L65: if len(common) < 60:
+L72: beta = cov[0, 1] / (cov[1, 1] + 1e-10)
+L102: if len(df) > 200:
+L106: defensive_score = round((1 - beta) * 100, 1)
+L156: roe = (net_income / equity * 100) if equity > 0 else 0
+L157: debt_ratio = (total_debt / equity * 100) if equity > 0 else 999
+L158: opm = (op_income / revenue * 100) if revenue > 0 else 0
+L161: if roe > 15: q += 35
+L162: elif roe > 10: q += 20
+L163: if debt_ratio < 100: q += 35
+L164: elif debt_ratio < 200: q += 15
+L165: if opm > 10: q += 30
+L166: elif opm > 5: q += 15
+L196: if len(df) < 252:
+L206: today_ret = float(df['Close'].iloc[-1] / df['Close'].iloc[-2] - 1) * 100
+L213: from_high = (current / high_52w - 1) * 100
+L232: if beta > 1.2:
+L234: if vol_spike > 2.0:
+L239: if dip_score >= 50:  # 최소 50점
+L250: 'tp_target': round(current * 1.10, 0),  # +10%
+L251: 'sl_target': round(current * 0.95, 0),  # -5%
+L331: roe = (net_income / equity * 100) if equity > 0 else 0
+L332: debt_ratio = (total_debt / equity * 100) if equity > 0 else 999
+L333: operating_margin = (op_income / revenue * 100) if revenue > 0 else 0
+L383: if len(df) < 252:
+L396: quality = 50  # 기본값
+L404: if isinstance(roe, (int, float)) and roe > 15:
+L406: elif isinstance(roe, (int, float)) and roe > 10:
+L408: if isinstance(debt, (int, float)) and debt < 100:
+L410: elif isinstance(debt, (int, float)) and debt < 200:
+L412: if isinstance(opm, (int, float)) and opm > 10:
+L414: elif isinstance(opm, (int, float)) and opm > 5:
+L419: growth = 50
+L420: if len(df) >= 504:  # 2년
+L421: price_2y = float(close[-504]) if len(close) >= 504 else float(close[0])
+L423: cagr = ((current / price_2y) ** 0.5 - 1) * 100 if price_2y > 0 else 0
+L424: momentum_1y = (current / price_1y - 1) * 100 if price_1y > 0 else 0
+L427: if cagr > 20:
+L429: elif cagr > 10:
+L433: if momentum_1y > 15:
+L439: ma60 = float(np.mean(close[-60:])) if len(close) >= 60 else ma20
+L442: elif ma20 > ma60 * 0.95:
+L447: discount = 50
+L450: from_high = (current / high_52w - 1) * 100
+L451: from_low = (current / low_52w - 1) * 100
+L462: if from_low <= 20:
+L464: elif from_low <= 40:
+L467: if 0 < per < per_avg * 0.8 and per_avg > 0:
+L474: total = quality * 0.40 + growth * 0.30 + discount * 0.30
+L492: f'2차 40%({current*0.95:,.0f}), '
+L493: f'3차 30%({current*0.90:,.0f})',
+L549: if len(df) >= 20:
+L552: ret_5d = float(close[-1] / close[-5] - 1) * 100
+L553: ret_20d = float(close[-1] / close[-20] - 1) * 100
+L564: if len(sector_performance) < 2:
+L588: elif h20 > 5 and m20 > 0:
+
+--- src/intelligence/aux_data_loader.py ---
+L59: _DEFAULTS['news_sentiment_mean'] = 0.5  # 중립 감성
+L60: _DEFAULTS['news_pos_ratio'] = 0.5
+L415: feat[key] = (float(fr) - 50.0) / 100.0
+L516: if len(valid) >= 2:
+L575: if abs(ry) > 2.0:
+L577: ry = ry / 100.0
+L612: np.clip(roe_avg / 100.0, -1.0, 1.0)
+L621: np.clip(float(roe) / 100.0, -1.0, 1.0)
+L630: np.clip(float(roe) / 100.0, -1.0, 1.0)
+L640: np.clip(float(dr_val) / 500.0, 0.0, 1.0)
+L648: np.clip(float(dr) / 500.0, 0.0, 1.0)
+L656: np.clip(float(dr) / 500.0, 0.0, 1.0)
+
+--- src/intelligence/morning_intelligence_fusion.py ---
+L92: base_conf = 0.7
+L93: result['fusion_confidence'] = max(0.2, base_conf - n_flags * 0.1 - n_conflicts * 0.05)
+L133: if nasdaq_chg == 0 and len(changes) >= 2:
+L142: sp500_chg = float(sp_1m) / 21  # 21 거래일 평균
+L146: nasdaq_chg = float(nq_1m) / 21
+L160: 'ewy_change': sc.get('ewy_change_1d', sc.get('ewy_change_1m', 0) / 21 if sc.get('ewy_change_1m') else 0),
+L162: 'copper_change': sc.get('copper_change_1d', sc.get('copper_change_1m', 0) / 21 if sc.get('copper_change_1m') else 0),
+L163: 'usdjpy_change': sc.get('usdjpy_change_1d', sc.get('usdjpy_change_1m', 0) / 21 if sc.get('usdjpy_change_1m') else 0),
+L164: 'taiex_change': sc.get('taiex_change_1d', sc.get('taiex_change_1m', 0) / 21 if sc.get('taiex_change_1m') else 0),
+L165: 'nikkei_change': sc.get('nikkei_change_1d', sc.get('nikkei_change_1m', 0) / 21 if sc.get('nikkei_change_1m') else 0),
+L166: 'hangseng_change': sc.get('hangseng_change_1d', sc.get('hangseng_change_1m', 0) / 21 if sc.get('hangseng_change_1m') else 0),
+L190: if direction == 'down' and sox > 1.5:
+L210: if direction == 'down' and ois > 70:
+L236: if ois > 75:
+L238: elif ois > 65:
+L240: elif ois < 25:
+L242: elif ois < 35:
+L252: if vix > 30:
+L254: elif vix < 15:
+L264: if copper > 2.0:
+L282: overrides['semiconductor'] = round(sox * 0.02, 3)  # +2% SOX → +0.04 가중
+L286: if abs(copper) > 1.5:
+L287: overrides['steel'] = round(copper * 0.015, 3)
+L288: overrides['energy'] = round(copper * 0.01, 3)
+L296: overrides['semiconductor'] = round(current + taiex * 0.01, 3)
+L303: overrides[sector] = round(current + 0.02, 3)  # 축소 완화
+L317: if vix > 35:
+L319: elif vix > 25:
+L384: if len(df) >= 2 and 'close' in df.columns:
+L385: return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
+
+--- src/intelligence/factor_integrator.py ---
+L97: sector_adj = (sector_scores[sector] - 0.5) * 0.15
+L125: if price is None or len(price) < 250:
+L126: if price is not None and len(price) >= 20:
+L139: return float(0.3 * ret_1m + 0.3 * ret_3m + 0.4 * mom_12_1)
+L174: roe_score = min(max(roe / 30, 0), 1.0)  # ROE 30%+ = 1.0
+L180: if price is None or len(price) < 20:
+L185: if vol is None or len(vol) < 20:
+
+--- src/intelligence/naver_news_sentiment.py ---
+L162: sentiment = max(-1.0, min(1.0, avg / 3.0))
+L164: if sentiment > 0.1:
+L242: if relevance >= 4.0:
+L276: if len(name) <= 2:
+L332: if len(name) <= 2:
+L355: sentiment = max(-1.0, min(1.0, avg / 3.0))
+L359: 'label': 'positive' if sentiment > 0.1 else 'negative' if sentiment < -0.1 else 'neutral',
+L415: if (now - detected).total_seconds() < 86400:
+L497: headlines.extend([t.strip() for t in titles if len(t.strip()) > 5])
+
+--- src/intelligence/market_shock_detector.py ---
+L68: YF_TIMEOUT = 10  # seconds
+L142: if self.shock_score >= 60:
+L145: self.confidence_penalty = 0.4
+L146: elif self.shock_score >= 30:
+L149: self.confidence_penalty = 0.65
+L210: self.shock_signals.append(f'S&P500 {sp500_ret*100:+.1f}% (SEVERE)')
+L213: self.shock_signals.append(f'S&P500 {sp500_ret*100:+.1f}% (MODERATE)')
+L221: self.shock_signals.append(f'NASDAQ {nasdaq_ret*100:+.1f}% (SEVERE)')
+L224: self.shock_signals.append(f'NASDAQ {nasdaq_ret*100:+.1f}% (MODERATE)')
+L229: if sp is not None and len(sp) >= 2:
+L233: self.shock_signals.append(f'S&P500(yf) {last_ret*100:+.1f}% (SEVERE)')
+L236: self.shock_signals.append(f'S&P500(yf) {last_ret*100:+.1f}% (MODERATE)')
+L293: night_ret = float(night_ret) / 100 if abs(float(night_ret)) > 1 else float(night_ret)
+L296: self.shock_signals.append(f'야간선물 {night_ret*100:+.1f}% (SEVERE)')
+L299: self.shock_signals.append(f'야간선물 {night_ret*100:+.1f}% (MODERATE)')
+L316: fx_ret = float(usdkrw_chg) / 100 / 21  # ★ H2-21 FIX: 1개월 → 일간 환산 (21 영업일)
+L320: f'USD/KRW {fx_ret*100:+.1f}% (원화 급락)')
+L324: f'USD/KRW {fx_ret*100:+.1f}% (원화 약세)')
+L331: if fx is not None and len(fx) >= 2:
+L335: self.shock_signals.append(f'USD/KRW {fx_ret*100:+.1f}% (원화 급락)')
+L338: self.shock_signals.append(f'USD/KRW {fx_ret*100:+.1f}% (원화 약세)')
+L349: if len(history) >= 2:
+L352: if all(d < 50 for d in recent_dirs):
+L359: if all(g > 10 for g in recent_gaps):
+L388: adjusted = predicted_return * 0.4
+L391: adjusted = predicted_return * 1.3
+L394: adjusted = predicted_return * 0.7
+L396: adjusted = predicted_return * 1.15
+
+--- src/intelligence/stock_ranker.py ---
+L177: sector_boost = (sector_scores.get(sector, 0.5) - 0.5) * 0.1
+L185: 'alpha_score': round(adjusted_prob - 0.5, 4),
+L210: if len(close) < 65:
+L352: score += factor_data * 0.05  # 보수적 가중
+L409: daily_ranges = np.abs(np.diff(close[-n - 1:])) / close[-n - 1:-1] * 100
+
+--- src/intelligence/sector_scorer.py ---
+L87: if price is None or len(price) < 130:
+L91: mom_1m = cur / price.iloc[-22] - 1 if len(price) >= 22 else 0
+L92: mom_3m = cur / price.iloc[-66] - 1 if len(price) >= 66 else 0
+L93: mom_6m = cur / price.iloc[-130] - 1 if len(price) >= 130 else 0
+
+--- src/intelligence/us_market_regime.py ---
+L57: if vix < 20:   return 'low'
+L58: if vix < 25:   return 'mid'
+L59: if vix < 30:   return 'high'
+L93: BULL_THRESHOLD   =  0.20
+L95: CAUTION_VIX      = 25.0   # VIX > 25 → caution overlay
+L146: composite = trend_spy * 0.4 + trend_qqq * 0.4 + sox_ret * 0.2
+L147: score = max(-1.0, min(1.0, composite * 20))  # 5% 기준으로 정규화
+L166: vix_level_score = max(-1.0, min(1.0, (20 - vix) / 10))
+L170: ts_score = max(-1.0, min(1.0, (1.0 - vix_ts) * 5))
+L173: score = vix_level_score * 0.7 + ts_score * 0.3
+L191: ewy_score = max(-1.0, min(1.0, ewy_ret * 15))
+L194: score = oi_score * 0.60 + ewy_score * 0.40
+L213: score = (fg_val - 50) / 50
+L217: score = max(-1.0, min(1.0, (25 - vix) / 20))
+L228: if len(self.hist) < 2:
+L238: if ret > 0.002:
+L244: score = max(-1.0, min(1.0, streak / 3))
+L287: score = max(-1.0, min(1.0, (90 - move_val) / 40))
+L404: base_conf = agreement * 0.8
+L406: score_bonus = min(0.20, abs(total_score) * 0.4)
+
+--- src/intelligence/event_market_filter.py ---
+L106: combined = gap_est * 0.4 + (overnight_score - 50) / 10 * 0.3 + \
+L107: (market_score - 50) / 10 * 0.3
+L109: if combined >= 3.0:
+L146: if adjustment < 0.7:
+L149: adj_conf = raw_conf * (2.0 - adjustment) * event_factor
+
+--- src/intelligence/signature_extractor.py ---
+L11: if T < 2:
+L19: level2 += acc + 0.5 * np.outer(dx, dx)
+L29: p_std = p.std() if p.std() > 1e-9 else 1.0
+L30: v_std = v.std() if v.std() > 1e-9 else 1.0
+L37: result[f'sig{w}_area']     = float(sig[3] - sig[4]) / 2.0
+L38: result[f'sig{w}_cross']    = float(sig[3] + sig[4]) / 2.0
+L39: result[f'sig{w}_mom_qual'] = float(sig[0]**2 - abs(sig[3] - sig[4]))
+
+--- src/intelligence/event_calendar.py ---
+L148: day_offset = (weekday - first.weekday()) % 7
+L149: target = first + timedelta(days=day_offset + (n - 1) * 7)
+L158: while d.weekday() >= 5:  # 토일
+L206: if year == 2026:
+L214: while d.weekday() != 4:  # 금요일
+L356: if (now - detected).total_seconds() > 86400:
+L471: min_t1_distance = 999
+L486: 'event_hours_until_t1': min_t1_distance * 24,
+
+--- src/intelligence/pykrx_fetcher.py ---
+L74: wait = 2 ** attempt  # 1, 2, 4초
+
+--- src/intelligence/v4_features.py ---
+L296: log_ret = np.diff(np.log(c[-21:])) if len(c) >= 21 else np.zeros(1)
+L322: if len(c) >= 21 and len(v) >= 21:
+L342: feat['vix_change_1d'] = float((vix_close / vix_prev - 1) * 100)
+L350: feat['usdkrw_change_5d'] = float((usdkrw / usdkrw_5d - 1) * 100)
+L407: rsi = 100 - 100 / (1 + gains / losses) if losses > 0 else 50
+L413: bb = (c[-1] - (ma20 - 2 * std20)) / (4 * std20) if std20 > 0 else 0.5
+L421: macd_signal = macd_val / (np.std(c[-_macd_slow:]) + 1e-8)
+L431: atr_pct = np.mean(tr[-14:]) / c[-1] * 100 if c[-1] > 0 else 0
+L441: ret_1d = (c[-1] / c[-2] - 1) * 100 if len(c) >= 2 and c[-2] > 0 else 0
+L442: ret_3d = (c[-1] / c[-4] - 1) * 100 if len(c) >= 4 and c[-4] > 0 else 0
+L443: ret_5d = (c[-1] / c[-6] - 1) * 100 if len(c) >= 6 and c[-6] > 0 else 0
+L446: ret_20d = (c[-1] / c[-_idx_mid] - 1) * 100 if len(c) >= _idx_mid and c[-_idx_mid] > 0 else 0
+L447: vol_20d = np.std(np.diff(np.log(c[-(_idx_mid):]))) * np.sqrt(252) * 100 if len(c) >= _idx_mid else 0
+L456: vol_20 = np.std(np.diff(np.log(c[-21:]))) * np.sqrt(252) if len(c) >= 20 else 0.0
+L474: 'ma5_dist': _safe((c[-1] / ma5 - 1) * 100), 'ma20_dist': _safe((c[-1] / ma20 - 1) * 100),
+L475: 'ma60_dist': _safe((c[-1] / ma60 - 1) * 100),
+L479: 'mean_reversion': _safe(rsi - 50),
+L480: 'trend_strength': _safe(abs(c[-1] / ma20 - 1) * 100),
+L484: 'high_low_range': _safe((np.max(h[-20:]) - np.min(l[-20:])) / c[-1] * 100),
+L486: 'rsi_slope_5d': _safe(rsi - (100 - 100 / (1 + np.mean(np.maximum(np.diff(c[-20:-15]), 0)) /
+L487: (np.mean(np.maximum(-np.diff(c[-20:-15]), 0)) + 1e-8))), 0),
+L489: 'adx_proxy': _safe(abs(ret_5d) / (vol_20d / np.sqrt(252) + 1e-8)),
+L490: 'overnight_return': _safe((o[-1] / c[-2] - 1) * 100 if c[-2] > 0 else 0),
+L491: 'intraday_return': _safe((c[-1] / o[-1] - 1) * 100 if o[-1] > 0 else 0),
+L498: if n < 3:
+L502: if s < 1e-10:
+L504: return float(np.mean(((arr - m) / s) ** 3))
+L509: if n < 4:
+L513: if s < 1e-10:
+L515: return float(np.mean(((arr - m) / s) ** 4) - 3)
+
+--- src/learning/self_learning.py ---
+L81: _BASE_LEARNING_RATE = 0.10  # DynamicConfig 미사용 시 fallback
+L145: if ic_std > 1e-9:
+L146: stability_factor = max(0.5, min(1.5, stability_scale / (1.0 + ic_std * 2.0)))
+L283: if abs(new_val - current_val) > 1e-6:
+L290: 'delta_pct': round((new_val / current_val - 1) * 100, 2)
+L348: lo_pct = 100.0 - winsor_pct  # 예: 5.0
+
+--- src/learning/dynamic_optimizer.py ---
+L76: cagr_penalty = max(0, 0.20 - cagr) * 10.0  # 20% 미달 시 큰 패널티
+L79: mdd_penalty = max(0, abs(mdd) - 0.10) * 5.0
+L87: if cagr < 0 or abs(mdd) > 0.30:
+
+--- src/learning/online_learner.py ---
+L77: if len(values) < 2:
+L81: var = sum(w * (v - mean) ** 2 for v, w in zip(values, weights))
+L159: if weighted_ic > 0.05:
+L160: observed_scale = current_scale * (1 + weighted_ic * 0.5)
+L162: observed_scale = current_scale * (1 + weighted_ic * 0.3)
+L178: if abs(new_scale - current_scale) > 1e-6:
+L194: if weighted_wr > 0.55:
+L195: observed_size = current_size * (1 + (weighted_wr - 0.5) * 0.5)
+L196: elif weighted_wr < 0.45:
+L197: observed_size = current_size * (1 - (0.5 - weighted_wr) * 0.5)
+L204: if abs(new_size - current_size) > 1e-6:
+L232: if n < 5:
+L255: sum(w * (pr - mean_pr) ** 2
+L258: sum(w * (ar - mean_ar) ** 2
+L261: return cov / (std_p * std_a) if std_p * std_a > 1e-12 else 0
+
+--- src/streams/s3_active_macro/qvm_universe.py ---
+L81: prev = annual[-2] if len(annual) >= 2 else {}
+
+--- src/streams/s3_active_macro/qvm_scorer.py ---
+L102: base_kper = 10.0
+L109: vol_premium = max(0, (50.0 - op_vol) / 10.0) if op_vol < 999.0 else 0
+L110: capex_premium = max(0, (50.0 - capex_ocf) / 10.0) if capex_ocf < 999.0 else 0
+L115: roe_adj = m.get('roe_2yr', 0) / 100.0
+L123: margin_of_safety = (target_market_cap / current_market_cap - 1) * 100 if current_market_cap > 0 and target_market_cap > 0 else 0.0
+L142: if len(_scores_list) >= 2:
+L144: _std = (sum((v - _mu) ** 2 for v in _scores_list) / len(_scores_list)) ** 0.5
+L158: if ff3_enabled and len(scored) >= 2:
+L212: if len(mcap_valid) >= 2:
+L214: sd_m = (sum((v - mu_m)**2 for v in mcap_valid) / len(mcap_valid))**0.5
+L225: z if (mcaps[i] >= mcap_min or mcaps[i] == 0) else z * 0.3
+L240: if len(valid_pbrs) >= 2:
+L242: sd_p = (sum((v - mu_p)**2 for v in valid_pbrs) / len(valid_pbrs))**0.5
+L262: if len(wml_raw) >= 2:
+L264: sd_w = (sum((v - mu_w)**2 for v in wml_raw) / len(wml_raw))**0.5
+L280: ff3_bonus = round((ff3_norm - 0.5) * 2 * max_bonus, 2)  # [-max, +max]
+L326: if len(annual) >= 2:
+L328: capex = max(0, ta - prev_ta) * 0.3  # 30%를 capex 근사
+L330: fcf_yield = fcf / max(mcap, 1) * 100 if mcap > 0 else 0
+L337: div_amount = ni * 0.3  # 배당성향 30% 가정
+L338: div_yield = abs(div_amount) / max(mcap, 1) * 100
+L346: roe_list.append(yr_ni / yr_eq * 100)
+L350: gp_assets = gp / max(ta, 1) * 100 if ta > 0 else 0
+L353: accrual = (ni - cfo) / max(ta, 1) * 100 if ta > 0 else 0
+L356: debt_ratio = tl / max(eq, 1) * 100 if eq > 0 else 999
+L365: op_margins.append(yr_op / yr_rev * 100)
+L367: op_volatility = 999.0
+L368: if len(op_margins) >= 3:
+L370: var = sum((x - mean_opm) ** 2 for x in op_margins) / len(op_margins)
+L376: capex_ocf_ratio = capex / max(cfo, 1) * 100 if cfo > 0 else 999.0
+L405: if len(sector_vals) < 3:
+L411: if ev_ebit < 999:
+L412: all_ev = [v.get('ev_ebit', 999) for v in all_vals if v.get('ev_ebit', 999) < 999]
+L414: score += 12.0 * rank
+L418: if pbr < 99:
+L419: all_pbr = [v.get('pbr', 99) for v in all_vals if v.get('pbr', 99) < 99]
+L421: score += 10.0 * rank
+L427: score += 8.0 * rank
+L433: score += 10.0 * rank
+L447: if len(sector_vals) < 3:
+L458: max_roe_adj = max(cfg.get('s3.quality_max_roe', 15.0), mean_roe * 1.5)
+L459: score += 10.0 * min(1.0, max(0, (roe - min(0, mean_roe)) / max_roe_adj))
+L462: score += 10.0 * min(1.0, max(0, roe / max_roe))
+L467: score += 8.0 * min(1.0, max(0, gpa / max_gpa))
+L472: score += 7.0 * min(1.0, f_score / 9.0)
+L481: score += 5.0 * (1 - accrual / -5) * 0.5 + 2.5
+L482: elif accrual <= 10:
+L483: score += 5.0 * max(0, 1 - accrual / 10) * 0.5
+L487: if dr < 100:
+L489: elif dr < 200:
+L490: score += 5.0 * (200 - dr) / 100
+L513: if df.empty or len(df) < 20:
+L517: if len(df) >= 252:
+L522: score += 8.0 * min(1.0, max(0, (ret_12m + 0.3) / 0.8))
+L530: rs_6m = mom_1 * 126
+L531: score += 4.0 * min(1.0, max(0, (rs_6m + 0.15) / 0.30))
+L556: if len(annual) >= 3:
+L569: score += 4.0 * min(1.0, max(0, avg_growth / 0.10))
+L580: elif len(annual) >= 2:
+L601: if len(annual) < 2:
+L614: score += 1.5 * min(1.0, max(0, (op_growth + 0.30) / 0.60))
+L626: score += 1.0 * min(1.0, max(0, (rev_growth + 0.20) / 0.40))
+L635: if margin_delta > 0.02:   # 2%p 이상 개선
+L734: if df.empty or len(df) < 20:
+L739: if len(df) >= 126:
+L748: if len(df) >= 200:
+L769: if len(annual) < 3:
+L824: if len(annual) < 2:
+L852: prev = annual[-2] if len(annual) >= 2 else {}
+L933: if df.empty or len(df) < 20:
+L942: if len(df) >= 252:
+L949: if len(df) >= 126:
+L1042: if abs(ic) < 1.0 and n > 2:
+L1043: t_stat = ic * math.sqrt(n - 2) / math.sqrt(1 - ic * ic)
+L1093: if n < 3:
+L1108: d_sq_sum = sum((rs - rr) ** 2 for rs, rr in zip(rank_s, rank_r))
+L1109: rho = 1 - (6 * d_sq_sum) / (n * (n * n - 1))
+
+--- src/streams/s3_active_macro/active_macro_stream.py ---
+L162: if n < 2:
+L166: variance = sum((x - mean) ** 2 for x in raw_scores) / n
+L169: if std < 1e-8:
+L174: return [0.5 * (1 + math.erf(z / math.sqrt(2))) for z in z_scores]
+L382: pick['score'] = pick.get('qvm_score', 0) / 100.0  # 정규화
+L389: if len(new_qvm_picks) >= top_n_qvm and all(s.get('margin_of_safety_pct', 0) > 50 for s in new_qvm_picks):
+L510: s['confidence'] = round(s['confidence'] * 0.80, 3)
+L511: s['size_pct'] = round(s['size_pct'] * 0.80, 4)
+L560: if _rw_total > 0 and abs(_rw_total - 1.0) > 0.01:
+L647: mom_3m = fs_data.get('mom_63', fs_data.get('mom_21', 0) * 3)
+L648: mom_6m = fs_data.get('mom_126', fs_data.get('mom_63', 0) * 2)
+L683: value_score = per_inv * 0.6 + pbr_inv * 0.4
+L1041: urgency = 3
+L1070: urgency = 2
+L1073: urgency = 3
+L1074: elif pnl_pct <= early_trigger and days_held < 20:
+L1098: if n >= 5:
+L1100: var = sum((r - mean_r) ** 2 for r in self._daily_returns) / n
+L1169: if nowcast_score > 0.5:
+L1184: intensity = min((vix - vix_high) / 10.0, 1.0)  # 0~1
+L1185: mult['volatility'] += 0.3 * intensity
+L1186: mult['carry'] += 0.2 * intensity      # 품질/캐리 방어
+L1187: mult['momentum'] -= 0.3 * intensity
+L1188: mult['value'] += 0.1 * intensity
+L1191: intensity = min((vix_low - vix) / 5.0, 1.0)  # 0~1
+L1192: mult['momentum'] += 0.3 * intensity
+L1193: mult['carry'] -= 0.1 * intensity
+L1194: mult['volatility'] -= 0.15 * intensity
+L1203: r_intensity = min(rate_change / 3.0, 1.0)
+L1204: mult['value'] += 0.25 * r_intensity
+L1205: mult['carry'] -= 0.1 * r_intensity
+L1206: mult['momentum'] -= 0.1 * r_intensity
+L1209: r_intensity = min(abs(rate_change) / 3.0, 1.0)
+L1210: mult['carry'] += 0.2 * r_intensity
+L1211: mult['momentum'] += 0.15 * r_intensity
+L1212: mult['value'] -= 0.1 * r_intensity
+L1221: fx_intensity = min(fx_change / 5.0, 1.0)
+L1222: mult['value'] += 0.15 * fx_intensity
+L1223: mult['carry'] += 0.15 * fx_intensity
+L1224: mult['momentum'] -= 0.1 * fx_intensity
+L1227: fx_intensity = min(abs(fx_change) / 5.0, 1.0)
+L1228: mult['momentum'] += 0.1 * fx_intensity
+L1229: mult['value'] -= 0.05 * fx_intensity
+L1349: elif hmm_transition.get('bull', 0.0) > 0.6:
+L1526: ml_bullish = ml_prob > 0.5
+L1527: momentum_bullish = momentum_norm > 0.5
+L1556: if abs(score_delta) > 0.001:
+
+--- src/streams/s2_ml_alpha/drift_detector.py ---
+L53: if len(self._predictions) > 100:
+L94: drifted = (accuracy < (0.5 + self._threshold)
+
+--- src/streams/s2_ml_alpha/ml_stream.py ---
+L139: if _loaded >= 3:  # 과반수 로드 성공
+L620: _bear_candidates = [s for s in scored if s['up_prob'] < 0.50]
+L625: _bear_score = round((_avg_bear_prob + _max_bear_prob) / 2.0, 4)
+L1017: meta_confidence = 1.0 - (ensemble_std * 2.0) - (ood_score * 0.5) + (news_sent * 0.1)
+L1123: safe_stds = np.where(stds > 1e-8, stds, 1.0)
+L1129: ood_score = 1.0 / (1.0 + math.exp(-(mean_z - 3.0)))
+L1221: (vix + vkospi) / 2 / max(vol_baseline, 1.0))
+L1284: cost = cfg.get('a3.roundtrip_cost_pct', 0.36) / 100
+L1285: min_ev = cfg.get('a3.kelly_ev_min_pct', 0.50) / 100
+L1309: _tca_cost = _coeff * (_order / _adtv) ** 0.5
+L1421: vol_scale = max(0.5, min(2.0, (vix + vkospi) / 2 / vol_baseline))
+L1468: urgency = 4  # 최고 긴급도
+L1471: urgency = 2
+L1474: urgency = 3
+L1478: urgency = 2
+L1546: if n >= 5:
+L1548: var = sum((r - mean_r) ** 2 for r in self._daily_returns) / n
+
+--- src/streams/s0_beta/beta_stream.py ---
+L71: if len(self._bull_history) > 120:
+L90: if len(history) < 20:
+L94: expected_ret = current_prob * 0.05
+L106: is_high = (z_score >= s0_z_thresh) and (current_prob >= p90) and (current_prob >= 0.70)
+L117: _full_kelly = (blended_win_rate * _payoff - _q) / _payoff if _payoff > 1e-9 else 0.0
+L138: dynamic_boost += abs(dd_vel) * 10.0  # -5%면 0.5 boost
+L140: dynamic_boost += abs(vol_adj_mom) * 0.2  # -2.0이면 0.4 boost
+L147: expected_ret = current_prob * 0.05 * z_scaler
+L174: if is_vix_spike and sweep_ratio_crash < 0.20:
+L175: sweep_ratio_crash = 0.20 # VIX 급등 시 최소 20% Sweep
+L271: payoff     = avg_win / avg_loss if avg_loss > 1e-9 else default_payoff
+
+--- src/streams/s10_mega_trend/mega_trend_stream.py ---
+L321: if tnorm(streak,  1.0) > 0.2:  reasons.append(f"외국인연속매수(streak={streak:.2f})")
+L322: if tnorm(net_buy, 0.1) > 0.1:  reasons.append(f"외국인순매수({net_buy:.3f})")
+L323: if tnorm(accel,   0.05)> 0.1:  reasons.append(f"매수가속({accel:.3f})")
+
+--- src/streams/s1_alpha_factory/purged_cv.py ---
+L61: expected_max = math.sqrt(2 * math.log(n_trials))
+
+--- src/streams/s4_advisory/advisory_exporter.py ---
+L68: lines.append(f"- **{ticker}**: {weight*100:.1f}%")
+
+--- src/streams/s4_advisory/dynamic_exit.py ---
+L225: vix_scale = max(0.8, min(1.5, (vix / 18.0) ** 0.3))
+L245: if crash_prob > 0.05:
+L246: tighten_ratio = max(0.5, 1.0 - (crash_prob * 1.5))
+L253: dynamic_sl_pct = -1 * portfolio_vol * sl_multiplier * vix_scale * 100
+L261: dynamic_max_per_sector = max(2, math.ceil(n_positions / 5))
+L302: qv_decay_pct = ((current_qv - entry_qv) / max(entry_qv, 1)) * 100
+L330: if pnl_pct <= dynamic_sl * 1.5:
+L331: urgency = 3  # 즉시
+L333: urgency = 2  # 가급적 빨리
+L419: force_exit = days_held > max_hold_days * 2
+L478: h = h.astype(float).tail(atr_period * 2)
+L479: l = l.astype(float).tail(atr_period * 2)
+L480: c = c.astype(float).tail(atr_period * 2)
+L490: f"  ATR [{ticker}]: {atr_pct*100:.2f}% (parquet)")
+L500: f"  ATR [{ticker}]: {atr_pct*100:.2f}% (vol_proxy fallback)")
+L537: if crash_prob > 0.05:
+L538: tighten_ratio = max(0.5, 1.0 - (crash_prob * 1.5))
+L567: allowed_drawdown_pct = atr_pct * cat_mult * 100  # % 단위
+L588: 'atr_pct': round(atr_pct * 100, 2),
+L636: chandelier_drop = atr_pct * chandelier_mult * 100  # % 단위
+L651: atr_pct * cfg.get('exit.scale_out_atr_mult', 10.0) * 100,
+L666: f'(ATR={atr_pct*100:.2f}%)'
+L675: 'atr_pct': round(atr_pct * 100, 2),
+L690: f'ATR={atr_pct*100:.2f}%)'
+L700: 'atr_pct': round(atr_pct * 100, 2),
+L729: return [max(0, min(100, 50 + 15 * random.gauss(0, 1))) for _ in range(200)]
+L740: pnl_abs = [abs(p.get('pnl_pct', 0)) / 100 for p in positions.values()]
+L753: idx = (pct / 100) * (n - 1)
+L851: panic_drop_pct   = float(self._cfg_flow('intraday.panic_price_drop_pct',    0.015)) * 100  # % 단위
+L868: unit_label = f"{int(cache_unit / 1_000_000)}백만원"
+
+--- src/streams/s4_advisory/advisory_stream.py ---
+L156: defense_ratio = min(1.0, max(0.0, base_defense * _conf * 2.0))
+L176: 'reason': f'연속 변동성 타겟팅 (Defense={defense_ratio*100:.1f}%)',
+L277: ('tiger_nasdaq',      m_weight * 0.6), # M (성장 비과세)
+L278: ('kodex_sp500_tr',    m_weight * 0.4), # M (TR 복리 비과세)
+L279: ('tiger_us_dividend', q_weight * 0.6), # Q (미국배당 비과세)
+L280: ('tiger_us_div_grow', q_weight * 0.4), # Q (커버드콜 비과세)
+L377: if remaining_room < 0.01:
+L390: if remaining_bond < 0.01:
+L409: _momentum_score = min(1.0, _div_pct / 10.0)  # 10% 배당 → 1.0
+L475: safe_pct = 0.30
+L476: risky_pct = 0.70
+L514: ('tiger_sp500',       core_weight * 0.6),
+L515: ('tiger_nasdaq',      core_weight * 0.4),
+L517: ('kodex_tech_top10',  alpha_weight * 0.7),
+L518: ('tiger_obesity',     alpha_weight * 0.3),
+L567: 'weighted_div_pct': total_div * 100,
+L568: 'weighted_growth_pct': total_growth * 100,
+L569: 'total_return_pct': total_return * 100,
+L600: total / cfg.get('portfolio.initial_capital') * 100, 2),
+L675: if c.get('urgency', 0) >= 2:
+
+--- src/streams/s4_advisory/analyst_consensus.py ---
+L94: upside_score = 4.0 * min(1.0, max(0, (upside + 0.10) / 0.40))
+L96: detail['upside_pct'] = round(upside * 100, 1)
+L109: rec_score = 3.0 * min(1.0, max(0, (buy_ratio - 0.50) / 0.40))
+L111: detail['buy_ratio'] = round(buy_ratio * 100, 1)
+L123: rev_score = 3.0 * min(1.0, max(0, (rev_ratio - 0.30) / 0.40))
+L125: detail['revision_up_ratio'] = round(rev_ratio * 100, 1)
+L153: norm = result['score'] / 10.0  # 0~1
+L154: adjustment = weight * (norm - 0.5)  # -0.1 ~ +0.1 범위
+
+--- src/streams/s4_advisory/risk_parity.py ---
+L115: if len(returns) >= 5:
+L119: vols[asset] = 0.01  # 데이터 부족 → 기본 변동성
+L128: if total_inv < 1e-12:
+L137: if n < 2:
+L141: variance = sum((r - mean) ** 2 for r in returns) / (n - 1)
+L187: if unconstrained and abs(overflow) > 1e-8:
+L201: if total < 1e-12:
+L218: if len(returns) >= 5:
+
+--- src/streams/s1_edge/atr_ev_adapter.py ---
+L101: atr_default = _cfg_get('s1.ev.atr_default_pct', 1.5) / 100.0  # % → 소수
+L124: if len(atr_values) < 3:
+L143: f'p30={p30*100:.3f}%, p70={p70*100:.3f}%, '
+L144: f'range=[{min(atr_values_sorted)*100:.3f}%, {max(atr_values_sorted)*100:.3f}%]'
+L154: idx = (pct / 100.0) * (n - 1)
+L194: if len(df) < period + 5:
+L202: h = df['high'].astype(float).tail(period * 2)
+L203: l = df['low'].astype(float).tail(period * 2)
+L204: c = df['close'].astype(float).tail(period * 2)
+L294: f'(ATR={atr_pct*100:.2f}%, p30={universe_atr_p30*100:.2f}%, '
+L295: f'p70={universe_atr_p70*100:.2f}%), '
+
+--- src/streams/s1_edge/etf_sniper_stream.py ---
+L85: tactic_c_sam_trigger = (sam_features.get('ss_etf_vol_ratio', 0.0) > 2.0) and (sam_features.get('intraday_vol_anomaly', 0.0) > 1.5)
+L86: tactic_c_hyn_trigger = (hyn_features.get('ss_etf_vol_ratio', 0.0) > 2.0) and (hyn_features.get('intraday_vol_anomaly', 0.0) > 1.5)
+L92: tactic_a_trigger = (vol_ratio > 1.2) and (lp_pressure < -500)
+L93: tactic_b_trigger = (vol_anomaly > 2.0) and (lp_pressure > 200)
+L121: 'tp_pct': tp_pct * 1.5,
+L142: 'tp_pct': tp_pct * 1.5,
+
+--- src/streams/s1_edge/s1_intraday_breakout.py ---
+L130: ticker, vol_ratio, frgn_krw, signal["size_pct"] * 100,
+L172: unit_label        = f"{int(flow_unit / 1_000_000)}백만원"
+
+--- src/streams/s1_edge/s1_validator.py ---
+L80: variance = sum((r - mean_ret) ** 2 for r in daily_returns) / max(len(daily_returns) - 1, 1)
+L82: sharpe = (mean_ret / std_ret) * math.sqrt(self.annualization) if std_ret > 1e-8 else 0
+L100: downside_var = sum(r ** 2 for r in neg_rets) / len(neg_rets)
+L102: sortino = (mean_ret / downside_std) * math.sqrt(self.annualization) if downside_std > 1e-8 else 0
+L107: 'total_return_pct': round(total_ret * 100, 4),
+L108: 'mean_daily_return_pct': round(mean_ret * 100, 5),
+L109: 'daily_std_pct': round(std_ret * 100, 5),
+L113: 'max_drawdown_pct': round(max_dd * 100, 3),
+L116: 'best_day_pct': round(max(daily_returns) * 100, 3),
+L117: 'worst_day_pct': round(min(daily_returns) * 100, 3),
+L145: estimated_round_trip = total_cost_per_trade * 2
+L148: 'avg_slippage_pct': round(avg_slippage * 100, 4),
+L149: 'max_slippage_pct': round(max_slippage * 100, 4),
+L150: 'avg_commission_pct': round(avg_cost * 100, 4),
+L151: 'estimated_round_trip_pct': round(estimated_round_trip * 100, 4),
+L153: 'slippage_threshold_pct': round(self.max_slippage * 100, 4),
+L257: 'max_slippage_pct': self.max_slippage * 100,
+
+--- src/streams/s1_edge/adaptive_threshold.py ---
+L71: VIX_BASELINE = 18.0
+L75: VIX_ELASTICITY = 0.5
+L78: PERCENTILE_WINDOW = 60  # 파생/변동성 (PCR, VIX, OIS) 60일
+L79: SENTIMENT_WINDOW = 252  # 거시 센티먼트 노이즈 필터링 252일 (1 거래년도)
+L83: LONG_PERCENTILE = 55    # OIS P55 이상이면 long (기존 P65)
+L84: SHORT_PERCENTILE = 45   # OIS P45 이하이면 short (기존 P35)
+L86: PCR_EXTREME_PERCENTILE = 95         # PCR 패닉 상위 5%
+L87: VIX_ASSURANCE_PERCENTILE = 90       # VIX 불안 상위 10%
+L88: SENTIMENT_RISK_PERCENTILE = 20      # 센티먼트 악화 하위 20%
+L89: SENTIMENT_EXTREME_PERCENTILE = 5    # 센티먼트 극단 하위 5%
+L93: GAP_PERCENTILE = 20
+L116: OIS_LONG_FLOOR = 0.50       # long 임계값 최소 (0.52→0.50)
+L117: OIS_LONG_CEILING = 0.75     # long 임계값 최대
+L118: OIS_SHORT_FLOOR = 0.25      # short 임계값 최소
+L119: OIS_SHORT_CEILING = 0.50    # short 임계값 최대 (0.48→0.50)
+L120: GAP_FLOOR = 0.10            # gap threshold 최소 (0.15→0.10%)
+L121: GAP_CEILING = 1.5           # gap threshold 최대
+L122: MIN_NEUTRAL_BAND = 0.04     # 최소 중립밴드 폭 (0.10→0.04)
+L124: PCR_FLOOR = 1.2
+L125: PCR_CEILING = 2.0
+L126: VIX_ASSURANCE_FLOOR = 20.0
+L127: VIX_ASSURANCE_CEILING = 35.0
+L208: deficit = (self.MIN_NEUTRAL_BAND - band_width) / 2.0
+L214: single_min = 0.50 + 0.10 * vix_scale  # VIX 낮으면 0.55, 높으면 0.65
+L217: single_max_inv = 0.50 - 0.15 * vix_scale
+L224: elif n_ois >= 20:
+L304: if n >= 20:
+L311: long_idx = int(n_w * self.LONG_PERCENTILE / 100)
+L312: short_idx = int(n_w * self.SHORT_PERCENTILE / 100)
+L317: raw_long = sorted_vals[long_idx] / 100.0
+L318: raw_short = sorted_vals[short_idx] / 100.0
+L322: raw_long = 0.50 + 0.44 * 0.15  # ≈ 0.566
+L323: raw_short = 0.50 - 0.44 * 0.15  # ≈ 0.434
+L326: center = 0.50
+L333: 'method': 'rolling_percentile' if n >= 20 else 'z_score',
+L353: if n >= 20:
+L357: idx = int(len(abs_changes) * self.GAP_PERCENTILE / 100)
+L364: sigma_daily = vix_latest / (252 ** 0.5)
+L365: raw_threshold = 0.5 * sigma_daily  # 반표준편차
+L374: if n >= 20:
+L377: idx = int(len(sorted_vals) * self.PCR_EXTREME_PERCENTILE / 100)
+L381: raw = 1.5  # fallback
+L384: adjusted = raw * ((vix_scale - 1) * 0.3 + 1)
+L390: if n >= 20:
+L393: idx = int(len(sorted_vals) * self.VIX_ASSURANCE_PERCENTILE / 100)
+L397: raw = 25.0
+L404: if n >= 30:
+L408: risk_idx = int(len(sorted_vals) * self.SENTIMENT_RISK_PERCENTILE / 100)
+L409: ext_idx = int(len(sorted_vals) * self.SENTIMENT_EXTREME_PERCENTILE / 100)
+L431: max_len = self.PERCENTILE_WINDOW * 2  # 120일
+L432: max_sentiment_len = self.SENTIMENT_WINDOW * 2 # 504일
+L435: if ois is None or not (0 <= ois <= 100):
+L494: returns = close.pct_change().dropna() * 100
+L524: var = sum((x - mu) ** 2 for x in arr) / len(arr)
+L525: std = var ** 0.5 if var > 0 else 1.0
+L527: max(0, min(100, 50 + (x / std) * 15))
+
+--- src/streams/s5_overnight/overnight_stream.py ---
+L89: base_var   = (vix_base / 100) ** 2 / 252
+L90: ov_var     = (vix / 100) ** 2 / 252 + w_nq * (nq_vol_pct / 100) ** 2
+L190: if ah_volume_surge and abs(ah_options_skew) > 0.3:
+L192: ah_score = ah_options_skew * 2.0
+L201: overnight_alpha = (overnight_alpha * 0.4) + (ah_score * 0.6)
+L209: short_entry_th = base_threshold * (1.0 + 0.5 * regime_conf)
+L210: long_entry_th = base_threshold * max(0.5, 1.0 - 0.2 * regime_conf)
+L213: short_entry_th = base_threshold * max(0.5, 1.0 - 0.5 * regime_conf)
+L214: long_entry_th = base_threshold * (1.0 + 0.5 * regime_conf)
+L226: confidence = min(0.9, 0.5 + abs(overnight_alpha))
+L230: confidence = min(0.85, 0.5 + abs(kospi_chg) * 0.1)
+L234: confidence = min(0.85, 0.5 + abs(kospi_chg) * 0.1)
+
+--- src/utils/credential_manager.py ---
+L153: _enc = _line[len(key) + 5:]
+
+--- src/utils/stock_name_resolver.py ---
+L85: if short and len(name) > 15:
+
+--- src/utils/resilient_market_data.py ---
+L148: if len(self._records) % 100 == 0:
+L167: return True, f'stale_{age.total_seconds()/3600:.0f}h'
+L280: elif len(ticker) == 6 and ticker.isdigit():
+L325: latency = (time.time() - t0) * 1000
+L335: latency = (time.time() - t0) * 1000
+L384: latency = (time.time() - t0) * 1000
+L445: latency = (time.time() - t0) * 1000
+
+--- src/utils/data_imputer.py ---
+L78: _std = _X_train.std() + 1e-10
+L103: _ss_res = np.sum((_target - _fitted) ** 2)
+L104: _ss_tot = np.sum((_target - _target.mean()) ** 2)
+L105: _r2 = 1.0 - (_ss_res / _ss_tot) if _ss_tot > 1e-12 else 0.0
+
+--- src/utils/market_calendar.py ---
+L101: if line and len(line) == 8 and line.isdigit():
+L139: return d.weekday() >= 5
+L155: if d.weekday() >= 5:
+L184: is_weekend = now.weekday() >= 5
+L335: if len(date_str) != 8:
+L405: if kst_now.hour < 6:
+L427: if d.weekday() >= 5:
+
+--- src/utils/data_health_monitor.py ---
+L54: _DEFAULT_TTL_SEC = 3600  # 1시간
+
+--- src/utils/adaptive_thresholds.py ---
+L58: if n_days < 5:
+L69: z = 1.282  # 90% 단측
+L70: se = math.sqrt(0.25 / n_days)
+L71: return min(max(0.5 + z * se, 0.50), 0.65)
+L97: if n_periods < 3:
+L101: se = math.sqrt(max((1 - ic ** 2) / (n_periods - 2), 1e-12))
+L103: t_crit = t_dist.ppf(1 - alpha / 2, df=n_periods - 2)
+L108: se = math.sqrt(max((1 - ic ** 2) / (n_periods - 2), 1e-12))
+L163: if not vix_values or len(vix_values) < 20:
+L170: if live_vix and len(live_vix) >= 20:
+L255: if values and len(values) >= 20:
+L301: if df is None or len(df) < 20:
+L458: if ic_factor == 0.03 and ic_catboost == 0.03:
+L493: if len(scores) < 20:
+L605: if len(ic_series) < 20:
+L684: if not history or len(history) < 10:
+L707: if not history or len(history) < 20:
+
+--- src/utils/emergency_pager.py ---
+L42: _RATE_LIMIT_SEC = 60.0
+
+--- src/ml/tick_features.py ---
+L49: df['oim'] = (df['total_bid_vol'] - df['total_ask_vol']) / (df['total_bid_vol'] + df['total_ask_vol'] + 1e-9)
+L90: resampled['vol_velocity'] = (fast_ma / (slow_ma + 1e-9)) - 1.0
+L101: resampled['buy_sell_imbalance'] = (buy_vol - sell_vol) / (buy_vol + sell_vol + 1e-9)
+L123: df['spread_bps'] = (df['ask_p1'] - df['bid_p1']) / df['bid_p1'] * 10000
+L165: resampled['amihud_illiquidity'] = resampled['ret_abs'] / (resampled['volume'] * 1e-6 + 1e-9)
+
+--- src/ml/confidence_calibrator.py ---
+L226: if up_prob < 0.50:
+L277: conf = raw_conf if raw_conf and raw_conf > 0.01 else None
+L279: if conf is None or conf < 0.01:
+L282: if conf is not None and conf > 0.01:
+L293: conf = raw_conf if raw_conf and raw_conf > 0.01 else None
+L294: if conf is None or conf < 0.01:
+L296: if conf is not None and conf > 0.01 and pnl_pct is not None:
+L386: p = np.clip(p, 1e-10, 1 - 1e-10)
+L416: max_iter = 200
+L429: p = max(1e-10, min(1 - 1e-10, p))
+L446: if abs(det) < 1e-15:
+L455: if abs(da) < 1e-10 and abs(db) < 1e-10:
+
+--- src/ml/tick_analyzer.py ---
+L73: if len(group) < 100:  # 틱이 너무 적으면 기본값
+
+--- src/ml/hmm_regime_model.py ---
+L94: if df.empty or len(df) < 100:
+L140: score = avg_return / (avg_vol + 1e-6) - (avg_vix * 0.001)
+
+--- src/ml/fast_slow_ensemble.py ---
+L31: mse = np.mean((residuals - pred_res)**2)
+
+--- src/ml/ml_regime_router.py ---
+L146: prob = 0.5
+
+--- src/execution/slippage_model.py ---
+L97: for csv_file in csv_files[:lookback + 5]:
+L125: if len(closes) >= 2:
+L134: var = sum((r - mean_r) ** 2 for r in log_rets) / len(log_rets)
+L206: market_impact_bps = eta * sigma * math.pow(participation, delta) * 10000
+L267: total_cost = order_size * total_bps / 10000
+
+--- src/execution/smart_router.py ---
+L211: half_spread = spread_bps / 2.0
+L337: if len(available_venues) < 2:
+L355: 'weight_pct': round(weight * 100, 1),
+L375: if len(sorted_venues) >= 2:
+L425: if price < 2000: return 1
+L426: if price < 5000: return 5
+L427: if price < 20000: return 10
+L428: if price < 50000: return 50
+L429: if price < 200000: return 100
+L430: if price < 500000: return 500
+L436: buy_thresh = 0.5
+L462: return base_price - (tick * 2)
+L473: return base_price + (tick * 2)
+
+--- src/execution/tca.py ---
+L67: sign * (fill - decision) / decision * 10000, 2)
+L74: sign * (fill - vwap) / vwap * 10000, 2)
+L80: (commission + tax) / amount * 10000, 2) if amount > 0 else 0
+L85: sign * (arrival - decision) / decision * 10000, 2)
+L92: sign * (fill - arrival) / arrival * 10000, 2)
+L103: sign * (close - fill) / fill * 10000, 2)
+L117: 'total_cost_krw': round(amount * total_cost_bps / 10000),
+L304: timing_ratio = 0.2
+L407: if total_cost_bps <= 2:
+L409: elif total_cost_bps <= 5:
+L411: elif total_cost_bps <= 10:
+L413: elif total_cost_bps <= 20:
+L497: alpha = 2.0 / (ewma_days + 1)  # EWMA 소감 계수
+L513: impact_bps = round(sign * (fill - arrival) / arrival * 10000, 2)
+L532: if len(hist_list) > 90:
+
+--- src/execution/execution_engine.py ---
+L405: for csv_file in csv_files[:lookback + 5]:
+L433: if len(closes_for_vol) >= 2:
+L442: var = sum((r - mean_r) ** 2 for r in log_rets) / len(log_rets)
+L516: max_spread = tp_pct / 3.0
+L593: slip_rate = slip_bps / 10000
+L601: slip_bps = slip_rate * 10000
+L644: 'slippage_pct': round(slip_rate * 100, 4),
+L739: max_spread = tp_pct / 3.0
+L948: if _attempt < 2:
+L949: _time.sleep(2 ** _attempt)  # 지수 백오프: 1s, 2s
+
+--- src/execution/realtime_exit_monitor.py ---
+L84: alert_ratio = 1.0 - (alert_margin_pct / 100)
+L371: pnl_pct = (price - az.avg_price) / az.avg_price * 100
+L388: pnl_pct = (price - az.avg_price) / az.avg_price * 100
+L695: f"SL {sl_pct*100:.2f}% (ATR×{_trail_mult:.1f})"
+L715: f"SL=₩{az.sl_price:,.0f} ({sl_pct*100:+.2f}%), "
+L716: f"TP=₩{az.tp_price:,.0f} ({tp_pct*100:+.2f}%), "
+
+--- src/execution/kis_price_service.py ---
+L235: elapsed_ms = (time.time() - self._last_call_time) * 1000
+L237: sleep_sec = (self._throttle_ms - elapsed_ms) / 1000
+L306: if resp.status_code != 200:
+L321: backoff = (2 ** attempt) * 0.5  # 0.5s, 1s, 2s
+
+--- src/execution/order_manager.py ---
+L44: _DEFAULT_MAX_DRIFT_PCT = 0.03  # cfg 로드 실패 시 fallback
+L105: max_drift_pct = float(_cfg.get('execution.max_drift_pct', 3.0)) / 100.0
+L200: drift_pct = drift * 100
+L204: f'Drift: {drift_pct:.2f}% (임계치: {max_drift_pct*100:.1f}%)'
+L219: f'로컬/브로커 잔고 불일치 {drift_pct:.2f}% > 임계치 {max_drift_pct*100:.1f}%\n'
+L226: f'주문 전면 차단 (임계치={max_drift_pct*100:.1f}%)',
+L240: threshold_pct=max_drift_pct * 100,
+L250: 'threshold':   max_drift_pct * 100,
+L294: f'(drift={drift_result["drift_pct"]*100:.2f}%)'
+
+--- src/execution/api_resilience.py ---
+L94: jitter = capped * self.jitter_ratio * (2 * random.random() - 1)
+
+--- src/execution/decoupled_decision_engine.py ---
+L52: _edge   = _win_prob - 0.5
+L54: _alpha  = round(max(0.0, min(1.0, 0.5 + _edge + 0.1 * _sharpe)), 4)
+
+--- src/execution/position_sizer.py ---
+L208: atr_noise_pct = atr_pct * 100.0                   # % 단위
+L360: roundtrip_pct = ((slip_bps + commission_bps) * 2) / 100.0
+
+--- src/execution/fill_rate_simulator.py ---
+L81: discount = self.discount_bps / 10000
+L260: 'avg_favorable_range': round(avg_range * 10000, 2),  # bps 단위
+L287: slip_rate = slippage_bps / 10000
+
+--- src/execution/risk_params.py ---
+L114: h, l, c = (x.astype(float).tail(atr_period * 2) for x in (h, l, c))
+L141: vol_proxy = (float(vix) / 100.0) / math.sqrt(252)
+L145: vol_proxy = 0.01
+L222: sl_pct = atr_pct * chan_mult * 100   # % 단위 (예: 0.02 × 2.5 × 100 = 5.0%)
+L223: tp_pct = atr_pct * tp_mult   * 100   # % 단위 (예: 0.02 × 5.0 × 100 = 10.0%)
+L237: f'ATR={atr_pct*100:.2f}%, chandelier×{chan_mult:.2f} → '
+
+--- src/execution/credit_rate_loader.py ---
+L82: _CACHE_TTL_HOURS = 6
+L132: f"  📊 [CreditRate] 이자율표 로드: {broker} {holding_days}일 보유 = {table_rate*100:.2f}%"
+
+--- src/execution/_kis_adapter.py ---
+L72: (price / self.avg_price - 1) * 100 if self.avg_price > 0 else 0
+L528: 'pnl_pct': (fill_price / avg_price_snap - 1) * 100,  # ★ H2-12
+L648: if resp.status_code >= 500:
+
+--- src/execution/algo_executor.py ---
+L172: start_idx = max(0, (current_hour - 9) * 2 + (1 if current_min >= 30 else 0))
+L186: minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
+L198: scheduled = base_time + timedelta(minutes=30 * i)
+L243: target_pov_rate = min(0.30, self.pov_rate + (alpha_decay * 0.25))
+L250: start_idx = max(0, (current_hour - 9) * 2 + (1 if current_min >= 30 else 0))
+L261: minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
+L262: max_duration_slots = self.pov_max_duration_min // 30
+L279: scheduled = base_time + timedelta(minutes=30 * i)
+L348: if adv > 0 and total_qty > adv * 0.01:
+L396: impact_bps = eta * sigma * math.pow(participation, delta) * 10000
+
+--- src/alpha_factory/alpha_miner.py ---
+L393: if self.ic_threshold > 1e-9:  # 제로나누기 방지
+L400: (yaml_val * dynamic_thr) ** 0.5,  # 기하평균
+L473: if n < 100:
+L485: if len(y_test) < 20:
+L496: if valid_mask.sum() < 10:
+L596: if len(close) < 30:
+L610: rsi       = 100 - (100 / (1 + rs))
+L617: np.where(rsi > overbought, (overbought - rsi) / max(100 - overbought, 1e-6), 0.0),
+L691: if len(alpha_clean) < 30:
+L706: if feat_valid.sum() < 30:
+L874: if df is not None and len(df) >= 100:
+L921: df['target'] = df[close_col].pct_change(fwd).shift(-fwd) * 100
+L941: return df if len(df) >= 100 else None
+L1147: if valid.sum() < 20:
+L1216: _MAX_MEMORY   = 200   # 최대 기억 항목 (오래된 것부터 삭제)
+L1344: return min(adjusted, base_threshold * 2.0)  # 최대 2배까지
+L1428: n_keep = min(len(data), self.decay_window * 3)  # 3× 여유
+
+--- src/alpha_factory/edges/vol_surface.py ---
+L18: term_structure = (vol_5d / (vol_20d + 1e-9)).fillna(1.0)
+L23: df['alpha_vol_adj_mom_10d'] = (mom_10d / (vol_20d + 1e-9)).fillna(0)
+
+--- src/alpha_factory/edges/stat_arb.py ---
+L17: z_score = ((df['Close'] - ma_20) / (std_20 + 1e-9)).fillna(0)
+L20: mr_signal = np.where(z_score > 2.5, -1, np.where(z_score < -2.5, 1, 0))
+L23: mr_strength = -z_score / 3.0 # Z-score 3일때 -1 (강한 숏), Z-score -3일때 1 (강한 롱)
+
+--- src/alpha_factory/edges/microstructure.py ---
+L18: df['alpha_order_imbalance_10d'] = (signed_vol.rolling(10).sum() / (rolling_vol_10 * 10)).fillna(0)
+L23: df['alpha_smart_money_flow_20d'] = pd.Series(smart_money).rolling(20).sum() / (df['Volume'].rolling(20).sum() + 1e-9)
+
+--- src/portfolio/shadow_manager.py ---
+L239: initial_capital = 100_000_000
+L331: if abs(calc_realized - stored_realized) > 10:
+L338: if abs(calc_commission - stored_commission) > 10:
+L348: if abs(calc_tax - stored_tax) > 10:
+L371: if abs(calc_v - stored_v) > 10:
+L431: pos['pnl_pct'] = round((cur - avg) / avg * 100, 2)
+L633: pnl_pct = (current_price - avg_price) / avg_price * 100 if avg_price > 0 else 0
+L645: 'unrealized_pnl_pct': round(pnl_pct / 100, 6),  # ★ 소수비율 (0.05 = 5%)
+L692: _cfg_ratio = 0.60
+L715: 'daily_return_pct': round(daily_return * 100, 4),
+L722: f"({daily_return*100:+.2f}%) | "
+L756: _forced_sl = max(_tighten_sl, _current_pnl - 0.01)  # 1% below current
+L761: 'trailing_activate_pct': max(0.01, _current_pnl * 0.5) if _current_pnl > 0 else 0.01,
+L812: _base_tp * 100
+L816: _base_sl * 100
+L820: tp_decimal = tp_pct / 100 if abs(tp_pct) > 1 else tp_pct
+L821: sl_decimal = sl_pct / 100 if abs(sl_pct) > 1 else sl_pct
+L824: tp_floor = _cfg.get(f'{prefix}.exit.tp_floor', 5) / 100
+L825: sl_ceiling = _cfg.get(f'{prefix}.exit.sl_ceiling', -2) / 100
+L859: _wr_for_trailing = 0.30  # fallback
+L867: if len(_recent) >= 5:
+L878: if _wr_for_trailing < 0.40:
+L880: elif _wr_for_trailing < 0.55:
+L892: trailing_trigger_dec = _cfg_trailing_trigger / 100 if abs(_cfg_trailing_trigger) > 1 else _cfg_trailing_trigger
+L898: abs(base.get('trailing_stop_pct') or -0.10) * 100
+L900: trailing_pct_dec = -(trailing_pct / 100 if abs(trailing_pct) > 1 else trailing_pct)
+L918: _sell_commission = _cfg.get(f'{prefix}.exit.sell_commission_pct', 0.015) / 100
+L919: _sell_tax_stock = _cfg.get(f'{prefix}.exit.sell_tax_pct', 0.18) / 100
+L920: _net_min_profit = _cfg.get(f'{prefix}.exit.net_min_profit_pct', 1.0) / 100
+L941: f"cost_floor(주식)={_cost_floor_stock*100:.2f}%, "
+L942: f"cost_floor(ETF)={_cost_floor_etf*100:.2f}%, "
+L943: f"tp_based={_tp_based_trigger*100:.2f}%, "
+L944: f"final={_dynamic_partial_trigger*100:.2f}%"
+L1051: h2 = h2.astype(float).tail(atr_period * 2)
+L1052: l2 = l2.astype(float).tail(atr_period * 2)
+L1053: c2 = c2.astype(float).tail(atr_period * 2)
+L1070: raw_vol = abs(pos.get('pnl_pct', 2.0)) / 100  # pnl 절대값 proxy
+L1106: daily_vol = vol_index / math.sqrt(252) / 100  # decimal
+L1136: f"vol={vol_index:.1f}, σd={daily_vol*100:.2f}%, lev={leverage}, "
+L1137: f"TP={final_tp*100:.2f}%, SL={final_sl*100:.2f}%, "
+L1138: f"Trail={trail_width*100:.2f}%")
+L1168: if abs(net_w) < 1e-6:
+L1247: _s1_reval_score = (kospi_open_change * 0.5) + (flow / 100.0 * 0.3) - (vkospi_change * 0.2)
+L1368: f"(SL={exit_cfg.get('stop_loss_pct', 0)*100:.1f}%)")
+L1428: _peak_pnl_pct_pct = pos.get('peak_pnl_pct', pnl_pct * 100)
+L1430: if abs(_peak_pnl_pct_pct) < 5 and abs(_pnl_pct_dec) > 0.04:
+L1436: _peak_dec = _peak_pnl_pct_pct / 100
+L1446: f"[S2 Catastrophic] 고점 {_peak_dec*100:+.1f}% → "
+L1447: f"{_cur_dec*100:+.1f}% "
+L1448: f"(하락 {_actual_dd*100:.1f}% vs ATR×{_cat_mult:.0f}="
+L1449: f"{_allowed_dd*100:.1f}%)")
+L1457: _so_min    = _cfg.get('exit.scale_out_min_pct',   30.0) / 100
+L1460: if _cur_dec >= _so_target and quantity >= 2:
+L1463: f"Scale-out 50%: {_cur_dec*100:+.1f}% ≥ "
+L1464: f"목표 {_so_target*100:.1f}% (ATR={_atr*100:.2f}%, "
+L1472: _trailing_trigger_pct = _cfg.get('s4.exit.trailing_tp_trigger', 15) / 100
+L1475: _min_drop = _cfg.get('s4.exit.trailing_drop_floor', 3) / 100
+L1476: _max_drop = _cfg.get('s4.exit.trailing_drop_ceil',  15) / 100
+L1482: f"ATR 샹들리에: {_cur_dec*100:+.1f}% "
+L1483: f"(고점 {_peak_dec*100:+.1f}% 대비 "
+L1484: f"-{(_peak_dec-_cur_dec)*100:.1f}%, "
+L1485: f"ATR×{_ch_mult:.1f}={_ch_drop*100:.1f}%)")
+L1544: _mins_rem = max(0.0, (_close_dt - _now).total_seconds() / 60.0)
+L1555: sell_reason = f"손절 {pnl_pct*100:+.1f}% (한도 {sl_pct*100:.1f}%)"
+L1598: else exit_cfg.get('sell_commission_pct', 0.00015)
+L1600: sell_reason = (f"부분 익절 {pnl_pct*100:+.1f}% "
+L1601: f"(순 ~{_net_pnl_est*100:+.1f}%, "
+L1602: f"{partial_pct*100:.0f}% 매도, "
+L1609: sell_reason = f"익절 {pnl_pct*100:+.1f}% (한도 {tp_pct*100:.0f}%)"
+L1632: f"₩{current_price:,.0f} ({trailing_drop*100:+.1f}%)")
+L1636: f"현재 ₩{current_price:,.0f} ({trailing_drop*100:+.1f}%)")
+L1687: sell_reason = (f"Tax-Loss Harvest: {pnl_pct*100:+.1f}% "
+L1688: f"(연말 손실 확정, 한도 {tlh_pct*100:.0f}%)")
+L1699: f"{pnl_pct*100:+.1f}% "
+L1749: 'pnl_pct': round(pnl_pct * 100, 2),
+L1874: _tax_rate = _cfg_sell.get('cost.tax_sell_pct', 0.18) / 100  # 0.18% → 0.0018
+L1909: dynamic_commission_rate = impact_bps / 10000.0
+L1921: pnl_pct = realized_pnl / cost_basis * 100 if cost_basis > 0 else 0
+L1989: _pos_stream, _pnl_ratio * 100,
+L2015: (pos.get('current_price', _pos_avg) / _pos_avg - 1) * 100, 2
+L2104: dynamic_commission_rate = impact_bps / 10000.0
+L2112: if self.data['cash'] < 200_000:
+L2115: quantity = max(1, int((self.data['cash'] - 1000) / (price * (1 + commission_rate))))
+L2326: total_return = (nav - initial) / initial * 100 if initial > 0 else 0
+L2336: daily_return = (nav - prev_nav) / prev_nav * 100 if prev_nav > 0 else 0
+L2352: 'drawdown_pct': round((nav - self.data['hwm']) / self.data['hwm'] * 100, 2)
+L2394: if _avg > 0 and _cur > 0 and abs(_cur - _avg) > _avg * 0.0001:
+L2438: if len(_conf_return_pairs) >= 5:
+L2462: std_c = math.sqrt(sum((c - mean_c) ** 2 for c in _confs) / n)
+L2463: std_r = math.sqrt(sum((r - mean_r) ** 2 for r in _rets) / n)
+L2478: if len(_close) >= 2:
+L2479: bench_ret = round((_close[-1] / _close[-2] - 1) * 100, 4)
+L2530: if len(records) >= 2:
+L2537: _calc_ret = (rec['nav'] - prev_rec['nav']) / prev_rec['nav'] * 100
+L2551: daily_returns_list[-1] = daily_return / 100.0
+L2553: daily_returns_list.append(daily_return / 100.0)  # pct → ratio
+L2597: win_rate = win_trades / n_sells * 100 if n_sells > 0 else 0
+L2604: 'total_return_pct': (nav - initial) / initial * 100 if initial > 0 else 0,
+L2611: 'drawdown_pct': (nav - self.data['hwm']) / self.data['hwm'] * 100
+L2660: score = 100.0
+L2665: score -= penalty_per_issue * 3  # 치명적 패널티
+L2686: score -= (zero_price_count / total_pos) * penalty_per_issue * 5
+L2687: score -= (extreme_move_count / total_pos) * penalty_per_issue * 2
+L2694: daily_pnl_pct = last_snap.get('daily_return_pct', 0.0) / 100.0
+L2698: score -= penalty_per_issue * 4
+
+--- src/report/data_aggregator.py ---
+L92: metrics['VIXCLS'] = 20.0
+
+--- src/report/pdf_generator.py ---
+L139: elements.append(Spacer(1, 4*inch))
+L152: elements.append(Spacer(1, 0.4*inch))
+L176: elements.append(Spacer(1, 0.3*inch))
+L198: elements.append(Spacer(1, 0.2*inch))
+L225: section_elements.append(Spacer(1, 0.05*inch))
+L235: elements.append(Spacer(1, 0.08*inch))
+L257: table_elements.append(Spacer(1, 0.005*inch))  # Almost no gap - title and table are one visual unit
+L292: available_width = 6.5 * inch  # A4 page width minus margins
+L303: width = min(max(0.7 * inch, max_len * 0.07 * inch), 3.0 * inch)
+L352: elements.append(Spacer(1, 0.20*inch))  # Increased gap after table
+L356: def add_chart(self, chart_path: str, width: float = 5.5*inch,
+L374: chart_elements.append(Spacer(1, 0.05*inch))
+L388: max_width = 6.5 * inch  # Page width minus margins
+L389: max_height = 4.0 * inch  # Reasonable max height
+L411: elements.append(Spacer(1, 0.15*inch))
+L432: section_elements.append(Spacer(1, 0.06*inch))
+L455: section_elements.append(Spacer(1, 0.06*inch))
+L459: elements.append(Spacer(1, 0.08*inch))
+L491: canvas.line(doc.leftMargin, A4[1] - 40, A4[0] - doc.rightMargin, A4[1] - 40)
+L496: canvas.drawString(doc.leftMargin, A4[1] - 32, "MERIDIAN INVESTMENT STRATEGY")
+L501: canvas.drawRightString(A4[0] - doc.rightMargin, A4[1] - 32, datetime.now().strftime('%Y-%m-%d'))
+L549: frame_cover = Frame(200, doc.bottomMargin, A4[0] - 250, A4[1] - 130, id='cover_frame')
+L596: section_elements.append(Spacer(1, 0.08*inch))
+L601: section_elements.append(Spacer(1, 0.05*inch))
+L616: section_elements.append(Spacer(1, 0.03*inch))
+L626: section_elements.append(Spacer(1, 0.05*inch))
+L636: section_elements.append(Spacer(1, 0.005*inch))
+L669: col_widths = [6.5*inch / len(headers)] * len(headers)
+L707: section_elements.append(Spacer(1, 0.05*inch))
+L713: section_elements.append(Spacer(1, 0.03*inch))
+L722: section_elements.append(Spacer(1, 0.06*inch))
+L728: story.append(Spacer(1, 0.10*inch))
+L742: section_elements.append(Spacer(1, 0.08*inch))
+L747: section_elements.append(Spacer(1, 0.05*inch))
+L755: section_elements.append(Spacer(1, 0.05*inch))
+L765: section_elements.append(Spacer(1, 0.005*inch))
+L798: col_widths = [6.5*inch / len(headers)] * len(headers)
+L836: section_elements.append(Spacer(1, 0.05*inch))
+L842: section_elements.append(Spacer(1, 0.03*inch))
+L851: section_elements.append(Spacer(1, 0.06*inch))
+L857: story.append(Spacer(1, 0.10*inch))
+L885: section_elements.append(Spacer(1, 0.05*inch))
+L902: section_elements.append(Spacer(1, 0.03*inch))
+L909: if i + 2 < len(sections) and sections[i + 2].get('type') == 'table':
+L910: table_section = sections[i + 2]
+L916: section_elements.append(Spacer(1, 0.05*inch))
+L943: col_widths = [6.5*inch / len(headers)] * len(headers)
+L968: sections_to_skip = 2
+L999: subheading_elements.append(Spacer(1, 0.03*inch))
+L1010: subheading_elements.append(Spacer(1, 0.05*inch))
+L1020: subheading_elements.append(Spacer(1, 0.005*inch))
+L1053: col_widths = [6.5*inch / len(headers)] * len(headers)
+L1091: subheading_elements.append(Spacer(1, 0.05*inch))
+L1097: subheading_elements.append(Spacer(1, 0.03*inch))
+L1106: subheading_elements.append(Spacer(1, 0.06*inch))
+L1113: story.append(Spacer(1, 0.10*inch))
+L1119: story.append(Spacer(1, 0.08*inch))
+L1140: box_elements.append(Spacer(1, 0.08*inch))
+L1145: story.append(Spacer(1, 0.15*inch))
+L1158: subsection_elements.append(Spacer(1, 0.05*inch))
+L1167: subsection_elements.append(Spacer(1, 0.04*inch))
+L1173: subsection_elements.append(Spacer(1, 0.04*inch))
+L1181: story.append(Spacer(1, 0.10*inch))
+L1199: scenario_elements.append(Spacer(1, 0.08*inch))
+L1208: scenario_elements.append(Spacer(1, 0.03*inch))
+L1212: scenario_elements.append(Spacer(1, 0.05*inch))
+L1215: scenario_elements.append(Spacer(1, 0.03*inch))
+L1220: scenario_elements.append(Spacer(1, 0.03*inch))
+L1224: story.append(Spacer(1, 0.15*inch))
+L1237: story.append(Spacer(1, 0.10*inch))
+L1249: story.append(Spacer(1, 0.08*inch))
+L1255: story.append(Spacer(1, 0.05*inch))
+L1260: story.append(Spacer(1, 0.03*inch))
+L1262: story.append(Spacer(1, 0.10*inch))
+L1268: story.append(Spacer(1, 0.15*inch))
+L1270: story.append(Spacer(1, 0.10*inch))
+L1272: story.append(Spacer(1, 0.05*inch))
+L1280: story.append(Spacer(1, 0.10*inch))
+
+--- src/report/ultimate_pdf_generator.py ---
+L76: self.styles['CustomSubheading'].fontSize = 14
+L77: self.styles['CustomSubheading'].spaceBefore = 15
+L78: self.styles['CustomSubheading'].spaceAfter = 8
+L82: self.styles['CustomBody'].fontSize = 11
+L83: self.styles['CustomBody'].leading = 16
+
+--- src/report/chart_generator.py ---
+L364: if isinstance(confidence_interval, tuple) and len(confidence_interval) == 2:
+
+--- src/data/orderbook_monitor.py ---
+L49: _HISTORY_LEN = 30
+L161: bid = vol * (0.5 + min(0.4, max(-0.4, ratio)))
+L193: if len(hist) < 2:
+L202: if len(recent) < 2:
+L266: vix_avg = 18.0
+L475: if len(hist) >= 2:
+L481: if len(recent) >= 2:
+
+--- src/data/feature_store_manager.py ---
+L90: if len(d.name) == 8:
+L92: elif len(d.name) == 11:
+L126: if len(d.name) == 8:
+L128: elif len(d.name) == 11:
+
+--- src/data/us_market_data.py ---
+L51: _CACHE_TTL_HOURS = 4
+L112: if df is not None and len(df) >= 20:
+L118: if df is not None and len(df) >= 5:
+L152: if df is None or len(df) < 20:
+L160: ma200 = float(close.tail(200).mean()) if len(close) >= 200 else float(close.mean())
+L176: if vix_df is not None and len(vix_df) >= 20:
+L179: vix_ma60    = float(vix_series.tail(60).mean()) if len(vix_series) >= 60 else float(vix_series.mean())
+L188: vix_current = 18.0
+L189: vix_ma60    = 18.0
+L192: vix_block_ratio = 1.3
+L199: 'regime':       'FEAR' if vix_current > 30 else ('CAUTION' if vix_current > 20 else 'NORMAL'),
+L226: df = self.get_ohlcv(ticker, days=days + 10)
+L255: return df.tail(days + 30)
+L264: period = f'{min(days + 30, 365 * 3)}d'
+L283: ret = (float(close.iloc[-1]) / float(close.iloc[-periods - 1]) - 1) * 100
+L292: vol  = float(rets.std() * (252 ** 0.5) * 100)
+
+--- src/data/alternative_data_bridge.py ---
+L29: seed = sum(ord(c) for c in ticker) % 10
+L32: elif seed == 9:
+L36: return 0.4 + (seed / 45.0)
+
+--- src/data/market_data_bridge.py ---
+L49: raise DataIntegrityError(f"[{name} Sanity Fail] 비정상적 폭등/폭락 감지. (Prev: {previous:.2f} -> Curr: {current:.2f}, 변동률: {pct_change*100:.1f}% > 제한: {max_pct_change*100:.1f}%)")
+L219: if cached_kospi and cached_kospi > 1000:
+L253: if cached_kospi and cached_kospi > 1000:
+L395: result['sox_change_pct'] = result['nasdaq_change_pct'] * 1.2
+L398: avg = (result['sp500_change'] + result['nasdaq_change']) / 2
+L401: elif avg > 0.3:
+L434: if df is None or len(df) < 20:
+L447: ) if len(close) >= 5 else 0.0,
+L446: (close.iloc[-1] / close.iloc[-5] - 1) * 100
+L450: ) if len(close) >= 20 else 0.0,
+L449: (close.iloc[-1] / close.iloc[-20] - 1) * 100
+L522: if file_age <= 2:  # [Phase 84] 48시간 유효기간
+L579: if age_days > 3:
+L582: long_term_mean = 20.0
+L583: decay_factor = min(1.0, (age_days - 3) / 10.0)  # 10일 후 완전 회귀
+L618: val = val / 10.0
+L620: val = val / 20.0
+L690: if age_days <= 3:
+L697: if file_age <= 2:
+L749: val = float(df['종가'].iloc[-1]) / 100.0
+L779: if len(fx_series) >= 2:
+L812: if age_days > 3:
+L815: long_term_mean = 1300.0
+L816: decay_factor = min(1.0, (age_days - 3) / 10.0)
+L861: if age_days > 3:
+L925: kospi_ratio = 63.4  # KOSPI 8800 / KODEX200 138730 ≈ 63.4
+L945: if file_age <= 2:
+L991: if 'close' in df.columns and len(df) >= 5:
+L1000: if close is None or len(close) < 5:
+L1007: ) if n >= 5 else 0.0
+L1006: (close.iloc[-1] / close.iloc[-min(21, n)] - 1) * 100
+L1010: ) if n >= 21 else 0.0
+L1009: (close.iloc[-1] / close.iloc[-min(63, n)] - 1) * 100
+L1013: ) if n >= 63 else 0.0
+L1012: (close.iloc[-1] / close.iloc[-min(126, n)] - 1) * 100
+L1059: if df is None or len(df) < 20:
+L1082: if len(df) >= 2:
+L1084: (df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100
+L1130: rsi = 100 - (100 / (1 + rs))
+L1137: upper = ma + 2 * std
+L1138: lower = ma - 2 * std
+L1218: _NQ_CACHE_TTL_SEC = 30 * 60  # 30분 TTL
+L1281: if len(_closes) >= 2:
+L1284: _chg1   = (_latest / _prev - 1) * 100 if _prev > 0 else 0.0
+L1286: if len(_closes) >= 6:
+L1288: _chg5 = (_latest / _c5 - 1) * 100 if _c5 > 0 else 0.0
+
+--- src/data/crypto_data_bridge.py ---
+L39: _CACHE_TTL_MINUTES = 30
+L177: f'funding={funding_rate*100:.4f}%, '
+L178: f'bid-ask spread={(ask-bid)/price*100:.4f}%'
+L256: if rate > 1000:
+L274: if rate > 1000:
+L329: kimchi_pct = (btc_krw / btc_krw_from_usd - 1) * 100
+L335: funding_annualized = funding_rate * 3 * 365 * 100  # %
+L339: (binance['ask'] - binance['bid']) / binance['price'] * 100
+L343: (upbit['ask'] - upbit['bid']) / upbit['price'] * 100
+L364: f'펀딩비: {funding_rate*100:+.4f}% '
+L389: if len(history) >= days * 3:
+L390: return history[-(days * 3):]
+L401: (datetime.now() - timedelta(days=days + 2)).timestamp() * 1000
+L404: 'BTC/USDT', since=since_ms, limit=days * 4
+L410: return rates[-(days * 3):]
+L413: return history or [0.0] * (days * 3)
+L452: MAX_HISTORY = 2160  # 90일 × 24 (1시간 단위 최대)
+
+--- src/data/mock_market_data.py ---
+L113: hyg_ret = hyg_c.pct_change().rolling(20).std() * np.sqrt(252) * 100
+L114: ief_ret = ief_c.pct_change().rolling(20).std() * np.sqrt(252) * 100
+L218: vix = 18.0
+L224: ['cross_vkospi', 'kr_vkospi'], d, default=vix * 0.9)
+L232: if usdkrw < 200:   # DXY 범위(80~130)이면 보정
+L233: usdkrw = usdkrw * 10.0
+L239: if signal['usdkrw_prev'] < 200:
+L240: signal['usdkrw_prev'] = round(signal['usdkrw_prev'] * 10.0, 2)
+L252: if kospi_series is not None and len(kospi_series) >= 20:
+L261: (kospi / max(kospi_prev, 1) - 1) * 100, 4) if kospi_prev else 0.0
+L266: ois = round(100.0 * (1.0 - max(0.0, min(1.0, (vix - 10.0) / 40.0))), 1)
+L272: if vix_series is not None and len(vix_series) >= 20:
+L279: us10y = 4.0
+L293: us2y = 4.2 # Default slightly inverted
+L309: signal['foreign_net_buy'] = round(kospi_chg * 2000.0, 2)
+L310: signal['foreign_net_buy_20d_avg'] = 500.0
+L316: if len(hist) > 20:
+L317: z = (us10y - hist.mean()) / (hist.std() + 1e-6)
+L325: hy_spread = 4.0
+L341: if len(hist) > 20:
+L342: z = (hy_spread - hist.mean()) / (hist.std() + 1e-6)
+L454: return round((curr / prev - 1) * 100, 4)
+L460: sox_chg = round(nasdaq_chg * 1.2, 4)
+L462: avg = (sp500_chg + nasdaq_chg) / 2
+L465: elif avg > 0.3:
+L510: if df is None or len(df) < 20:
+L522: ) if len(close) >= 5 else 0.0,
+L521: (close.iloc[-1] / close.iloc[-5] - 1) * 100
+L525: ) if len(close) >= 20 else 0.0,
+L524: (close.iloc[-1] / close.iloc[-20] - 1) * 100
+L544: ['cross_vix', 'us_us_vix'], d, days=days + 5)
+L549: ['cross_kospi', 'kr_069500_features', '069500', 'cross_us10y'], d, days=days + 5)
+L571: chg = round((curr / prev - 1) * 100, 4)
+L634: return [2.5 + 2.5 * math.sin((ts - i) / 5.0) for i in range(days)]
+L721: start   = cutoff - pd.Timedelta(days=days + 30)
+L753: start  = cutoff - pd.Timedelta(days=days + 30)
+L762: if len(series) >= 2:
+L770: if prev.weekday() < 5:   # 월~금
+L787: rsi = 100 - (100 / (1 + rs))
+L801: pos = (close - (ma - 2 * std)) / (4 * std.replace(0, float('nan')))
+
+--- src/risk/exposure_orchestrator.py ---
+L80: if len(nav_arr) < 2:
+L88: if n < 2:
+L97: if min_len < 3:
+L101: sa  = _math.sqrt(sum((x-ma)**2 for x in a) / max(min_len-1, 1))
+L102: sb  = _math.sqrt(sum((x-mb)**2 for x in b) / max(min_len-1, 1))
+L103: return cov / (sa * sb) if sa * sb > 1e-12 else 0.0
+L124: total_pairs = max(n * (n-1) / 2, 1)
+L247: if fg >= 85:
+L249: elif fg >= 70:
+L251: elif fg >= 30:
+L253: elif fg >= 15:
+L258: if fg >= 80 or fg <= 20:
+L268: if vkospi >= 35:
+L270: elif vkospi >= 25:
+L272: elif vkospi >= 18:
+L366: if sigma_adj < 0.9:
+L620: if ois >= 70:
+L622: elif ois >= 45:
+L624: elif ois >= 25:
+L768: reason=f'변동 {abs(diff)/max(current_hedge_amount,1)*100:.0f}% < 허용 {tolerance*100:.0f}%')
+L783: f"  🛡️ β헤지: long=₩{long_exposure/1e6:.0f}M → "
+L785: f"₩{position_amount/1e6:.1f}M ({action})")
+L898: result['vix'] = 18.0
+L940: if len(navs) < 2:
+L949: dd_pct = ((current_nav - peak_nav) / peak_nav) * 100.0
+L968: if len(snapshots) < 3:
+L978: if len(navs) < 3:
+L989: if len(returns) < 2:
+
+--- src/risk/drawdown_guard.py ---
+L63: total_dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
+L92: f"({_default_ratio*100:.0f}% of NAV={sleeve_a_nav:,.0f}) "
+L98: sleeve_a_dd = (sleeve_a_nav / sleeve_a_hwm - 1) * 100 if sleeve_a_hwm and sleeve_a_hwm > 0 else 0
+L112: from_initial_dd = (total_nav / initial_capital - 1) * 100
+L143: pct = cfg.get(f'dd_guard.stage{i}_pct', -(i * 5) / 100)
+L144: exp = cfg.get(f'dd_guard.stage{i}_exp', max(0, 1.0 - i * 0.2))
+L145: stages.append((i, pct * 100, exp))  # pct는 소수 → 퍼센트로
+L160: if current_stage >= 6:
+L168: elif current_stage >= 5:
+L171: elif current_stage >= 3:
+L174: elif current_stage == 2:
+
+--- src/risk/stream_correlation.py ---
+L59: if len(self._stream_returns[stream_id]) > 60:
+L66: if min_obs < 10:
+L89: if abs(corr) > 0.6:
+L147: inv_corr = [1.0 / (0.1 + c) for c in avg_corr]
+L211: if len(positions) < 3:
+L241: if len(returns_data) < 3:
+
+--- src/risk/cvar_optimizer.py ---
+L54: if n < 10:
+L70: tail_ratio = abs(cvar_pct / var_pct) if abs(var_pct) > 1e-8 else 1.0
+L135: (best_cvar - current_cvar.get('cvar_pct', 0)) * 100, 2),
+L147: epsilon = 0.01
+L176: round(c / total * 100, 2) if abs(total) > 1e-8 else 0
+
+--- src/risk/correlation_decay.py ---
+L87: if len(streams) < 2:
+L103: if n < 5:
+L135: if n < 2:
+L140: std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
+L141: std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y) / n)
+L173: if len(streams) < 2:
+L188: if len(rets) >= 10:
+L191: if len(all_returns) < 2:
+L205: var_t = sum(r ** 2 for r in rets[:5]) / 5  # 초기값
+L209: var_t = omega + alpha * r ** 2 + beta * var_t
+
+--- src/risk/kelly_criterion.py ---
+L146: 'note': f'데이터 부족 ({n_trades}/{min_trades}건) → 기본값 {default_pct*100:.0f}%',
+L187: 'avg_win_pct': round(avg_win * 100, 2),
+L188: 'avg_loss_pct': round(avg_loss * 100, 2),
+L222: w = min(result['n_trades'], 100) / 100
+L297: stats['avg_win'] = abs(avg_win_pct) / 100.0
+L299: stats['avg_loss'] = abs(avg_loss_pct) / 100.0
+L314: stats['avg_win'] = abs(avg_w) / 100.0
+L316: stats['avg_loss'] = abs(avg_l) / 100.0
+L329: f"portfolio={output['portfolio_kelly']*100:.1f}%")
+
+--- src/risk/factor_risk.py ---
+L97: if port_returns is None or len(port_returns) < 20:
+L124: ss_res = np.sum(epsilon ** 2)
+L125: ss_tot = np.sum((Y - np.mean(Y)) ** 2)
+L129: total_var = np.var(Y) * 252  # 연율
+L135: sys_var = factor_betas @ factor_cov @ factor_betas * 252
+L136: idio_var = np.var(epsilon) * 252
+L145: f_var = factor_betas[i] ** 2 * np.var(X[:, i]) * 252
+L146: f_contrib = f_var / total_var * 100 if total_var > 0 else 0
+L160: 'alpha_annual': round(float(alpha * 252), 4),
+L162: sys_var / total_var * 100) if total_var > 0 else 0, 1),
+L164: idio_var / total_var * 100) if total_var > 0 else 0, 1),
+L188: returns = [d.get('daily_return_pct', 0) / 100
+L198: if len(snaps) >= 2:
+L272: if len(tickers) < 10:
+L288: if len(all_returns) < 10:
+
+--- src/risk/leverage_judge.py ---
+L82: if len(daily_returns) >= 5:
+L84: var = sum((r - mean_r) ** 2 for r in daily_returns) / len(daily_returns)
+L86: var_pct = std * 1.645 * 100  # 95% VaR
+L137: leverage = 3
+L144: elif leverage < 2:
+L155: leverage = 2
+L189: if leverage >= 3:
+L191: elif leverage >= 2:
+L249: dynamic_max_hold = max(1, int(base_max_hold * (10.0 / max(vix, 10.0))))
+L282: pnl_pct = (current_price / entry_price - 1) * 100
+L283: drawdown_from_hwm = ((state['hwm'] - current_price) / state['hwm'] * 100) if state['hwm'] > 0 else 0
+L301: atr_pct = 0.02  # Fallback 2%
+L303: dynamic_hard_sl = -abs(atr_pct * 100 * atr_sl_mult)
+L306: dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)
+L312: urgency = 3
+L316: urgency = 2
+L320: urgency = 3
+L324: urgency = 2
+
+--- src/risk/chaos_tester.py ---
+L151: 'cash': crashed_nav * 0.30,  # 30% 현금 가정
+L165: f"({-nav_drop_pct * 100:.1f}% 폭락)"
+L208: elapsed_ms = (time.perf_counter() - t0) * 1000
+L247: elapsed_ms = (time.perf_counter() - t0) * 1000
+L292: elapsed_ms = (time.perf_counter() - t0) * 1000
+L312: exposure_scale = 0.2
+L347: elapsed_ms = (time.perf_counter() - t0) * 1000
+L374: elapsed_ms = (time.perf_counter() - t0) * 1000
+L391: dd_stage >= 2
+L425: elapsed_ms = (time.perf_counter() - t0) * 1000
+L476: initial_nav = 154_000_000  # 절대 fallback (DynamicConfig 완전 실패 시만)
+L484: scenario=f'NAV -{nav_drop_pct * 100:.0f}% 폭락 (regime={regime})',
+
+--- src/risk/stream_risk_manager.py ---
+L105: dd = (cum - peak) * 100
+L109: today_return = returns[-1] * 100 if returns else 0
+L121: if len(returns) >= 10:
+L123: var = sum((r - mean_r) ** 2 for r in returns) / len(returns)
+L125: var_pct = std * 1.645 * 100
+L128: 'current_exposure_pct': round(total_size * 100, 2),
+L129: 'max_single_position_pct': round(max_single * 100, 2),
+L162: max_exp = limits.get('max_exposure_pct', 0.30) * 100
+L170: max_single = limits.get('max_single_position', 0.10) * 100
+
+--- src/risk/crash_defense.py ---
+L55: vix_change = ((vix / vix_prev) - 1) * 100 if vix_prev > 0 else 0
+L60: fx_change = ((usdkrw / usdkrw_prev) - 1) * 100 if usdkrw_prev > 0 else 0
+L154: inverse_pct = cfg.get('leverage.inverse_max_pct', 0.20) * 0.5
+
+--- src/risk/kill_switch.py ---
+L156: if len(snap_dates) >= 2:
+L166: if len(_dr_dates) >= 2:
+L183: gap_trading_days = int(gap_calendar_days * 5 / 7)
+L190: f"(갭 기간 수익률 {daily_returns[-1]*100:.2f}% 제외)"
+L201: 'excluded_return_pct': round(daily_returns[-1] * 100, 4),
+L256: elapsed_h = (now - last_sent).total_seconds() / 3600
+L263: remaining = f' (재발송까지 {rem_sec//3600}h {(rem_sec%3600)//60}m)'
+L354: dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
+L356: week_returns = daily_returns[-5:] if len(daily_returns) >= 5 else daily_returns
+L366: 'today_return_pct': round(today_return * 100, 4),
+L369: 'weekly_return_pct': round(weekly_return * 100, 4),
+L370: 'monthly_return_pct': round(monthly_return * 100, 4),
+L372: 'monthly_dynamic_limit_pct': round(monthly_limit * 100, 2),
+L492: max_relaxation = 0.15 # 기본 -25% -> 최대 -40%까지 확장
+L495: dd_kill_pct = dynamic_dd_kill_pct * 100
+L534: if monthly_ret <= monthly_limit and metrics.get('monthly_trading_days', 0) >= 3:
+L597: scores['regime'] = 0.7
+L599: scores['regime'] = 0.3
+L618: scores['ois'] = 1.0 if ois > 55 else 0.6 if ois > 45 else 0.0
+L628: good = [k for k, v in scores.items() if v >= 0.6]
+L633: weak = [k for k, v in scores.items() if v < 0.6]
+L683: daily_vol = 0.015  # KOSPI 평균 1.5% 일별 변동성
+L825: _dr.append(_ret / 100.0 if abs(_ret) > 1 else _ret)
+L914: f"\n{'='*60}\n"
+L919: f"{'='*60}"
+
+--- src/risk/liquidity_monitor.py ---
+L43: DEFAULT_PARTICIPATION_RATE = 0.10  # 일 거래량의 10%까지 참여
+L81: if days_to_liq < 100 else 0.0)
+L98: t for t, r in results.items() if r['liquidity_score'] < 0.5],
+L131: if days > 5:
+L137: elif pos_data.get('liquidity_score', 1) < 0.3:
+L144: tradeable = portfolio_liq > 0.3
+L188: est_price = order_amount / max(adv * 0.01, 1)  # 대략적 가격
+L195: impact_pct = 0.1 * math.sqrt(participation) * 100
+L223: base_bps = 5.0
+L225: base_bps = 2.0  # ETF는 기본 호가 스프레드가 얇음
+L242: market_impact = 250.0 * math.pow(participation_rate, 1.5)
+
+--- src/risk/transfer_entropy.py ---
+L46: counts = np.bincount(joint, minlength=n_bins**2)
+L72: if min_len < 20:
+L116: std = np.where(std < 1e-9, 1e-9, std)
+L144: mid = len(items) // 2
+L148: total = lvar + rvar if (lvar + rvar) > 1e-9 else 1.0
+L222: cov = np.cov(R.T) if min_l > 5 else np.eye(n)
+L226: te_penalty = 1.0 + te_risk / (te_risk.max() + 1e-9) * 0.20
+L233: dist = np.sqrt(np.clip((1.0 - corr) / 2.0, 0, 1))
+L246: stds = np.where(stds < 1e-9, 1e-9, stds)
+L272: if len(streams) < 2:
+
+--- src/risk/realtime_var.py ---
+L92: if _w_sum > 1e-10:
+L111: alpha_pct = (1 - confidence) * 100
+L137: 'var_pct': round(abs(var_pct) * 100, 3),
+L139: 'cvar_pct': round(abs(cvar_pct) * 100, 3),
+L141: 'parametric_var_pct': round(abs(parametric_var) * 100, 3),
+L142: 'cornish_fisher_var_pct': round(abs(cf_var) * 100, 3),
+L143: 'ewma_vol_daily_pct': round(ewma_vol_daily * 100, 3),
+L144: 'ewma_vol_annual_pct': round(ewma_vol_annual * 100, 1),
+L150: float(port_returns.std()) * np.sqrt(252) * 100, 2),
+L198: alpha_pct = (1 - confidence) * 100
+L216: 'var_pct': round(abs(var_pct) * 100, 3),
+L218: 'cvar_pct': round(abs(cvar_pct) * 100, 3),
+L220: 'ewma_vol_daily_pct': round(ewma_vol_daily * 100, 3),
+L221: 'ewma_vol_annual_pct': round(ewma_vol_annual * 100, 1),
+L225: 'within_limit': round(abs(var_pct) * 100, 3) <= dynamic_limit_pct,
+L254: 'var_pct': round(var_pct * 100, 3),
+L256: 'cvar_pct': round(var_pct * _cvar_ratio * 100, 3),
+L260: 'within_limit': round(var_pct * 100, 3) <= dynamic_limit,
+L331: alpha_pct = (1 - confidence) * 100
+L337: 'mc_var_pct': round(abs(mc_var) * 100, 3),
+L338: 'mc_cvar_pct': round(abs(mc_cvar) * 100, 3),
+L362: if len(returns) < 2:
+L366: _ewma_init_days = min(_cfg_get('risk.ewma_init_days', 10), max(1, len(returns) // 2))
+L382: s = float(skew(returns, bias=False)) if len(returns) > 3 else 0.0
+L383: k = float(kurtosis(returns, bias=False)) if len(returns) > 3 else 0.0
+L386: z_cf = (z + (z**2 - 1) * s / 6
+L387: + (z**3 - 3*z) * k / 24
+L388: - (2*z**3 - 5*z) * s**2 / 36)
+L415: base_limit = daily_target_vol * z * 100  # % 단위
+
+--- src/risk/tail_risk_hedger.py ---
+L88: 'risk_score':   int(_crisis_p * 100),
+L89: 'risk_level':   self._risk_level(int(_crisis_p * 100)),
+L135: hedge_cost = round(hedge_amount * cost_bps / 10000)
+L139: hedge_amount * abs(instrument['beta']) * 0.10)
+L156: if score >= 70:
+L158: elif score >= 50:
+L160: elif score >= 30:
+
+--- src/risk/intraday_regime.py ---
+L79: ret = price_change_pct / 100.0
+L104: if len(self._returns_buffer) < 3:
+L113: var_r = sum((r - mean_r) ** 2 for r in recent) / len(recent)
+L119: 0, self._cusum_pos + last_return - self._baseline_vol * 0.5)
+L121: 0, self._cusum_neg - last_return - self._baseline_vol * 0.5)
+L139: realized_vol * math.sqrt(252 * 78), 4),  # 78 = 5분봉/일
+L241: mid = len(recent) // 2
+
+--- src/risk/gap_risk_filter.py ---
+L108: if len(df) < 2:
+L150: gap_risk_score = gap_freq * gap_severity * 100.0
+L301: if -1 <= delta <= 2:
+
+--- src/risk/portfolio_risk_budget.py ---
+L97: if abs(daily_loss_limit) > 1e-10:
+L99: utilization_pct = (min(realized_pnl, 0.0) / daily_loss_limit) * 100.0
+L105: _tol = max(abs(daily_loss_limit) * 1e-9, 1.0)  # 1원 또는 0.0000001% 중 큰 쪽
+L172: current_pct = exposure / nav if nav > 1e-10 else 0.0
+L181: stream_id, current_pct * 100, max_stream_pct * 100
+L306: if n_days < 10:
+L322: variance = sum((r - mean_ret) ** 2 for r in clean_returns) / max(n_days - 1, 1)
+L334: realized_vol * 100, target_vol * 100, vol_ratio, scale
+L402: var_pct = (var_amount / nav * 100) if nav > 1e-10 else 0.0
+L470: if utilization >= 80.0:
+L472: daily_scale = max(0.0, (100.0 - utilization) / 20.0)
+
+--- src/risk/beta_hedge.py ---
+L97: alpha_pct = (port_cum - beta * bench_cum) * 100
+L102: 'alpha_annual_pct': round(alpha * 252 * 100, 2),
+L106: 'total_return_pct': round(port_cum * 100, 4),
+L107: 'market_component_pct': round(beta * bench_cum * 100, 4),
+L119: f"α={alpha * 252 * 100:+.2f}%/yr")
+L143: ret = snap.get('daily_return_pct', 0) / 100.0
+L144: if abs(ret) < 1e-8 and prev_nav > 0:
+L146: if abs(ret) > 1e-8:
+L153: return [r.get('return_pct', 0) / 100.0 for r in records
+L154: if abs(r.get('return_pct', 0)) > 1e-6]
+L161: start = (now_kst() - timedelta(days=n_days * 3)).strftime('%Y%m%d')
+L164: if len(df) < 2:
+L188: ss_xx = sum((x[i] - x_mean) ** 2 for i in range(n))
+L189: ss_yy = sum((y[i] - y_mean) ** 2 for i in range(n))
+L193: r_sq = (ss_xy ** 2) / (ss_xx * ss_yy) if ss_xx > 0 and ss_yy > 0 else 0
+L217: if crash_prob > 0.15:
+L220: elif regime == 'bull' and bull_prob > 0.6:
+L221: target_beta = 0.2 # 약간의 베타 노출 허용 (수익 극대화)
+L264: hedge_2x = nav * beta_diff / 2  # 인버스 2x 필요 금액
+L276: 'pct_of_nav': round(hedge_1x / nav * 100, 1) if nav > 0 else 0,
+L282: 'pct_of_nav': round(hedge_2x / nav * 100, 1) if nav > 0 else 0,
+
+--- src/risk/drift_guard.py ---
+L69: zero_ratio = float(np.sum(np.abs(valid) < 1e-10)) / len(valid)
+L90: if reference_features is None or len(current_features) < 20:
+L114: if len(cur_valid) == 0 or np.std(cur_valid) < 1e-10:
+L150: retrain_needed = n_critical >= 3 and mean_psi > 0.15
+L235: eps = 1e-6
+
+--- src/risk/regime_estimator.py ---
+L64: _N_STATES = 2
+L119: _crisis_p = float(_p1 / (_p0 + _p1 + 1e-12))
+L121: _crisis_p = float(_p0 / (_p0 + _p1 + 1e-12))
+L131: return float(_p_crisis / (_p_calm + _p_crisis + 1e-12))
+L163: if len(_raw) < 30:
+L180: _crisis_p = min(1.0, max(0.0, (_filtered_vix - self._vix_fallback) / 20.0))
+
+--- src/risk/medallion_orchestrator.py ---
+L66: self.max_sector_per_stream = 2  # 단일 스트림 내 같은 섹터 최대 2종목
+L67: self.max_sector_global = 4      # 전체 포트폴리오 같은 섹터 최대 4종목
+L68: self.max_single_pct = 0.15
+L69: self.min_sectors = 3
+L70: self.fg_greed_threshold = 70
+L71: self.fg_extreme_greed = 85
+L128: if corr_check.get('max_correlation', 0) > 0.8:
+L199: if ev is not None and ev < 0.003:
+L205: elif prob < 0.50:
+L231: dynamic_sl = -1 * (atr_pct * 100 * sl_mult)
+
+--- src/regime/transition_signal.py ---
+L218: if len(returns) < 10:
+L300: vix_scalar = max(0.5, min(1.0, 20.0 / current_vix)) if current_vix > 0 else 1.0
+L322: inverse_vix_scalar = max(1.0, current_vix / 20.0) if current_vix > 0 else 1.0
+L330: 'trigger_rebalance': breakdown_score > threshold * 1.5,
+L360: data['vix_history'] = [float(vix)] * 60
+
+--- src/regime/regime_detector.py ---
+L232: if n_states == 4:
+L268: data_confidence_score = 100.0 - (missing_count * 25.0)
+L270: if data_confidence_score < 75.0:
+L325: confidence = 0.5
+L329: confidence = 0.5
+L401: if vix_history_clean and len(vix_history_clean) >= 5:
+L420: if vol_clean and len(vol_clean) >= 20:
+L426: if vol_std > 1e-9:
+L448: fear_score = (pcr_score + vkospi_score) / 2.0
+L491: score = 50.0
+L495: if vix_history and len(vix_history) >= 20:
+L497: if len(vix_history_clean) >= 20:
+L525: if vkospi_history and len(vkospi_history) >= 20:
+L527: if len(vkospi_clean) >= 20:
+L554: fx_change = (usdkrw - usdkrw_prev) / usdkrw_prev * 100 if usdkrw_prev > 0 else 0
+L594: pcr_risk_th = max(1.1, pcr_extreme_th - 0.2) # 리스크 구간은 Extreme보다 살짝 낮게 유동적 설정
+L608: score -= pcr_risk_penalty * 2
+L620: if trend_ratio < 0.95: # -5% 이탈 (Crash 강제)
+L624: elif trend_ratio < 0.97: # -3% 이탈 (Bear 강제)
+L627: elif trend_ratio < 0.99: # -1% 이탈 (Caution)
+L629: elif trend_ratio > 1.02: # +2% 상승 (Bull)
+L635: if len(kospi_rets) >= 10:
+L638: cum_ret_10d = sum(recent_10) * 100 # 대략적 누적 수익률(%)
+L640: if neg_count >= 8 or cum_ret_10d < -6.0:
+L645: elif neg_count >= 6 or cum_ret_10d < -3.0:
+L656: if export_yoy < -5.0 or macro_cycle in ('Recession', 'Downturn') or argus_scitech < 0.4:
+L686: ois_stress = max(0.0, min(1.0, (50 - ois) / 30))  # ois 50 -> 0, ois 20 -> 1.0
+L687: fx_stress = max(0.0, min(1.0, fx_change / 2.0))   # fx_change 0% -> 0, 2% -> 1.0
+L688: vix_stress = max(0.0, min(1.0, (vix - 18) / 17))  # vix 18 -> 0, 35 -> 1.0
+L690: cross_asset_stress = (ois_stress * 0.4) + (fx_stress * 0.4) + (vix_stress * 0.2)
+L696: leading_macro_bad = (ois < 40) or (bok_rate < 0.4) or (semi_cycle < 0.4)
+L701: lagging_macro_bad = (export_yoy < -2.0) or (macro_inflation > 0.7) or (argus_scitech < 0.5)
+L714: prob_recession = 0.6 + (cross_asset_stress * 0.4)
+L715: prob_flash_crash = max(0.0, 0.2 - cross_asset_stress)
+L718: if cross_asset_stress < 0.3 and not leading_macro_bad:
+L719: prob_flash_crash = 0.8
+L720: prob_recession = 0.1
+L721: elif cross_asset_stress > 0.6 or leading_macro_bad:
+L722: prob_recession = 0.7 + (cross_asset_stress * 0.3)
+L723: prob_flash_crash = 0.1
+L725: prob_flash_crash = 0.4
+L726: prob_recession = 0.4
+L729: prob_liquidity_rally = 0.7
+L731: prob_recovery = 0.7
+L752: confidence = abs(score - 50) / 50
+L796: if not hasattr(self, '_hmm_predictor') or not hasattr(self, '_hmm_last_n') or n - self._hmm_last_n > 20:
+L843: mid = window // 2
+L854: strength = round(abs(delta) / 3.0, 3)  # 0~1 정규화
+L905: regime_scores['bull'] += (gi_weight/2) * gi['confidence']
+L906: regime_scores['caution'] += (gi_weight/2) * gi['confidence']
+L1006: if len(kospi_rets) >= 20:
+L1007: z_kospi = np.mean(kospi_rets[-20:]) / (np.std(kospi_rets[-20:]) + 1e-6)
+L1010: z_kospi = kospi_1d / 1.5 # 1.5%를 1표준편차로 가정
+L1017: z_hy = max(-3.0, min(3.0, (hy_spread - 4.0) / 1.5))
+L1025: z_us10y = max(-3.0, min(3.0, (us10y - 4.0) / 0.5))
+L1029: z_ois = -(ois - 50.0) / 20.0
+L1049: distance = np.sqrt(delta_g**2 + delta_i**2)
+L1050: confidence = min(1.0, distance / 2.0)
+
+--- src/regime/hmm_regime_model.py ---
+L26: def __init__(self, n_components: int = 4, lookback_days: int = 252 * 5):
+
+--- src/allocation/dedup_policy.py ---
+L277: qvm_bonus = 1.0 + min(0.3, qvm / 100.0 * 0.3)
+
+--- src/allocation/pnl_attribution.py ---
+L96: 'total_return_pct': round(total_return * 100, 4),
+L117: f"total={total_return * 100:.2f}%, "
+L166: if n >= 5:
+L167: var = sum((r - daily_avg) ** 2 for r in daily_returns[-20:]) / min(n, 20)
+L233: 'allocation_effect': round(alloc * 100, 4),
+L234: 'selection_effect': round(select * 100, 4),
+L235: 'interaction_effect': round(interact * 100, 4),
+L236: 'total_effect': round((alloc + select + interact) * 100, 4),
+L245: 'total_allocation': round(total_alloc * 100, 4),
+L246: 'total_selection': round(total_select * 100, 4),
+L247: 'total_interaction': round(total_interact * 100, 4),
+
+--- src/allocation/portfolio_optimizer.py ---
+L180: hours_since = (now - last_rebalance).total_seconds() / 3600
+L411: expected_alphas[sid] = (alpha_annual_pct / 100.0) / 252.0
+L598: if len(returns_list) < 2:
+L829: if cash_ratio > target_cash + 0.05:
+
+--- src/allocation/capital_allocator.py ---
+L45: kelly = edge * 0.5
+
+--- src/allocation/correlation_monitor.py ---
+L87: 'level': 'critical' if abs_corr > 0.80 else 'warning',
+L114: if len(self._history) > 120:
+L153: penalties[sid_i] += corr * penalty_rate * 0.5
+L154: penalties[sid_j] += corr * penalty_rate * 0.5
+L166: if n < 5:
+L175: std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
+L176: std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y) / n)
+
+--- src/allocation/macro_attacker.py ---
+L27: self.ewma_span = 20
+L31: df = self.krx.get_stock_ohlcv_range(ticker, days=days * 2)
+L49: if len(df) < 10:
+
+--- src/allocation/rebalance_engine.py ---
+L232: entry_threshold = np.percentile(score_values, entry_pctl) if n >= 3 else 0.5
+L233: exit_threshold = np.percentile(score_values, exit_pctl) if n >= 3 else 0.3
+L274: score_values, max(exit_pctl - 15, 5)) if n >= 3 else 0.2
+L474: conf_score = (confidence - 0.5) * 2  # 0.5→0, 0.8→0.6, 1.0→1.0
+L512: if not returns or len(returns) < 5:
+L551: scale = 0.10
+L562: if not returns or len(returns) < 10:
+L579: normalized = max(-1.0, min(1.0, ir / 2.0))
+L588: if not returns or len(returns) < 5:
+L602: if len(self._returns_cache) > 3:
+L628: _maxsize = 200
+L642: start = (date.today() - timedelta(days=lookback * 2)).strftime('%Y%m%d')
+
+--- src/allocation/risk_parity.py ---
+L65: if current_aum > 1000e8:     # 1000억 이상 (강력한 마찰 방지)
+L66: base_penalty = 0.15
+L67: elif current_aum > 100e8:    # 100억 이상
+L68: base_penalty = 0.05
+L72: dynamic_max_cap = max(self.max_weight_per_asset, 1.0 / max(N * 0.8, 1.0))
+L102: inv_vol = 1.0 / (np.sqrt(np.diag(cov_matrix)) + 1e-8)
+
+--- src/allocation/alpha_allocator.py ---
+L212: if total_w > 1e-9:
+L271: if len(m.get('returns', m.get('daily_returns', []))) >= 20
+L273: if len(_returns) >= 3:
+L330: boost = 1.0 + alpha * (sharpe ** 2)
+L549: if wr_5d is None or n_trades < 3:
+L628: is_bull_market = (regime == 'bull') or (market_data and market_data.get('prob_recovery', 0.0) > 0.5)
+L720: if vol == 0: vol = 0.15 # fallback
+L800: var = sum((r - mean) ** 2 for r in data) / n
+L836: if prob_fc > 0.5:
+L837: fc_alloc = 0.20 * prob_fc
+L840: if 'S5' in base: base['S5'] = max(0.0, base['S5'] - (fc_alloc / 2))
+L841: if 'S7' in base: base['S7'] = max(0.0, base['S7'] - (fc_alloc / 2))
+L844: if prob_rec > 0.5:
+L845: rec_cash_alloc = 0.30 * prob_rec
+L848: if 'S3_A' in base: base['S3_A'] = max(0.0, base['S3_A'] - 0.10)
+L852: if prob_lr > 0.5:
+L853: lr_cash_alloc = 0.15 * prob_lr
+L860: if uncertainty > 0.4:
+L868: base['S1'] = 0.20
+L869: if 'S5' in base: base['S5'] = max(0.0, base['S5'] - 0.10)
+L870: if 'S7' in base: base['S7'] = max(0.0, base['S7'] - 0.10)
+L932: std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
+L933: std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y) / n)
+L1305: if sentiment < 0.2:
+L1309: elif sentiment < 0.4:
+
+--- scripts/run_sleeve_backtest.py ---
+L19: "\n" + "=" * 70 + "\n"
+L29: + "=" * 70 + "\n"
+L189: t['pnl_pct'] = round((t['price'] / avg - 1) * 100, 2) if avg > 0 else 0
+L214: pos['pnl_pct'] = round((latest_price / avg_price - 1) * 100, 2) if avg_price > 0 else 0
+L334: 'daily_return_pct': round(day_ret * 100, 4),
+L335: 'bench_pct': round(b_ret * 100, 4),
+L367: total_ret = (cum - 1) * 100
+L373: bench_ret = (b_cum - 1) * 100
+L380: alpha = (s_ann - b_ann) * 100
+L388: var_r = sum((r - mean_r) ** 2 for r in rets) / n
+L399: dd = (nav_t / hwm_t - 1) * 100
+L408: wr = wins / len(stream_sells) * 100 if stream_sells else 0
+L420: port_ret = (nav / initial_capital - 1) * 100
+
+--- scripts/collect_analyst_consensus.py ---
+L81: if t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+L96: if t and t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+L111: if t and t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+L132: if t and t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+L164: if t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+L210: if resp_basic.status_code == 200:
+L220: if resp_intg.status_code == 200:
+L241: if recomm >= 3.5:
+L244: result['buy'] = max(1, int(n * min(1.0, (recomm - 3.0) / 2.0)))
+L247: elif recomm >= 2.5:
+L249: result['buy'] = max(0, int(n * 0.3))
+L255: result['hold'] = max(0, int(n * 0.3))
+L272: if upside > 0.15:
+L274: result['eps_revision_up'] = max(1, int(n_research * 0.7))
+L275: result['eps_revision_down'] = max(0, int(n_research * 0.1))
+L277: result['eps_revision_up'] = max(1, int(n_research * 0.5))
+L278: result['eps_revision_down'] = max(0, int(n_research * 0.2))
+L281: result['eps_revision_up'] = max(0, int(n_research * 0.2))
+L282: result['eps_revision_down'] = max(1, int(n_research * 0.5))
+L335: upside = ((tp - cur) / cur * 100) if cur > 0 and tp > 0 else 0
+
+--- scripts/train_ensemble.py ---
+L153: if idx < 65:
+L162: f['rsi_14'] = 100 - 100 / (1 + g / max(ls, 1e-9))
+L165: f['bb_position'] = (c[-1] - (ma20 - 2*std20)) / max(4*std20, 1e-9)
+L171: v20m = v[-20:].mean() if len(v) >= 20 else 1
+L173: f['volume_trend'] = v[-5:].mean() / max(v20m, 1) if len(v) >= 20 else 1
+L175: if len(c) >= 21:
+L176: f['atr_pct'] = float(np.mean(np.abs(np.diff(c[-21:])) / c[-21:-1] * 100))
+L178: f['atr_pct'] = 2
+L180: ma5 = np.mean(c[-5:]); ma60 = np.mean(c[-60:]) if len(c) >= 60 else ma20
+L181: f['ma5_dist'] = (c[-1] / ma5 - 1) * 100
+L182: f['ma20_dist'] = (c[-1] / ma20 - 1) * 100
+L183: f['ma60_dist'] = (c[-1] / ma60 - 1) * 100
+L185: f['return_5d'] = (c[-1] / c[-6] - 1) * 100 if len(c) > 5 else 0
+L186: f['return_20d'] = (c[-1] / c[-21] - 1) * 100 if len(c) > 20 else 0
+L188: rets = np.diff(np.log(c[-21:])) if len(c) > 20 else [0]
+L189: f['volatility_20d'] = np.std(rets) * np.sqrt(252) * 100
+L192: vol_w = f['volatility_20d'] / 100 * c[-1]
+L196: f['trend_strength'] = abs(up_d / 19 - 0.5) * 2
+L199: f['return_1d'] = (c[-1] / c[-2] - 1) * 100 if len(c) > 1 else 0
+L200: f['return_3d'] = (c[-1] / c[-4] - 1) * 100 if len(c) > 3 else 0
+L203: if len(h) >= 5 and len(l) >= 5:
+L204: f['high_low_range'] = (np.mean(h[-5:]) - np.mean(l[-5:])) / c[-1] * 100
+L208: f['close_to_high_20d'] = (c[-1] / max(c[-20:]) - 1) * 100
+L210: if len(c) > 25:
+L213: dd = np.diff(c[i-14:i+1])
+L216: rsi5.append(100 - 100 / (1 + gg / max(ll2, 1e-9)))
+L221: f['volume_spike'] = 1.0 if v[-1] > v20m * 2 else 0.0
+L223: if len(h) >= 14:
+L226: f['adx_proxy'] = abs(plus_dm - minus_dm) / 14
+L230: f['overnight_return'] = (o[-1] / c[-2] - 1) * 100 if len(o) > 1 and c[-2] > 0 else 0
+L231: f['intraday_return'] = (c[-1] / o[-1] - 1) * 100 if o[-1] > 0 else 0
+L288: ret = (closes[i] / prev - 1) * 100 if prev > 0 else 0
+L296: close_5d = closes[max(0, i - 5)]
+L426: if n < 300:
+L471: max_return_pct = (max_future_high / close[idx] - 1) * 100
+L475: close_return_pct = (close[future_end - 1] / close[idx] - 1) * 100
+L517: if np.std(col_vals) < 1e-10:
+L581: model_count = 3 + int(has_lgbm) + int(has_catboost)
+L707: if pruning_pct > 0 and train_X.shape[1] > 5:
+L710: n_prune = max(1, int(n_features * pruning_pct / 100))
+L955: acc = accuracy_score(val_y, (pp >= 0.5).astype(int))
+L975: if raw_scores.std() < 1e-9:
+L982: if raw_scores.std() < 1e-9:
+L998: ens_acc = accuracy_score(val_y, (ens >= 0.5).astype(int))
+L1018: if m.sum() > 5:
+L1092: if len(train_X) < 500:
+L1099: if split_size < 50:
+L1117: if len(split_X) < 10 or len(np.unique(split_y)) < 2:
+L1122: pred_label = (pred_prob >= 0.5).astype(int)
+L1256: if len(records) >= 5:
+L1261: and r.get('hit_count', 0) / r.get('total_count', 1) < 0.45
+L1263: if da_failures >= 5:
+L1279: if vix_val and vix_prev and abs(vix_val - vix_prev) >= 5:
+L1293: if len(close) >= 20:
+L1294: monthly_ret = abs(close[-1] / close[-20] - 1) * 100
+L1295: if monthly_ret > 10:
+L1348: age_hours = (now_kst() - req_time).total_seconds() / 3600
+L1349: if age_hours <= 24:
+L1453: if len(train_X) < 500:
+L1537: if _psi_val > 0.5:
+L1538: _psi_cut = min(0.003, (_psi_val - 0.5) * 0.001)
+L1788: n_half = max(n_train // 2, 1)
+L1826: if len(X_sub) < 50:
+L1836: split = int(len(X_sub) * 0.8)
+L1885: f'({_model_path.stat().st_size // 1024}KB)'
+
+--- scripts/walk_forward_validator.py ---
+L109: pred_up = pred_prob >= 0.5
+L157: if len(pairs) < 3:
+
+--- scripts/deep_backtest_v35.py ---
+L50: KOFR_D = float(dc('s5.kofr_annual_rate',  0.035)) / 252
+L126: if len(_r) < 20: return 0.60
+L127: _vol = _r.rolling(20).std() * math.sqrt(252) * 100
+L145: if len(past) < 20:
+L154: vol20_raw = rets.rolling(20).std().iloc[-1] * math.sqrt(252) * 100
+L158: vix_hist_raw = (rets.rolling(20).std() * math.sqrt(252) * 100).dropna()
+L160: vkospi_hist = [v * 0.82 for v in vix_hist]  # VKOSPI ≈ VIX × 0.82 (실증)
+L163: ma20 = float(prices.rolling(20).mean().iloc[-1]) if len(prices) >= 20 else float(prices.mean())
+L164: ma60 = float(prices.rolling(60).mean().iloc[-1]) if len(prices) >= 60 else float(prices.mean())
+L169: mom20 = float(prices.pct_change(20).iloc[-1]) if len(prices) >= 20 else 0.0
+L170: us10y_proxy = max(3.0, min(5.5, 4.0 + mom20 * 5))  # 동적 범위 3.0~5.5%
+L173: usdkrw_proxy = 1300 + vix_proxy * 2.5
+L176: sp500_proxy = 5000 + (cur_p - float(prices.iloc[0])) / float(prices.iloc[0]) * 3000
+L179: up_days_ratio = (rets.tail(20) > 0).mean() * 100
+L186: 'vkospi':  round(vix_proxy * 0.82, 2),
+L189: 'usdkrw_prev': round(usdkrw_proxy * 1.001, 1),
+L264: sub = df[df.index <= pd.Timestamp(dt)].tail(window + 5)
+L265: if len(sub) < window // 2: return 0.0
+L267: if len(rets) < 10: return 0.0
+L269: return (mu / sd * math.sqrt(252)) if sd > 1e-9 else 0.0
+L287: sub = df[df.index <= end_ts].tail(lookback + 70)
+L288: if len(sub) < 70: return 0.0
+L293: w = rets.iloc[i-60:i]
+L295: sh = (mu / sd * math.sqrt(252)) if sd > 1e-9 else 0.0
+L334: mixed = {k: 0.50*norm.get(k,0) + 0.50*BASE_W.get(k,0.2) for k in BASE_W}
+L391: if i % 60 == 0:
+L400: bull_pct = dist.get('bull',0) / max(sum(dist.values()),1) * 100
+L401: ms_pct   = dist.get('momentum_surge',0) / max(sum(dist.values()),1) * 100
+L494: if 'kr_122630' not in s.positions and 'kr_122630' in pm and s.cash>10000:
+L495: conf = min(1.0, (bull-BULL_T)/max(0.90-BULL_T, 0.01))
+L496: qty = int(s.cash*min(1.0, 0.70+0.30*conf) / pm['kr_122630'])
+L501: if 'kr_252670' not in s.positions and 'kr_252670' in pm and s.cash>10000:
+L502: qty = int(s.cash*0.80 / pm['kr_252670'])
+L507: if 'kr_069500' not in s.positions and 'kr_069500' in pm and s.cash>10000:
+L523: if c not in s.positions and s.cash>10000:
+L524: qty = int(per*0.95/pm[c])
+L538: if len(sub) < 21: continue
+L540: m5  = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L541: score = 0.70*m20 - 0.30*m5
+L550: if c not in s.positions and s.cash>10000:
+L551: qty = int(per*0.90/p)
+L565: if c not in s.positions and s.cash>10000:
+L566: qty = int(per*0.95/pm[c])
+L580: if c not in s.positions and s.cash>10000:
+L581: qty = int(per*0.95/pm[c])
+L586: if idle < 10000: return
+L592: if len(sub) >= 2:
+L596: if abs(gap) > 0.003: s1.cash += idle*0.10*gap*0.50
+L635: if len(sub) < 20: continue
+L654: mom5 = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L655: fg_score = w_fg*math.tanh(fg_norm*3) + w_fg2*math.tanh(fg_ratio*5)
+L656: total_score = (fg_score + 0.30 + ma_bonus + 0.20*math.tanh(mom5*20))
+L685: if code not in s.positions and s.cash > 10000:
+L687: kelly = min(kelly_f * 4 * (score - entry_thr + 0.1), float(dc('s10.max_single_stock_pct', 0.30)))
+L708: f'S2={cap["S2"]/1e6:.1f}M S3={cap["S3"]/1e6:.1f}M '
+L709: f'S4={cap["S4"]/1e6:.1f}M S10={cap["S10"]/1e6:.1f}M')
+L720: rebal_s1  = (i % 5  == 0)
+L721: rebal_s2  = (i % 5  == 0)
+L722: rebal_s3  = (i % 21 == 0)
+L723: rebal_s4  = (i % 10 == 0)
+L724: rebal_s10 = (i % 5  == 0)
+L727: if i % 30 == 0:
+L746: if i % 100 == 0:
+L757: if n < 2: return {}
+L758: yrs = n / 252
+L770: tax = max(0, pnl-2_500_000)*FIN_TX
+L782: if s_n<2: continue
+L783: s_c = CAP_MAP.get(sid, INIT_NAV/6)
+L790: s_ptax = max(0,s_pnl-500_000)*FIN_TX
+L792: sp[sid] = {'cagr_gross':round(s_cagr*100,2),'mdd':round(s_mdd*100,2),
+L808: 'total_return_pct': round((navs[-1]/INIT_NAV-1)*100,2),
+L809: 'cagr_gross_pct': round(cagr_g*100,2),
+L810: 'cagr_net_pct': round(cagr_net*100,2),
+L811: 'mdd_pct': round(mdd*100,2),
+L850: f'Sharpe={sp["sharpe"]:>6.3f}  세후={sp["pnl_net"]/1e4:>8.1f}만원')
+
+--- scripts/api_health_check.py ---
+L126: warn_msg = f"⚠️ [API Health Check 경고] KIS Token 만료가 {time_left.seconds // 3600}시간 남았습니다."
+
+--- scripts/deep_backtest.py ---
+L93: if df.shape[1] > 10:
+L95: bm = bm / bm.iloc[0] * 100
+L111: if 'rsi_14' in df.columns and len(df) > 20:
+L190: exec_price = max(price - slip, price * 0.95)
+L226: if not self.nav_series or len(self.nav_series) < 2:
+L232: n_years = (dates[-1] - dates[0]).days / 365.25 if isinstance(dates[0], date) else 1
+L243: rf_daily = float(dc('backtest.risk_free_rate', 0.03)) / 252
+L245: sharpe = float(np.mean(excess) / np.std(excess) * np.sqrt(252)) if np.std(excess) > 1e-9 else 0
+L248: sortino = float(np.mean(excess) / np.std(downside) * np.sqrt(252)) if len(downside) > 5 and np.std(downside) > 1e-9 else 0
+L250: calmar = float(cagr / abs(mdd)) if abs(mdd) > 1e-6 else 0
+L265: 'total_return_pct': round((final / initial - 1) * 100, 2),
+L266: 'cagr_pct': round(cagr * 100, 2),
+L267: 'mdd_pct': round(mdd * 100, 2),
+L271: 'win_rate_pct': round(win_rate * 100, 1),
+L282: 'cost_drag_pct': round(total_cost / initial * 100, 3),
+L299: if len(close) < lookback + forward + 10:
+L304: if len(combined) > 30:
+L339: 'da': round(correct / max(total, 1) * 100, 1),
+L462: top = [t for t, s in sorted_scores[:30] if s > 0.5][:max_positions]
+L465: top = [t for t, s in sorted_scores[10:50] if s > 0.2][:max_positions]
+L484: if n_slots > 0 and stream.cash > 10000:
+L486: alloc_per_stock = stream.cash / max(len(new_tickers), 1) * 0.95
+L501: if i % 50 == 0 and verbose:
+L512: n_years = (nav_dates[-1] - nav_dates[0]).days / 365.25 if nav_dates else 1
+L518: rf_daily = float(dc('backtest.risk_free_rate', 0.03)) / 252
+L520: sharpe = float(np.mean(excess) / np.std(excess) * np.sqrt(252)) if np.std(excess) > 1e-9 else 0
+L522: sortino = float(np.mean(excess) / np.std(downside) * np.sqrt(252)) if len(downside) > 5 and np.std(downside) > 1e-9 else 0
+L523: calmar = float(cagr / abs(mdd)) if abs(mdd) > 1e-6 else 0
+L538: after_tax_return = after_tax_pnl / initial_nav * 100
+L578: 'commission_rate_bps': COMMISSION_RATE * 10000,
+L579: 'slippage_rate_bps': SLIPPAGE_RATE * 10000,
+L580: 'sell_tax_kr_pct': SELL_TAX_KR * 100,
+L581: 'capital_gains_tax_pct': CAPITAL_GAINS_TAX * 100,
+L588: 'gross_return_pct': round((final_nav / initial_nav - 1) * 100, 2),
+L589: 'cagr_pct': round(cagr * 100, 2),
+L590: 'after_cost_cagr_pct': round(after_cost_cagr * 100, 2),
+L591: 'after_tax_cagr_pct': round(after_tax_cagr * 100, 2),
+L593: 'mdd_pct': round(mdd * 100, 2),
+L597: 'alpha_annualized_pct': round(alpha_annualized * 100, 2),
+L608: 'cost_drag_bps': round(total_cost / initial_nav * 10000, 1),
+L622: 'alpha_annualized_pct': round(alpha_annualized * 100, 2),
+L624: 'kospi_benchmark_cagr_pct': round(kospi_cagr * 100, 2),
+L651: sep = '═' * 70
+
+--- scripts/deep_backtest_v31.py ---
+L112: crash_prob = max(0.0, 0.2 - score * 0.1)
+L114: bull_prob  = 0.35
+L115: crash_prob = 0.15
+L117: bull_prob  = max(0.0, 0.2 - score * 0.1)
+L222: if len(self.nav_series) < 10: return {}
+L226: n_years = max((dates[-1] - dates[0]).days / 365.25, 0.1)
+L231: rf_d = float(dc('backtest.risk_free_rate', 0.03)) / 252
+L233: sharpe  = float(np.mean(exc)/np.std(exc)*np.sqrt(252)) if np.std(exc)>1e-9 else 0
+L235: sortino = float(np.mean(exc)/np.std(dn)*np.sqrt(252)) if len(dn)>5 and np.std(dn)>1e-9 else 0
+L236: calmar  = float(cagr/abs(mdd)) if abs(mdd)>1e-6 else 0
+L252: 'total_return_pct': round((final/init-1)*100, 2),
+L253: 'cagr_pct': round(cagr*100, 2),
+L254: 'mdd_pct': round(mdd*100, 2),
+L257: 'win_rate_pct': round(win_rate*100, 1),
+L332: if lev in price_map and stream.cash > 10000:
+L335: alloc = stream.cash * min(0.8, 0.4 + confidence_scale * 0.4)
+L342: if inv in price_map and stream.cash > 10000:
+L343: confidence_scale = min(1.0, crash_prob / 0.5)
+L344: alloc = stream.cash * min(0.6, 0.3 + confidence_scale * 0.3)
+L350: if has_lev and bull_prob < S0_BULL_THRESH * 0.8:  # 확신도 약화
+L353: if has_inv and crash_prob < S0_CRASH_THRESH * 0.7:
+L385: if n_slots > 0 and stream.cash > 10000:
+L387: alloc = stream.cash / max(len(new), 1) * 0.95
+L413: if s > 0.3][:max_pos]
+L419: if n_slots > 0 and stream.cash > 10000:
+L421: alloc = stream.cash / max(len(new), 1) * 0.92
+L441: track_a_cash = stream.cash * 0.5
+L442: n_slots = 4 - len([t for t in stream.positions if t in S3_SECTOR_ETFS])
+L445: alloc = track_a_cash / max(len(new_etfs), 1) * 0.95
+L451: if i_day < 5:  # 초기 진입
+L453: if qvm_avail and stream.cash > 50000:
+L454: alloc = stream.cash * 0.5 / max(len(qvm_avail), 1) * 0.95
+L482: and t in price_map and s > 0.1}
+L500: if n_slots > 0 and stream.cash > 10000:
+L502: alloc = stream.cash / max(len(new), 1) * 0.93
+L518: if len(close) < lookback + forward + 10: continue
+L522: if len(comb) > 30:
+L546: return {'da': round(correct/max(total,1)*100,1),
+L662: if i % 50 == 0:
+L673: n_years   = max((nav_dates[-1]-nav_dates[0]).days/365.25, 0.1)
+L678: rf_d      = float(dc('backtest.risk_free_rate', 0.03))/252
+L680: sharpe    = float(np.mean(exc)/np.std(exc)*np.sqrt(252)) if np.std(exc)>1e-9 else 0
+L682: sortino   = float(np.mean(exc)/np.std(dn)*np.sqrt(252)) if len(dn)>5 and np.std(dn)>1e-9 else 0
+L683: calmar    = float(cagr/abs(mdd)) if abs(mdd)>1e-6 else 0
+L722: 'commission_bps': COMMISSION_RATE*10000,
+L723: 'stock_slippage_bps': SLIPPAGE_STOCK*10000,
+L724: 'etf_slippage_bps': SLIPPAGE_ETF*10000,
+L725: 'stock_sell_tax_pct': SELL_TAX_STOCK*100,
+L726: 'etf_sell_tax_pct': SELL_TAX_ETF*100,
+L727: 'capital_gains_tax_pct': CAPITAL_GAINS_TAX*100,
+L731: 'sleeve_a_pct': sleeve_a*100,
+L732: 'sleeve_b_pct': sleeve_b*100,
+L733: 'weights': {k: round(v.weight*100,1) for k,v in streams.items()},
+L738: 'gross_return_pct': round((final_nav/init_nav-1)*100, 2),
+L739: 'cagr_pct': round(cagr*100, 2),
+L740: 'after_cost_cagr_pct': round(ac_cagr*100, 2),
+L741: 'after_tax_cagr_pct': round(at_cagr*100, 2),
+L742: 'mdd_pct': round(mdd*100, 2),
+L745: 'alpha_annualized_pct': round(alpha_ann*100, 2),
+L755: 'cost_drag_bps': round(total_tc/init_nav*10000, 1),
+L767: 'alpha_annualized_pct': round(alpha_ann*100, 2),
+L768: 'kospi_benchmark_cagr_pct': round(kospi_cagr*100, 2),
+L788: sep = '═'*70
+L845: ret = (vals['last']/prev-1)*100
+L846: dd = (vals['last']/vals['peak']-1)*100 if vals['peak']>0 else 0
+
+--- scripts/generate_ultimate_report.py ---
+L49: if vix < 18.0: regime = "Bullish (Risk-On)"
+L50: elif vix > 25.0: regime = "Bearish (Risk-Off)"
+L52: ai_confidence = "High" if vix < 20 else "Moderate"
+L96: vix_comment = "elevated uncertainty and potential market stress" if vix > 25 else "a stable volatility environment" if vix < 18 else "neutral market volatility"
+L270: cum_returns_data[stream_id] = np.cumsum(returns) * 100
+L272: cum_ret = sum(returns)*100 if returns else 0.0
+L273: win_rate = s_data.get('win_rate', 0.0)*100
+L339: da = gap_data.get('overall_da', 0.0) * 100
+
+--- scripts/stream_orchestrator.py ---
+L109: if isinstance(df, pd.DataFrame) and 'close' in df.columns and len(df) >= 20:
+L111: if len(returns) >= 5:
+L115: f'[Phase 51 vol] {ticker}: {vol*100:.3f}% '
+L126: return atr_val / 100.0  # % → 소수 변환
+L193: _vol_floor = 0.005
+L195: WINDOW = 60
+L232: sigma = (sum((r - mu)**2 for r in daily_rets) / len(daily_rets))**0.5
+L338: 'portfolio_mdd': portfolio.get('hwm', 0) > 0 and (portfolio.get('total_nav', 0) / portfolio['hwm'] - 1.0) * 100 or 0.0
+L383: if date.today().weekday() >= 5:
+L841: kofr_price = 100000.0
+L911: price = 100000.0
+L942: if current_kofr > 10000:
+L1250: if _total_size_pct > 0 and abs(_total_size_pct - 1.0) > 0.001:
+L1337: + (f" ({_amt/_bgt*100:.0f}%)" if _bgt > 0 else " (예산 없음)"))
+L1407: _dyn_trail_activate_raw = _asset_vol_daily * 100
+L1408: _dyn_trail_dist_raw     = _asset_vol_daily * 100
+L1413: f'[Phase 51] {_pos_ticker} vol={_asset_vol_daily*100:.2f}% '
+L1448: urgency = 2
+L1453: urgency = 3
+L1458: urgency = 2
+L1472: urgency = 2
+L1527: force_sell_ratio = min(0.5, force_sell_ratio * 1.5)  # 최대 50%까지 강제 청산
+L1528: hedge_ratio = min(0.5, hedge_ratio * 1.5)            # 최대 50%까지 헷지 비중 확대
+L1648: if len(ois_history) >= 5
+L1672: if len(conf_hist) < 3 or not conf_vals:
+L1707: if avg_corr < 0.3:
+L1709: elif avg_corr < 0.6:
+
+--- scripts/generate_s4_advisory.py ---
+L188: 'utilization_pct': (invested / total_capital * 100) if total_capital > 0 else 0,
+L241: if tier <= 2:  # Tier 1~2만
+L269: elif days_to_t1 <= 3:
+L278: fx_change_pct = ((usdkrw - usdkrw_prev) / usdkrw_prev * 100
+L313: scale *= max(0.5, 1.0 - (macro_composite - 1.0) * 0.2)
+L315: scale *= min(1.2, 1.0 + abs(macro_composite + 1.0) * 0.1)
+L319: scale *= (1.0 - event_conf_adj * 0.3)  # 이벤트 50% → 추가 15% 축소
+L325: elif news_sent > 0.3:
+L331: scale *= max(0.7, 1.0 - cs * 0.3)
+L847: f"({total_invested/max(total_budget,1)*100:.0f}%)")
+
+--- scripts/watchdog.py ---
+L127: 'age_minutes': int((now - mtime).total_seconds() / 60),
+L162: if len(parts) < 3:
+L195: if cpu_pct > 0.5:
+L328: if len(parts) == 2:
+L330: elif len(parts) == 3:
+L331: return int(parts[0]) * 60 + int(parts[1])
+L335: return int(days) * 1440 + int(h) * 60 + int(m)
+
+--- scripts/deep_backtest_hft.py ---
+L44: KOFR_D  = float(dc("s5.kofr_annual_rate",  0.035)) / 252
+L50: CREDIT_RATE = _credit_rate_annual / 252
+L52: CREDIT_RATE = float(dc("cost.credit_interest_rate", 0.085)) / 252  # 신용융자 일일 이자율
+L103: if len(past)<20: return {}
+L105: ma20=float(prices.rolling(20).mean().iloc[-1]) if len(prices)>=20 else float(prices.mean())
+L106: ma60=float(prices.rolling(60).mean().iloc[-1]) if len(prices)>=60 else float(prices.mean())
+L109: rv=(rets.rolling(20).std()*math.sqrt(252)*100).dropna()
+L119: if len(_vh) >= 20:
+L123: sc["vix_ma_20"] = 15.0
+L124: sc["vix_std_20"] = 2.0
+L134: if len(_sub_inv) >= 5 and len(_sub_lev) >= 5:
+L154: if len(si) >= 5 and len(sl) >= 5:
+L223: if len(nav_hist)<max(lookback//3,5): return 0.01
+L225: if len(series)<2: return 0.01
+L227: ann=float(np.mean(rets))*252; peak=series[0]; mdd=0.0
+L280: ra_vix = 0.5
+L284: if len(va) >= 10:
+L285: vix_pct = float(sp_stats.percentileofscore(
+L299: ra_sharpe = 0.5
+L303: mn = float(np.mean(recent)) * 252
+L306: ra_sharpe = float(np.tanh(sharpe_20 / 2.0)) * 0.5 + 0.5  # 0~1 정규화
+L309: ra_ic = 0.5
+L314: ra_ic = float(np.tanh(ic_trend * 10.0)) * 0.5 + 0.5  # 0~1
+L375: qty_sell = int(s.positions[code]["qty"] * actual_red * 0.5)
+L390: if len(_PORT_RETS)<vw//3: return 1.0
+L391: rv=float(np.std(_PORT_RETS[-vw:]))*math.sqrt(252)*100
+L460: return {k: v/tot for k, v in ic_abs.items()} if tot > 1e-9 else {k: 0.2 for k in ic_abs}
+L466: return 50.0 if lo<1e-9 else 100-100/(1+g/lo)
+L472: if len(px)<5: return {f:0.0 for f in _S2_IC_HIST}
+L473: mom20=-(float(px.iloc[-1]/px.iloc[-21]-1)) if len(px)>=21 else 0.0
+L475: rsi_s=max((30-rsi_v)/30,0.0)
+L477: boll_s=max((float(px.tail(bw).mean())-float(px.iloc[-1]))/max(2*float(px.tail(bw).std()),0.01),0.0) if len(px)>=bw else 0.0
+L479: if "volume" in sub.columns and len(sub)>=20:
+L481: vol_s=max(float(vol.iloc[-1])/max(vma,1)-1,0)*max(-float(px.pct_change().iloc[-1]),0)*5
+L503: if tot < 1e-9:
+L543: sub=df[df.index<=ts].tail(lb+5)["close"]
+L544: if len(sub)<lb//3: continue
+L551: mr=mdf[mdf.index<=ts].tail(lb+5)[col].pct_change().dropna()
+L553: if len(cm)<20: betas[fac]=0.0; continue
+L555: betas[fac]=float(np.cov(y,x)[0,1]/vx) if vx>1e-12 else 0.0
+L565: if len(sub)<3: continue
+L576: ec=nav*drift*(COMM+SLIP)*2; eg=nav*abs(sig)*float(dc("cost.expected_gain_scale",0.015))
+L582: if len(ps)<w//2: return 0.0
+L584: return (mu/sd*math.sqrt(252)) if sd>1e-9 else 0.0
+L588: if len(ps)<w+10: return -999.0
+L589: rets=ps.tail(lb+w+10).pct_change().dropna(); roll=[]
+L592: roll.append((float(ww.mean())/sd*math.sqrt(252)) if sd>1e-9 else 0.0)
+L615: ea=len(es)>=60 if not es.empty and "close" in es.columns else False
+L618: esig=float(math.tanh((sh-th)*2)); we=we0
+L620: ws=ws0*(1.0/(1.0-we0+1e-9))*(1.0-we) if we<we0 else ws0; ws=min(ws,0.45)
+L626: if len(sub)<30: continue
+L628: ssig=float(math.tanh(float(np.mean(ss))*1.5)) if ss else 0.0
+L632: isig=float(math.tanh(_fic(sector,dt)*20))
+L655: m5=float(sub["close"].iloc[-1]/sub["close"].iloc[-6]-1) if len(sub)>=6 else 0.0
+L656: ic[code]=max(0.5*math.tanh(fg*3)+0.3*math.tanh(m5*20)+0.2*bw+0.5,0.01)
+L669: mx={k:0.5*nm.get(k,0)+0.5*BASE_W.get(k,0.2) for k in BASE_W}
+L715: vp=float(sp_stats.percentileofscore(va,vn))/100.0
+L769: if "kr_069500" not in s.positions and "kr_069500" in pm and s.cash > 10000:
+L780: if risk_appetite > 0.5 and "kr_069500" in pm:
+L781: target_qty = int(s.nav * 0.20 / pm["kr_069500"])
+L793: if "kr_069500" not in s.positions and target_qty > 0 and s.cash > 10000:
+L802: if "kr_069500" not in s.positions and "kr_069500" in pm and s.cash > 10000:
+L817: if len(va) < 8: return
+L911: if sam_vol > 0.035:
+L913: elif hyn_vol > 0.045:
+L918: if vol_ratio > 2.0 and inv_vol_surge > 1.5:
+L920: elif current_vix > vix_ma_20 + (3.0 * vix_std_20):
+L960: if c not in s.positions and s.cash > 10000:
+L963: qty = int(s.nav * (w/max(w_sum,0.01)) * 0.90 * vs / p)
+L973: qty_intraday = int(s.nav * (w/max(w_sum,0.01)) * 0.90 * vs / entry_p)
+L980: if random.random() < 0.85:
+L981: s.sell(c, entry_p * 1.045, qty_intraday, dt, "s1_hft_synthetic_win")
+L983: s.sell(c, entry_p * 0.995, qty_intraday, dt, "s1_hft_synthetic_loss")
+L986: if l < entry_p * 0.995:
+L987: s.sell(c, entry_p * 0.995, qty_intraday, dt, "s1_hft_stop_loss")
+L988: elif h > entry_p * 1.03:
+L989: s.sell(c, entry_p * 1.03, qty_intraday, dt, "s1_hft_take_profit")
+L1005: if len(sub)<21: continue
+L1015: if c not in s.positions and s.cash>10000:
+L1016: qty=int(per*0.90*vs/p)
+L1025: if regime in ("bull", "momentum_surge"): _atr_mult = _base_mult * 1.2
+L1026: elif regime == "caution": _atr_mult = _base_mult * 0.8
+L1027: elif regime in ("bear", "crash"): _atr_mult = _base_mult * 0.5
+L1063: if c not in s.positions and s.cash>10000:
+L1064: qty=int(per*0.95*vs/pm[c])
+L1078: if c not in s.positions and s.cash>10000:
+L1079: qty=int(per*0.95*vs/pm[c])
+L1084: if idle<10000: return
+L1090: if len(sub)>=2:
+L1094: if abs(gap)>0.003: s1.cash+=idle*0.10*gap*0.50
+L1121: if len(sub)>=3: usl=float(sub.iloc[-1]-sub.iloc[0])
+L1122: vp=0.5
+L1125: if len(va)>0: vp=float(sp_stats.percentileofscore(va.values,float(va.iloc[-1])))/100.0
+L1127: wb=max(0.10,0.28+usl*msc); wd=max(0.10,0.24+usl*msc*0.5)
+L1128: wq=max(0.10,0.24-usl*msc*0.7); wl=max(0.10,0.24+vp*float(dc("caution.lowvol_vix_scale",0.25)))
+L1136: if p and c not in sc.positions and sc.cash>10000:
+L1137: qty=int(nav*w*0.95*vs/p)
+L1164: daily_ret = KOFR_D + annual_spread / 252
+L1196: if len(sub) < 21:
+L1216: if s.cash > 10000: s.cash += s.cash * KOFR_D  # 일일 KOFR 적립
+L1233: vix_now = 20.0
+L1272: if p and p > 0 and s.cash > 10000:
+L1274: qty = int(s.nav * 0.95 * vs / p)
+L1308: if len(sub)<20: continue
+L1312: kl=min(float(dc("s10.kelly_fraction",0.35))*4*max(ens,0.01),float(dc("s10.max_single_stock_pct",0.35)))*vs
+L1319: if code not in s.positions and s.cash>10000:
+L1375: run_s1(streams["S1"],  pm, dt, (i % 5  == 0), regime)
+L1376: run_s2(streams["S2"],  pm, dt, (i % 5  == 0), regime)
+L1377: run_s3(streams["S3"],  pm, dt, (i % 21 == 0), regime)
+L1380: run_s10(streams["S10"], pm, dt, i, (i % 5 == 0), regime)
+L1387: if _vs_now > 1.0 + 1e-6:
+L1407: if i % 5 == 0:
+L1414: if len(s2d) >= 2:
+L1424: if i % 100 == 0:
+L1434: if n<2: return {}
+L1435: yrs=n/252; cg=(navs[-1]/INIT_NAV)**(1/yrs)-1
+L1443: pnl=navs[-1]-INIT_NAV; tx=max(0,pnl-2_500_000)*FIN_TX; pn=pnl-tc-tx
+L1449: if sns<2: continue
+L1458: spnl=sn[-1]-sc; stx=max(0,spnl-500_000)*FIN_TX
+L1459: sp[sid]={"cagr_gross":round(sc2*100,2),"mdd":round(smdd*100,2),"sharpe":round(ssh,3),
+L1464: "total_return_pct":round((navs[-1]/INIT_NAV-1)*100,2),
+L1465: "cagr_gross_pct":round(cg*100,2),"mdd_pct":round(mdd*100,2),
+
+--- scripts/deep_backtest_v34.py ---
+L48: KOFR_D = float(dc('s5.kofr_annual_rate', 0.035)) / 252
+L51: SLV_B = 0.40   # S0
+L52: SLV_A = 0.60   # S1~S4, S10
+L119: regime[(kospi['close'] > ma20) & (ma20 > ma60) & (vol20 < 0.20)] = 'bull'
+L121: regime[(kospi['close'] > ma60) & (vol20 >= 0.20) & (vol20 < 0.28)] = 'caution'
+L123: regime[(kospi['close'] < ma60) & (vol20 < 0.30) & (ret > -0.04)] = 'bear'
+L125: regime[(vol20 >= 0.28) | (ret < -0.04)] = 'crash'
+L184: k: 0.50 * normalized.get(k, 0) + 0.50 * BASE_W.get(k, 0.2)
+L318: if len(sub) < 20: continue
+L339: if not has_lev and 'kr_122630' in pm and s.cash > 10000:
+L340: conf = min(1.0, (bull - S0_BULL) / max(0.90 - S0_BULL, 0.01))
+L341: alloc = s.cash * min(1.0, 0.70 + 0.30*conf)
+L348: if not has_inv and 'kr_252670' in pm and s.cash > 10000:
+L349: qty = int(s.cash * 0.80 / pm['kr_252670'])
+L355: if not has_base and 'kr_069500' in pm and s.cash > 10000:
+L371: if c not in s.positions and s.cash > 10000:
+L372: qty = int(per * 0.95 / pm[c])
+L387: if len(sub) < 21: continue
+L389: mom5  = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]  - 1) if len(sub)>=6 else 0
+L390: score = 0.70*mom20 - 0.30*mom5
+L400: if c not in s.positions and s.cash > 10000:
+L401: qty = int(per*0.90/p)
+L417: if c not in s.positions and s.cash > 10000:
+L418: qty = int(per*0.95/pm[c])
+L434: if c not in s.positions and s.cash > 10000:
+L435: qty = int(per*0.95/pm[c])
+L441: if idle < 10000: return
+L447: if len(sub) >= 2:
+L452: if abs(gap) > 0.003:
+L453: s1_sbt.cash += idle * 0.10 * gap * 0.50
+L477: if len(sub) < 20: continue
+L481: ma120 = float(sub['close'].rolling(120).mean().iloc[-1]) if len(sub)>=120 \
+L491: mom5 = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L492: fg_score  = 0.60 * math.tanh(fg_norm * 3) + 0.40 * math.tanh(fg_ratio * 5)
+L494: mom_score = 0.20 * math.tanh(mom5 * 20)
+L498: total = (0.50 * fg_score + 0.30 + ma_bonus + mom_score) * mult
+L519: if code not in s.positions and s.cash > 10000:
+L520: kelly = min((score - 0.1) / 0.5, 0.25) * float(dc('s10.kelly_fraction', 0.25)) * 4
+L531: CAP_S10 = INIT_NAV * SLV_A * 0.15
+L540: rebal = (i % 5 == 0)
+L554: if len(sub) < 20: continue
+L556: ma120 = float(sub['close'].rolling(120).mean().iloc[-1]) if len(sub)>=120 \
+L560: mom5 = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L562: fg_sc = math.tanh(fg_norm * 3)
+L565: score = (0.5*fg_sc + 0.3 + ma_bn + 0.2*math.tanh(mom5*20)) * mult
+L566: if score > 0.10:
+L567: atr_sl = price_now - 2.0 * price_now * atr_pct
+L576: if code not in s.positions and s.cash > 10000:
+L577: qty = int(per * 0.90 / price_now)
+L583: if len(navs) < 2: continue
+L585: cagr = (navs[-1]/init_c)**0.5 - 1 if init_c > 0 else 0
+L592: 'cagr': round(cagr*100,2), 'mdd': round(mdd*100,2),
+L615: f'S2={cap["S2"]/1e6:.1f}M S3={cap["S3"]/1e6:.1f}M '
+L616: f'S4={cap["S4"]/1e6:.1f}M S10={cap["S10"]/1e6:.1f}M')
+L628: if i % 30 == 0:
+L637: rebal_s1  = (i % 5  == 0)
+L638: rebal_s2  = (i % 5  == 0)
+L639: rebal_s3  = (i % 21 == 0)
+L640: rebal_s4  = (i % 10 == 0)
+L641: rebal_s10 = (i % 5  == 0)
+L655: if i % 100 == 0:
+L666: if n < 2: return {}
+L667: yrs = n / 252
+L679: tax = max(0, pnl - 2_500_000) * FIN_TX
+L696: if s_n < 2: continue
+L697: s_c = CAP_MAP.get(sid, INIT_NAV/6)
+L705: s_ptax = max(0, s_pnl - 500_000) * FIN_TX
+L708: 'cagr_gross': round(s_cagr*100,2),
+L709: 'mdd':        round(s_mdd*100,2),
+L712: 'win_rate':   round(sum(1 for t in s.trades if t['dir']=='sell')/max(len(s.trades),1)*100,1),
+L724: 'total_return_pct': round((navs[-1]/INIT_NAV-1)*100,2),
+L725: 'cagr_gross_pct':   round(cagr_g*100,2),
+L726: 'cagr_net_pct':     round(cagr_net*100,2),
+L727: 'mdd_pct':          round(mdd*100,2),
+L775: f'{s["sharpe"]:>7.3f}  {s["calmar"]:>7.3f}  {s["pnl_net"]/1e4:>10.1f}만원')
+
+--- scripts/generate_shadow_report.py ---
+L35: _TARGET_DAYS = 14                       # 목표 추적 기간
+L36: _ANNUALIZE = 252                        # 연환산 영업일
+L39: _SHARPE_THRESHOLD = 0.5
+L40: _WINRATE_THRESHOLD = 0.50               # 50 %
+L42: _MIN_ACTIVE_STREAMS = 3                 # S1~S4 중 최소 활성
+L43: _VAR_LIMIT = 1.5                        # VaR 한도 (%)
+L108: if len(daily_returns) < 2:
+L111: var = sum((r - mean_r) ** 2 for r in daily_returns) / (len(daily_returns) - 1)
+L126: cum *= (1 + r / 100)
+L128: dd = (cum / peak - 1) * 100
+L139: return round(wins / len(sells) * 100, 2)
+L146: return round((nav / initial - 1) * 100, 4)
+L169: win_rate = round(wins / len(s_sells) * 100, 2)
+L219: if win_rate >= _WINRATE_THRESHOLD * 100:
+L220: conditions_met.append(f'Win Rate ≥ {_WINRATE_THRESHOLD*100:.0f}% (현재: {win_rate}%)')
+L222: conditions_pending.append(f'Win Rate ≥ {_WINRATE_THRESHOLD*100:.0f}% (현재: {win_rate}%)')
+L453: (p['win_rate'] >= _WINRATE_THRESHOLD * 100,
+L454: f'Win Rate ≥ {_WINRATE_THRESHOLD*100:.0f}%'),
+
+--- scripts/chaos_tester_expert.py ---
+L75: max_cap = 150_000_000 * 0.20  # Max 20% of AUM per trade
+L76: crazy_amount = 100_000_000_000
+L100: simulated_age = 96
+
+--- scripts/ci_validate.py ---
+L82: if 'DynamicConfig' not in content and len(content) > 500:
+
+--- scripts/nasdaq_leverage_advisor.py ---
+L34: if len(hist) >= 2:
+L37: futures_chg = ((curr_price - prev_close) / prev_close) * 100
+L39: if futures_chg > 0.3:
+L61: if futures_chg > 0.2:
+
+--- scripts/run_shadow_live.py ---
+L171: (total_slippage_krw + total_commission_krw) / max(total_amount_krw, 1) * 10000, 2
+L186: if len(tca_history) > 30:
+
+--- scripts/whatif_backtest.py ---
+L329: if curr.weekday() < 5:  # 월~금
+L368: ret_pct = ((r['nav'] / initial) - 1) * 100 if initial > 0 else 0
+L374: total_return = ((final['nav'] / initial) - 1) * 100
+
+--- scripts/chaos_tester.py ---
+L36: assert slip_res['slippage_bps'] == 50.0, "Slippage Injection 실패"
+L84: delay_ms = 3000
+L101: latency = (now - stale_time).total_seconds() * 1000
+
+--- scripts/run_event_backtest.py ---
+L94: self.stock_slippage = slippage_bps / 10_000
+L95: self.stock_commission = commission_bps / 10_000
+L96: self.etf_slippage = etf_slippage_bps / 10_000
+L97: self.etf_commission = etf_commission_bps / 10_000
+L219: pnl_pct = (pnl_krw / (pos['avg_price'] * qty) * 100 if pos['avg_price'] > 0 else 0.0)
+L255: kofr_daily_yield = 0.035 / 252.0
+L258: self.cash *= (1 + 0.020 / 252.0)
+L275: pos['unrealized_pnl_pct'] = (pnl_krw / (pos['avg_price'] * pos['qty']) * 100) if pos['avg_price'] > 0 else 0.0
+L327: if len(nav_series) < 2: return {'error': 'insufficient_data'}
+L329: total_return_pct = (nav_series[-1] / initial_capital - 1) * 100
+L330: daily_rets = [(nav_series[i] / nav_series[i-1] - 1) * 100 for i in range(1, len(nav_series))]
+L335: max_dd = min(max_dd, (nav - peak) / peak * 100)
+L344: 'win_rate_pct': round(len(wins) / len(trade_rets) * 100 if trade_rets else 0.0, 2),
+L361: if curr.weekday() < 5:
+L563: 'mdd_pct': round(s_mdd * 100, 2),
+L565: 'return_contrib_pct': round((s_end / initial_capital) * 100, 2) if initial_capital > 0 else 0.0
+
+--- scripts/generate_kis_portfolio.py ---
+L155: wr = len(wins) / max(len(sells), 1) * 100
+L188: 'invest_pct': round((1 - cash / max(nav, 1)) * 100, 1),
+L249: 'cash_pct': round(cash / max(nav, 1) * 100, 1),
+
+--- scripts/run_moonshot_sim.py ---
+L25: bull_base = 0.3
+L26: bear_base = 0.3
+L27: caution_base = 0.4
+L31: if random.random() < 0.2:
+L78: 'vwap_switch_triggered': random.random() > 0.8
+
+--- scripts/migrate_to_keychain.py ---
+
+--- scripts/feature_importance_audit.py ---
+L181: f'활성 평균 {overall_avg:.4f}의 {noise_ratio*100:.0f}%',
+
+--- scripts/collect_macro_context.py ---
+L50: _TIMEOUT = 20
+L227: rate_stance = min(1.0, max(-1.0, (dovish - hawkish) * 0.3))
+L231: capex = min(1.0, max(-1.0, (capex_pos - capex_neg) * 0.3))
+L236: supply_stress = min(1.0, sc * 0.15)
+
+--- scripts/diag_v37.py ---
+L12: flag = '🔴' if (calmar < 1.5 or sp['mdd'] < -25) else ('🟡' if calmar < 2.0 else '🟢')
+L24: INIT = 300_000_000
+L27: eff = sp['pnl_net'] / alloc * 100
+
+--- scripts/bootstrap_engines.py ---
+L31: days = 252 * 5
+L33: normal_vix = np.random.normal(15, 3, int(days * 0.8))
+L34: crisis_vix = np.random.normal(35, 10, int(days * 0.2))
+
+--- scripts/sleeve_orchestrator.py ---
+L168: 'amount': a1_budget * 0.5,  # 메인 50%
+L183: 'amount': a1_budget * 0.25,  # 섹터 25%
+L194: 'amount': a1_budget * 0.25,  # 글로벌 25%
+L218: views = {t: sector_scores.get(t, 0) * 0.05 for t in sector_etfs}
+L402: cost_bps = cfg.get('cost.roundtrip_total_bps') / 10000  # 왕복 비용
+L426: expected_return = max(0, (sector_score - 0.4) * 0.05) - cost_bps
+L433: tp_pct = abs(exits.get('tp_pct', 5.0)) / 100
+L434: sl_pct = abs(exits.get('sl_pct', 3.0)) / 100
+L519: if remaining_budget >= amount * 0.3:  # 최소 30% 이상 투입 가능
+L544: f"({used/budget*100:.0f}%)"
+L623: if _now.hour == 15 and _now.minute >= _hard_limit_minute:
+L688: if datetime.now().weekday() == 5 or learning_result.get('samples', 0) % 20 == 0:
+L697: if datetime.now().day <= 3:
+
+--- scripts/run_virtual_trading.py ---
+L122: mid = (hist_price + fs_price) / 2
+L125: if divergence > 0.20:
+L245: age_min = (now_kst - pykrx_ts).total_seconds() / 60
+L265: if len(source_prices) >= 3:
+L604: stream_budgets['S3_A'] = s3_budget / 2
+L605: stream_budgets['S3_B'] = s3_budget / 2
+L610: stream_budgets = {'S1': available_capital/3, 'S2': available_capital/3, 'S3': available_capital/3}
+L841: remaining *= (1 - _credit_stress * 0.3)  # stress 1 → 30% 축소
+L867: if len(_recent_sells) >= 5:
+L960: boost_note = f' [conf_lv={confluence}, boost={ev_boost*100:+.2f}%]' if confluence >= 2 else ''
+L963: f"EV={ev*100:+.3f}% < {min_ev*100:.1f}% "
+L1000: half_kelly = kelly_f / 2
+L1013: min(kelly_ceiling, half_kelly * 10))
+L1367: f"수수료 {etf_comm*100:.3f}% (증권거래세 면제)")
+L1614: if 0.001 <= ratio <= 0.10:
+L1616: return ratio * 100
+L1617: elif ratio < 0.001:
+L1619: return atr_val * 100
+L1623: return (atr_val / entry_price) * 100
+L1626: return atr_val * 100
+L1806: f"수수료 {etf_comm*100:.3f}% (증권거래세 면제)")
+
+--- scripts/rebuild_stream_metrics.py ---
+L242: pnl_pct = (current_price - avg_price) / avg_price * 100
+L245: daily_returns.append(pnl_pct / 100)
+L255: portfolio_ret = snap.get('daily_return_pct', 0) / 100  # → decimal
+L271: if len(daily_returns) >= 2:
+L274: var = sum((r - mean_r) ** 2 for r in daily_returns) / n
+L296: if len(r) < 2:
+L300: var = sum((x - mean_r) ** 2 for x in r) / n
+L309: if n < 3:
+L316: std_x = math.sqrt(sum((xi - mean_x) ** 2 for xi in x) / n)
+L317: std_y = math.sqrt(sum((yi - mean_y) ** 2 for yi in y) / n)
+L356: 'total_return_pct': round(total_return * 100, 3),
+L358: 'cost_pct': round(cost_pct * 100, 4) if cost_pct else 0,
+L379: var = sum((r - mean_r) ** 2 for r in rets) / n
+L384: 'mean_return_pct': round(mean_r * 100, 4),
+L385: 'std_pct': round(std * 100, 4),
+L411: 'win_rate': round(win_sells / len(sells) * 100, 1) if sells else 0,
+L442: avg = sum(r) / len(r) * 100 if r else 0
+L444: wr = n_win / len(r) * 100 if r else 0
+
+--- scripts/generate_ss_etf_risk.py ---
+L58: _VOL_THRESHOLD = 0.30
+
+--- scripts/gap_feedback.py ---
+L194: if not stream or fail_rate <= 0.50:
+L260: if not regime or da >= 0.40:
+L356: age_hours = (datetime.now() - gap_time).total_seconds() / 3600
+L376: elapsed = (datetime.now() - last).total_seconds() / 3600
+
+--- scripts/build_universe.py ---
+L80: min_turnover = min_turnover_억 * 1e8  # 억원 → 원
+L124: f"₩{q['avg_turnover']/1e8:.0f}억/일")
+L173: if len(added) > 10:
+
+--- scripts/audit_events.py ---
+L57: conf_red = f"-{ev.get('confidence_reduction', 0) * 100:.0f}%"
+L73: conf_drop  = features.get('event_confidence_reduction', 0) * 100
+L91: if abs(macro_max_cr - features.get('event_confidence_reduction', 0)) < 0.001:
+L123: hours_ago  = (now - detected).total_seconds() / 3600
+L128: if hours_ago > 24:
+L170: conf    = f"-{ev.get('confidence_reduction', 0) * 100:.0f}%"
+
+--- scripts/macro_proxy_collector.py ---
+L82: _CACHE_TTL_SEC = 30 * 60  # 30분
+L144: if len(closes) < 2:
+L149: chg_1d = (latest_close / prev_close - 1) * 100 if prev_close > 0 else 0.0
+L153: if len(closes) >= 6:
+L155: chg_5d = (latest_close / close_5d_ago - 1) * 100 if close_5d_ago > 0 else 0.0
+L187: norm_mom = max(-1.0, min(1.0, mom5 / 5.0))  # ÷5: ±5% = ±1.0
+
+--- scripts/realtime_mtm.py ---
+L48: hm = now.hour * 100 + now.minute
+L50: if now.weekday() >= 5:
+L53: if 800 <= hm < 850:
+L55: elif 900 <= hm < 1530:
+L57: elif 1530 <= hm < 1800:
+
+--- scripts/train_s1_intraday.py ---
+L214: if len(purged_train) > 10:  # 최소 샘플 보장
+L367: start_date = end_date - timedelta(days=365 * 4)  # 4년
+L414: split_idx = int(len(df) * 0.80)
+L423: embargo_days = 5  # 5거래일 = 약 1주일 갭
+L424: n_cv_splits = 5
+L487: pred_class = (proba_test >= 0.5).astype(int)
+L490: da = np.mean(pred_class == y_test) * 100
+L506: prob_above_60 = float(np.mean(proba_test >= 0.60))
+L507: prob_below_40 = float(np.mean(proba_test <= 0.40))
+L518: if brier > 0.28:
+L520: if auc < 0.52:
+L547: 'prob_above_60_pct': round(prob_above_60 * 100, 2),
+L548: 'prob_below_40_pct': round(prob_below_40 * 100, 2),
+
+--- scripts/deep_backtest_v38.py ---
+L44: KOFR_D  = float(dc("s5.kofr_annual_rate",  0.035)) / 252
+L50: CREDIT_RATE = _credit_rate_annual / 252
+L52: CREDIT_RATE = float(dc("cost.credit_interest_rate", 0.085)) / 252  # 신용융자 일일 이자율
+L103: if len(past)<20: return {}
+L105: ma20=float(prices.rolling(20).mean().iloc[-1]) if len(prices)>=20 else float(prices.mean())
+L106: ma60=float(prices.rolling(60).mean().iloc[-1]) if len(prices)>=60 else float(prices.mean())
+L109: rv=(rets.rolling(20).std()*math.sqrt(252)*100).dropna()
+L119: if len(_vh) >= 20:
+L123: sc["vix_ma_20"] = 15.0
+L124: sc["vix_std_20"] = 2.0
+L134: if len(_sub_inv) >= 5 and len(_sub_lev) >= 5:
+L154: if len(si) >= 5 and len(sl) >= 5:
+L222: if len(nav_hist)<max(lookback//3,5): return 0.01
+L224: if len(series)<2: return 0.01
+L226: ann=float(np.mean(rets))*252; peak=series[0]; mdd=0.0
+L279: ra_vix = 0.5
+L283: if len(va) >= 10:
+L284: vix_pct = float(sp_stats.percentileofscore(
+L298: ra_sharpe = 0.5
+L302: mn = float(np.mean(recent)) * 252
+L305: ra_sharpe = float(np.tanh(sharpe_20 / 2.0)) * 0.5 + 0.5  # 0~1 정규화
+L308: ra_ic = 0.5
+L313: ra_ic = float(np.tanh(ic_trend * 10.0)) * 0.5 + 0.5  # 0~1
+L374: qty_sell = int(s.positions[code]["qty"] * actual_red * 0.5)
+L389: if len(_PORT_RETS)<vw//3: return 1.0
+L390: rv=float(np.std(_PORT_RETS[-vw:]))*math.sqrt(252)*100
+L459: return {k: v/tot for k, v in ic_abs.items()} if tot > 1e-9 else {k: 0.2 for k in ic_abs}
+L465: return 50.0 if lo<1e-9 else 100-100/(1+g/lo)
+L471: if len(px)<5: return {f:0.0 for f in _S2_IC_HIST}
+L472: mom20=-(float(px.iloc[-1]/px.iloc[-21]-1)) if len(px)>=21 else 0.0
+L474: rsi_s=max((30-rsi_v)/30,0.0)
+L476: boll_s=max((float(px.tail(bw).mean())-float(px.iloc[-1]))/max(2*float(px.tail(bw).std()),0.01),0.0) if len(px)>=bw else 0.0
+L478: if "volume" in sub.columns and len(sub)>=20:
+L480: vol_s=max(float(vol.iloc[-1])/max(vma,1)-1,0)*max(-float(px.pct_change().iloc[-1]),0)*5
+L502: if tot < 1e-9:
+L542: sub=df[df.index<=ts].tail(lb+5)["close"]
+L543: if len(sub)<lb//3: continue
+L550: mr=mdf[mdf.index<=ts].tail(lb+5)[col].pct_change().dropna()
+L552: if len(cm)<20: betas[fac]=0.0; continue
+L554: betas[fac]=float(np.cov(y,x)[0,1]/vx) if vx>1e-12 else 0.0
+L564: if len(sub)<3: continue
+L575: ec=nav*drift*(COMM+SLIP)*2; eg=nav*abs(sig)*float(dc("cost.expected_gain_scale",0.015))
+L581: if len(ps)<w//2: return 0.0
+L583: return (mu/sd*math.sqrt(252)) if sd>1e-9 else 0.0
+L587: if len(ps)<w+10: return -999.0
+L588: rets=ps.tail(lb+w+10).pct_change().dropna(); roll=[]
+L591: roll.append((float(ww.mean())/sd*math.sqrt(252)) if sd>1e-9 else 0.0)
+L614: ea=len(es)>=60 if not es.empty and "close" in es.columns else False
+L617: esig=float(math.tanh((sh-th)*2)); we=we0
+L619: ws=ws0*(1.0/(1.0-we0+1e-9))*(1.0-we) if we<we0 else ws0; ws=min(ws,0.45)
+L625: if len(sub)<30: continue
+L627: ssig=float(math.tanh(float(np.mean(ss))*1.5)) if ss else 0.0
+L631: isig=float(math.tanh(_fic(sector,dt)*20))
+L654: m5=float(sub["close"].iloc[-1]/sub["close"].iloc[-6]-1) if len(sub)>=6 else 0.0
+L655: ic[code]=max(0.5*math.tanh(fg*3)+0.3*math.tanh(m5*20)+0.2*bw+0.5,0.01)
+L668: mx={k:0.5*nm.get(k,0)+0.5*BASE_W.get(k,0.2) for k in BASE_W}
+L714: vp=float(sp_stats.percentileofscore(va,vn))/100.0
+L768: if "kr_069500" not in s.positions and "kr_069500" in pm and s.cash > 10000:
+L789: if "kr_069500" not in s.positions and "kr_069500" in pm and s.cash > 10000:
+L804: if len(va) < 8: return
+L887: if ss_sam.get("vol_ratio", 0) > 2.0 and ss_sam.get("inv_vol_surge", 0) > 1.5:
+L889: elif ss_hyn.get("vol_ratio", 0) > 2.0 and ss_hyn.get("inv_vol_surge", 0) > 1.5:
+L894: if vol_ratio > 2.0 and inv_vol_surge > 1.5:
+L896: elif current_vix > vix_ma_20 + (3.0 * vix_std_20):
+L949: if c not in s.positions and s.cash > 10000:
+L952: qty = int(s.nav * (w/max(w_sum,0.01)) * 0.90 * vs / p)
+L956: s.positions[c]["atr_sl"] = p * 0.995  # 0.5% 마이크로 손절매
+L968: if len(sub)<21: continue
+L978: if c not in s.positions and s.cash>10000:
+L979: qty=int(per*0.90*vs/p)
+L1020: if c not in s.positions and s.cash>10000:
+L1021: qty=int(per*0.95*vs/pm[c])
+L1035: if c not in s.positions and s.cash>10000:
+L1036: qty=int(per*0.95*vs/pm[c])
+L1041: if idle<10000: return
+L1047: if len(sub)>=2:
+L1051: if abs(gap)>0.003: s1.cash+=idle*0.10*gap*0.50
+L1078: if len(sub)>=3: usl=float(sub.iloc[-1]-sub.iloc[0])
+L1079: vp=0.5
+L1082: if len(va)>0: vp=float(sp_stats.percentileofscore(va.values,float(va.iloc[-1])))/100.0
+L1084: wb=max(0.10,0.28+usl*msc); wd=max(0.10,0.24+usl*msc*0.5)
+L1085: wq=max(0.10,0.24-usl*msc*0.7); wl=max(0.10,0.24+vp*float(dc("caution.lowvol_vix_scale",0.25)))
+L1093: if p and c not in sc.positions and sc.cash>10000:
+L1094: qty=int(nav*w*0.95*vs/p)
+L1121: daily_ret = KOFR_D + annual_spread / 252
+L1153: if len(sub) < 21:
+L1173: if s.cash > 10000: s.cash += s.cash * KOFR_D  # 일일 KOFR 적립
+L1190: vix_now = 20.0
+L1229: if p and p > 0 and s.cash > 10000:
+L1231: qty = int(s.nav * 0.95 * vs / p)
+L1265: if len(sub)<20: continue
+L1269: kl=min(float(dc("s10.kelly_fraction",0.35))*4*max(ens,0.01),float(dc("s10.max_single_stock_pct",0.35)))*vs
+L1276: if code not in s.positions and s.cash>10000:
+L1332: run_s1(streams["S1"],  pm, dt, (i % 5  == 0), regime)
+L1333: run_s2(streams["S2"],  pm, dt, (i % 5  == 0), regime)
+L1334: run_s3(streams["S3"],  pm, dt, (i % 21 == 0), regime)
+L1337: run_s10(streams["S10"], pm, dt, i, (i % 5 == 0), regime)
+L1344: if _vs_now > 1.0 + 1e-6:
+L1364: if i % 5 == 0:
+L1371: if len(s2d) >= 2:
+L1381: if i % 100 == 0:
+L1391: if n<2: return {}
+L1392: yrs=n/252; cg=(navs[-1]/INIT_NAV)**(1/yrs)-1
+L1400: pnl=navs[-1]-INIT_NAV; tx=max(0,pnl-2_500_000)*FIN_TX; pn=pnl-tc-tx
+L1406: if sns<2: continue
+L1415: spnl=sn[-1]-sc; stx=max(0,spnl-500_000)*FIN_TX
+L1416: sp[sid]={"cagr_gross":round(sc2*100,2),"mdd":round(smdd*100,2),"sharpe":round(ssh,3),
+L1421: "total_return_pct":round((navs[-1]/INIT_NAV-1)*100,2),
+L1422: "cagr_gross_pct":round(cg*100,2),"mdd_pct":round(mdd*100,2),
+
+--- scripts/health_check.py ---
+L69: dynamic_max = (now - prev_dt).total_seconds() / 3600 + 2  # +2h 여유
+L93: age_hours = (now - mtime).total_seconds() / 3600
+L113: free_gb = usage.free / (1024 ** 3)
+L164: age_min = (datetime.now() - ts).total_seconds() / 60
+L204: return {'data_size_mb': round(total / (1024 ** 2), 1)}
+
+--- scripts/analyze_stream_metrics.py ---
+
+--- scripts/deep_backtest_v33.py ---
+L66: KOFR_DAY = (float(dc('s5.kofr_annual_rate', 0.035)) / 252)   # 일 수익률
+L106: regime[(price > ma60) & (vol < 0.18)]   = 'bull'
+L107: regime[(price < ma60) & (vol > 0.22)]   = 'bear'
+L108: regime[(vol > 0.30) | (ret < -0.04)]    = 'crash'
+L109: regime[(price > ma60) & (vol >= 0.18) & (vol < 0.25)] = 'caution'
+L305: if len(sub) < 20: continue
+L328: if not has_lev and 'kr_122630' in pm and s.cash > 10000:
+L329: conf = min(1.0, (bull - S0_BULL_THR) / max(0.90 - S0_BULL_THR, 0.01))
+L330: alloc = s.cash * min(1.0, 0.70 + 0.30 * conf)
+L337: if not has_inv and 'kr_252670' in pm and s.cash > 10000:
+L338: qty = int(s.cash * 0.80 / pm['kr_252670'])
+L344: if not has_base and 'kr_069500' in pm and s.cash > 10000:
+L366: if c in pm and c not in s.positions and s.cash > 10000:
+L367: qty = int(per * 0.95 / pm[c])
+L384: if len(sub) < 21: continue
+L388: score = 0.70 * mom20 - 0.30 * mom5
+L399: if c not in s.positions and s.cash > 10000:
+L400: qty = int(per * 0.90 / p)
+L421: if c not in s.positions and s.cash > 10000:
+L422: qty = int(per * 0.95 / pm[c])
+L442: if c not in s.positions and s.cash > 10000:
+L443: qty = int(per * 0.95 / pm[c])
+L449: if idle_cash < 10000: return
+L457: if not df.empty and len(df[df.index <= pd.Timestamp(dt)]) >= 2:
+L459: prev_close = float(sub['close'].iloc[-2]) if len(sub) >= 2 else 0
+L463: if abs(gap_ret) > 0.003:  # 0.3% 이상 갭만 포착
+L464: overnight_alpha = idle_cash * 0.10 * gap_ret * 0.50
+L469: if not rebal and (not trading_days.index(dt) % 5 == 0): return
+L484: if len(sub) < 20: continue
+L486: ma120 = float(sub['close'].rolling(120).mean().iloc[-1]) if len(sub) >= 120 \
+L490: ma_signal = 0.15 if price_now > ma120 else (-0.10 if price_now < ma120 * 0.95 else 0)
+L491: mom5 = float(sub['close'].iloc[-1] / sub['close'].iloc[-6] - 1) if len(sub) >= 6 else 0
+L492: score = 0.45 * math.tanh(fs) + 0.30 + ma_signal + 0.25 * math.tanh(mom5 * 20)
+L496: if score > 0.10:
+L511: if code not in s.positions and s.cash > 10000:
+L512: kelly = min((score - 0.1) / 0.5, 0.25)
+L513: qty = int(per * kelly * 4 / price_now)   # kelly fraction ~25%
+L537: bm_qty = int(INIT_NAV * 0.99 / bm_entry) if bm_entry > 0 else 0
+L543: f'S1={cap["S1"]/1e6:.1f}M S2={cap["S2"]/1e6:.1f}M '
+L544: f'S3={cap["S3"]/1e6:.1f}M S4={cap["S4"]/1e6:.1f}M '
+L545: f'S10={cap["S10"]/1e6:.1f}M')
+L552: rebal_s1 = (i % 5 == 0)
+L553: rebal_s2 = (i % 5 == 0)
+L554: rebal_s3 = (i % 21 == 0)
+L555: rebal_s4 = (i % 10 == 0)
+L556: rebal_s10= (i % 5 == 0)
+L571: if i % 100 == 0:
+L584: if n < 2: return {}
+L587: years = n / 252
+L611: cost_drag   = total_cost / INIT_NAV * 10000   # bps
+L613: pnl_tax     = max(0, pnl_gross - 2_500_000) * FIN_TAX
+L626: if s_n < 2: continue
+L627: s_years = s_n / 252
+L644: s_ptax  = max(0, s_pnl - 500_000) * FIN_TAX
+L647: 'cagr_gross':    round(s_cagr * 100, 2),
+L648: 'mdd':           round(s_mdd * 100, 2),
+L651: 'win_rate':      round(s_wr * 100, 1),
+L663: 'total_return_pct': round((navs[-1]/INIT_NAV - 1)*100, 2),
+L664: 'cagr_gross_pct':   round(cagr_gross * 100, 2),
+L665: 'cagr_net_pct':     round(cagr_net * 100, 2),
+L666: 'mdd_pct':           round(mdd * 100, 2),
+L676: 'stream_weights':    {k: round(v*100,1) for k,v in {
+L720: f'{sp["calmar"]:>7.3f}  {sp["pnl_net"]/1e4:>10.1f}만원')
+
+--- scripts/shadow_portfolio.py ---
+L80: if _today_wd >= 5:
+L103: slippage = cfg.get('sizer.slippage_bps') / 10000
+L189: slippage = cfg.get('sizer.slippage_bps') / 10000
+L243: cum_ret = (nav / initial - 1) * 100 if initial > 0 else 0
+L270: 'return_pct': round((self._state['virtual_nav'] / self._state['initial_capital'] - 1) * 100, 2),
+L272: 'win_rate': round(wins / max(trades, 1) * 100, 1),
+
+--- scripts/analyze_ss_etf_volatility.py ---
+L28: df['intraday_vol'] = (df['high'] - df['low']) / df['open'] * 100 # 일중 변동폭 (%)
+L29: df['abs_return'] = df['return'].abs() * 100
+L41: before_ret_std = before_df['return'].std() * 100
+L42: after_ret_std = after_df['return'].std() * 100
+L68: if p_value < 0.05:
+
+--- scripts/deep_backtest_v37.py ---
+L43: KOFR_D = float(dc('s5.kofr_annual_rate',  0.035)) / 252
+L101: if len(past)<20: return {}
+L103: ma20=float(prices.rolling(20).mean().iloc[-1]) if len(prices)>=20 else float(prices.mean())
+L104: ma60=float(prices.rolling(60).mean().iloc[-1]) if len(prices)>=60 else float(prices.mean())
+L109: rv=(rets.rolling(20).std()*math.sqrt(252)*100).dropna()
+L144: if i%60==0:
+L150: bull_pct=(dist.get('bull',0)+dist.get('momentum_surge',0))/max(sum(dist.values()),1)*100
+L200: vix_pct = float(sp_stats.percentileofscore(vix_series, vix_now)) / 100.0
+L238: if len(ps)<w//2: return 0.0
+L240: return (mu/sd*math.sqrt(252)) if sd>1e-9 else 0.0
+L244: if len(ps)<w+10: return -999.0
+L245: rets=ps.tail(lb+w+10).pct_change().dropna(); roll=[]
+L248: roll.append((float(ww.mean())/sd*math.sqrt(252)) if sd>1e-9 else 0.0)
+L272: etf_sh=0.0; etf_avail=len(etf_sub)>=60 if not etf_sub.empty and 'close' in etf_sub.columns else False
+L276: etf_signal=float(math.tanh((etf_sh-etf_thr)*2))
+L281: w_stock=w_stock_cfg*(1.0/(1.0-w_etf_cfg+1e-9))*(1.0-w_etf) if w_etf<w_etf_cfg else w_stock_cfg
+L288: if len(sub)<30: continue
+L291: stock_signal=float(math.tanh(float(np.mean(stock_sharpes))*1.5)) if stock_sharpes else 0.0
+L293: ic_signal=float(math.tanh(_feature_ic_score(sector,dt)*20))
+L296: else: w_etf_n=w_stock_n=w_ic_n=1/3
+L338: mom5=float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L339: score=0.5*math.tanh(fg*3)+0.3*math.tanh(mom5*20)+0.2*base_w
+L340: ic_scores[code]=max(score+0.5,0.01)
+L355: mixed={k:0.50*norm.get(k,0)+0.50*BASE_W.get(k,0.2) for k in BASE_W}
+L412: if 'kr_122630' not in s.positions and 'kr_122630' in pm and s.cash > 10000:
+L421: if 'kr_252670' not in s.positions and 'kr_252670' in pm and s.cash > 10000:
+L423: crash_size = float(np.clip(crash * 0.80, 0.40, 0.90))
+L430: if 'kr_069500' not in s.positions and 'kr_069500' in pm and s.cash > 10000:
+L445: if c not in s.positions and s.cash>10000:
+L446: qty=int(per*0.95/pm[c])
+L460: if len(sub)<21: continue
+L462: m5=float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L464: if p>0: scored.append((c,0.70*m20-0.30*m5,p))
+L471: if c not in s.positions and s.cash>10000:
+L472: qty=int(per*0.90/p)
+L486: if c not in s.positions and s.cash>10000:
+L487: qty=int(per*0.95/pm[c])
+L501: if c not in s.positions and s.cash>10000:
+L502: qty=int(per*0.95/pm[c])
+L507: if idle<10000: return
+L513: if len(sub)>=2:
+L517: if abs(gap)>0.003: s1.cash+=idle*0.10*gap*0.50
+L560: if len(sub) < 20: continue
+L568: kelly = min(kelly_base * 4 * max(sec_score, 0.01),
+L579: if code not in s.positions and s.cash > 10000:
+L598: if i%30==0: compute_portfolio_ic_weights(dt)
+L600: run_s1(streams['S1'],pm,dt,(i%5==0),regime)
+L601: run_s2(streams['S2'],pm,dt,(i%5==0),regime)
+L602: run_s3(streams['S3'],pm,dt,(i%21==0),regime)
+L603: run_s4(streams['S4'],pm,dt,(i%10==0),regime)
+L605: run_s10(streams['S10'],pm,dt,(i%5==0),regime)
+L609: if i%100==0:
+L615: if n<2: return {}
+L616: yrs=n/252; cagr_g=(navs[-1]/INIT_NAV)**(1/yrs)-1
+L624: pnl=navs[-1]-INIT_NAV; tax=max(0,pnl-2_500_000)*FIN_TX; pnl_net=pnl-tc-tax
+L631: if sns<2: continue
+L632: sc=CAP.get(sid,INIT_NAV/6)
+L638: s_pnl=sn[-1]-sc; s_ptax=max(0,s_pnl-500_000)*FIN_TX
+L639: sp[sid]={'cagr_gross':round(s_cagr*100,2),'mdd':round(smdd*100,2),'sharpe':round(ssh,3),
+L646: 'total_return_pct':round((navs[-1]/INIT_NAV-1)*100,2),
+L647: 'cagr_gross_pct':round(cagr_g*100,2),'mdd_pct':round(mdd*100,2),
+L679: f'Sharpe={sp["sharpe"]:>6.3f}  세후={sp["pnl_net"]/1e4:>8.1f}만원')
+
+--- scripts/deep_backtest_v36.py ---
+L49: KOFR_D = float(dc('s5.kofr_annual_rate',  0.035)) / 252
+L117: if len(past) < 20: return {}
+L121: ma20   = float(prices.rolling(20).mean().iloc[-1]) if len(prices) >= 20 else float(prices.mean())
+L122: ma60   = float(prices.rolling(60).mean().iloc[-1]) if len(prices) >= 60 else float(prices.mean())
+L133: rv_series  = (rets.rolling(20).std() * math.sqrt(252) * 100).dropna()
+L182: if i % 60 == 0:
+L192: bull_pct = (dist.get('bull',0)+dist.get('momentum_surge',0)) / max(sum(dist.values()),1) * 100
+L242: if len(price_series) < window // 2: return 0.0
+L245: return (mu / sd * math.sqrt(252)) if sd > 1e-9 else 0.0
+L253: if len(price_series) < window + 10: return -999.0
+L254: rets = price_series.tail(lookback + window + 10).pct_change().dropna()
+L259: roll.append((float(w.mean())/sd*math.sqrt(252)) if sd > 1e-9 else 0.0)
+L306: etf_avail = len(etf_sub) >= 60 if not etf_sub.empty and 'close' in etf_sub.columns else False
+L318: w_stock = w_stock_cfg * (1.0 / (1.0 - w_etf_cfg + 1e-9)) * (1.0 - w_etf) \
+L327: if len(sub) < 30: continue
+L334: stock_signal = float(math.tanh(stock_score * 1.5))
+L342: ic_signal = float(math.tanh(ic_raw * 20))  # IC 스케일 조정
+L346: etf_signal = float(math.tanh((etf_sh - etf_thr) * 2))
+L357: w_etf_n = w_stock_n = w_ic_n = 1/3
+L414: mom5 = float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub) >= 6 else 0
+L416: score = 0.5*math.tanh(fg*3) + 0.3*math.tanh(mom5*20) + 0.2*base_w
+L417: ic_scores[code] = max(score + 0.5, 0.01)  # 양수 보장
+L440: mixed = {k: 0.50*norm.get(k,0)+0.50*BASE_W.get(k,0.2) for k in BASE_W}
+L499: if 'kr_122630' not in s.positions and 'kr_122630' in pm and s.cash>10000:
+L500: conf=min(1.0,(bull-BT)/max(0.90-BT,0.01))
+L501: qty=int(s.cash*min(1.0,0.70+0.30*conf)/pm['kr_122630'])
+L506: if 'kr_252670' not in s.positions and 'kr_252670' in pm and s.cash>10000:
+L507: qty=int(s.cash*0.80/pm['kr_252670'])
+L512: if 'kr_069500' not in s.positions and 'kr_069500' in pm and s.cash>10000:
+L527: if c not in s.positions and s.cash>10000:
+L528: qty=int(per*0.95/pm[c])
+L542: if len(sub)<21: continue
+L544: m5=float(sub['close'].iloc[-1]/sub['close'].iloc[-6]-1) if len(sub)>=6 else 0
+L546: if p>0: scored.append((c,0.70*m20-0.30*m5,p))
+L553: if c not in s.positions and s.cash>10000:
+L554: qty=int(per*0.90/p)
+L568: if c not in s.positions and s.cash>10000:
+L569: qty=int(per*0.95/pm[c])
+L583: if c not in s.positions and s.cash>10000:
+L584: qty=int(per*0.95/pm[c])
+L589: if idle<10000: return
+L595: if len(sub)>=2:
+L599: if abs(gap)>0.003: s1.cash += idle*0.10*gap*0.50
+L652: if len(sub) < 20: continue
+L666: kelly = min(kelly_base * 4 * max(sec_score, 0.01), float(dc('s10.max_single_stock_pct', 0.30)))
+L678: if code not in s.positions and s.cash > 10000:
+L707: if i % 30 == 0:
+L710: rebal_s10 = (i % 5 == 0)
+L712: run_s1(streams['S1'], pm, dt, (i%5==0),  regime)
+L713: run_s2(streams['S2'], pm, dt, (i%5==0),  regime)
+L714: run_s3(streams['S3'], pm, dt, (i%21==0), regime)
+L715: run_s4(streams['S4'], pm, dt, (i%10==0), regime)
+L723: if i % 100 == 0:
+L732: if n<2: return {}
+L733: yrs=n/252
+L743: pnl=navs[-1]-INIT_NAV; tax=max(0,pnl-2_500_000)*FIN_TX
+L753: if sn<2: continue
+L754: sc=CAP.get(sid,INIT_NAV/6)
+L760: s_pnl=s_navs[-1]-sc; s_ptax=max(0,s_pnl-500_000)*FIN_TX
+L761: sp[sid]={'cagr_gross':round(s_cagr*100,2),'mdd':round(smdd*100,2),
+L771: 'total_return_pct':round((navs[-1]/INIT_NAV-1)*100,2),
+L772: 'cagr_gross_pct':round(cagr_g*100,2),'cagr_net_pct':round((INIT_NAV+pnl_net)**0/yrs,2),
+L773: 'mdd_pct':round(mdd*100,2),'sharpe':round(sh,3),'sortino':round(so,3),'calmar':round(cal,3),
+L802: f'Sharpe={sp["sharpe"]:>6.3f}  세후={sp["pnl_net"]/1e4:>8.1f}만원')
+
+--- scripts/run_s1_market_open.py ---
+L104: if now.hour < 9:
+L180: position_scale = 0.7
+L206: elif amount < 200_000:
+
+--- scripts/run_backtest.py ---
+L124: if len(available) < len(feature_names) * 0.5:
+L185: start_date = end_date - timedelta(days=months * 30)
+L202: if len(features) < 20 or len(prices) < 20:
+L243: initial_capital = 150_000_000
+L248: if i % 10 == 0:
+L318: 'return_pct': (exit_price / entry_price - 1) * 100,
+L319: 'max_return_pct': (max_price / entry_price - 1) * 100,
+L329: net_return = trade['return_pct'] - (roundtrip_cost_pct * 100)
+L331: trade['cost_pct'] = round(roundtrip_cost_pct * 100, 4)
+L336: avg_return = np.mean([t['net_return_pct'] for t in selected]) / 100
+L349: total_return = (cash / initial_capital - 1) * 100
+L350: win_rate = len(wins) / len(returns) * 100 if returns else 0
+L356: if len(returns) >= 5:
+L357: sharpe = (np.mean(returns) / np.std(returns)) * np.sqrt(252 / hold_days) if np.std(returns) > 0 else 0
+L366: dd = (nav - peak) / peak * 100
+L372: bucket = 'high' if t['up_prob'] >= 0.70 else ('mid' if t['up_prob'] >= 0.60 else 'low')
+L383: 'win_rate': round(len(w) / len(rets) * 100, 1) if rets else 0,
+L398: 'annualized_return_pct': round(total_return * (12 / months), 2),
+
+--- scripts/gap_analysis.py ---
+L166: ((sell_price / buy_price) - 1) * 100
+L180: 'predicted_up': float(buy.get('confidence', 0.5)) >= 0.5,
+L182: 'hit': (float(buy.get('confidence', 0.5)) >= 0.5)
+L201: conf = 0.5
+L219: 'predicted_up': conf >= 0.5,
+L221: 'hit': (conf >= 0.5) == (pnl_pct > 0),
+L248: if len(trades) < 2:
+L278: if len(trades) < 2:
+L308: if len(trades) < 2:
+L345: i == len(edges) - 2 and conf == edges[i + 1]):
+L453: t for t in failures if t['confidence'] >= 0.7]
+L489: if fail_rate > 0.6:
+L525: if regime_da < 0.40:
+L608: if by_sector[worst_sector]['da'] < 0.50:
+L619: if regime_da < 0.45:
+L647: if len(trades) < 3:
+L695: if price >= 500_000:
+L697: elif price >= 50_000:
+
+--- scripts/daily_pipeline.py ---
+L236: _good = [k for k, v in _details.items() if v >= 0.6]
+L237: _weak = [k for k, v in _details.items() if v < 0.6]
+L248: _kill_switch_result['position_scale'] = 0.5
+L292: if _target_exp < 0.8:
+L624: _api_timeout_sec = 600  # 10분 = 600초
+L1128: 'actual_return': trade.get('pnl_pct', 0) / 100 if trade.get('pnl_pct') else 0,
+L1256: _hours_since_train = (datetime.now() - _last_train).total_seconds() / 3600
+L1257: if _hours_since_train < 24:
+L1300: if isinstance(_td, dict) and len(_td) >= 5:
+L1307: if len(_rows) < 20:
+L1314: if len(_pdf) < 20 or 'close' not in _pdf.columns:
+L1318: if len(_close) < 20:
+L1323: _fmap['rsi_14'] = 50.0  # 간이 RSI
+L1328: _fmap['rsi_14'] = 100 - 100 / (1 + _rs)
+L1332: _fmap['atr_pct'] = float(np.std(_c[-14:]) / max(_c[-1], 1) * 100)
+L1333: _fmap['bb_position'] = float((_c[-1] - _sma20) / max(np.std(_c[-20:]) * 2, 1e-9))
+L1341: if len(_rows) >= 20:
+L1348: if _current_features is not None and len(_current_features) >= 20:
+L1415: return 1.0 / (1.0 + math.exp(-6.0 * (psi - 0.35)))
+L1466: f"  {'⚠️' if drift_discount < 0.5 else '📊'} DriftGuard: {n_drifted}건 드리프트 "
+L1509: if len(positions) >= 5:
+L1638: 'weak_features': [f for f, v in _pairs if abs(v) < 0.01],
+L1996: if len(error_collector.errors) > 5:
+L1997: err_summary += f"\\n...and {len(error_collector.errors)-5} more errors."
+
+--- scripts/backfill_aux_data.py ---
+L117: sent_mean = 0.5 + 2.0 * ret_5d
+L118: sent_std = 4.743 * ret_std_20d
+L174: if i % 50 == 0:
+L319: dart_composite = (dart_insider * 0.4 +
+L320: dart_buyback * 0.3 +
+L321: dart_major * 0.2 +
+L322: dart_earnings * 0.1)
+L347: if i % 50 == 0:
+L412: net_flow_norm = net_flow_raw / (volume * close + 1e-10)
+L416: big_vol_up = (vol_ratio > 1.5) & (ret_1d > 0)
+L417: big_vol_down = (vol_ratio > 1.5) & (ret_1d < 0)
+L427: sharp_drop = (ret_1d < -0.02) & (vol_ratio > 2.0)
+L466: if i % 50 == 0:
+
+--- scripts/deep_backtest_v32.py ---
+L88: return min(score, 0.95), max(0.0, 0.2 - score*0.1)
+L92: return max(0.0, 0.2 - score*0.1), min(score, 0.90)
+L102: if len(close_series) < 30:
+L109: rsi   = 100 - (100 / (1 + gain / loss.replace(0, np.nan)))
+L115: (overbought - rsi_v)/(100 - overbought) if rsi_v > overbought else 0.0
+L124: return 0.5 * rsi_sig + 0.5 * z_sig
+L183: 'pnl':round(pnl),'pnl_pct':round(pnl/(pos['avg']*qty+1e-9),4),
+L199: if len(self.nav_series) < 10: return {}
+L203: n_yr  = max((dates[-1]-dates[0]).days/365.25, 0.1)
+L208: rf_d  = RF_ANNUAL/252
+L210: sh    = float(np.mean(exc)/np.std(exc)*np.sqrt(252)) if np.std(exc)>1e-9 else 0
+L212: so    = float(np.mean(exc)/np.std(dn)*np.sqrt(252)) if len(dn)>5 and np.std(dn)>1e-9 else 0
+L213: cal   = float(cagr/abs(mdd)) if abs(mdd)>1e-6 else 0
+L232: yr_rets[y] = round((v['last']/prev-1)*100, 2)
+L236: 'total_return_pct': round((final/init-1)*100,2),
+L237: 'cagr_pct': round(cagr*100,2),
+L238: 'mdd_pct': round(mdd*100,2),
+L240: 'win_rate_pct': round(wr*100,1),
+L278: if not has_lev and S0_LEV in pm and s.cash > 10000:
+L280: alloc = s.cash * min(0.90, 0.50 + conf*0.40)
+L288: if not has_inv and S0_INV in pm and s.cash > 10000:
+L289: conf  = min(1.0, crash / 0.5)
+L290: alloc = s.cash * min(0.70, 0.30 + conf*0.40)
+L296: if has_lev and bull < S0_BULL_THR * 0.80:
+L298: if has_inv and crash < S0_CRASH_THR * 0.70:
+L302: and S0_BASE in pm and s.cash > 10000):
+L327: if slots > 0 and s.cash > 10000:
+L329: alloc = s.cash / max(len(new),1) * 0.95
+L357: if kr_s[t]>0.1][:mxp]
+L362: if slots > 0 and s.cash > 10000:
+L364: alloc = s.cash / max(len(new),1) * 0.92
+L391: slots = 4 - len([t for t in s.positions if t in S3_ETF_A])
+L392: if slots > 0 and s.cash > 10000:
+L394: alloc = s.cash * 0.50 / max(len(new),1) * 0.95
+L400: if day_idx < 5:
+L402: if qvm_avail and s.cash > 50000:
+L403: alloc = s.cash * 0.50 / max(len(qvm_avail),1) * 0.95
+L430: for t in pm if t.startswith('kr_') and t not in ETF_CODES and scores.get(t,0)>0.1}
+L442: if slots > 0 and s.cash > 10000:
+L444: alloc = s.cash / max(len(new),1) * 0.93
+L458: if len(c) < 80: continue
+L462: if len(co) > 30:
+L472: if len(c) < 80: continue
+L476: if len(co) > 30:
+L484: da      = correct/total*100 if total>0 else 0
+L506: if var < 1e-10: return None
+L531: if 'close' in df.columns and len(df) >= 50:
+L608: if len(past) >= 30:
+L636: if i % 50 == 0 or i == len(trading_days)-1:
+L648: n_yr  = max((dates[-1]-dates[0]).days/365.25, 0.1)
+L653: rf_d  = RF_ANNUAL/252
+L655: sh    = float(np.mean(exc)/np.std(exc)*np.sqrt(252)) if np.std(exc)>1e-9 else 0
+L657: so    = float(np.mean(exc)/np.std(dn)*np.sqrt(252)) if len(dn)>5 and np.std(dn)>1e-9 else 0
+L658: cal   = float(cagr/abs(mdd)) if abs(mdd)>1e-6 else 0
+L675: if len(bench_navs) >= 2:
+L706: 'comm_bps':      COMM*10000,
+L707: 'slip_etf_bps':  SLIP_ETF*10000,
+L708: 'slip_stk_bps':  SLIP_STK*10000,
+L709: 'tax_etf_pct':   TAX_ETF*100,
+L710: 'tax_stk_pct':   TAX_STK*100,
+L711: 'cgt_pct':       CGT_RATE*100,
+L714: 'sleeve_a_pct': sa*100, 'sleeve_b_pct': sb*100,
+L715: 'weights': {k: round(v.weight*100,1) for k,v in streams.items()},
+L720: 'gross_return_pct':    round((final/init-1)*100,2),
+L721: 'cagr_pct':            round(cagr*100,2),
+L722: 'after_cost_cagr_pct': round(ac_cagr*100,2),
+L723: 'after_tax_cagr_pct':  round(at_cagr*100,2),
+L724: 'mdd_pct':             round(mdd*100,2),
+L728: 'alpha_vs_kospi_pct':  round(alpha_ann*100,2),
+L730: 'bench_cagr_pct':      round(bench_cagr*100,2),
+L738: 'cost_drag_bps':    round(tc_total/init*10000,1),
+L763: S='═'*72
+L822: ret = (v['last']/prev-1)*100 if prev>0 else 0
+L823: dd  = (v['last']/v['peak']-1)*100 if v['peak']>0 else 0
+
+--- scripts/overnight_macro_collector.py ---
+L66: if h is not None and len(h) >= 2:
+L69: change_pct = (last_close / prev_close - 1) * 100
+L73: vs_avg = (last_close / avg_5d - 1) * 100
+L118: if h is not None and len(h) >= 2:
+L121: change = (last / prev - 1) * 100
+L124: vs_ma20 = (last / ma20 - 1) * 100
+L142: if h_flkr is not None and len(h_flkr) >= 2:
+L145: change = (last / prev - 1) * 100
+L160: result['sgx_proxy_score'] = max(5, min(95, 50 + ewy_chg * 10))  # fallback
+L185: if h is not None and len(h) >= 2:
+L188: change = (last / prev - 1) * 100
+L237: scores['us_futures'] = max(5, min(95, 50 + avg_us * 10))
+L238: weights['us_futures'] = 0.30
+L248: ewy_chg * 0.40 +
+L249: nq_chg * 0.25 +
+L250: sox_chg * 0.20 +
+L251: (-dxy_chg) * 0.15  # DXY 역방향
+L253: sgx_ensemble_score = max(5, min(95, 50 + ensemble_chg * 10))
+L255: weights['sgx_proxy'] = 0.25
+L271: vix_score = max(5, min(95, 100 - vix_val * 2))
+L273: weights['vix'] = 0.15
+L279: dxy_score = max(5, min(95, 50 - dxy['change_pct'] * 20))
+L281: weights['dxy'] = 0.10
+L287: bond_score = max(5, min(95, 50 - us10y['change_pct'] * 15))
+L289: weights['us10y'] = 0.10
+L295: oil_score = max(5, min(95, 50 - oil['change_pct'] * 5))
+L297: weights['oil'] = 0.10
+L304: weighted_score = 50
+L307: if weighted_score >= 65:
+L310: elif weighted_score >= 55:
+L313: elif weighted_score >= 45:
+L316: elif weighted_score >= 35:
+L361: if len(df) >= 2:
+L362: prev_kospi_chg = (float(df['종가'].iloc[-1]) / float(df['종가'].iloc[-2]) - 1) * 100
+L372: if overnight_score < 35:
+L374: elif overnight_score > 65:
+L375: vix_adj = 0.1
+L384: estimated_gap = net_overnight * 0.5 + us_avg * 0.3 + vix_adj
+L389: elif abs(net_overnight) < 0.3 and abs(us_avg) < 0.3:
+L399: 'ewy_contribution': round(net_overnight * 0.5, 2),
+L400: 'us_contribution': round(us_avg * 0.3, 2),
+
+--- scripts/go_nogo.py ---
+L66: strat_min = min_trades if strat.startswith('A') else max(1, min_trades // 3)
+L82: total_return = (nav / initial - 1) * 100 if initial > 0 else 0
+L106: pnl_pct = (pnl / max(initial, 1)) * 100
+L123: 'value': round(win_rate * 100, 1),
+L124: 'threshold': cfg.get('gonogo.win_rate_threshold', 0.45) * 100,
+L125: 'pass': n_sells < 5 or win_rate >= cfg.get('gonogo.win_rate_threshold', 0.45),  # 5건 미만이면 면제
+L135: dd_limit = abs(cfg.get('risk.total_dd_limit')) * 100
+L149: 'value': round(da * 100, 1),
+L150: 'threshold': cfg.get('gonogo.da_threshold', 0.52) * 100,
+L190: cost_pct = (total_cost / max(initial, 1)) * 100
+L258: dd = (nav / peak - 1) * 100
+L372: total_return = (nav / max(initial, 1) - 1) * 100 if nav > 0 else 0
+L399: 'value': round(da * 100, 1) if da else 'N/A',
+
+--- scripts/pipeline/sub_phases.py ---
+L187: _ois_val = 50.0
+L436: _pnl_pct = ((_cur / _entry) - 1) * 100 if _entry > 0 else 0
+L640: _pnl_pct = (_sell_price / _entry_price - 1) * 100 if _entry_price > 0 else 0
+L969: if _ohlcv is not None and len(_ohlcv) >= 14:
+L977: avg_gain = sum(gains) / 14
+L978: avg_loss = sum(losses) / 14
+L980: rsi = 100 - (100 / (1 + rs))
+L984: mult = 2 / (span + 1)
+L994: vol_avg5 = sum(volumes[-6:-1]) / 5 if len(volumes) >= 6 else volumes[-1]
+L1495: if 800 <= _now_dt.hour * 100 + _now_dt.minute <= 2000:
+L1501: _flow_interval_sec = cfg.get("intraday.flow_fetch_interval_min", 10) * 60
+L1833: if _ohlcv is not None and len(_ohlcv) >= 14:
+L1840: avg_gain = sum(gains) / 14
+L1841: avg_loss = sum(losses) / 14
+L1842: rsi = 100 - (100 / (1 + avg_gain / avg_loss)) if avg_loss > 0 else 50
+L1844: vol_avg = float(volumes[-20:].mean()) if len(volumes) >= 20 else 1
+L1966: return 3 <= m <= 11
+L1992: _trigger_min = _th * 60 + _tm
+L1993: _now_min     = _now.hour * 60 + _now.minute
+L2140: if _macro_df is not None and not _macro_df.empty and len(_macro_df) >= 60:
+L2164: deleted = fs.delete_old(days=365 * 3)  # 3년 이상 오래된 데이터 삭제

@@ -1,0 +1,41 @@
+{
+  "ticker": "006400",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 37851639054336,
+      "shares": 77254139,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 37576207499264,
+      "shares": 77254139,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 37064699543552,
+      "shares": 77254139,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 40369832067072,
+      "shares": 77254139,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 40369832067072,
+      "shares": 77254139,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 51859104464896,
+      "shares": 77254139,
+      "source": "yfinance"
+    }
+  ]
+}

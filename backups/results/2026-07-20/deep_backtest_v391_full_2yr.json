@@ -1,0 +1,97 @@
+{
+  "version": "v3.9.1",
+  "period": "2024-07-10 ~ 2026-07-09",
+  "trading_days": 485,
+  "initial_nav": 300000000.0,
+  "final_nav": 488684404,
+  "total_return_pct": 62.89,
+  "cagr_gross_pct": 28.86,
+  "mdd_pct": -13.07,
+  "sharpe": 1.743,
+  "sortino": 2.539,
+  "calmar": 2.209,
+  "total_cost": 9466790,
+  "tax_est": 40960569,
+  "pnl_gross": 188684404,
+  "pnl_net": 138257045,
+  "total_trades": 831,
+  "regime_distribution": {
+    "neutral": 19,
+    "crash": 98,
+    "bear": 198,
+    "caution": 15,
+    "bull": 155
+  },
+  "s10_dynamic_thresholds": {
+    "semiconductor": 0.5321,
+    "battery": 0.3931,
+    "defense": -0.0629,
+    "auto": 0.4421,
+    "bio": 0.3348,
+    "it": 0.1866,
+    "finance": 0.2726
+  },
+  "s2_ic_weights": {
+    "mom20": 0.2,
+    "rsi": 0.2,
+    "bollinger": 0.2,
+    "volume": 0.2,
+    "foreign": 0.2
+  },
+  "streams": {
+    "S0": {
+      "cagr_gross": -1.44,
+      "mdd": -5.76,
+      "sharpe": -0.453,
+      "calmar": -0.25,
+      "trades": 104,
+      "pnl_net": -2746825,
+      "final_nav": 87522799
+    },
+    "S_C": {
+      "cagr_gross": 9.99,
+      "mdd": -10.42,
+      "sharpe": 0.99,
+      "calmar": 0.959,
+      "trades": 234,
+      "pnl_net": 1500574,
+      "final_nav": 12607588
+    },
+    "S1": {
+      "cagr_gross": -0.5,
+      "mdd": -19.03,
+      "sharpe": 0.093,
+      "calmar": -0.026,
+      "trades": 78,
+      "pnl_net": -1244418,
+      "final_nav": 40952021
+    },
+    "S2": {
+      "cagr_gross": 64.47,
+      "mdd": -22.41,
+      "sharpe": 2.066,
+      "calmar": 2.877,
+      "trades": 138,
+      "pnl_net": 126097167,
+      "final_nav": 277327278
+    },
+    "S3": {
+      "cagr_gross": 21.07,
+      "mdd": -26.8,
+      "sharpe": 0.739,
+      "calmar": 0.786,
+      "trades": 53,
+      "pnl_net": 13777516,
+      "final_nav": 59735232
+    },
+    "S10": {
+      "cagr_gross": 1.0,
+      "mdd": -5.81,
+      "sharpe": 0.218,
+      "calmar": 0.171,
+      "trades": 224,
+      "pnl_net": 94872,
+      "final_nav": 10539485
+    }
+  }
+}

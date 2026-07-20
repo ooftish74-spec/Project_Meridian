@@ -1,0 +1,16 @@
+{
+  "var_pct": 6.872,
+  "var_amount": 68677.0,
+  "cvar_pct": 10.091,
+  "cvar_amount": 100852.0,
+  "ewma_vol_daily_pct": 4.934,
+  "ewma_vol_annual_pct": 78.3,
+  "confidence": 0.95,
+  "method": "single_asset",
+  "ticker": "069500",
+  "within_limit": "True",
+  "limit_pct": 9.33,
+  "dynamic_limit_pct": 9.33,
+  "sigma_target_annual": 0.2,
+  "sigma_ratio": 3.916
+}

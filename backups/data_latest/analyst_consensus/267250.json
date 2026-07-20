@@ -1,0 +1,20 @@
+{
+  "ticker": "267250",
+  "target_price": 395000,
+  "current_price": 276500,
+  "recomm_mean": 4.0,
+  "buy": 1,
+  "hold": 2,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 0,
+  "research_count": 3,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "HD현대",
+  "latest_research": {
+    "title": "종합선물세트",
+    "broker": "대신증권",
+    "date": "20260518"
+  }
+}

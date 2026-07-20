@@ -1,0 +1,22 @@
+{
+  "ticker": "001800",
+  "company": "001800",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 96621785705,
+  "operating_profit": 80097265374,
+  "net_income": 61613281057,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.574819"
+}

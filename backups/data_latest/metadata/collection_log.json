@@ -1,0 +1,742 @@
+{
+  "SP500": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "NASDAQ": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "DOW": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 8591
+  },
+  "DAX": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9138
+  },
+  "CAC40": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9132
+  },
+  "FTSE100": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9124
+  },
+  "NIKKEI": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 8863
+  },
+  "HANGSENG": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 8916
+  },
+  "KOSPI": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 7184
+  },
+  "KOSDAQ": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6244
+  },
+  "US_NVIDIA": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6808
+  },
+  "US_Apple": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_Alphabet": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5407
+  },
+  "US_Microsoft": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_Amazon": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 7233
+  },
+  "US_Meta": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3455
+  },
+  "US_Tesla": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3932
+  },
+  "US_Berkshire_Hathaway": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 7490
+  },
+  "US_Walmart": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_JPMorgan": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_Visa": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 4506
+  },
+  "US_Johnson_Johnson": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_Mastercard": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 4962
+  },
+  "US_Home_Depot": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "US_Bank_of_America": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "ETF_Technology": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Healthcare": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Financials": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Energy": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Consumer_Discretionary": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Consumer_Staples": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Industrials": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Materials": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_Real_Estate": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2603
+  },
+  "ETF_Utilities": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6828
+  },
+  "ETF_KODEX_Semiconductor": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "ETF_KODEX_2ndBattery": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "ETF_KODEX_Bio": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "FX_USD_KRW": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5759
+  },
+  "FX_EUR_KRW": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5775
+  },
+  "FX_GBP_KRW": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5765
+  },
+  "FX_EUR_USD": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5761
+  },
+  "FX_USD_JPY": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 7595
+  },
+  "FX_GBP_USD": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5773
+  },
+  "FX_USD_CNY": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6163
+  },
+  "COMM_Gold": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6389
+  },
+  "COMM_Silver": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6391
+  },
+  "COMM_Crude_Oil": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6398
+  },
+  "COMM_Natural_Gas": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6395
+  },
+  "COMM_Copper": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6394
+  },
+  "BOND_US_10Y_Treasury": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9066
+  },
+  "BOND_US_30Y_Treasury": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9066
+  },
+  "BOND_US_5Y_Treasury": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9066
+  },
+  "VOL_VIX": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9097
+  },
+  "VOL_VXN_NASDAQ": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 6303
+  },
+  "ECON_US_M1": {
+    "last_date": "2025-12-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 432
+  },
+  "ECON_US_M2": {
+    "last_date": "2025-12-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 432
+  },
+  "ECON_US_M3": {
+    "last_date": "2006-03-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 846
+  },
+  "ECON_US_Real_GDP": {
+    "last_date": "2025-07-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 143
+  },
+  "ECON_US_Real_GDP_Per_Capita": {
+    "last_date": "2025-07-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 143
+  },
+  "ECON_US_CPI": {
+    "last_date": "2026-01-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 433
+  },
+  "ECON_US_PCE": {
+    "last_date": "2025-11-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 431
+  },
+  "ECON_US_Unemployment_Rate": {
+    "last_date": "2026-01-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 433
+  },
+  "ECON_US_Nonfarm_Payrolls": {
+    "last_date": "2026-01-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 433
+  },
+  "ECON_US_Fed_Funds_Rate": {
+    "last_date": "2026-02-12",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 13192
+  },
+  "ECON_US_10Y_Yield": {
+    "last_date": "2026-02-12",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9424
+  },
+  "ECON_KR_M1": {
+    "last_date": "2023-10-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 406
+  },
+  "ECON_JP_Interest_Rate": {
+    "last_date": "2025-12-01",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 432
+  },
+  "ECON_JPY_USD": {
+    "last_date": "2026-02-06",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9420
+  },
+  "ECON_CNY_USD": {
+    "last_date": "2026-02-06",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 9420
+  },
+  "KR_\uc0bc\uc131\uc804\uc790": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_SK\ud558\uc774\ub2c9\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc0bc\uc131\uc804\uc790\uc6b0": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ud604\ub300\ucc28": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_LG\uc5d0\ub108\uc9c0\uc194\ub8e8\uc158": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 990
+  },
+  "KR_\uc0bc\uc131\ubc14\uc774\uc624\ub85c\uc9c1\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2273
+  },
+  "KR_SK\uc2a4\ud018\uc5b4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1032
+  },
+  "KR_\uae30\uc544": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_KB\uae08\uc735": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ub450\uc0b0\uc5d0\ub108\ube4c\ub9ac\ud2f0": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_HD\ud604\ub300\uc911\uacf5\uc5c5": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1078
+  },
+  "KR_\ud55c\ud654\uc5d0\uc5b4\ub85c\uc2a4\ud398\uc774\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc140\ud2b8\ub9ac\uc628": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc0bc\uc131\ubb3c\uc0b0": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2739
+  },
+  "KR_\uc2e0\ud55c\uc9c0\uc8fc": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc0bc\uc131\uc0dd\uba85": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ud55c\ud654\uc624\uc158": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_NAVER": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ud604\ub300\ubaa8\ube44\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ud55c\uad6d\uc804\ub825": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ud558\ub098\uae08\uc735\uc9c0\uc8fc": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ubbf8\ub798\uc5d0\uc14b\uc99d\uad8c": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uace0\ub824\uc544\uc5f0": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_HD\ud604\ub300\uc77c\ub809\ud2b8\ub9ad": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2152
+  },
+  "KR_POSCO\ud640\ub529\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc0bc\uc131SDI": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc6b0\ub9ac\uae08\uc735\uc9c0\uc8fc": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1723
+  },
+  "KR_HD\ud55c\uad6d\uc870\uc120\ud574\uc591": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc0bc\uc131\ud654\uc7ac": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uce74\uce74\uc624": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc54c\ud14c\uc624\uc820": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2743
+  },
+  "KR_\uc5d0\ucf54\ud504\ub85c": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc5d0\ucf54\ud504\ub85c\ube44\uc5e0": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1710
+  },
+  "KR_\ub808\uc778\ubcf4\uc6b0\ub85c\ubcf4\ud2f1\uc2a4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1234
+  },
+  "KR_\uc0bc\ucc9c\ub2f9\uc81c\uc57d": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\uc5d0\uc774\ube44\uc5d8\ubc14\uc774\uc624": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 1757
+  },
+  "KR_\ucf54\uc624\ub871\ud2f0\uc288\uc9c4": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2032
+  },
+  "KR_\ub9ac\ub178\uacf5\uc5c5": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_HLB": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 3000
+  },
+  "KR_\ucf00\uc5b4\uc820": {
+    "last_date": "2026-02-13",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 2514
+  },
+  "economic_sentiment": {
+    "last_date": "2026-02-15",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 53
+  },
+  "social_sentiment": {
+    "last_date": "2026-02-16",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 366
+  },
+  "macro_events": {
+    "last_date": "2025-12-28",
+    "last_update": "2026-02-16 12:59:03",
+    "total_records": 5
+  },
+  "financials_KR_\uc0bc\uc131\uc804\uc790": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1020
+  },
+  "disclosure_KR_\uc0bc\uc131\uc804\uc790": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 2597
+  },
+  "financials_KR_SK\ud558\uc774\ub2c9\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1020
+  },
+  "disclosure_KR_SK\ud558\uc774\ub2c9\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 479
+  },
+  "financials_KR_\ud604\ub300\ucc28": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 342
+  },
+  "disclosure_KR_\ud604\ub300\ucc28": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 856
+  },
+  "financials_KR_LG\uc5d0\ub108\uc9c0\uc194\ub8e8\uc158": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 538
+  },
+  "disclosure_KR_LG\uc5d0\ub108\uc9c0\uc194\ub8e8\uc158": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 99
+  },
+  "financials_KR_\uc0bc\uc131\ubc14\uc774\uc624\ub85c\uc9c1\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 767
+  },
+  "disclosure_KR_\uc0bc\uc131\ubc14\uc774\uc624\ub85c\uc9c1\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 107
+  },
+  "financials_KR_SK\uc2a4\ud018\uc5b4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 271
+  },
+  "disclosure_KR_SK\uc2a4\ud018\uc5b4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 84
+  },
+  "financials_KR_\uae30\uc544": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 960
+  },
+  "disclosure_KR_\uae30\uc544": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 145
+  },
+  "financials_KR_KB\uae08\uc735": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 296
+  },
+  "disclosure_KR_KB\uae08\uc735": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 143
+  },
+  "financials_KR_\ub450\uc0b0\uc5d0\ub108\ube4c\ub9ac\ud2f0": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1027
+  },
+  "disclosure_KR_\ub450\uc0b0\uc5d0\ub108\ube4c\ub9ac\ud2f0": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 147
+  },
+  "financials_KR_HD\ud604\ub300\uc911\uacf5\uc5c5": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 516
+  },
+  "disclosure_KR_HD\ud604\ub300\uc911\uacf5\uc5c5": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 140
+  },
+  "financials_KR_\ud55c\ud654\uc5d0\uc5b4\ub85c\uc2a4\ud398\uc774\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1016
+  },
+  "disclosure_KR_\ud55c\ud654\uc5d0\uc5b4\ub85c\uc2a4\ud398\uc774\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 416
+  },
+  "financials_KR_\uc140\ud2b8\ub9ac\uc628": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 704
+  },
+  "financials_KR_\uc2e0\ud55c\uc9c0\uc8fc": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 304
+  },
+  "disclosure_KR_\uc2e0\ud55c\uc9c0\uc8fc": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 143
+  },
+  "financials_KR_\uc0bc\uc131\uc0dd\uba85": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 290
+  },
+  "disclosure_KR_\uc0bc\uc131\uc0dd\uba85": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 97
+  },
+  "financials_KR_\ud55c\ud654\uc624\uc158": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1014
+  },
+  "disclosure_KR_\ud55c\ud654\uc624\uc158": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 158
+  },
+  "financials_KR_NAVER": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1052
+  },
+  "disclosure_KR_NAVER": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 270
+  },
+  "financials_KR_\ud604\ub300\ubaa8\ube44\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1014
+  },
+  "disclosure_KR_\ud604\ub300\ubaa8\ube44\uc2a4": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 106
+  },
+  "financials_KR_\ud55c\uad6d\uc804\ub825": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 1040
+  },
+  "disclosure_KR_\ud55c\uad6d\uc804\ub825": {
+    "last_date": "1970-01-01",
+    "last_update": "2026-02-16 11:43:20",
+    "total_records": 42
+  }
+}

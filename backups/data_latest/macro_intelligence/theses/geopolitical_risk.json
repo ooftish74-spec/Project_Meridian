@@ -1,0 +1,34 @@
+{
+  "id": "geopolitical_risk",
+  "title": "지정학적 리스크 (미중/대만/중동)",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "geopolitical",
+  "confidence": 0.5,
+  "horizon": "ongoing",
+  "thesis": {
+    "summary": "미중 기술 패권 경쟁 + 대만해협 리스크 → 반도체 공급망 재편",
+    "risk_areas": [
+      "미중 반도체 수출 통제 (NVIDIA H20 차단 등)",
+      "대만해협 긴장 → TSMC 공급 리스크",
+      "중동 분쟁 → 원유가 급등 → 인플레 재발",
+      "러시아-우크라이나 → 에너지/곡물 공급 불안"
+    ]
+  },
+  "signals": {
+    "escalation": [
+      "미중 추가 제재 발표",
+      "대만해협 군사 훈련",
+      "원유 $100+ 돌파"
+    ],
+    "de_escalation": [
+      "미중 정상회담 합의",
+      "대만 현상유지 확인"
+    ]
+  },
+  "system_impact": {
+    "L1": "VIX 급등 → 인버스 전환 트리거",
+    "L3": "AllWeather 원자재/금 슬리브 방어",
+    "L4_IRP": "금/미국채 비중 확대"
+  }
+}

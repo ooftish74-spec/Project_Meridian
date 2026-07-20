@@ -1,0 +1,2 @@
+{"timestamp": "2026-05-27T20:24:21.814566", "event_type": "TRADE_DECISION", "source": "S1", "reason": "buy 005930 qty=100 conf=0.85", "details": {"stream_id": "S1", "ticker": "005930", "action": "buy", "quantity": 100, "confidence": 0.85, "decision_reasons": ["Momentum", "VIX low"]}}
+{"timestamp": "2026-05-27T20:24:21.814575", "event_type": "REGIME_CHANGE", "source": "regime_detector", "reason": "caution → bull (conf=0.75)", "details": {"old_regime": "caution", "new_regime": "bull", "confidence": 0.75, "factors": {"vix": 16, "trend": "up"}}}

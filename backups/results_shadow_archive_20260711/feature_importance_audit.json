@@ -1,0 +1,75 @@
+{
+  "date": "2026-07-11T03:00:07.489448",
+  "ensemble_importance": {
+    "return_1d": 43.58762,
+    "high_low_range": 43.126834,
+    "volume_ratio_20d": 38.593274,
+    "overnight_return": 35.765775,
+    "log_return_skew_20d": 35.38547,
+    "return_3d": 32.425168,
+    "volatility_20d": 29.654669,
+    "price_ma_ratio_20_60": 28.643289,
+    "foreign_ratio_feat": 28.404701,
+    "bb_position": 28.299529,
+    "rsi_slope_5d": 26.978381,
+    "obv_slope_20d": 25.764449,
+    "log_return_kurtosis_20d": 25.731795,
+    "macd_signal": 25.563149,
+    "rsi_14": 25.245477,
+    "volume_trend": 24.937731,
+    "atr_pct": 24.046054,
+    "debt_ratio_latest": 23.488189,
+    "return_20d": 22.03456,
+    "ma5_dist": 19.635286,
+    "return_5d": 19.585951,
+    "close_to_high_20d": 16.465552,
+    "ma20_dist": 15.927539,
+    "intraday_return": 15.416652,
+    "ma60_dist": 12.832313,
+    "price_ma_ratio_5_20": 12.469329,
+    "earnings_surprise_latest": 11.361104,
+    "trend_strength": 8.80292,
+    "vol_ratio_5_20": 8.61299,
+    "revenue_yoy_latest": 8.10249,
+    "mean_reversion": 7.205985,
+    "adx_proxy": 4.105779
+  },
+  "drift_risk_features": [],
+  "low_importance_candidates": [
+    "price_ma_ratio_5_20",
+    "earnings_surprise_latest",
+    "trend_strength",
+    "vol_ratio_5_20",
+    "revenue_yoy_latest",
+    "mean_reversion",
+    "adx_proxy"
+  ],
+  "data_absent_features": [],
+  "active_weak_features": [
+    "price_ma_ratio_5_20",
+    "earnings_surprise_latest",
+    "trend_strength",
+    "vol_ratio_5_20",
+    "revenue_yoy_latest",
+    "mean_reversion",
+    "adx_proxy"
+  ],
+  "recommendations": [
+    {
+      "action": "RETRAIN_WITHOUT_NOISE",
+      "priority": "LOW",
+      "features": [
+        "revenue_yoy_latest",
+        "vol_ratio_5_20",
+        "adx_proxy",
+        "mean_reversion",
+        "price_ma_ratio_5_20",
+        "earnings_surprise_latest",
+        "trend_strength"
+      ],
+      "reason": "활성 약세 7개 피처 제외 후 재학습 검토"
+    }
+  ],
+  "psi_scores": {},
+  "removal_candidates": []
+}

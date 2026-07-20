@@ -1,0 +1,242 @@
+{
+  "raw_data": {
+    "S0": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S1": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S2": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S3": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S4": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S5": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    },
+    "S10": {
+      "daily_returns": [],
+      "daily_costs": [],
+      "regimes": [],
+      "n_trades": 0,
+      "sharpe": null
+    }
+  },
+  "metrics": {
+    "sharpes": {
+      "S0": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S1": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S2": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S3": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S4": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S5": {
+        "20": null,
+        "60": null,
+        "120": null
+      },
+      "S10": {
+        "20": null,
+        "60": null,
+        "120": null
+      }
+    },
+    "correlation_matrix": {
+      "S0_S1": 0.0,
+      "S0_S2": 0.0,
+      "S0_S3": 0.0,
+      "S0_S4": 0.0,
+      "S0_S5": 0.0,
+      "S0_S10": 0.0,
+      "S1_S2": 0.0,
+      "S1_S3": 0.0,
+      "S1_S4": 0.0,
+      "S1_S5": 0.0,
+      "S1_S10": 0.0,
+      "S2_S3": 0.0,
+      "S2_S4": 0.0,
+      "S2_S5": 0.0,
+      "S2_S10": 0.0,
+      "S3_S4": 0.0,
+      "S3_S5": 0.0,
+      "S3_S10": 0.0,
+      "S4_S5": 0.0,
+      "S4_S10": 0.0,
+      "S5_S10": 0.0
+    },
+    "cost_efficiency": {
+      "S0": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S1": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S2": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S3": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S4": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S5": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      },
+      "S10": {
+        "total_return_pct": 0,
+        "total_cost_krw": 0,
+        "cost_pct": 0,
+        "efficiency": null,
+        "n_days": 0
+      }
+    },
+    "regime_conditional": {
+      "S0": {},
+      "S1": {},
+      "S2": {},
+      "S3": {},
+      "S4": {},
+      "S5": {},
+      "S10": {}
+    },
+    "stream_summary": {
+      "S0": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S1": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S2": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S3": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S4": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S5": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      },
+      "S10": {
+        "n_positions": 0,
+        "n_buys": 0,
+        "n_sells": 0,
+        "win_rate": 0,
+        "total_invested": 0,
+        "unrealized_pnl": 0,
+        "realized_pnl": 0
+      }
+    },
+    "tracking_start": "2026-07-13",
+    "last_updated": "2026-07-19T22:52:14.564125"
+  }
+}

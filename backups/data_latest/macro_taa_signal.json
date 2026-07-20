@@ -1,0 +1,39 @@
+{
+  "date": "2026-05-25",
+  "signals": {
+    "quadrant": {
+      "quadrant": "Q4_falling_growth_falling_inflation",
+      "growth_trend": 0.0,
+      "inflation_trend": 0.0
+    },
+    "vol_scale": {
+      "ewma_vol_daily": 0.0356,
+      "ewma_vol_annual": 0.5651,
+      "target_vol": 0.15,
+      "scale": 0.3,
+      "lambda": 0.94
+    }
+  },
+  "quadrant": {
+    "quadrant": "Q4_falling_growth_falling_inflation",
+    "growth_trend": 0.0,
+    "inflation_trend": 0.0
+  },
+  "vol_scale": {
+    "ewma_vol_daily": 0.0356,
+    "ewma_vol_annual": 0.5651,
+    "target_vol": 0.15,
+    "scale": 0.3,
+    "lambda": 0.94
+  },
+  "taa_adjustments": {
+    "kr_equity": -0.024,
+    "kr_bond": 0.12,
+    "us_equity": 0.0,
+    "gold": 0.08,
+    "commodity": -0.015,
+    "tips": 0.0,
+    "cash": 0.0,
+    "inverse": 0.0
+  }
+}

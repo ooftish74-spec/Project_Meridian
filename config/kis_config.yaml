@@ -1,0 +1,28 @@
+# ═══════════════════════════════════════════════════════
+# Project Meridian — KIS API Configuration
+# ═══════════════════════════════════════════════════════
+# KIS OpenAPI 연결 설정 + 스트림별 거래 세션 매핑.
+# DynamicConfig에 없는 인프라 설정만 여기서 관리.
+
+account:
+  mode: live  # shadow | paper | live
+  base_url_live: https://openapi.koreainvestment.com:9443
+  base_url_paper: https://openapivts.koreainvestment.com:29443
+
+rate_limit:
+  requests_per_second: 20
+  throttle_ms: 50
+
+streams:
+  S1:
+    tradeable_sessions: [regular]  # ETF: regular only
+    exchange: SOR
+  S2:
+    tradeable_sessions: [pre, regular, after]  # Individual stocks
+    exchange: auto  # NXT for pre/after, SOR for regular
+  S3:
+    tradeable_sessions: [regular]  # ETF: regular only
+    exchange: SOR
+  S4:
+    tradeable_sessions: [pre, regular, after]  # Individual stocks
+    exchange: auto

@@ -1,0 +1,29 @@
+{
+  "passive_pct": 0.15,
+  "active_pct": 0.85,
+  "conviction": 0.5,
+  "ic_mean": null,
+  "benchmark_etf": "069500",
+  "cash_drag_action": "deploy",
+  "excess_cash": 199766210,
+  "deploy_to": [
+    {
+      "target": "069500",
+      "stream": "S3",
+      "amount": 14982466,
+      "type": "passive_benchmark"
+    },
+    {
+      "target": null,
+      "stream": "S2",
+      "amount": 42450320,
+      "type": "active_excess_cash"
+    },
+    {
+      "target": null,
+      "stream": "S3",
+      "amount": 42450320,
+      "type": "active_excess_cash"
+    }
+  ]
+}

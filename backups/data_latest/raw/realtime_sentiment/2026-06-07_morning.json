@@ -1,0 +1,126 @@
+{
+  "date": "2026-06-07",
+  "phase": "morning",
+  "timestamp": "2026-06-07T06:01:07.896545",
+  "fear_greed": {
+    "score": 42.1,
+    "rating": "fear",
+    "previous": 54.7,
+    "change": -12.6
+  },
+  "news_sentiment": {
+    "score": -0.1,
+    "positive_count": 1,
+    "negative_count": 4,
+    "total": 30,
+    "details": [
+      {
+        "title": "ECB Steps Up as G7’s Lead Hawk With Interest-Rate Hike Primed",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "IATA Director Willie Walsh on Rising Cost of Jet Fuel",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "IATA Director on Air Transport Stagflation & Challenges",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "DoubleLine, Oaktree Brace for Potential AI Pain",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Bloomberg This Weekend 6/06/2026",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Stocks Sink in Broad AI Rout Sparked by China's DeepSeek",
+        "source": "wsj",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Comex Gold, Silver Settle Lower",
+        "source": "wsj",
+        "sentiment": 0.0
+      },
+      {
+        "title": "DeepSeek Won't Sink U.S. AI Titans",
+        "source": "wsj",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Financial Services Roundup: Market Talk",
+        "source": "wsj",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Arabica Coffee Prices Hit Record on U.S., Colombia Tariff Spat",
+        "source": "wsj",
+        "sentiment": -1.0
+      }
+    ]
+  },
+  "kospi_futures": {
+    "night": {
+      "close": 1434.95,
+      "change": 25.0,
+      "return": 0.017731,
+      "date": "20260604"
+    },
+    "overnight_signal": {
+      "direction": "up",
+      "strength": 0.017731125217206285,
+      "source": "KRX_Night"
+    }
+  },
+  "vix_term": {
+    "vix": 21.51,
+    "vix3m": 21.82,
+    "ratio": 0.9858,
+    "structure": "contango",
+    "panic": "elevated"
+  },
+  "geopolitical": {
+    "score": 93,
+    "level": "critical",
+    "high": 5,
+    "medium": 3,
+    "low": 3
+  },
+  "social_media": {
+    "naver": {
+      "score": null,
+      "source": "no_api_key"
+    },
+    "reddit": {
+      "score": null,
+      "source": "failed"
+    },
+    "composite_score": 0
+  },
+  "naver_categories": {
+    "status": "no_api_key"
+  },
+  "contrarian_signal": {
+    "raw_sentiment": -0.06,
+    "is_extreme": "False",
+    "contrarian": 0
+  },
+  "composite_fg": {
+    "index": 43.5,
+    "classification": "Fear",
+    "components": {
+      "cnn_fg": 42.1,
+      "news": 45.0,
+      "vix": 57.0,
+      "social": 50,
+      "geo": 7
+    }
+  }
+}

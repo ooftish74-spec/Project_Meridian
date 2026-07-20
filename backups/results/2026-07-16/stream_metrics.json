@@ -1,0 +1,79 @@
+{
+  "S0": {
+    "sharpe": 0.0,
+    "cumulative_return_pct": 0.0,
+    "active_positions": 0
+  },
+  "S1": {
+    "sharpe": 1.5,
+    "cumulative_return_pct": 5.0,
+    "active_positions": 0,
+    "mdd_pct": -2.0
+  },
+  "S2": {
+    "stream_id": "S2",
+    "name": "ML Alpha",
+    "daily_returns": [],
+    "cumulative_return_pct": 0,
+    "sharpe": null,
+    "max_drawdown_pct": 0,
+    "win_rate": 0.0,
+    "total_trades": 0,
+    "active_positions": 0,
+    "model_loaded": true,
+    "model_meta": {
+      "val_acc": 0,
+      "val_auc": 0,
+      "train_date": "",
+      "version": "v_20260715_200227",
+      "model_weights": {}
+    },
+    "n_days": 0
+  },
+  "S3": {
+    "stream_id": "S3",
+    "name": "Hybrid Multifactor & QVM Engine",
+    "daily_returns": [],
+    "cumulative_return_pct": 0,
+    "sharpe": null,
+    "max_drawdown_pct": 0,
+    "win_rate": 0.0,
+    "total_trades": 1,
+    "active_positions": 3,
+    "last_turnover_pct": 1.0,
+    "n_days": 0
+  },
+  "S4": {
+    "stream_id": "S4",
+    "name": "Advisory/Tax-Optimized",
+    "daily_returns": [],
+    "cumulative_return_pct": 0,
+    "sharpe": null,
+    "max_drawdown_pct": 0,
+    "win_rate": 0,
+    "total_trades": 0,
+    "active_positions": 0,
+    "tax_savings": {
+      "isa_savings_krw": 330000,
+      "irp_credit_krw": 1155000,
+      "pension_credit_krw": 990000,
+      "total_annual_savings_krw": 2475000,
+      "equivalent_return_pct": 247.5
+    },
+    "drip_projections": {
+      "weighted_div_pct": 4.0,
+      "weighted_growth_pct": 8.0,
+      "total_return_pct": 12.0,
+      "total_10y": 31058482,
+      "total_20y": 96462931,
+      "total_30y": 299599221
+    },
+    "n_days": 0
+  },
+  "S5": {
+    "sharpe": 0.0,
+    "daily_returns": []
+  },
+  "_timestamp": "2026-07-15T23:37:17.440842",
+  "_regime": "crash"
+}

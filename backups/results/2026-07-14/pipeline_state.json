@@ -1,0 +1,54 @@
+{
+  "us_regime": "neutral",
+  "us_prev_regime": "neutral",
+  "us_regime_confidence": 0.383,
+  "us_regime_score": 0.1014,
+  "us_regime_source": "us_market_regime",
+  "kr_regime": "bull",
+  "kr_prev_regime": "bull",
+  "kr_regime_confidence": 0.417,
+  "kr_regime_scores": {
+    "bull": 0.43,
+    "caution": 0.42,
+    "bear": 0.0,
+    "crash": 0.18
+  },
+  "ois": 49.0,
+  "ois_label": "neutral",
+  "ois_threshold_adj": 0,
+  "intraday_regime": "normal",
+  "operating_regime": {
+    "overall": "caution",
+    "detail": {
+      "kr_index": "bull",
+      "kr_single": "bull",
+      "global_lev": "caution"
+    },
+    "us_score": 0.0,
+    "kr_score": 1.0
+  },
+  "updated_at": "2026-07-13T15:10:09.871739",
+  "updated_by": "daily_pipeline.market",
+  "regime": "neutral",
+  "intraday_updated_at": "2026-07-14T03:26:24.435781",
+  "kr_regime_measurements": {
+    "vix": 20.34,
+    "kospi_trend": "sideways",
+    "kospi_ma20_dist": -10.24,
+    "kospi_ma60_dist": -0.81,
+    "kospi_volatility": 74.4,
+    "usdkrw": 1498.8769,
+    "usdkrw_prev": 1498.8769,
+    "vkospi": 12.78,
+    "ois": 49.0,
+    "macro_composite": -0.348
+  },
+  "kr_regime_updated_at": "2026-07-13T07:50:08.360892",
+  "kr_regime_updated_by": "regime_engine",
+  "market_regime": "crash",
+  "drawdown_stage": "Normal",
+  "drawdown_pct": 0.0628,
+  "timestamp": "2026-07-13T20:00:05.719620",
+  "date": "2026-07-13",
+  "ssot_synced": true
+}

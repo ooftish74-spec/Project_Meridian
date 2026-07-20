@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-07-15T23:37:16.697458",
+  "regime": "crash",
+  "regime_confidence": 0.554,
+  "orders": [
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.554,
+      "size_pct": 0.8864,
+      "strategy": "continuous_vol_defense",
+      "account": "ISA",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=88.6%)",
+      "timestamp": "2026-07-15T23:37:16.693163"
+    },
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.554,
+      "size_pct": 0.8864,
+      "strategy": "continuous_vol_defense",
+      "account": "IRP",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=88.6%)",
+      "timestamp": "2026-07-15T23:37:16.693176"
+    },
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.554,
+      "size_pct": 0.8864,
+      "strategy": "continuous_vol_defense",
+      "account": "PENSION",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=88.6%)",
+      "timestamp": "2026-07-15T23:37:16.693184"
+    },
+    {
+      "stream_id": "S4",
+      "ticker": "360750",
+      "name": "TIGER 미국S&P500",
+      "direction": "long",
+      "confidence": 0.38,
+      "size_pct": 0.0545,
+      "strategy": "advisory",
+      "account": "PENSION",
+      "div_pct": 1.5,
+      "etf_type": "GLOBAL",
+      "reason": "[수동매매/Advisory] PENSION 월간 리밸런싱 (crash)",
+      "timestamp": "2026-07-15T23:37:16.694283"
+    }
+  ]
+}

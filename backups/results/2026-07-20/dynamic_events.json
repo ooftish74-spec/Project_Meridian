@@ -1,0 +1,84 @@
+[
+  {
+    "type": "CENTRAL_BANK",
+    "tier": 1,
+    "event_type": "monetary",
+    "headline": "[비즈토크&lt;하&gt;] 긴축 들어간 한국은행…기준금리 인상 영향은",
+    "keywords": [
+      "금리 인상",
+      "기준금리"
+    ],
+    "relevance": 4.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-19T05:15:23.187185"
+  },
+  {
+    "type": "POLICY",
+    "tier": 1,
+    "event_type": "policy",
+    "headline": "[단독]구글·메타·네이버·카카오에 청소년 SNS 규제 검토",
+    "keywords": [
+      "규제"
+    ],
+    "relevance": 2.5,
+    "entities": [
+      {
+        "ticker": "035720",
+        "name": "카카오"
+      }
+    ],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-19T05:15:23.185616"
+  },
+  {
+    "type": "POLICY",
+    "tier": 1,
+    "event_type": "policy",
+    "headline": "송미령 농식장관 \"韓 농업 보조금 519만 원, 다른 나라보다 적어\"(종합)",
+    "keywords": [
+      "보조금"
+    ],
+    "relevance": 2.5,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-19T05:15:23.188665"
+  },
+  {
+    "type": "IPO",
+    "tier": 2,
+    "event_type": "market_event",
+    "headline": "‘세계 최대 규모 상장’ 스페이스X, 시가총액 1500조원 증발",
+    "keywords": [
+      "상장"
+    ],
+    "relevance": 2.0,
+    "entities": [
+      {
+        "ticker": "SPCX",
+        "name": "스페이스X",
+        "market": "global"
+      }
+    ],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-19T05:15:23.189960"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "SNS 할수록 우울한 소녀들...정부도 칼 빼들었다",
+    "keywords": [
+      "부도"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-19T05:15:23.190900"
+  }
+]

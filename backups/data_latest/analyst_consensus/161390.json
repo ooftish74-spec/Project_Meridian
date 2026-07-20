@@ -1,0 +1,20 @@
+{
+  "ticker": "161390",
+  "target_price": 84000,
+  "current_price": 69800,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "한국타이어앤테크놀로지",
+  "latest_research": {
+    "title": "이젠 열관리가 타이어에게 힘이 될 때",
+    "broker": "한화투자증권",
+    "date": "20260520"
+  }
+}

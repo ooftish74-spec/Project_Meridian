@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-07-10T23:56:33.162031",
+  "factors": {
+    "value_score": {
+      "ic": -0.0377,
+      "icir": 0.037,
+      "valid": "weak",
+      "n_samples": 50
+    },
+    "quality_score": {
+      "ic": -0.3387,
+      "icir": 0.3527,
+      "valid": "moderate",
+      "n_samples": 50
+    },
+    "momentum_score": {
+      "ic": -0.1559,
+      "icir": 0.1547,
+      "valid": "weak",
+      "n_samples": 50
+    },
+    "governance_score": {
+      "ic": -0.0217,
+      "icir": 0.0212,
+      "valid": "weak",
+      "n_samples": 50
+    },
+    "qvm_score": {
+      "ic": -0.1509,
+      "icir": 0.1496,
+      "valid": "weak",
+      "n_samples": 50
+    }
+  },
+  "weight_adjustment": {
+    "value_score": {
+      "action": "reduce",
+      "multiplier": 0.7
+    },
+    "quality_score": {
+      "action": "maintain",
+      "multiplier": 1.0
+    },
+    "momentum_score": {
+      "action": "reduce",
+      "multiplier": 0.7
+    },
+    "governance_score": {
+      "action": "reduce",
+      "multiplier": 0.7
+    },
+    "qvm_score": {
+      "action": "reduce",
+      "multiplier": 0.7
+    }
+  },
+  "n_universe": 50,
+  "n_returns": 50
+}

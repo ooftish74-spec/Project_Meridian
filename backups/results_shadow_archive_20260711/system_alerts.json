@@ -1,0 +1,31 @@
+[
+  {
+    "timestamp": "2026-07-03T15:48:36.945871",
+    "source": "DATA_FREEZE",
+    "message": "모든 VIX 데이터 소스 수집 실패 (Stale/Glitch). 매매를 동결합니다.",
+    "severity": "critical",
+    "status": "active",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-07-05T20:05:53.691228",
+    "source": "fetch_pykrx_vkospi",
+    "message": "'지수명'",
+    "severity": "error",
+    "status": "active",
+    "context": {
+      "args": [],
+      "kwargs": {}
+    }
+  },
+  {
+    "timestamp": "2026-07-05T20:05:53.691821",
+    "source": "VKOSPI",
+    "message": "pykrx 수집 실패, Naver 우회 시도",
+    "severity": "warning",
+    "status": "resolved",
+    "context": {},
+    "resolved_at": "2026-07-05T20:05:53.868356",
+    "resolution": "Naver 수집으로 복구 완료"
+  }
+]

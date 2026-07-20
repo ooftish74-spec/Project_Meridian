@@ -1,0 +1,46 @@
+[
+  {
+    "type": "CENTRAL_BANK",
+    "tier": 1,
+    "event_type": "monetary",
+    "headline": "한국은행, 16일 기준금리 인상 유력…관건은 ‘얼마나 더 올리나’",
+    "keywords": [
+      "금리 인상",
+      "기준금리"
+    ],
+    "relevance": 4.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-12T05:15:26.849321"
+  },
+  {
+    "type": "IPO",
+    "tier": 1,
+    "event_type": "market_event",
+    "headline": "이번주 공모주 청약, 에이치엘지노믹스 1개사",
+    "keywords": [
+      "공모",
+      "공모주"
+    ],
+    "relevance": 4.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-12T05:15:26.850937"
+  },
+  {
+    "type": "CENTRAL_BANK",
+    "tier": 1,
+    "event_type": "monetary",
+    "headline": "‘월요일이 두려워?’…“주가 하락 추세 전환 가능성 제한적” 한은의 전망, 왜?",
+    "keywords": [
+      "한은"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-12T05:15:26.848172"
+  }
+]

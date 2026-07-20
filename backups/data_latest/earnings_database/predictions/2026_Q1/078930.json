@@ -1,0 +1,22 @@
+{
+  "ticker": "078930",
+  "company": "078930",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 5774183225175,
+  "operating_profit": 354341641427,
+  "net_income": 272570493405,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.586678"
+}

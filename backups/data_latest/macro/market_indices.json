@@ -1,0 +1,110 @@
+{
+  "updated": "2026-05-02",
+  "source": "data/raw/indices/*.csv + yfinance",
+  "indices": {
+    "CAC40": {
+      "date": "2026-04-30",
+      "current": 8114.8398,
+      "prev": 8072.1299,
+      "change_pct": 0.529,
+      "change_20d_pct": 1.674
+    },
+    "DAX": {
+      "date": "2026-04-30",
+      "current": 24292.3809,
+      "prev": 23954.5605,
+      "change_pct": 1.41,
+      "change_20d_pct": 4.264
+    },
+    "DOW": {
+      "date": "2026-05-01",
+      "current": 49499.2695,
+      "prev": 49652.1406,
+      "change_pct": -0.308,
+      "change_20d_pct": 6.063
+    },
+    "DXY": {
+      "date": "2026-05-01",
+      "current": 98.227,
+      "prev": 98.08,
+      "change_pct": 0.15,
+      "change_20d_pct": -1.418
+    },
+    "FTSE100": {
+      "date": "2026-05-01",
+      "current": 10363.9297,
+      "prev": 10378.7998,
+      "change_pct": -0.143,
+      "change_20d_pct": -0.693
+    },
+    "HANGSENG": {
+      "date": "2026-04-30",
+      "current": 25776.5293,
+      "prev": 26111.8398,
+      "change_pct": -1.284,
+      "change_20d_pct": 3.987
+    },
+    "KOSDAQ": {
+      "date": "2026-04-30",
+      "current": 1192.35,
+      "prev": 1220.26,
+      "change_pct": -2.287,
+      "change_20d_pct": 12.089
+    },
+    "KOSPI": {
+      "date": "2026-04-30",
+      "current": 6598.87,
+      "prev": 6690.9,
+      "change_pct": -1.375,
+      "change_20d_pct": 22.717
+    },
+    "NASDAQ": {
+      "date": "2026-05-01",
+      "current": 25114.4434,
+      "prev": 24892.3105,
+      "change_pct": 0.892,
+      "change_20d_pct": 14.176
+    },
+    "NIKKEI225": {
+      "date": "2026-05-01",
+      "current": 59513.1211,
+      "prev": 59284.9219,
+      "change_pct": 0.385,
+      "change_20d_pct": 12.028
+    },
+    "RUSSELL2000": {
+      "date": "2026-05-01",
+      "current": 2812.8223,
+      "prev": 2799.9099,
+      "change_pct": 0.461,
+      "change_20d_pct": 10.713
+    },
+    "SP500": {
+      "date": "2026-05-01",
+      "current": 7230.1201,
+      "prev": 7209.0098,
+      "change_pct": 0.293,
+      "change_20d_pct": 9.351
+    },
+    "SSE_Composite": {
+      "date": "2026-04-30",
+      "current": 4112.1592,
+      "prev": 4107.5142,
+      "change_pct": 0.113,
+      "change_20d_pct": 4.921
+    },
+    "VIX": {
+      "date": "2026-05-01",
+      "current": 16.99,
+      "prev": 16.89,
+      "change_pct": 0.592,
+      "change_20d_pct": -29.706
+    },
+    "GOLD": {
+      "date": "2026-05-01",
+      "current": 4625.6001,
+      "change_pct": 0.236,
+      "change_20d_pct": 0
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "ticker": "402340",
+  "target_price": 1291429,
+  "current_price": 1346000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 1,
+  "eps_revision_down": 2,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "SK스퀘어",
+  "latest_research": {
+    "title": "백조의 첫 날갯짓",
+    "broker": "대신증권",
+    "date": "20260526"
+  }
+}

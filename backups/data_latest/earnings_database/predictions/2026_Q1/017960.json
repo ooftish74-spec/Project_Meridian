@@ -1,0 +1,22 @@
+{
+  "ticker": "017960",
+  "company": "017960",
+  "market": "KR",
+  "sector": "기타",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 241983051173,
+  "operating_profit": 115744338852,
+  "net_income": 89034106809,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.580163"
+}

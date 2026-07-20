@@ -1,0 +1,461 @@
+[
+  {
+    "formula": "add(X0, mul(X1, X2))",
+    "features_used": [
+      "rsi_14",
+      "atr_pct",
+      "volume_ratio"
+    ],
+    "retire_regime": "bear",
+    "avg_ic_before_retire": 0.03,
+    "ic_trend": [
+      0.04,
+      0.03,
+      0.02
+    ],
+    "complexity": 5,
+    "retire_reason": "IC decay",
+    "original_oos_ic": 0.03,
+    "retired_at": "2026-07-10T11:45:09.682300"
+  },
+  {
+    "formula": "add(X0,X1)",
+    "features_used": [
+      "rsi_14"
+    ],
+    "retire_regime": "bear",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 3,
+    "retire_reason": "",
+    "original_oos_ic": 0.03,
+    "retired_at": "2026-07-10T11:48:15.258441"
+  },
+  {
+    "formula": "X0",
+    "features_used": [
+      "exog_kospi_index",
+      "zscore_14",
+      "exog_pc_ratio_ma5",
+      "exog_finbert_score",
+      "exog_sc_semi"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-14T17:52:33.450594"
+  },
+  {
+    "formula": "Abs(2*Abs(x1) - 0.002582863)/x1",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 6,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-14T21:40:38.732698+00:00"
+  },
+  {
+    "formula": "-x1 + x1/0.26892528 - (x0 - (x1 + (x1 + x1)/0.14556214)/0.27319098) + 0.14503755",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 10,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-15T19:16:02.165741+00:00"
+  },
+  {
+    "formula": "0.198364970000000",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-16T19:15:32.102656+00:00"
+  },
+  {
+    "formula": "X0",
+    "features_used": [
+      "exog_kospi_index",
+      "zscore_14",
+      "exog_pc_ratio_ma5",
+      "exog_finbert_score",
+      "exog_sc_semi"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-17T22:26:03.079970"
+  },
+  {
+    "formula": "x1 - Abs(2872.7832466888*x1 + 0.464988578869708*log(x1) - 27.894249) + 26.970201",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 9,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-17T19:15:18.422682+00:00"
+  },
+  {
+    "formula": "Abs(x0 + x1 + x1 + x1 + x1 + x1 + x1 + x1/0.017355746 + 0.10289324)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 11,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-18T19:15:20.411467+00:00"
+  },
+  {
+    "formula": "Abs(13.2124971239755*(x1 + 10.580906)*Abs(x1) - 0.0134677744596581)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 7,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-19T19:15:20.981088+00:00"
+  },
+  {
+    "formula": "X4",
+    "features_used": [
+      "exog_kr_trend_환율",
+      "exog_sc_semi",
+      "exog_bok_export_chg3",
+      "exog_sc_shipping",
+      "exog_xm_gold_oil_ratio",
+      "exog_bok_export_level",
+      "exog_sc_lithium",
+      "exog_kr_trend_부동산",
+      "exog_sc_dram",
+      "exog_kr_trend_반도체",
+      "exog_gt_real_estate",
+      "exog_kr_trend_etf",
+      "exog_gt_gold",
+      "exog_kr_export_yoy",
+      "exog_kr_trend_금값",
+      "exog_kr_trend_자동차",
+      "exog_kr_trend_주식"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-20T08:46:29.442178"
+  },
+  {
+    "formula": "x1 - (-x1 - 3.684273) + Abs(x1 + Abs(x1) + 2.18290128186949*Abs(Abs(x1))) - 1*(-2.9817011) - 0.009446498/x1",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 15,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-20T19:15:19.569043+00:00"
+  },
+  {
+    "formula": "4.13124724626551*Abs(log(-x0 + 331.615421701412*x1*exp(0.78978837*exp(re(x0)) - 0.867422654177779*re(x0)) + x1))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 15,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-21T19:15:23.561271+00:00"
+  },
+  {
+    "formula": "(0.47605035 + x1/x1)*Abs(2*x1 + (x0 - 0.47252128)*0.3793678 - 2.260529 + 0.0034049707/x1)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 12,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-22T19:15:18.715245+00:00"
+  },
+  {
+    "formula": "Abs(x0 - 2*x1 + 0.502809334414839*log(x1) + 3.50445695422644)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 8,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-23T19:15:22.660274+00:00"
+  },
+  {
+    "formula": "x1 - 1*(-0.21125264)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 3,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-24T19:15:24.704997+00:00"
+  },
+  {
+    "formula": "x1*141.33005",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 2,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-25T19:15:25.057548+00:00"
+  },
+  {
+    "formula": "Abs(x1*(x1 - 1*(-135.95912)) - x1)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 6,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-26T19:15:22.827893+00:00"
+  },
+  {
+    "formula": "Abs(x1/(-(-x1 + x1/0.08741492) - 0.30278987 + 0.32789648) - (-0.09993708)*(0.543287 - x0) + 2*Abs(Abs(x1)))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 14,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-27T19:15:22.723577+00:00"
+  },
+  {
+    "formula": "Abs(-0.17393494*x1 + log(24.146954*x1**2) + 10.0549101)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 8,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-28T19:15:21.719237+00:00"
+  },
+  {
+    "formula": "x1 + Abs(x0 + x1) + Abs(2*x1 + log(0.378814628655938*exp(x1)) + 746.2846*Abs(x1))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 14,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-29T19:15:20.027695+00:00"
+  },
+  {
+    "formula": "0.220809830000000",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-06-30T19:15:22.717009+00:00"
+  },
+  {
+    "formula": "(-(-x1/0.10450448 - 2.5360138) + 3.622555 - 0.008977697/x1)/0.80978954 + Abs(x1)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 9,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-01T19:15:22.782113+00:00"
+  },
+  {
+    "formula": "-x1 - x1 + 0.20955418",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 3,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-02T19:15:21.633051+00:00"
+  },
+  {
+    "formula": "-2*x1 + Abs(x1 - Abs(4209.681*x1 - Abs(2*x1 - Abs(log(x1) - Abs(x1)))))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 15,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-03T19:15:23.938601+00:00"
+  },
+  {
+    "formula": "exp(x1*(-1062.4612))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 3,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-04T19:15:18.965753+00:00"
+  },
+  {
+    "formula": "0.232607280000000",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-05T19:15:23.430079+00:00"
+  },
+  {
+    "formula": "0.228148420000000",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 1,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-06T19:15:21.276956+00:00"
+  },
+  {
+    "formula": "Abs(log(2*Abs(x1)) + 5.5850353)",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 6,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-07T19:15:21.126176+00:00"
+  },
+  {
+    "formula": "1.27846736105428*Abs(Abs(x1 + x1*4.365897 - 0.17446302))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 7,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-08T19:15:17.425247+00:00"
+  },
+  {
+    "formula": "Abs(log(0.124413244*Abs(log(x1))))",
+    "features_used": [
+      "gscpi",
+      "copper_gold_ratio"
+    ],
+    "retire_regime": "caution",
+    "avg_ic_before_retire": 0.0,
+    "ic_trend": [],
+    "complexity": 6,
+    "retire_reason": "OOS IC 미달 (0.0000 < 0.02)",
+    "original_oos_ic": 0.0,
+    "retired_at": "2026-07-09T19:15:19.661780+00:00"
+  }
+]

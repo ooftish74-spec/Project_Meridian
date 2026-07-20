@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-07-11T06:02:37.187905",
+  "finbert": {
+    "positive": 9,
+    "negative": 6,
+    "score": 0.0476,
+    "num_articles": 30
+  },
+  "corrected_sentiment": {
+    "raw_sentiment_newsapi": 0.0476,
+    "corrected_sentiment": 0.0476,
+    "sentiment_dispersion": 0.0476,
+    "contrarian_signal": 0
+  },
+  "corrected": {
+    "overall": 0.0476
+  }
+}

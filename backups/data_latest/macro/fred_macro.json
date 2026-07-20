@@ -1,0 +1,132 @@
+{
+  "updated": "2026-05-02",
+  "source": "data/raw/economic_indicators/*.csv + yfinance_proxy",
+  "indicators": {
+    "CHN_GDP": {
+      "date": "2024-01-01",
+      "current": 18743803170827.2,
+      "prev": 18270356654533.2,
+      "change_pct": 2.591,
+      "change_20d_pct": 708.776
+    },
+    "EU_CPI": {
+      "date": "2025-12-01",
+      "current": 129.47,
+      "prev": 129.26,
+      "change_pct": 0.162,
+      "change_20d_pct": 2.526
+    },
+    "EU_GDP": {
+      "date": "2025-10-01",
+      "current": 3408826.7,
+      "prev": 3397574.1,
+      "change_pct": 0.331,
+      "change_20d_pct": 10.34
+    },
+    "EU_Unemployment": {
+      "date": "2023-01-01",
+      "current": 6.7,
+      "prev": 6.7,
+      "change_pct": 0.0,
+      "change_20d_pct": -14.103
+    },
+    "GROWTH_PROXY": {
+      "date": "2026-04-17",
+      "current": 713.36,
+      "prev": 704.74,
+      "change_pct": 1.223,
+      "change_20d_pct": 9.529
+    },
+    "KOR_GDP": {
+      "date": "2025-07-01",
+      "current": 1.334,
+      "prev": 0.6749,
+      "change_pct": 97.669,
+      "change_20d_pct": -15.905
+    },
+    "SP500": {
+      "date": "2026-04-17",
+      "current": 7126.0601,
+      "prev": 7041.2798,
+      "change_pct": 1.204,
+      "change_20d_pct": 9.523
+    },
+    "USA_10Y_Treasury": {
+      "date": "2026-02-12",
+      "current": 4.09,
+      "prev": 4.18,
+      "change_pct": -2.153,
+      "change_20d_pct": -3.538
+    },
+    "USA_CPI": {
+      "date": "2026-01-01",
+      "current": 326.588,
+      "prev": 326.031,
+      "change_pct": 0.171,
+      "change_20d_pct": 4.327
+    },
+    "USA_FedFunds": {
+      "date": "2026-01-01",
+      "current": 3.64,
+      "prev": 3.72,
+      "change_pct": -2.151,
+      "change_20d_pct": -31.707
+    },
+    "USA_GDP": {
+      "date": "2025-07-01",
+      "current": 31098.027,
+      "prev": 30485.729,
+      "change_pct": 2.008,
+      "change_20d_pct": 40.797
+    },
+    "USA_Unemployment": {
+      "date": "2026-01-01",
+      "current": 4.3,
+      "prev": 4.4,
+      "change_pct": -2.273,
+      "change_20d_pct": 4.878
+    },
+    "US_10Y": {
+      "date": "2026-05-01",
+      "current": 4.378,
+      "ticker": "^TNX",
+      "source": "yfinance_proxy"
+    },
+    "US_2Y": {
+      "date": "2026-05-01",
+      "current": 3.575,
+      "ticker": "^IRX",
+      "source": "yfinance_proxy"
+    },
+    "VIX": {
+      "date": "2026-05-01",
+      "current": 16.99,
+      "ticker": "^VIX",
+      "source": "yfinance_proxy"
+    },
+    "OIL_WTI": {
+      "date": "2026-05-01",
+      "current": 102.5,
+      "ticker": "CL=F",
+      "source": "yfinance_proxy"
+    },
+    "GOLD": {
+      "date": "2026-05-01",
+      "current": 4625.6001,
+      "ticker": "GC=F",
+      "source": "yfinance_proxy"
+    },
+    "DXY": {
+      "date": "2026-05-01",
+      "current": 98.211,
+      "ticker": "DX-Y.NYB",
+      "source": "yfinance_proxy"
+    },
+    "INFLATION_PROXY": {
+      "date": "2026-05-01",
+      "current": 111.35,
+      "ticker": "TIP",
+      "source": "yfinance_proxy"
+    }
+  }
+}

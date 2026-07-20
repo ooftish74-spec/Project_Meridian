@@ -1,0 +1,10 @@
+{
+  "_comment": "P2-6: Production 환경 설정 — 실전 운용",
+  "execution.current_mode": "paper",
+  "dashboard.ws_interval_sec": 5,
+  "logging.structured_enabled": true,
+  "logging.level": "INFO",
+  "rate_limit.kis.rate": 10,
+  "rate_limit.kis.capacity": 20,
+  "gonogo.shadow_min_days": 4
+}

@@ -1,0 +1,25 @@
+{
+  "started_at": "2026-07-14T23:56:38.862988",
+  "ws_price_updates": 0,
+  "rest_heartbeats": 0,
+  "alert_checks": 0,
+  "exit_triggers": 0,
+  "exit_executed": 0,
+  "ws_connected": false,
+  "last_heartbeat": null,
+  "last_exit_check": null,
+  "is_running": true,
+  "alert_zones": 1,
+  "alert_zone_details": [
+    {
+      "stream_id": "S_YIELD",
+      "ticker": "449170",
+      "avg_price": 111320.0,
+      "sl_price": 104960.54,
+      "tp_price": 128018.0,
+      "sl_alert": 105596.48,
+      "tp_alert": 126348.2,
+      "in_alert": false
+    }
+  ]
+}

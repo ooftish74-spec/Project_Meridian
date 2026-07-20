@@ -1,0 +1,20 @@
+{
+  "ticker": "009150",
+  "target_price": 1848600,
+  "current_price": 2270000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 1,
+  "eps_revision_down": 2,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "삼성전기",
+  "latest_research": {
+    "title": "AI의 패러다임에 최대 수혜, 재평가 확대!",
+    "broker": "대신증권",
+    "date": "20260610"
+  }
+}

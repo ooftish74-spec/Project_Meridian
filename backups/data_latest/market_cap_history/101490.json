@@ -1,0 +1,41 @@
+{
+  "ticker": "101490",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2043384168448,
+      "shares": 20829604,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1991310180352,
+      "shares": 20829604,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2126702575616,
+      "shares": 20829604,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2189191413760,
+      "shares": 20829604,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2189191413760,
+      "shares": 20829604,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2120453718016,
+      "shares": 20829604,
+      "source": "yfinance"
+    }
+  ]
+}

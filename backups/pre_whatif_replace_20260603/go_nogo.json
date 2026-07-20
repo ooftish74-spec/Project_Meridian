@@ -1,0 +1,114 @@
+{
+  "verdict": "PENDING",
+  "criteria": {
+    "shadow_days": {
+      "value": 6,
+      "threshold": 4,
+      "pass": true,
+      "detail": "6/4일"
+    },
+    "s1_trades": {
+      "value": 0,
+      "threshold": 1,
+      "pass": false,
+      "detail": "S1 0/1건"
+    },
+    "s2_trades": {
+      "value": 17,
+      "threshold": 1,
+      "pass": true,
+      "detail": "S2 17/1건"
+    },
+    "s3_trades": {
+      "value": 3,
+      "threshold": 1,
+      "pass": true,
+      "detail": "S3 3/1건"
+    },
+    "s4_trades": {
+      "value": 31,
+      "threshold": 1,
+      "pass": true,
+      "detail": "S4 31/1건"
+    },
+    "total_return": {
+      "value": 0.75,
+      "threshold": 0,
+      "pass": true
+    },
+    "s1_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S1 PnL=0원 (+0.00%)"
+    },
+    "s2_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S2 PnL=0원 (+0.00%)"
+    },
+    "s3_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S3 PnL=0원 (+0.00%)"
+    },
+    "s4_return": {
+      "value": 0.0,
+      "threshold": "info",
+      "pass": true,
+      "detail": "S4 PnL=0원 (+0.00%)"
+    },
+    "win_rate": {
+      "value": 0.0,
+      "threshold": 45,
+      "pass": true
+    },
+    "mdd": {
+      "value": -0.32,
+      "threshold": 10.0,
+      "pass": true
+    },
+    "da": {
+      "value": 63.0,
+      "threshold": 52,
+      "pass": true,
+      "detail": "63.0% (27건)"
+    },
+    "ic": {
+      "value": "PENDING (D6/20)",
+      "threshold": "p<0.10",
+      "pass": true,
+      "detail": "거래일 부족 (6/20일)",
+      "pending": true
+    },
+    "net_alpha": {
+      "value": "PENDING (D6/20)",
+      "threshold": 0,
+      "pass": true,
+      "detail": "거래일 부족 (6/20일), 현재 Alpha=+0.75%",
+      "pending": true
+    }
+  },
+  "has_pending": true,
+  "strategy_summary": {
+    "S1": {
+      "trades": 0,
+      "pnl": 0
+    },
+    "S2": {
+      "trades": 17,
+      "pnl": 0
+    },
+    "S3": {
+      "trades": 3,
+      "pnl": 0
+    },
+    "S4": {
+      "trades": 31,
+      "pnl": 0
+    }
+  },
+  "timestamp": "2026-06-03T08:50:43.383422"
+}

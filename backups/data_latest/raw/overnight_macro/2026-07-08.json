@@ -1,0 +1,89 @@
+{
+  "date": "2026-07-08",
+  "timestamp": "2026-07-08T05:15:19.211995",
+  "us_futures": {},
+  "sgx_proxy": {
+    "sgx_proxy_components": {
+      "ewy": 0,
+      "nq": 0,
+      "sox": 0,
+      "dxy_inv": 0
+    },
+    "sgx_proxy_source": "ensemble",
+    "sgx_proxy_score": 50.0
+  },
+  "macro_indicators": {
+    "vix": {
+      "name": "VIX (공포지수)",
+      "symbol": "^VIX",
+      "last_close": 20.65,
+      "change_pct": 0,
+      "note": "only_1_day_available"
+    },
+    "dxy": {
+      "name": "DXY (달러인덱스)",
+      "symbol": "DX-Y.NYB",
+      "last_close": 28.32,
+      "change_pct": 0,
+      "note": "only_1_day_available"
+    },
+    "us10y": {
+      "name": "미국 10년물 국채",
+      "symbol": "^TNX",
+      "last_close": 94.18,
+      "change_pct": 0,
+      "note": "only_1_day_available"
+    },
+    "wti_oil": {
+      "name": "WTI 원유",
+      "symbol": "CL=F",
+      "last_close": 104.35,
+      "change_pct": 0,
+      "note": "only_1_day_available"
+    },
+    "gold": {
+      "name": "금 선물",
+      "symbol": "GC=F",
+      "last_close": 382.13,
+      "change_pct": 0,
+      "note": "only_1_day_available"
+    },
+    "usdkrw": {
+      "name": "원/달러 환율",
+      "symbol": "USDKRW=X",
+      "prev_close": 1513.0242,
+      "last_close": 1513.0242,
+      "change_pct": 0.0,
+      "impact_direction": "negative"
+    }
+  },
+  "overnight_score": {
+    "overnight_score": 51.9,
+    "direction": "neutral",
+    "label": "⚪ 중립",
+    "component_scores": {
+      "sgx_proxy": 50.0,
+      "vix": 58.7,
+      "dxy": 50,
+      "us10y": 50,
+      "oil": 50
+    },
+    "weights": {
+      "sgx_proxy": 0.25,
+      "vix": 0.15,
+      "dxy": 0.1,
+      "us10y": 0.1,
+      "oil": 0.1
+    }
+  },
+  "kospi_gap_estimate": {
+    "estimated_gap_pct": 2.46,
+    "ewy_raw_chg": 0,
+    "prev_kospi_chg": -4.93,
+    "net_overnight": 4.93,
+    "ewy_contribution": 2.46,
+    "us_contribution": 0.0,
+    "vix_adjustment": 0,
+    "confidence": "medium"
+  }
+}

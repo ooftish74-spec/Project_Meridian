@@ -1,0 +1,115 @@
+{
+  "version": "v3.9.1",
+  "period": "2024-07-10 ~ 2026-07-09",
+  "trading_days": 485,
+  "initial_nav": 150000000.0,
+  "final_nav": 230921511,
+  "total_return_pct": 53.95,
+  "cagr_gross_pct": 25.13,
+  "mdd_pct": -13.54,
+  "sharpe": 1.769,
+  "sortino": 2.409,
+  "calmar": 1.855,
+  "total_cost": 4444100,
+  "tax_est": 17252732,
+  "pnl_gross": 80921511,
+  "pnl_net": 59224678,
+  "total_trades": 785,
+  "regime_distribution": {
+    "neutral": 19,
+    "crash": 98,
+    "bear": 83,
+    "caution": 55,
+    "bull": 230
+  },
+  "s10_dynamic_thresholds": {
+    "semiconductor": 0.5212,
+    "battery": 0.4896,
+    "defense": 0.18,
+    "auto": 0.5089,
+    "bio": 0.6772,
+    "it": 0.3483,
+    "finance": 0.488
+  },
+  "s2_ic_weights": {
+    "mom20": 0.3669,
+    "rsi": 0.1673,
+    "bollinger": 0.4,
+    "volume": 0.0055,
+    "foreign": 0.0603
+  },
+  "streams": {
+    "S0": {
+      "cagr_gross": 7.85,
+      "mdd": -23.01,
+      "sharpe": 0.624,
+      "calmar": 0.341,
+      "trades": 142,
+      "pnl_net": 4451106,
+      "final_nav": 52022356
+    },
+    "S_C": {
+      "cagr_gross": 7.79,
+      "mdd": -10.37,
+      "sharpe": 0.785,
+      "calmar": 0.752,
+      "trades": 234,
+      "pnl_net": 621123,
+      "final_nav": 6063528
+    },
+    "S6A": {
+      "cagr_gross": 11.07,
+      "mdd": -0.12,
+      "sharpe": 18.137,
+      "calmar": 95.779,
+      "trades": 0,
+      "pnl_net": 2863890,
+      "final_nav": 19290163
+    },
+    "S6B": {
+      "cagr_gross": 3.73,
+      "mdd": 0.0,
+      "sharpe": 78.151,
+      "calmar": 0,
+      "trades": 0,
+      "pnl_net": 827151,
+      "final_nav": 13522924
+    },
+    "S1": {
+      "cagr_gross": 22.9,
+      "mdd": -16.51,
+      "sharpe": 1.094,
+      "calmar": 1.388,
+      "trades": 82,
+      "pnl_net": 5407252,
+      "final_nav": 22007157
+    },
+    "S2": {
+      "cagr_gross": 48.2,
+      "mdd": -22.27,
+      "sharpe": 1.704,
+      "calmar": 2.165,
+      "trades": 142,
+      "pnl_net": 31180479,
+      "final_nav": 81219388
+    },
+    "S3": {
+      "cagr_gross": 51.84,
+      "mdd": -28.47,
+      "sharpe": 1.402,
+      "calmar": 1.821,
+      "trades": 47,
+      "pnl_net": 14105736,
+      "final_nav": 33057448
+    },
+    "S10": {
+      "cagr_gross": 0.53,
+      "mdd": -9.67,
+      "sharpe": 0.113,
+      "calmar": 0.055,
+      "trades": 138,
+      "pnl_net": 9691,
+      "final_nav": 3738546
+    }
+  }
+}

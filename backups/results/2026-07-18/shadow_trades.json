@@ -1,0 +1,26 @@
+[
+  {
+    "date": "2026-07-13",
+    "action": "BUY",
+    "ticker": "449170",
+    "name": "KODEX KOFR금리액티브(합성)",
+    "price": 111320.0,
+    "quantity": 8,
+    "amount": 890560.0,
+    "cost": 667.92,
+    "stream": "S_YIELD",
+    "strategy": "S_YIELD"
+  },
+  {
+    "date": "2026-07-15",
+    "action": "SELL",
+    "ticker": "449170",
+    "price": 111355,
+    "quantity": 8,
+    "amount": 890840,
+    "cost": 0,
+    "stream": "S_YIELD",
+    "strategy": "S_YIELD_LIQUIDATION",
+    "pnl": 280.0
+  }
+]

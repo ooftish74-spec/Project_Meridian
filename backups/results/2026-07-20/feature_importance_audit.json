@@ -1,0 +1,75 @@
+{
+  "date": "2026-07-19T01:44:11.232456",
+  "ensemble_importance": {
+    "return_1d": 38.856711,
+    "high_low_range": 38.617333,
+    "overnight_return": 35.424523,
+    "price_ma_ratio_20_60": 32.954439,
+    "volume_ratio_20d": 32.23669,
+    "volume_trend": 32.053808,
+    "log_return_skew_20d": 32.023777,
+    "volatility_20d": 31.741135,
+    "obv_slope_20d": 31.328927,
+    "bb_position": 30.170995,
+    "rsi_14": 29.094725,
+    "debt_ratio_latest": 28.899075,
+    "log_return_kurtosis_20d": 27.672727,
+    "return_3d": 27.443032,
+    "rsi_slope_5d": 26.880439,
+    "ma20_dist": 25.195925,
+    "atr_pct": 24.058767,
+    "foreign_ratio_feat": 23.978677,
+    "macd_signal": 23.434036,
+    "ma5_dist": 22.312442,
+    "return_20d": 21.432038,
+    "return_5d": 18.065072,
+    "intraday_return": 15.604706,
+    "close_to_high_20d": 14.478057,
+    "earnings_surprise_latest": 13.370388,
+    "ma60_dist": 12.132362,
+    "price_ma_ratio_5_20": 8.616603,
+    "mean_reversion": 8.244057,
+    "revenue_yoy_latest": 7.898063,
+    "vol_ratio_5_20": 7.497946,
+    "trend_strength": 7.338651,
+    "adx_proxy": 3.343874
+  },
+  "drift_risk_features": [],
+  "low_importance_candidates": [
+    "ma60_dist",
+    "price_ma_ratio_5_20",
+    "mean_reversion",
+    "revenue_yoy_latest",
+    "vol_ratio_5_20",
+    "trend_strength",
+    "adx_proxy"
+  ],
+  "data_absent_features": [],
+  "active_weak_features": [
+    "ma60_dist",
+    "price_ma_ratio_5_20",
+    "mean_reversion",
+    "revenue_yoy_latest",
+    "vol_ratio_5_20",
+    "trend_strength",
+    "adx_proxy"
+  ],
+  "recommendations": [
+    {
+      "action": "RETRAIN_WITHOUT_NOISE",
+      "priority": "LOW",
+      "features": [
+        "price_ma_ratio_5_20",
+        "adx_proxy",
+        "revenue_yoy_latest",
+        "mean_reversion",
+        "ma60_dist",
+        "trend_strength",
+        "vol_ratio_5_20"
+      ],
+      "reason": "활성 약세 7개 피처 제외 후 재학습 검토"
+    }
+  ],
+  "psi_scores": {},
+  "removal_candidates": []
+}

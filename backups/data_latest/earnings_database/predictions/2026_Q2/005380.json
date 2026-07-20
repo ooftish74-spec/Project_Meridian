@@ -1,0 +1,22 @@
+{
+  "ticker": "005380",
+  "company": "005380",
+  "market": "KR",
+  "sector": "자동차",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 557227721254,
+  "operating_profit": 2857894930334,
+  "net_income": 2198380715642,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.853896"
+}

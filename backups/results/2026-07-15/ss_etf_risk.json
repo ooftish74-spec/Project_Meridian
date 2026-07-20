@@ -1,0 +1,18 @@
+{
+  "samsung": {
+    "vol_ratio": 0.0,
+    "lp_pressure": 0.0,
+    "vol_anomaly": 1.0714,
+    "status": "정상"
+  },
+  "hynix": {
+    "vol_ratio": 0.0,
+    "lp_pressure": 0.0,
+    "vol_anomaly": 1.3137,
+    "status": "정상"
+  },
+  "combined_warning": false,
+  "vol_threshold": 0.3,
+  "source": "generate_ss_etf_risk.py",
+  "timestamp": "2026-07-14T17:07:33.157891"
+}

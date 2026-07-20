@@ -1,0 +1,52 @@
+{
+  "vkospi": {
+    "vkospi": 15.95,
+    "vix": 18.77,
+    "vkospi_prev": 14.22,
+    "vkospi_change": 12.19,
+    "vkospi_ma20": 14.46,
+    "timestamp": "2026-07-19T17:10:30.512849",
+    "source": "yfinance_vix",
+    "level": "greed"
+  },
+  "global_corr": {
+    "correlations": {
+      "KOSPI_SP500": {
+        "current": 0.428,
+        "avg_60d": 0.303,
+        "deviation": 0.125
+      },
+      "KOSPI_DXY": {
+        "current": -0.174,
+        "avg_60d": -0.368,
+        "deviation": 0.194
+      },
+      "KOSPI_WTI": {
+        "current": -0.356,
+        "avg_60d": -0.225,
+        "deviation": -0.131
+      },
+      "KOSPI_GOLD": {
+        "current": 0.129,
+        "avg_60d": 0.25,
+        "deviation": -0.121
+      },
+      "KOSPI_US10Y": {
+        "current": -0.258,
+        "avg_60d": -0.151,
+        "deviation": -0.107
+      }
+    },
+    "current_corr": {
+      "KOSPI_SP500": 0.428,
+      "KOSPI_DXY": -0.174,
+      "KOSPI_WTI": -0.356,
+      "KOSPI_GOLD": 0.129,
+      "KOSPI_US10Y": -0.258
+    },
+    "risk_mode": "neutral",
+    "copper_gold_momentum": 0.1222,
+    "timestamp": "2026-07-19T17:10:33.866476"
+  },
+  "timestamp": "2026-07-19T17:10:33.869956"
+}

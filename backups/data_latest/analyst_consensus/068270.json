@@ -1,0 +1,20 @@
+{
+  "ticker": "068270",
+  "target_price": 274737,
+  "current_price": 187900,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "셀트리온",
+  "latest_research": {
+    "title": "CSID 후기: 오픈 이노베이션으로 맞춘 신약 퍼즐",
+    "broker": "IBK투자증권",
+    "date": "20260527"
+  }
+}

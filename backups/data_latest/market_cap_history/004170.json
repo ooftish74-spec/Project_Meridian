@@ -1,0 +1,41 @@
+{
+  "ticker": "004170",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2989779320832,
+      "shares": 8767681,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 3007314657280,
+      "shares": 8767681,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 3029233827840,
+      "shares": 8767681,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 3322950975488,
+      "shares": 8767681,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 3322950975488,
+      "shares": 8767681,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 3349254242304,
+      "shares": 8767681,
+      "source": "yfinance"
+    }
+  ]
+}

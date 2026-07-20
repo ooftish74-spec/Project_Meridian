@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-07-11T15:20:11.919577",
+  "status": "WARNING",
+  "n_issues": 4,
+  "n_critical": 0,
+  "issues": [
+    {
+      "check": "freshness",
+      "file": "shadow_portfolio.json",
+      "age_hours": 27.6,
+      "max": 25.3,
+      "severity": "WARNING"
+    },
+    {
+      "check": "freshness",
+      "file": "prices_current.csv",
+      "age_hours": 1124.5,
+      "max": 25.3,
+      "severity": "WARNING"
+    },
+    {
+      "check": "freshness",
+      "file": "projecta.duckdb",
+      "age_hours": 1124.5,
+      "max": 25.3,
+      "severity": "WARNING"
+    },
+    {
+      "check": "freshness",
+      "file": "us_financials_summary.json",
+      "age_hours": 88.7,
+      "max": 25.3,
+      "severity": "WARNING"
+    }
+  ],
+  "data_size_mb": 1129.0
+}

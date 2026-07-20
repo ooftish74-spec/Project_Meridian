@@ -1,0 +1,157 @@
+{
+  "date": "2026-05-24",
+  "phase": "evening",
+  "timestamp": "2026-05-24T16:20:02.500716",
+  "fear_greed": {
+    "score": 58.6,
+    "rating": "greed",
+    "previous": 58.2,
+    "change": 0.4,
+    "source": "cnn_api"
+  },
+  "news_sentiment": {
+    "score": -0.0667,
+    "positive_count": 3,
+    "negative_count": 5,
+    "neutral_count": 12,
+    "total": 20,
+    "details": [
+      {
+        "title": "World’s Most Fervent Day Traders in Korea to Get Risky New Tools - Bloomberg",
+        "source": "Bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "South Korea’s stock market soars as Samsung union calls off planned strike - Al ",
+        "source": "Al Jazeera",
+        "sentiment": 1.0
+      },
+      {
+        "title": "Why South Korea’s Won Is Weak Despite An AI-Driven Stock Boom - Bloomberg",
+        "source": "Bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "The AI Stocks Boom Fueling Record Rallies in Korea and Taiwan - Bloomberg",
+        "source": "Bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Asia's trillion-dollar titans are powering — and distorting — its fastest growin",
+        "source": "CNBC",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Meta, Broadcom and others to launch $125 million semiconductor research hub at U",
+        "source": "CNBC",
+        "sentiment": 0.0
+      },
+      {
+        "title": "China’s biggest contract chipmaker clears final hurdle for US$6 billion takeover",
+        "source": "South China Morning Post",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Breakingviews - Why it’s too late to jump on the chip bandwagon - Reuters",
+        "source": "Reuters",
+        "sentiment": 1.0
+      },
+      {
+        "title": "UCLA Samueli School of Engineering Launches $125 Million Semiconductor Hub With ",
+        "source": "UCLA Samueli School of Engineering",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Trump revives chip theft claim, heaping pressure on Taiwan semiconductor firms -",
+        "source": "digitimes",
+        "sentiment": 0.0
+      }
+    ]
+  },
+  "kospi_futures": {
+    "krx_kospi200_night": {
+      "close": 1232.45,
+      "change": 4.45,
+      "return": 0.003624,
+      "date": "20260522",
+      "name": "코스피200 F 202606 (야간)"
+    },
+    "krx_kospi200_day": {
+      "close": 1228.15,
+      "change": 0.15,
+      "return": 0.000122,
+      "date": "20260522",
+      "name": "코스피200 F 202606 (주간)"
+    },
+    "krx_vkospi": {
+      "close": 67.7,
+      "date": "20260522"
+    },
+    "krx_semi": {
+      "close": 16404.2,
+      "change": 159.0,
+      "date": "20260522"
+    },
+    "overnight_signal": {
+      "direction": "up",
+      "strength": 0.003624,
+      "source": "KRX_KOSPI200_Night"
+    },
+    "kospi_etf": {
+      "last": 182.03,
+      "prev": 186.42,
+      "return": -0.023549,
+      "date": "2026-05-22"
+    },
+    "nikkei_futures": {
+      "last": 63335.0,
+      "prev": 62190.0,
+      "return": 0.018411,
+      "date": "2026-05-22"
+    }
+  },
+  "vix_term": {
+    "vix": 16.7,
+    "vix3m": 20.03,
+    "ratio": 0.8337,
+    "structure": "contango",
+    "panic_level": "normal"
+  },
+  "geopolitical": {
+    "score": 100,
+    "level": "critical",
+    "high_count": 7,
+    "medium_count": 6,
+    "low_count": 4,
+    "matched_headlines": [
+      "🔴 What's Fueling the Latest Oil Price Surge? Geopolitical Tens",
+      "🔴 Exclusive | U.S. to Award Quantum-Computing Firms $2 Billion",
+      "🔴 Pentagon awards $500 million contract to Perennial Autonomy ",
+      "🔴 Contracts for May 6, 2026 - U.S. Department of War (.gov)",
+      "🔴 Trump’s War Is Damaging U.S. Arms Exports to Allies - Foreig"
+    ]
+  },
+  "social_media": {
+    "naver": {
+      "composite_score": 0.15,
+      "positive": 19,
+      "negative": 4,
+      "total": 100
+    },
+    "reddit": {
+      "sentiment_score": -0.1072,
+      "total": 40
+    },
+    "google_trends": {
+      "kospi_interest": 24,
+      "buy_interest": 0,
+      "sell_interest": 0,
+      "buy_sell_ratio": 0.0,
+      "ai_interest": 0,
+      "bio_interest": 0,
+      "quantum_interest": 10,
+      "defense_interest": 0
+    },
+    "composite_score": 0.0214
+  }
+}

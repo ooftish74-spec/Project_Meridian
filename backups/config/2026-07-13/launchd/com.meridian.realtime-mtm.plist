@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.meridian.realtime-mtm</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Frameworks/Python.framework/Versions/3.12/bin/python3</string>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/realtime_mtm.py</string>
+    </array>
+    <!-- 300초 = 5분 간격 실행 (장외 시간은 스크립트 내부에서 자동 스킵) -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+    <key>StandardOutPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/com.meridian.realtime-mtm.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/com.meridian.realtime-mtm.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Library/Frameworks/Python.framework/Versions/3.12/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+    </dict>
+</dict>
+</plist>

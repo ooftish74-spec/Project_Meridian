@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.meridian.alpha-factory</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Library/Frameworks/Python.framework/Versions/3.12/bin/python3</string>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Macro_Analysis_Agent/src/api/signal_publisher.py</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>15</integer>
+    </dict>
+    <key>WorkingDirectory</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Macro_Analysis_Agent</string>
+    <key>StandardOutPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Macro_Analysis_Agent/com.meridian.alpha-factory.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Macro_Analysis_Agent/com.meridian.alpha-factory.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Library/Frameworks/Python.framework/Versions/3.12/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Macro_Analysis_Agent/src</string>
+    </dict>
+</dict>
+</plist>

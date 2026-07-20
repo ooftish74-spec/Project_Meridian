@@ -1,0 +1,477 @@
+﻿date,title,sentiment_score,positive_count,negative_count,source
+2026-04-13,설계사 수당이 보험료 30배?… 과당경쟁에 GA만 배불려,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092160213
+2026-04-13,"상장 보험사, 현금 대신 주식 상여금…한화생명 투톱 70억",0.0,0,0,https://www.fetv.co.kr/news/article.html?no=216775
+2026-04-12,[르포] 금융권 개발자들의 치열한 AI 경쟁…'AWS 게임데이' 가보니,0.0,0,0,https://zdnet.co.kr/view/?no=20260412085320
+2026-04-11,"미래에셋생명, 최대주주 지분 81.43%로 확대…계열사 매수·주식수 감소...",0.261,1,0,http://www.fins.co.kr/news/articleView.html?idxno=108185
+2026-04-11,“AI 에이전트로 IT 문제 해결 역량 겨룬다”…AWS 게임데이 개최,0.0,0,0,https://www.ddaily.co.kr/page/view/2026041018294127115
+2026-04-13,"[증권 뉴스브리핑] 미래에셋, 스페이스X 한국 청약 추진/금감원, 제약·...",-0.408,0,1,https://www.asiatime.co.kr/article/20260413500369
+2026-04-13,"하나증권, AI투자일임 자율주행 서비스 오픈 기념 이벤트 진행 外",0.0,0,0,https://www.rcast.co.kr/news/articleView.html?idxno=30516
+2026-04-13,미래에셋증권 '차이나데이 2026' 행사 성료,0.0,0,0,https://www.mediapen.com/news/view/1093050
+2026-04-13,"미래에셋증권, ‘차이나데이 2026’ 개최… 알리바바·샤오미 등 참석",0.0,0,0,https://www.munhwa.com/article/11581922?ref=naver
+2026-04-13,"미래에셋증권, '차이나데이 2026' 개최",0.0,0,0,http://www.newsmaker.or.kr/news/articleView.html?idxno=176041
+2026-04-13,"‘강달러 직격탄’, 생보사 외환차손 1년 새 4배↑…삼성·교보도 못피...",0.0,0,0,https://www.ceoscoredaily.com/page/view/2026041010432913903
+2026-04-13,"우리 업은 ABL생명, 몸집 불린다…GA 자회사에 200억 투입",0.0,0,0,https://biz.sbs.co.kr/article_hub/20000303896?division=NAVER
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료…알리바바·샤오미 등 참석",0.0,0,0,http://www.paxetv.com/news/articleView.html?idxno=269417
+2026-04-13,"""알리바바, 韓 기관투자자 대상 최초 설명회""…미래에셋증권, '차이나데...",0.0,0,0,https://www.dailian.co.kr/news/view/1632986/?sc=Naver
+2026-04-13,"[금융 HOT 뉴스] ""알리바바의 한국 첫 기관 대상 IR""…미래에셋증권 '차...",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=133557
+2026-04-13,"미래에셋증권, '미래에셋 차이나데이 2026' 열어",0.0,0,0,http://www.enewstoday.co.kr/news/articleView.html?idxno=2418203
+2026-04-13,미래에셋증권 '차이나데이 2026' 개최…알리바바·샤오미 참석,0.0,0,0,https://weekly.hankooki.com/news/articleView.html?idxno=7159664
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료",0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=300998
+2026-04-13,"미래에셋증권, 중국 혁신 산업의 국내 IR 채널 '차이나데이 2026' 성료",0.0,0,0,http://www.sisacast.kr/news/articleView.html?idxno=94957
+2026-04-13,"미래에셋증권, '차이나데이 2026' 개최…투자 협력 플랫폼 입지 굳혀",0.0,0,0,https://www.kfenews.co.kr/news/articleView.html?idxno=656806
+2026-04-13,[밸류메이커] AWS 게임대회 우승 카뱅 '키키404팀' AI 역량 입증,0.0,0,0,https://www.newsfreezone.co.kr/news/articleView.html?idxno=684912
+2026-04-13,"미래에셋증권, '차이나데이' 성료...중국 혁신기업의 국내 IR 창구로 입...",0.0,0,0,http://www.updownnews.co.kr/news/articleView.html?idxno=316887
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료…알리바바•샤오미 등 참석",0.0,0,0,https://www.upkoreanews.kr/news/articleView.html?idxno=97984
+2026-04-13,"미래에셋증권, '차이나데이 2026' 개최…알리바바·샤오미 등 참여",0.0,0,0,http://www.seoulwire.com/news/articleView.html?idxno=716584
+2026-04-13,"미래에셋증권, 알리바바 첫 한국 IR…차이나데이 2026 개최",0.322,1,0,http://www.ftoday.co.kr/news/articleView.html?idxno=357613
+2026-04-13,"금융 서비스 개발자들, 아마존 AI 코딩 '키로'로 장애 해결해보니",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=656330
+2026-04-13,'미래에셋증권 차이나데이' 통해 '알리바바' 국내기관 대상 첫 IR 데뷔,0.0,0,0,https://www.financialpost.co.kr/news/articleView.html?idxno=255274
+2026-04-13,"미래에셋증권, 차이나데이 기관투자자 한자리에...알리바바, 韓 최초 기...",0.0,0,0,http://www.newsroad.co.kr/news/articleView.html?idxno=57816
+2026-04-13,"미래에셋생명, 지분 81% 쥔 그룹…상장폐지 시나리오 ‘부상’",0.0,0,0,https://mdtoday.co.kr/news/view/1065582019114904
+2026-04-13,"미래에셋생명, 혁신적 '자본 재배치' 가동...""한국의 ‘버크셔 해서웨이...",0.0,0,0,http://www.thevaluenews.co.kr/news/view.php?idx=198042
+2026-04-13,"카카오뱅크, AWS 게임데이 2연패…""윤호영 대표님, 리인벤트 가고 싶습...",0.0,0,0,https://zdnet.co.kr/view/?no=20260413103416
+2026-04-13,"미래에셋증권 파워, 알리바바·샤오미·브레인코·미니맥스가 서울에",0.0,0,0,https://www.smarttoday.co.kr/ko-kr/articles/106423
+2026-04-13,오늘의 메모[4월 14일],0.0,0,0,https://www.sedaily.com/article/20031716?ref=naver
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료…알리바바 등 참석",0.0,0,0,https://www.newsis.com/view/NISX20260413_0003588452
+2026-04-13,"미래에셋증권, 차이나데이 2026 성료...알리바바·샤오미 참석",0.0,0,0,https://www.mt.co.kr/stock/2026/04/13/2026041310515231669
+2026-04-13,"미래에셋증권, '차이나데이 2026'에 알리바바·샤오미 등 참석",0.0,0,0,http://www.whitepaper.co.kr/news/articleView.html?idxno=260921
+2026-04-13,"미래에셋증권, '차이나데이 2026' 개최…알리바바·샤오미 등 참석",0.0,0,0,https://www.newspim.com/news/view/20260413000472
+2026-04-13,"미래에셋증권, '차이나데이 2026' 개최…알리바바 첫 韓 기관 IR",0.0,0,0,https://www.etnews.com/20260413000145
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료...알리바바·샤오미 등 참석",0.0,0,0,https://www.wolyo.co.kr/news/articleView.html?idxno=310906
+2026-04-13,"미래에셋증권, 알리바바-샤오미 참여 ‘차이나 데이 2026’ 개최",0.0,0,0,https://www.cnbnews.com/news/article.html?no=788825
+2026-04-13,"미래에셋증권, ‘차이나데이 2026’ 성료",0.0,0,0,https://www.megaeconomy.co.kr/news/newsview.php?ncode=1065576858111805
+2026-04-13,"미래에셋증권, ‘차이나데이 2026’ 성황리 개최… 알리바바·샤오미 등...",0.0,0,0,https://www.ddaily.co.kr/page/view/2026041310264798019
+2026-04-13,"미래에셋증권, 중국 혁신기업-국내 기관투자가 연결 ‘차이나데이’ 성...",0.0,0,0,https://www.inthenews.co.kr/news/article.html?no=85501
+2026-04-13,"""알리바바·국내 기관투자자 한자리에""...미래에셋 차이나데이 성료",0.0,0,0,https://thetracker.co.kr/View.aspx?No=4039189
+2026-04-13,[오늘의 증권] 한국투자증권·KB증권·미래에셋증권·하나증권,0.0,0,0,http://www.financialreview.co.kr/news/articleView.html?idxno=41596
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성료…중국 대표 혁신 기업 집합",0.0,0,0,https://www.joongangenews.com/news/articleView.html?idxno=511059
+2026-04-13,미래에셋증권 '차이나데이 2026' 성료…알리바바·샤오미 등 참석,0.0,0,0,http://www.smedaily.co.kr/news/articleView.html?idxno=355533
+2026-04-13,"미래에셋증권, '차이나데이 2026' 성공적 마무리",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=130547
+2026-04-13,"미래에셋증권, ‘차이나데이 2026’ 성료…알리바바·샤오미 참석",0.0,0,0,http://www.globalepic.co.kr/view.php?ud=202604131020145887cc35ccc5c_29
+2026-04-13,주간일정(4월13일~19일),0.0,0,0,https://www.labortoday.co.kr/news/articleView.html?idxno=233760
+2026-04-14,[AWS 게임데이]개발·운영 역할분담이 승부 갈랐다…카카오뱅크 2연패,0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=659275
+2026-04-14,"보험사, 후순위채 1.3조 차환 ‘고민’",0.0,0,0,https://www.sedaily.com/article/20032398?ref=naver
+2026-04-14,"[AWS 게임데이]""위기 회사 구해라""…AI 무장한 금융 개발자들 승부",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=659282
+2026-04-14,[보험시장 공룡 GA/上] '제판분리·비용절감' 업고 급성장···대형사만...,0.322,1,0,https://www.seoulfn.com/news/articleView.html?idxno=626407
+2026-04-14,"미래에셋증권, 한·중 기업 간 가능성 모색 '차이나데이' 성료",0.0,0,0,https://www.handmk.com/news/articleView.html?idxno=37146
+2026-04-15,"'불완전판매' 압박 높이는 금감원…즉시연금 이어 소액암도 ""설명 부족...",-0.682,0,2,https://www.news1.kr/finance/insurance-card/6136455
+2026-04-15,"[1Q 퇴직연금 리그테이블 ②] 삼성생명, 금융권 '탑' 내줬지만 업계 1위...",0.0,0,0,https://www.1conomynews.co.kr/news/articleView.html?idxno=48086
+2026-04-15,[IFRS17 3년] 보험 파는데만 급급…낙관적 계리로 손해율 상승·실적 흔...,0.261,1,0,https://www.g-enews.com/view.php?ud=202604141425517873e30fcb1ba8_1
+2026-04-15,미래에셋생명 '2분기 MVP 리포트' 발간,0.0,0,0,https://www.consumuch.com/news/articleView.html?idxno=77817
+2026-04-15,"미래에셋생명, 비대면 핸즈온 봉사 ...'체인지 카드' 만들기 진행",0.0,0,0,http://www.newsroad.co.kr/news/articleView.html?idxno=57927
+2026-04-16,“상장폐지냐 자본통제냐”…미래에셋생명 지분 확대 ‘시선 집중’,0.0,0,0,https://www.ddaily.co.kr/page/view/2026041618064855878
+2026-04-16,"박성철 상무, 미래에셋생명 주식 9000주 증가",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=657632
+2026-04-16,"미래에셋생명, 최대주주등 보통주 13만9500주 증가",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=657634
+2026-04-16,"미래에셋생명, AI 기반 ETF 변액펀드 운용 … 누적수익률 최대 60%",0.0,0,0,https://biz.newdaily.co.kr/site/data/html/2026/04/16/2026041600112.html
+2026-04-16,보험사 퇴직연금 '대형사 쏠림' 심화…상위권 중심 재편,0.0,0,0,http://www.4th.kr/news/articleView.html?idxno=2110519
+2026-04-16,"미래에셋생명, 글로벌 자산배분 전략…2분기 MVP 리포트 발간",0.0,0,0,http://www.newscape.co.kr/news/articleView.html?idxno=121677
+2026-04-16,"출산·육아 가구 보험료 부담 덜어주는 보험업권, 미래에셋생명도 특약...",0.0,0,0,https://www.todaykorea.co.kr/news/articleView.html?idxno=400802
+2026-04-16,주요일정(4월16일),0.0,0,0,https://www.labortoday.co.kr/news/articleView.html?idxno=233839
+2026-04-17,"미래에셋생명, AI 기반 변액펀드 성과…누적수익률 최대 60.5%",0.0,0,0,http://www.seouleconews.com/news/articleView.html?idxno=90706
+2026-04-17,"미래에셋생명, AI 활용 ETF 변액펀드…누적수익률 69.5% 기록",0.0,0,0,https://www.news1.kr/finance/insurance-card/6139758
+2026-04-17,"미래에셋생명, '체인지 카드' 제작 봉사 진행…비대면 참여 확대",0.0,0,0,http://www.dailysmart.co.kr/news/articleView.html?idxno=122780
+2026-04-17,"미래에셋생명, 'MVP 리포트' 발간…AI·반도체 투자 강화",0.0,0,0,https://www.fetv.co.kr/news/articleView.html?idxno=300535
+2026-04-17,"중소 생보사, 보장성 보다 높은 저축성 판매 비중…이유는?",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108238
+2026-04-18,미래·흥국생명 내리고 흥국화재 올리고…보험사 대출금리 '희비',0.0,0,0,https://www.newsway.co.kr/news/view?ud=2026041710325209961
+2026-04-21,"미래에셋생명, 베트남 공략 계획 수립…채널·상품 다각화",0.645,2,0,https://www.fetv.co.kr/news/articleView.html?idxno=300657
+2026-04-21,대기업 자사주 소각 3개월 만에 42.5조원…작년 한해의 3배,0.0,0,0,https://www.yna.co.kr/view/AKR20260420148300003?input=1195m
+2026-04-21,[Biz & Now] 미래에셋생명 ‘패밀리 헬스케어’ 오픈,0.0,0,0,https://www.joongang.co.kr/article/25421797
+2026-04-20,[자투리 뉴스] 고객 접점 넓히며 사업 다변화 잰걸음,0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095210
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 서비스 도입으로 보험의 새로운 장 열...",0.0,0,0,https://www.tokenpost.kr/news/economy/351454
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 오픈",0.0,0,0,http://www.newsdream.kr/news/articleView.html?idxno=111477
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 출시…보험 넘어 가족 건강관리 확장",0.0,0,0,http://www.newslock.co.kr/news/articleView.html?idxno=128979
+2026-04-20,[브리프] 신한라이프 미래에셋생명 KB손해보험 현대해상 국민카드 하나...,0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=352690
+2026-04-20,"주요주주 미래에셋자산운용, 미래에셋생명 주식 16만4140주 매수",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=658605
+2026-04-20,"[금융 라운지] SBI저축은행, 최대 7.1% '아이적금' 출시",0.0,0,0,https://www.goodkyung.com/news/articleView.html?idxno=286062
+2026-04-20,[보험 뉴스브리핑] 현대해상 디지털사고안심보험 출시,0.0,0,0,https://www.asiatime.co.kr/article/20260420500382
+2026-04-20,"[A 보험가 소식] NH농협생명, 경기 파주 농가 일손돕기 外",0.0,0,0,https://www.asiaa.co.kr/news/articleView.html?idxno=247032
+2026-04-20,[보험단신] 미래에셋생명·신한라이프·KB라이프·KB손해보험·현대해상,0.0,0,0,https://daily.hankooki.com/news/articleView.html?idxno=1359891
+2026-04-20,대출 넘어 투자·일자리·건강관리까지…금융권 지원 방식 바뀐다,0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095206
+2026-04-20,[보험 NOW] 미래에셋생명·KB손보·현대해상,0.0,0,0,http://www.wikileaks-kr.org/news/articleView.html?idxno=186514
+2026-04-20,"가족·지인까지 건강관리…미래에셋생명, '패밀리 헬스케어' 출시",0.0,0,0,http://www.ftoday.co.kr/news/articleView.html?idxno=357880
+2026-04-20,[보험 pick] 가족까지 아우른다… 보험업계 헬스케어 '진화',0.0,0,0,https://www.lcnews.co.kr/news/articleView.html?idxno=201029
+2026-04-20,"[보험업계 소식] 미래에셋생명, 현대해상, KB손해보험, 보험연수원",0.0,0,0,https://www.financialpost.co.kr/news/articleView.html?idxno=256101
+2026-04-20,"[보험사 풍향계] 진옥동 신한금융 회장, 신한라이프 영업가족 격려 外",0.0,0,0,https://www.ekn.kr/web/view.php?key=20260420027598489
+2026-04-20,"주요주주 미래에셋캐피탈, 미래에셋생명 주식 8만4000주 추가 매수",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=658525
+2026-04-20,"미래에셋생명, 가족·지인까지 묶었다...디지털 '패밀리 헬스케어' 출시",0.0,0,0,http://www.updownnews.co.kr/news/articleView.html?idxno=316962
+2026-04-20,"미래에셋생명, ‘패밀리 헬스케어’ 선봬",0.0,0,0,https://www.cnbnews.com/news/article.html?no=790107
+2026-04-20,[브리프] KB손해보험 신한라이프 미래에셋생명 KB라이프,0.0,0,0,https://www.s-journal.co.kr/news/articleView.html?idxno=40656
+2026-04-20,"미래에셋생명, 작년 변액보험 메트라이프 꺾었지만···올핸 '예측불가...",0.0,0,0,https://www.sisajournal-e.com/news/articleView.html?idxno=420593
+2026-04-20,"미래에셋생명, 가족·지인까지 확대된 '패밀리 헬스케어' 출시",0.0,0,0,https://www.econovill.com/news/articleView.html?idxno=737944
+2026-04-20,[보험브리핑]KB손보·미래에셋생명·신한라이프,0.0,0,0,http://www.metroseoul.co.kr/article/20260420500352
+2026-04-20,"미래에셋생명 주가, 4월 20일 250원 오르며 17,700원 마감",0.261,1,0,https://www.topstarnews.net/news/articleView.html?idxno=16039638
+2026-04-20,"가족·지인까지…미래에셋생명, '패밀리 헬스케어' 출시",0.0,0,0,https://www.cstimes.com/news/articleView.html?idxno=702604
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 오픈…가족·지인 건강관리도",0.0,0,0,https://www.yna.co.kr/view/AKR20260420104800002?input=1195m
+2026-04-20,[더밸류 브리핑] 오늘의 생명보험 소식…신한라이프·미래에셋생명·KB라...,0.0,0,0,http://www.thevaluenews.co.kr/news/view.php?idx=198187
+2026-04-20,"미래에셋생명, 가족·지인까지 확대된 '패밀리 헬스케어' 서비스 선보여",0.0,0,0,https://www.polinews.co.kr/news/articleView.html?idxno=728948
+2026-04-20,"""가족 건강까지 한 번에 챙긴다"" 미래에셋생명, M‑LIFE에 '패밀리 헬스...",0.0,0,0,http://www.economytalk.kr/news/articleView.html?idxno=420656
+2026-04-20,[#금융톡톡] 현대해상 '디지털보험' 출시·미래에셋생명 '헬스케어 서비...,0.0,0,0,https://www.newsworks.co.kr/news/articleView.html?idxno=838322
+2026-04-20,[보험사 이모저모] 미래에셋생명·신한라이프,0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=134275
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 서비스 도입",0.0,0,0,https://www.newspost.kr/news/articleView.html?idxno=222429
+2026-04-20,"""가족·지인 건강까지 서비스 확대"" 미래에셋생명 '패밀리 헬스케어' 오...",0.0,0,0,https://www.catchnews.kr/news/articleView.html?idxno=122959
+2026-04-20,"보험사들, 헬스케어 서비스 경쟁 치열…보장에서 예방·관리로 이동",0.0,0,0,https://www.raonnews.com/news/article.html?no=57609
+2026-04-20,"미래에셋생명, 가족·지인까지 챙기는 '패밀리 헬스케어' 서비스 론칭",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=446920
+2026-04-20,[ND 보험] KB손해보험·KB라이프·미래에셋생명 外,0.0,0,0,http://www.newsdream.kr/news/articleView.html?idxno=111451
+2026-04-20,미래에셋생명 ‘패밀리 헬스케어’ 오픈…“가족·지인도 건강관리 혜택...,0.0,0,0,https://www.inthenews.co.kr/news/article.html?no=85783
+2026-04-20,"미래에셋생명, 패밀리 헬스케어 오픈…“오렌지등급 가족이면 누구나 이...",0.0,0,0,https://www.g-enews.com/view.php?ud=202604201039303912a6e8311f64_1
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 출시",0.0,0,0,https://www.kpinews.kr/newsView/1065577263657661
+2026-04-20,"미래에셋생명, 가족·지인까지 챙기는 ‘패밀리 헬스케어’ 서비스 출시",0.0,0,0,https://www.ddaily.co.kr/page/view/2026042009561274766
+2026-04-20,"미래에셋생명, 가족·지인까지 누리는 '패밀리 헬스케어' 출시",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90332
+2026-04-20,"미래에셋생명, 디지털헬스케어서비스 '패밀리 헬스케어' 오픈",0.0,0,0,https://www.sentv.co.kr/article/view/sentv202604200053
+2026-04-20,"미래에셋생명, 디지털 '패밀리 헬스케어' 도입",0.0,0,0,http://www.newscape.co.kr/news/articleView.html?idxno=121737
+2026-04-20,"""건강보험 유병자도 더 간편하게 가입하세요""",0.0,0,0,https://www.asiatime.co.kr/article/20260420500101
+2026-04-20,"미래에셋생명, 가족에 지인까지 챙기는 '디지털헬스케어' 서비스 확대",0.0,0,0,https://www.mt.co.kr/finance/2026/04/20/2026042009545022280
+2026-04-20,"미래에셋생명, 보험 넘어 가족·지인 건강까지 확대..‘패밀리 헬스케어...",0.0,0,0,https://kpenews.com/View.aspx?No=4047804
+2026-04-20,"미래에셋생명, '사랑의 모루인형'이 아이들 지켜요",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=300560
+2026-04-20,"미래에셋생명, 헬스케어 고도화…""가족·지인까지 건강관리""",0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=301889
+2026-04-20,"""보험 넘어 가족·지인 건강까지 확대""…미래에셋생명, ‘패밀리 헬스케...",0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=02706006645418088
+2026-04-20,"미래에셋생명, 가족·지인 '패밀리 헬스케어' 서비스 개시",0.0,0,0,https://www.fetv.co.kr/news/articleView.html?idxno=300705
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 출시…가족·지인까지 건강관리 확대",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=131308
+2026-04-20,자사주 강제소각 개정상법 시행 후 첫 자사주 장내매도 감행(?) 상장사 ...,0.0,0,0,http://www.nongaek.com/news/articleView.html?idxno=95135
+2026-04-20,"""가족·지인 건강까지 챙겨요""…미래에셋생명, ‘패밀리 헬스케어’ 오...",0.0,0,0,http://www.beyondpost.co.kr/view.php?ud=202604200943087292be44c0aacd_30
+2026-04-20,"미래에셋생명, '패밀리 헬스케어' 출시…""가족 건강관리 원스톱으로""",0.0,0,0,https://view.asiae.co.kr/article/2026042009351254608
+2026-04-20,'퇴직연금 1위' 내준 삼성생명…대형사 실질 수익률은 교보생명 '선두',0.0,0,0,https://www.ngetnews.com/news/articleView.html?idxno=549923
+2026-04-20,"미래에셋생명 AI 기반 변액펀드, 방점은 안정적 수익률",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=659765
+2026-04-20,"김재식·황문규 투트랙 통했다…미래에셋생명, CSM·이익 '사상 최대'",0.583,1,0,https://daily.hankooki.com/news/articleView.html?idxno=1359393
+2026-04-19,"[데이터 뉴스룸] KB금융·한국투자금융, 1년 새 영업이익 1조 넘게 증가...",0.0,0,0,https://www.greened.kr/news/articleView.html?idxno=339474
+2026-04-19,보험업계 퇴직연금 'DC·IRP' 도전장…수익률은 은행·증권 잡았다,0.0,0,0,https://www.mt.co.kr/finance/2026/04/19/2026041716505436153
+2026-04-21,"대기업 자사주 소각, 3개월 만 무려 43조…태광·SK 지배력 '급감'",0.0,0,0,https://www.epnc.co.kr/news/articleView.html?idxno=400650
+2026-04-21,"미래에셋자산운용, 연금 브랜드평판 4월 빅데이터 1위...하나·NH농협은...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=20260421042720988307d270612f_23
+2026-04-21,상법 개정 후폭풍…대기업 자사주 소각 3개월 만에 42조,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1706023
+2026-04-21,"대기업 자사주 소각, 작년 한해의 '3배'...총수 지배력↓",-0.261,0,1,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202604210231&t=NN
+2026-04-21,올 1~3월 대기업 자사주 42조5207억원 소각···삼성전자·하이닉스 27조...,0.0,0,0,https://www.khan.co.kr/article/202604210749001
+2026-04-21,"연금 브랜드평판 4월 빅데이터 분석... 1위 미래에셋자산운용 연금, 2위...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=447138
+2026-04-21,"대기업 자사주 소각, 3개월 만에 무려 43조…태광·SK 지배력 ‘급감’",0.0,0,0,https://www.ceoscoredaily.com/page/view/2026041711220109064
+2026-04-21,"[브랜드평판] 미래에셋자산운용, 연금 4월 1위... 하나은행, NH농협은행...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=49097
+2026-04-22,고령화 직격탄 생보사 시름… 장수고객 보험금 천정부지,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092160715
+2026-04-22,"미래에셋생명, AI 활용 ETF 변액펀드 수익률 60.5% 달성",0.0,0,0,https://www.nocutnews.co.kr/news/6505825?utm_source=naver&utm_medium=article&utm_campaign=20260422050037
+2026-04-21,"대기업, 1분기에만 자사주 42.5조 '태웠다'",0.0,0,0,https://www.getnews.co.kr/news/articleView.html?idxno=868341
+2026-04-21,대기업 자사주 소각 1분기 ‘42조5207억’,0.0,0,0,https://www.khan.co.kr/article/202604212105035
+2026-04-21,대기업 자사주 소각 규모 1분기 42조대 ‘전년 3배’,0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026042118135816577
+2026-04-21,대기업 자사주 소각 1분기 만에 42.5조원… 작년 한해의 3배,0.0,0,0,https://www.newscj.com/news/articleView.html?idxno=3395240
+2026-04-21,"'상법 개정' 영향…대기업, 자사주 소각 석 달 만에 무려 42조 5000억원 넘...",0.0,0,0,https://www.industrynews.co.kr/news/articleView.html?idxno=80257
+2026-04-21,"[금융가 산책] KB증권, 경북 울진 방문해 '의료봉사' 실시",0.0,0,0,https://www.newsinside.kr/news/articleView.html?idxno=4605389
+2026-04-21,"보험사 헬스케어, 일상으로 파고들지만… 확장 속 '제약' 여전",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=447299
+2026-04-21,"출산하면 보험료↓...미래에셋생명, 저출산 극복 동참",0.322,1,0,https://www.ekn.kr/web/view.php?key=20260421021538814
+2026-04-21,"대기업 자사주 소각, 3개월 만에 43조…태광·SK 총수 지배력 '급감'",0.0,0,0,https://www.esgeconomy.com/news/articleView.html?idxno=15297
+2026-04-21,대기업 자사주 소각 3개월 만에 ‘43조’,0.0,0,0,http://www.newstomato.com/ReadNews.aspx?no=1298575&inflow=N
+2026-04-21,"보험 넘어 부동산까지···미래에셋생명, 부동산 상담 플랫폼 운영",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=131500
+2026-04-21,"나신평 ""한화·동양·ABL생명, CSM 늘었지만 이익은 줄어""",0.322,1,0,https://www.newstopkorea.com/news/articleView.html?idxno=44539
+2026-04-21,보험 넘어 가족까지 묶는다…미래에셋생명 ‘헬스케어 플랫폼’ 확장,0.0,0,0,https://www.viva100.com/article/20260421500729
+2026-04-21,[금융家] 미래에셋증권 ② ㅣ 연금 전략·글로벌 투자·헬스케어…서비...,0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=569211
+2026-04-21,"대기업, 자사주 소각 급물살..올 1분기 43조원",0.0,0,0,http://www.breaknews.com/1201889
+2026-04-21,[뉴스 인 데이터] 올해 상반기 73개 그룹 자사주 42조원 규모 소각,0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095225
+2026-04-21,올 1분기 대기업 자사주 42조5천억 소각…‘삼전·닉스’만 27조,0.0,0,0,https://www.hani.co.kr/arti/economy/marketing/1255151.html
+2026-04-21,"삼성전자·SK하이닉스, 자사주 소각 27조…전체 64% 차지",0.0,0,0,http://www.inews24.com/view/1962023
+2026-04-21,3개월만에 42조 소각···대기업 자사주 소각 급등,0.408,1,0,https://www.ziksir.com/news/articleView.html?idxno=131476
+2026-04-21,연금 브랜드평판 4월 1위 미래에셋자산운용…2위 하나은행 3위 NH농협은...,0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=569176
+2026-04-21,[빅데이터투데이] 연금 2026년 4월 브랜드평판 랭킹... 1위 미래에셋자산...,0.0,0,0,https://www.fntoday.co.kr/news/articleView.html?idxno=382693
+2026-04-21,"미래에셋생명, AI 기술 활용 ETF 변액펀드…안정적 투자수익 추구",0.0,0,0,https://daily.hankooki.com/news/articleView.html?idxno=1360092
+2026-04-21,대기업 자사주 소각 3개월 만에 42.5조원,0.0,0,0,https://www.cstimes.com/news/articleView.html?idxno=702740
+2026-04-21,"대기업 자사주 소각액, 전년比 220% 폭증···삼성·SK하닉 63.8% 차지",0.0,0,0,https://www.ajunews.com/view/20260421095444569
+2026-04-21,"미래에셋생명, 납입유예·할인 특약 4월 시행",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108301
+2026-04-21,대기업 상장사 자사주 소각 작년 13조→ 1분기 43조,0.0,0,0,http://www.efnews.co.kr/news/articleView.html?idxno=129231
+2026-04-21,"대기업들, 자사주 소각 러시…3개월 만에 42.5조원 태워",0.0,0,0,https://zdnet.co.kr/view/?no=20260421091558
+2026-04-21,'상법 개정 후폭풍' 대기업 자사주 소각 올 1분기만 42.5조원 '작년 한 ...,0.0,0,0,http://www.worktoday.co.kr/news/articleView.html?idxno=83888
+2026-04-21,자사주 소각 3개월 만에 43조…지배구조 '지각변동' 태광·SK 등 지배력 ...,0.0,0,0,https://www.businessplus.kr/news/articleView.html?idxno=110867
+2026-04-21,대기업 자사주 3개월 만에 42.5조원 소각…상법 개정 영향,0.0,0,0,https://www.sentv.co.kr/article/view/sentv202604210010
+2026-04-21,"연금 2026년 4월 브랜드평판...미래에셋자산운용, 하나은행, NH농협은행...",0.0,0,0,https://www.energy-news.co.kr/news/articleView.html?idxno=224765
+2026-04-21,대기업 자사주 소각 1분기 만에 42.5조…작년 한해의 3배,0.0,0,0,http://www.tjb.co.kr/sub0301/bodo/view/id/97381
+2026-04-21,"미래에셋자산운용, 4월 연금 브랜드평판 1위 수성… 하나은행·NH농협 뒤...",0.0,0,0,http://www.popcornnews.net/news/articleView.html?idxno=118910
+2026-04-21,"대기업 자사주 소각 '폭발'…3개월 만에 43조, 지배력 지형 흔들렸다",0.0,0,0,http://www.newsian.co.kr/news/articleView.html?idxno=88756
+2026-04-21,"[브랜드평판] 미래에셋자산운용, 연금 4월 1위···하나은행·NH농협은...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=49097
+2026-04-23,"미래에셋생명, 부동산 플랫폼 앞세워 자산관리 경쟁력 강화",0.0,0,0,https://www.shinailbo.co.kr/news/articleView.html?idxno=5013050
+2026-04-22,[미리보는 이데일리 신문]AI가 해킹하는 시대 보안 패러다임 붕괴,0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=06150006645418744
+2026-04-22,"미래에셋생명, 2분기 MVP 리포트 발간…AI 인프라·반도체 비중 확대",0.0,0,0,http://www.lawissue.co.kr/view.php?ud=2026042216241676479817d053b9_12
+2026-04-22,"미래에셋생명, 가입 문턱 낮춘 'M-케어 건강보험' 출시",0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=04388646645418744
+2026-04-22,"[보험사 이모저모] 미래에셋생명 모루인형 봉사활동, 동양생명 실손24 인...",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=134541
+2026-04-22,"2030 여성 잡아라…미래에셋생명·한화손보, 출산 혜택 상품 출시",0.0,0,0,http://www.srtimes.kr/news/articleView.html?idxno=201833
+2026-04-22,"미래에셋생명, 가입문턱 낮춘 'M-케어 건강보험' 시리즈 출시",0.0,0,0,https://www.mt.co.kr/finance/2026/04/22/2026042208422719999
+2026-04-22,"생보사도 '부동산 컨설팅' 경쟁력 키운다…미래에셋생명, FC 전용 솔루션...",0.0,0,0,http://mbnmoney.mbn.co.kr/news/view?news_no=MM1005818496
+2026-04-22,"[보험家] ""보장 넘어 생존으로""…보험업계, 4월 '실버케어·AI·제3보험'...",0.0,0,0,https://www.megaeconomy.co.kr/news/newsview.php?ncode=1065564885990579
+2026-04-22,"미래에셋생명, 출산·육아휴직 가정 보험료 부담 낮춘다",0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202604211013358670990
+2026-04-24,"미래에셋그룹, 스페이스X로 ‘4대 금융’ 신한 시총 넘봐⋯합산 46조원",0.0,0,0,https://www.etoday.co.kr/news/view/2578572
+2026-04-24,"[반퇴시대 재산리모델링] ‘월 보험료 1300만원’ 50대, 30개 보험부터 ...",0.0,0,0,https://www.joongang.co.kr/article/25422902
+2026-04-23,"미래에셋자산운용, 미래에셋생명보험과 968억원 수익증권 거래",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=659864
+2026-04-23,"미래에셋생명, '패밀리 헬스케어' 출시",0.0,0,0,https://www.ekoreanews.co.kr/news/articleView.html?idxno=85734
+2026-04-23,"미래에셋생명, 2분기 MVP 포트폴리오 보고서 발간",0.0,0,0,https://news.dealsitetv.com/articles/169162
+2026-04-23,"미래에셋생명, 유병자 시장 공략...문턱 낮춘 간편고지 건강보험 선봬",0.0,0,0,http://www.wikileaks-kr.org/news/articleView.html?idxno=186630
+2026-04-23,오늘의 메모[4월 24일],0.0,0,0,https://www.sedaily.com/article/20036138?ref=naver
+2026-04-23,"미래에셋생명, ‘사랑의 모루인형 안전키링 만들기’ 봉사활동",0.0,0,0,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202604230349&t=NN
+2026-04-23,"미래에셋생명, 부동산 상담 플랫폼 'REPS-CRM' 가동",0.0,0,0,https://www.sisaon.co.kr/news/articleView.html?idxno=200513
+2026-04-23,보험사 GA 자회사 설계사 1년 새 1.2만여명 급증…한화 '고공행진',0.0,0,0,http://www.srtimes.kr/news/articleView.html?idxno=201897
+2026-04-23,"""가족·지인 최대 6명까지 혜택 공유""… 미래에셋생명, '패밀리 헬스케...",0.0,0,0,http://www.economytalk.kr/news/articleView.html?idxno=420778
+2026-04-23,"한화생명, 13.5% 자사주 소각 '묵묵부답'…배경엔 오너 승계 있나",0.38,1,0,https://www.smarttoday.co.kr/ko-kr/articles/106803
+2026-04-23,'100조 시대 깨지나'…DB형 쏠림에 쪼그라드는 적립금[보험 퇴직연금 머...,0.0,0,0,https://www.newsway.co.kr/news/view?ud=2026042114541527492
+2026-04-23,"삼성생명, 나홀로 시장점유율 52%…퇴직연금 양극화 심화[보험 퇴직연금...",0.0,0,0,https://www.newsway.co.kr/news/view?ud=2026042214585771754
+2026-04-22,"[보험사 이모저모] 미래에셋생명 '모루인형 봉사활동 전개', 동양생명 '...",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=134541
+2026-04-27,"보험사 헬스케어 서비스, '종합 건강관리'로 확대",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90375
+2026-04-26,"""보험 넘어 가족 건강까지""…미래에셋생명, '패밀리 헬스케어'로 서비스...",0.0,0,0,http://www.dailysmart.co.kr/news/articleView.html?idxno=123171
+2026-04-27,보험사 자사주 소각 확산… 삼성·한화생명은 '관망' 왜?,0.0,0,0,https://www.ekoreanews.co.kr/news/articleView.html?idxno=85773
+2026-04-27,보험업계 흔드는 '근로자 추정제'…고용 위축 우려도,-0.38,0,1,http://www.segyebiz.com/newsView/20260427513295?OutUrl=naver
+2026-04-27,"미래에셋생명, 출산·육아휴직 가정 보험료 할인 특약 시행",0.0,0,0,https://biz.heraldcorp.com/article/10726476?ref=naver
+2026-04-27,"보험주 혼조 흐름…삼성생명 상승, 동양생명 3%대 하락",0.322,2,1,https://www.cbci.co.kr/news/articleView.html?idxno=570449
+2026-04-27,"[창간 42주년 금융 특집 #12] AI 인프라·반도체 투자 강화, 2026년 2분기...",0.0,0,0,http://woman.chosun.com/news/articleView.html?idxno=125607
+2026-04-29,[보험사 임직원 연봉 ③ 등기임원] 1년 만에 반등... '급락 후 정상화' ...,0.1,2,1,http://www.fins.co.kr/news/articleView.html?idxno=108235
+2026-04-29,“은퇴 후 100세까지 소득…답은 ‘인출 전략’”[인터뷰],0.0,0,0,https://magazine.hankyung.com/business/article/202604229476b
+2026-04-28,"보험금 지급, 하루도 길다…AI 앞세운 '초단기 보상' 경쟁",0.0,0,0,https://www.econovill.com/news/articleView.html?idxno=739002
+2026-04-28,"주요주주 미래에셋자산운용, 미래에셋생명 주식 보유 증가",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=661087
+2026-04-28,[보험사 퀀텀점프②] 총자산 960조 생보사 핵심 DNA는 '자산운용업',0.322,1,0,https://www.ebn.co.kr/news/articleView.html?idxno=1706924
+2026-04-28,"미래에셋생명, 출산·육아가정 보험료 부담 낮춘다",0.0,0,0,https://biz.heraldcorp.com/article/10727239?ref=naver
+2026-04-28,"미래에셋생명, AI 기반 ETF 변액펀드 운용…누적수익률 60.5%",0.0,0,0,http://www.whitepaper.co.kr/news/articleView.html?idxno=261708
+2026-04-28,"﻿미래에셋생명, FC 부동산 상담 솔루션 지원…'종합자산관리' 차별화",0.0,0,0,https://www.getnews.co.kr/news/articleView.html?idxno=868262
+2026-04-28,[KDB생명 매각] 정진택 CFO 앞세운 KDB생명…밸류업 속도전에도 성과 '아...,0.0,0,0,https://dealsite.co.kr/articles/160584
+2026-04-28,KDB생명·하나생명 약관이해도 평가 '우수'...KB라이프·미래에셋생명·...,0.0,0,0,http://www.consumernews.co.kr/news/articleView.html?idxno=754860
+2026-04-29,"존재감 약해진 보험사, DC·IRP로 영토 확장",0.0,0,0,https://www.hankyung.com/article/2026042962821
+2026-04-29,"주요주주 미래에셋캐피탈, 미래에셋생명 주식 매수로 지분율 증가",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=661490
+2026-04-29,"미래에셋생명, FC 전용 부동산 솔루션으로 자산관리 경쟁력 제고",0.0,0,0,http://www.press9.kr/news/articleView.html?idxno=75393
+2026-04-29,"미래에셋생명, ‘M-케어 건강보험’ 출시…유병자도 4가지 고지로 가입...",0.0,0,0,http://www.thevaluenews.co.kr/news/view.php?idx=198281
+2026-04-29,정부 압박 거센 보험업계…'소비자 보호' 아니면 생존 불가,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1707005
+2026-04-29,"손주부터 지인까지...보험업계, 가정의 달 맞춤 상품 '봇물'",0.0,0,0,https://www.cstimes.com/news/articleView.html?idxno=703760
+2026-04-30,"LG CNS, 1Q 영업익 전년비 19%↑",0.322,1,0,https://www.dt.co.kr/article/12060404?ref=naver
+2026-04-30,LG CNS AI·클라우드 양날개… 영업익 19% 껑충,0.0,0,0,http://www.fnnews.com/news/202604301810498181
+2026-04-30,건전성에 막혔나 셈법에 묶였나…한화생명 ‘자사주 처리’ 침묵 속사정,0.0,0,0,https://ilyo.co.kr/?ac=article_view&entry_id=510646
+2026-04-30,"미래에셋생명, 미래에셋자산운용과 수익증권 거래 예정",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=661942
+2026-04-30,"LG CNS, 1분기 매출 1조 3,150억원...AI·클라우드 사업 성장 견인",0.322,1,0,https://www.ekoreanews.co.kr/news/articleView.html?idxno=85822
+2026-04-30,"LG CNS, AI·클라우드 사업 호조 ··· 1분기 매출·영업익 증가",0.322,1,0,https://www.datanet.co.kr/news/articleView.html?idxno=211377
+2026-04-30,"LG CNS, 스마트엔지니어링 매출 회복…풀스택 RX 추진",0.0,0,0,https://www.newspost.kr/news/articleView.html?idxno=222684
+2026-04-30,"LG CNS, 'AI·클라우드' 힘입어 1Q 영업익 19% 증가",0.0,0,0,https://www.shinailbo.co.kr/news/articleView.html?idxno=5016812
+2026-04-30,[#클라우드 월드] 삼성SDS '온AI' 선정·LG CNS '1분기 실적'·트레드링스...,0.0,0,0,https://www.newsworks.co.kr/news/articleView.html?idxno=839584
+2026-04-30,"LG CNS, 영업익 20% 뛰었다…DC 수주 효과 덕분",0.38,1,0,https://news.bizwatch.co.kr/article/mobile/2026/04/30/0018
+2026-04-30,"LG CNS, 1분기 매출 1조3150억원…전년 동기 대비 8.6%↑",0.322,1,0,https://www.insightkorea.co.kr/news/articleView.html?idxno=245732
+2026-04-30,"LG CNS, 1분기 매출 1조3150억원 8.6% 증가 .... AI·클라우드 사업 실적...",0.322,1,0,http://www.worktoday.co.kr/news/articleView.html?idxno=84222
+2026-04-30,"LG CNS, 1분기 매출 1조3천억원 돌파…AI·클라우드가 실적 이끌어",0.261,1,0,http://www.efnews.co.kr/news/articleView.html?idxno=129516
+2026-04-30,"LG CNS, 1분기 영업이익 942억 전년比 19.4% 증가…AI·클라우드 사업 성...",0.0,0,0,https://www.newsquest.co.kr/news/articleView.html?idxno=265678
+2026-04-30,"LG CNS, 1분기 매출액 전년比 8.6%↑…‘AI·클라우드’가 견인",0.322,1,0,http://www.beyondpost.co.kr/view.php?ud=202604301432014533be44c0aacd_30
+2026-04-30,"LG CNS, 1분기 영업이익 942억원…전년 대비 19.4% 증가",0.0,0,0,https://www.dailian.co.kr/news/view/1639940/?sc=Naver
+2026-04-30,"LG CNS, 영업이익 942억원…AI·클라우드 사업 매출 비중 58%",0.0,0,0,https://www.goodkyung.com/news/articleView.html?idxno=286514
+2026-04-30,"[컨콜-LG CNS] 이준호 전무 ""피지컬 AI 사업, LG 그룹 전방위 확대 추진""",0.322,1,0,https://www.fetv.co.kr/news/articleView.html?idxno=301560
+2026-04-30,"LG CNS, 1분기 영업익 942억원…AI·클라우드 성장",0.322,1,0,https://theviewers.co.kr/View.aspx?No=4062824
+2026-04-30,"LG CNS, 1Q 스마트엔지니어링·디지털비즈니스 동반 회복세",0.0,0,0,https://www.sisajournal-e.com/news/articleView.html?idxno=420825
+2026-04-30,"[컨콜 종합] LG CNS, 1분기 영업익 19.4% '쑥'…""AI·신사업 확대로 성장...",0.322,1,0,http://www.inews24.com/view/1964938
+2026-04-30,"LG CNS, 1Q 영업익 942억원…전년比 19.4% ↑",0.0,0,0,https://www.1conomynews.co.kr/news/articleView.html?idxno=48375
+2026-04-30,"LG CNS, AI·클라우드가 1분기 실적 견인",0.322,1,0,https://news.dealsitetv.com/articles/169592
+2026-04-30,"LG CNS, 1분기 매출 1조 3,150억원·영업익 942억원 ··· AI·클라우드...",0.0,0,0,https://www.aitimes.kr/news/articleView.html?idxno=39862
+2026-04-30,"LG CNS, 1분기 영업이익 942억원···전년比 19.4% 증가",0.0,0,0,https://www.kfenews.co.kr/news/articleView.html?idxno=657518
+2026-04-30,"AI·클라우드 양날개로 성장…LG CNS, 1Q 매출 1조3150억원·영업이익 19...",0.322,1,0,https://www.kukinews.com/article/view/kuk202604300078
+2026-04-30,"LG CNS, 1Q 영업익 942억·19%↑…AI·클라우드 비중 절반 넘어 (종합 2보...",0.322,1,0,https://news.einfomax.co.kr/news/articleView.html?idxno=4412637
+2026-04-30,"LG CNS, 1분기 매출 1.3조…전년比 8.6%↑",0.322,1,0,https://weekly.hankooki.com/news/articleView.html?idxno=7162333
+2026-04-30,LG CNS 1분기 매출 1조3150억…AI·로봇·글로벌 세 축으로 성장 경로 넓...,0.322,1,0,https://www.econovill.com/news/articleView.html?idxno=739220
+2026-04-30,"LG CNS, 1분기 영업익 전년 대비 19.4%↑...AI·클라우드 사업 성장 견인",0.322,1,0,https://www.getnews.co.kr/news/articleView.html?idxno=869085
+2026-04-30,"LG CNS, 1분기 영업익 942억원…전년비 19.4% 증가",0.322,1,0,https://www.koit.co.kr/news/articleView.html?idxno=206993
+2026-04-30,"LG CNS, 1분기 영업익 942억원…전년比 19.4%↑",0.322,1,0,https://www.megaeconomy.co.kr/news/newsview.php?ncode=1065578979005218
+2026-04-30,"""AI·클라우드 호조""… LG CNS, 1분기 매출 1조3150억·영업익 942억",0.322,1,0,https://it.chosun.com/news/articleView.html?idxno=2023092161311
+2026-04-30,"LG CNS, 1분기 영업익 942억원…AI·클라우드 호조에 19.4%↑",0.322,1,0,https://www.ddaily.co.kr/page/view/2026043009304676299
+2026-04-30,"LG CNS, 1분기 영업익 19% 증가···AI·클라우드 사업이 성장 견인",0.322,1,0,https://www.etoday.co.kr/news/view/2580808
+2026-04-30,"LG CNS, 1분기 매출 1.3조···AI·클라우드 매출비중 58%로 '체질전환'...",0.322,1,0,https://www.greened.kr/news/articleView.html?idxno=340071
+2026-04-30,"LG CNS, 1분기 영업익 942억…'AI·클라우드' 도약, 전년비 19.4% 증가",0.322,1,0,http://www.itdaily.kr/news/articleView.html?idxno=239141
+2026-04-30,"LG CNS, 1분기 영업익 942억원…전년 比 19.4%↑",0.261,1,0,https://www.ajunews.com/view/20260430103048310
+2026-04-30,"LG CNS, 영업익 19% 껑충…AI '끌고'·클라우드 '밀고'",0.322,1,0,http://www.newstomato.com/ReadNews.aspx?no=1299618&inflow=N
+2026-04-30,"미래에셋생명, 'M-케어 건강보험(355간편고지 고당)' 출시",0.0,0,0,https://www.econovill.com/news/articleView.html?idxno=738537
+2026-04-30,"LG CNS, 1분기 매출 1.3조원… AI·클라우드 사업 성장 견인",0.322,1,0,https://www.newscj.com/news/articleView.html?idxno=3397493
+2026-04-30,"LG CNS, AI·클라우드 호조에 1Q 영업익 942억원 … 19.4% 증가",0.322,1,0,https://biz.newdaily.co.kr/site/data/html/2026/04/30/2026043000077.html
+2026-04-30,"LG CNS, AI·클라우드 성장에 1분기 영업이익 전년대비 19.4% 증가",0.322,1,0,https://www.thelec.kr/news/articleView.html?idxno=55906
+2026-04-30,"LG CNS, 1분기 매출 1조3150억·영업이익 942억…AI·클라우드가 성장 견...",0.322,1,0,https://www.nextdaily.co.kr/news/articleView.html?idxno=248956
+2026-04-30,"LG CNS, 1분기 매출 1.32조원…전년 대비 8.6% 증가",0.322,1,0,https://www.sidae.com/article/2026043009503939363
+2026-04-30,"LG CNS, 1분기 매출 1.3조…AI·클라우드 사업 성장 견인",0.322,1,0,https://www.it-b.co.kr/news/articleView.html?idxno=88035
+2026-04-30,"LG CNS, 1분기 실적 AI 견인…피지컬 AI·로봇·해외 사업 확대 본격화",0.0,0,0,https://www.news2day.co.kr/article/20260430500104
+2026-04-30,"LG CNS, 1분기 영업이익 19% 급증…AI·클라우드가 58% 견인",0.0,0,0,http://www.newsroad.co.kr/news/articleView.html?idxno=58786
+2026-04-30,"LG CNS, 1분기 영업이익 942억...AI·클라우드 성장 견인",0.322,1,0,https://www.techm.kr/news/articleView.html?idxno=151465
+2026-04-30,"LG CNS, 1분기 영업익 942억·19%↑…AI·클라우드 비중 절반 넘어(종합)",0.0,0,0,https://news.einfomax.co.kr/news/articleView.html?idxno=4412577
+2026-04-30,"LG CNS, 1분기 매출 1조 3150억원...""피지컬 AI, 신성장 동력 낙점""",0.322,1,0,http://www.fnnews.com/news/202604300953413248
+2026-04-30,"LG CNS, 1Q 영업익 942억…전년比 19.4% ↑",0.682,2,0,http://www.fntimes.com/html/view.php?ud=2026043009491069977fd637f543_18
+2026-04-30,"LG CNS, 2026년 1분기 영업이익 942억원⋯ 전년比 19.4%↑",0.322,1,0,https://www.viva100.com/article/20260430500167
+2026-04-30,"LG CNS, 1분기 매출 1조3150억·영업익 942억…AX 사업 확장 효과",0.322,1,0,http://www.edaily.co.kr/news/newspath.asp?newsid=03978646645421368
+2026-04-30,"LG CNS, 1Q 매출 1조3150억…AI·클라우드 사업 성장 견인",0.322,1,0,https://www.ebn.co.kr/news/articleView.html?idxno=1707234
+2026-04-30,"LG CNS, 1분기 영업익 942억 …전년비 19.4% ↑",0.322,1,0,http://www.segyebiz.com/newsView/20260430505245?OutUrl=naver
+2026-04-30,"LG CNS, 1분기 영업이익 942억…전년比 19.4%↑",0.462,1,0,https://www.widedaily.com/news/articleView.html?idxno=293223
+2026-04-30,"“AI·클라우드가 성장 견인“…LG CNS, 1분기 영업익 942억원으로 전년...",0.322,1,0,https://biz.chosun.com/it-science/ict/2026/04/30/WSENE2MS2VAHDF2Z2UTO5C5GIY/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-04-30,"LG CNS, 1분기 매출 1.3조… “AX 사업 덕분”",0.0,0,0,https://www.sedaily.com/article/20038932?ref=naver
+2026-04-30,"LG CNS, 1분기 매출 1.3조, 영업익 942억…AI·클라우드가 실적 견인",0.322,1,0,https://www.mt.co.kr/tech/2026/04/30/2026043009345478116
+2026-04-30,"[마켓포인트] LG CNS, 1분기 영업익 20% 증가…AI·클라우드 성장 견인",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=449831
+2026-04-30,"LG CNS, 1분기 매출 1조3150억원 ··· AI·클라우드 비중 58%로 확대",0.322,1,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=661657
+2026-04-30,"LG CNS, 1분기 매출 1조3150억 원…AI·클라우드가 성장 견인",0.682,2,0,https://www.nbntv.kr/news/articleView.html?idxno=340001
+2026-04-30,"LG CNS, 1분기 매출 1조 3150억·영업익 924억...AI·클라우드 매출 비중...",0.322,1,0,http://www.inews24.com/view/1964819
+2026-04-30,"LG CNS, 1분기 영업익 942억원…전년比 19.4% ↑",0.322,1,0,https://daily.hankooki.com/news/articleView.html?idxno=1363084
+2026-04-30,"LG CNS, AI·클라우드로 1분기 날았다…영업익 19%↑",0.0,0,0,https://zdnet.co.kr/view/?no=20260430092916
+2026-04-30,"LG CNS, 1분기 영업익 942억원…전년대비 19.4% 증가",0.322,1,0,https://byline.network/?p=9004111222601167
+2026-04-30,"LG CNS, 1분기 매출 1.3조 돌파…AX 사업이 실적 견인",0.537,2,0,https://www.joongangenews.com/news/articleView.html?idxno=515972
+2026-04-30,"보험사, 차환 발행 없이 후순위채 잇달아 조기상환",0.0,0,0,https://news.einfomax.co.kr/news/articleView.html?idxno=4412539
+2026-05-04,"삼성생명, 이팔훈 부사장 AI센터장 선임…인프라 고도화 [금융권 AI 人포...",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202605030031184004dd55077bc2_18
+2026-05-03,"LG CNS, 1분기 영업익 942억원 '19.4%↑'···AI·클라우드 호조",0.322,1,0,https://www.seoulfn.com/news/articleView.html?idxno=627896
+2026-05-03,손보 이어 생보도 '어린이 보장' 손질…미래에셋·한화생명 선봉,0.322,1,0,https://www.shinailbo.co.kr/news/articleView.html?idxno=5016645
+2026-05-03,"보험업계, 황혼육아·고령화 대응... 신상품·서비스로 경쟁",0.0,0,0,http://www.hansbiz.co.kr/news/articleView.html?idxno=836441
+2026-05-05,'5세대 실손' 출격…생보사 신규 진입 '0',0.0,0,0,https://www.kbanker.co.kr/news/articleView.html?idxno=224845
+2026-05-05,"[이슈] LG CNS, 1분기 영업익 19.4%↑… AI·클라우드 핵심 동력 삼았다",0.322,1,0,https://www.startuptoday.co.kr/news/articleView.html?idxno=611829
+2026-05-04,"미래에셋운용·캐피탈, 미래에셋생명 보통주 35만주 장내매수",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=661304
+2026-05-04,"LG CNS, 1분기 매출액 8.6% 증가한 1조 3,150억 기록",0.322,1,0,https://www.klnews.co.kr/news/articleView.html?idxno=320967
+2026-05-04,"LG CNS, 1분기 AI·클라우드 중심 고성장...DX 리더십 강화",0.322,1,0,https://www.m-economynews.com/news/article.html?no=66954
+2026-05-04,"디산협, '제9회 디지털 헬스 수요-공급기업 매칭데이' 개최",0.0,0,0,https://www.rapportian.com/news/articleView.html?idxno=235472
+2026-05-04,“미래에셋 코빗 인수는 특혜” Vs “혁신”…공정위 조사 착수,0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=01279206645445640
+2026-05-04,'저출산 3종' 닻 올린 보험사…어린이보험 '조부모·학교' 영토 확장,0.0,0,0,https://www.ngetnews.com/news/articleView.html?idxno=550136
+2026-05-04,"[더벨][IR Briefing] LG CNS ""그룹 업무에 팔란티어 실제 도입""",0.322,1,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202604301439584520107525
+2026-05-04,"보험사 CEO 29명 모두 수도권 거주, 서초·용산 등 집중…아파트 선호 뚜...",0.0,0,0,https://www.ceoscoredaily.com/page/view/2026042910295823525
+2026-05-07,"변액보험 최강자 미래에셋생명, 불장에 몸집 커졌지만 수익성 '꽝'",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092161584
+2026-05-06,[A 금융체크] '치매환자 100만 시대' 어떤 치매간병보험 선택할까,0.0,0,0,https://www.asiaa.co.kr/news/articleView.html?idxno=248523
+2026-05-06,"보험사, 후순위채 '차환' 대신 '상환' 러시…킥스 규제前 빚 줄이기 총력",0.0,0,0,http://www.ftoday.co.kr/news/articleView.html?idxno=358496
+2026-05-06,미래에셋생명 한화생명 삼성생명 주시...생명보험주 코스피 칠천피시대,0.604,2,0,https://www.cbci.co.kr/news/articleView.html?idxno=572600
+2026-05-06,삼성·교보·한화생명 1분기 퇴직연금 수익률 '3파전'…생보사 강세 왜...,0.322,1,0,http://www.srtimes.kr/news/articleView.html?idxno=202650
+2026-05-06,"변액보험 2026년 5월 브랜드평판...미래에셋생명, 삼성생명, 한화생명 順",0.0,0,0,https://www.energy-news.co.kr/news/articleView.html?idxno=225170
+2026-05-06,변액보험 브랜드평판 5월 분석…미래에셋생명 1위·삼성생명 2위,0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=572508
+2026-05-06,내 보험 수익률은? 5월 변액보험 브랜드평판 순위... 미래에셋-삼성-한...,0.0,0,0,https://www.businesskorea.co.kr/news/articleView.html?idxno=268981
+2026-05-06,"미래에셋생명, 5월 변액보험 평판 1위 독주…삼성·한화생명 '빅3'",-0.261,0,1,http://www.popcornnews.net/news/articleView.html?idxno=120342
+2026-05-06,[테크M 리포트] 7000피 최대 수혜주는 미래에셋증권...하루새 15% 올랐다,0.0,0,0,https://www.techm.kr/news/articleView.html?idxno=151579
+2026-05-06,[빅데이터투데이] 변액보험 브랜드평판 5월 브랜드평판 랭킹 ... 1위 미래...,0.0,0,0,https://www.fntoday.co.kr/news/articleView.html?idxno=383786
+2026-05-06,"미래에셋생명, 변액보험 브랜드평판 2026년 5월 1위",0.0,0,0,http://www.beyondpost.co.kr/view.php?ud=20260506081031510246a9e4dd7f_30
+2026-05-06,"미래에셋생명 변액보험, 최근 한달간 변액보험 브랜드평판 1위...삼성·...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=202605060740356415d0a8833aad_23
+2026-05-06,변액보험 브랜드평판 2026년 5월 빅데이터 분석... 1위 미래에셋생명 변...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=450584
+2026-05-06,"[브랜드평판] 미래에셋생명, 변액보험 브랜드평판 5월 1위···삼성생명...",0.261,1,0,https://www.enetnews.co.kr/news/articleView.html?idxno=49652
+2026-05-07,역마진 감수한 보험사 '빚잔치' 이제 끝물,0.0,0,0,https://www.kbanker.co.kr/news/articleView.html?idxno=224875
+2026-05-07,"미래에셋생명, 기업대출에 무게 싣고 '고위험 PF' 줄인다",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=661547
+2026-05-07,"[심층분석] 삼성생명, 보험사 시총 1위... 4월 이어 5월도 상승세 이어간...",0.0,1,1,https://www.mediawatch.kr/news/article.html?no=259508
+2026-05-07,"보험설계사 스카우트 경쟁 과열…금감원·GA업계, '자율협약' 실효성 제...",-0.408,0,1,https://www.etnews.com/20260507000131
+2026-05-07,"""보험사 생산적 금융 전환에 국채 수요 감소 가능성""",0.0,0,0,https://www.news2day.co.kr/article/20260507500119
+2026-05-07,"[生기업TALK] 미래에셋생명, 투자 플랫폼으로 '한국형 버크셔' 키운다",0.0,0,0,http://www.sisacast.kr/news/articleView.html?idxno=95640
+2026-05-10,"5세대 출시됐지만…생보업계, 여전히 '실손보험 기피'",0.0,0,0,https://www.etnews.com/20260508000103
+2026-05-10,후순위채 대신 신종자본증권…보험사 조달 루트 달라지나,0.0,0,0,https://news.einfomax.co.kr/news/articleView.html?idxno=4413941
+2026-05-10,5세대 실손 16개사 출격했지만…'제한 판매·신규 중심' 조용한 출발,0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108477
+2026-05-10,[DQN] DB형 적립금 삼성생명 부동의 1위·수익률 교보 1위…IBK연금보험...,0.261,1,0,http://www.fntimes.com/html/view.php?ud=2026050921444687398a55064dd1_18
+2026-05-11,"[포커스] '변액보험 1위' 미래에셋생명, 불장엔 웃지만 민원 부담되네",0.322,1,0,https://www.startuptoday.co.kr/news/articleView.html?idxno=800543
+2026-05-11,"[창간 기획] 보험 넘어 '라이프 플랫폼'으로…보험사, 시니어 고객 경쟁...",0.322,1,0,https://daily.hankooki.com/news/articleView.html?idxno=1365831
+2026-05-11,"[보험사 M&A] [KDB생명] ① 승부사 ‘김남구’ 한투금융 회장, 시선 머무...",0.0,0,0,https://www.topdaily.kr/articles/109940
+2026-05-11,[금융계 4월 동향 - 미래에셋①],0.0,0,0,http://www.wsobi.com/news/articleView.html?idxno=311616
+2026-05-11,"미래에셋생명, '한국형 버크셔' 모델 시동…자본효율 높인다",0.322,1,0,https://www.sisaon.co.kr/news/articleView.html?idxno=200918
+2026-05-12,[iN The Scene] 22개 생보사 CEO “소비자보호 최우선가치 실천”,0.0,0,0,https://www.inthenews.co.kr/news/article.html?no=86742
+2026-05-12,22개 생보사 CEO 공동 선언...“소비자 기준으로 바꾸겠다”,0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095642
+2026-05-12,생보사 CEO 총출동…“보험금 지연·불완전판매 없앤다”,0.0,0,0,https://biz.heraldcorp.com/article/10736338?ref=naver
+2026-05-12,"[포토] 생보업계 CEO, '소비자와의 다섯 가지 약속' 결의",0.0,0,0,https://www.fetv.co.kr/news/articleView.html?idxno=302194
+2026-05-12,"생보업계, 신뢰 회복 위한 '소비자와의 다섯 가지 약속' 발표",0.0,0,0,https://www.joongangenews.com/news/articleView.html?idxno=518559
+2026-05-12,"22개 생보사 CEO, 소비자 신뢰 회복 공동 선언",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=133567
+2026-05-12,"""보험은 약속입니다"" 생명보험사, 소비자 위한 다섯 가지 약속 발표",0.0,0,0,https://weekly.hankooki.com/news/articleView.html?idxno=7163699
+2026-05-12,후순위채 줄고 신종자본 문턱 높고…보험사 자본확충 ‘난제’,0.0,0,0,https://www.dailian.co.kr/news/view/1642939/?sc=Naver
+2026-05-12,"""3초 만에 보험금 지급""…보험업계, AI 내재화 경쟁 돌입",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1708273
+2026-05-11,"[창간기획] 보험 넘어 '라이프 플랫폼'으로…보험사, 시니어 고객 경쟁...",0.322,1,0,https://daily.hankooki.com/news/articleView.html?idxno=1365831
+2026-05-13,"보험사 2025년 말 지급여력비율 212%, 주가 상승 효과로 1.5%포인트 개선",0.261,1,0,https://www.businesspost.co.kr/BP?command=article_view&num=437737
+2026-05-13,"""정치가 무섭다""...난데없는 생보 CEO들 공동선언",0.0,0,0,https://theviewers.co.kr/View.aspx?No=4076557
+2026-05-13,작년말 보험사 지급여력비율 212.3%로 개선…생보사 오르고 손보사 내렸...,-0.261,0,1,http://www.joseilbo.com/news/news_read.php?uid=568187&class=18&grp=
+2026-05-13,"생명보험 2026년 5월 브랜드평판...한화생명, 미래에셋생명, 교보생명 順",0.0,0,0,https://www.energy-news.co.kr/news/articleView.html?idxno=225343
+2026-05-13,"한화생명, 5월 생명보험 브랜드평판 1위…미래에셋생명·교보생명 뒤이...",0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=574169
+2026-05-13,"[더벨][컨콜 Q&A 리뷰] 한화생명, 배당도 자사주 소각도 환원 시점 불분...",0.0,0,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605121524263000105929
+2026-05-13,"한화생명, 주주환원 압박에도 자사주 소각 ‘안갯속’",0.0,0,0,https://www.topdaily.kr/articles/110073
+2026-05-13,"한화생명, 5월 생명보험 평판 1위 '리더십 공고'…미래에셋·교보 순",0.0,0,0,http://www.popcornnews.net/news/articleView.html?idxno=121122
+2026-05-13,"한화생명, 생명보험 브랜드평판 5월 빅데이터 1위...미래에셋·교보생명...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=202605130820293150d0a8833aad_23
+2026-05-13,"한화생명, 생명보험 브랜드평판 2026년 5월...1위",0.0,0,0,http://www.beyondpost.co.kr/view.php?ud=20260513075425825646a9e4dd7f_30
+2026-05-13,"생명보험 브랜드평판 5월 빅데이터 분석... 1위 한화생명, 2위 미래에셋...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=452238
+2026-05-13,"[브랜드평판] 한화생명, 생명보험 5월 1위···미래에셋생명·교보생명...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=49915
+2026-05-13,"보험사 GA채널, 생보 한화생명 '독주', 손보 메리츠화재 '수성'",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108474
+2026-05-14,"미래에셋그룹, '분기 순익 1조원' 시대 개막...투자 명가의 시총 3배 퀀...",0.261,1,0,https://www.g-enews.com/view.php?ud=202605141702385938df2f5bc1bc_1
+2026-05-14,반도체 80% 뛸 때 13% 오른 보험주…순환매 상승기류,0.261,1,0,https://www.news1.kr/finance/general-stock/6167010
+2026-05-14,[CEO포커스]증권사 첫 분기 순이익 1조원의 '박현주 매직' 비결은?,0.0,0,0,http://www.hansbiz.co.kr/news/articleView.html?idxno=838820
+2026-05-14,[리걸타임즈 특집=Rising Stars 2026] 박채은 변호사,0.0,0,0,http://www.legaltimes.co.kr/news/articleView.html?idxno=93802
+2026-05-14,"[더벨][아카이브 읽어주는 기자] [영상]100억에서 1000조까지, 미래에셋...",0.0,0,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605141013079120109545
+2026-05-17,"미래에셋생명, 올 1분기 순익 전년比 115.4% 급증…투자손익 개선",0.0,0,0,https://weekly.hankooki.com/news/articleView.html?idxno=7164569
+2026-05-17,금융 신상품,0.0,0,0,https://magazine.hankyung.com/money/article/202604202365c
+2026-05-16,미래에셋생명 1분기 순이익 115% 성장···586억 투자이익이 견인,0.322,1,0,https://www.womaneconomy.co.kr/news/articleView.html?idxno=253843
+2026-05-16,보험사 1분기 순익 줄어도 건전성 개선·미래 곳간 더 두둑,0.0,0,0,https://biz.heraldcorp.com/article/10739265?ref=naver
+2026-05-18,투자효과 톡톡히 본 미래에셋생명…1분기 순이익 2배 급증,0.583,1,0,https://www.newsway.co.kr/news/view?ud=2026051813462413979
+2026-05-18,본업 정체 보험사 '투자 대박'은 회계착시? 금리·당국규제는 숙제,0.823,2,0,https://www.sidae.com/article/2026051813364088839
+2026-05-18,"미래에셋생명, 임직원 건강관리 강화…'트윈 챌린지' 운영",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709183
+2026-05-18,"박현주 지배력 부각…미래에셋운용 총자산 624조 돌파, ‘朴 지분 60.19%...",0.261,1,0,https://www.ddaily.co.kr/page/view/2026051814210706797
+2026-05-18,한화생명·삼성생명 강세…코스피 양전 속 생명보험주 다시 들썩,0.775,3,0,https://www.cbci.co.kr/news/articleView.html?idxno=575220
+2026-05-18,"보험사, 체력·체질 더 좋아졌다",0.0,0,0,https://biz.heraldcorp.com/article/10740009?ref=naver
+2026-05-18,"[더벨][보험경영분석] 미래에셋생명, 순익 껑충…9할이 투자, 본업은 부...",0.682,2,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605151512566440103362
+2026-05-18,5월 15일 주식시장 주요공시,0.0,0,0,https://www.catchnews.kr/news/articleView.html?idxno=123959
+2026-05-18,"삼성생명 주가 2배 상승 등 보험주 '들썩'...증권가, 올해 실적전망은 ‘...",0.261,1,0,https://www.youthdaily.co.kr/news/article.html?no=219262
+2026-05-18,[오늘의 IR] 한미반도체ㆍ삼양식품ㆍ자연과환경 등,0.0,0,0,https://www.etoday.co.kr/news/view/2585292
+2026-05-20,"한화생명은 피플라이프, 메리츠는 인카…원수사별 '주력 GA' 윤곽 뚜렷",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108595
+2026-05-19,"미래에셋생명, 1분기 순익 115% 증가…건강보험 판매 확대·투자손익 개...",0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=353987
+2026-05-19,"미래에셋생명, 임직원 건강 챙긴다…'트윈 챌린지' 운영",0.0,0,0,http://www.ftoday.co.kr/news/articleView.html?idxno=359162
+2026-05-19,"[주식도락] 꿈틀대는 보험주…증권가 ""호실적+'이것' 주목""",0.8,2,0,http://www.newsdream.kr/news/articleView.html?idxno=112149
+2026-05-19,[속보] 미래에셋생명 한화생명 급등…동양생명 삼성생명은 하락세 생명...,0.408,2,1,https://www.cbci.co.kr/news/articleView.html?idxno=575599
+2026-05-19,"지급 보험금이 예측을 넘었다…주요 생보사, 예실차에 본업 타격",0.0,0,0,https://www.raonnews.com/news/article.html?no=58246
+2026-05-19,"[비즈 인사이트] ""박현주式 ‘투톱 경영’ 통했다""...미래에셋 금융 3총...",0.462,1,0,https://www.seoultimes.news/news/article.html?no=2000095791
+2026-05-19,생보사 사업비 지출 두 자릿수 증가…GA 경쟁에 수익성 ‘빨간불’,-0.261,0,1,https://www.ceoscoredaily.com/page/view/2026051510271984316
+2026-05-19,"미래에셋생명, 기본자본 K-ICS 105%…변동성 맞아도 웃었다, 왜",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=662754
+2026-05-19,"생보사 GA 순이익 판도 바뀌었다...한화생명 '주춤', 삼성·미래에셋생명...",0.0,0,0,http://www.consumernews.co.kr/news/articleView.html?idxno=755943
+2026-05-20,"미래에셋, 미래에셋생명 500억 규모 추가 출자… 지배구조 강화",0.0,0,0,https://www.webeconomy.co.kr/news/articleView.html?idxno=2178564
+2026-05-20,"미래에셋운용, ‘한국형 버크셔 해서웨이’ 미래에셋생명에 500억 추가 ...",0.0,0,0,http://www.beyondpost.co.kr/view.php?ud=202605202143554136be44c0aacd_30
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억원 추가 출자...""저평가 대응 차...",0.38,1,0,https://www.thepublic.kr/news/articleView.html?idxno=305151
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억원 추가 출자…보험·운용 시너지...",0.0,0,0,https://www.econovill.com/news/articleView.html?idxno=740531
+2026-05-20,"[금융 HOT 뉴스] 미래에셋운용, 미래에셋생명 500억 추가 출자…""저평가...",0.38,1,0,http://www.bizwnews.com/news/articleView.html?idxno=137043
+2026-05-20,"""한국형 버크셔에 베팅""…미래에셋운용, 미래에셋생명에 500억원 추가 출...",0.38,1,0,http://www.metroseoul.co.kr/article/20260520500381
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억 추가 출자…그룹 시너지 제고",0.0,0,0,http://www.paxetv.com/news/articleView.html?idxno=272615
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억 추가 출자",0.0,0,0,http://www.fnnews.com/news/202605201811256214
+2026-05-20,"미래에셋자산운용 미래에셋생명에 500억 추가 출자, ""지배구조 강화와 ...",0.0,0,0,https://www.businesspost.co.kr/BP?command=article_view&num=438284
+2026-05-20,"미래에셋운용, ""미래에셋생명 싸다""…500억원 추가 출자",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303009
+2026-05-20,"미래에셋운용, 미래에셋생명 500억 규모 추가 출자 결정",0.0,0,0,http://www.enewstoday.co.kr/news/articleView.html?idxno=2431467
+2026-05-20,[운용 NOW] 미래에셋운용·삼성자산운용·한화자산운용,0.0,0,0,http://www.wikileaks-kr.org/news/articleView.html?idxno=187634
+2026-05-20,보험사 1분기 영업익 6조 돌파…생보 강세·손보 부진 속 삼성생명 ‘1조...,0.834,3,0,https://www.ceoscoredaily.com/page/view/2026051909185342267
+2026-05-20,"미래에셋운용, 미래에셋생명 500억 규모 추가 출자...""지배구조 강화 목...",0.0,0,0,https://www.greened.kr/news/articleView.html?idxno=341066
+2026-05-20,"[금융가 산책] 미래에셋운용,미래에셋생명500억 추가 출자",0.0,0,0,https://www.newsinside.kr/news/articleView.html?idxno=4691434
+2026-05-20,대신증권 신한은행 미래에셋자산운용 外(금융 레이더),0.0,0,0,https://www.newsclaim.co.kr/news/articleView.html?idxno=3064222
+2026-05-20,"금융투자업계, 연금·디지털·자산관리 등 시장 경쟁 치열",0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095868
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억원 추가 출자 결정",0.322,1,0,https://www.megaeconomy.co.kr/news/newsview.php?ncode=1065598725970680
+2026-05-20,"미래에셋운용, 미래에셋생명 500억 추가 출자…지배력 강화 속도",0.0,0,0,https://www.news2day.co.kr/article/20260520500217
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억 규모 출자",0.0,0,0,https://www.seoulfn.com/news/articleView.html?idxno=629292
+2026-05-20,[애프터마켓 브리핑] 노동부 장관 주재 삼성 교섭 재개에 반등 시도,0.322,2,1,https://biz.sbs.co.kr/article_hub/20000311635?division=NAVER
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억원 추가 출자",0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=305652
+2026-05-20,"연금 시장 공략 속도 내는 금융권, 상품·이벤트·서비스 강화",0.0,0,0,https://www.pressman.kr/news/articleView.html?idxno=101941
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억원 추가 출자… 지배구조 강화",0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202605201612130930511
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억 규모 추가 출자...""지배구조 강...",0.0,0,0,https://www.delighti.co.kr/news/articleView.html?idxno=116649
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억 추가 출자…지배력 강화 나선다",0.0,0,0,http://www.popcornnews.net/news/articleView.html?idxno=121892
+2026-05-20,"미래에셋운용, 미래생명보험에 500억 추가 출자",0.0,0,0,http://www.inews24.com/view/1970192
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억 규모 추가 출자…12월까지 순차...",0.0,0,0,https://www.sidae.com/article/2026052015312982356
+2026-05-20,"미래에셋운용, 미래에셋생명 500억원 추가 출자… '종합금융 시너지' 강...",0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=354019
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억 추가 출자…""저평가 국면, 지...",0.38,1,0,http://www.queen.co.kr/news/articleView.html?idxno=457267
+2026-05-20,"""주가 쌀 때 더 산다"" 미래운용, 미래에셋생명에 500억 추가 베팅",0.38,1,0,https://www.mediapen.com/news/view/1100076
+2026-05-20,"미래에셋생명, 투자손익 급증에 순익 2배 성장…'변액보험 경쟁력' 재확...",0.682,2,0,http://www.wikileaks-kr.org/news/articleView.html?idxno=187628
+2026-05-20,"미래운용, 미래에셋생명에 500억원 추가 출자 단행",0.38,1,0,https://sateconomy.co.kr/news/view/1065595612246013
+2026-05-20,"미래에셋운용, 미래에셋생명 주식 500억 추가로 사들인다",0.38,1,0,https://www.mk.co.kr/article/12053202
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억원 추가 출자… 지배력 강화",0.0,0,0,https://www.cnbizm.com/news/articleView.html?idxno=303468
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억 추가 출자",0.0,0,0,https://www.digitaltoday.co.kr/news/articleView.html?idxno=667669
+2026-05-20,"미래에셋자산운용, 미래에셋생명 보통주 500억원 규모 추가 출자 단행",0.0,0,0,https://www.100ssd.co.kr/news/articleView.html?idxno=209471
+2026-05-20,"미래에셋운용, 미래에셋생명 500억 규모 추가 출자",0.0,0,0,https://www.mt.co.kr/stock/2026/05/20/2026052015095657933
+2026-05-20,"미래에셋운용, 미래에셋생명 500억원 추가 출자",0.0,0,0,http://www.4th.kr/news/articleView.html?idxno=2112012
+2026-05-20,"미래에셋운용, 500억어치 미래에셋생명 주식 사들인다",0.0,0,0,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202605200551&t=NN
+2026-05-20,"미래에셋자산운용, 미래에셋생명 보통주에 500억 규모 추가 출자 결정",0.0,0,0,https://www.newspim.com/news/view/20260520000815
+2026-05-20,"미래운용, 미래에셋생명에 500억원 추가 출자…""지배구조 강화""",0.0,0,0,https://biz.sbs.co.kr/article_hub/20000311619?division=NAVER
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억원 추가 출자…""지배구조 강화...",0.0,0,0,http://www.smarttimes.co.kr/news/articleView.html?idxno=45704
+2026-05-20,"미래에셋운용, '미래에셋생명' 500억 규모 추가 출자...우량 자회사 기업...",0.0,0,0,https://www.betanews.net/article/view/beta202605200125
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억원 추가 출자…지배력 강화·‘한...",0.0,0,0,https://www.todayeconomic.com/news/article.html?no=30657
+2026-05-20,"미래에셋, 미래에셋생명 500억 규모 추가 출자",0.0,0,0,https://www.cstimes.com/news/articleView.html?idxno=706614
+2026-05-20,"미래에셋자산운용, 미래에셋생명 500억 규모 추가 출자",0.0,0,0,https://www.g-enews.com/view.php?ud=202605201446325944c5557f8da8_1
+2026-05-20,"미래에셋자산운용, 500억 규모 미래에셋생명 주식 매입 결정",0.0,0,0,https://www.inthenews.co.kr/news/article.html?no=87106
+2026-05-20,"미래운용, 미래에셋생명에 500억 추가 출자…""지배구조 강화""",0.0,0,0,http://www.yonhapnewstv.co.kr/news/AKR20260520150820VZ6
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억 추가 출자…지배구조 강화",0.0,0,0,https://www.womentimes.co.kr/news/articleView.html?idxno=103085
+2026-05-20,"미래에셋운용 ""미래에셋생명 기업가치 높인다…추가 출자""",0.38,1,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709526
+2026-05-20,"미래에셋운용, 미래에셋생명에 추가 출자…500억 원 규모",0.0,0,0,https://www.sedaily.com/article/20046347?ref=naver
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억 규모 추가 출자",0.0,0,0,https://biz.heraldcorp.com/article/10742018?ref=naver
+2026-05-20,"미래에셋자산운용, 미래에셋생명에 500억 추가 출자…""책임경영 강화""",0.0,0,0,https://www.newsworks.co.kr/news/articleView.html?idxno=841356
+2026-05-20,"미래에셋운용, 미래에셋생명에 500억 추가 출자…“시너지 강화”",0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=03916326645450888
+2026-05-20,"미래에셋운용, 미래에셋생명 500억 추가 매입 ""장기 성장 포석""",0.322,1,0,http://www.fnnews.com/news/202605201434395885
+2026-05-20,"미래에셋운용, 보험 계열사에 500억원 추가 출자…지배구조 강화·시너...",0.0,0,0,http://www.srtimes.kr/news/articleView.html?idxno=203637
+2026-05-20,"미래에셋자산, 미래에셋생명에 500억원 추가 출자 방침",0.0,0,0,https://www.joongangenews.com/news/articleView.html?idxno=520675
+2026-05-20,"미래에셋의 '책임 경영'…자산운용, 미래에셋생명에 500억 투입",0.0,0,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=77477
+2026-05-20,"미래에셋자산운용, 미래에셋생명 추가 출자…""지배구조 강화·시너지 확...",0.322,1,0,https://thetracker.co.kr/View.aspx?No=4084971
+2026-05-20,치매 치료부터 가정 간병까지… 보험 하나로 실속있게,0.0,0,0,https://www.munhwa.com/article/11590102?ref=naver
+2026-05-21,"[이슈] '순익 115% 껑충' 미래에셋생명, 운용서 500억원 수혈…'저PBR 명...",0.682,2,0,http://www.paxetv.com/news/articleView.html?idxno=272724
+2026-05-21,"[단독] 미래에셋생명, 주가조작 민원 낸 주주에 법적대응 압박 논란",0.0,0,0,https://biz.newdaily.co.kr/site/data/html/2026/05/21/2026052100238.html
+2026-05-21,[증권 뉴스브리핑] '미공개정보 이용' NH투자증권 전 임원 검찰 고발/주...,0.0,0,0,https://www.asiatime.co.kr/article/20260521500294
+2026-05-21,저평가 보험주 '수두룩'…명단 공개 앞두고 밸류업 러시,0.38,1,0,https://www.sidae.com/article/2026052108394439750
+2026-05-21,[더밸류 브리핑] 오늘의 미래에셋 소식…미래에셋증권·미래에셋자산운...,0.0,0,0,http://www.thevaluenews.co.kr/news/view.php?idx=198903
+2026-05-21,미래에셋운용 'TIGER 미국나스닥100' 순자산 10조 돌파···미래생명보...,0.261,1,0,http://www.wsobi.com/news/articleView.html?idxno=312264
+2026-05-21,[단독] 자진상폐 노린 고의 주가 누르기? … 대차잔고 4배 폭증 미래에...,0.0,0,0,https://biz.newdaily.co.kr/site/data/html/2026/05/21/2026052100086.html
+2026-05-21,"미래운용, 미래에셋생명에 500억원 추가 출자…""지배구조 강화""",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108609
+2026-05-21,"[生기업TALK] 미래에셋자산운용, 수탁고 600조원 시대 열고 미래에셋생...",0.0,0,0,http://www.sisacast.kr/news/articleView.html?idxno=95966
+2026-05-21,"미래에셋생명, 박현주 방계 지분 정리⋯중복상장 해소 가능성",0.0,0,0,http://www.inews24.com/view/1970342
+2026-05-21,"미래에셋자산운용, 생명 지배력 높인다",0.0,0,0,http://www.globalepic.co.kr/view.php?ud=2026052108402457827cc35ccc5c_29
+2026-05-21,"미래에셋운용, 미래에셋생명에500억 규모 추가 출자 결정",0.0,0,0,https://biz.chosun.com/stock/stock_general/2026/05/21/SXML76ZKEBCPJNGTQAN4ZFKIPY/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-05-21,"""미래에셋자산운용, 미래에셋생명에 500억 추가 출자… 지배구조 강화 ...",0.0,0,0,https://www.ilyoseoul.co.kr/news/articleView.html?idxno=517380
+2026-05-25,손 안 대고 코 푼 보험사…5세대 실손 전환 슬쩍 뭉개기,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162665
+2026-05-25,"사기·횡령 등 금융사고 6년여간 1조 넘었다…""작년 역대 최대""",0.0,0,0,https://www.yna.co.kr/view/AKR20260523043200002?input=1195m
+2026-05-25,"미래에셋생명, 1분기 순익 534억원… 건강보험 중심 체질개선 성과",0.322,1,0,https://www.insnews.co.kr/news/articleView.html?idxno=90924
+2026-05-24,"미래에셋생명, 14년 연속 한국백혈병어린이재단 소아암 항균물품 지원",0.0,0,0,https://www.asiaa.co.kr/news/articleView.html?idxno=250353
+2026-05-23,"거래소, 코스피 200·코스닥 150 등 구성종목 정기변경",0.0,0,0,http://www.metroseoul.co.kr/article/20260523500001
+2026-05-23,"[금융zip] DB손해보험, 美 보험사 포테그라 인수 완료 外",0.0,0,0,https://www.getnews.co.kr/news/articleView.html?idxno=870774
+2026-05-23,증시 호황에 금융판 뒤집혔다…증권·보험 ‘신흥 주도주’ 부상,0.0,0,0,https://magazine.hankyung.com/business/article/202605210875b
+2026-05-23,거래소 '대표지수' 물갈이…어떤 기업이 포함되고 빠졌나,0.0,0,0,https://www.dailian.co.kr/news/view/1647830/?sc=Naver

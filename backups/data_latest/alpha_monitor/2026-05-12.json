@@ -1,0 +1,2316 @@
+{
+  "ic_alert": {
+    "n_features": 93,
+    "positive_ic": 9,
+    "negative_ic": 54,
+    "ic_changes": [
+      {
+        "feature": "rstd_14",
+        "prev_ic": 0.0663,
+        "curr_ic": -0.1067,
+        "delta": -0.173
+      },
+      {
+        "feature": "macd_hist",
+        "prev_ic": 0.0618,
+        "curr_ic": -0.0927,
+        "delta": -0.1545
+      },
+      {
+        "feature": "rsi_x_vol",
+        "prev_ic": 0.0856,
+        "curr_ic": -0.1136,
+        "delta": -0.1992
+      },
+      {
+        "feature": "rmean_30",
+        "prev_ic": 0.1279,
+        "curr_ic": -0.1537,
+        "delta": -0.2816
+      },
+      {
+        "feature": "lag_5",
+        "prev_ic": 0.1663,
+        "curr_ic": -0.1943,
+        "delta": -0.3606
+      },
+      {
+        "feature": "ema_30",
+        "prev_ic": 0.163,
+        "curr_ic": -0.1825,
+        "delta": -0.3455
+      },
+      {
+        "feature": "rstd_7",
+        "prev_ic": 0.0615,
+        "curr_ic": -0.0916,
+        "delta": -0.1531
+      },
+      {
+        "feature": "lag_4",
+        "prev_ic": 0.1707,
+        "curr_ic": -0.1979,
+        "delta": -0.3686
+      },
+      {
+        "feature": "rmean_14",
+        "prev_ic": 0.1786,
+        "curr_ic": -0.2047,
+        "delta": -0.3833
+      },
+      {
+        "feature": "price_ma_ratio_30",
+        "prev_ic": 0.0978,
+        "curr_ic": -0.1345,
+        "delta": -0.2323
+      },
+      {
+        "feature": "lag_3",
+        "prev_ic": 0.1716,
+        "curr_ic": -0.2026,
+        "delta": -0.3742
+      },
+      {
+        "feature": "rmean_7",
+        "prev_ic": 0.1919,
+        "curr_ic": -0.22,
+        "delta": -0.4119
+      },
+      {
+        "feature": "lag_2",
+        "prev_ic": 0.1848,
+        "curr_ic": -0.2105,
+        "delta": -0.3953
+      },
+      {
+        "feature": "trend_price_position",
+        "prev_ic": 0.093,
+        "curr_ic": -0.1145,
+        "delta": -0.2075
+      },
+      {
+        "feature": "rsi_14",
+        "prev_ic": 0.0769,
+        "curr_ic": -0.1016,
+        "delta": -0.1785
+      },
+      {
+        "feature": "rmean_3",
+        "prev_ic": 0.2027,
+        "curr_ic": -0.2268,
+        "delta": -0.4295
+      },
+      {
+        "feature": "alt_greed_flag",
+        "prev_ic": 0.0858,
+        "curr_ic": -0.1202,
+        "delta": -0.206
+      },
+      {
+        "feature": "lag_1",
+        "prev_ic": 0.1967,
+        "curr_ic": -0.2216,
+        "delta": -0.4183
+      },
+      {
+        "feature": "trend_dist_high_52w",
+        "prev_ic": 0.1047,
+        "curr_ic": -0.1335,
+        "delta": -0.2382
+      },
+      {
+        "feature": "mtf_weekly_rsi",
+        "prev_ic": 0.0877,
+        "curr_ic": -0.1153,
+        "delta": -0.203
+      },
+      {
+        "feature": "bb_x_vol",
+        "prev_ic": 0.0898,
+        "curr_ic": -0.1197,
+        "delta": -0.2095
+      },
+      {
+        "feature": "ma_spread",
+        "prev_ic": 0.0947,
+        "curr_ic": -0.1306,
+        "delta": -0.2253
+      },
+      {
+        "feature": "bear_downside_vol_ratio",
+        "prev_ic": 0.0907,
+        "curr_ic": 0.1161,
+        "delta": 0.0254
+      },
+      {
+        "feature": "mtf_vs_ma100",
+        "prev_ic": 0.1342,
+        "curr_ic": -0.1793,
+        "delta": -0.3135
+      },
+      {
+        "feature": "trend_golden_cross",
+        "prev_ic": 0.1,
+        "curr_ic": -0.1384,
+        "delta": -0.2384
+      }
+    ]
+  },
+  "ab_test": {
+    "today_accuracy": 0.8428,
+    "cumulative_accuracy": 0.7666,
+    "total_days": 38,
+    "n_predictions": 299,
+    "day_of_week": 1,
+    "dow_stats": {
+      "0": {
+        "name": "Mon",
+        "mean_da": 0.7903,
+        "n_days": 7,
+        "std_da": 0.154
+      },
+      "1": {
+        "name": "Tue",
+        "mean_da": 0.827,
+        "n_days": 7,
+        "std_da": 0.1432
+      },
+      "2": {
+        "name": "Wed",
+        "mean_da": 0.7416,
+        "n_days": 7,
+        "std_da": 0.3217
+      },
+      "3": {
+        "name": "Thu",
+        "mean_da": 0.8424,
+        "n_days": 7,
+        "std_da": 0.0623
+      },
+      "4": {
+        "name": "Fri",
+        "mean_da": 0.7706,
+        "n_days": 7,
+        "std_da": 0.2346
+      },
+      "5": {
+        "name": "DOW5",
+        "mean_da": 0.3968,
+        "n_days": 2,
+        "std_da": 0.1294
+      }
+    },
+    "dow_bias": {},
+    "results": [
+      {
+        "ticker": "000100",
+        "predicted": "down",
+        "up_prob": 0.3422,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000120",
+        "predicted": "down",
+        "up_prob": 0.3479,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000150",
+        "predicted": "down",
+        "up_prob": 0.3478,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000240",
+        "predicted": "down",
+        "up_prob": 0.3495,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000270",
+        "predicted": "down",
+        "up_prob": 0.3464,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000500",
+        "predicted": "down",
+        "up_prob": 0.3459,
+        "actual_return": 0.299728,
+        "correct": "False"
+      },
+      {
+        "ticker": "000660",
+        "predicted": "down",
+        "up_prob": 0.367,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000720",
+        "predicted": "down",
+        "up_prob": 0.34,
+        "actual_return": -0.020311,
+        "correct": "True"
+      },
+      {
+        "ticker": "000810",
+        "predicted": "down",
+        "up_prob": 0.365,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000880",
+        "predicted": "down",
+        "up_prob": 0.3437,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "000990",
+        "predicted": "down",
+        "up_prob": 0.3381,
+        "actual_return": 0.067302,
+        "correct": "False"
+      },
+      {
+        "ticker": "001040",
+        "predicted": "down",
+        "up_prob": 0.346,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "001120",
+        "predicted": "down",
+        "up_prob": 0.3468,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "001430",
+        "predicted": "down",
+        "up_prob": 0.3547,
+        "actual_return": 0.061693,
+        "correct": "False"
+      },
+      {
+        "ticker": "001450",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "001720",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "001800",
+        "predicted": "down",
+        "up_prob": 0.3549,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "002380",
+        "predicted": "down",
+        "up_prob": 0.37,
+        "actual_return": 0.025381,
+        "correct": "False"
+      },
+      {
+        "ticker": "002790",
+        "predicted": "down",
+        "up_prob": 0.3503,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "003090",
+        "predicted": "down",
+        "up_prob": 0.3484,
+        "actual_return": 0.01139,
+        "correct": "False"
+      },
+      {
+        "ticker": "003230",
+        "predicted": "down",
+        "up_prob": 0.348,
+        "actual_return": 0.075949,
+        "correct": "False"
+      },
+      {
+        "ticker": "003380",
+        "predicted": "down",
+        "up_prob": 0.3512,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "003490",
+        "predicted": "down",
+        "up_prob": 0.3462,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "003550",
+        "predicted": "down",
+        "up_prob": 0.3443,
+        "actual_return": 0.041109,
+        "correct": "False"
+      },
+      {
+        "ticker": "003570",
+        "predicted": "down",
+        "up_prob": 0.3455,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "003670",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": -0.02027,
+        "correct": "True"
+      },
+      {
+        "ticker": "003690",
+        "predicted": "down",
+        "up_prob": 0.3509,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "004020",
+        "predicted": "down",
+        "up_prob": 0.3437,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "004170",
+        "predicted": "down",
+        "up_prob": 0.3644,
+        "actual_return": -0.010393,
+        "correct": "True"
+      },
+      {
+        "ticker": "004370",
+        "predicted": "down",
+        "up_prob": 0.3542,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "004800",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": -0.047101,
+        "correct": "True"
+      },
+      {
+        "ticker": "004990",
+        "predicted": "down",
+        "up_prob": 0.3487,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005070",
+        "predicted": "down",
+        "up_prob": 0.3415,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005290",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": -0.022951,
+        "correct": "True"
+      },
+      {
+        "ticker": "005380",
+        "predicted": "down",
+        "up_prob": 0.3637,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005440",
+        "predicted": "down",
+        "up_prob": 0.347,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005490",
+        "predicted": "down",
+        "up_prob": 0.3646,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005830",
+        "predicted": "down",
+        "up_prob": 0.3474,
+        "actual_return": -0.002424,
+        "correct": "True"
+      },
+      {
+        "ticker": "005850",
+        "predicted": "down",
+        "up_prob": 0.3442,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005930",
+        "predicted": "down",
+        "up_prob": 0.3424,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "005940",
+        "predicted": "down",
+        "up_prob": 0.3412,
+        "actual_return": -0.029178,
+        "correct": "True"
+      },
+      {
+        "ticker": "006040",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "006260",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "006280",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": 0.010981,
+        "correct": "False"
+      },
+      {
+        "ticker": "006360",
+        "predicted": "down",
+        "up_prob": 0.3574,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "006400",
+        "predicted": "down",
+        "up_prob": 0.371,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "006800",
+        "predicted": "down",
+        "up_prob": 0.3495,
+        "actual_return": 0.007595,
+        "correct": "False"
+      },
+      {
+        "ticker": "007070",
+        "predicted": "down",
+        "up_prob": 0.3519,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "007310",
+        "predicted": "down",
+        "up_prob": 0.3594,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "007340",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": -0.001953,
+        "correct": "True"
+      },
+      {
+        "ticker": "007660",
+        "predicted": "down",
+        "up_prob": 0.3493,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "008770",
+        "predicted": "down",
+        "up_prob": 0.3442,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "008930",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": 0.013661,
+        "correct": "False"
+      },
+      {
+        "ticker": "009150",
+        "predicted": "down",
+        "up_prob": 0.3669,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "009240",
+        "predicted": "down",
+        "up_prob": 0.3461,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "009420",
+        "predicted": "down",
+        "up_prob": 0.3517,
+        "actual_return": -0.006764,
+        "correct": "True"
+      },
+      {
+        "ticker": "009540",
+        "predicted": "down",
+        "up_prob": 0.3681,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "009830",
+        "predicted": "down",
+        "up_prob": 0.3529,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "009970",
+        "predicted": "down",
+        "up_prob": 0.3567,
+        "actual_return": -0.01182,
+        "correct": "True"
+      },
+      {
+        "ticker": "010060",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "010120",
+        "predicted": "down",
+        "up_prob": 0.3533,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "010130",
+        "predicted": "down",
+        "up_prob": 0.3677,
+        "actual_return": -0.000641,
+        "correct": "True"
+      },
+      {
+        "ticker": "010140",
+        "predicted": "down",
+        "up_prob": 0.3444,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "010950",
+        "predicted": "down",
+        "up_prob": 0.3459,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "011070",
+        "predicted": "down",
+        "up_prob": 0.3381,
+        "actual_return": -0.020408,
+        "correct": "True"
+      },
+      {
+        "ticker": "011170",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "011200",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "011210",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.086435,
+        "correct": "False"
+      },
+      {
+        "ticker": "011780",
+        "predicted": "down",
+        "up_prob": 0.3472,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "011790",
+        "predicted": "down",
+        "up_prob": 0.3472,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "012330",
+        "predicted": "down",
+        "up_prob": 0.3674,
+        "actual_return": 0.152888,
+        "correct": "False"
+      },
+      {
+        "ticker": "012450",
+        "predicted": "down",
+        "up_prob": 0.35,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "012510",
+        "predicted": "down",
+        "up_prob": 0.3463,
+        "actual_return": -0.002494,
+        "correct": "True"
+      },
+      {
+        "ticker": "012630",
+        "predicted": "down",
+        "up_prob": 0.3491,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "012750",
+        "predicted": "down",
+        "up_prob": 0.3502,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "014680",
+        "predicted": "down",
+        "up_prob": 0.3468,
+        "actual_return": -0.008666,
+        "correct": "True"
+      },
+      {
+        "ticker": "015760",
+        "predicted": "down",
+        "up_prob": 0.3442,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "016360",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "017670",
+        "predicted": "down",
+        "up_prob": 0.346,
+        "actual_return": 0.003219,
+        "correct": "False"
+      },
+      {
+        "ticker": "017800",
+        "predicted": "down",
+        "up_prob": 0.3431,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "017960",
+        "predicted": "down",
+        "up_prob": 0.3586,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "018260",
+        "predicted": "down",
+        "up_prob": 0.3451,
+        "actual_return": -0.006795,
+        "correct": "True"
+      },
+      {
+        "ticker": "018670",
+        "predicted": "down",
+        "up_prob": 0.3505,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "018880",
+        "predicted": "down",
+        "up_prob": 0.3549,
+        "actual_return": -0.026531,
+        "correct": "True"
+      },
+      {
+        "ticker": "020150",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "020560",
+        "predicted": "down",
+        "up_prob": 0.3435,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "021240",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.008055,
+        "correct": "False"
+      },
+      {
+        "ticker": "022100",
+        "predicted": "down",
+        "up_prob": 0.3422,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "023530",
+        "predicted": "down",
+        "up_prob": 0.3457,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "023590",
+        "predicted": "down",
+        "up_prob": 0.3368,
+        "actual_return": -0.014286,
+        "correct": "True"
+      },
+      {
+        "ticker": "024110",
+        "predicted": "down",
+        "up_prob": 0.3498,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "024720",
+        "predicted": "down",
+        "up_prob": 0.3442,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "026960",
+        "predicted": "down",
+        "up_prob": 0.3521,
+        "actual_return": 0.005952,
+        "correct": "False"
+      },
+      {
+        "ticker": "028050",
+        "predicted": "down",
+        "up_prob": 0.3437,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "028260",
+        "predicted": "down",
+        "up_prob": 0.3507,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "028300",
+        "predicted": "down",
+        "up_prob": 0.3444,
+        "actual_return": -0.021849,
+        "correct": "True"
+      },
+      {
+        "ticker": "028670",
+        "predicted": "down",
+        "up_prob": 0.3433,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "029780",
+        "predicted": "down",
+        "up_prob": 0.3484,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "030000",
+        "predicted": "down",
+        "up_prob": 0.3493,
+        "actual_return": 0.000521,
+        "correct": "False"
+      },
+      {
+        "ticker": "030200",
+        "predicted": "down",
+        "up_prob": 0.3521,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "030530",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "030610",
+        "predicted": "down",
+        "up_prob": 0.3453,
+        "actual_return": -0.015926,
+        "correct": "True"
+      },
+      {
+        "ticker": "031210",
+        "predicted": "down",
+        "up_prob": 0.3437,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "031980",
+        "predicted": "down",
+        "up_prob": 0.3452,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "032350",
+        "predicted": "down",
+        "up_prob": 0.3473,
+        "actual_return": -0.012285,
+        "correct": "True"
+      },
+      {
+        "ticker": "032640",
+        "predicted": "down",
+        "up_prob": 0.3487,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "032820",
+        "predicted": "down",
+        "up_prob": 0.3519,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "032830",
+        "predicted": "down",
+        "up_prob": 0.3532,
+        "actual_return": -0.016667,
+        "correct": "True"
+      },
+      {
+        "ticker": "033780",
+        "predicted": "down",
+        "up_prob": 0.3438,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "034020",
+        "predicted": "down",
+        "up_prob": 0.3514,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "034220",
+        "predicted": "down",
+        "up_prob": 0.344,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "034230",
+        "predicted": "down",
+        "up_prob": 0.3479,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "034730",
+        "predicted": "down",
+        "up_prob": 0.3403,
+        "actual_return": 0.012891,
+        "correct": "False"
+      },
+      {
+        "ticker": "035250",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "035420",
+        "predicted": "down",
+        "up_prob": 0.3448,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "035720",
+        "predicted": "down",
+        "up_prob": 0.348,
+        "actual_return": 0.016575,
+        "correct": "False"
+      },
+      {
+        "ticker": "035760",
+        "predicted": "down",
+        "up_prob": 0.3519,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "035900",
+        "predicted": "down",
+        "up_prob": 0.3463,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "036460",
+        "predicted": "down",
+        "up_prob": 0.3467,
+        "actual_return": -0.011704,
+        "correct": "True"
+      },
+      {
+        "ticker": "036570",
+        "predicted": "down",
+        "up_prob": 0.3509,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "036930",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.028127,
+        "correct": "False"
+      },
+      {
+        "ticker": "038500",
+        "predicted": "down",
+        "up_prob": 0.3509,
+        "actual_return": 0.002658,
+        "correct": "False"
+      },
+      {
+        "ticker": "039030",
+        "predicted": "down",
+        "up_prob": 0.3473,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "039200",
+        "predicted": "down",
+        "up_prob": 0.3439,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "039490",
+        "predicted": "down",
+        "up_prob": 0.3625,
+        "actual_return": -0.02897,
+        "correct": "True"
+      },
+      {
+        "ticker": "041510",
+        "predicted": "down",
+        "up_prob": 0.3399,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "042660",
+        "predicted": "down",
+        "up_prob": 0.3456,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "042700",
+        "predicted": "down",
+        "up_prob": 0.3571,
+        "actual_return": -0.007634,
+        "correct": "True"
+      },
+      {
+        "ticker": "043260",
+        "predicted": "down",
+        "up_prob": 0.347,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "044820",
+        "predicted": "down",
+        "up_prob": 0.3505,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "047040",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": -0.010542,
+        "correct": "True"
+      },
+      {
+        "ticker": "047050",
+        "predicted": "down",
+        "up_prob": 0.3484,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "047810",
+        "predicted": "down",
+        "up_prob": 0.3483,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "048410",
+        "predicted": "down",
+        "up_prob": 0.3469,
+        "actual_return": -0.0243,
+        "correct": "True"
+      },
+      {
+        "ticker": "051600",
+        "predicted": "down",
+        "up_prob": 0.3482,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "051900",
+        "predicted": "down",
+        "up_prob": 0.3482,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "051910",
+        "predicted": "down",
+        "up_prob": 0.3659,
+        "actual_return": 0.010588,
+        "correct": "False"
+      },
+      {
+        "ticker": "052690",
+        "predicted": "down",
+        "up_prob": 0.3445,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "055550",
+        "predicted": "down",
+        "up_prob": 0.3413,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "058470",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "058610",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.089372,
+        "correct": "False"
+      },
+      {
+        "ticker": "060310",
+        "predicted": "down",
+        "up_prob": 0.3483,
+        "actual_return": -0.027371,
+        "correct": "True"
+      },
+      {
+        "ticker": "060370",
+        "predicted": "down",
+        "up_prob": 0.3474,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "062040",
+        "predicted": "down",
+        "up_prob": 0.3412,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "064350",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "064400",
+        "predicted": "down",
+        "up_prob": 0.344,
+        "actual_return": 0.048744,
+        "correct": "False"
+      },
+      {
+        "ticker": "064760",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "065350",
+        "predicted": "down",
+        "up_prob": 0.3458,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "066570",
+        "predicted": "down",
+        "up_prob": 0.345,
+        "actual_return": 0.036315,
+        "correct": "False"
+      },
+      {
+        "ticker": "066970",
+        "predicted": "down",
+        "up_prob": 0.3412,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "067310",
+        "predicted": "down",
+        "up_prob": 0.3564,
+        "actual_return": 0.008245,
+        "correct": "False"
+      },
+      {
+        "ticker": "068270",
+        "predicted": "down",
+        "up_prob": 0.3455,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "068760",
+        "predicted": "down",
+        "up_prob": 0.3455,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "069620",
+        "predicted": "down",
+        "up_prob": 0.3435,
+        "actual_return": 0.002762,
+        "correct": "False"
+      },
+      {
+        "ticker": "069960",
+        "predicted": "down",
+        "up_prob": 0.3406,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "071050",
+        "predicted": "down",
+        "up_prob": 0.3479,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "071970",
+        "predicted": "down",
+        "up_prob": 0.3449,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "073240",
+        "predicted": "down",
+        "up_prob": 0.3432,
+        "actual_return": -0.012324,
+        "correct": "True"
+      },
+      {
+        "ticker": "077970",
+        "predicted": "down",
+        "up_prob": 0.3414,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "078340",
+        "predicted": "down",
+        "up_prob": 0.3474,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "078600",
+        "predicted": "down",
+        "up_prob": 0.3461,
+        "actual_return": -0.005309,
+        "correct": "True"
+      },
+      {
+        "ticker": "078930",
+        "predicted": "down",
+        "up_prob": 0.3502,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "079550",
+        "predicted": "down",
+        "up_prob": 0.3651,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "080220",
+        "predicted": "down",
+        "up_prob": 0.3487,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "081660",
+        "predicted": "down",
+        "up_prob": 0.3451,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "082270",
+        "predicted": "down",
+        "up_prob": 0.3553,
+        "actual_return": 0.009434,
+        "correct": "False"
+      },
+      {
+        "ticker": "082740",
+        "predicted": "down",
+        "up_prob": 0.3485,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "083650",
+        "predicted": "down",
+        "up_prob": 0.3465,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "084370",
+        "predicted": "down",
+        "up_prob": 0.3453,
+        "actual_return": 0.011572,
+        "correct": "False"
+      },
+      {
+        "ticker": "085620",
+        "predicted": "down",
+        "up_prob": 0.3484,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "085660",
+        "predicted": "down",
+        "up_prob": 0.3528,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "086280",
+        "predicted": "down",
+        "up_prob": 0.3462,
+        "actual_return": 0.088937,
+        "correct": "False"
+      },
+      {
+        "ticker": "086520",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "086790",
+        "predicted": "down",
+        "up_prob": 0.3457,
+        "actual_return": -0.017857,
+        "correct": "True"
+      },
+      {
+        "ticker": "087010",
+        "predicted": "down",
+        "up_prob": 0.3547,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "088350",
+        "predicted": "down",
+        "up_prob": 0.3436,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "088980",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "089030",
+        "predicted": "down",
+        "up_prob": 0.3483,
+        "actual_return": -0.003361,
+        "correct": "True"
+      },
+      {
+        "ticker": "090430",
+        "predicted": "down",
+        "up_prob": 0.3429,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "090460",
+        "predicted": "down",
+        "up_prob": 0.3457,
+        "actual_return": 0.03871,
+        "correct": "False"
+      },
+      {
+        "ticker": "090710",
+        "predicted": "down",
+        "up_prob": 0.349,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "095340",
+        "predicted": "down",
+        "up_prob": 0.3486,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "096770",
+        "predicted": "down",
+        "up_prob": 0.3457,
+        "actual_return": -0.022496,
+        "correct": "True"
+      },
+      {
+        "ticker": "097230",
+        "predicted": "down",
+        "up_prob": 0.3484,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "097950",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "098460",
+        "predicted": "down",
+        "up_prob": 0.3486,
+        "actual_return": 0.013699,
+        "correct": "False"
+      },
+      {
+        "ticker": "099320",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "100840",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "101490",
+        "predicted": "down",
+        "up_prob": 0.346,
+        "actual_return": -0.038462,
+        "correct": "True"
+      },
+      {
+        "ticker": "103140",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "103590",
+        "predicted": "down",
+        "up_prob": 0.3491,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "105560",
+        "predicted": "down",
+        "up_prob": 0.3459,
+        "actual_return": 0.003102,
+        "correct": "False"
+      },
+      {
+        "ticker": "108490",
+        "predicted": "down",
+        "up_prob": 0.3411,
+        "actual_return": 0.107616,
+        "correct": "False"
+      },
+      {
+        "ticker": "111770",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "112040",
+        "predicted": "down",
+        "up_prob": 0.3446,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "112610",
+        "predicted": "down",
+        "up_prob": 0.3592,
+        "actual_return": -0.011438,
+        "correct": "True"
+      },
+      {
+        "ticker": "115180",
+        "predicted": "down",
+        "up_prob": 0.3473,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "120110",
+        "predicted": "down",
+        "up_prob": 0.345,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "124500",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.00519,
+        "correct": "False"
+      },
+      {
+        "ticker": "128940",
+        "predicted": "down",
+        "up_prob": 0.359,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "131970",
+        "predicted": "down",
+        "up_prob": 0.3413,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "138040",
+        "predicted": "down",
+        "up_prob": 0.3472,
+        "actual_return": -0.007067,
+        "correct": "True"
+      },
+      {
+        "ticker": "138930",
+        "predicted": "down",
+        "up_prob": 0.3428,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "139130",
+        "predicted": "down",
+        "up_prob": 0.3461,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "139480",
+        "predicted": "down",
+        "up_prob": 0.3416,
+        "actual_return": 0.041513,
+        "correct": "False"
+      },
+      {
+        "ticker": "140410",
+        "predicted": "down",
+        "up_prob": 0.3526,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "140860",
+        "predicted": "down",
+        "up_prob": 0.3459,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "141080",
+        "predicted": "down",
+        "up_prob": 0.3447,
+        "actual_return": 0.024083,
+        "correct": "False"
+      },
+      {
+        "ticker": "145020",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "160190",
+        "predicted": "down",
+        "up_prob": 0.3441,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "161390",
+        "predicted": "down",
+        "up_prob": 0.3508,
+        "actual_return": -0.040185,
+        "correct": "True"
+      },
+      {
+        "ticker": "161890",
+        "predicted": "down",
+        "up_prob": 0.3403,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "174900",
+        "predicted": "down",
+        "up_prob": 0.3507,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "175330",
+        "predicted": "down",
+        "up_prob": 0.3401,
+        "actual_return": -0.011385,
+        "correct": "True"
+      },
+      {
+        "ticker": "178320",
+        "predicted": "down",
+        "up_prob": 0.3419,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "180640",
+        "predicted": "down",
+        "up_prob": 0.3478,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "189300",
+        "predicted": "down",
+        "up_prob": 0.3571,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "192820",
+        "predicted": "down",
+        "up_prob": 0.3454,
+        "actual_return": 0.009615,
+        "correct": "False"
+      },
+      {
+        "ticker": "195870",
+        "predicted": "down",
+        "up_prob": 0.3417,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "195940",
+        "predicted": "down",
+        "up_prob": 0.3519,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "196170",
+        "predicted": "down",
+        "up_prob": 0.366,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "204320",
+        "predicted": "down",
+        "up_prob": 0.3428,
+        "actual_return": 0.039931,
+        "correct": "False"
+      },
+      {
+        "ticker": "207940",
+        "predicted": "down",
+        "up_prob": 0.3478,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "214150",
+        "predicted": "down",
+        "up_prob": 0.3427,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "214370",
+        "predicted": "down",
+        "up_prob": 0.3418,
+        "actual_return": -0.005118,
+        "correct": "True"
+      },
+      {
+        "ticker": "214450",
+        "predicted": "down",
+        "up_prob": 0.345,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "218410",
+        "predicted": "down",
+        "up_prob": 0.3404,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "222800",
+        "predicted": "down",
+        "up_prob": 0.3572,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "226950",
+        "predicted": "down",
+        "up_prob": 0.3544,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "232140",
+        "predicted": "down",
+        "up_prob": 0.3479,
+        "actual_return": -0.022676,
+        "correct": "True"
+      },
+      {
+        "ticker": "237690",
+        "predicted": "down",
+        "up_prob": 0.3589,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "240810",
+        "predicted": "down",
+        "up_prob": 0.3457,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "241560",
+        "predicted": "down",
+        "up_prob": 0.3462,
+        "actual_return": -0.023468,
+        "correct": "True"
+      },
+      {
+        "ticker": "247540",
+        "predicted": "down",
+        "up_prob": 0.3429,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "251270",
+        "predicted": "down",
+        "up_prob": 0.3502,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "257720",
+        "predicted": "down",
+        "up_prob": 0.3486,
+        "actual_return": 0.00558,
+        "correct": "False"
+      },
+      {
+        "ticker": "259960",
+        "predicted": "down",
+        "up_prob": 0.346,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "263750",
+        "predicted": "down",
+        "up_prob": 0.349,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "267250",
+        "predicted": "down",
+        "up_prob": 0.3536,
+        "actual_return": -0.003448,
+        "correct": "True"
+      },
+      {
+        "ticker": "267260",
+        "predicted": "down",
+        "up_prob": 0.3679,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "267270",
+        "predicted": "down",
+        "up_prob": 0.3432,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "271560",
+        "predicted": "down",
+        "up_prob": 0.348,
+        "actual_return": 0.008571,
+        "correct": "False"
+      },
+      {
+        "ticker": "272210",
+        "predicted": "down",
+        "up_prob": 0.3485,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "277810",
+        "predicted": "down",
+        "up_prob": 0.3514,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "278470",
+        "predicted": "down",
+        "up_prob": 0.3646,
+        "actual_return": 0.080946,
+        "correct": "False"
+      },
+      {
+        "ticker": "282330",
+        "predicted": "down",
+        "up_prob": 0.3497,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "290650",
+        "predicted": "down",
+        "up_prob": 0.3523,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "293490",
+        "predicted": "down",
+        "up_prob": 0.3498,
+        "actual_return": 0.013974,
+        "correct": "False"
+      },
+      {
+        "ticker": "294870",
+        "predicted": "down",
+        "up_prob": 0.348,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "298020",
+        "predicted": "down",
+        "up_prob": 0.343,
+        "actual_return": 0.011387,
+        "correct": "False"
+      },
+      {
+        "ticker": "298040",
+        "predicted": "down",
+        "up_prob": 0.3565,
+        "actual_return": -0.044121,
+        "correct": "True"
+      },
+      {
+        "ticker": "298380",
+        "predicted": "down",
+        "up_prob": 0.3431,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "302440",
+        "predicted": "down",
+        "up_prob": 0.3515,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "307950",
+        "predicted": "down",
+        "up_prob": 0.366,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "310210",
+        "predicted": "down",
+        "up_prob": 0.3431,
+        "actual_return": -0.035593,
+        "correct": "True"
+      },
+      {
+        "ticker": "316140",
+        "predicted": "down",
+        "up_prob": 0.3506,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "319400",
+        "predicted": "down",
+        "up_prob": 0.348,
+        "actual_return": 0.224194,
+        "correct": "False"
+      },
+      {
+        "ticker": "319660",
+        "predicted": "down",
+        "up_prob": 0.3543,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "322000",
+        "predicted": "down",
+        "up_prob": 0.3598,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "323280",
+        "predicted": "down",
+        "up_prob": 0.3488,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "323410",
+        "predicted": "down",
+        "up_prob": 0.3443,
+        "actual_return": -0.01046,
+        "correct": "True"
+      },
+      {
+        "ticker": "326030",
+        "predicted": "down",
+        "up_prob": 0.342,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "328130",
+        "predicted": "down",
+        "up_prob": 0.3471,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "329180",
+        "predicted": "down",
+        "up_prob": 0.3703,
+        "actual_return": -0.050505,
+        "correct": "True"
+      },
+      {
+        "ticker": "336260",
+        "predicted": "down",
+        "up_prob": 0.3479,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "347700",
+        "predicted": "down",
+        "up_prob": 0.3562,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "347850",
+        "predicted": "down",
+        "up_prob": 0.3523,
+        "actual_return": 0.008547,
+        "correct": "False"
+      },
+      {
+        "ticker": "352820",
+        "predicted": "down",
+        "up_prob": 0.3396,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "353200",
+        "predicted": "down",
+        "up_prob": 0.35,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "357780",
+        "predicted": "down",
+        "up_prob": 0.357,
+        "actual_return": -0.031513,
+        "correct": "True"
+      },
+      {
+        "ticker": "361610",
+        "predicted": "down",
+        "up_prob": 0.3442,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "373220",
+        "predicted": "down",
+        "up_prob": 0.3673,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "375500",
+        "predicted": "down",
+        "up_prob": 0.3464,
+        "actual_return": -0.048853,
+        "correct": "True"
+      },
+      {
+        "ticker": "376900",
+        "predicted": "down",
+        "up_prob": 0.3463,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "377300",
+        "predicted": "down",
+        "up_prob": 0.352,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "383220",
+        "predicted": "down",
+        "up_prob": 0.3436,
+        "actual_return": 0.033582,
+        "correct": "False"
+      },
+      {
+        "ticker": "383800",
+        "predicted": "down",
+        "up_prob": 0.3473,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "395400",
+        "predicted": "down",
+        "up_prob": 0.3485,
+        "actual_return": 0.035772,
+        "correct": "False"
+      },
+      {
+        "ticker": "397030",
+        "predicted": "down",
+        "up_prob": 0.3462,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "402340",
+        "predicted": "down",
+        "up_prob": 0.3678,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "403870",
+        "predicted": "down",
+        "up_prob": 0.3469,
+        "actual_return": -0.014625,
+        "correct": "True"
+      },
+      {
+        "ticker": "417200",
+        "predicted": "down",
+        "up_prob": 0.3482,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "419080",
+        "predicted": "down",
+        "up_prob": 0.3441,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "437730",
+        "predicted": "down",
+        "up_prob": 0.3466,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "439260",
+        "predicted": "down",
+        "up_prob": 0.3541,
+        "actual_return": -0.03352,
+        "correct": "True"
+      },
+      {
+        "ticker": "440110",
+        "predicted": "down",
+        "up_prob": 0.3441,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "443060",
+        "predicted": "down",
+        "up_prob": 0.3425,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "445680",
+        "predicted": "down",
+        "up_prob": 0.3507,
+        "actual_return": -0.075099,
+        "correct": "True"
+      },
+      {
+        "ticker": "450080",
+        "predicted": "down",
+        "up_prob": 0.3436,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "454910",
+        "predicted": "down",
+        "up_prob": 0.3443,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "456160",
+        "predicted": "down",
+        "up_prob": 0.3458,
+        "actual_return": -0.016518,
+        "correct": "True"
+      },
+      {
+        "ticker": "457190",
+        "predicted": "down",
+        "up_prob": 0.3391,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "458870",
+        "predicted": "down",
+        "up_prob": 0.356,
+        "actual_return": -0.069672,
+        "correct": "True"
+      },
+      {
+        "ticker": "462870",
+        "predicted": "down",
+        "up_prob": 0.3464,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "466100",
+        "predicted": "down",
+        "up_prob": 0.3383,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "475830",
+        "predicted": "down",
+        "up_prob": 0.3496,
+        "actual_return": -0.035088,
+        "correct": "True"
+      },
+      {
+        "ticker": "483650",
+        "predicted": "down",
+        "up_prob": 0.3506,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "489790",
+        "predicted": "down",
+        "up_prob": 0.3487,
+        "actual_return": 0.0,
+        "correct": "True"
+      },
+      {
+        "ticker": "950160",
+        "predicted": "down",
+        "up_prob": 0.3439,
+        "actual_return": -0.01145,
+        "correct": "True"
+      }
+    ]
+  },
+  "regime": {
+    "regime": "BULL",
+    "composite_score": 0.85,
+    "action": "\uacf5\uaca9\uc801 (80% \ud22c\uc790)",
+    "invest_ratio": 0.8,
+    "scores": {
+      "trend": 1.0,
+      "ret_20d": 31.48,
+      "price_vs_ma20": 19.94,
+      "vix": 18.4,
+      "vix_score": 0.5,
+      "kr_vs_us": 25.07
+    },
+    "timestamp": "2026-05-12T16:01:40.993025"
+  },
+  "optimal_weights": {}
+}

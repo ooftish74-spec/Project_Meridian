@@ -1,0 +1,22 @@
+{
+  "ticker": "105560",
+  "company": "105560",
+  "market": "KR",
+  "sector": "금융",
+  "period": "2026 Q2",
+  "announcement_date": null,
+  "revenue": 1497139831439,
+  "operating_profit": 2112824672961,
+  "net_income": 1625249748431,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 75,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:05.914420"
+}

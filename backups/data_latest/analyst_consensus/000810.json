@@ -1,0 +1,20 @@
+{
+  "ticker": "000810",
+  "target_price": 659824,
+  "current_price": 641000,
+  "recomm_mean": 3.88,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 1,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "삼성화재",
+  "latest_research": {
+    "title": "1Q26 Review: 견조한 이익 지속 전망, 업종내 Top picks",
+    "broker": "교보증권",
+    "date": "20260518"
+  }
+}

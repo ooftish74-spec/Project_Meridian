@@ -1,0 +1,20 @@
+{
+  "ticker": "035420",
+  "target_price": 301381,
+  "current_price": 280500,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 1,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "NAVER",
+  "latest_research": {
+    "title": "전략적 판단 필요",
+    "broker": "키움증권",
+    "date": "20260529"
+  }
+}

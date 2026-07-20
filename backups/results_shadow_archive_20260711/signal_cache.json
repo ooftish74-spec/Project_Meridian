@@ -1,0 +1,450 @@
+{
+  "vix": 21.23,
+  "vix_change_1d": -2.6522,
+  "sp500": 745.4,
+  "sp500_change_1d": 0.0001,
+  "nasdaq": 711.44,
+  "nasdaq_change_1d": -0.7963,
+  "sox": 12626.2197265625,
+  "sox_change_1d": -5.4448,
+  "dji": 52900.0703125,
+  "dji_change_1d": 1.1372,
+  "us10y": 93.51,
+  "us10y_change_1d": -0.4554,
+  "us5y": 4.230000019073486,
+  "us5y_change_1d": -0.7927,
+  "us30y": 4.984999656677246,
+  "us30y_change_1d": 0.1235,
+  "dxy": 28.36,
+  "dxy_change_1d": -0.003,
+  "wti": 112.21,
+  "wti_change_1d": 0.131,
+  "copper": 6.223999977111816,
+  "copper_change_1d": 1.7908,
+  "gold_us": 4187.2998046875,
+  "gold_us_change_1d": 1.8139,
+  "silver": 62.814998626708984,
+  "silver_change_1d": 3.5816,
+  "usdkrw": 1502.2,
+  "usdkrw_change_1d": 0.16,
+  "usdjpy": 161.33700561523438,
+  "usdjpy_change_1d": -0.7395,
+  "eurusd": 1.1440337896347046,
+  "eurusd_change_1d": 0.548,
+  "ewy": 184.75,
+  "ewy_change_1d": 1.111,
+  "flkr": 60.12,
+  "flkr_change_1d": 0.6698,
+  "fxi": 33.41,
+  "fxi_change_1d": -0.0897,
+  "kospi": 8088.33984375,
+  "kospi_change_1d": 2.4639,
+  "kosdaq": 868.4099731445312,
+  "kosdaq_change_1d": 5.374,
+  "taiex": 46780.62109375,
+  "taiex_change_1d": 0.078,
+  "nikkei": 69744.0703125,
+  "nikkei_change_1d": 1.4708,
+  "hangseng": 23350.029296875,
+  "hangseng_change_1d": 1.2795,
+  "last_update": "2026-07-11T07:00:17.370559",
+  "stock_technicals": {
+    "005930": {
+      "rsi_14": 35.38,
+      "macd_hist": -7003.51,
+      "volume_ratio": 0.9,
+      "close": 278000.0,
+      "name": "삼성전자"
+    },
+    "000660": {
+      "rsi_14": 37.71,
+      "macd_hist": -1154.39,
+      "volume_ratio": 0.84,
+      "close": 2186000.0,
+      "name": "SK하이닉스"
+    }
+  },
+  "kospi200": 120600.0,
+  "kospi_close": 120600.0,
+  "last_overnight_update": "2026-07-10T07:45:06.741919",
+  "timestamp": "2026-07-10T23:56:33.249275+09:00",
+  "vix_prev": 20.87,
+  "dxy_prev": 28.4,
+  "us10y_prev": 93.7,
+  "wti_prev": 108.92,
+  "gold": 374.45,
+  "gold_prev": 377.49,
+  "usdkrw_prev": 1505.4233,
+  "ois": 59.2,
+  "ois_price": 30.8,
+  "ois_sentiment": 16.9,
+  "ois_threshold_adj": 7,
+  "overnight_intel": {
+    "sp500_change_pct": 0.00013702513856905796,
+    "nasdaq_change_pct": -0.7963100679955204,
+    "sox_change_pct": -0.9555720815946245,
+    "sp500_change": 0.00013702513856905796,
+    "nasdaq_change": -0.7963100679955204,
+    "us_sentiment": "slightly_bearish",
+    "timestamp": "2026-07-10T05:15:19.948256"
+  },
+  "us_regime": "neutral",
+  "us_regime_score": 0.0942,
+  "us_regime_confidence": 0.381,
+  "sox_change": -0.9555720815946245,
+  "upcoming_events": 3,
+  "next_event": "한국 옵션 만기일 (후일)",
+  "event_confidence_adj": 0.15,
+  "macro_features": {
+    "fred_unemployment": -0.1,
+    "fred_fed_rate": 0.435,
+    "fred_gdp_growth": 0.418,
+    "fred_consumer_sentiment": -0.673,
+    "fred_hy_spread": 0.39,
+    "credit_stress": 0,
+    "fred_ig_spread": 0.493,
+    "cross_usjp_spread": 1.74,
+    "cross_usjp_change": -0.075,
+    "cross_usjp_signal": 0.13,
+    "cross_yield_curve": 0.35,
+    "yield_curve_inverted": 0,
+    "cross_yield_signal": 0.35,
+    "cross_caixin_pmi": 50.1,
+    "cross_caixin_signal": 0.02,
+    "news_llm_sentiment": 0.0,
+    "news_realtime_sentiment": -1.0,
+    "news_naver_sentiment": 0.024,
+    "news_naver_label": "neutral",
+    "news_naver_count": 42,
+    "news_naver_updated": "2026-07-11T05:15:25.470683",
+    "news_events_count": 3
+  },
+  "cross_asset_direction": "neutral",
+  "cross_asset_score": 0,
+  "kr_regime": "bull",
+  "cpi": 333.979,
+  "unemployment_rate": 4.2,
+  "federal_funds_rate": 3.63,
+  "consumer_sentiment": 44.8,
+  "hy_credit_spread": 2.83,
+  "ig_credit_spread": 0.76,
+  "industrial_production": 102.6475,
+  "retail_sales": 662752.0,
+  "gdp_growth": 2.09,
+  "macro_features_ts": "2026-07-10T07:30:07.104554",
+  "morning_fusion": {
+    "regime_adjustment": -0.05,
+    "sector_overrides": {
+      "steel": 0.027,
+      "energy": 0.018,
+      "semiconductor": 0.062
+    },
+    "risk_flags": [],
+    "overnight_context": {
+      "ois": 28.6,
+      "us_regime": "neutral",
+      "us_regime_confidence": 0.381,
+      "sp500_change": 0.0001,
+      "nasdaq_change": -0.7963,
+      "sox_change": -0.9555720815946245,
+      "vix": 21.23,
+      "vkospi": 14.08,
+      "usdkrw": 1505.4233,
+      "ewy_change": 0.7888,
+      "dxy_change": -0.003,
+      "copper_change": 1.7908,
+      "usdjpy_change": -0.7395,
+      "taiex_change": 0.078,
+      "nikkei_change": 1.4708,
+      "hangseng_change": 1.2795
+    },
+    "fusion_confidence": 0.7,
+    "conflicts": [],
+    "timestamp": "2026-07-10T07:30:07.217114"
+  },
+  "regime_adjustment": -0.05,
+  "ois_premarket": true,
+  "yield_curve_10y_5y": 89.28,
+  "yield_curve_inverted": 0,
+  "yield_curve_10y_2y": 89.28,
+  "yield_curve_10y_30y": 88.525,
+  "tier1_refresh_ts": "2026-07-10T15:26:56.027603",
+  "tier2_refresh_ts": "2026-07-10T15:27:00.348542",
+  "kospi_prev_close": 117700.0,
+  "kospi_ma20": 134367.0,
+  "kosdaq_close": 14510.0,
+  "kosdaq_prev_close": 13770.0,
+  "kosdaq_ma20": 16067.75,
+  "kospi200_prev_close": 117700.0,
+  "kr_refresh_ts": "2026-07-10T15:27:00.905417",
+  "macro_refresh_ts": "2026-07-10T15:26:52.810850",
+  "realtime_mtm": {
+    "last_updated": "2026-07-09T12:36:10.687308",
+    "session": "regular",
+    "n_tickers": 1
+  },
+  "intraday_range_pct": 3.9511,
+  "investor_flow": {
+    "foreign_net_5d": 0.22272398942874547,
+    "foreign_net_20d": -1.215145890479289,
+    "inst_net_5d": 0.2227239894236896,
+    "inst_net_20d": -1.2151458904602541,
+    "flow_momentum": 0.12382494947462006,
+    "foreign_streak": 1.0,
+    "supply_demand_score": 0.16850947955574758,
+    "collected_at": "2026-07-09T16:30:24.862958",
+    "n_tickers": 4,
+    "by_ticker": {
+      "114800": {
+        "foreign_net_5d": 0.29787366310302166,
+        "foreign_net_20d": -0.2845709307321358,
+        "inst_net_5d": 0.2978736630648397,
+        "inst_net_20d": -0.2845709306972541,
+        "flow_momentum": 0.12415679406211558,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.22618386976250912
+      },
+      "015760": {
+        "foreign_net_5d": -0.61164103571224,
+        "foreign_net_20d": 0.6235163867373255,
+        "inst_net_5d": -0.6116410350885538,
+        "inst_net_20d": 0.6235163864462264,
+        "flow_momentum": -0.2775536463080875,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -0.36908661162380896
+      },
+      "091180": {
+        "foreign_net_5d": 1.0626868741895796,
+        "foreign_net_20d": -0.23587401987449141,
+        "inst_net_5d": 1.0626868701770498,
+        "inst_net_20d": -0.23587401972998082,
+        "flow_momentum": 0.44968375431809054,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.6862485625877109
+      },
+      "122630": {
+        "foreign_net_5d": -0.16058684568315287,
+        "foreign_net_20d": -0.9244434248705041,
+        "inst_net_5d": -0.16058684567976883,
+        "inst_net_20d": -0.9244434248532778,
+        "flow_momentum": -0.034809733160153476,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -0.07073634278894567
+      },
+      "252670": {
+        "foreign_net_5d": 0.5661401744205604,
+        "foreign_net_20d": 1.0956716096103356,
+        "inst_net_5d": 0.5661401743846776,
+        "inst_net_20d": 1.0956716095649262,
+        "flow_momentum": 0.1346715304771555,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.32347154634625025
+      },
+      "192090": {
+        "foreign_net_5d": 0.4202985913674125,
+        "foreign_net_20d": -0.9525649427368591,
+        "inst_net_5d": 0.4202985143930602,
+        "inst_net_20d": -0.952564780474615,
+        "flow_momentum": 0.16551066246333848,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.2998024790278373
+      },
+      "000660": {
+        "foreign_net_5d": -2.324402858067457,
+        "foreign_net_20d": -2.561096885078696,
+        "inst_net_5d": -2.324402858054545,
+        "inst_net_20d": -2.561096885069626,
+        "flow_momentum": -0.5241766897396175,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -1.0
+      },
+      "069500": {
+        "foreign_net_5d": 0.22272398942874547,
+        "foreign_net_20d": -1.215145890479289,
+        "inst_net_5d": 0.2227239894236896,
+        "inst_net_20d": -1.2151458904602541,
+        "flow_momentum": 0.12382494947462006,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.16850947955574758
+      },
+      "133690": {
+        "foreign_net_5d": 0.23321132726566823,
+        "foreign_net_20d": 0.8113872681237979,
+        "inst_net_5d": 0.23321132716870835,
+        "inst_net_20d": 0.8113872677464152,
+        "flow_momentum": -0.008061327303815539,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.13418726542229747
+      },
+      "000270": {
+        "foreign_net_5d": -0.13840227814438721,
+        "foreign_net_20d": -1.474387468551369,
+        "inst_net_5d": -0.1384022781115768,
+        "inst_net_20d": -1.4743874680431674,
+        "flow_momentum": -0.04245971675081518,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -0.06193905409087608
+      },
+      "009540": {
+        "foreign_net_5d": -0.28340204537177194,
+        "foreign_net_20d": 1.1244390099309012,
+        "inst_net_5d": -0.283402045262993,
+        "inst_net_20d": 1.1244390094568288,
+        "flow_momentum": -0.22453602752727794,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -0.1890618309223136
+      },
+      "396500": {
+        "foreign_net_5d": -0.6148289228702519,
+        "foreign_net_20d": 0.09872284898546889,
+        "inst_net_5d": -0.6148289228483717,
+        "inst_net_20d": 0.09872284898146139,
+        "flow_momentum": -0.24589444325744428,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.3811827944079832
+      },
+      "042660": {
+        "foreign_net_5d": 2.0254946370937965,
+        "foreign_net_20d": 0.5819624089710413,
+        "inst_net_5d": 2.025494636850339,
+        "inst_net_20d": 0.5819624089297752,
+        "flow_momentum": 0.47146132270286534,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 1.0
+      },
+      "005930": {
+        "foreign_net_5d": 0.7825955718073694,
+        "foreign_net_20d": -1.5321929820964386,
+        "inst_net_5d": 0.7825955718003001,
+        "inst_net_20d": -1.5321929820867901,
+        "flow_momentum": 0.3179174339480112,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.5066730160866741
+      },
+      "028260": {
+        "foreign_net_5d": -0.6057345526970087,
+        "foreign_net_20d": -0.7866085728724306,
+        "inst_net_5d": -0.6057345526038677,
+        "inst_net_20d": -0.7866085728239607,
+        "flow_momentum": -0.1453681904970702,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.3464777334789972
+      }
+    }
+  },
+  "kr_factor_composite": -0.141,
+  "kr_factor_foreign": -0.238,
+  "kr_factor_lcap": -0.29,
+  "kr_stream_adjustments": {
+    "S1": 0.979,
+    "S2": 0.976,
+    "S3": 1.018,
+    "S4": 0.971
+  },
+  "vkospi": 13.71,
+  "put_call_ratio": 1.0,
+  "fear_greed_index": 49.5,
+  "news_sentiment": 0.0476,
+  "EWY": 183.45,
+  "FLKR": 59.89,
+  "FXI": 33.475,
+  "sector_momentum": {
+    "091160": {
+      "momentum_1m": 0.029,
+      "momentum_3m": 74.491,
+      "momentum_6m": 164.133
+    },
+    "395160": {
+      "momentum_1m": 9.266,
+      "momentum_3m": 114.677,
+      "momentum_6m": 204.838
+    },
+    "139260": {
+      "momentum_1m": 4.314,
+      "momentum_3m": 136.007,
+      "momentum_6m": 231.589
+    },
+    "117700": {
+      "momentum_1m": -9.379,
+      "momentum_3m": -5.331,
+      "momentum_6m": 61.823
+    },
+    "305720": {
+      "momentum_1m": -19.693,
+      "momentum_3m": -14.948,
+      "momentum_6m": 0.279
+    },
+    "091180": {
+      "momentum_1m": -19.892,
+      "momentum_3m": 5.261,
+      "momentum_6m": 28.004
+    },
+    "227550": {
+      "momentum_1m": -3.561,
+      "momentum_3m": -9.652,
+      "momentum_6m": 25.357
+    },
+    "091170": {
+      "momentum_1m": -0.345,
+      "momentum_3m": 8.495,
+      "momentum_6m": 26.261
+    },
+    "244580": {
+      "momentum_1m": -11.696,
+      "momentum_3m": -23.769,
+      "momentum_6m": -26.491
+    },
+    "133690": {
+      "momentum_1m": -2.139,
+      "momentum_3m": 26.382,
+      "momentum_6m": 22.789
+    },
+    "409820": {
+      "momentum_1m": -4.255,
+      "momentum_3m": 53.947,
+      "momentum_6m": 27.056
+    },
+    "371160": {
+      "momentum_1m": -7.823,
+      "momentum_3m": -2.062,
+      "momentum_6m": -13.636
+    },
+    "411060": {
+      "momentum_1m": -5.735,
+      "momentum_3m": -8.613,
+      "momentum_6m": -5.343
+    },
+    "195930": {
+      "momentum_1m": 6.059,
+      "momentum_3m": 15.833,
+      "momentum_6m": 13.17
+    },
+    "192090": {
+      "momentum_1m": 0.31,
+      "momentum_3m": 11.991,
+      "momentum_6m": 15.699
+    }
+  },
+  "alpha_factory": {
+    "s5_overnight_score": 2.15,
+    "formula": "exp(x1*(-1062.4612))",
+    "fitness": 0.8522319793701172,
+    "discovered_at": "2026-07-04T19:15:18.965753+00:00"
+  },
+  "alpha_signals": {
+    "status": "FALLBACK_MODE",
+    "S1_signal": {
+      "contagion_alert": "NORMAL",
+      "vix_spike": false
+    },
+    "S2_signal": {
+      "pysr_macro_feature_value": 0.0
+    },
+    "S3_signal": {
+      "sector_forecast": {}
+    },
+    "S4_signal": {
+      "macro_cycle": "Neutral"
+    }
+  }
+}

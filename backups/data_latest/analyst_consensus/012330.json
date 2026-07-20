@@ -1,0 +1,20 @@
+{
+  "ticker": "012330",
+  "target_price": 729200,
+  "current_price": 759000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 1,
+  "eps_revision_down": 2,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "현대모비스",
+  "latest_research": {
+    "title": "자동차 부품사를 넘어 Physical AI 밸류체인으로",
+    "broker": "신한투자증권",
+    "date": "20260528"
+  }
+}

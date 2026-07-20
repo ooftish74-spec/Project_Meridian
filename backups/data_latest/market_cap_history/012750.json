@@ -1,0 +1,41 @@
+{
+  "ticker": "012750",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 3026016534528,
+      "shares": 33810239,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2982063112192,
+      "shares": 33810239,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 3103779979264,
+      "shares": 33810239,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 3117304250368,
+      "shares": 33810239,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 3117304250368,
+      "shares": 33810239,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 2975301107712,
+      "shares": 33810239,
+      "source": "yfinance"
+    }
+  ]
+}

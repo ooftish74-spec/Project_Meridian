@@ -1,0 +1,52 @@
+{
+  "date": "2026-05-25",
+  "tickers_collected": 333,
+  "sources_tried": [
+    "krx_api",
+    "fdr",
+    "pykrx_retry",
+    "yfinance"
+  ],
+  "high_short_interest": [
+    {
+      "ticker": "411060",
+      "short_ratio": 0.8134
+    },
+    {
+      "ticker": "032350",
+      "short_ratio": 0.8116000000000001
+    },
+    {
+      "ticker": "160190",
+      "short_ratio": 0.7385999999999999
+    },
+    {
+      "ticker": "361610",
+      "short_ratio": 0.7351999999999999
+    },
+    {
+      "ticker": "014680",
+      "short_ratio": 0.732
+    },
+    {
+      "ticker": "077970",
+      "short_ratio": 0.6776
+    },
+    {
+      "ticker": "263750",
+      "short_ratio": 0.6572000000000001
+    },
+    {
+      "ticker": "141080",
+      "short_ratio": 0.6488
+    },
+    {
+      "ticker": "012330",
+      "short_ratio": 0.635
+    },
+    {
+      "ticker": "950160",
+      "short_ratio": 0.6344
+    }
+  ]
+}

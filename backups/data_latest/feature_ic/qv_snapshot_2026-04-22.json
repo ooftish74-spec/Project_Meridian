@@ -1,0 +1,139 @@
+{
+  "snapshot_date": "2026-04-22",
+  "tickers": {
+    "012630": {
+      "f_score": 8,
+      "qm_score": 85.9,
+      "momentum_6m": 54.55,
+      "rank_l3": null,
+      "price_at_snapshot": 27200.0
+    },
+    "017960": {
+      "f_score": 8,
+      "qm_score": 84.8,
+      "momentum_6m": 47.8,
+      "rank_l3": null,
+      "price_at_snapshot": 52100.0
+    },
+    "001430": {
+      "f_score": 7,
+      "qm_score": 83.0,
+      "momentum_6m": 196.84,
+      "rank_l3": null,
+      "price_at_snapshot": 75100.0
+    },
+    "124500": {
+      "f_score": 7,
+      "qm_score": 82.6,
+      "momentum_6m": 184.8,
+      "rank_l3": null,
+      "price_at_snapshot": 53200.0
+    },
+    "402340": {
+      "f_score": 7,
+      "qm_score": 82.2,
+      "momentum_6m": 160.31,
+      "rank_l3": null,
+      "price_at_snapshot": 682000.0
+    },
+    "395400": {
+      "f_score": 8,
+      "qm_score": 80.4,
+      "momentum_6m": 33.92,
+      "rank_l3": null,
+      "price_at_snapshot": 6830.0
+    },
+    "028050": {
+      "f_score": 7,
+      "qm_score": 79.3,
+      "momentum_6m": 80.18,
+      "rank_l3": null,
+      "price_at_snapshot": 49550.0
+    },
+    "034730": {
+      "f_score": 7,
+      "qm_score": 78.3,
+      "momentum_6m": 64.14,
+      "rank_l3": null,
+      "price_at_snapshot": 368500.0
+    },
+    "011210": {
+      "f_score": 7,
+      "qm_score": 77.9,
+      "momentum_6m": 55.22,
+      "rank_l3": null,
+      "price_at_snapshot": 83200.0
+    },
+    "267250": {
+      "f_score": 7,
+      "qm_score": 77.2,
+      "momentum_6m": 50.29,
+      "rank_l3": null,
+      "price_at_snapshot": 255000.0
+    },
+    "128940": {
+      "f_score": 7,
+      "qm_score": 76.8,
+      "momentum_6m": 49.65,
+      "rank_l3": null,
+      "price_at_snapshot": 529000.0
+    },
+    "028260": {
+      "f_score": 7,
+      "qm_score": 76.1,
+      "momentum_6m": 46.66,
+      "rank_l3": null,
+      "price_at_snapshot": 301500.0
+    },
+    "139480": {
+      "f_score": 7,
+      "qm_score": 75.0,
+      "momentum_6m": 38.93,
+      "rank_l3": null,
+      "price_at_snapshot": 101700.0
+    },
+    "103590": {
+      "f_score": 8,
+      "qm_score": 74.8,
+      "momentum_6m": 89.24,
+      "rank_l3": null,
+      "price_at_snapshot": 86200.0
+    },
+    "AMAT": {
+      "f_score": null,
+      "qm_score": 100.0,
+      "momentum_6m": 79.36,
+      "rank_l3": null
+    },
+    "CAT": {
+      "f_score": null,
+      "qm_score": 100.0,
+      "momentum_6m": 56.42,
+      "rank_l3": null
+    },
+    "MU": {
+      "f_score": null,
+      "qm_score": 100.0,
+      "momentum_6m": 126.61,
+      "rank_l3": null
+    },
+    "GOOGL": {
+      "f_score": null,
+      "qm_score": 97.56,
+      "momentum_6m": 32.2,
+      "rank_l3": null
+    },
+    "GOOG": {
+      "f_score": null,
+      "qm_score": 97.2,
+      "momentum_6m": 31.04,
+      "rank_l3": null
+    },
+    "MRK": {
+      "f_score": null,
+      "qm_score": 97.04,
+      "momentum_6m": 30.54,
+      "rank_l3": null
+    }
+  }
+}

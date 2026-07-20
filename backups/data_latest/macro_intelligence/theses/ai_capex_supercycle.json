@@ -1,0 +1,79 @@
+{
+  "id": "ai_capex_supercycle",
+  "title": "AI CapEx 슈퍼사이클 ($725B)",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "structural_trend",
+  "confidence": 0.85,
+  "horizon": "3-12 months",
+  "thesis": {
+    "summary": "하이퍼스케일러 5사 AI 인프라 투자 $725B — 역대 최대 CapEx 사이클",
+    "drivers": [
+      "Microsoft: Azure AI 확장 → 2026 CapEx $80B+",
+      "Google: TPU v6 + Gemini 인프라 → $70B+",
+      "Meta: LLaMA 4 + AR/VR AI → $65B+",
+      "Amazon AWS: Trainium2 자체칩 + Bedrock → $100B+",
+      "Apple: On-device AI (M4 Ultra) + 데이터센터 신규 $30B"
+    ],
+    "beneficiaries": {
+      "direct": [
+        "NVIDIA (GPU)",
+        "SK하이닉스 (HBM)",
+        "삼성전자 (HBM+DRAM)",
+        "TSMC (파운드리)"
+      ],
+      "indirect": [
+        "삼성전기 (MLCC)",
+        "LG이노텍 (기판)",
+        "한미반도체 (패키징)"
+      ],
+      "infrastructure": [
+        "데이터센터 건설",
+        "전력 인프라",
+        "냉각 시스템"
+      ]
+    },
+    "risks": [
+      "AI 투자 ROI 실현 지연 → CapEx 가이던스 하향",
+      "반독점 규제 (EU AI Act, 미 의회)",
+      "전력 공급 병목 (데이터센터 전력 2027년 부족 예상)"
+    ]
+  },
+  "signals": {
+    "bullish": [
+      "CapEx 가이던스 상향",
+      "GPU ASP 상승",
+      "HBM 공급부족 지속"
+    ],
+    "bearish": [
+      "CapEx 가이던스 하향 >15%",
+      "재고 축적",
+      "GPU ASP 하락"
+    ],
+    "monitoring": [
+      "분기별 실적 발표 CapEx 라인",
+      "NVIDIA 가이던스",
+      "HBM 가격 추이"
+    ]
+  },
+  "system_impact": {
+    "L1_TACTICAL": {
+      "action": "SOXL/TQQQ 롱 유리",
+      "etf": [
+        "SOXL",
+        "TQQQ",
+        "SOXX"
+      ]
+    },
+    "L2_ALPHA": {
+      "action": "AI 관련주 ML 예측 상향 편향 기대"
+    },
+    "L3_CORE": {
+      "action": "글로벌성장 슬리브 확대"
+    },
+    "L4_ADVISORY": {
+      "action": "PENSION 나스닥100 35→40%",
+      "account": "PENSION"
+    }
+  }
+}

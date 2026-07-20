@@ -1,0 +1,41 @@
+{
+  "ticker": "030200",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 14974324834304,
+      "shares": 241132446,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 15191344414720,
+      "shares": 241132446,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 15528929263616,
+      "shares": 241132446,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 15387915714560,
+      "shares": 240812446,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 15387915714560,
+      "shares": 240812446,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 14882209529856,
+      "shares": 240812446,
+      "source": "yfinance"
+    }
+  ]
+}

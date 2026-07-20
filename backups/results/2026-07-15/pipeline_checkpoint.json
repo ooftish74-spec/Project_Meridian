@@ -1,0 +1,117 @@
+{
+  "date": "2026-07-14",
+  "phases": {
+    "intraday": {
+      "status": "done",
+      "started_at": "2026-07-14T23:56:38.860846",
+      "retries": 0,
+      "completed_at": "2026-07-14T23:56:59.078471",
+      "duration_sec": 20.2
+    },
+    "overnight": {
+      "status": "done",
+      "started_at": "2026-07-14T05:15:02.514288",
+      "retries": 0,
+      "completed_at": "2026-07-14T05:15:22.956708",
+      "duration_sec": 20.4
+    },
+    "collect": {
+      "status": "done",
+      "started_at": "2026-07-14T06:00:06.958689",
+      "retries": 0,
+      "completed_at": "2026-07-14T06:03:21.498924",
+      "duration_sec": 194.5
+    },
+    "morning_ml": {
+      "status": "done",
+      "started_at": "2026-07-14T07:30:04.825681",
+      "retries": 0,
+      "completed_at": "2026-07-14T07:32:23.918839",
+      "duration_sec": 139.1
+    },
+    "premarket": {
+      "status": "done",
+      "started_at": "2026-07-14T07:45:06.767987",
+      "retries": 0,
+      "completed_at": "2026-07-14T07:45:06.876004",
+      "duration_sec": 0.1
+    },
+    "morning": {
+      "status": "done",
+      "started_at": "2026-07-14T07:50:07.507613",
+      "retries": 0,
+      "completed_at": "2026-07-14T07:50:10.102093",
+      "duration_sec": 2.6
+    },
+    "premarket_trade": {
+      "status": "done",
+      "started_at": "2026-07-14T08:00:07.304497",
+      "retries": 0,
+      "completed_at": "2026-07-14T08:00:09.877098",
+      "duration_sec": 2.6
+    },
+    "market": {
+      "status": "done",
+      "started_at": "2026-07-14T09:05:07.779751",
+      "retries": 0,
+      "completed_at": "2026-07-14T09:05:14.997640",
+      "duration_sec": 7.2
+    },
+    "closing": {
+      "status": "done",
+      "started_at": "2026-07-14T15:10:07.183004",
+      "retries": 0,
+      "completed_at": "2026-07-14T15:10:09.884777",
+      "duration_sec": 2.7
+    },
+    "aftermarket": {
+      "status": "done",
+      "started_at": "2026-07-14T15:35:07.245884",
+      "retries": 0,
+      "completed_at": "2026-07-14T15:35:07.903169",
+      "duration_sec": 0.7
+    },
+    "aftermarket_trade": {
+      "status": "done",
+      "started_at": "2026-07-14T15:40:08.108633",
+      "retries": 0,
+      "completed_at": "2026-07-14T15:40:10.840119",
+      "duration_sec": 2.7
+    },
+    "krx_refresh": {
+      "status": "done",
+      "started_at": "2026-07-14T16:10:06.260377",
+      "retries": 0,
+      "completed_at": "2026-07-14T16:22:42.176239",
+      "duration_sec": 755.9
+    },
+    "collect_flow": {
+      "status": "done",
+      "started_at": "2026-07-14T16:30:07.139649",
+      "retries": 0,
+      "completed_at": "2026-07-14T16:30:29.136465",
+      "duration_sec": 22.0
+    },
+    "evening_data": {
+      "status": "done",
+      "started_at": "2026-07-14T17:00:06.365066",
+      "retries": 0,
+      "completed_at": "2026-07-14T17:07:33.263553",
+      "duration_sec": 446.9
+    },
+    "collect_dart": {
+      "status": "done",
+      "started_at": "2026-07-14T19:00:08.194533",
+      "retries": 0,
+      "completed_at": "2026-07-14T19:00:08.311312",
+      "duration_sec": 0.1
+    },
+    "evening": {
+      "status": "done",
+      "started_at": "2026-07-14T20:00:07.501334",
+      "retries": 0,
+      "completed_at": "2026-07-14T20:00:07.563725",
+      "duration_sec": 0.1
+    }
+  }
+}

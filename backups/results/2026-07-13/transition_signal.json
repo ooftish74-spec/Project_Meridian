@@ -1,0 +1,24 @@
+{
+  "signal_type": "none",
+  "strength": 0,
+  "exposure_adjustment": 1.0,
+  "trigger_rebalance": false,
+  "sources": {
+    "hmm": {
+      "signal_type": "none",
+      "strength": 0,
+      "regime": "bear",
+      "method": "rule_only"
+    },
+    "intraday": {
+      "signal_type": "none",
+      "strength": 0,
+      "regime": "normal"
+    },
+    "momentum": {
+      "signal_type": "none",
+      "strength": 0
+    }
+  },
+  "timestamp": "2026-07-13T03:29:04.094102"
+}

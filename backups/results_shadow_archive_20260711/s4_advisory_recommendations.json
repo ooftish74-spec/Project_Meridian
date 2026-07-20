@@ -1,0 +1,175 @@
+{
+  "date": "2026-07-10",
+  "timestamp": "2026-07-10T15:35:03.813954",
+  "regime": "caution",
+  "macro_context": {
+    "regime": "caution",
+    "regime_confidence": 0.42,
+    "macro_composite": -0.458,
+    "position_scale": 0.59,
+    "event_conf_adj": 0.5,
+    "upcoming_events": [
+      {
+        "date": "2026-07-10",
+        "name": "[뉴스] CRISIS: 유가, 美·이란 협상 재개 기대에 2% 하락…&#034;호르무즈 전면 봉쇄는 안 본다&#034;",
+        "tier": 1,
+        "conf_reduction": 0.5,
+        "days_away": 0
+      },
+      {
+        "date": "2026-07-10",
+        "name": "[뉴스] CRISIS: '12·3 계엄 행적 공방' 안철수 \"사실만 말해\" 한동훈 \"거짓선동 대응\"",
+        "tier": 1,
+        "conf_reduction": 0.5,
+        "days_away": 0
+      },
+      {
+        "date": "2026-07-10",
+        "name": "[뉴스] IPO: SK하이닉스, 알리바바 넘어 美 최대 IPO...40조원 조달 (SK하이닉스, 이닉스)",
+        "tier": 2,
+        "conf_reduction": 0.3,
+        "days_away": 0
+      },
+      {
+        "date": "2026-07-10",
+        "name": "[뉴스] CENTRAL_BANK: 신현송 “상당 기간 고물가 지속… 금리 인상 필요”",
+        "tier": 1,
+        "conf_reduction": 0.5,
+        "days_away": 0
+      },
+      {
+        "date": "2026-07-10",
+        "name": "[뉴스] CORPORATE_CRISIS: “바이오, 반도체처럼 전체 파업제한을”… 삼성바이오 형평성 논란 바로잡힐까",
+        "tier": 2,
+        "conf_reduction": 0.3,
+        "days_away": 0
+      }
+    ],
+    "next_event_name": "[뉴스] CRISIS: 유가, 美·이란 협상 재개 기대에 2% 하락…&#034;호르무즈 전면 봉쇄는 안 본다&#034;",
+    "fx": {
+      "usdkrw": 1502.2,
+      "usdkrw_prev": 1505.4233,
+      "change_pct": -0.21
+    },
+    "news": {
+      "sentiment": 0,
+      "label": "neutral",
+      "count": 0
+    },
+    "macro_indicators": {
+      "vix": 21.23,
+      "ois": 59.2,
+      "credit_stress": 0,
+      "hy_spread": 0.39,
+      "usjp_spread": 1.74,
+      "usjp_change": -0.075
+    },
+    "strategy_notes": [
+      "⚠️ CAUTION 레짐 (conf 42%) — 선별적 매수, 포지션 축소",
+      "📅 [뉴스] CRISIS: 유가, 美·이란 협상 재개 기대에 2% 하락…&#034;호르무즈 전면 봉쇄는 안 본다&#034; (오늘, Tier 1) — conf 50% 감산",
+      "📅 [뉴스] CRISIS: '12·3 계엄 행적 공방' 안철수 \"사실만 말해\" 한동훈 \"거짓선동 대응\" (오늘, Tier 1) — conf 50% 감산",
+      "📅 [뉴스] IPO: SK하이닉스, 알리바바 넘어 美 최대 IPO...40조원 조달 (SK하이닉스, 이닉스) (오늘, Tier 2) — conf 30% 감산",
+      "💱 원달러 ₩1,502 (-0.2% 일간)",
+      "🇯🇵 US-JP 금리차 축소 (-0.075) — 엔캐리 안정",
+      "📊 포지션 스케일: 59% (레짐+매크로+이벤트 종합)"
+    ]
+  },
+  "recommendations": {
+    "ISA": {
+      "buy": [
+        {
+          "action": "BUY",
+          "ticker": "490330",
+          "name": "TIGER 미국나스닥100레버리지(합성)",
+          "stream": "S4",
+          "strategy": "S6-B Dual Momentum",
+          "confidence": 0.475,
+          "raw_confidence": 0.95,
+          "size_pct": 0.15,
+          "price": 0,
+          "quantity": 0,
+          "invest_amount": 2950000,
+          "reason": "S6-B (US Dual Momentum) RISK_ON",
+          "auto_execute": false,
+          "event_warning": "이벤트 근접: [뉴스] CRISIS: 유가, 美·이란 협상 재개 기대에 2% 하락…&#034;호르무즈 전면 봉쇄는 안 본다&#034; (conf 감산 50%)"
+        }
+      ],
+      "sell": [],
+      "hold": []
+    },
+    "IRP": {
+      "buy": [],
+      "sell": [],
+      "hold": []
+    },
+    "PENSION": {
+      "buy": [],
+      "sell": [],
+      "hold": []
+    },
+    "BROKERAGE": {
+      "buy": [],
+      "sell": [],
+      "hold": []
+    }
+  },
+  "brokerage_auto": [],
+  "budget": {
+    "ISA": {
+      "total_capital": 20000000,
+      "invested": 0,
+      "available": 20000000,
+      "max_per_stock": 5000000.0,
+      "max_holdings": 8,
+      "current_holdings": 0,
+      "can_add_more": true,
+      "risk_asset_limit": 1.0,
+      "utilization_pct": 0.0
+    },
+    "IRP": {
+      "total_capital": 22000000,
+      "invested": 0,
+      "available": 6600000.0,
+      "max_per_stock": 7699999.999999999,
+      "max_holdings": 5,
+      "current_holdings": 0,
+      "can_add_more": true,
+      "risk_asset_limit": 0.3,
+      "utilization_pct": 0.0
+    },
+    "PENSION": {
+      "total_capital": 7000000,
+      "invested": 0,
+      "available": 4900000.0,
+      "max_per_stock": 2100000.0,
+      "max_holdings": 6,
+      "current_holdings": 0,
+      "can_add_more": true,
+      "risk_asset_limit": 0.7,
+      "utilization_pct": 0.0
+    },
+    "BROKERAGE": {
+      "total_capital": 15000000,
+      "invested": 0,
+      "available": 15000000,
+      "max_per_stock": 2250000.0,
+      "max_holdings": 8,
+      "current_holdings": 0,
+      "can_add_more": true,
+      "risk_asset_limit": 1.0,
+      "utilization_pct": 0.0
+    }
+  },
+  "summary": {
+    "total_actions": 1,
+    "isa_actions": 1,
+    "irp_actions": 0,
+    "pension_actions": 0,
+    "brokerage_actions": 0,
+    "total_holdings": 0,
+    "isa_holdings": 0,
+    "irp_holdings": 0,
+    "pension_holdings": 0,
+    "brokerage_holdings": 0
+  }
+}

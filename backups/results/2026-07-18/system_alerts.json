@@ -1,0 +1,68 @@
+[
+  {
+    "timestamp": "2026-07-13T07:50:08.255616",
+    "source": "DataFreshnessValidator",
+    "message": "데이터 최신화 실패로 인한 프로세스 차단: 필수 지수(vix, vkospi, kospi) 데이터가 누락되었습니다.",
+    "severity": "critical",
+    "status": "active",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-07-14T07:50:07.513106",
+    "source": "DataFreshnessValidator",
+    "message": "데이터 최신화 실패로 인한 프로세스 차단: 필수 지수(vix, vkospi, kospi) 데이터가 누락되었습니다.",
+    "severity": "critical",
+    "status": "active",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-07-15T07:30:48.631787",
+    "source": "DataFreshnessValidator",
+    "message": "데이터 최신화 실패로 인한 프로세스 차단: 필수 지수(vix, vkospi, kospi) 데이터가 누락되었습니다.",
+    "severity": "critical",
+    "status": "active",
+    "context": {}
+  },
+  {
+    "timestamp": "2026-07-15T07:30:59.842819",
+    "source": "fetch_pykrx_vkospi",
+    "message": "'지수명'",
+    "severity": "error",
+    "status": "active",
+    "context": {
+      "args": [],
+      "kwargs": {}
+    }
+  },
+  {
+    "timestamp": "2026-07-15T07:30:59.843704",
+    "source": "VKOSPI",
+    "message": "pykrx 수집 실패, Naver 우회 시도",
+    "severity": "warning",
+    "status": "resolved",
+    "context": {},
+    "resolved_at": "2026-07-15T07:31:00.031417",
+    "resolution": "Naver 수집으로 복구 완료"
+  },
+  {
+    "timestamp": "2026-07-18T00:08:47.656378",
+    "source": "fetch_pykrx_vkospi",
+    "message": "'지수명'",
+    "severity": "error",
+    "status": "active",
+    "context": {
+      "args": [],
+      "kwargs": {}
+    }
+  },
+  {
+    "timestamp": "2026-07-18T00:08:47.657413",
+    "source": "VKOSPI",
+    "message": "pykrx 수집 실패, Naver 우회 시도",
+    "severity": "warning",
+    "status": "resolved",
+    "context": {},
+    "resolved_at": "2026-07-18T00:08:47.772970",
+    "resolution": "Naver 수집으로 복구 완료"
+  }
+]

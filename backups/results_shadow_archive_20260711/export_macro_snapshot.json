@@ -1,0 +1,32 @@
+{
+  "date": "2026-07-03",
+  "timestamp": "2026-07-03T11:39:42.387256",
+  "export_total_yoy": null,
+  "export_10d_yoy": 83.82,
+  "export_20d_yoy": 70.5,
+  "sector": {
+    "auto": 21.61,
+    "ship": 25.11,
+    "battery": 40.17,
+    "steel": 28.66,
+    "petrochem": 43.81,
+    "beauty": 35.35,
+    "semi": 95.32
+  },
+  "region": {
+    "us_export_yoy": 37.57,
+    "china_export_yoy": 28.23,
+    "eu_export_yoy": 33.36
+  },
+  "surprise": {
+    "auto": true,
+    "ship": true,
+    "battery": true,
+    "steel": true,
+    "petrochem": true,
+    "beauty": true,
+    "semi": true
+  },
+  "source": "export_macro_collector",
+  "confidence": 1.0
+}

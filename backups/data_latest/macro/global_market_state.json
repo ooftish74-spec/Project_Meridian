@@ -1,0 +1,237 @@
+{
+  "timestamp": "2026-05-16T15:50:06.310187",
+  "n_indicators": 21,
+  "indicators": {
+    "S&P500": {
+      "ticker": "^GSPC",
+      "close": 7408.5,
+      "prev_close": 7501.24,
+      "change_pct": -1.24,
+      "high_30d": 7517.12,
+      "low_30d": 7008.52,
+      "volume": 5582070000,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "NASDAQ": {
+      "ticker": "^IXIC",
+      "close": 26225.14,
+      "prev_close": 26635.22,
+      "change_pct": -1.54,
+      "high_30d": 26707.14,
+      "low_30d": 23894.91,
+      "volume": 9584430000,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "DOW": {
+      "ticker": "^DJI",
+      "close": 49526.17,
+      "prev_close": 50063.46,
+      "change_pct": -1.07,
+      "high_30d": 50200.54,
+      "low_30d": 48337.38,
+      "volume": 587920000,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "VIX": {
+      "ticker": "^VIX",
+      "close": 18.43,
+      "prev_close": 17.26,
+      "change_pct": 6.78,
+      "high_30d": 21.56,
+      "low_30d": 16.18,
+      "volume": 0,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "US10Y": {
+      "ticker": "^TNX",
+      "close": 4.59,
+      "prev_close": 4.46,
+      "change_pct": 3.0,
+      "high_30d": 4.6,
+      "low_30d": 4.23,
+      "volume": 0,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "SPY": {
+      "ticker": "SPY",
+      "close": 739.17,
+      "prev_close": 748.17,
+      "change_pct": -1.2,
+      "high_30d": 749.53,
+      "low_30d": 698.53,
+      "volume": 60290000,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "QQQ": {
+      "ticker": "QQQ",
+      "close": 708.93,
+      "prev_close": 719.79,
+      "change_pct": -1.51,
+      "high_30d": 722.03,
+      "low_30d": 635.26,
+      "volume": 51687900,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "Russell2000": {
+      "ticker": "IWM",
+      "close": 277.6,
+      "prev_close": 284.45,
+      "change_pct": -2.41,
+      "high_30d": 287.58,
+      "low_30d": 268.05,
+      "volume": 35384700,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "Korea_ETF": {
+      "ticker": "EWY",
+      "close": 178.86,
+      "prev_close": 190.52,
+      "change_pct": -6.12,
+      "high_30d": 194.58,
+      "low_30d": 145.4,
+      "volume": 21699500,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "China_ETF": {
+      "ticker": "FXI",
+      "close": 36.2,
+      "prev_close": 37.24,
+      "change_pct": -2.79,
+      "high_30d": 38.35,
+      "low_30d": 36.12,
+      "volume": 51383400,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "Gold": {
+      "ticker": "GLD",
+      "close": 417.29,
+      "prev_close": 427.21,
+      "change_pct": -2.32,
+      "high_30d": 448.7,
+      "low_30d": 413.28,
+      "volume": 9335200,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "US_Treasury_20Y": {
+      "ticker": "TLT",
+      "close": 83.66,
+      "prev_close": 84.92,
+      "change_pct": -1.48,
+      "high_30d": 86.89,
+      "low_30d": 83.59,
+      "volume": 50726700,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "Commodity": {
+      "ticker": "DBC",
+      "close": 31.19,
+      "prev_close": 31.15,
+      "change_pct": 0.13,
+      "high_30d": 31.72,
+      "low_30d": 27.84,
+      "volume": 832200,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "USD_Index": {
+      "ticker": "UUP",
+      "close": 27.77,
+      "prev_close": 27.62,
+      "change_pct": 0.54,
+      "high_30d": 27.77,
+      "low_30d": 27.2,
+      "volume": 1851100,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "TQQQ": {
+      "ticker": "TQQQ",
+      "close": 75.34,
+      "prev_close": 78.95,
+      "change_pct": -4.57,
+      "high_30d": 79.68,
+      "low_30d": 55.1,
+      "volume": 80890300,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "SOXL": {
+      "ticker": "SOXL",
+      "close": 164.18,
+      "prev_close": 186.19,
+      "change_pct": -11.82,
+      "high_30d": 191.29,
+      "low_30d": 83.31,
+      "volume": 61516400,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "UPRO": {
+      "ticker": "UPRO",
+      "close": 139.73,
+      "prev_close": 145.1,
+      "change_pct": -3.7,
+      "high_30d": 145.93,
+      "low_30d": 119.37,
+      "volume": 3090700,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "Nikkei": {
+      "ticker": "^N225",
+      "close": 61409.29,
+      "prev_close": 62654.05,
+      "change_pct": -1.99,
+      "high_30d": 63799.32,
+      "low_30d": 58428.19,
+      "volume": 213900000,
+      "date": "2026-05-15",
+      "n_days": 18
+    },
+    "HangSeng": {
+      "ticker": "^HSI",
+      "close": 25962.73,
+      "prev_close": 26389.04,
+      "change_pct": -1.62,
+      "high_30d": 26844.8,
+      "low_30d": 25609.61,
+      "volume": 3259900000,
+      "date": "2026-05-15",
+      "n_days": 21
+    },
+    "USD_KRW": {
+      "ticker": "USDKRW=X",
+      "close": 1493.34,
+      "prev_close": 1489.84,
+      "change_pct": 0.23,
+      "high_30d": 1505.78,
+      "low_30d": 1439.15,
+      "volume": 0,
+      "date": "2026-05-15",
+      "n_days": 22
+    },
+    "WTI_Oil": {
+      "ticker": "CL=F",
+      "close": 105.42,
+      "prev_close": 101.17,
+      "change_pct": 4.2,
+      "high_30d": 110.93,
+      "low_30d": 80.56,
+      "volume": 173862,
+      "date": "2026-05-15",
+      "n_days": 22
+    }
+  }
+}

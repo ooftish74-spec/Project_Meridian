@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.project.meridian.alpha_miner</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>source /Users/sunghohong/miniforge3/bin/activate tf_mac && cd /Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian && python scripts/run_alpha_miner.py</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>0</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/alpha_miner.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/alpha_miner.error.log</string>
+</dict>
+</plist>

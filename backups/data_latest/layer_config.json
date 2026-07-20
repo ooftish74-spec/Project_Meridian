@@ -1,0 +1,115 @@
+{
+  "version": "2.0",
+  "updated_at": "2026-04-11",
+  "layers": {
+    "L1": {
+      "name": "레버리지/인버스 ETF 지수 Day Trading",
+      "strategy": "etf_scalper",
+      "holding_period_days": 1,
+      "accounts": ["CMA"],
+      "auto_trading": true,
+      "regime_sensitive": true,
+      "max_allocation_pct": 30,
+      "note": "V5 레짐 신호 기반 KODEX 레버리지/인버스 당일 매매"
+    },
+    "L2": {
+      "name": "중기 모멘텀 스윙",
+      "strategy": "momentum_swing",
+      "holding_period_min_days": 90,
+      "holding_period_max_days": 365,
+      "accounts": ["주식종합계좌", "CMA"],
+      "auto_trading": true,
+      "regime_sensitive": true,
+      "max_allocation_pct": 30,
+      "rebalance": "monthly_signal_driven",
+      "signal_sources": ["V5_momentum", "RS_rank", "PEAD"],
+      "universe_filter": {
+        "min_mktcap_bn": 300,
+        "markets": ["KOSPI", "KOSDAQ"]
+      },
+      "exit_conditions": {
+        "trailing_stop_pct": 15,
+        "max_holding_days": 365,
+        "momentum_reversal": true
+      },
+      "note": "52주 신고가+어닝서프라이즈+섹터로테이션 / 3~12개월 보유 / 변경: Day Swing → 중기 모멘텀"
+    },
+    "L3": {
+      "name": "Quality-Momentum 가치투자 (1~2년)",
+      "strategy": "quality_momentum",
+      "holding_period_min_days": 365,
+      "holding_period_max_days": 730,
+      "accounts": ["주식종합계좌"],
+      "auto_trading": true,
+      "regime_sensitive": true,
+      "max_allocation_pct": 30,
+      "rebalance": "semi_annual",
+      "quality_threshold": {
+        "f_score_min": 7,
+        "ohlson_status": ["SAFE", "LOW_RISK"]
+      },
+      "momentum_filter": {
+        "lookback_months": 6,
+        "min_percentile": 40
+      },
+      "valuation_guard": {
+        "pbr_sector_multiplier_max": 1.5
+      },
+      "regime_weights": {
+        "BULL":    {"quality": 0.50, "momentum": 0.50},
+        "NEUTRAL": {"quality": 0.55, "momentum": 0.45},
+        "CAUTION": {"quality": 0.65, "momentum": 0.35},
+        "BEAR":    {"quality": 0.75, "momentum": 0.25},
+        "CRISIS":  {"quality": 0.85, "momentum": 0.15}
+      },
+      "exit_conditions": {
+        "f_score_min": 5,
+        "ohlson_distress": true,
+        "max_holding_days": 730
+      },
+      "note": "Quality(F-Score≥7) × Momentum(6M RS) / 가치함정 방어 / 변경: GARP → QM"
+    },
+    "L4": {
+      "name": "Deep Value QV+@ (3~10년+)",
+      "strategy": "deep_value_qv",
+      "holding_period_min_days": 1095,
+      "holding_period_max_days": null,
+      "accounts": ["ISA", "연금저축", "퇴직연금IRP", "주식종합계좌"],
+      "auto_trading": false,
+      "portfolio_proposal_only": true,
+      "rebalance": "annual",
+      "universe": {
+        "kr_stocks": {
+          "source": "DART",
+          "min_mktcap_bn": 300,
+          "markets": ["KOSPI", "KOSDAQ"]
+        },
+        "us_stocks": {
+          "source": "yfinance",
+          "accounts_eligible": ["주식종합계좌"],
+          "note": "ISA/연금은 해외 개별주 불가. 주식종합계좌만 가능."
+        },
+        "core_etf": {
+          "role": "자산배분 Core",
+          "eligible_accounts": ["ISA", "연금저축", "퇴직연금IRP"],
+          "examples": ["379800(S&P500)", "133690(NASDAQ100)", "114820(국내채권)"]
+        }
+      },
+      "qv_criteria": {
+        "ev_ebit_max": 12,
+        "roic_min_pct": 12,
+        "f_score_min": 7,
+        "ohlson_status": ["SAFE", "LOW_RISK"],
+        "m_score_status": ["SAFE"]
+      },
+      "note": "ISA/연금은 KRX상장증권만(개별주+국내ETF). 주식종합계좌는 미국 개별주 추가 가능."
+    }
+  },
+  "capital_allocation_by_regime": {
+    "BULL":    {"L1": 0.20, "L2": 0.30, "L3": 0.30, "L4": 0.20},
+    "NEUTRAL": {"L1": 0.20, "L2": 0.25, "L3": 0.30, "L4": 0.25},
+    "CAUTION": {"L1": 0.15, "L2": 0.20, "L3": 0.30, "L4": 0.35},
+    "BEAR":    {"L1": 0.10, "L2": 0.15, "L3": 0.25, "L4": 0.50},
+    "CRISIS":  {"L1": 0.05, "L2": 0.10, "L3": 0.20, "L4": 0.65}
+  }
+}

@@ -1,0 +1,895 @@
+{
+  "last_updated": "2026-07-15T07:52:34.484161",
+  "phases": {
+    "evening": {
+      "timestamp": "2026-07-15T07:52:34.479859",
+      "elapsed_sec": 606,
+      "etf": 35,
+      "stocks": 336,
+      "stocks_attempted": 336,
+      "stocks_failed": 0,
+      "sector_batch": {
+        "supply_chain": {
+          "MU": {
+            "name": "Micron (DRAM 프록시)",
+            "last_price": 983.12,
+            "chg_1m": -1.27,
+            "chg_3m": 133.27,
+            "chg_1y": 719.83,
+            "trend": "down",
+            "sma20": 1050.58,
+            "sectors": [
+              "Semiconductor"
+            ],
+            "correlation": "positive"
+          },
+          "SOXX": {
+            "name": "PHLX Semiconductor Index",
+            "last_price": 567.92,
+            "chg_1m": -3.19,
+            "chg_3m": 50.06,
+            "chg_1y": 131.69,
+            "trend": "down",
+            "sma20": 596.74,
+            "sectors": [
+              "Semiconductor"
+            ],
+            "correlation": "positive"
+          },
+          "LIT": {
+            "name": "Lithium ETF",
+            "last_price": 71.58,
+            "chg_1m": -10.96,
+            "chg_3m": -6.32,
+            "chg_1y": 80.48,
+            "trend": "down",
+            "sma20": 77.16,
+            "sectors": [
+              "Battery",
+              "Automotive"
+            ],
+            "correlation": "positive"
+          },
+          "HG=F": {
+            "name": "Copper Futures",
+            "last_price": 6.37,
+            "chg_1m": 1.71,
+            "chg_3m": 10.75,
+            "chg_1y": 15.43,
+            "trend": "up",
+            "sma20": 6.22,
+            "sectors": [
+              "Materials",
+              "Battery"
+            ],
+            "correlation": "positive"
+          },
+          "CL=F": {
+            "name": "WTI Crude Oil",
+            "last_price": 79.97,
+            "chg_1m": -8.82,
+            "chg_3m": -18.29,
+            "chg_1y": 19.39,
+            "trend": "up",
+            "sma20": 73.07,
+            "sectors": [
+              "Energy"
+            ],
+            "correlation": "positive"
+          },
+          "NG=F": {
+            "name": "Natural Gas",
+            "last_price": 2.91,
+            "chg_1m": -5.73,
+            "chg_3m": 8.99,
+            "chg_1y": -16.04,
+            "trend": "down",
+            "sma20": 3.17,
+            "sectors": [
+              "Energy",
+              "Utilities"
+            ],
+            "correlation": "positive"
+          },
+          "SLX": {
+            "name": "Steel ETF",
+            "last_price": 101.25,
+            "chg_1m": -7.14,
+            "chg_3m": 3.21,
+            "chg_1y": 48.28,
+            "trend": "down",
+            "sma20": 101.34,
+            "sectors": [
+              "Materials",
+              "Shipbuilding"
+            ],
+            "correlation": "positive"
+          },
+          "BDRY": {
+            "name": "Baltic Dry Index ETN",
+            "last_price": 13.1,
+            "chg_1m": 4.63,
+            "chg_3m": 27.18,
+            "chg_1y": 93.22,
+            "trend": "up",
+            "sma20": 12.2,
+            "sectors": [
+              "Shipbuilding"
+            ],
+            "correlation": "positive"
+          },
+          "URA": {
+            "name": "Uranium ETF",
+            "last_price": 41.55,
+            "chg_1m": -7.32,
+            "chg_3m": -18.42,
+            "chg_1y": 11.11,
+            "trend": "down",
+            "sma20": 44.22,
+            "sectors": [
+              "Utilities",
+              "Energy"
+            ],
+            "correlation": "positive"
+          },
+          "GC=F": {
+            "name": "Gold",
+            "last_price": 4056.9,
+            "chg_1m": -0.82,
+            "chg_3m": -15.34,
+            "chg_1y": 21.05,
+            "trend": "down",
+            "sma20": 4126.96,
+            "sectors": [
+              "Finance"
+            ],
+            "correlation": "negative"
+          },
+          "JPY=X": {
+            "name": "USD/JPY (엔캐리 proxy)",
+            "last_price": 162.23,
+            "chg_1m": 1.42,
+            "chg_3m": 1.89,
+            "chg_1y": 10.14,
+            "trend": "up",
+            "sma20": 161.79,
+            "sectors": [
+              "Semiconductor",
+              "AI",
+              "Battery"
+            ],
+            "correlation": "positive"
+          },
+          "KRW=X": {
+            "name": "USD/KRW (환율)",
+            "last_price": 1488.56,
+            "chg_1m": -1.39,
+            "chg_3m": 0.79,
+            "chg_1y": 8.01,
+            "trend": "down",
+            "sma20": 1528.21,
+            "sectors": [
+              "Semiconductor",
+              "Automotive",
+              "Shipbuilding"
+            ],
+            "correlation": "negative"
+          }
+        },
+        "per_band": {},
+        "us_kr_beta": {
+          "Semiconductor": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "AI": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Software": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Finance": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Healthcare": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Energy": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Materials": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Consumer": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Utilities": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Telecom": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Defense": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "RealEstate": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Shipbuilding": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Automotive": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Battery": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Robotics": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "QuantumComputing": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          }
+        },
+        "collected_at": "2026-07-15T07:52:28.397400"
+      },
+      "breadth": {
+        "vkospi": {
+          "vkospi": 14.03,
+          "vix": 16.5,
+          "vkospi_prev": 14.59,
+          "vkospi_change": -3.85,
+          "vkospi_ma20": 14.46,
+          "timestamp": "2026-07-15T07:52:28.873790",
+          "source": "yfinance_vix",
+          "level": "greed"
+        },
+        "put_call": {
+          "put_call_ratio": 1.0,
+          "sentiment": "unknown",
+          "source": "default"
+        },
+        "global_correlations": {
+          "correlations": {
+            "KOSPI_SP500": {
+              "current": 0.428,
+              "avg_60d": 0.287,
+              "deviation": 0.14
+            },
+            "KOSPI_DXY": {
+              "current": -0.174,
+              "avg_60d": -0.384,
+              "deviation": 0.21
+            },
+            "KOSPI_WTI": {
+              "current": -0.356,
+              "avg_60d": -0.23,
+              "deviation": -0.126
+            },
+            "KOSPI_GOLD": {
+              "current": 0.129,
+              "avg_60d": 0.27,
+              "deviation": -0.141
+            },
+            "KOSPI_US10Y": {
+              "current": -0.258,
+              "avg_60d": -0.128,
+              "deviation": -0.13
+            }
+          },
+          "current_corr": {
+            "KOSPI_SP500": 0.428,
+            "KOSPI_DXY": -0.174,
+            "KOSPI_WTI": -0.356,
+            "KOSPI_GOLD": 0.129,
+            "KOSPI_US10Y": -0.258
+          },
+          "risk_mode": "neutral",
+          "copper_gold_momentum": 0.0564,
+          "timestamp": "2026-07-15T07:52:31.748466"
+        },
+        "economic_surprise": {
+          "economic_surprise_index": 0,
+          "interpretation": "unknown"
+        },
+        "composite_sentiment": {
+          "score": 65.3,
+          "label": "greed",
+          "components": {
+            "VKOSPI": 86.7,
+            "P/C_Ratio": 60.0,
+            "Risk_Mode": 50,
+            "ESI": 50
+          }
+        },
+        "timestamp": "2026-07-15T07:52:31.749004"
+      },
+      "flow": {},
+      "evening_signals": true,
+      "stale_sweep": {
+        "attempted": 0,
+        "fixed": 0,
+        "still_stale": 0
+      },
+      "fallback_events": [
+        {
+          "time": "2026-07-15T07:42:36.052781",
+          "type": "STALE_HALT",
+          "target": "parking_etfs",
+          "message": "파킹 ETF 동적 캐시가 없으며 API도 실패했습니다. 시스템 보호를 위해 Halt를 발동합니다."
+        }
+      ]
+    },
+    "morning": {
+      "timestamp": "2026-07-15T07:28:24.979366",
+      "elapsed_sec": 89,
+      "freshness_gate": {
+        "status": "partial",
+        "repairs": {
+          "kr_stocks": {
+            "attempted": 0,
+            "fixed": 0
+          },
+          "cross_market": {
+            "stale": [
+              "cross_gold_futures.parquet",
+              "cross_oil_futures.parquet",
+              "cross_sp500.parquet",
+              "cross_us10y.parquet",
+              "cross_usdkrw.parquet",
+              "cross_vix.parquet"
+            ],
+            "recollected": true
+          },
+          "signal_cache": {
+            "missing": [
+              "kospi"
+            ]
+          }
+        },
+        "remaining_stale": 0,
+        "threshold_h": 20.0
+      },
+      "signals": 3,
+      "macro": {
+        "series_count": 22
+      },
+      "cross_market": {
+        "indicators": 3
+      },
+      "sentiment": {
+        "unified": 12
+      },
+      "prefetch": true,
+      "final_stale_count": 0
+    },
+    "full": {
+      "timestamp": "2026-07-15T07:42:22.867189",
+      "elapsed_sec": 667,
+      "signals": 3,
+      "etf": 35,
+      "flow": {},
+      "stocks": 336,
+      "stocks_attempted": 336,
+      "stocks_failed": 0,
+      "macro": {
+        "series_count": 22
+      },
+      "cross_market": {
+        "indicators": 3
+      },
+      "breadth": {
+        "vkospi": {
+          "vkospi": 14.03,
+          "vix": 16.5,
+          "vkospi_prev": 14.59,
+          "vkospi_change": -3.85,
+          "vkospi_ma20": 14.46,
+          "timestamp": "2026-07-15T07:38:26.974757",
+          "source": "yfinance_vix",
+          "level": "greed"
+        },
+        "put_call": {
+          "put_call_ratio": 1.0,
+          "sentiment": "unknown",
+          "source": "default"
+        },
+        "global_correlations": {
+          "correlations": {
+            "KOSPI_SP500": {
+              "current": 0.428,
+              "avg_60d": 0.287,
+              "deviation": 0.14
+            },
+            "KOSPI_DXY": {
+              "current": -0.174,
+              "avg_60d": -0.384,
+              "deviation": 0.21
+            },
+            "KOSPI_WTI": {
+              "current": -0.356,
+              "avg_60d": -0.23,
+              "deviation": -0.126
+            },
+            "KOSPI_GOLD": {
+              "current": 0.129,
+              "avg_60d": 0.27,
+              "deviation": -0.141
+            },
+            "KOSPI_US10Y": {
+              "current": -0.258,
+              "avg_60d": -0.128,
+              "deviation": -0.13
+            }
+          },
+          "current_corr": {
+            "KOSPI_SP500": 0.428,
+            "KOSPI_DXY": -0.174,
+            "KOSPI_WTI": -0.356,
+            "KOSPI_GOLD": 0.129,
+            "KOSPI_US10Y": -0.258
+          },
+          "risk_mode": "neutral",
+          "copper_gold_momentum": 0.0561,
+          "timestamp": "2026-07-15T07:38:29.932403"
+        },
+        "economic_surprise": {
+          "economic_surprise_index": 0,
+          "interpretation": "unknown"
+        },
+        "composite_sentiment": {
+          "score": 65.3,
+          "label": "greed",
+          "components": {
+            "VKOSPI": 86.7,
+            "P/C_Ratio": 60.0,
+            "Risk_Mode": 50,
+            "ESI": 50
+          }
+        },
+        "timestamp": "2026-07-15T07:38:29.933367"
+      },
+      "sentiment": {
+        "unified": 12
+      },
+      "sector_batch": {
+        "supply_chain": {
+          "MU": {
+            "name": "Micron (DRAM 프록시)",
+            "last_price": 983.12,
+            "chg_1m": -1.27,
+            "chg_3m": 133.27,
+            "chg_1y": 719.83,
+            "trend": "down",
+            "sma20": 1050.58,
+            "sectors": [
+              "Semiconductor"
+            ],
+            "correlation": "positive"
+          },
+          "SOXX": {
+            "name": "PHLX Semiconductor Index",
+            "last_price": 567.92,
+            "chg_1m": -3.19,
+            "chg_3m": 50.06,
+            "chg_1y": 131.69,
+            "trend": "down",
+            "sma20": 596.74,
+            "sectors": [
+              "Semiconductor"
+            ],
+            "correlation": "positive"
+          },
+          "LIT": {
+            "name": "Lithium ETF",
+            "last_price": 71.58,
+            "chg_1m": -10.96,
+            "chg_3m": -6.32,
+            "chg_1y": 80.48,
+            "trend": "down",
+            "sma20": 77.16,
+            "sectors": [
+              "Battery",
+              "Automotive"
+            ],
+            "correlation": "positive"
+          },
+          "HG=F": {
+            "name": "Copper Futures",
+            "last_price": 6.36,
+            "chg_1m": 1.69,
+            "chg_3m": 10.73,
+            "chg_1y": 15.41,
+            "trend": "up",
+            "sma20": 6.22,
+            "sectors": [
+              "Materials",
+              "Battery"
+            ],
+            "correlation": "positive"
+          },
+          "CL=F": {
+            "name": "WTI Crude Oil",
+            "last_price": 79.88,
+            "chg_1m": -8.93,
+            "chg_3m": -18.38,
+            "chg_1y": 19.26,
+            "trend": "up",
+            "sma20": 73.06,
+            "sectors": [
+              "Energy"
+            ],
+            "correlation": "positive"
+          },
+          "NG=F": {
+            "name": "Natural Gas",
+            "last_price": 2.91,
+            "chg_1m": -5.7,
+            "chg_3m": 9.03,
+            "chg_1y": -16.01,
+            "trend": "down",
+            "sma20": 3.17,
+            "sectors": [
+              "Energy",
+              "Utilities"
+            ],
+            "correlation": "positive"
+          },
+          "SLX": {
+            "name": "Steel ETF",
+            "last_price": 101.25,
+            "chg_1m": -7.14,
+            "chg_3m": 3.21,
+            "chg_1y": 48.28,
+            "trend": "down",
+            "sma20": 101.34,
+            "sectors": [
+              "Materials",
+              "Shipbuilding"
+            ],
+            "correlation": "positive"
+          },
+          "BDRY": {
+            "name": "Baltic Dry Index ETN",
+            "last_price": 13.1,
+            "chg_1m": 4.63,
+            "chg_3m": 27.18,
+            "chg_1y": 93.22,
+            "trend": "up",
+            "sma20": 12.2,
+            "sectors": [
+              "Shipbuilding"
+            ],
+            "correlation": "positive"
+          },
+          "URA": {
+            "name": "Uranium ETF",
+            "last_price": 41.55,
+            "chg_1m": -7.32,
+            "chg_3m": -18.42,
+            "chg_1y": 11.11,
+            "trend": "down",
+            "sma20": 44.22,
+            "sectors": [
+              "Utilities",
+              "Energy"
+            ],
+            "correlation": "positive"
+          },
+          "GC=F": {
+            "name": "Gold",
+            "last_price": 4056.9,
+            "chg_1m": -0.82,
+            "chg_3m": -15.34,
+            "chg_1y": 21.05,
+            "trend": "down",
+            "sma20": 4126.96,
+            "sectors": [
+              "Finance"
+            ],
+            "correlation": "negative"
+          },
+          "JPY=X": {
+            "name": "USD/JPY (엔캐리 proxy)",
+            "last_price": 162.2,
+            "chg_1m": 1.4,
+            "chg_3m": 1.87,
+            "chg_1y": 10.12,
+            "trend": "up",
+            "sma20": 161.78,
+            "sectors": [
+              "Semiconductor",
+              "AI",
+              "Battery"
+            ],
+            "correlation": "positive"
+          },
+          "KRW=X": {
+            "name": "USD/KRW (환율)",
+            "last_price": 1488.36,
+            "chg_1m": -1.4,
+            "chg_3m": 0.78,
+            "chg_1y": 8.0,
+            "trend": "down",
+            "sma20": 1528.2,
+            "sectors": [
+              "Semiconductor",
+              "Automotive",
+              "Shipbuilding"
+            ],
+            "correlation": "negative"
+          }
+        },
+        "per_band": {},
+        "us_kr_beta": {
+          "Semiconductor": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "AI": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Software": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Finance": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Healthcare": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Energy": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Materials": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Consumer": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Utilities": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Telecom": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Defense": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "RealEstate": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Shipbuilding": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Automotive": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "Battery": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "Lagged pts: 0"
+          },
+          "Robotics": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          },
+          "QuantumComputing": {
+            "beta": 0.3,
+            "correlation": 0.3,
+            "lagged_corr": 0.3,
+            "same_day_corr": 0.1,
+            "us_5d_return": 0,
+            "data_available": false,
+            "note": "US or KR ETF missing"
+          }
+        },
+        "collected_at": "2026-07-15T07:42:22.859424"
+      },
+      "dart": {
+        "disclosures": 3
+      }
+    }
+  },
+  "stale_files": [],
+  "stale_count": 0,
+  "overall": {
+    "total_kr_parquets": 381,
+    "fresh_count": 381,
+    "stale_count": 0,
+    "success_rate": 1.0
+  }
+}

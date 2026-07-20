@@ -1,0 +1,20 @@
+{
+  "ticker": "035720",
+  "target_price": 72053,
+  "current_price": 42550,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "카카오",
+  "latest_research": {
+    "title": "증명이 필요한 시기",
+    "broker": "미래에셋증권",
+    "date": "20260522"
+  }
+}

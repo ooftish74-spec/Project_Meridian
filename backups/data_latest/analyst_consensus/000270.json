@@ -1,0 +1,20 @@
+{
+  "ticker": "000270",
+  "target_price": 231667,
+  "current_price": 145200,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "기아",
+  "latest_research": {
+    "title": "실적이 끌고, 현대모비스가 밀고",
+    "broker": "삼성증권",
+    "date": "20260630"
+  }
+}

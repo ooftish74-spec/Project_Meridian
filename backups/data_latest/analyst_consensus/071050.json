@@ -1,0 +1,20 @@
+{
+  "ticker": "071050",
+  "target_price": 345875,
+  "current_price": 241500,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "한국금융지주",
+  "latest_research": {
+    "title": "1Q26 Review: 돋보이는 전 부분의 고른 약진",
+    "broker": "교보증권",
+    "date": "20260518"
+  }
+}

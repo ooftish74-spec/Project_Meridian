@@ -1,0 +1,58 @@
+{
+  "tested_at": "2026-07-10T12:05:45.329876",
+  "memory_store_records": 31,
+  "penalty_features": 26,
+  "top_penalty_features": [
+    "rsi_14",
+    "atr_pct",
+    "volume_ratio",
+    "exog_kospi_index",
+    "zscore_14"
+  ],
+  "ic_threshold_simulation": [
+    {
+      "alpha_id": "hypo-bull-rsi",
+      "features": [
+        "rsi_14",
+        "volume_ratio_20d",
+        "atr_pct"
+      ],
+      "raw_ic": 0.06,
+      "adjusted_threshold": 0.05161,
+      "passes": true
+    },
+    {
+      "alpha_id": "hypo-macro-vix",
+      "features": [
+        "exog_xm_vix_level",
+        "exog_kr_export_mom"
+      ],
+      "raw_ic": 0.055,
+      "adjusted_threshold": 0.05,
+      "passes": true
+    },
+    {
+      "alpha_id": "hypo-penalty",
+      "features": [
+        "rsi_14",
+        "atr_pct",
+        "volume_ratio"
+      ],
+      "raw_ic": 0.055,
+      "adjusted_threshold": 0.05215,
+      "passes": true
+    },
+    {
+      "alpha_id": "hypo-new-feature",
+      "features": [
+        "zscore_14",
+        "copper_gold_ratio"
+      ],
+      "raw_ic": 0.055,
+      "adjusted_threshold": 0.07258,
+      "passes": false
+    }
+  ],
+  "gc_memory_store_connected": true,
+  "evolution_loop_status": "FUNCTIONAL"
+}

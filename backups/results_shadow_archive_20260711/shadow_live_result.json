@@ -1,0 +1,11 @@
+{
+  "date": "2026-07-02",
+  "timestamp": "2026-07-02T23:23:35.027207",
+  "phase": "all",
+  "regime": "bull",
+  "mode": "shadow_live",
+  "kis_mode": "mock",
+  "n_fills": 6,
+  "kill_switch": false,
+  "tca_log": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/results/shadow_live_tca.json"
+}

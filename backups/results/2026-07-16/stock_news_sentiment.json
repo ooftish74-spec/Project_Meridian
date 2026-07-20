@@ -1,0 +1,94 @@
+{
+  "timestamp": "2026-07-15T07:26:50.195888",
+  "stocks": {
+    "247540": {
+      "name": "에코프로",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "에코프로비엠, 1.2조 유상증자 막혔다…금감원 정정 요구"
+      ]
+    },
+    "086520": {
+      "name": "에코프로",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "에코프로비엠, 1.2조 유상증자 막혔다…금감원 정정 요구"
+      ]
+    },
+    "204320": {
+      "name": "HL만도",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "HL만도, 하반기 로봇 액추에이터 동력 기대-하나"
+      ]
+    },
+    "000660": {
+      "name": "SK하이닉스",
+      "sentiment": 0.3,
+      "label": "positive",
+      "mentions": 5,
+      "headlines": [
+        "반도체주 되살아난 뉴욕증시…SK하이닉스 ADR 27% 상승",
+        "물가 우려 완화에 상승…SK하이닉스 ADR 27%↑ [뉴욕증시 브리핑]",
+        "CPI 안도감에 반도체·대형주 랠리…SK하이닉스 ADR 27% 폭등  [美증시 특징주]",
+        "본주 괴리율, 사흘 만에 51% 돌파… SK하이닉스 美 ADR &#039;폭등&#039;",
+        "\"최근 하락은 매수 기회\"…KB證, SK하이닉스 목표가 420만원 유지"
+      ]
+    },
+    "452400": {
+      "name": "이닉스",
+      "sentiment": 0.083,
+      "label": "neutral",
+      "mentions": 6,
+      "headlines": [
+        "반도체주 되살아난 뉴욕증시…SK하이닉스 ADR 27% 상승",
+        "서동주 &#034;내가 259층 개미라니&#034;...하이닉스 폭락에 &#034;매일 비명 지른다&#034; 솔직 고백",
+        "물가 우려 완화에 상승…SK하이닉스 ADR 27%↑ [뉴욕증시 브리핑]",
+        "CPI 안도감에 반도체·대형주 랠리…SK하이닉스 ADR 27% 폭등  [美증시 특징주]",
+        "본주 괴리율, 사흘 만에 51% 돌파… SK하이닉스 美 ADR &#039;폭등&#039;"
+      ]
+    },
+    "005930": {
+      "name": "삼성전자",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "KT, 삼성전자·HD현대삼호와 자율 네트워크 기반 피지컬 AI 실증"
+      ]
+    },
+    "267250": {
+      "name": "HD현대",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "KT, 삼성전자·HD현대삼호와 자율 네트워크 기반 피지컬 AI 실증"
+      ]
+    },
+    "030200": {
+      "name": "KT",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "KT, 삼성전자·HD현대삼호와 자율 네트워크 기반 피지컬 AI 실증"
+      ]
+    },
+    "033250": {
+      "name": "체시스",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "체시스 후계자 37살 이준성 ‘광폭 행보’만 보면…승계 초읽기?[거버넌스워치]"
+      ]
+    }
+  }
+}

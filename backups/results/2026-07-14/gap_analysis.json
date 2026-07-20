@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-07-13T20:00:09.838170",
+  "status": "skip",
+  "min_trades": 10,
+  "reason": "거래 1건 < 최소 10건",
+  "n_trades": 1
+}

@@ -1,0 +1,14 @@
+[
+    {
+        "id": "alpha_20260711_1915",
+        "formula": "Abs(x1)*149.38242",
+        "fitness": 0.25966405868530273,
+        "sharpe_ratio": 2.15,
+        "features_used": [
+            "gscpi",
+            "copper_gold_ratio"
+        ],
+        "discovered_at": "2026-07-11T19:15:21.977569+00:00",
+        "status": "active"
+    }
+]

@@ -1,0 +1,17 @@
+{
+  "kimchi_intel": {
+    "kimchi_pct": -1.2045,
+    "funding_rate": 2.6e-05,
+    "funding_rate_annualized": 2.7955,
+    "binance_price_usd": 64789.8,
+    "upbit_price_krw": 95182000.0,
+    "usdkrw": 1487.0,
+    "bid_ask_spread_binance_pct": 0.0,
+    "bid_ask_spread_upbit_pct": 0.0,
+    "open_interest": 0.0,
+    "mark_price": 64792.99,
+    "index_price": 64814.39,
+    "timestamp": "2026-07-16T09:05:14.246689"
+  },
+  "timestamp": "2026-07-16T09:05:14.246785"
+}

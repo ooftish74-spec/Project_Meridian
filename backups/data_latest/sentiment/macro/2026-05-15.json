@@ -1,0 +1,26 @@
+{
+  "macro_kr": {
+    "score": 0.0352,
+    "count": 60,
+    "weight": 0.8,
+    "purpose": "regime"
+  },
+  "macro_global": {
+    "score": -0.0225,
+    "count": 49,
+    "weight": 0.7,
+    "purpose": "regime"
+  },
+  "geopolitical": {
+    "score": 0.0185,
+    "count": 60,
+    "weight": 1.0,
+    "purpose": "risk"
+  },
+  "regulation": {
+    "score": 0.011,
+    "count": 70,
+    "weight": 0.5,
+    "purpose": "strategic"
+  }
+}

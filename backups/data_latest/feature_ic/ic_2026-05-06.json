@@ -1,0 +1,279 @@
+{
+  "timestamp": "2026-05-06T15:53:08.790105",
+  "n_tickers": 300,
+  "n_features": 31,
+  "feature_ic": {
+    "lag_1": {
+      "mean_ic": 0.2057,
+      "std_ic": 0.1519,
+      "ir": 1.3544,
+      "t_stat": 23.4203,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "lag_2": {
+      "mean_ic": 0.1958,
+      "std_ic": 0.1514,
+      "ir": 1.2935,
+      "t_stat": 22.3662,
+      "pct_positive": 0.886,
+      "n_tickers": 299
+    },
+    "lag_3": {
+      "mean_ic": 0.1926,
+      "std_ic": 0.1481,
+      "ir": 1.3005,
+      "t_stat": 22.4882,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "lag_4": {
+      "mean_ic": 0.1868,
+      "std_ic": 0.1475,
+      "ir": 1.2662,
+      "t_stat": 21.8944,
+      "pct_positive": 0.88,
+      "n_tickers": 299
+    },
+    "lag_5": {
+      "mean_ic": 0.1772,
+      "std_ic": 0.1483,
+      "ir": 1.1946,
+      "t_stat": 20.6572,
+      "pct_positive": 0.88,
+      "n_tickers": 299
+    },
+    "rmean_3": {
+      "mean_ic": 0.2187,
+      "std_ic": 0.1551,
+      "ir": 1.4104,
+      "t_stat": 24.3873,
+      "pct_positive": 0.89,
+      "n_tickers": 299
+    },
+    "rmean_7": {
+      "mean_ic": 0.21,
+      "std_ic": 0.1542,
+      "ir": 1.3615,
+      "t_stat": 23.5419,
+      "pct_positive": 0.896,
+      "n_tickers": 299
+    },
+    "rmean_14": {
+      "mean_ic": 0.1753,
+      "std_ic": 0.1567,
+      "ir": 1.1187,
+      "t_stat": 19.3441,
+      "pct_positive": 0.86,
+      "n_tickers": 299
+    },
+    "rmean_30": {
+      "mean_ic": 0.1268,
+      "std_ic": 0.1571,
+      "ir": 0.8073,
+      "t_stat": 13.9594,
+      "pct_positive": 0.769,
+      "n_tickers": 299
+    },
+    "rstd_30": {
+      "mean_ic": 0.0906,
+      "std_ic": 0.153,
+      "ir": 0.5925,
+      "t_stat": 10.2448,
+      "pct_positive": 0.773,
+      "n_tickers": 299
+    },
+    "ema_30": {
+      "mean_ic": 0.1618,
+      "std_ic": 0.1634,
+      "ir": 0.99,
+      "t_stat": 17.1183,
+      "pct_positive": 0.833,
+      "n_tickers": 299
+    },
+    "rsi_14": {
+      "mean_ic": 0.095,
+      "std_ic": 0.1415,
+      "ir": 0.671,
+      "t_stat": 11.6023,
+      "pct_positive": 0.786,
+      "n_tickers": 299
+    },
+    "price_ma_ratio_30": {
+      "mean_ic": 0.1263,
+      "std_ic": 0.1362,
+      "ir": 0.9267,
+      "t_stat": 16.0246,
+      "pct_positive": 0.836,
+      "n_tickers": 299
+    },
+    "zscore_30": {
+      "mean_ic": 0.0998,
+      "std_ic": 0.142,
+      "ir": 0.703,
+      "t_stat": 12.1553,
+      "pct_positive": 0.769,
+      "n_tickers": 299
+    },
+    "trend_dist_high_52w": {
+      "mean_ic": 0.1704,
+      "std_ic": 0.1504,
+      "ir": 1.1325,
+      "t_stat": 19.5827,
+      "pct_positive": 0.873,
+      "n_tickers": 299
+    },
+    "trend_price_position": {
+      "mean_ic": 0.1556,
+      "std_ic": 0.1443,
+      "ir": 1.0782,
+      "t_stat": 18.643,
+      "pct_positive": 0.876,
+      "n_tickers": 299
+    },
+    "mtf_weekly_mom": {
+      "mean_ic": 0.1263,
+      "std_ic": 0.1464,
+      "ir": 0.863,
+      "t_stat": 14.9223,
+      "pct_positive": 0.809,
+      "n_tickers": 299
+    },
+    "mtf_vs_ma100": {
+      "mean_ic": 0.2062,
+      "std_ic": 0.1383,
+      "ir": 1.4904,
+      "t_stat": 25.7706,
+      "pct_positive": 0.926,
+      "n_tickers": 299
+    },
+    "mtf_weekly_rsi": {
+      "mean_ic": 0.1073,
+      "std_ic": 0.1406,
+      "ir": 0.7631,
+      "t_stat": 13.1949,
+      "pct_positive": 0.783,
+      "n_tickers": 299
+    },
+    "rsi_x_vol": {
+      "mean_ic": 0.1047,
+      "std_ic": 0.1483,
+      "ir": 0.706,
+      "t_stat": 12.2086,
+      "pct_positive": 0.736,
+      "n_tickers": 299
+    },
+    "ma_spread": {
+      "mean_ic": 0.1236,
+      "std_ic": 0.1394,
+      "ir": 0.887,
+      "t_stat": 15.3384,
+      "pct_positive": 0.826,
+      "n_tickers": 299
+    },
+    "bb_x_vol": {
+      "mean_ic": 0.123,
+      "std_ic": 0.1396,
+      "ir": 0.8812,
+      "t_stat": 15.2365,
+      "pct_positive": 0.803,
+      "n_tickers": 299
+    },
+    "alt_pc_ratio_zscore": {
+      "mean_ic": 0.0963,
+      "std_ic": 0.1352,
+      "ir": 0.7122,
+      "t_stat": 12.3149,
+      "pct_positive": 0.803,
+      "n_tickers": 299
+    },
+    "alt_greed_flag": {
+      "mean_ic": 0.009,
+      "std_ic": 0.1108,
+      "ir": 0.0813,
+      "t_stat": 1.4018,
+      "pct_positive": 0.539,
+      "n_tickers": 297
+    },
+    "opt_iv_skew": {
+      "mean_ic": 0.1045,
+      "std_ic": 0.1658,
+      "ir": 0.63,
+      "t_stat": 10.8934,
+      "pct_positive": 0.739,
+      "n_tickers": 299
+    },
+    "opt_pcr_extreme": {
+      "mean_ic": 0.1151,
+      "std_ic": 0.1024,
+      "ir": 1.1247,
+      "t_stat": 19.4476,
+      "pct_positive": 0.863,
+      "n_tickers": 299
+    },
+    "id_vwap_ratio": {
+      "mean_ic": 0.1401,
+      "std_ic": 0.1258,
+      "ir": 1.1137,
+      "t_stat": 2.2273,
+      "pct_positive": 1.0,
+      "n_tickers": 4
+    },
+    "id_vol_climax": {
+      "mean_ic": 0.1362,
+      "std_ic": 0.1281,
+      "ir": 1.0633,
+      "t_stat": 2.1266,
+      "pct_positive": 1.0,
+      "n_tickers": 4
+    },
+    "id_closing_mom": {
+      "mean_ic": 0.0726,
+      "std_ic": 0.0822,
+      "ir": 0.8832,
+      "t_stat": 1.7663,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "idx_climax_trend": {
+      "mean_ic": 0.125,
+      "std_ic": 0.1054,
+      "ir": 1.1867,
+      "t_stat": 2.3734,
+      "pct_positive": 1.0,
+      "n_tickers": 4
+    },
+    "idx_intraday_reversal": {
+      "mean_ic": -0.0985,
+      "std_ic": 0.0678,
+      "ir": -1.4514,
+      "t_stat": -2.9028,
+      "pct_positive": 0.25,
+      "n_tickers": 4
+    }
+  },
+  "top_features": [
+    "rmean_3",
+    "rmean_7",
+    "mtf_vs_ma100",
+    "lag_1",
+    "lag_2",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "rmean_14",
+    "trend_dist_high_52w",
+    "ema_30",
+    "trend_price_position",
+    "id_vwap_ratio",
+    "id_vol_climax",
+    "rmean_30"
+  ],
+  "noise_features": [
+    "alt_greed_flag"
+  ],
+  "reverse_features": [
+    "idx_intraday_reversal"
+  ],
+  "date": "2026-05-06"
+}

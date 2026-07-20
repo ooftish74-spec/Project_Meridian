@@ -1,0 +1,26 @@
+{
+  "sector_tech": {
+    "score": 0.0169,
+    "count": 30,
+    "weight": 0.6,
+    "purpose": "sector"
+  },
+  "sector_ev": {
+    "score": 0.0609,
+    "count": 30,
+    "weight": 0.6,
+    "purpose": "sector"
+  },
+  "sector_bio": {
+    "score": 0.0161,
+    "count": 20,
+    "weight": 0.5,
+    "purpose": "sector"
+  },
+  "sector_ship": {
+    "score": 0.1605,
+    "count": 20,
+    "weight": 0.5,
+    "purpose": "sector"
+  }
+}

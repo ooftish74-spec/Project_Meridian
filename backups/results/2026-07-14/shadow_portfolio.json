@@ -1,0 +1,127 @@
+{
+  "initial_capital": 1000000.0,
+  "virtual_nav": 999332.08,
+  "cash": 108772.07999999996,
+  "positions": {
+    "S_YIELD:449170": {
+      "ticker": "449170",
+      "name": "KODEX KOFR금리액티브(합성)",
+      "entry_price": 111320.0,
+      "avg_price": 111320.0,
+      "price": 111320.0,
+      "quantity": 8,
+      "amount": 890560.0,
+      "entry_date": "2026-07-13",
+      "strategy": "S_YIELD",
+      "up_prob": 1.0,
+      "exits": {},
+      "high_water_mark": 111320.0,
+      "cost": 667.92,
+      "current_price": 111320,
+      "market_value": 890560,
+      "unrealized_pnl": 0.0,
+      "pnl_pct": 0.0,
+      "hwm_price": 111325,
+      "stream_id": "S_YIELD",
+      "current_value": 890560,
+      "unrealized_pnl_pct": 0.0
+    }
+  },
+  "trade_history": [
+    {
+      "date": "2026-07-13",
+      "action": "BUY",
+      "ticker": "449170",
+      "name": "KODEX KOFR금리액티브(합성)",
+      "price": 111320.0,
+      "quantity": 8,
+      "amount": 890560.0,
+      "cost": 667.92,
+      "stream": "S_YIELD",
+      "strategy": "S_YIELD"
+    }
+  ],
+  "daily_records": [
+    {
+      "date": "2026-07-13",
+      "virtual_nav": 999332.08,
+      "nav": 999332.08,
+      "cash": 108772.07999999996,
+      "n_positions": 1,
+      "n_trades": 0,
+      "position_scale": 1.0,
+      "return_pct": -0.0668,
+      "daily_return_pct": -0.0668,
+      "bench_pct": 2.4681,
+      "regime": "bull",
+      "alpha_pct": -2.5349,
+      "hit_count": 0,
+      "total_count": 0,
+      "held_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "sell_da": {
+        "hit": 0,
+        "total": 0
+      },
+      "ic": {}
+    }
+  ],
+  "cumulative": {
+    "total_pnl": 0,
+    "total_trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "total_cost": 667.92
+  },
+  "strategy_pnl": {},
+  "created": "2026-07-13T05:27:01.718035",
+  "last_updated": "2026-07-13T09:05:15.580876",
+  "daily_snapshots": [
+    {
+      "date": "2026-07-13",
+      "timestamp": "2026-07-13T15:35:05.178763",
+      "nav": 999332.08,
+      "cash": 108772.07999999996,
+      "market_value": 890560.0,
+      "n_positions": 1,
+      "regime": "bull",
+      "position_scale": 1.0,
+      "daily_return_pct": -0.0668,
+      "total_return_pct": -0.0668,
+      "realized_pnl": 0,
+      "unrealized_pnl": 0.0,
+      "hwm": 999372.08,
+      "drawdown_pct": -0.0,
+      "n_buys": 0,
+      "n_sells": 0,
+      "total_commission": 0,
+      "sub_accounts": {},
+      "data_confidence_score": 100.0
+    }
+  ],
+  "realized_pnl": 0,
+  "total_commission": 0,
+  "hwm": 999372.08,
+  "cumulative_return_pct": 0.0,
+  "daily_pnl": 0,
+  "consecutive_loss_days": 0,
+  "max_drawdown_pct": 0.0,
+  "drawdown_pct": 0.0,
+  "unrealized_pnl": 0.0,
+  "daily_returns": [
+    -0.0006679200000000419
+  ],
+  "total_return_pct": 0.0,
+  "sub_accounts": {},
+  "sleeve_a_nav": 599599.25,
+  "sleeve_b_nav": 399732.83,
+  "sleeve_a_hwm": 599623.25,
+  "sleeve_b_hwm": 399748.83,
+  "total_nav": 999332.08,
+  "updated": "2026-07-13T17:59:11.675371",
+  "daily_returns_dates": [
+    "2026-07-13"
+  ]
+}

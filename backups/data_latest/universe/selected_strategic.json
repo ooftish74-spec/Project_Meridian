@@ -1,0 +1,89 @@
+{
+  "strategy": "strategic",
+  "regime": "caution",
+  "tickers": [
+    "005935",
+    "028670",
+    "161390",
+    "023530",
+    "016360",
+    "011780",
+    "018670",
+    "462870",
+    "036930",
+    "000660"
+  ],
+  "details": [
+    {
+      "ticker": "005935",
+      "name": "삼성전자우",
+      "score": 75.6,
+      "direction": "strong_buy",
+      "sector": "Electronics"
+    },
+    {
+      "ticker": "028670",
+      "name": "팬오션",
+      "score": 69.2,
+      "direction": "strong_buy",
+      "sector": "Industrials"
+    },
+    {
+      "ticker": "161390",
+      "name": "한국타이어앤테크놀로지",
+      "score": 68.6,
+      "direction": "strong_buy",
+      "sector": "Automotive"
+    },
+    {
+      "ticker": "023530",
+      "name": "롯데쇼핑",
+      "score": 64.2,
+      "direction": "strong_buy",
+      "sector": "Consumer"
+    },
+    {
+      "ticker": "016360",
+      "name": "삼성증권",
+      "score": 61.2,
+      "direction": "strong_buy",
+      "sector": "Securities"
+    },
+    {
+      "ticker": "011780",
+      "name": "금호석유화학",
+      "score": 60.5,
+      "direction": "strong_buy",
+      "sector": "Materials"
+    },
+    {
+      "ticker": "018670",
+      "name": "SK가스",
+      "score": 60.4,
+      "direction": "strong_buy",
+      "sector": "Energy"
+    },
+    {
+      "ticker": "462870",
+      "name": "시프트업",
+      "score": 58.4,
+      "direction": "buy",
+      "sector": "Software"
+    },
+    {
+      "ticker": "036930",
+      "name": "주성엔지니어링",
+      "score": 58.2,
+      "direction": "buy",
+      "sector": "Other"
+    },
+    {
+      "ticker": "000660",
+      "name": "SK하이닉스",
+      "score": 55.0,
+      "direction": "hold",
+      "sector": "Semiconductor"
+    }
+  ],
+  "timestamp": "2026-05-22T08:10:24.701633"
+}

@@ -1,0 +1,649 @@
+{
+  "timestamp": "2026-06-26T23:59:34.048155+09:00",
+  "overnight_intel": {
+    "sp500_change_pct": -0.04716574175711585,
+    "nasdaq_change_pct": -0.24047254063451762,
+    "sox_change_pct": -0.28856704876142114,
+    "sp500_change": -0.04716574175711585,
+    "nasdaq_change": -0.24047254063451762,
+    "us_sentiment": "neutral",
+    "timestamp": "2026-06-28T05:15:09.773814"
+  },
+  "morning_data": {},
+  "macro": {},
+  "signals": {},
+  "note": "Reset for live trading start 2026-06-09",
+  "vix": 18.40999984741211,
+  "vix_change_1d": -2.541,
+  "vix_change_1m": 11.05,
+  "sp500": 7354.02001953125,
+  "nasdaq": 25297.619140625,
+  "sox": 13203.5703125,
+  "sox_change_1d": -5.2888,
+  "sox_change_1m": 8.26,
+  "dji": 51876.109375,
+  "us10y": 4.451000213623047,
+  "us10y_change_1d": -0.2689,
+  "us10y_change_1m": -3.94,
+  "us2y": 4.950999736785889,
+  "us2y_change_1d": 0.0,
+  "us2y_change_1m": -1.59,
+  "dxy": 101.36000061035156,
+  "dxy_change_1d": -0.069,
+  "dxy_change_1m": 2.27,
+  "wti": 69.2300033569336,
+  "wti_change_1d": -3.7403,
+  "wti_change_1m": -23.88,
+  "copper": 6.141499996185303,
+  "copper_change_1d": 1.1696,
+  "copper_change_1m": -3.62,
+  "gold_us": 4078.699951171875,
+  "gold_us_change_1d": 1.1959,
+  "gold_us_change_1m": -10.19,
+  "silver": 59.21699905395508,
+  "silver_change_1d": 1.4893,
+  "silver_change_1m": -24.13,
+  "usdkrw": 1535.0,
+  "usdkrw_change_1d": -0.503,
+  "usdkrw_change_1m": 2.77,
+  "usdjpy": 161.68499755859375,
+  "usdjpy_change_1d": -0.0742,
+  "usdjpy_change_1m": 1.38,
+  "eurusd": 1.1389521360397339,
+  "eurusd_change_1d": 0.3109,
+  "eurusd_change_1m": -2.08,
+  "ewy": 197.27999877929688,
+  "flkr": 64.41999816894531,
+  "fxi": 31.59000015258789,
+  "kospi": 8411.2099609375,
+  "kospi_change_1d": -5.8127,
+  "kospi_change_1m": 7.94,
+  "kosdaq": 851.3699951171875,
+  "kosdaq_change_1d": -4.1045,
+  "kosdaq_change_1m": -21.69,
+  "taiex": 44571.76171875,
+  "taiex_change_1d": -3.6396,
+  "taiex_change_1m": 5.5,
+  "nikkei": 69360.8828125,
+  "nikkei_change_1d": -4.1531,
+  "nikkei_change_1m": 6.43,
+  "hangseng": 22671.859375,
+  "hangseng_change_1d": -1.7552,
+  "hangseng_change_1m": -8.57,
+  "last_update": "2026-06-28T07:00:31.526021",
+  "investor_flow": {
+    "foreign_net_5d": -2.13387315168737,
+    "foreign_net_20d": -2.1199507508174653,
+    "inst_net_5d": -2.133873151632808,
+    "inst_net_20d": -2.1199507507585866,
+    "flow_momentum": -0.7241148182095033,
+    "foreign_streak": 0.0,
+    "supply_demand_score": -1.0,
+    "collected_at": "2026-06-26T16:30:18.003927",
+    "n_tickers": 12,
+    "by_ticker": {
+      "091160": {
+        "foreign_net_5d": -1.8808744615132116,
+        "foreign_net_20d": -0.8933655024553635,
+        "inst_net_5d": -1.880874461298151,
+        "inst_net_20d": -0.8933655023684943,
+        "flow_momentum": -0.5241774785046799,
+        "foreign_streak": 1.0,
+        "supply_demand_score": -1.0
+      },
+      "042700": {
+        "foreign_net_5d": 1.9056041001323853,
+        "foreign_net_20d": -0.8388843411727309,
+        "inst_net_5d": 1.905604099401464,
+        "inst_net_20d": -0.8388843411698027,
+        "flow_momentum": 0.7075676348380464,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 1.0
+      },
+      "005850": {
+        "foreign_net_5d": 1.1948923635674888,
+        "foreign_net_20d": -0.7007796538632521,
+        "inst_net_5d": 1.1948923524529778,
+        "inst_net_20d": -0.7007796538011309,
+        "flow_momentum": 0.3830855890306961,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.7123718562700511
+      },
+      "458730": {
+        "foreign_net_5d": -1.2975533300644293,
+        "foreign_net_20d": -0.970952876575816,
+        "inst_net_5d": -1.29755330350573,
+        "inst_net_20d": -0.9709528579093102,
+        "flow_momentum": -0.3978608635884677,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.7681349187970151
+      },
+      "122630": {
+        "foreign_net_5d": -1.275383472355998,
+        "foreign_net_20d": -1.6770436868924168,
+        "inst_net_5d": -1.2753834723302553,
+        "inst_net_20d": -1.677043686857089,
+        "flow_momentum": -0.43319507462050033,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.7676502585590006
+      },
+      "443060": {
+        "foreign_net_5d": 2.129037433935605,
+        "foreign_net_20d": 0.6949801195047834,
+        "inst_net_5d": 2.129037433272083,
+        "inst_net_20d": 0.6949801194025593,
+        "flow_momentum": 0.7600265734238245,
+        "foreign_streak": 5.0,
+        "supply_demand_score": 1.0
+      },
+      "000270": {
+        "foreign_net_5d": -1.1273645228781866,
+        "foreign_net_20d": -1.3260170948466772,
+        "inst_net_5d": -1.1273645226057454,
+        "inst_net_20d": -1.3260170943341072,
+        "flow_momentum": -0.4997965261948923,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.7136212192430728
+      },
+      "000660": {
+        "foreign_net_5d": 0.8207831022755926,
+        "foreign_net_20d": 0.019973857640293732,
+        "inst_net_5d": 0.8207831022706819,
+        "inst_net_20d": 0.019973857640208068,
+        "flow_momentum": 0.3426878401601857,
+        "foreign_streak": 8.0,
+        "supply_demand_score": 0.6731979031848699
+      },
+      "069500": {
+        "foreign_net_5d": -2.13387315168737,
+        "foreign_net_20d": -2.1199507508174653,
+        "inst_net_5d": -2.133873151632808,
+        "inst_net_20d": -2.1199507507585866,
+        "flow_momentum": -0.7241148182095033,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -1.0
+      },
+      "192090": {
+        "foreign_net_5d": -2.0709809704542614,
+        "foreign_net_20d": -1.4577733108639401,
+        "inst_net_5d": -2.0709805740179643,
+        "inst_net_20d": -1.4577730585522588,
+        "flow_momentum": -0.7652090142881933,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -1.0
+      },
+      "279530": {
+        "foreign_net_5d": 0.2814562124814469,
+        "foreign_net_20d": 1.8700549851841446,
+        "inst_net_5d": 0.28145620881863653,
+        "inst_net_20d": 1.8700549458781701,
+        "flow_momentum": 0.06320612996364433,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.15968994449725468
+      },
+      "015760": {
+        "foreign_net_5d": -0.8015367423595846,
+        "foreign_net_20d": 0.698894158428844,
+        "inst_net_5d": -0.801536741549316,
+        "inst_net_20d": 0.6988941581348813,
+        "flow_momentum": -0.3253180515024543,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.49836378646847485
+      },
+      "133690": {
+        "foreign_net_5d": -1.6508727220805846,
+        "foreign_net_20d": -2.0950672460254873,
+        "inst_net_5d": -1.6508727214338221,
+        "inst_net_20d": -2.095067245262723,
+        "flow_momentum": -0.45761736234306294,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.9627215696138587
+      },
+      "009150": {
+        "foreign_net_5d": -1.102275777248206,
+        "foreign_net_20d": -0.27037497102996283,
+        "inst_net_5d": -1.1022757772209317,
+        "inst_net_20d": -0.27037497102473823,
+        "flow_momentum": -0.2916542018549834,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.6386341491751433
+      },
+      "091180": {
+        "foreign_net_5d": -0.9718388452442553,
+        "foreign_net_20d": -0.4132101124839332,
+        "inst_net_5d": -0.9718388421164617,
+        "inst_net_20d": -0.4132101124819858,
+        "flow_momentum": -0.4007319129052206,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.6061389958681351
+      },
+      "441640": {
+        "foreign_net_5d": 0.5192271957616859,
+        "foreign_net_20d": -0.7773389396144279,
+        "inst_net_5d": 0.5192271749352552,
+        "inst_net_20d": -0.7773389008655373,
+        "flow_momentum": 0.2504401100365347,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.3547456267265172
+      },
+      "305720": {
+        "foreign_net_5d": -0.2836444733488481,
+        "foreign_net_20d": -0.050420325022279174,
+        "inst_net_5d": -0.2836444732537454,
+        "inst_net_20d": -0.05042032501473199,
+        "flow_momentum": -0.28146395783303657,
+        "foreign_streak": 2.0,
+        "supply_demand_score": -0.1862614240053145
+      },
+      "018670": {
+        "foreign_net_5d": -1.0164312370186268,
+        "foreign_net_20d": -1.1693308955815764,
+        "inst_net_5d": -1.016431234359841,
+        "inst_net_20d": -1.1693308946221812,
+        "flow_momentum": -0.4071552765147843,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.6303622009319915
+      },
+      "023530": {
+        "foreign_net_5d": -0.7377604248750431,
+        "foreign_net_20d": 1.0446103669238607,
+        "inst_net_5d": -0.7377604221334824,
+        "inst_net_20d": 1.0446103636730308,
+        "flow_momentum": -0.31129534828275895,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.46226881637403705
+      },
+      "120110": {
+        "foreign_net_5d": -0.7958391078328143,
+        "foreign_net_20d": -1.212431766882372,
+        "inst_net_5d": -0.795839107037597,
+        "inst_net_20d": -1.2124317658745831,
+        "flow_momentum": -0.3118236604801979,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.491466651901423
+      },
+      "004170": {
+        "foreign_net_5d": -0.6819103781225446,
+        "foreign_net_20d": 1.0060568380461665,
+        "inst_net_5d": -0.6819103774051795,
+        "inst_net_20d": 1.006056837373852,
+        "flow_momentum": -0.18363743320507514,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.39604641887932185
+      },
+      "090430": {
+        "foreign_net_5d": 1.8067767848429441,
+        "foreign_net_20d": -0.18733920128968717,
+        "inst_net_5d": 1.8067767790497546,
+        "inst_net_20d": -0.18733920112568359,
+        "flow_momentum": 0.7221613899027707,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 1.0
+      },
+      "207940": {
+        "foreign_net_5d": 2.9575364890011655,
+        "foreign_net_20d": 1.5930002335358457,
+        "inst_net_5d": 2.957536484549298,
+        "inst_net_20d": 1.5930002322441774,
+        "flow_momentum": 0.7476128172057372,
+        "foreign_streak": 5.0,
+        "supply_demand_score": 1.0
+      },
+      "396500": {
+        "foreign_net_5d": -0.772154880339222,
+        "foreign_net_20d": 0.3050225126018096,
+        "inst_net_5d": -0.7721548803106204,
+        "inst_net_20d": 0.3050225125894289,
+        "flow_momentum": -0.2859991211649533,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.4718771765133767
+      },
+      "030200": {
+        "foreign_net_5d": 2.4328591961641854,
+        "foreign_net_20d": 2.4904301503081285,
+        "inst_net_5d": 2.432859190913253,
+        "inst_net_20d": 2.4904301447982102,
+        "flow_momentum": 0.6451721196211935,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 1.0
+      },
+      "411060": {
+        "foreign_net_5d": 0.5749353275345134,
+        "foreign_net_20d": -0.8006350003412334,
+        "inst_net_5d": 0.5749353266758399,
+        "inst_net_20d": -0.8006349999359144,
+        "flow_momentum": 0.25410056711533047,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.36369783373012116
+      },
+      "305080": {
+        "foreign_net_5d": 0.9763002531842987,
+        "foreign_net_20d": 0.45591020793250264,
+        "inst_net_5d": 0.9762996138145249,
+        "inst_net_20d": 0.455910116765744,
+        "flow_momentum": 0.26877260271705705,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.6087817795333117
+      },
+      "114800": {
+        "foreign_net_5d": 0.33948390077108037,
+        "foreign_net_20d": 0.4018310136085841,
+        "inst_net_5d": 0.33948390072999796,
+        "inst_net_20d": 0.4018310135644201,
+        "flow_momentum": 0.09725771631886453,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.21891926527298305
+      },
+      "132030": {
+        "foreign_net_5d": 1.352777464900087,
+        "foreign_net_20d": 0.8117295626056217,
+        "inst_net_5d": 1.3527774234667154,
+        "inst_net_20d": 0.8117295435501583,
+        "flow_momentum": 0.3876920434082521,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 0.7926963371858448
+      },
+      "329200": {
+        "foreign_net_5d": 1.3522835951488346,
+        "foreign_net_20d": 0.9840892010620291,
+        "inst_net_5d": 1.3522835868013656,
+        "inst_net_20d": 0.9840892004279811,
+        "flow_momentum": 0.609151439087546,
+        "foreign_streak": 2.0,
+        "supply_demand_score": 0.8988872276311873
+      },
+      "148070": {
+        "foreign_net_5d": 1.6904013912458622,
+        "foreign_net_20d": 2.0501120407865066,
+        "inst_net_5d": 1.6904012294769153,
+        "inst_net_20d": 2.0501118918116097,
+        "flow_momentum": 0.5979340283645401,
+        "foreign_streak": 0.0,
+        "supply_demand_score": 1.0
+      },
+      "252670": {
+        "foreign_net_5d": 0.8627129528723173,
+        "foreign_net_20d": 1.1032159301100783,
+        "inst_net_5d": 0.8627129528116221,
+        "inst_net_20d": 1.1032159300514996,
+        "flow_momentum": 0.23786156849465148,
+        "foreign_streak": 1.0,
+        "supply_demand_score": 0.522714946972415
+      },
+      "005930": {
+        "foreign_net_5d": -1.6659649830002647,
+        "foreign_net_20d": -0.9945107558606664,
+        "inst_net_5d": -1.6659649829843806,
+        "inst_net_20d": -0.9945107558550068,
+        "flow_momentum": -0.4815123357101742,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.9774361922100077
+      },
+      "009540": {
+        "foreign_net_5d": -0.624354802428684,
+        "foreign_net_20d": 0.5754043936499291,
+        "inst_net_5d": -0.6243548021955309,
+        "inst_net_20d": 0.5754043934075872,
+        "flow_momentum": -0.29745767895328634,
+        "foreign_streak": 0.0,
+        "supply_demand_score": -0.40141470485369724
+      }
+    }
+  },
+  "last_overnight_update": "2026-06-28T05:15:18.229316",
+  "kr_factor_composite": -0.563,
+  "kr_factor_foreign": -1.0,
+  "kr_factor_lcap": 0.25,
+  "kr_stream_adjustments": {
+    "S1": 0.916,
+    "S2": 0.9,
+    "S3": 0.92,
+    "S4": 1.025
+  },
+  "ois": 19.8,
+  "ois_price": 20.0,
+  "ois_sentiment": 18.4,
+  "ois_threshold_adj": 7,
+  "us_regime": "neutral",
+  "us_regime_score": 0.1229,
+  "us_regime_confidence": 0.392,
+  "sox_change": -0.28856704876142114,
+  "stock_technicals": {
+    "005930": {
+      "rsi_14": 59.44,
+      "macd_hist": 6298.2,
+      "volume_ratio": 0.91,
+      "close": 339500.0,
+      "name": "삼성전자"
+    },
+    "000660": {
+      "rsi_14": 66.48,
+      "macd_hist": 121312.59,
+      "volume_ratio": 1.03,
+      "close": 2673000.0,
+      "name": "SK하이닉스"
+    }
+  },
+  "upcoming_events": 2,
+  "next_event": "한국 수출입 (매월 1일) (전일)",
+  "event_confidence_adj": 0.15,
+  "macro_features": {
+    "fred_unemployment": -0.15,
+    "fred_fed_rate": 0.435,
+    "fred_gdp_growth": 0.418,
+    "fred_consumer_sentiment": -0.507,
+    "fred_hy_spread": 0.413,
+    "credit_stress": 0,
+    "fred_ig_spread": 0.5,
+    "cross_usjp_spread": 1.74,
+    "cross_usjp_change": -0.075,
+    "cross_usjp_signal": 0.13,
+    "cross_yield_curve": 0.3,
+    "yield_curve_inverted": 0,
+    "cross_yield_signal": 0.3,
+    "cross_ism_pmi": 50.7,
+    "cross_ism_signal": 0.07,
+    "cross_caixin_pmi": 50.3,
+    "cross_caixin_signal": 0.06,
+    "news_llm_sentiment": 0.0,
+    "news_realtime_sentiment": -1.0,
+    "news_naver_sentiment": -0.047,
+    "news_naver_label": "neutral",
+    "news_naver_count": 39,
+    "news_naver_updated": "2026-06-28T05:15:17.315483",
+    "news_events_count": 2
+  },
+  "cross_asset_direction": "neutral",
+  "cross_asset_score": 0,
+  "kr_regime": "caution",
+  "macro_features_ts": "2026-06-26T07:30:18.606665",
+  "morning_fusion": {
+    "regime_adjustment": 0.0,
+    "sector_overrides": {
+      "semiconductor": -0.022,
+      "steel": 0.047,
+      "energy": 0.032
+    },
+    "risk_flags": [],
+    "overnight_context": {
+      "ois": 29.8,
+      "us_regime": "neutral",
+      "us_regime_confidence": 0.389,
+      "sp500_change": -0.0303,
+      "nasdaq_change": -0.5717,
+      "sox_change": -0.6860604536631332,
+      "vix": 18.889999389648438,
+      "vkospi": 9052.42,
+      "usdkrw": 1544.68994140625,
+      "ewy_change": 3.9238,
+      "dxy_change": -0.1899,
+      "copper_change": 3.155,
+      "usdjpy_change": 0.0043,
+      "taiex_change": -2.2442,
+      "nikkei_change": -0.879,
+      "hangseng_change": 0.3252
+    },
+    "fusion_confidence": 0.7,
+    "conflicts": [],
+    "timestamp": "2026-06-26T07:30:18.962716"
+  },
+  "regime_adjustment": 0.0,
+  "ois_premarket": true,
+  "vkospi": 9052.42,
+  "usdkrw_prev": 1542.76,
+  "kospi_ma20": 136366.0,
+  "sector_momentum": {
+    "091160": {
+      "momentum_1m": 28.384,
+      "momentum_3m": 75.029,
+      "momentum_6m": 215.165
+    },
+    "395160": {
+      "momentum_1m": 60.679,
+      "momentum_3m": 111.888,
+      "momentum_6m": 253.972
+    },
+    "139260": {
+      "momentum_1m": 51.143,
+      "momentum_3m": 134.696,
+      "momentum_6m": 282.143
+    },
+    "117700": {
+      "momentum_1m": -7.477,
+      "momentum_3m": 0.282,
+      "momentum_6m": 72.485
+    },
+    "305720": {
+      "momentum_1m": -4.726,
+      "momentum_3m": 3.673,
+      "momentum_6m": 6.043
+    },
+    "091180": {
+      "momentum_1m": 6.381,
+      "momentum_3m": 11.742,
+      "momentum_6m": 46.132
+    },
+    "227550": {
+      "momentum_1m": -5.501,
+      "momentum_3m": -3.885,
+      "momentum_6m": 25.91
+    },
+    "091170": {
+      "momentum_1m": 4.682,
+      "momentum_3m": -0.545,
+      "momentum_6m": 23.658
+    },
+    "244580": {
+      "momentum_1m": -6.978,
+      "momentum_3m": -28.35,
+      "momentum_6m": -27.08
+    },
+    "133690": {
+      "momentum_1m": 5.912,
+      "momentum_3m": 26.009,
+      "momentum_6m": 23.025
+    },
+    "409820": {
+      "momentum_1m": 7.856,
+      "momentum_3m": 49.249,
+      "momentum_6m": 33.847
+    },
+    "371160": {
+      "momentum_1m": -4.299,
+      "momentum_3m": -6.853,
+      "momentum_6m": -14.856
+    },
+    "411060": {
+      "momentum_1m": -5.939,
+      "momentum_3m": -12.729,
+      "momentum_6m": 0.178
+    },
+    "195930": {
+      "momentum_1m": 8.006,
+      "momentum_3m": 12.537,
+      "momentum_6m": 11.261
+    },
+    "192090": {
+      "momentum_1m": 4.242,
+      "momentum_3m": 11.917,
+      "momentum_6m": 17.64
+    }
+  },
+  "kospi_close": 1366.489990234375,
+  "kosdaq_close": 583.5083549804256,
+  "kospi200": 1366.489990234375,
+  "kosdaq150": 561.0798674859038,
+  "cpi": 333.979,
+  "unemployment_rate": 4.3,
+  "federal_funds_rate": 3.63,
+  "consumer_sentiment": 44.8,
+  "hy_credit_spread": 2.78,
+  "ig_credit_spread": 0.76,
+  "industrial_production": 102.6475,
+  "retail_sales": 662752.0,
+  "gdp_growth": 2.09,
+  "tier1_refresh_ts": "2026-06-26T15:28:34.285887",
+  "tier2_refresh_ts": "2026-06-26T15:11:58.081821",
+  "macro_refresh_ts": "2026-06-26T15:28:32.726547",
+  "sp500_change_1d": -0.0472,
+  "sp500_change_1m": -2.15,
+  "nasdaq_change_1d": -0.2405,
+  "nasdaq_change_1m": -4.87,
+  "dji_change_1d": -0.0857,
+  "dji_change_1m": 2.89,
+  "ewy_change_1d": -3.7659,
+  "ewy_change_1m": 2.17,
+  "flkr_change_1d": -3.5224,
+  "flkr_change_1m": 3.73,
+  "fxi_change_1d": -0.2841,
+  "fxi_change_1m": -10.72,
+  "vix_prev": 18.89,
+  "dxy_prev": 101.43,
+  "us10y_prev": 4.451,
+  "wti_prev": 71.92,
+  "gold": 4078.7,
+  "gold_prev": 4030.5,
+  "realtime_mtm": {
+    "last_updated": "2026-06-26T17:58:50.507650",
+    "session": "after",
+    "n_tickers": 10
+  },
+  "kospi_prev_close": 145830.0,
+  "kosdaq_prev_close": 15870.0,
+  "kosdaq_ma20": 17278.5,
+  "kospi200_prev_close": 145830.0,
+  "kr_refresh_ts": "2026-06-26T15:28:34.543116",
+  "yield_curve_10y_2y": 0.226,
+  "yield_curve_inverted": 0,
+  "us5y": 4.224999904632568,
+  "us5y_change_1d": -0.0946,
+  "us30y": 4.901000022888184,
+  "us30y_change_1d": -0.5075,
+  "intraday_range_pct": 8.9932,
+  "yield_curve_10y_5y": 0.226,
+  "yield_curve_10y_30y": -0.45,
+  "us5y_change_1m": -1.47,
+  "us30y_change_1m": -5.04,
+  "alpha_factory": {
+    "s5_overnight_score": 2.15,
+    "formula": "x1 - (-x1 - 3.684273) + Abs(x1 + Abs(x1) + 2.18290128186949*Abs(Abs(x1))) - 1*(-2.9817011) - 0.009446498/x1",
+    "fitness": -0.706672191619873,
+    "discovered_at": "2026-06-20T19:15:19.569043+00:00"
+  },
+  "alpha_signals": {
+    "status": "FALLBACK_MODE",
+    "S1_signal": {
+      "contagion_alert": "NORMAL",
+      "vix_spike": false
+    },
+    "S2_signal": {
+      "pysr_macro_feature_value": 0.0
+    },
+    "S3_signal": {
+      "sector_forecast": {}
+    },
+    "S4_signal": {
+      "macro_cycle": "Neutral"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "regime_adjustment": 0.0,
+  "sector_overrides": {},
+  "risk_flags": [],
+  "overnight_context": {
+    "ois": 49.0,
+    "us_regime": "neutral",
+    "us_regime_confidence": 0.383,
+    "sp500_change": 0.0001,
+    "nasdaq_change": -0.7963,
+    "sox_change": -0.9555720815946245,
+    "vix": 20.34,
+    "vkospi": 12.78,
+    "usdkrw": 1498.8769,
+    "ewy_change": 0,
+    "dxy_change": 0,
+    "copper_change": 0,
+    "usdjpy_change": 0,
+    "taiex_change": 0,
+    "nikkei_change": 0,
+    "hangseng_change": 0
+  },
+  "fusion_confidence": 0.7,
+  "conflicts": [],
+  "timestamp": "2026-07-13T07:30:05.831045"
+}

@@ -1,0 +1,41 @@
+{
+  "ticker": "005290",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 2545017421824,
+      "shares": 51414494,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 2683836563456,
+      "shares": 51414494,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 2904919113728,
+      "shares": 51414494,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 2818648047616,
+      "shares": 50970126,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 2818648047616,
+      "shares": 50970126,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 3078595805184,
+      "shares": 50970126,
+      "source": "yfinance"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "version": "v3.7_all_dynamic",
+  "period": "2024-07-10 ~ 2026-07-09",
+  "trading_days": 485,
+  "initial_nav": 300000000.0,
+  "final_nav": 623383239,
+  "total_return_pct": 107.79,
+  "cagr_gross_pct": 46.23,
+  "mdd_pct": -18.26,
+  "sharpe": 1.682,
+  "sortino": 1.973,
+  "calmar": 2.532,
+  "total_cost": 10964967,
+  "tax_est": 70594313,
+  "pnl_gross": 323383239,
+  "pnl_net": 241823959,
+  "total_trades": 617,
+  "regime_distribution": {
+    "neutral": 19,
+    "crash": 78,
+    "bear": 95,
+    "caution": 130,
+    "bull": 163
+  },
+  "s10_dynamic_thresholds": {
+    "semiconductor": 0.7392,
+    "battery": 0.5833,
+    "defense": -0.0396,
+    "auto": 0.5833,
+    "bio": 0.4667,
+    "it": 0.2568,
+    "finance": 0.4392
+  },
+  "streams": {
+    "S0": {
+      "cagr_gross": 27.46,
+      "mdd": -39.92,
+      "sharpe": 0.941,
+      "calmar": 0.688,
+      "trades": 159,
+      "pnl_net": 51596123,
+      "final_nav": 191432041
+    },
+    "S1": {
+      "cagr_gross": 21.92,
+      "mdd": -32.33,
+      "sharpe": 0.753,
+      "calmar": 0.678,
+      "trades": 38,
+      "pnl_net": 10719535,
+      "final_nav": 44001597
+    },
+    "S2": {
+      "cagr_gross": 92.97,
+      "mdd": -26.42,
+      "sharpe": 1.825,
+      "calmar": 3.519,
+      "trades": 118,
+      "pnl_net": 128655453,
+      "final_nav": 238578534
+    },
+    "S3": {
+      "cagr_gross": 41.59,
+      "mdd": -28.71,
+      "sharpe": 1.129,
+      "calmar": 1.448,
+      "trades": 51,
+      "pnl_net": 21907376,
+      "final_nav": 58674751
+    },
+    "S4": {
+      "cagr_gross": 52.12,
+      "mdd": -16.78,
+      "sharpe": 1.778,
+      "calmar": 3.106,
+      "trades": 41,
+      "pnl_net": 28567926,
+      "final_nav": 67365864
+    },
+    "S10": {
+      "cagr_gross": 1.82,
+      "mdd": -9.61,
+      "sharpe": 0.296,
+      "calmar": 0.189,
+      "trades": 210,
+      "pnl_net": 487545,
+      "final_nav": 23330453
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "allocator.s1_base_weight": 0.4,
+  "_last_updated": "2026-07-18T00:09:09.826087",
+  "_updated_by": "self_learning",
+  "portfolio.sleeve_b_ratio": 0.3,
+  "portfolio.min_signal_confidence": 0.4,
+  "execution.mode": "live",
+  "execution.current_mode": "live",
+  "risk.max_event_confidence_adj": 0.2
+}

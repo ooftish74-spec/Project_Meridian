@@ -1,0 +1,76 @@
+{
+  "verdict": "CONDITIONAL_GO",
+  "sharpe": -5.343,
+  "win_rate": 0.6667,
+  "max_dd": 0.0,
+  "profit_factor": 0,
+  "n_days": 3,
+  "grade": "?",
+  "da": 1.0,
+  "ic": null,
+  "alpha_pct": -7.241,
+  "criteria": {
+    "shadow_days": {
+      "value": 3,
+      "threshold": 4,
+      "pass": false,
+      "detail": "3일 / 4일"
+    },
+    "total_return": {
+      "value": -0.04,
+      "threshold": 0,
+      "pass": false,
+      "detail": "-0.04%"
+    },
+    "win_rate": {
+      "value": 0,
+      "threshold": 50.0,
+      "pass": false,
+      "detail": "0.0% / 50%"
+    },
+    "mdd": {
+      "value": -0.07,
+      "threshold": -5.0,
+      "pass": true,
+      "detail": "-0.07% / -5.0%"
+    },
+    "da": {
+      "value": 100.0,
+      "threshold": 55.00000000000001,
+      "pass": true,
+      "detail": "100.0% / 55%"
+    },
+    "ic": {
+      "value": null,
+      "threshold": 0.05,
+      "pass": false,
+      "detail": "N/A",
+      "pending": true
+    },
+    "net_alpha": {
+      "value": -7.24,
+      "threshold": 0.0,
+      "pass": "False",
+      "detail": "-7.24% / 0.0%"
+    },
+    "sharpe": {
+      "value": -5.346,
+      "threshold": 1.0,
+      "pass": false,
+      "detail": "-5.346 / 1.0"
+    },
+    "profit_factor": {
+      "value": 0,
+      "threshold": 1.5,
+      "pass": false,
+      "detail": "0.000 / 1.5"
+    }
+  },
+  "daily_returns": [
+    -0.000668,
+    8e-05,
+    0.0002
+  ],
+  "timestamp": "2026-07-15T23:37:17.444124",
+  "source": "measurement_engine_ssot"
+}

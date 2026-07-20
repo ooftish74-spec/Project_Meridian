@@ -1,0 +1,15 @@
+{
+  "trading_days": 99,
+  "cumulative_return_pct": -1.34,
+  "cost_adjusted_return_pct": -1.89,
+  "sharpe_ratio": -0.177,
+  "max_drawdown_pct": -7.91,
+  "win_rate_pct": 20.2,
+  "avg_daily_return_pct": -0.0098,
+  "daily_volatility_pct": 0.8785,
+  "total_trades": 151,
+  "total_costs": 163866.87,
+  "cost_drag_pct": 0.55,
+  "current_value": 29597014.74,
+  "initial_capital": 30000000
+}

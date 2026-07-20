@@ -1,0 +1,41 @@
+{
+  "ticker": "015760",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 27861241036800,
+      "shares": 641964077,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 27090885804032,
+      "shares": 641964077,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 28471107518464,
+      "shares": 641964077,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 29466151616512,
+      "shares": 641964077,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 29466151616512,
+      "shares": 641964077,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 29755036401664,
+      "shares": 641964077,
+      "source": "yfinance"
+    }
+  ]
+}

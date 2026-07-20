@@ -1,0 +1,25 @@
+{
+  "triggered": true,
+  "can_buy": false,
+  "position_scale": 0.0,
+  "reason": "DD -99.3% ≤ -25% (Dynamic Stage 5+)",
+  "active": true,
+  "forward_override": {
+    "override": false,
+    "reason": "",
+    "score": 0,
+    "details": {}
+  },
+  "forward_signals": {
+    "regime": "caution",
+    "regime_confidence": 0.0,
+    "signal_avg_confidence": 0.0,
+    "n_signals": 0,
+    "news_sentiment": 0,
+    "ois_score": 83.0,
+    "bench_alpha_5d": 0.0,
+    "ic": 0.0,
+    "da": 0.0
+  },
+  "timestamp": "2026-07-12T14:14:39.603514+09:00"
+}

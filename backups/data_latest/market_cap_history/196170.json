@@ -1,0 +1,41 @@
+{
+  "ticker": "196170",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 19333772214272,
+      "shares": 53482080,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 18905915457536,
+      "shares": 53482080,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 19948816564224,
+      "shares": 53482080,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 19574441377792,
+      "shares": 53482080,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 19574441377792,
+      "shares": 53482080,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 19226806976512,
+      "shares": 53482080,
+      "source": "yfinance"
+    }
+  ]
+}

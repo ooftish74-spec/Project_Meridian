@@ -1,0 +1,16 @@
+{
+  "virtual_nav": 150000000.0,
+  "virtual_cash": 150000000.0,
+  "positions": {},
+  "last_updated": "2026-07-09T12:36:31.733738",
+  "note": "Shadow Trading Clean Baseline (AUM 1.5e8)",
+  "sleeve_a_nav": 90000000.0,
+  "sleeve_a_hwm": 90000000.0,
+  "sleeve_b_nav": 60000000.0,
+  "sleeve_b_hwm": 60000000.0,
+  "total_nav": 150000000.0,
+  "initial_capital": 150000000.0,
+  "hwm": 150000000.0,
+  "daily_returns": [],
+  "_sleeve_note": "sleeve_a=Alpha Streams(S1~S10), sleeve_b=Beta(S0). 수술-2026-07-10 추가"
+}

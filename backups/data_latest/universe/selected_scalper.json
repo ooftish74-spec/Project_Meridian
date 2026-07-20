@@ -1,0 +1,49 @@
+{
+  "strategy": "scalper",
+  "regime": "caution",
+  "tickers": [
+    "007070",
+    "003550",
+    "011070",
+    "066570",
+    "383800"
+  ],
+  "details": [
+    {
+      "ticker": "007070",
+      "name": "GS리테일",
+      "score": 57.6,
+      "tech_score": 75.0,
+      "sector": "Other"
+    },
+    {
+      "ticker": "003550",
+      "name": "LG",
+      "score": 66.2,
+      "tech_score": 75.0,
+      "sector": "Electronics"
+    },
+    {
+      "ticker": "011070",
+      "name": "LG이노텍",
+      "score": 58.1,
+      "tech_score": 75.0,
+      "sector": "Other"
+    },
+    {
+      "ticker": "066570",
+      "name": "LG전자",
+      "score": 60.9,
+      "tech_score": 75.0,
+      "sector": "Electronics"
+    },
+    {
+      "ticker": "383800",
+      "name": "LX홀딩스",
+      "score": 57.5,
+      "tech_score": 75.0,
+      "sector": "Other"
+    }
+  ],
+  "timestamp": "2026-05-22T08:10:24.701386"
+}

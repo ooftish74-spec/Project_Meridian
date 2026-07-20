@@ -1,0 +1,20 @@
+{
+  "ticker": "042660",
+  "target_price": 168800,
+  "current_price": 82000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-08",
+  "stock_name": "한화오션",
+  "latest_research": {
+    "title": "캐나다 잠수함, 아쉬운 결과지만 끝이 아니다",
+    "broker": "신한투자증권",
+    "date": "20260707"
+  }
+}

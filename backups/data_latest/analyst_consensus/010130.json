@@ -1,0 +1,20 @@
+{
+  "ticker": "010130",
+  "target_price": 1903750,
+  "current_price": 1322000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "고려아연",
+  "latest_research": {
+    "title": "1Q 호실적 달성. 앞으로 남은 과제는?",
+    "broker": "신한투자증권",
+    "date": "20260508"
+  }
+}

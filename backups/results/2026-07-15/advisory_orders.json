@@ -1,0 +1,52 @@
+{
+  "timestamp": "2026-07-14T09:05:11.541077",
+  "regime": "crash",
+  "regime_confidence": 0.743,
+  "orders": [
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.743,
+      "size_pct": 1.0,
+      "strategy": "continuous_vol_defense",
+      "account": "ISA",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=100.0%)",
+      "timestamp": "2026-07-14T09:05:11.538488"
+    },
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.743,
+      "size_pct": 1.0,
+      "strategy": "continuous_vol_defense",
+      "account": "IRP",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=100.0%)",
+      "timestamp": "2026-07-14T09:05:11.538491"
+    },
+    {
+      "stream_id": "S4",
+      "ticker": "357330",
+      "name": "KODEX KOFR 금리액티브 (연속 방어)",
+      "direction": "long",
+      "confidence": 0.743,
+      "size_pct": 1.0,
+      "strategy": "continuous_vol_defense",
+      "account": "PENSION",
+      "div_pct": 3.5,
+      "etf_type": "SAFE",
+      "regime": "crash",
+      "reason": "연속 변동성 타겟팅 (Defense=100.0%)",
+      "timestamp": "2026-07-14T09:05:11.538493"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "ticker": "009540",
+  "target_price": 598571,
+  "current_price": 362500,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "HD한국조선해양",
+  "latest_research": {
+    "title": "모든 자회사의 실적 성장",
+    "broker": "하나증권",
+    "date": "20260508"
+  }
+}

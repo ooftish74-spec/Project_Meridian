@@ -1,0 +1,167 @@
+{
+  "MU": {
+    "name": "Micron (DRAM 프록시)",
+    "last_price": 366.24,
+    "chg_1m": -8.58,
+    "chg_3m": 24.47,
+    "chg_1y": 393.83,
+    "trend": "down",
+    "sma20": 396.55,
+    "sectors": [
+      "Semiconductor"
+    ],
+    "correlation": "positive"
+  },
+  "SOXX": {
+    "name": "PHLX Semiconductor Index",
+    "last_price": 339.61,
+    "chg_1m": -0.5,
+    "chg_3m": 11.3,
+    "chg_1y": 100.62,
+    "trend": "up",
+    "sma20": 334.09,
+    "sectors": [
+      "Semiconductor"
+    ],
+    "correlation": "positive"
+  },
+  "LIT": {
+    "name": "Lithium ETF",
+    "last_price": 74.17,
+    "chg_1m": 4.26,
+    "chg_3m": 13.15,
+    "chg_1y": 101.34,
+    "trend": "up",
+    "sma20": 71.29,
+    "sectors": [
+      "Battery",
+      "Automotive"
+    ],
+    "correlation": "positive"
+  },
+  "HG=F": {
+    "name": "Copper Futures",
+    "last_price": 5.65,
+    "chg_1m": -1.76,
+    "chg_3m": -1.32,
+    "chg_1y": 35.57,
+    "trend": "up",
+    "sma20": 5.61,
+    "sectors": [
+      "Materials",
+      "Battery"
+    ],
+    "correlation": "positive"
+  },
+  "CL=F": {
+    "name": "WTI Crude Oil",
+    "last_price": 110.14,
+    "chg_1m": 35.96,
+    "chg_3m": 90.06,
+    "chg_1y": 81.45,
+    "trend": "up",
+    "sma20": 96.57,
+    "sectors": [
+      "Energy"
+    ],
+    "correlation": "positive"
+  },
+  "NG=F": {
+    "name": "Natural Gas",
+    "last_price": 2.86,
+    "chg_1m": -4.8,
+    "chg_3m": -28.02,
+    "chg_1y": -21.78,
+    "trend": "down",
+    "sma20": 3.01,
+    "sectors": [
+      "Energy",
+      "Utilities"
+    ],
+    "correlation": "positive"
+  },
+  "SLX": {
+    "name": "Steel ETF",
+    "last_price": 92.49,
+    "chg_1m": -3.46,
+    "chg_3m": 8.68,
+    "chg_1y": 63.16,
+    "trend": "up",
+    "sma20": 89.99,
+    "sectors": [
+      "Materials",
+      "Shipbuilding"
+    ],
+    "correlation": "positive"
+  },
+  "BDRY": {
+    "name": "Baltic Dry Index ETN",
+    "last_price": 10.45,
+    "chg_1m": -12.26,
+    "chg_3m": 19.57,
+    "chg_1y": 73.59,
+    "trend": "up",
+    "sma20": 10.24,
+    "sectors": [
+      "Shipbuilding"
+    ],
+    "correlation": "positive"
+  },
+  "URA": {
+    "name": "Uranium ETF",
+    "last_price": 48.9,
+    "chg_1m": -7.33,
+    "chg_3m": 12.01,
+    "chg_1y": 128.11,
+    "trend": "down",
+    "sma20": 48.92,
+    "sectors": [
+      "Utilities",
+      "Energy"
+    ],
+    "correlation": "positive"
+  },
+  "GC=F": {
+    "name": "Gold",
+    "last_price": 4719.3,
+    "chg_1m": -6.83,
+    "chg_3m": 7.99,
+    "chg_1y": 59.91,
+    "trend": "down",
+    "sma20": 4763.06,
+    "sectors": [
+      "Finance"
+    ],
+    "correlation": "negative"
+  },
+  "JPY=X": {
+    "name": "USD/JPY (엔캐리 proxy)",
+    "last_price": 159.45,
+    "chg_1m": 1.22,
+    "chg_3m": 1.57,
+    "chg_1y": 9.64,
+    "trend": "up",
+    "sma20": 159.07,
+    "sectors": [
+      "Semiconductor",
+      "AI",
+      "Battery"
+    ],
+    "correlation": "positive"
+  },
+  "KRW=X": {
+    "name": "USD/KRW (환율)",
+    "last_price": 1503.65,
+    "chg_1m": 1.63,
+    "chg_3m": 4.39,
+    "chg_1y": 3.09,
+    "trend": "up",
+    "sma20": 1495.07,
+    "sectors": [
+      "Semiconductor",
+      "Automotive",
+      "Shipbuilding"
+    ],
+    "correlation": "negative"
+  }
+}

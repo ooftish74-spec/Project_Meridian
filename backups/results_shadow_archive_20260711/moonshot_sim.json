@@ -1,0 +1,306 @@
+{
+  "timestamp": "2026-06-17T23:47:41.748770",
+  "hmm_regime": [
+    {
+      "date": "2026-05-18",
+      "bull": 0.3,
+      "caution": 0.4,
+      "bear": 0.3
+    },
+    {
+      "date": "2026-05-19",
+      "bull": 0.3,
+      "caution": 0.4,
+      "bear": 0.3
+    },
+    {
+      "date": "2026-05-20",
+      "bull": 0.3,
+      "caution": 0.4,
+      "bear": 0.3
+    },
+    {
+      "date": "2026-05-21",
+      "bull": 0.381,
+      "caution": 0.427,
+      "bear": 0.193
+    },
+    {
+      "date": "2026-05-22",
+      "bull": 0.381,
+      "caution": 0.427,
+      "bear": 0.193
+    },
+    {
+      "date": "2026-05-23",
+      "bull": 0.381,
+      "caution": 0.427,
+      "bear": 0.193
+    },
+    {
+      "date": "2026-05-24",
+      "bull": 0.381,
+      "caution": 0.427,
+      "bear": 0.193
+    },
+    {
+      "date": "2026-05-25",
+      "bull": 0.381,
+      "caution": 0.427,
+      "bear": 0.193
+    },
+    {
+      "date": "2026-05-26",
+      "bull": 0.413,
+      "caution": 0.47,
+      "bear": 0.117
+    },
+    {
+      "date": "2026-05-27",
+      "bull": 0.413,
+      "caution": 0.47,
+      "bear": 0.117
+    },
+    {
+      "date": "2026-05-28",
+      "bull": 0.413,
+      "caution": 0.47,
+      "bear": 0.117
+    },
+    {
+      "date": "2026-05-29",
+      "bull": 0.413,
+      "caution": 0.47,
+      "bear": 0.117
+    },
+    {
+      "date": "2026-05-30",
+      "bull": 0.413,
+      "caution": 0.47,
+      "bear": 0.117
+    },
+    {
+      "date": "2026-05-31",
+      "bull": 0.339,
+      "caution": 0.529,
+      "bear": 0.132
+    },
+    {
+      "date": "2026-06-01",
+      "bull": 0.14,
+      "caution": 0.561,
+      "bear": 0.299
+    },
+    {
+      "date": "2026-06-02",
+      "bull": 0.14,
+      "caution": 0.561,
+      "bear": 0.299
+    },
+    {
+      "date": "2026-06-03",
+      "bull": 0.273,
+      "caution": 0.432,
+      "bear": 0.295
+    },
+    {
+      "date": "2026-06-04",
+      "bull": 0.273,
+      "caution": 0.432,
+      "bear": 0.295
+    },
+    {
+      "date": "2026-06-05",
+      "bull": 0.273,
+      "caution": 0.432,
+      "bear": 0.295
+    },
+    {
+      "date": "2026-06-06",
+      "bull": 0.273,
+      "caution": 0.432,
+      "bear": 0.295
+    },
+    {
+      "date": "2026-06-07",
+      "bull": 0.273,
+      "caution": 0.432,
+      "bear": 0.295
+    },
+    {
+      "date": "2026-06-08",
+      "bull": 0.189,
+      "caution": 0.649,
+      "bear": 0.162
+    },
+    {
+      "date": "2026-06-09",
+      "bull": 0.189,
+      "caution": 0.649,
+      "bear": 0.162
+    },
+    {
+      "date": "2026-06-10",
+      "bull": 0.189,
+      "caution": 0.649,
+      "bear": 0.162
+    },
+    {
+      "date": "2026-06-11",
+      "bull": 0.189,
+      "caution": 0.649,
+      "bear": 0.162
+    },
+    {
+      "date": "2026-06-12",
+      "bull": 0.166,
+      "caution": 0.663,
+      "bear": 0.171
+    },
+    {
+      "date": "2026-06-13",
+      "bull": 0.166,
+      "caution": 0.663,
+      "bear": 0.171
+    },
+    {
+      "date": "2026-06-14",
+      "bull": 0.166,
+      "caution": 0.663,
+      "bear": 0.171
+    },
+    {
+      "date": "2026-06-15",
+      "bull": 0.127,
+      "caution": 0.508,
+      "bear": 0.365
+    },
+    {
+      "date": "2026-06-16",
+      "bull": 0.138,
+      "caution": 0.401,
+      "bear": 0.461
+    },
+    {
+      "date": "2026-06-17",
+      "bull": 0.138,
+      "caution": 0.401,
+      "bear": 0.461
+    }
+  ],
+  "black_litterman": {
+    "market_cap_weights": {
+      "005930": 0.4,
+      "000660": 0.2,
+      "035420": 0.15,
+      "051910": 0.15,
+      "005380": 0.1
+    },
+    "optimal_weights": {
+      "005930": 0.309,
+      "000660": 0.208,
+      "035420": 0.171,
+      "051910": 0.206,
+      "005380": 0.106
+    }
+  },
+  "supply_chain": [
+    {
+      "ticker": "000660",
+      "pagerank": 0.28,
+      "in_degree": 5,
+      "out_degree": 2,
+      "theme": "Semiconductor"
+    },
+    {
+      "ticker": "005930",
+      "pagerank": 0.25,
+      "in_degree": 8,
+      "out_degree": 3,
+      "theme": "Semiconductor"
+    },
+    {
+      "ticker": "042700",
+      "pagerank": 0.15,
+      "in_degree": 1,
+      "out_degree": 4,
+      "theme": "Semiconductor"
+    },
+    {
+      "ticker": "012330",
+      "pagerank": 0.12,
+      "in_degree": 2,
+      "out_degree": 3,
+      "theme": "Auto"
+    },
+    {
+      "ticker": "005380",
+      "pagerank": 0.1,
+      "in_degree": 4,
+      "out_degree": 1,
+      "theme": "Auto"
+    }
+  ],
+  "tca_feedback": [
+    {
+      "date": "2026-06-08",
+      "avg_is_bps": 2.1,
+      "avg_market_impact_bps": 6.5,
+      "vwap_switch_triggered": true
+    },
+    {
+      "date": "2026-06-09",
+      "avg_is_bps": 7.3,
+      "avg_market_impact_bps": 14.7,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-10",
+      "avg_is_bps": 4.0,
+      "avg_market_impact_bps": 13.8,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-11",
+      "avg_is_bps": 2.8,
+      "avg_market_impact_bps": 6.0,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-12",
+      "avg_is_bps": 5.0,
+      "avg_market_impact_bps": 1.9,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-13",
+      "avg_is_bps": 5.2,
+      "avg_market_impact_bps": 11.9,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-14",
+      "avg_is_bps": 2.8,
+      "avg_market_impact_bps": 9.5,
+      "vwap_switch_triggered": true
+    },
+    {
+      "date": "2026-06-15",
+      "avg_is_bps": 4.0,
+      "avg_market_impact_bps": 5.1,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-16",
+      "avg_is_bps": 2.2,
+      "avg_market_impact_bps": 12.1,
+      "vwap_switch_triggered": false
+    },
+    {
+      "date": "2026-06-17",
+      "avg_is_bps": 3.6,
+      "avg_market_impact_bps": 12.8,
+      "vwap_switch_triggered": true
+    }
+  ]
+}

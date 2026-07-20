@@ -1,0 +1,61 @@
+{
+  "date": "2026-07-19",
+  "regime": "neutral",
+  "confidence": 0.383,
+  "tier": "mid",
+  "score": 0.1006,
+  "vix": 20.0,
+  "components": {
+    "spy_qqq_trend": {
+      "spy_1d": 0.0,
+      "qqq_1d": 0.0,
+      "sox_1d": 0.0,
+      "trend_5d_spy": 0.0,
+      "trend_5d_qqq": 0.0,
+      "score": 0.0,
+      "weight": 0.25
+    },
+    "vix": {
+      "vix": 20.0,
+      "vix_ts_ratio": 1.0,
+      "vix_level_score": 0.0,
+      "ts_score": 0.0,
+      "score": 0.0,
+      "weight": 0.2
+    },
+    "overnight_mom": {
+      "overnight_score": 0.0,
+      "overnight_conf": 0.0,
+      "ewy_ret": 0.0,
+      "ewy_score": 0.0,
+      "score": 0.0,
+      "weight": 0.15
+    },
+    "fear_greed": {
+      "fear_greed_value": null,
+      "score": 0.25,
+      "source": "vix_proxy",
+      "weight": 0.12
+    },
+    "streak": {
+      "streak": 0,
+      "score": 0.0,
+      "weight": 0.08
+    },
+    "move_index": {
+      "move": 70.88,
+      "score": 0.478,
+      "source": "yfinance",
+      "weight": 0.12
+    },
+    "ted_spread": {
+      "tnx_10y": 4.541,
+      "irx_3m": 3.707,
+      "ted_spread": 0.834,
+      "score": 0.166,
+      "source": "yfinance",
+      "weight": 0.08
+    }
+  },
+  "generated_at": "2026-07-19T05:15:17.806831"
+}

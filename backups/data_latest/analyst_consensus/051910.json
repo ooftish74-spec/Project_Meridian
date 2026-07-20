@@ -1,0 +1,20 @@
+{
+  "ticker": "051910",
+  "target_price": 465533,
+  "current_price": 355000,
+  "recomm_mean": 3.8,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "LG화학",
+  "latest_research": {
+    "title": "첨단소재 실적 턴어라운드 시작",
+    "broker": "유진투자증권",
+    "date": "20260506"
+  }
+}

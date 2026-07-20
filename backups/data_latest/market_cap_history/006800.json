@@ -1,0 +1,41 @@
+{
+  "ticker": "006800",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 38602352361472,
+      "shares": 435656534,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 37905770741760,
+      "shares": 435656534,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 40459908939776,
+      "shares": 435656534,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 41165881606144,
+      "shares": 438845801,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 41165881606144,
+      "shares": 438845801,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 40405718532096,
+      "shares": 438845801,
+      "source": "yfinance"
+    }
+  ]
+}

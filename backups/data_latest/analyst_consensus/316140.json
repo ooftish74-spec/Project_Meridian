@@ -1,0 +1,20 @@
+{
+  "ticker": "316140",
+  "target_price": 44100,
+  "current_price": 29900,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "우리금융지주",
+  "latest_research": {
+    "title": "‘26년 배당수익률 1등",
+    "broker": "대신증권",
+    "date": "20260430"
+  }
+}

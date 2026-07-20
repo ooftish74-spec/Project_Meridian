@@ -1,0 +1,20 @@
+{
+  "ticker": "097950",
+  "target_price": 295455,
+  "current_price": 201000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "CJ제일제당",
+  "latest_research": {
+    "title": "속도는 더디지만, 방향성은 확인",
+    "broker": "한화투자증권",
+    "date": "20260513"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "id": "shadow_banking_risk",
+  "title": "그림자금융 (Private Credit) 시스템 리스크",
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "category": "systemic_risk",
+  "confidence": 0.65,
+  "horizon": "3-6 months (tail risk)",
+  "thesis": {
+    "summary": "Private Credit 시장 $2T 돌파. AI 관련 딜 비중 33%. FSB 5/6 경고 발령.",
+    "risk_factors": [
+      "Private Credit AUM $2T 돌파 — 은행 규제 회피 구조",
+      "AI 딜 비중 33% — AI CapEx 둔화 시 직접 타격",
+      "FSB 2026-05-06 경고: 유동성 변환 리스크 (maturity mismatch)",
+      "사모펀드 환매 제한 (redemption gate) → 유동성 경색 촉발 가능",
+      "금리 동결 지속 → 레버리지 비용 상승 → 부실 증가"
+    ],
+    "trigger_conditions": [
+      "VIX > 25 AND HY Spread > 400bp → 경계",
+      "사모펀드 월 환매 > 5% → 주의",
+      "사모펀드 월 환매 > 10% → 위기",
+      "하이퍼스케일러 CapEx 가이던스 > 15% 하향 → 전면 방어"
+    ],
+    "contagion_path": [
+      "Private Credit 부실 → 사모펀드 손실",
+      "환매 요청 급증 → 유동성 경색",
+      "신용 스프레드 확대 → 하이일드 급락",
+      "VIX 급등 → 레버리지 포지션 강제 청산",
+      "주식시장 전반 급락 (특히 AI/테크)"
+    ]
+  },
+  "signals": {
+    "early_warning": [
+      "HY Spread > 350bp",
+      "VIX > 20 (3일 연속)",
+      "IG-HY Spread 확대"
+    ],
+    "critical": [
+      "VIX > 25",
+      "HY Spread > 400bp",
+      "사모펀드 환매 뉴스"
+    ],
+    "crisis": [
+      "VIX > 35",
+      "HY Spread > 500bp",
+      "연쇄 환매 사태"
+    ]
+  },
+  "system_impact": {
+    "L1_TACTICAL": "즉시 SOXS/SQQQ 전환 — 인버스 40%",
+    "L2_ALPHA": "신규 진입 중단 (Kill Switch)",
+    "L3_CORE": "위기 모드: 금/채권 50%+, AllWeather BEAR 자동 전환",
+    "L4_ISA": "커버드콜 방어 유지 (하락 시 프리미엄↑)",
+    "L4_IRP": "위험 50% / 안전 50%",
+    "DEO": "exposure → 20% 이하"
+  }
+}

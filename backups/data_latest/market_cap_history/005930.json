@@ -1,0 +1,41 @@
+{
+  "ticker": "005930",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1359256888541184,
+      "shares": 5795963304,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1326265231474688,
+      "shares": 5795963304,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1392248545607680,
+      "shares": 5795963304,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1425240202674176,
+      "shares": 5795963304,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1425240202674176,
+      "shares": 5795963304,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1435137686372352,
+      "shares": 5795963304,
+      "source": "yfinance"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "ticker": "095340",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 5283590963200,
+      "shares": 20518799,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 4442320011264,
+      "shares": 20518799,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 4606470389760,
+      "shares": 20518799,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 4698805370880,
+      "shares": 20518799,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 4698805370880,
+      "shares": 20518799,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 4914252611584,
+      "shares": 20518799,
+      "source": "yfinance"
+    }
+  ]
+}

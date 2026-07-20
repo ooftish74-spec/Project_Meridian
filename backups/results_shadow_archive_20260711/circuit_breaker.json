@@ -1,0 +1,10 @@
+{
+  "ft": {
+    "state": "CLOSED",
+    "failures": 0,
+    "successes": 0,
+    "last_failure": "2026-05-27T23:49:54.842034",
+    "last_success": null,
+    "opened_at": "2026-05-27T23:49:54.842039"
+  }
+}

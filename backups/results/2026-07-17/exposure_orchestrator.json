@@ -1,0 +1,37 @@
+{
+  "target_exposure": 0.809,
+  "target_raw": 0.809,
+  "sigma_adjustment": 1.0,
+  "components": {
+    "regime": {
+      "score": 1.0,
+      "value": "bull"
+    },
+    "vix": {
+      "score": 0.7142857142857143,
+      "value": 20
+    },
+    "fng": {
+      "score": 0.8,
+      "value": 50
+    },
+    "vkospi": {
+      "score": 0.7,
+      "value": 20
+    },
+    "trend": {
+      "score": 0.6,
+      "value": 0
+    },
+    "joint_risk": {
+      "final_adj": 1.0,
+      "defense": 0.0,
+      "jrm_adj": 1.0,
+      "avg_pairwise_corr": 0.0,
+      "high_corr_pairs": []
+    },
+    "data_penalty": 1.0
+  },
+  "reason": "Normal conditions",
+  "timestamp": "2026-07-16T21:48:25.725496"
+}

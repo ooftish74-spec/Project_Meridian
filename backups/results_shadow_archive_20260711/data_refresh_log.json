@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-06-05T09:31:53.161726",
+  "trigger": "full_data_refresh_0605",
+  "results": {
+    "signal_cache": {
+      "kospi": 8275.8203125,
+      "vix": 15.399999618530273,
+      "usdkrw": 1537.97998046875,
+      "vkospi": 18.0,
+      "kospi_ma20": 7814.053051757813
+    },
+    "regime": {
+      "regime": "bull",
+      "confidence": 0.73,
+      "kospi_ma20_dist": 11.61
+    },
+    "ois": {
+      "score": 69.9,
+      "sentiment": "bullish"
+    },
+    "adaptive_threshold": {
+      "gap": 0.217,
+      "ois_long": 0.52,
+      "ois_short": 0.48,
+      "confidence": "high"
+    },
+    "measurement": {
+      "nav": 90786330.7825,
+      "sharpe": 0.293,
+      "calmar": 1.146,
+      "da": null,
+      "alpha": null
+    },
+    "s4": "synced"
+  }
+}

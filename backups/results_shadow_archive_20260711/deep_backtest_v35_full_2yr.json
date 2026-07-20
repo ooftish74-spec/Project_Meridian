@@ -1,0 +1,121 @@
+{
+  "version": "v3.5_dynamic_all",
+  "period": "2024-07-10 ~ 2026-07-09",
+  "trading_days": 485,
+  "initial_nav": 300000000.0,
+  "final_nav": 522491750,
+  "total_return_pct": 74.16,
+  "cagr_gross_pct": 33.41,
+  "cagr_net_pct": 25.25,
+  "mdd_pct": -22.13,
+  "sharpe": 1.346,
+  "sortino": 1.659,
+  "calmar": 1.51,
+  "total_cost": 11385427,
+  "tax_est": 48398185,
+  "pnl_gross": 222491750,
+  "pnl_net": 162708138,
+  "total_trades": 565,
+  "regime_distribution": {
+    "neutral": 19,
+    "crash": 101,
+    "bear": 185,
+    "bull": 154,
+    "caution": 26
+  },
+  "recent_active_sectors": {
+    "2026-01-06": [
+      "semiconductor",
+      "battery",
+      "defense",
+      "auto",
+      "bio",
+      "it",
+      "finance"
+    ],
+    "2026-02-20": [
+      "semiconductor",
+      "battery",
+      "defense",
+      "auto",
+      "bio",
+      "it",
+      "finance"
+    ],
+    "2026-04-06": [
+      "semiconductor",
+      "battery",
+      "defense",
+      "auto",
+      "bio",
+      "finance"
+    ],
+    "2026-05-20": [
+      "semiconductor",
+      "defense",
+      "bio",
+      "it"
+    ],
+    "2026-07-02": [
+      "defense",
+      "bio",
+      "it"
+    ]
+  },
+  "streams": {
+    "S0": {
+      "cagr_gross": -27.22,
+      "mdd": -65.51,
+      "sharpe": -0.245,
+      "calmar": -0.415,
+      "trades": 155,
+      "pnl_net": -59271399,
+      "final_nav": 65103833
+    },
+    "S1": {
+      "cagr_gross": 21.96,
+      "mdd": -33.88,
+      "sharpe": 0.702,
+      "calmar": 0.648,
+      "trades": 16,
+      "pnl_net": 10904673,
+      "final_nav": 44063069
+    },
+    "S2": {
+      "cagr_gross": 102.81,
+      "mdd": -20.0,
+      "sharpe": 2.136,
+      "calmar": 5.14,
+      "trades": 118,
+      "pnl_net": 153567021,
+      "final_nav": 273925769
+    },
+    "S3": {
+      "cagr_gross": 35.0,
+      "mdd": -26.78,
+      "sharpe": 1.008,
+      "calmar": 1.307,
+      "trades": 55,
+      "pnl_net": 17847721,
+      "final_nav": 53576690
+    },
+    "S4": {
+      "cagr_gross": 54.35,
+      "mdd": -21.97,
+      "sharpe": 1.517,
+      "calmar": 2.473,
+      "trades": 45,
+      "pnl_net": 26966190,
+      "final_nav": 62394387
+    },
+    "S10": {
+      "cagr_gross": 2.0,
+      "mdd": -5.21,
+      "sharpe": 0.459,
+      "calmar": 0.384,
+      "trades": 176,
+      "pnl_net": 616776,
+      "final_nav": 23428003
+    }
+  }
+}

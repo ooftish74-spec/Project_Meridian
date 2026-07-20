@@ -1,0 +1,87 @@
+{
+  "updated": "2026-04-22T22:17:11.724812",
+  "total": 8,
+  "collected": 8,
+  "details": {
+    "010620": {
+      "name": "현대미포조선",
+      "delist_date": "2025-12-30",
+      "reason": "흡수합병",
+      "status": "collected",
+      "rows": 1215,
+      "start": "2020-12-30",
+      "end": "2025-12-12",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/010620.csv"
+    },
+    "000250": {
+      "name": "삼천당제약",
+      "delist_date": "2024-08-16",
+      "reason": "합병",
+      "status": "collected",
+      "rows": 1234,
+      "start": "2019-08-16",
+      "end": "2024-08-16",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/000250.csv"
+    },
+    "003610": {
+      "name": "방림",
+      "delist_date": "2024-06-28",
+      "reason": "합병",
+      "status": "collected",
+      "rows": 1234,
+      "start": "2019-06-28",
+      "end": "2024-06-28",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/003610.csv"
+    },
+    "096530": {
+      "name": "씨젠",
+      "delist_date": "2023-07-14",
+      "reason": "자진상폐",
+      "status": "collected",
+      "rows": 1234,
+      "start": "2018-07-16",
+      "end": "2023-07-14",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/096530.csv"
+    },
+    "032680": {
+      "name": "소프트센",
+      "delist_date": "2021-05-10",
+      "reason": "관리종목",
+      "status": "collected",
+      "rows": 1230,
+      "start": "2016-05-10",
+      "end": "2021-05-10",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/032680.csv"
+    },
+    "006740": {
+      "name": "영풍정밀",
+      "delist_date": "2020-12-29",
+      "reason": "합병",
+      "status": "collected",
+      "rows": 1228,
+      "start": "2015-12-29",
+      "end": "2020-12-29",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/006740.csv"
+    },
+    "000680": {
+      "name": "LS전선(구)",
+      "delist_date": "2019-07-25",
+      "reason": "합병",
+      "status": "collected",
+      "rows": 1227,
+      "start": "2014-07-25",
+      "end": "2019-07-25",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/000680.csv"
+    },
+    "001430": {
+      "name": "세아제강지주",
+      "delist_date": "2018-05-02",
+      "reason": "합병",
+      "status": "collected",
+      "rows": 1045,
+      "start": "2014-02-03",
+      "end": "2018-05-02",
+      "path": "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/data/korean_stocks/prices/001430.csv"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "009540": {
+    "value": {
+      "price": 421801,
+      "fetched_method": "websocket"
+    },
+    "fetched_at": "2026-06-19T18:11:46.311236",
+    "source": "websocket"
+  },
+  "000270": {
+    "value": {
+      "price": 155616,
+      "fetched_method": "websocket"
+    },
+    "fetched_at": "2026-06-19T18:11:46.311738",
+    "source": "websocket"
+  },
+  "005930": {
+    "value": {
+      "price": 353865,
+      "fetched_method": "websocket"
+    },
+    "fetched_at": "2026-06-19T18:11:46.311979",
+    "source": "websocket"
+  },
+  "015760": {
+    "value": {
+      "price": 37761,
+      "fetched_method": "websocket"
+    },
+    "fetched_at": "2026-06-19T18:11:46.312177",
+    "source": "websocket"
+  },
+  "000660": {
+    "value": {
+      "price": 2774013,
+      "fetched_method": "websocket"
+    },
+    "fetched_at": "2026-06-19T18:11:46.312415",
+    "source": "websocket"
+  }
+}

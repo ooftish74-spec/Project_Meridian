@@ -1,0 +1,133 @@
+[
+  {
+    "date": "2026-05-06",
+    "macro_score": 77,
+    "vix": 17.38,
+    "regime": "bull",
+    "ai_capex": 0.85,
+    "hbm": 0.9,
+    "shadow_risk": -0.35,
+    "fed": 0.0,
+    "kr_export": 0.7,
+    "composite_bull_prob": 0.77,
+    "stance": "BULL",
+    "updated": "2026-05-06T23:26:28.600623"
+  },
+  {
+    "date": "2026-05-07",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.38,
+    "created": "2026-05-07T06:00:10.365990"
+  },
+  {
+    "date": "2026-05-08",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.38,
+    "created": "2026-05-08T06:00:09.893944"
+  },
+  {
+    "date": "2026-05-11",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.39,
+    "created": "2026-05-11T06:00:07.280168"
+  },
+  {
+    "date": "2026-05-12",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.08,
+    "created": "2026-05-12T06:00:11.909252"
+  },
+  {
+    "date": "2026-05-13",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.19,
+    "created": "2026-05-13T06:00:14.142743"
+  },
+  {
+    "date": "2026-05-14",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 18.38,
+    "created": "2026-05-14T06:00:17.009014"
+  },
+  {
+    "date": "2026-05-15",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.99,
+    "created": "2026-05-15T06:00:13.935606"
+  },
+  {
+    "date": "2026-05-18",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "bull",
+    "vix": 17.87,
+    "created": "2026-05-18T06:00:16.081251"
+  },
+  {
+    "date": "2026-05-19",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "caution",
+    "vix": 17.26,
+    "created": "2026-05-19T06:00:18.126740"
+  },
+  {
+    "date": "2026-05-20",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "caution",
+    "vix": 18.43,
+    "created": "2026-05-20T06:00:19.545573"
+  },
+  {
+    "date": "2026-05-21",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "caution",
+    "vix": 17.82,
+    "created": "2026-05-21T06:00:17.388489"
+  },
+  {
+    "date": "2026-05-22",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "caution",
+    "vix": 18.06,
+    "created": "2026-05-22T06:00:25.504595"
+  },
+  {
+    "date": "2026-05-25",
+    "macro_score": 77,
+    "stance": "BULL",
+    "composite_bull_prob": 0.77,
+    "regime": "caution",
+    "vix": 17.44,
+    "created": "2026-05-25T06:00:14.773435"
+  }
+]

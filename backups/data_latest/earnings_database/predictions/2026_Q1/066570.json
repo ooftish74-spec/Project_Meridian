@@ -1,0 +1,22 @@
+{
+  "ticker": "066570",
+  "company": "066570",
+  "market": "KR",
+  "sector": "전자",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 20757287855542,
+  "operating_profit": 636611657374,
+  "net_income": 489701274903,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 80,
+  "surprise_direction": "neutral",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.585611"
+}

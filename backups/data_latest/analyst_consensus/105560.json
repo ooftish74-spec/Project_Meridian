@@ -1,0 +1,20 @@
+{
+  "ticker": "105560",
+  "target_price": 202211,
+  "current_price": 156600,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "KB금융",
+  "latest_research": {
+    "title": "기대되는 하반기 자사주 매입",
+    "broker": "유안타증권",
+    "date": "20260428"
+  }
+}

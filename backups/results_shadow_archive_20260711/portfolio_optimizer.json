@@ -1,0 +1,93 @@
+{
+  "timestamp": "2026-07-10T15:10:07.231082",
+  "trigger": "closing",
+  "regime": "caution",
+  "previous_regime": "caution",
+  "portfolio_value": 150000000.0,
+  "current_weights": {
+    "S6-B": 0.0746,
+    "S2": 0.1917,
+    "S0": 0.0648,
+    "S5": 0.0889,
+    "S7": 0.0802,
+    "S9": 0.0724,
+    "S10": 0.0802,
+    "S4": 0.0,
+    "S6-A": 0.0724,
+    "S3": 0.093,
+    "S1": 0.1817
+  },
+  "turnover_check": {
+    "allowed": true,
+    "reason": "ok",
+    "daily_count": 1,
+    "monthly_count": 7,
+    "limit_reached": false
+  },
+  "target_exposure": 0.72,
+  "raw_weights": {
+    "S0": 0.0662,
+    "S1": 0.204,
+    "S2": 0.1863,
+    "S3": 0.0907,
+    "S5": 0.103,
+    "S6-A": 0.0662,
+    "S6-B": 0.0724,
+    "S9": 0.0662,
+    "S7": 0.0662,
+    "S10": 0.0786
+  },
+  "scaled_weights": {
+    "S0": 0.0663,
+    "S1": 0.204,
+    "S2": 0.1862,
+    "S3": 0.0907,
+    "S5": 0.1031,
+    "S6-A": 0.0663,
+    "S6-B": 0.0724,
+    "S9": 0.0663,
+    "S7": 0.0663,
+    "S10": 0.0786
+  },
+  "cvar_check": {
+    "violated": false,
+    "reason": "insufficient_data",
+    "warning": "cvar_check_skipped_no_data"
+  },
+  "cvar_adjusted": false,
+  "target_weights": {
+    "S0": 0.0663,
+    "S1": 0.204,
+    "S2": 0.1862,
+    "S3": 0.0907,
+    "S5": 0.1031,
+    "S6-A": 0.0663,
+    "S6-B": 0.0724,
+    "S9": 0.0663,
+    "S7": 0.0663,
+    "S10": 0.0786
+  },
+  "tx_check": {
+    "should_rebalance": true,
+    "trade_cost": 5017.0,
+    "turnover": 0.0223,
+    "n_trades": 1,
+    "expected_profit": 0.0,
+    "dynamic_override": false
+  },
+  "final_weights": {
+    "S6-B": 0.073,
+    "S5": 0.087,
+    "S9": 0.0708,
+    "S10": 0.0785,
+    "S4": 0.0,
+    "S1": 0.1996,
+    "S6-A": 0.0708,
+    "S0": 0.0634,
+    "S7": 0.0785,
+    "S3": 0.091,
+    "S2": 0.1875
+  },
+  "action": "rebalance",
+  "reason": "closing"
+}

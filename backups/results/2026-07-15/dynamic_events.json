@@ -1,0 +1,149 @@
+[
+  {
+    "type": "EARNINGS",
+    "tier": 2,
+    "event_type": "earnings",
+    "headline": "한국은행, 7월 금통위 개최…TSMC는 2분기 실적 발표[주간경제전망]",
+    "keywords": [
+      "실적 발표",
+      "분기 실적"
+    ],
+    "relevance": 3.0,
+    "entities": [
+      {
+        "ticker": "TSM",
+        "name": "TSMC",
+        "market": "global"
+      }
+    ],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-13T05:15:26.415212"
+  },
+  {
+    "type": "POLICY",
+    "tier": 1,
+    "event_type": "policy",
+    "headline": "후기인 척 뒷광고 한 성형외과 3곳, 공정위 제재",
+    "keywords": [
+      "제재"
+    ],
+    "relevance": 2.5,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-13T05:15:26.413809"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "파산 기로에 선 홈플러스… 금융권도 3조원 물려 ‘불안’",
+    "keywords": [
+      "파산"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-13T05:15:26.411538"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "현대차 노조, 13일부터 부분파업… 2년 연속 파업 국면",
+    "keywords": [
+      "파업"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-13T05:15:26.412935"
+  },
+  {
+    "type": "CRISIS",
+    "tier": 1,
+    "event_type": "geopolitical",
+    "headline": "美 이란 재봉쇄에 국제유가 요동…WTI 10% 급등",
+    "keywords": [
+      "봉쇄"
+    ],
+    "relevance": 3.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.530242"
+  },
+  {
+    "type": "CRISIS",
+    "tier": 1,
+    "event_type": "geopolitical",
+    "headline": "트럼프, 이란 해상봉쇄 재개…국제유가 9% 넘게 폭등",
+    "keywords": [
+      "봉쇄"
+    ],
+    "relevance": 3.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.531166"
+  },
+  {
+    "type": "CRISIS",
+    "tier": 1,
+    "event_type": "geopolitical",
+    "headline": "[속보]&#034;이란 봉쇄 재개&#034;…뉴욕증시, 일제히 하락 마감",
+    "keywords": [
+      "봉쇄"
+    ],
+    "relevance": 3.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.533963"
+  },
+  {
+    "type": "POLICY",
+    "tier": 1,
+    "event_type": "policy",
+    "headline": "\"아동 온라인 소비 유도 못 막았다\"…EU, 연내 플랫폼 겨냥 새 법안 발표",
+    "keywords": [
+      "법안"
+    ],
+    "relevance": 2.5,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.535644"
+  },
+  {
+    "type": "CENTRAL_BANK",
+    "tier": 1,
+    "event_type": "monetary",
+    "headline": "&#039;AI로 치매머니 지킨다&#039; 피싱 안전망 촘촘히 세운 신한은행",
+    "keywords": [
+      "한은"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.532465"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "현대차 노조, 사흘간 부분파업... “순이익 30% 성과급으로 달라”",
+    "keywords": [
+      "파업"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-14T05:15:21.536811"
+  }
+]

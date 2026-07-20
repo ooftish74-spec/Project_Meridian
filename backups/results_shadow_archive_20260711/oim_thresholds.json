@@ -1,0 +1,7 @@
+{
+  "DEFAULT": {
+    "buy_threshold": 0.5,
+    "sell_threshold": -0.3,
+    "samples": 0
+  }
+}

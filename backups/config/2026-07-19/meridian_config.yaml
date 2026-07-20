@@ -1,0 +1,617 @@
+project:
+  name: Project Meridian
+  version: 2.0.0
+  description: 4-Stream 통합 알파 생성 + 자산 관리 시스템
+  architecture: 4-Stream (S1:Edge, S2:ML Alpha, S3:Factor, S4:Advisory)
+market:
+  kr_open: 09:00
+  kr_close: '15:30'
+  kr_force_close: '15:10'
+  premarket_open: 08:00
+  aftermarket_close: '20:00'
+  timezone: Asia/Seoul
+streams:
+  s1_edge:
+    name: Edge/Directional
+    active_start: 08:00
+    active_end: '15:10'
+    description: 방향성 ETF + 갭/스윙 트레이딩
+  s2_ml_alpha:
+    name: ML Alpha
+    active_start: 09:00
+    active_end: '15:10'
+    description: 5-앙상블 ML 기반 개별주 알파
+    model:
+      type: 5-ensemble
+      models:
+      - GBR
+      - XGBoost
+      - RandomForest
+      - LightGBM
+      - CatBoost
+      features: 51
+      feature_source: data/feature_store/
+      model_path: results/models/stock_ranker_ensemble.pkl
+      conformal: true
+      kelly_fraction: 0.25
+  s3_active_macro:
+    name: Active Macro / Sector Rotation
+    rebalance_day: 1
+    description: 5-팩터 기반 섹터/종목 로테이션
+    factors:
+    - momentum
+    - trend
+    - mean_reversion
+    - volatility
+    - quality
+  s4_advisory:
+    name: Tax-Advisory
+    description: ISA/IRP/개인연금 절세계좌 관리
+allocator:
+  active_streams:
+  - S1
+  - S2
+  - S3
+  - S5
+allocation:
+  s2_upscale_ratio: 0.5
+  penalty_ratio: 0.5
+portfolio:
+  sleeve_a_ratio: 0.6
+  trailing_ratio:
+    bull: 0.2
+    caution: 0.3
+    bear: 0.4
+  time_decay_base: 0.5
+  time_decay_scale: 0.5
+  recent_days_window: 7
+  calmar_lookback: 60
+  calmar_softmax_tau: 1.5
+  calmar_realloc_days: 21
+  s0_min_alloc: 0.2
+  s0_max_alloc: 0.45
+  sleeve_b_ratio: 0.30      # [Option C] S0 배분 비율 (0.40→0.30, 잉여→S2)
+  s2_max_alloc:   0.30      # [Option C] S2 과집중 방지 상한
+  sc_alloc: 0.1
+  sc_min_alloc: 0.03
+  sc_max_alloc: 0.2
+  vol_target_pct: 17.5
+  vol_target_window: 20
+  vol_scale_min: 0.5
+  vol_scale_max: 1.0
+risk:
+  ewma_lookback: 60
+  ewma_init_days: 10
+training:
+  target_type: max_return
+  forward_days: 5
+  positive_threshold_pct: 3.0
+  rolling_window_days: 730
+  retrain_frequency_days: 7
+  retrain_cooldown_days: 2
+  triggers:
+  - regime_change
+  - da_failure
+  - vix_spike
+  - market_extreme
+  - drift_detected
+regime:
+  hmm_n_states: 4
+  hmm_state_map_4:
+    state_0: bull
+    state_1: caution
+    state_2: caution
+    state_3: momentum_surge
+  hmm_state_map_2:
+    state_0: bull
+    state_1: bear
+  allow_momentum_surge: true
+  hmm_covariance_type: full
+  hmm_n_iter: 100
+  hmm_random_state: 42
+  crash_vix_vel_warn: 0.3
+  crash_vix_vel_alarm: 0.6
+  crash_volume_z_threshold: 3.0
+  crash_pcr_normal: 0.8
+  crash_pcr_extreme: 1.5
+  crash_vkospi_normal: 15.0
+  crash_vkospi_extreme: 40.0
+  crash_radar_w_vix: 0.4
+  crash_radar_w_vol: 0.3
+  crash_radar_w_fear: 0.3
+  crash_radar_warn_threshold: 0.5
+  crash_radar_score_penalty: 20.0
+  crash_radar_exit_threshold: 0.35
+  crash_radar_min_hold_days: 3
+  crash_radar_time_decay: true
+
+  # US Market Regime Factor Weights — us_market_regime.py @property weights가 읽는 키
+  # 합산 = 1.00 (코드에서 sum으로 자동 정규화되므로 조정 후에도 안전)
+  us:
+    weights:
+      spy_qqq_trend:  0.25   # SPY/QQQ 추세 (장기 방향성)
+      vix:            0.20   # VIX 공포 지수 (변동성 체제)
+      overnight_mom:  0.15   # 야간 선물 모멘텀
+      fear_greed:     0.12   # CNN Fear & Greed 지수
+      streak:         0.08   # 연속 상승/하락 스트릭
+      move_index:     0.12   # MOVE 채권 변동성 지수
+      ted_spread:     0.08   # TED Spread (신용 리스크)
+exit:
+  s1:
+    take_profit_pct: 0.015
+    stop_loss_pct: -0.007
+    trailing_stop_pct: null
+    max_hold_days: 1
+    min_hold_days: 0
+    signal_expire_days: 0
+    partial_exit: false
+    use_atr_stops: true
+    atr_sl_multiplier: 1.5
+    atr_tp_multiplier: 2.5
+    atr_window: 14
+  s2:
+    take_profit_pct: 0.15
+    stop_loss_pct: -0.07
+    trailing_stop_pct: -0.1
+    trailing_activate_pct: 0.05
+    max_hold_days:
+      bull: 30
+      caution: 20
+      bear: 14
+      crash: 7
+    min_hold_days: 1
+    signal_expire_days: 0  # 0=비활성화. 양수 설정 시 해당 일수 후 손익분기 이하 포지션 청산
+    expire_profit_keep_pct: 3.0  # signal_expire 후 이 수익률 이상이면 유지
+    use_atr_stops: true
+    atr_sl_multiplier: 2.0
+    atr_tp_multiplier: 3.5
+  s3:
+    take_profit_pct: 0.2
+    stop_loss_pct: -0.08
+    trailing_stop_pct: -0.12
+    trailing_activate_pct: 0.08
+    max_hold_days:
+      bull: 90
+      caution: 60
+      bear: 45
+      crash: 21
+    min_hold_days: 5
+    signal_expire_days: 10
+    use_atr_stops: true
+    atr_sl_multiplier: 2.5
+    atr_tp_multiplier: 4.0
+    partial_exit: true
+    partial_exit_pct: 0.5
+    partial_exit_trigger: 0.12
+  s4:
+    take_profit_pct: 0.3
+    stop_loss_pct: -0.12
+    trailing_stop_pct: -0.15
+    trailing_activate_pct: 0.1
+    max_hold_days:
+      bull: 180
+      caution: 120
+      bear: 90
+      crash: 45
+    min_hold_days: 10
+    signal_expire_days: 30
+    partial_exit: true
+    partial_exit_pct: 0.3
+    partial_exit_trigger: 0.2
+    tax_aware: true
+    tax_loss_harvest_pct: -0.1
+    isa_tax_free_limit: 2000000
+    isa_min_hold_years: 3
+    turnover_penalty: 0.005
+  risk_sensitivity:
+    s1: 1.0
+    s2: 0.8
+    s3: 0.6
+    s4: 0.4
+execution:
+  default_strategy: twap
+  n_slices: 5
+  min_order_value: 100000
+  slippage_bps: 7.5
+  commission_bps: 1.5
+  modes:
+  - shadow
+  - mock
+  - paper
+  - live
+  current_mode: live
+schedule:
+  phases:
+  - phase: overnight
+    time: 05:15
+    description: 야간 인텔리전스 수집
+  - phase: collect
+    time: 06:00
+    description: 10단계 전체 데이터 수집
+  - phase: premarket
+    time: 07:45
+    description: 프리마켓 분석 + 레짐 판정
+  - phase: morning
+    time: 08:00
+    description: Intelligence Cascade
+  - phase: market
+    time: 09:05
+    description: 매매 실행
+  - phase: intraday
+    time: 09:30
+    description: 장중 실시간 모니터링
+  - phase: closing
+    time: '15:10'
+    description: 포지션 청산 + PnL
+  - phase: aftermarket
+    time: '15:35'
+    description: 애프터마켓 분석
+  - phase: krx_refresh
+    time: '16:10'
+    description: KRX 확정 데이터
+  - phase: collect_flow
+    time: '16:30'
+    description: 투자자 수급 수집
+  - phase: evening_data
+    time: '17:00'
+    description: US 가격 + 저녁 데이터
+  - phase: collect_dart
+    time: '19:00'
+    description: DART 공시 수집
+  - phase: evening
+    time: '20:00'
+    description: 자가학습 + 리포트
+  - phase: us_market
+    time: '22:35'
+    description: 미국 시장 트레이딩
+  - phase: weekly_retrain
+    time: 토 02:00
+    description: 주간 ML 재학습
+  - phase: weekly_validate
+    time: 토 03:00
+    description: 주간 검증
+data:
+  feature_store: data/feature_store/
+  model_cache: data/model_cache/
+  historical_10y: data/historical_10y/
+  minute_bars: data/minute_bars/
+  financials: data/financials_history/
+  earnings: data/earnings_database/
+  raw: data/raw/
+s5_overnight:
+  enabled: true
+  max_allocation_pct: 0.4
+  overnight_reversion_threshold: 1.0
+  tp_pct: 1.0
+  sl_pct: -1.5
+ml:
+  excluded_features: []
+  cv_method: purged_ts_split
+  cv_n_splits: 5
+  cv_purge_days: 5
+risk_mc:
+  mc_enabled: true
+  mc_n_simulations: 10000
+  mc_horizon_days: 1
+  mc_seed: null
+risk_factor:
+  factor_lookback_days: 120
+  factor_list:
+  - market
+  - size
+  - value
+  - momentum
+  - volatility
+risk_dcc:
+  dcc_enabled: true
+  garch_omega: 1.0e-05
+  garch_alpha: 0.06
+  garch_beta: 0.93
+  dcc_a: 0.05
+  dcc_b: 0.93
+execution_unfilled:
+  fill_timeout_sec: 60
+  fill_fallback: market
+  fill_check_interval_sec: 5
+telegram:
+  enabled: true
+  bot_token: ''
+  chat_id: ''
+  alert_levels:
+  - CRITICAL
+  - WARNING
+  - INFO
+  daily_summary: true
+  kill_switch_alert: true
+  trade_alert: true
+intraday:
+  kospi_drop_pct: -2.0
+  kospi_surge_pct: 2.0
+  vix_spike_pct: 3.0
+  freeze_minutes: 30
+hedge:
+  instruments: null
+websocket:
+  enabled: true
+  reconnect_base_sec: 1.0
+  reconnect_max_sec: 60.0
+  mock_interval_sec: 1.0
+  max_subscriptions: 40
+  channels:
+  - price
+  - orderbook
+  - notice
+train:
+  embargo_days: 5
+  val_ratio: 0.2
+  wf_acc_retrain_threshold: 0.55
+s5:
+  enabled: true
+crash:
+  stress_vix_threshold: 30
+  stress_vix_max_score: 40
+  stress_vix_scale: 2
+  stress_vkospi_threshold: 25
+  stress_vkospi_max_score: 20
+  stress_vkospi_scale: 2
+  stress_sp500_threshold: 2
+  stress_sp500_max_score: 20
+  stress_sp500_scale: 5
+  stress_fx_threshold: 1
+  stress_fx_max_score: 10
+  stress_fx_scale: 5
+m6:
+  benchmark_etf: 069500
+  min_conviction: 0.4
+  max_passive_pct: 0.15
+  min_deploy_amount: 10000
+  max_deploy_positions: 2
+  default_etf: 069500
+exposure:
+  # ── S0 Predictive Leverage Attacker (2026-07-17) ──────────────────────
+  # 골디락스 수퍼부스트: +2.5 넷베타, 웩더독 어태커: -1.0 넷숏
+  max_leveraged_exposure: 2.5          # 구: 1.3 → 수퍼부스트 지원으로 상향
+  min_target_beta: -1.0                # 넷숏 어태커 허용 최소 베타
+
+  # 3종 헤징/공격 인스트루먼트 (티커 + 절대 베타)
+  instrument_leverage:                 # 수퍼부스트 매수 대상
+    ticker: '122630'                   # KODEX 레버리지
+    name: 'KODEX 레버리지'
+    beta: 2.0                          # 절대 베타값 (양수 레버리지)
+    cost_bps: 10
+  instrument_inverse:                  # 웩더독 어태커 매수 대상
+    ticker: '252670'                   # KODEX 200선물인버스2X (곱버스)
+    name: 'KODEX 200선물인버스2X'
+    beta: -2.0                         # 절대 베타값 (음수 = 인버스)
+    cost_bps: 10
+  instrument_vix:                      # VIX 스파이크 순간 헤지
+    ticker: '500030'                   # 신한 S&P500 VIX S/T ETN
+    name: '신한 S&P500 VIX S/T ETN'
+    beta: -1.0                         # 절대 베타값 (VIX 상승 = 음수 시장 베타)
+    cost_bps: 15
+
+  # 어태커 모드 제어 파라미터
+  attacker_timeout_minutes: 60         # 장중 진입 후 최대 유지 시간 (분)
+  vix_trailing_stop: true             # VIX 모멘텀 음전환 시 강제 청산
+
+  # 기존 VIX 임계값 (레짐별 헤지 조정용)
+  vix_thresholds:
+  - 18
+  - 25
+  - 35
+  - 50
+
+dd_guard:
+  stage1_pct: -0.05
+  stage1_exp: 0.8
+  stage2_pct: -0.1
+  stage2_exp: 0.6
+  stage3_pct: -0.15
+  stage3_exp: 0.4
+  stage4_pct: -0.2
+  stage4_exp: 0.2
+  stage5_pct: -0.25
+  stage5_exp: 0.1
+  stage6_pct: -0.3
+  stage6_exp: 0.0
+  stage1_scale: 0.7
+  stage2_scale: 0.4
+shock:
+  threshold:
+    us_sp500_moderate: -0.02
+    us_sp500_severe: -0.04
+    us_nasdaq_moderate: -0.025
+    us_nasdaq_severe: -0.05
+    vix_moderate: 25.0
+    vix_severe: 35.0
+    futures_moderate: -0.015
+    futures_severe: -0.03
+    usdkrw_moderate: 0.01
+    usdkrw_severe: 0.02
+defensive:
+  low_beta_max: 0.7
+  avg_vol_min: 50000
+  qgd_score_min: 50
+  qgd_vol_min: 30000
+s0_beta:
+  base_position_enabled: true
+  base_ticker: 069500
+  base_position_ratio: 0.8
+  base_expected_return: 0.055
+  regime_roll_days: 2
+self_learning:
+  direction_change_lr_factor: 0.7
+  winsorize_enabled: true
+  winsorize_pct: 95.0
+  winsorize_min_history: 20
+  winsorize_max_abs_ic: 0.3
+  winsorize_max_abs_sharpe: 3.0
+  winsorize_history_size: 252
+  data_qa_enabled: true
+  data_qa_min_score: 75.0     # 리테일 API 현실 반영 (90→75)
+  data_qa_log_freeze: true
+filter:
+  hard_stop_dd_stage: 5
+  w_ic: 0.3
+  w_conf: 0.35
+  w_regime: 0.2
+  w_exp_ret: 0.15
+  ic_score_min: 0.02
+  ic_score_good: 0.1
+  conf_min: 0.5
+  conf_good: 0.75
+  exp_ret_min: 0.005
+  exp_ret_good: 0.03
+  entry_threshold: 0.4
+  position_scale_max: 1.0
+  regime_score:
+    bull: 0.75
+    caution: 0.5
+    bear: 0.3
+    crash: 0.1
+alpha_factory:
+  ic_window_days: 30
+  ic_dynamic_percentile: 25.0
+  ic_min_positive_samples: 10
+  ic_dynamic_min: 0.005
+  ic_dynamic_max: 0.15
+shadow:
+  data_qa_penalty_per_issue: 5.0   # 이슈 1건 -5점으로 완화 (10→5)
+  data_qa_extreme_move_threshold: 0.5
+  data_qa_pnl_floor: -0.9
+  data_qa_pnl_ceil: 1.0
+beta_tracker:
+  bull_beta_warn_pct: 80.0
+  neutral_beta_warn_pct: 70.0
+  caution_beta_warn_pct: 65.0
+  bear_beta_warn_pct: 60.0
+  crash_beta_warn_pct: 50.0
+  min_obs_for_dynamic: 20
+  beta_warn_floor: 1.0
+  min_regime_obs: 5
+s3:
+  ff3_enabled: true
+  ff3_max_bonus: 20.0
+  ff3_smb_weight: 0.3
+  ff3_hml_weight: 0.4
+  ff3_wml_weight: 0.3
+  ff3_smb_mcap_min: 50000000000
+s10:
+  top_sector_count: 2
+  default_sector: semiconductor
+  feature_streak: flow_foreign_streak
+  feature_net_buy: flow_foreign_net_buy
+  feature_accel: flow_foreign_accel
+  weight_streak: 0.45
+  weight_net_buy: 0.35
+  weight_accel: 0.2
+  ma_window: 120
+  ma120_bonus_threshold: 0.0
+  ma120_bonus: 0.15
+  ma120_penalty: -0.1
+  ma120_exit_gap: 0.05
+  regime_mult_bull: 1.2
+  regime_mult_neutral: 1.0
+  regime_mult_caution: 0.8
+  regime_mult_bear: 0.5
+  regime_mult_crash: 0.0
+  exit_on_crash: true
+  entry_score_threshold: 0.1
+  exit_score_threshold: -0.05
+  kelly_fraction: 0.25
+  max_single_stock_pct: 0.3
+  default_tp_pct: 0.3
+  default_sl_pct: 0.1
+  macro_lookback: 120
+  macro_refresh_days: 21
+  macro_signal_scale: 6.0
+  w_macro_ensemble: 0.25
+caution:
+  macro_scale: 8.0
+  lowvol_vix_scale: 0.25
+  lookback_days: 10
+s2:
+  rsi_period: 14
+  bollinger_window: 20
+  ic_lookback_days: 20
+cost:
+  rebal_drift_threshold: 0.18
+  min_signal_strength: 0.15
+  expected_gain_scale: 0.018
+  min_benefit_ratio: 1.2
+
+# ════════════════════════════════════════════════════════
+# S1 Mathematical Dynamic Thresholding — 7대 수학 모델 파라미터
+# Operation Zero-Hardcoding (2026-07-16)
+# ════════════════════════════════════════════════════════
+
+# Model 1 & 2: VIX 스케일링 및 Gap Threshold (adaptive_threshold.py)
+adaptive_threshold:
+  # Model 1: Gamma-Aware Asymmetric Log VIX Scaling
+  # 공식: 1.0 + max(0, log(vix / vix_baseline)) * vix_log_elasticity
+  # vix_baseline = 18.0: S&P500 장기 옵션 마켓메이커 감마 플립선
+  vix_baseline: 18.0
+  vix_log_elasticity: 0.5         # log-linear 탄력성 계수 (0.5 = 완만한 비례)
+
+  # Model 2: Friction-Bound Volatility Gap Threshold 하한선
+  # 최소 마찰 비용 (Slippage + Commission) → gap threshold 하한 보장
+  min_friction_cost: 0.10         # 단위: % (슬리피지 + 수수료 합산)
+
+  # Model 5: Regime Asymmetry base 편향값 (tanh 비선형 함수로 스케일링됨)
+  # 공식: shift = base_shift * math.tanh(regime_strength * math.pi)
+  regime_asymmetry:
+    bull:
+      base_long_shift: -0.08      # 추세 순응: long 진입 완화
+      base_short_shift: +0.08     # 추세 역행: short 진입 강화
+    caution:
+      base_long_shift: 0.00
+      base_short_shift: 0.00
+    bear:
+      base_long_shift: +0.08      # 역추세 억제: long 진입 강화
+      base_short_shift: -0.08     # 추세 순응: short 진입 완화
+    crash:
+      base_long_shift: +0.15      # Crash 시 레버리지 강하게 억제
+      base_short_shift: -0.15     # 인버스 진입 대폭 완화
+
+  # Model 6: Kelly Shrinkage Single Stock Threshold
+  # 공식: idio_vol = vix_scale * (1 - 1/(1+beta))
+  #        single_min = clamp(0.5 + kelly_shrinkage * idio_vol, 0.52, 0.68)
+  single_stock:
+    kelly_shrinkage: 0.5          # Half-Kelly 축소 계수
+    beta_floor: 0.8               # 베타 하한 가정 (저베타 종목 보정)
+
+# Model 3, 4, 7: OFI Sigmoid, Chandelier SL, Variance Ratio (etf_sniper_stream.py)
+s1:
+  # Model 3: LP Pressure → OFI Z-Score Sigmoid (방안 C 확정)
+  # 공식: ofi_z = (lp_pressure - lp_ma) / max(lp_std, 1.0)
+  #        ofi_prob = 1 / (1 + exp(-k * ofi_z))
+  #        tactic_a_trigger = (ofi_prob < (1 - ofi_trigger_prob))
+  ofi_sigmoid_k: 2.0              # 감사 권장안: 5.0 → 2.0 (Z=-1.1σ에서 발동)
+  ofi_trigger_prob: 0.90          # 매도 극단 하위 10% 컷
+
+  # Model 4: Chandelier Exit (ATR 기반 동적 손절매)
+  # 공식: sl_pct = max(sl_min_pct, atr_5m * sl_atr_multiplier)
+  exit:
+    sl_atr_multiplier: 2.0        # Chandelier ATR 배수 (기존 exit.s1.atr_sl_multiplier와 별개)
+    sl_min_pct: 0.003             # 절대 손절매 하한: 0.3%
+
+  # Model 7: Variance Ratio Test for Tactic B/C
+  # 공식: vol_z = (vol_ratio - 1.0) * sqrt(vol_history_window)
+  #        tactic_trigger = (vol_z > z_threshold)
+  variance_ratio:
+    z_threshold: 2.0              # 통계적 유의성 컷 (p≈0.023, 2-sigma)
+    vol_history_window: 20        # 단기 분산 추정 윈도우 (일)
+
+  # Sniper 수익/손절 기본 파라미터
+  sniper_tp_pct: 0.015            # 기본 목표수익률 1.5%
+  tactic_bc_tp_multiplier: 1.5    # Tactic B/C 확장 TP 배수 (하드코딩 1.5 외부화)
+
+  # ── 사전 조건 키: MacroRealtimeRefresher._refresh_s1_derived_stats() 파라미터 ──
+  # signal_cache에 주입될 rolling 통계 계산 윈도우
+  vix_rolling_window: 20          # vix_ma_20 / vix_std_20 계산 윈도우
+  lp_pressure_rolling_window: 20  # lp_pressure_ma / lp_pressure_std 계산 윈도우
+  atr_5m_window: 5                # 5분봉 ATR 계산 봉 수 (Wilder 근사)
+
+# Model 2 전역 마찰 비용 (adaptive_threshold 내부와 동일값, 실행 레이어와 공유)
+execution:
+  min_friction_cost: 0.10         # Slippage + Commission 최소 마찰 비용 (%)

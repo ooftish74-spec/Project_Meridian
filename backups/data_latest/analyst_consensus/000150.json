@@ -1,0 +1,20 @@
+{
+  "ticker": "000150",
+  "target_price": 2297273,
+  "current_price": 1918000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "두산",
+  "latest_research": {
+    "title": "NDR 후기: CAPA 와 고객사의 동반 확장",
+    "broker": "유진투자증권",
+    "date": "20260511"
+  }
+}

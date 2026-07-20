@@ -1,0 +1,238 @@
+{
+  "updated": "2026-07-10T16:57:32.453977+09:00",
+  "n_days": 19,
+  "regime": "caution",
+  "go_nogo": {
+    "verdict": "INSUFFICIENT_DATA",
+    "n_days": 0,
+    "sharpe": 0.0,
+    "win_rate": 0.0,
+    "max_dd": 0.0,
+    "criteria": {
+      "sharpe_pass": false,
+      "winrate_pass": false,
+      "dd_pass": false
+    },
+    "daily_returns": []
+  },
+  "daily_stats": [
+    {
+      "date": "2026-06-22",
+      "n_runs": 2,
+      "n_orders": 20,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "caution",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-23",
+      "n_runs": 4,
+      "n_orders": 22,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-24",
+      "n_runs": 4,
+      "n_orders": 22,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-25",
+      "n_runs": 10,
+      "n_orders": 32,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-26",
+      "n_runs": 1098,
+      "n_orders": 8727,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-27",
+      "n_runs": 1411,
+      "n_orders": 3207,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-28",
+      "n_runs": 1004,
+      "n_orders": 2615,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-29",
+      "n_runs": 13,
+      "n_orders": 20,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-06-30",
+      "n_runs": 12,
+      "n_orders": 24,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-01",
+      "n_runs": 753,
+      "n_orders": 3109,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-02",
+      "n_runs": 24,
+      "n_orders": 67,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-03",
+      "n_runs": 389,
+      "n_orders": 1782,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-04",
+      "n_runs": 5165,
+      "n_orders": 37370,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-05",
+      "n_runs": 4269,
+      "n_orders": 25535,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-06",
+      "n_runs": 4395,
+      "n_orders": 11691,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "caution",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-07",
+      "n_runs": 8,
+      "n_orders": 90,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bull",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-08",
+      "n_runs": 27,
+      "n_orders": 167,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-09",
+      "n_runs": 2554,
+      "n_orders": 9250,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "bear",
+      "nav": 0
+    },
+    {
+      "date": "2026-07-10",
+      "n_runs": 2238,
+      "n_orders": 6457,
+      "n_filled": 0,
+      "total_buy": 0,
+      "total_sell": 0,
+      "net_flow": 0,
+      "regime": "caution",
+      "nav": 0
+    }
+  ],
+  "nav": 150000000.0,
+  "cash": 0,
+  "hwm": 150000000.0,
+  "initial_capital": 150000000.0,
+  "n_positions": 0,
+  "realized_pnl": 0,
+  "unrealized_pnl": 0,
+  "total_commission": 0,
+  "total_return_pct": 0.0
+}

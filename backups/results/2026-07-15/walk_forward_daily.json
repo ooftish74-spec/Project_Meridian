@@ -1,0 +1,18 @@
+[
+  {
+    "date": "2026-07-13",
+    "timestamp": "2026-07-13T20:00:05.518697",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-14",
+    "timestamp": "2026-07-14T20:00:07.505004",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  }
+]

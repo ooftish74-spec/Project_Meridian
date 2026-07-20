@@ -1,0 +1,165 @@
+{
+  "date": "2026-05-06",
+  "updated": "2026-05-25T06:00:14.774148",
+  "version": "1.0",
+  "overall_stance": "BULL",
+  "confidence": 0.77,
+  "signals": {
+    "ai_capex": {
+      "direction": "positive",
+      "strength": 0.85,
+      "source": "earnings_guidance"
+    },
+    "hbm_cycle": {
+      "direction": "positive",
+      "strength": 0.9,
+      "source": "supply_demand"
+    },
+    "shadow_risk": {
+      "direction": "negative",
+      "strength": 0.35,
+      "source": "fsb_warning"
+    },
+    "fed_policy": {
+      "direction": "neutral",
+      "strength": 0.5,
+      "source": "fomc_statement"
+    },
+    "kr_export": {
+      "direction": "positive",
+      "strength": 0.7,
+      "source": "customs_data"
+    },
+    "geopolitical": {
+      "direction": "neutral",
+      "strength": 0.4,
+      "source": "news_sentiment"
+    },
+    "vix": {
+      "value": 17.38,
+      "zone": "low_vol",
+      "signal": "bullish"
+    }
+  },
+  "macro_score": 72,
+  "macro_score_history": [
+    {
+      "date": "2026-05-06",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-07",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-08",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-11",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-12",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-13",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-14",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-15",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-18",
+      "score": 77,
+      "regime": "bull"
+    },
+    {
+      "date": "2026-05-19",
+      "score": 77,
+      "regime": "caution"
+    },
+    {
+      "date": "2026-05-20",
+      "score": 77,
+      "regime": "caution"
+    },
+    {
+      "date": "2026-05-21",
+      "score": 77,
+      "regime": "caution"
+    },
+    {
+      "date": "2026-05-22",
+      "score": 77,
+      "regime": "caution"
+    },
+    {
+      "date": "2026-05-25",
+      "score": 77,
+      "regime": "caution"
+    }
+  ],
+  "position_guide": {
+    "equity_exposure": "70-90%",
+    "bond_exposure": "5-15%",
+    "cash_floor": "5-10%",
+    "inverse_hedge": "0% (BULL)",
+    "preferred_sectors": [
+      "반도체",
+      "AI/소프트웨어",
+      "데이터센터 인프라"
+    ],
+    "avoid_sectors": [
+      "부동산",
+      "레저/여행 (소비 둔화 시)"
+    ]
+  },
+  "monitoring_thresholds": {
+    "vix": {
+      "normal": "<20",
+      "caution": "20-25",
+      "defense": ">25"
+    },
+    "hy_spread": {
+      "normal": "<350bp",
+      "caution": "350-400bp",
+      "defense": ">400bp"
+    },
+    "capex_revision": {
+      "normal": "유지/상향",
+      "caution": "소폭 하향",
+      "defense": ">15% 하향"
+    },
+    "private_credit_redemption": {
+      "normal": "<5%/월",
+      "caution": "5-10%/월",
+      "defense": ">10%/월"
+    }
+  },
+  "ml_features": {
+    "macro_score": 72,
+    "vix_level": 17.38,
+    "ai_capex_signal": 0.85,
+    "hbm_signal": 0.9,
+    "shadow_risk_signal": -0.35,
+    "fed_signal": 0.0,
+    "kr_export_signal": 0.7,
+    "geopolitical_signal": -0.2,
+    "composite_bull_prob": 0.75
+  }
+}

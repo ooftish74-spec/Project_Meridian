@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-07-16T23:49:59.732972",
+  "overall": "PASS",
+  "total_issues": 0,
+  "critical": 0,
+  "sentiment": {
+    "fear_greed": 20,
+    "vix": 45.0,
+    "regime": "crash"
+  },
+  "validations": {
+    "edge": {
+      "principle": "\u2460 Edge",
+      "status": "PASS",
+      "issues": [],
+      "n_issues": 0
+    },
+    "risk": {
+      "principle": "\u2461 Risk",
+      "status": "PASS",
+      "issues": [],
+      "n_issues": 0
+    },
+    "diversification": {
+      "principle": "\u2462 Diversification",
+      "status": "PASS",
+      "sectors": {
+        "Inverse_ETF": 1,
+        "Market_ETF": 1
+      },
+      "stream_sectors": {
+        "S1": {
+          "Inverse_ETF": 1
+        },
+        "S3": {
+          "Market_ETF": 1
+        }
+      },
+      "total_sectors": 2,
+      "issues": [],
+      "n_issues": 0
+    },
+    "no_override": {
+      "principle": "\u2463 No Override",
+      "status": "PASS",
+      "issues": [],
+      "n_issues": 0
+    }
+  },
+  "correlation": {
+    "sufficient_data": false,
+    "min_observations": 0,
+    "orthogonality_score": 1.0,
+    "high_correlation_pairs": []
+  },
+  "pnl_attribution": null
+}

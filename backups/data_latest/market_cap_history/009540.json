@@ -1,0 +1,41 @@
+{
+  "ticker": "009540",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 27861563998208,
+      "shares": 70714630,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 27472634576896,
+      "shares": 70714630,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 28391925350400,
+      "shares": 70714630,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 29664787562496,
+      "shares": 70714630,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 29664787562496,
+      "shares": 70714630,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 32740875436032,
+      "shares": 70714630,
+      "source": "yfinance"
+    }
+  ]
+}

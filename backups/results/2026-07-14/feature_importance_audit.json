@@ -1,0 +1,75 @@
+{
+  "date": "2026-07-13T20:00:06.492295",
+  "ensemble_importance": {
+    "high_low_range": 50.943564,
+    "overnight_return": 36.781773,
+    "volatility_20d": 35.468126,
+    "volume_ratio_20d": 35.154627,
+    "bb_position": 33.4658,
+    "return_3d": 32.172993,
+    "log_return_skew_20d": 30.848225,
+    "foreign_ratio_feat": 30.83935,
+    "return_5d": 30.161537,
+    "ma20_dist": 26.607117,
+    "volume_trend": 26.351442,
+    "return_1d": 25.600978,
+    "atr_pct": 24.942037,
+    "price_ma_ratio_20_60": 23.473092,
+    "intraday_return": 22.550322,
+    "obv_slope_20d": 21.942888,
+    "log_return_kurtosis_20d": 21.919302,
+    "ma60_dist": 21.529492,
+    "return_20d": 21.474273,
+    "macd_signal": 20.524587,
+    "debt_ratio_latest": 19.349358,
+    "rsi_14": 18.577903,
+    "rsi_slope_5d": 17.207009,
+    "close_to_high_20d": 16.465912,
+    "vol_ratio_5_20": 14.795153,
+    "earnings_surprise_latest": 14.456845,
+    "ma5_dist": 12.977979,
+    "revenue_yoy_latest": 12.785391,
+    "mean_reversion": 11.841229,
+    "trend_strength": 9.044949,
+    "price_ma_ratio_5_20": 8.531312,
+    "adx_proxy": 4.615435
+  },
+  "drift_risk_features": [],
+  "low_importance_candidates": [
+    "earnings_surprise_latest",
+    "ma5_dist",
+    "revenue_yoy_latest",
+    "mean_reversion",
+    "trend_strength",
+    "price_ma_ratio_5_20",
+    "adx_proxy"
+  ],
+  "data_absent_features": [],
+  "active_weak_features": [
+    "earnings_surprise_latest",
+    "ma5_dist",
+    "revenue_yoy_latest",
+    "mean_reversion",
+    "trend_strength",
+    "price_ma_ratio_5_20",
+    "adx_proxy"
+  ],
+  "recommendations": [
+    {
+      "action": "RETRAIN_WITHOUT_NOISE",
+      "priority": "LOW",
+      "features": [
+        "price_ma_ratio_5_20",
+        "mean_reversion",
+        "earnings_surprise_latest",
+        "adx_proxy",
+        "trend_strength",
+        "revenue_yoy_latest",
+        "ma5_dist"
+      ],
+      "reason": "활성 약세 7개 피처 제외 후 재학습 검토"
+    }
+  ],
+  "psi_scores": {},
+  "removal_candidates": []
+}

@@ -1,0 +1,156 @@
+[
+  {
+    "type": "CRISIS",
+    "tier": 1,
+    "event_type": "geopolitical",
+    "headline": "유가, 美·이란 협상 재개 기대에 2% 하락…&#034;호르무즈 전면 봉쇄는 안 본다&#034;",
+    "keywords": [
+      "봉쇄"
+    ],
+    "relevance": 3.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.688992"
+  },
+  {
+    "type": "CRISIS",
+    "tier": 1,
+    "event_type": "geopolitical",
+    "headline": "'12·3 계엄 행적 공방' 안철수 \"사실만 말해\" 한동훈 \"거짓선동 대응\"",
+    "keywords": [
+      "계엄"
+    ],
+    "relevance": 3.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.694102"
+  },
+  {
+    "type": "IPO",
+    "tier": 2,
+    "event_type": "market_event",
+    "headline": "SK하이닉스, 알리바바 넘어 美 최대 IPO...40조원 조달",
+    "keywords": [
+      "IPO"
+    ],
+    "relevance": 2.0,
+    "entities": [
+      {
+        "ticker": "000660",
+        "name": "SK하이닉스"
+      },
+      {
+        "ticker": "452400",
+        "name": "이닉스"
+      }
+    ],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.690320"
+  },
+  {
+    "type": "CENTRAL_BANK",
+    "tier": 1,
+    "event_type": "monetary",
+    "headline": "신현송 “상당 기간 고물가 지속… 금리 인상 필요”",
+    "keywords": [
+      "금리 인상"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.691674"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "“바이오, 반도체처럼 전체 파업제한을”… 삼성바이오 형평성 논란 바로잡힐까",
+    "keywords": [
+      "파업"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.692749"
+  },
+  {
+    "type": "CORPORATE_CRISIS",
+    "tier": 2,
+    "event_type": "corporate_risk",
+    "headline": "경찰, ‘고객정보 유출 혐의’ 카카오페이 압수수색",
+    "keywords": [
+      "압수수색"
+    ],
+    "relevance": 2.0,
+    "entities": [
+      {
+        "ticker": "035720",
+        "name": "카카오"
+      },
+      {
+        "ticker": "377300",
+        "name": "카카오페이"
+      }
+    ],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-10T05:15:25.695357"
+  },
+  {
+    "type": "IPO",
+    "tier": 1,
+    "event_type": "market_event",
+    "headline": "[속보] SK하이닉스, 美상장 첫날 168달러에 마감…공모가 대비 13%↑",
+    "keywords": [
+      "상장",
+      "공모"
+    ],
+    "relevance": 4.0,
+    "entities": [
+      {
+        "ticker": "000660",
+        "name": "SK하이닉스"
+      },
+      {
+        "ticker": "452400",
+        "name": "이닉스"
+      }
+    ],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-11T05:15:25.465274"
+  },
+  {
+    "type": "POLICY",
+    "tier": 1,
+    "event_type": "policy",
+    "headline": "中, 반도체 생산 핵심소재 ‘헬륨’ 수출 금지…“오늘부터 시행”",
+    "keywords": [
+      "금지"
+    ],
+    "relevance": 2.5,
+    "entities": [],
+    "confidence_reduction": 0.5,
+    "source": "news",
+    "detected_at": "2026-07-11T05:15:25.469917"
+  },
+  {
+    "type": "IPO",
+    "tier": 2,
+    "event_type": "market_event",
+    "headline": "&#039;매일 울리는&#039; 사이드카…레버리지 ETF 상장 후 24차례 쏠렸다",
+    "keywords": [
+      "상장"
+    ],
+    "relevance": 2.0,
+    "entities": [],
+    "confidence_reduction": 0.3,
+    "source": "news",
+    "detected_at": "2026-07-11T05:15:25.468090"
+  }
+]

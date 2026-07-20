@@ -1,0 +1,20 @@
+{
+  "ticker": "011170",
+  "target_price": 121071,
+  "current_price": 77400,
+  "recomm_mean": 3.71,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "롯데케미칼",
+  "latest_research": {
+    "title": "완만한 회복 전망",
+    "broker": "유진투자증권",
+    "date": "20260513"
+  }
+}

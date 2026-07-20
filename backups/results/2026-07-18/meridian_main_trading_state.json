@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-07-16T09:09:22.984584",
+  "mode": "live",
+  "account": {
+    "total_equity": 1001718.0,
+    "cash": 1001718.0,
+    "positions_value": 0.0,
+    "realized_pnl": 0.0,
+    "unrealized_pnl": 0.0
+  },
+  "positions": {},
+  "trade_history": []
+}

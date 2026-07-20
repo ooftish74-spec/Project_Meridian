@@ -1,0 +1,20 @@
+{
+  "ticker": "000880",
+  "target_price": 176200,
+  "current_price": 118900,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "한화",
+  "latest_research": {
+    "title": "불확실성 해소 앞두고 할인율 축소 기대",
+    "broker": "SK증권",
+    "date": "20260519"
+  }
+}

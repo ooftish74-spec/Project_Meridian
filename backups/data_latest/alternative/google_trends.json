@@ -1,0 +1,3130 @@
+{
+  "last_updated": "2026-05-25",
+  "keywords": {
+    "삼성전자": {
+      "current": 26,
+      "avg_30d": 49.5,
+      "trend": "down",
+      "change_pct": -47.4
+    },
+    "SK하이닉스": {
+      "current": 17,
+      "avg_30d": 26.0,
+      "trend": "down",
+      "change_pct": -34.6
+    },
+    "코스피": {
+      "current": 22,
+      "avg_30d": 24.0,
+      "trend": "down",
+      "change_pct": -8.5
+    },
+    "주식": {
+      "current": 23,
+      "avg_30d": 46.0,
+      "trend": "down",
+      "change_pct": -50.0
+    },
+    "금리": {
+      "current": 3,
+      "avg_30d": 5.1,
+      "trend": "down",
+      "change_pct": -41.6
+    },
+    "NVIDIA": {
+      "current": 2,
+      "avg_30d": 4.3,
+      "trend": "down",
+      "change_pct": -53.5
+    },
+    "AI": {
+      "current": 40,
+      "avg_30d": 59.2,
+      "trend": "down",
+      "change_pct": -32.4
+    },
+    "반도체": {
+      "current": 6,
+      "avg_30d": 10.6,
+      "trend": "down",
+      "change_pct": -43.4
+    },
+    "전기차": {
+      "current": 1,
+      "avg_30d": 1.9,
+      "trend": "down",
+      "change_pct": -48.3
+    },
+    "배터리": {
+      "current": 4,
+      "avg_30d": 4.2,
+      "trend": "down",
+      "change_pct": -5.5
+    }
+  },
+  "n_keywords": 10,
+  "method": "pytrends (attempt 1)",
+  "stale": false,
+  "history": [
+    {
+      "date": "2026-03-08",
+      "data": {
+        "삼성전자": {
+          "current": 18,
+          "avg_30d": 31.6,
+          "trend": "down",
+          "change_pct": -43.1
+        },
+        "SK하이닉스": {
+          "current": 3,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -50.8
+        },
+        "코스피": {
+          "current": 11,
+          "avg_30d": 20.9,
+          "trend": "down",
+          "change_pct": -47.5
+        },
+        "주식": {
+          "current": 32,
+          "avg_30d": 51.3,
+          "trend": "down",
+          "change_pct": -37.7
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 6.4,
+          "trend": "down",
+          "change_pct": -22.3
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.4,
+          "trend": "down",
+          "change_pct": -31.8
+        },
+        "AI": {
+          "current": 67,
+          "avg_30d": 67.3,
+          "trend": "down",
+          "change_pct": -0.4
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.9,
+          "trend": "down",
+          "change_pct": -15.3
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 2.8,
+          "trend": "up",
+          "change_pct": 5.9
+        },
+        "배터리": {
+          "current": 8,
+          "avg_30d": 7.7,
+          "trend": "up",
+          "change_pct": 3.9
+        }
+      }
+    },
+    {
+      "date": "2026-03-09",
+      "data": {
+        "삼성전자": {
+          "current": 19,
+          "avg_30d": 32.7,
+          "trend": "down",
+          "change_pct": -41.9
+        },
+        "SK하이닉스": {
+          "current": 4,
+          "avg_30d": 6.3,
+          "trend": "down",
+          "change_pct": -36.2
+        },
+        "코스피": {
+          "current": 12,
+          "avg_30d": 21.8,
+          "trend": "down",
+          "change_pct": -44.9
+        },
+        "주식": {
+          "current": 35,
+          "avg_30d": 53.2,
+          "trend": "down",
+          "change_pct": -34.2
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 6.6,
+          "trend": "down",
+          "change_pct": -24.2
+        }
+      }
+    },
+    {
+      "date": "2026-03-10",
+      "data": {
+        "삼성전자": {
+          "current": 57,
+          "avg_30d": 33.0,
+          "trend": "up",
+          "change_pct": 72.9
+        },
+        "SK하이닉스": {
+          "current": 9,
+          "avg_30d": 6.4,
+          "trend": "up",
+          "change_pct": 40.6
+        },
+        "코스피": {
+          "current": 58,
+          "avg_30d": 22.8,
+          "trend": "up",
+          "change_pct": 154.0
+        },
+        "주식": {
+          "current": 70,
+          "avg_30d": 53.1,
+          "trend": "up",
+          "change_pct": 31.9
+        },
+        "금리": {
+          "current": 8,
+          "avg_30d": 6.6,
+          "trend": "up",
+          "change_pct": 21.2
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 4.7,
+          "trend": "up",
+          "change_pct": 7.1
+        },
+        "AI": {
+          "current": 89,
+          "avg_30d": 69.9,
+          "trend": "up",
+          "change_pct": 27.3
+        },
+        "반도체": {
+          "current": 8,
+          "avg_30d": 6.1,
+          "trend": "up",
+          "change_pct": 31.9
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 2.9,
+          "trend": "up",
+          "change_pct": 3.4
+        },
+        "배터리": {
+          "current": 10,
+          "avg_30d": 7.9,
+          "trend": "up",
+          "change_pct": 27.1
+        }
+      }
+    },
+    {
+      "date": "2026-03-11",
+      "data": {
+        "삼성전자": {
+          "current": 58,
+          "avg_30d": 35.0,
+          "trend": "up",
+          "change_pct": 65.7
+        },
+        "SK하이닉스": {
+          "current": 12,
+          "avg_30d": 6.8,
+          "trend": "up",
+          "change_pct": 76.5
+        },
+        "코스피": {
+          "current": 38,
+          "avg_30d": 24.3,
+          "trend": "up",
+          "change_pct": 56.2
+        },
+        "주식": {
+          "current": 57,
+          "avg_30d": 54.9,
+          "trend": "up",
+          "change_pct": 3.9
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 6.9,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 4.8,
+          "trend": "up",
+          "change_pct": 4.9
+        },
+        "AI": {
+          "current": 92,
+          "avg_30d": 72.5,
+          "trend": "up",
+          "change_pct": 26.8
+        },
+        "반도체": {
+          "current": 8,
+          "avg_30d": 6.3,
+          "trend": "up",
+          "change_pct": 27.0
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 2.8,
+          "trend": "up",
+          "change_pct": 7.1
+        },
+        "배터리": {
+          "current": 10,
+          "avg_30d": 8.0,
+          "trend": "up",
+          "change_pct": 25.5
+        }
+      }
+    },
+    {
+      "date": "2026-03-12",
+      "data": {
+        "삼성전자": {
+          "current": 49,
+          "avg_30d": 36.4,
+          "trend": "up",
+          "change_pct": 34.7
+        },
+        "SK하이닉스": {
+          "current": 9,
+          "avg_30d": 7.1,
+          "trend": "up",
+          "change_pct": 26.8
+        },
+        "코스피": {
+          "current": 30,
+          "avg_30d": 25.1,
+          "trend": "up",
+          "change_pct": 19.4
+        },
+        "주식": {
+          "current": 55,
+          "avg_30d": 56.0,
+          "trend": "down",
+          "change_pct": -1.7
+        },
+        "금리": {
+          "current": 7,
+          "avg_30d": 7.1,
+          "trend": "down",
+          "change_pct": -0.9
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -2.6
+        },
+        "AI": {
+          "current": 97,
+          "avg_30d": 77.7,
+          "trend": "up",
+          "change_pct": 24.8
+        },
+        "반도체": {
+          "current": 8,
+          "avg_30d": 6.6,
+          "trend": "up",
+          "change_pct": 21.8
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 3.0,
+          "trend": "down",
+          "change_pct": -1.1
+        },
+        "배터리": {
+          "current": 10,
+          "avg_30d": 8.3,
+          "trend": "up",
+          "change_pct": 20.0
+        }
+      }
+    },
+    {
+      "date": "2026-03-13",
+      "data": {
+        "삼성전자": {
+          "current": 44,
+          "avg_30d": 36.3,
+          "trend": "up",
+          "change_pct": 21.1
+        },
+        "SK하이닉스": {
+          "current": 7,
+          "avg_30d": 7.1,
+          "trend": "down",
+          "change_pct": -1.4
+        },
+        "코스피": {
+          "current": 26,
+          "avg_30d": 25.0,
+          "trend": "up",
+          "change_pct": 4.0
+        },
+        "주식": {
+          "current": 52,
+          "avg_30d": 54.7,
+          "trend": "down",
+          "change_pct": -4.9
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 6.8,
+          "trend": "down",
+          "change_pct": -11.8
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 4.8,
+          "trend": "up",
+          "change_pct": 4.2
+        },
+        "AI": {
+          "current": 86,
+          "avg_30d": 71.8,
+          "trend": "up",
+          "change_pct": 19.7
+        },
+        "반도체": {
+          "current": 7,
+          "avg_30d": 6.2,
+          "trend": "up",
+          "change_pct": 12.9
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 2.8,
+          "trend": "up",
+          "change_pct": 8.4
+        },
+        "배터리": {
+          "current": 9,
+          "avg_30d": 7.6,
+          "trend": "up",
+          "change_pct": 18.9
+        }
+      }
+    },
+    {
+      "date": "2026-03-25",
+      "data": {
+        "삼성전자": {
+          "current": 47,
+          "avg_30d": 42.0,
+          "trend": "up",
+          "change_pct": 11.9
+        },
+        "SK하이닉스": {
+          "current": 10,
+          "avg_30d": 8.9,
+          "trend": "up",
+          "change_pct": 12.8
+        },
+        "코스피": {
+          "current": 20,
+          "avg_30d": 29.1,
+          "trend": "down",
+          "change_pct": -31.4
+        },
+        "주식": {
+          "current": 54,
+          "avg_30d": 56.0,
+          "trend": "down",
+          "change_pct": -3.6
+        },
+        "금리": {
+          "current": 9,
+          "avg_30d": 7.9,
+          "trend": "up",
+          "change_pct": 14.4
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -8.5
+        },
+        "AI": {
+          "current": 86,
+          "avg_30d": 73.8,
+          "trend": "up",
+          "change_pct": 16.5
+        },
+        "반도체": {
+          "current": 7,
+          "avg_30d": 6.2,
+          "trend": "up",
+          "change_pct": 12.9
+        },
+        "전기차": {
+          "current": 3,
+          "avg_30d": 2.3,
+          "trend": "up",
+          "change_pct": 28.6
+        },
+        "배터리": {
+          "current": 6,
+          "avg_30d": 6.6,
+          "trend": "down",
+          "change_pct": -8.6
+        }
+      }
+    },
+    {
+      "date": "2026-03-26",
+      "data": {
+        "삼성전자": {
+          "current": 32,
+          "avg_30d": 41.7,
+          "trend": "down",
+          "change_pct": -23.2
+        },
+        "SK하이닉스": {
+          "current": 7,
+          "avg_30d": 8.8,
+          "trend": "down",
+          "change_pct": -20.5
+        },
+        "코스피": {
+          "current": 19,
+          "avg_30d": 29.1,
+          "trend": "down",
+          "change_pct": -34.6
+        },
+        "주식": {
+          "current": 50,
+          "avg_30d": 56.2,
+          "trend": "down",
+          "change_pct": -11.0
+        },
+        "금리": {
+          "current": 7,
+          "avg_30d": 7.8,
+          "trend": "down",
+          "change_pct": -10.6
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -26.4
+        },
+        "AI": {
+          "current": 74,
+          "avg_30d": 73.6,
+          "trend": "up",
+          "change_pct": 0.5
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -1.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 6,
+          "avg_30d": 6.6,
+          "trend": "down",
+          "change_pct": -8.6
+        }
+      }
+    },
+    {
+      "date": "2026-03-27",
+      "data": {
+        "삼성전자": {
+          "current": 35,
+          "avg_30d": 41.6,
+          "trend": "down",
+          "change_pct": -15.9
+        },
+        "SK하이닉스": {
+          "current": 6,
+          "avg_30d": 8.8,
+          "trend": "down",
+          "change_pct": -32.1
+        },
+        "코스피": {
+          "current": 18,
+          "avg_30d": 29.1,
+          "trend": "down",
+          "change_pct": -38.1
+        },
+        "주식": {
+          "current": 43,
+          "avg_30d": 56.0,
+          "trend": "down",
+          "change_pct": -23.3
+        },
+        "금리": {
+          "current": 7,
+          "avg_30d": 7.9,
+          "trend": "down",
+          "change_pct": -11.8
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -25.9
+        },
+        "AI": {
+          "current": 67,
+          "avg_30d": 72.7,
+          "trend": "down",
+          "change_pct": -7.8
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.9,
+          "trend": "down",
+          "change_pct": -15.7
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.4,
+          "trend": "down",
+          "change_pct": -22.3
+        }
+      }
+    },
+    {
+      "date": "2026-03-30",
+      "data": {
+        "삼성전자": {
+          "current": 11,
+          "avg_30d": 36.7,
+          "trend": "down",
+          "change_pct": -70.0
+        },
+        "SK하이닉스": {
+          "current": 2,
+          "avg_30d": 7.7,
+          "trend": "down",
+          "change_pct": -73.9
+        },
+        "코스피": {
+          "current": 5,
+          "avg_30d": 25.6,
+          "trend": "down",
+          "change_pct": -80.4
+        },
+        "주식": {
+          "current": 21,
+          "avg_30d": 49.5,
+          "trend": "down",
+          "change_pct": -57.6
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 7.4,
+          "trend": "down",
+          "change_pct": -32.7
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 5.0,
+          "trend": "down",
+          "change_pct": -60.0
+        },
+        "AI": {
+          "current": 56,
+          "avg_30d": 72.9,
+          "trend": "down",
+          "change_pct": -23.2
+        },
+        "반도체": {
+          "current": 2,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -63.6
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.2,
+          "trend": "down",
+          "change_pct": -18.9
+        }
+      }
+    },
+    {
+      "date": "2026-03-31",
+      "data": {
+        "삼성전자": {
+          "current": 34,
+          "avg_30d": 36.7,
+          "trend": "down",
+          "change_pct": -7.4
+        },
+        "SK하이닉스": {
+          "current": 5,
+          "avg_30d": 7.6,
+          "trend": "down",
+          "change_pct": -33.9
+        },
+        "코스피": {
+          "current": 22,
+          "avg_30d": 25.8,
+          "trend": "down",
+          "change_pct": -14.7
+        },
+        "주식": {
+          "current": 41,
+          "avg_30d": 48.5,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "금리": {
+          "current": 9,
+          "avg_30d": 7.5,
+          "trend": "up",
+          "change_pct": 19.5
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.0,
+          "trend": "down",
+          "change_pct": -40.0
+        },
+        "AI": {
+          "current": 67,
+          "avg_30d": 73.8,
+          "trend": "down",
+          "change_pct": -9.3
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -6.2
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -11.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -18.0
+        }
+      }
+    },
+    {
+      "date": "2026-04-01",
+      "data": {
+        "삼성전자": {
+          "current": 39,
+          "avg_30d": 39.1,
+          "trend": "down",
+          "change_pct": -0.3
+        },
+        "SK하이닉스": {
+          "current": 11,
+          "avg_30d": 8.3,
+          "trend": "up",
+          "change_pct": 33.1
+        },
+        "코스피": {
+          "current": 27,
+          "avg_30d": 27.3,
+          "trend": "down",
+          "change_pct": -1.0
+        },
+        "주식": {
+          "current": 45,
+          "avg_30d": 50.2,
+          "trend": "down",
+          "change_pct": -10.4
+        },
+        "금리": {
+          "current": 9,
+          "avg_30d": 8.0,
+          "trend": "up",
+          "change_pct": 13.0
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -22.6
+        },
+        "AI": {
+          "current": 69,
+          "avg_30d": 74.6,
+          "trend": "down",
+          "change_pct": -7.5
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -8.5
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -11.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -17.6
+        }
+      }
+    },
+    {
+      "date": "2026-04-02",
+      "data": {
+        "삼성전자": {
+          "current": 34,
+          "avg_30d": 37.2,
+          "trend": "down",
+          "change_pct": -8.7
+        },
+        "SK하이닉스": {
+          "current": 7,
+          "avg_30d": 7.9,
+          "trend": "down",
+          "change_pct": -11.4
+        },
+        "코스피": {
+          "current": 20,
+          "avg_30d": 26.2,
+          "trend": "down",
+          "change_pct": -23.7
+        },
+        "주식": {
+          "current": 41,
+          "avg_30d": 47.5,
+          "trend": "down",
+          "change_pct": -13.7
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 7.6,
+          "trend": "down",
+          "change_pct": -21.4
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -44.1
+        },
+        "AI": {
+          "current": 65,
+          "avg_30d": 75.6,
+          "trend": "down",
+          "change_pct": -14.0
+        },
+        "반도체": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -26.4
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -18.0
+        }
+      }
+    },
+    {
+      "date": "2026-04-03",
+      "data": {
+        "삼성전자": {
+          "current": 34,
+          "avg_30d": 36.8,
+          "trend": "down",
+          "change_pct": -7.6
+        },
+        "SK하이닉스": {
+          "current": 5,
+          "avg_30d": 7.9,
+          "trend": "down",
+          "change_pct": -36.4
+        },
+        "코스피": {
+          "current": 24,
+          "avg_30d": 25.1,
+          "trend": "down",
+          "change_pct": -4.5
+        },
+        "주식": {
+          "current": 41,
+          "avg_30d": 47.0,
+          "trend": "down",
+          "change_pct": -12.7
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 7.6,
+          "trend": "down",
+          "change_pct": -21.4
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -44.8
+        },
+        "AI": {
+          "current": 69,
+          "avg_30d": 76.6,
+          "trend": "down",
+          "change_pct": -9.9
+        },
+        "반도체": {
+          "current": 4,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -27.3
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -16.7
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -18.5
+        }
+      }
+    },
+    {
+      "date": "2026-04-06",
+      "data": {
+        "삼성전자": {
+          "current": 13,
+          "avg_30d": 34.4,
+          "trend": "down",
+          "change_pct": -62.2
+        },
+        "SK하이닉스": {
+          "current": 6,
+          "avg_30d": 7.7,
+          "trend": "down",
+          "change_pct": -22.4
+        },
+        "코스피": {
+          "current": 5,
+          "avg_30d": 19.9,
+          "trend": "down",
+          "change_pct": -74.9
+        },
+        "주식": {
+          "current": 24,
+          "avg_30d": 43.2,
+          "trend": "down",
+          "change_pct": -44.4
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 7.8,
+          "trend": "down",
+          "change_pct": -48.5
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -62.7
+        },
+        "AI": {
+          "current": 53,
+          "avg_30d": 75.3,
+          "trend": "down",
+          "change_pct": -29.6
+        },
+        "반도체": {
+          "current": 3,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -41.2
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 6.0,
+          "trend": "down",
+          "change_pct": -16.7
+        }
+      }
+    },
+    {
+      "date": "2026-04-07",
+      "data": {
+        "삼성전자": {
+          "current": 51,
+          "avg_30d": 36.3,
+          "trend": "up",
+          "change_pct": 40.4
+        },
+        "SK하이닉스": {
+          "current": 8,
+          "avg_30d": 8.2,
+          "trend": "down",
+          "change_pct": -2.0
+        },
+        "코스피": {
+          "current": 23,
+          "avg_30d": 20.8,
+          "trend": "up",
+          "change_pct": 10.6
+        },
+        "주식": {
+          "current": 44,
+          "avg_30d": 45.0,
+          "trend": "down",
+          "change_pct": -2.2
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 8.1,
+          "trend": "down",
+          "change_pct": -25.9
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -44.8
+        },
+        "AI": {
+          "current": 65,
+          "avg_30d": 76.7,
+          "trend": "down",
+          "change_pct": -15.3
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -5.7
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 6,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -1.1
+        }
+      }
+    },
+    {
+      "date": "2026-04-08",
+      "data": {
+        "삼성전자": {
+          "current": 54,
+          "avg_30d": 35.7,
+          "trend": "up",
+          "change_pct": 51.4
+        },
+        "SK하이닉스": {
+          "current": 11,
+          "avg_30d": 8.1,
+          "trend": "up",
+          "change_pct": 35.8
+        },
+        "코스피": {
+          "current": 24,
+          "avg_30d": 20.0,
+          "trend": "up",
+          "change_pct": 20.0
+        },
+        "주식": {
+          "current": 38,
+          "avg_30d": 42.7,
+          "trend": "down",
+          "change_pct": -11.1
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 7.7,
+          "trend": "down",
+          "change_pct": -34.8
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -43.8
+        },
+        "AI": {
+          "current": 61,
+          "avg_30d": 74.5,
+          "trend": "down",
+          "change_pct": -18.2
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -3.8
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.8,
+          "trend": "down",
+          "change_pct": -13.3
+        }
+      }
+    },
+    {
+      "date": "2026-04-09",
+      "data": {
+        "삼성전자": {
+          "current": 46,
+          "avg_30d": 35.5,
+          "trend": "up",
+          "change_pct": 29.7
+        },
+        "SK하이닉스": {
+          "current": 18,
+          "avg_30d": 8.4,
+          "trend": "up",
+          "change_pct": 115.1
+        },
+        "코스피": {
+          "current": 34,
+          "avg_30d": 19.2,
+          "trend": "up",
+          "change_pct": 76.8
+        },
+        "주식": {
+          "current": 45,
+          "avg_30d": 42.4,
+          "trend": "up",
+          "change_pct": 6.0
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 7.5,
+          "trend": "down",
+          "change_pct": -33.6
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -43.0
+        },
+        "AI": {
+          "current": 61,
+          "avg_30d": 73.8,
+          "trend": "down",
+          "change_pct": -17.4
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -2.0
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -16.7
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.7,
+          "trend": "down",
+          "change_pct": -11.8
+        }
+      }
+    },
+    {
+      "date": "2026-04-10",
+      "data": {
+        "삼성전자": {
+          "current": 42,
+          "avg_30d": 35.8,
+          "trend": "up",
+          "change_pct": 17.4
+        },
+        "SK하이닉스": {
+          "current": 8,
+          "avg_30d": 8.4,
+          "trend": "down",
+          "change_pct": -4.8
+        },
+        "코스피": {
+          "current": 34,
+          "avg_30d": 19.6,
+          "trend": "up",
+          "change_pct": 73.5
+        },
+        "주식": {
+          "current": 44,
+          "avg_30d": 42.9,
+          "trend": "up",
+          "change_pct": 2.6
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 7.6,
+          "trend": "down",
+          "change_pct": -34.5
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -43.0
+        },
+        "AI": {
+          "current": 62,
+          "avg_30d": 75.1,
+          "trend": "down",
+          "change_pct": -17.4
+        },
+        "반도체": {
+          "current": 5,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -3.2
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.7,
+          "trend": "down",
+          "change_pct": -12.3
+        }
+      }
+    },
+    {
+      "date": "2026-04-11",
+      "data": {
+        "삼성전자": {
+          "current": 61,
+          "avg_30d": 36.2,
+          "trend": "up",
+          "change_pct": 68.7
+        },
+        "SK하이닉스": {
+          "current": 24,
+          "avg_30d": 9.1,
+          "trend": "up",
+          "change_pct": 163.7
+        },
+        "코스피": {
+          "current": 26,
+          "avg_30d": 19.3,
+          "trend": "up",
+          "change_pct": 34.7
+        },
+        "주식": {
+          "current": 77,
+          "avg_30d": 43.6,
+          "trend": "up",
+          "change_pct": 76.6
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 7.7,
+          "trend": "down",
+          "change_pct": -22.1
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -42.3
+        },
+        "AI": {
+          "current": 58,
+          "avg_30d": 72.2,
+          "trend": "down",
+          "change_pct": -19.7
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 5.0,
+          "trend": "up",
+          "change_pct": 20.0
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.2,
+          "trend": "down",
+          "change_pct": -7.7
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -9.1
+        }
+      }
+    },
+    {
+      "date": "2026-04-13",
+      "data": {
+        "삼성전자": {
+          "current": 43,
+          "avg_30d": 35.6,
+          "trend": "up",
+          "change_pct": 20.9
+        },
+        "SK하이닉스": {
+          "current": 19,
+          "avg_30d": 10.0,
+          "trend": "up",
+          "change_pct": 89.4
+        },
+        "코스피": {
+          "current": 24,
+          "avg_30d": 18.1,
+          "trend": "up",
+          "change_pct": 32.8
+        },
+        "주식": {
+          "current": 33,
+          "avg_30d": 41.8,
+          "trend": "down",
+          "change_pct": -21.0
+        },
+        "금리": {
+          "current": 3,
+          "avg_30d": 7.3,
+          "trend": "down",
+          "change_pct": -58.7
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -61.5
+        },
+        "AI": {
+          "current": 48,
+          "avg_30d": 73.4,
+          "trend": "down",
+          "change_pct": -34.6
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 5.2,
+          "trend": "up",
+          "change_pct": 16.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.6,
+          "trend": "down",
+          "change_pct": -10.2
+        }
+      }
+    },
+    {
+      "date": "2026-04-14",
+      "data": {
+        "삼성전자": {
+          "current": 47,
+          "avg_30d": 37.0,
+          "trend": "up",
+          "change_pct": 27.1
+        },
+        "SK하이닉스": {
+          "current": 17,
+          "avg_30d": 10.5,
+          "trend": "up",
+          "change_pct": 61.4
+        },
+        "코스피": {
+          "current": 26,
+          "avg_30d": 18.9,
+          "trend": "up",
+          "change_pct": 37.6
+        },
+        "주식": {
+          "current": 50,
+          "avg_30d": 42.6,
+          "trend": "up",
+          "change_pct": 17.5
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 7.5,
+          "trend": "down",
+          "change_pct": -20.0
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -41.9
+        },
+        "AI": {
+          "current": 65,
+          "avg_30d": 73.1,
+          "trend": "down",
+          "change_pct": -11.0
+        },
+        "반도체": {
+          "current": 7,
+          "avg_30d": 5.3,
+          "trend": "up",
+          "change_pct": 32.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.6,
+          "trend": "down",
+          "change_pct": -10.2
+        }
+      }
+    },
+    {
+      "date": "2026-04-15",
+      "data": {
+        "삼성전자": {
+          "current": 34,
+          "avg_30d": 33.0,
+          "trend": "up",
+          "change_pct": 2.9
+        },
+        "SK하이닉스": {
+          "current": 25,
+          "avg_30d": 10.2,
+          "trend": "up",
+          "change_pct": 145.1
+        },
+        "코스피": {
+          "current": 25,
+          "avg_30d": 17.4,
+          "trend": "up",
+          "change_pct": 44.0
+        },
+        "주식": {
+          "current": 100,
+          "avg_30d": 40.6,
+          "trend": "up",
+          "change_pct": 146.1
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 6.7,
+          "trend": "down",
+          "change_pct": -40.3
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -42.3
+        },
+        "AI": {
+          "current": 65,
+          "avg_30d": 74.5,
+          "trend": "down",
+          "change_pct": -12.8
+        },
+        "반도체": {
+          "current": 9,
+          "avg_30d": 5.5,
+          "trend": "up",
+          "change_pct": 62.7
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -9.6
+        }
+      }
+    },
+    {
+      "date": "2026-04-16",
+      "data": {
+        "삼성전자": {
+          "current": 33,
+          "avg_30d": 32.1,
+          "trend": "up",
+          "change_pct": 2.8
+        },
+        "SK하이닉스": {
+          "current": 21,
+          "avg_30d": 10.3,
+          "trend": "up",
+          "change_pct": 103.2
+        },
+        "코스피": {
+          "current": 21,
+          "avg_30d": 17.4,
+          "trend": "up",
+          "change_pct": 20.9
+        },
+        "주식": {
+          "current": 60,
+          "avg_30d": 41.2,
+          "trend": "up",
+          "change_pct": 45.7
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 6.5,
+          "trend": "down",
+          "change_pct": -38.8
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.9,
+          "trend": "down",
+          "change_pct": -38.8
+        },
+        "AI": {
+          "current": 63,
+          "avg_30d": 71.6,
+          "trend": "down",
+          "change_pct": -12.0
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 5.4,
+          "trend": "up",
+          "change_pct": 11.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -8.5
+        }
+      }
+    },
+    {
+      "date": "2026-04-17",
+      "data": {
+        "삼성전자": {
+          "current": 29,
+          "avg_30d": 31.9,
+          "trend": "down",
+          "change_pct": -9.0
+        },
+        "SK하이닉스": {
+          "current": 14,
+          "avg_30d": 10.6,
+          "trend": "up",
+          "change_pct": 32.1
+        },
+        "코스피": {
+          "current": 22,
+          "avg_30d": 17.6,
+          "trend": "up",
+          "change_pct": 25.2
+        },
+        "주식": {
+          "current": 43,
+          "avg_30d": 40.8,
+          "trend": "up",
+          "change_pct": 5.3
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 6.4,
+          "trend": "down",
+          "change_pct": -37.8
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 4.7,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "AI": {
+          "current": 74,
+          "avg_30d": 71.2,
+          "trend": "up",
+          "change_pct": 3.9
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 5.4,
+          "trend": "up",
+          "change_pct": 11.8
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -5.1
+        }
+      }
+    },
+    {
+      "date": "2026-04-18",
+      "data": {
+        "삼성전자": {
+          "current": 37,
+          "avg_30d": 32.7,
+          "trend": "up",
+          "change_pct": 13.0
+        },
+        "SK하이닉스": {
+          "current": 44,
+          "avg_30d": 12.3,
+          "trend": "up",
+          "change_pct": 256.8
+        },
+        "코스피": {
+          "current": 22,
+          "avg_30d": 18.1,
+          "trend": "up",
+          "change_pct": 21.3
+        },
+        "주식": {
+          "current": 51,
+          "avg_30d": 42.4,
+          "trend": "up",
+          "change_pct": 20.3
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 6.7,
+          "trend": "down",
+          "change_pct": -40.0
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.7,
+          "trend": "down",
+          "change_pct": -35.7
+        },
+        "AI": {
+          "current": 69,
+          "avg_30d": 74.2,
+          "trend": "down",
+          "change_pct": -7.0
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 5.6,
+          "trend": "up",
+          "change_pct": 7.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -20.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -7.4
+        }
+      }
+    },
+    {
+      "date": "2026-04-19",
+      "data": {
+        "삼성전자": {
+          "current": 12,
+          "avg_30d": 30.9,
+          "trend": "down",
+          "change_pct": -61.1
+        },
+        "SK하이닉스": {
+          "current": 28,
+          "avg_30d": 12.5,
+          "trend": "up",
+          "change_pct": 124.6
+        },
+        "코스피": {
+          "current": 40,
+          "avg_30d": 18.5,
+          "trend": "up",
+          "change_pct": 116.2
+        },
+        "주식": {
+          "current": 40,
+          "avg_30d": 40.9,
+          "trend": "down",
+          "change_pct": -2.1
+        },
+        "금리": {
+          "current": 2,
+          "avg_30d": 6.3,
+          "trend": "down",
+          "change_pct": -68.1
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.5,
+          "trend": "down",
+          "change_pct": -55.6
+        },
+        "AI": {
+          "current": 51,
+          "avg_30d": 71.7,
+          "trend": "down",
+          "change_pct": -28.8
+        },
+        "반도체": {
+          "current": 4,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -26.8
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -16.7
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -25.0
+        }
+      }
+    },
+    {
+      "date": "2026-04-20",
+      "data": {
+        "삼성전자": {
+          "current": 16,
+          "avg_30d": 31.0,
+          "trend": "down",
+          "change_pct": -48.3
+        },
+        "SK하이닉스": {
+          "current": 25,
+          "avg_30d": 13.4,
+          "trend": "up",
+          "change_pct": 86.6
+        },
+        "코스피": {
+          "current": 28,
+          "avg_30d": 19.5,
+          "trend": "up",
+          "change_pct": 43.8
+        },
+        "주식": {
+          "current": 27,
+          "avg_30d": 41.1,
+          "trend": "down",
+          "change_pct": -34.3
+        },
+        "금리": {
+          "current": 2,
+          "avg_30d": 6.1,
+          "trend": "down",
+          "change_pct": -67.4
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.4,
+          "trend": "down",
+          "change_pct": -54.2
+        },
+        "AI": {
+          "current": 50,
+          "avg_30d": 70.7,
+          "trend": "down",
+          "change_pct": -29.3
+        },
+        "반도체": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -26.4
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -25.5
+        }
+      }
+    },
+    {
+      "date": "2026-04-21",
+      "data": {
+        "삼성전자": {
+          "current": 36,
+          "avg_30d": 31.2,
+          "trend": "up",
+          "change_pct": 15.4
+        },
+        "SK하이닉스": {
+          "current": 33,
+          "avg_30d": 13.7,
+          "trend": "up",
+          "change_pct": 140.3
+        },
+        "코스피": {
+          "current": 20,
+          "avg_30d": 19.6,
+          "trend": "up",
+          "change_pct": 1.9
+        },
+        "주식": {
+          "current": 34,
+          "avg_30d": 40.7,
+          "trend": "down",
+          "change_pct": -16.4
+        },
+        "금리": {
+          "current": 3,
+          "avg_30d": 6.0,
+          "trend": "down",
+          "change_pct": -49.7
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.3,
+          "trend": "down",
+          "change_pct": -30.2
+        },
+        "AI": {
+          "current": 61,
+          "avg_30d": 68.8,
+          "trend": "down",
+          "change_pct": -11.4
+        },
+        "반도체": {
+          "current": 8,
+          "avg_30d": 5.5,
+          "trend": "up",
+          "change_pct": 45.5
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -21.6
+        }
+      }
+    },
+    {
+      "date": "2026-04-22",
+      "data": {
+        "삼성전자": {
+          "current": 47,
+          "avg_30d": 33.1,
+          "trend": "up",
+          "change_pct": 41.9
+        },
+        "SK하이닉스": {
+          "current": 25,
+          "avg_30d": 14.8,
+          "trend": "up",
+          "change_pct": 69.3
+        },
+        "코스피": {
+          "current": 28,
+          "avg_30d": 20.4,
+          "trend": "up",
+          "change_pct": 37.0
+        },
+        "주식": {
+          "current": 40,
+          "avg_30d": 42.0,
+          "trend": "down",
+          "change_pct": -4.7
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 6.0,
+          "trend": "down",
+          "change_pct": -33.0
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.3,
+          "trend": "down",
+          "change_pct": -30.8
+        },
+        "AI": {
+          "current": 62,
+          "avg_30d": 72.0,
+          "trend": "down",
+          "change_pct": -13.8
+        },
+        "반도체": {
+          "current": 16,
+          "avg_30d": 6.1,
+          "trend": "up",
+          "change_pct": 160.9
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -7.4
+        }
+      }
+    },
+    {
+      "date": "2026-04-23",
+      "data": {
+        "삼성전자": {
+          "current": 33,
+          "avg_30d": 32.3,
+          "trend": "up",
+          "change_pct": 2.1
+        },
+        "SK하이닉스": {
+          "current": 17,
+          "avg_30d": 14.7,
+          "trend": "up",
+          "change_pct": 15.6
+        },
+        "코스피": {
+          "current": 25,
+          "avg_30d": 20.2,
+          "trend": "up",
+          "change_pct": 23.6
+        },
+        "주식": {
+          "current": 52,
+          "avg_30d": 41.4,
+          "trend": "up",
+          "change_pct": 25.7
+        },
+        "금리": {
+          "current": 3,
+          "avg_30d": 5.7,
+          "trend": "down",
+          "change_pct": -47.4
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.3,
+          "trend": "down",
+          "change_pct": -30.8
+        },
+        "AI": {
+          "current": 59,
+          "avg_30d": 71.7,
+          "trend": "down",
+          "change_pct": -17.7
+        },
+        "반도체": {
+          "current": 7,
+          "avg_30d": 6.3,
+          "trend": "up",
+          "change_pct": 11.7
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -25.9
+        }
+      }
+    },
+    {
+      "date": "2026-04-24",
+      "data": {
+        "삼성전자": {
+          "current": 49,
+          "avg_30d": 34.4,
+          "trend": "up",
+          "change_pct": 42.4
+        },
+        "SK하이닉스": {
+          "current": 28,
+          "avg_30d": 16.0,
+          "trend": "up",
+          "change_pct": 75.4
+        },
+        "코스피": {
+          "current": 30,
+          "avg_30d": 21.4,
+          "trend": "up",
+          "change_pct": 40.2
+        },
+        "주식": {
+          "current": 48,
+          "avg_30d": 42.7,
+          "trend": "up",
+          "change_pct": 12.4
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 5.7,
+          "trend": "down",
+          "change_pct": -29.8
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.2,
+          "trend": "down",
+          "change_pct": -28.6
+        },
+        "AI": {
+          "current": 62,
+          "avg_30d": 70.6,
+          "trend": "down",
+          "change_pct": -12.1
+        },
+        "반도체": {
+          "current": 7,
+          "avg_30d": 6.3,
+          "trend": "up",
+          "change_pct": 11.1
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -6.8
+        }
+      }
+    },
+    {
+      "date": "2026-04-27",
+      "data": {
+        "삼성전자": {
+          "current": 44,
+          "avg_30d": 35.3,
+          "trend": "up",
+          "change_pct": 24.8
+        },
+        "SK하이닉스": {
+          "current": 23,
+          "avg_30d": 17.6,
+          "trend": "up",
+          "change_pct": 30.7
+        },
+        "코스피": {
+          "current": 6,
+          "avg_30d": 21.8,
+          "trend": "down",
+          "change_pct": -72.4
+        },
+        "주식": {
+          "current": 36,
+          "avg_30d": 43.1,
+          "trend": "down",
+          "change_pct": -16.5
+        },
+        "금리": {
+          "current": 2,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -62.5
+        },
+        "NVIDIA": {
+          "current": 1,
+          "avg_30d": 4.1,
+          "trend": "down",
+          "change_pct": -75.8
+        },
+        "AI": {
+          "current": 46,
+          "avg_30d": 68.9,
+          "trend": "down",
+          "change_pct": -33.2
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 7.0,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -21.1
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -6.2
+        }
+      }
+    },
+    {
+      "date": "2026-04-28",
+      "data": {
+        "삼성전자": {
+          "current": 34,
+          "avg_30d": 35.3,
+          "trend": "down",
+          "change_pct": -3.7
+        },
+        "SK하이닉스": {
+          "current": 17,
+          "avg_30d": 17.8,
+          "trend": "down",
+          "change_pct": -4.3
+        },
+        "코스피": {
+          "current": 31,
+          "avg_30d": 22.0,
+          "trend": "up",
+          "change_pct": 40.7
+        },
+        "주식": {
+          "current": 44,
+          "avg_30d": 43.2,
+          "trend": "up",
+          "change_pct": 1.9
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -23.6
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.1,
+          "trend": "down",
+          "change_pct": -50.8
+        },
+        "AI": {
+          "current": 55,
+          "avg_30d": 68.8,
+          "trend": "down",
+          "change_pct": -20.0
+        },
+        "반도체": {
+          "current": 11,
+          "avg_30d": 7.3,
+          "trend": "up",
+          "change_pct": 50.7
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -5.7
+        }
+      }
+    },
+    {
+      "date": "2026-04-29",
+      "data": {
+        "삼성전자": {
+          "current": 33,
+          "avg_30d": 37.3,
+          "trend": "down",
+          "change_pct": -11.4
+        },
+        "SK하이닉스": {
+          "current": 29,
+          "avg_30d": 19.3,
+          "trend": "up",
+          "change_pct": 50.5
+        },
+        "코스피": {
+          "current": 20,
+          "avg_30d": 23.3,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "주식": {
+          "current": 50,
+          "avg_30d": 45.3,
+          "trend": "up",
+          "change_pct": 10.5
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 5.5,
+          "trend": "down",
+          "change_pct": -9.6
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.0,
+          "trend": "down",
+          "change_pct": -50.0
+        },
+        "AI": {
+          "current": 57,
+          "avg_30d": 69.4,
+          "trend": "down",
+          "change_pct": -17.8
+        },
+        "반도체": {
+          "current": 10,
+          "avg_30d": 7.6,
+          "trend": "up",
+          "change_pct": 32.2
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.3,
+          "trend": "down",
+          "change_pct": -5.7
+        }
+      }
+    },
+    {
+      "date": "2026-04-30",
+      "data": {
+        "삼성전자": {
+          "current": 37,
+          "avg_30d": 34.7,
+          "trend": "up",
+          "change_pct": 6.6
+        },
+        "SK하이닉스": {
+          "current": 29,
+          "avg_30d": 18.4,
+          "trend": "up",
+          "change_pct": 57.6
+        },
+        "코스피": {
+          "current": 30,
+          "avg_30d": 21.8,
+          "trend": "up",
+          "change_pct": 37.6
+        },
+        "주식": {
+          "current": 58,
+          "avg_30d": 42.8,
+          "trend": "up",
+          "change_pct": 35.4
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 4.9,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.0,
+          "trend": "down",
+          "change_pct": -50.4
+        },
+        "AI": {
+          "current": 50,
+          "avg_30d": 67.7,
+          "trend": "down",
+          "change_pct": -26.1
+        },
+        "반도체": {
+          "current": 9,
+          "avg_30d": 7.7,
+          "trend": "up",
+          "change_pct": 16.9
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -3.8
+        }
+      }
+    },
+    {
+      "date": "2026-05-01",
+      "data": {
+        "삼성전자": {
+          "current": 35,
+          "avg_30d": 38.8,
+          "trend": "down",
+          "change_pct": -9.8
+        },
+        "SK하이닉스": {
+          "current": 11,
+          "avg_30d": 20.9,
+          "trend": "down",
+          "change_pct": -47.5
+        },
+        "코스피": {
+          "current": 34,
+          "avg_30d": 24.5,
+          "trend": "up",
+          "change_pct": 38.6
+        },
+        "주식": {
+          "current": 58,
+          "avg_30d": 48.0,
+          "trend": "up",
+          "change_pct": 20.8
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 5.4,
+          "trend": "down",
+          "change_pct": -26.4
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.0,
+          "trend": "down",
+          "change_pct": -50.0
+        },
+        "AI": {
+          "current": 47,
+          "avg_30d": 68.3,
+          "trend": "down",
+          "change_pct": -31.2
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 7.9,
+          "trend": "down",
+          "change_pct": -24.4
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.5,
+          "trend": "down",
+          "change_pct": -21.1
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -22.6
+        }
+      }
+    },
+    {
+      "date": "2026-05-04",
+      "data": {
+        "삼성전자": {
+          "current": 66,
+          "avg_30d": 40.6,
+          "trend": "up",
+          "change_pct": 62.6
+        },
+        "SK하이닉스": {
+          "current": 29,
+          "avg_30d": 21.9,
+          "trend": "up",
+          "change_pct": 32.6
+        },
+        "코스피": {
+          "current": 23,
+          "avg_30d": 24.7,
+          "trend": "down",
+          "change_pct": -7.0
+        },
+        "주식": {
+          "current": 33,
+          "avg_30d": 49.1,
+          "trend": "down",
+          "change_pct": -32.7
+        },
+        "금리": {
+          "current": 2,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -61.8
+        },
+        "NVIDIA": {
+          "current": 1,
+          "avg_30d": 3.7,
+          "trend": "down",
+          "change_pct": -73.2
+        },
+        "AI": {
+          "current": 37,
+          "avg_30d": 64.9,
+          "trend": "down",
+          "change_pct": -43.0
+        },
+        "반도체": {
+          "current": 3,
+          "avg_30d": 7.7,
+          "trend": "down",
+          "change_pct": -61.2
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 5.0,
+          "trend": "down",
+          "change_pct": -20.0
+        }
+      }
+    },
+    {
+      "date": "2026-05-06",
+      "data": {
+        "삼성전자": {
+          "current": 58,
+          "avg_30d": 43.9,
+          "trend": "up",
+          "change_pct": 32.0
+        },
+        "SK하이닉스": {
+          "current": 13,
+          "avg_30d": 22.9,
+          "trend": "down",
+          "change_pct": -43.2
+        },
+        "코스피": {
+          "current": 28,
+          "avg_30d": 26.2,
+          "trend": "up",
+          "change_pct": 6.7
+        },
+        "주식": {
+          "current": 45,
+          "avg_30d": 52.3,
+          "trend": "down",
+          "change_pct": -14.0
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 5.2,
+          "trend": "down",
+          "change_pct": -4.5
+        }
+      }
+    },
+    {
+      "date": "2026-05-07",
+      "data": {
+        "삼성전자": {
+          "current": 67,
+          "avg_30d": 44.9,
+          "trend": "up",
+          "change_pct": 49.1
+        },
+        "SK하이닉스": {
+          "current": 24,
+          "avg_30d": 24.0,
+          "trend": "up",
+          "change_pct": 0.1
+        },
+        "코스피": {
+          "current": 52,
+          "avg_30d": 27.6,
+          "trend": "up",
+          "change_pct": 88.4
+        },
+        "주식": {
+          "current": 71,
+          "avg_30d": 54.5,
+          "trend": "up",
+          "change_pct": 30.4
+        },
+        "금리": {
+          "current": 6,
+          "avg_30d": 5.4,
+          "trend": "up",
+          "change_pct": 11.8
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 3.9,
+          "trend": "down",
+          "change_pct": -48.7
+        },
+        "AI": {
+          "current": 58,
+          "avg_30d": 65.2,
+          "trend": "down",
+          "change_pct": -11.1
+        },
+        "반도체": {
+          "current": 12,
+          "avg_30d": 8.4,
+          "trend": "up",
+          "change_pct": 42.3
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.0,
+          "trend": "down",
+          "change_pct": -0.7
+        }
+      }
+    },
+    {
+      "date": "2026-05-14",
+      "data": {
+        "삼성전자": {
+          "current": 53,
+          "avg_30d": 41.5,
+          "trend": "up",
+          "change_pct": 27.8
+        },
+        "SK하이닉스": {
+          "current": 21,
+          "avg_30d": 25.3,
+          "trend": "down",
+          "change_pct": -17.1
+        },
+        "코스피": {
+          "current": 32,
+          "avg_30d": 24.1,
+          "trend": "up",
+          "change_pct": 32.8
+        },
+        "주식": {
+          "current": 50,
+          "avg_30d": 48.2,
+          "trend": "up",
+          "change_pct": 3.7
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 4.2,
+          "trend": "down",
+          "change_pct": -5.5
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 3.9,
+          "trend": "down",
+          "change_pct": -49.2
+        },
+        "AI": {
+          "current": 56,
+          "avg_30d": 64.2,
+          "trend": "down",
+          "change_pct": -12.8
+        },
+        "반도체": {
+          "current": 10,
+          "avg_30d": 9.8,
+          "trend": "up",
+          "change_pct": 2.0
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -14.3
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.0,
+          "trend": "up",
+          "change_pct": 0.7
+        }
+      }
+    },
+    {
+      "date": "2026-05-15",
+      "data": {
+        "삼성전자": {
+          "current": 43,
+          "avg_30d": 42.5,
+          "trend": "up",
+          "change_pct": 1.3
+        },
+        "SK하이닉스": {
+          "current": 27,
+          "avg_30d": 26.0,
+          "trend": "up",
+          "change_pct": 4.0
+        },
+        "코스피": {
+          "current": 25,
+          "avg_30d": 24.8,
+          "trend": "up",
+          "change_pct": 0.7
+        },
+        "주식": {
+          "current": 63,
+          "avg_30d": 49.0,
+          "trend": "up",
+          "change_pct": 28.5
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 4.4,
+          "trend": "down",
+          "change_pct": -9.1
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.0,
+          "trend": "down",
+          "change_pct": -24.4
+        },
+        "AI": {
+          "current": 58,
+          "avg_30d": 65.3,
+          "trend": "down",
+          "change_pct": -11.1
+        },
+        "반도체": {
+          "current": 10,
+          "avg_30d": 10.0,
+          "trend": "down",
+          "change_pct": 0.0
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.4,
+          "trend": "down",
+          "change_pct": -15.5
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 4.9,
+          "trend": "up",
+          "change_pct": 1.4
+        }
+      }
+    },
+    {
+      "date": "2026-05-18",
+      "data": {
+        "삼성전자": {
+          "current": 59,
+          "avg_30d": 44.8,
+          "trend": "up",
+          "change_pct": 31.8
+        },
+        "SK하이닉스": {
+          "current": 30,
+          "avg_30d": 27.0,
+          "trend": "up",
+          "change_pct": 11.1
+        },
+        "코스피": {
+          "current": 17,
+          "avg_30d": 25.2,
+          "trend": "down",
+          "change_pct": -32.6
+        },
+        "주식": {
+          "current": 80,
+          "avg_30d": 50.3,
+          "trend": "up",
+          "change_pct": 58.9
+        },
+        "금리": {
+          "current": 4,
+          "avg_30d": 4.6,
+          "trend": "down",
+          "change_pct": -13.7
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.2,
+          "trend": "down",
+          "change_pct": -52.0
+        },
+        "AI": {
+          "current": 51,
+          "avg_30d": 65.3,
+          "trend": "down",
+          "change_pct": -21.9
+        },
+        "반도체": {
+          "current": 9,
+          "avg_30d": 11.1,
+          "trend": "down",
+          "change_pct": -18.9
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -2.0
+        }
+      }
+    },
+    {
+      "date": "2026-05-19",
+      "data": {
+        "삼성전자": {
+          "current": 85,
+          "avg_30d": 50.2,
+          "trend": "up",
+          "change_pct": 69.3
+        },
+        "SK하이닉스": {
+          "current": 27,
+          "avg_30d": 28.5,
+          "trend": "down",
+          "change_pct": -5.3
+        },
+        "코스피": {
+          "current": 32,
+          "avg_30d": 26.9,
+          "trend": "up",
+          "change_pct": 19.1
+        },
+        "주식": {
+          "current": 44,
+          "avg_30d": 53.9,
+          "trend": "down",
+          "change_pct": -18.4
+        },
+        "금리": {
+          "current": 8,
+          "avg_30d": 5.0,
+          "trend": "up",
+          "change_pct": 60.0
+        },
+        "NVIDIA": {
+          "current": 3,
+          "avg_30d": 4.0,
+          "trend": "down",
+          "change_pct": -25.6
+        },
+        "AI": {
+          "current": 54,
+          "avg_30d": 63.3,
+          "trend": "down",
+          "change_pct": -14.6
+        },
+        "반도체": {
+          "current": 11,
+          "avg_30d": 10.9,
+          "trend": "up",
+          "change_pct": 0.9
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -11.8
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.0,
+          "trend": "down",
+          "change_pct": 0.0
+        }
+      }
+    },
+    {
+      "date": "2026-05-20",
+      "data": {
+        "삼성전자": {
+          "current": 100,
+          "avg_30d": 49.1,
+          "trend": "up",
+          "change_pct": 103.8
+        },
+        "SK하이닉스": {
+          "current": 28,
+          "avg_30d": 26.8,
+          "trend": "up",
+          "change_pct": 4.3
+        },
+        "코스피": {
+          "current": 32,
+          "avg_30d": 25.1,
+          "trend": "up",
+          "change_pct": 27.5
+        },
+        "주식": {
+          "current": 43,
+          "avg_30d": 50.1,
+          "trend": "down",
+          "change_pct": -14.2
+        },
+        "금리": {
+          "current": 7,
+          "avg_30d": 4.9,
+          "trend": "up",
+          "change_pct": 41.9
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 4.3,
+          "trend": "down",
+          "change_pct": -6.2
+        },
+        "AI": {
+          "current": 60,
+          "avg_30d": 66.3,
+          "trend": "down",
+          "change_pct": -9.5
+        },
+        "반도체": {
+          "current": 15,
+          "avg_30d": 11.7,
+          "trend": "up",
+          "change_pct": 28.6
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -1.3
+        }
+      }
+    },
+    {
+      "date": "2026-05-21",
+      "data": {
+        "삼성전자": {
+          "current": 100,
+          "avg_30d": 48.8,
+          "trend": "up",
+          "change_pct": 105.1
+        },
+        "SK하이닉스": {
+          "current": 25,
+          "avg_30d": 25.4,
+          "trend": "down",
+          "change_pct": -1.4
+        },
+        "코스피": {
+          "current": 27,
+          "avg_30d": 24.0,
+          "trend": "up",
+          "change_pct": 12.7
+        },
+        "주식": {
+          "current": 41,
+          "avg_30d": 48.0,
+          "trend": "down",
+          "change_pct": -14.5
+        },
+        "금리": {
+          "current": 7,
+          "avg_30d": 4.7,
+          "trend": "up",
+          "change_pct": 47.9
+        },
+        "NVIDIA": {
+          "current": 5,
+          "avg_30d": 4.4,
+          "trend": "up",
+          "change_pct": 13.6
+        },
+        "AI": {
+          "current": 60,
+          "avg_30d": 66.1,
+          "trend": "down",
+          "change_pct": -9.3
+        },
+        "반도체": {
+          "current": 12,
+          "avg_30d": 11.9,
+          "trend": "up",
+          "change_pct": 0.8
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.3,
+          "trend": "down",
+          "change_pct": -13.0
+        },
+        "배터리": {
+          "current": 5,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -2.6
+        }
+      }
+    },
+    {
+      "date": "2026-05-22",
+      "data": {
+        "삼성전자": {
+          "current": 74,
+          "avg_30d": 47.4,
+          "trend": "up",
+          "change_pct": 56.2
+        },
+        "SK하이닉스": {
+          "current": 14,
+          "avg_30d": 23.5,
+          "trend": "down",
+          "change_pct": -40.4
+        },
+        "코스피": {
+          "current": 36,
+          "avg_30d": 22.9,
+          "trend": "up",
+          "change_pct": 57.2
+        },
+        "주식": {
+          "current": 38,
+          "avg_30d": 45.1,
+          "trend": "down",
+          "change_pct": -15.7
+        },
+        "금리": {
+          "current": 5,
+          "avg_30d": 4.6,
+          "trend": "up",
+          "change_pct": 7.9
+        },
+        "NVIDIA": {
+          "current": 4,
+          "avg_30d": 4.2,
+          "trend": "down",
+          "change_pct": -4.0
+        },
+        "AI": {
+          "current": 55,
+          "avg_30d": 61.1,
+          "trend": "down",
+          "change_pct": -10.0
+        },
+        "반도체": {
+          "current": 20,
+          "avg_30d": 11.1,
+          "trend": "up",
+          "change_pct": 79.6
+        },
+        "전기차": {
+          "current": 2,
+          "avg_30d": 2.1,
+          "trend": "down",
+          "change_pct": -3.2
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 4.5,
+          "trend": "down",
+          "change_pct": -11.1
+        }
+      }
+    },
+    {
+      "date": "2026-05-25",
+      "data": {
+        "삼성전자": {
+          "current": 26,
+          "avg_30d": 49.5,
+          "trend": "down",
+          "change_pct": -47.4
+        },
+        "SK하이닉스": {
+          "current": 17,
+          "avg_30d": 26.0,
+          "trend": "down",
+          "change_pct": -34.6
+        },
+        "코스피": {
+          "current": 22,
+          "avg_30d": 24.0,
+          "trend": "down",
+          "change_pct": -8.5
+        },
+        "주식": {
+          "current": 23,
+          "avg_30d": 46.0,
+          "trend": "down",
+          "change_pct": -50.0
+        },
+        "금리": {
+          "current": 3,
+          "avg_30d": 5.1,
+          "trend": "down",
+          "change_pct": -41.6
+        },
+        "NVIDIA": {
+          "current": 2,
+          "avg_30d": 4.3,
+          "trend": "down",
+          "change_pct": -53.5
+        },
+        "AI": {
+          "current": 40,
+          "avg_30d": 59.2,
+          "trend": "down",
+          "change_pct": -32.4
+        },
+        "반도체": {
+          "current": 6,
+          "avg_30d": 10.6,
+          "trend": "down",
+          "change_pct": -43.4
+        },
+        "전기차": {
+          "current": 1,
+          "avg_30d": 1.9,
+          "trend": "down",
+          "change_pct": -48.3
+        },
+        "배터리": {
+          "current": 4,
+          "avg_30d": 4.2,
+          "trend": "down",
+          "change_pct": -5.5
+        }
+      }
+    }
+  ]
+}

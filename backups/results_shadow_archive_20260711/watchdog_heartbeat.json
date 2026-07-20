@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-07-11T15:19:59.036357",
+  "n_issues": 1,
+  "n_critical": 0,
+  "killed": 0,
+  "reloaded": 0,
+  "issues": [
+    {
+      "type": "stale_result",
+      "phase": "market",
+      "file": "shadow_portfolio.json",
+      "age_minutes": 1656,
+      "severity": "WARNING"
+    }
+  ],
+  "dry_run": false
+}

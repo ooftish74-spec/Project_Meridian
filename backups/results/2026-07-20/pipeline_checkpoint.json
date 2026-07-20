@@ -1,0 +1,19 @@
+{
+  "date": "2026-07-20",
+  "phases": {
+    "intraday": {
+      "status": "done",
+      "started_at": "2026-07-20T03:27:25.712307",
+      "retries": 0,
+      "completed_at": "2026-07-20T03:27:42.296382",
+      "duration_sec": 16.6
+    },
+    "us_market": {
+      "status": "done",
+      "started_at": "2026-07-20T02:00:05.425637",
+      "retries": 0,
+      "completed_at": "2026-07-20T02:00:17.349844",
+      "duration_sec": 11.9
+    }
+  }
+}

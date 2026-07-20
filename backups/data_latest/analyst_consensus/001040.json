@@ -1,0 +1,20 @@
+{
+  "ticker": "001040",
+  "target_price": 259600,
+  "current_price": 181500,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "CJ",
+  "latest_research": {
+    "title": "1Q 부진 불구, 올리브영 글로벌 진출과 자사주 향방이 변수",
+    "broker": "대신증권",
+    "date": "20260519"
+  }
+}

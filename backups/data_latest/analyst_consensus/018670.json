@@ -1,0 +1,20 @@
+{
+  "ticker": "018670",
+  "target_price": 367000,
+  "current_price": 215500,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "SK가스",
+  "latest_research": {
+    "title": "NDR 후기: 좋은 내용 대비 너무 빠진 주가",
+    "broker": "DS투자증권",
+    "date": "20260521"
+  }
+}

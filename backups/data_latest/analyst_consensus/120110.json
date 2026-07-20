@@ -1,0 +1,20 @@
+{
+  "ticker": "120110",
+  "target_price": 116400,
+  "current_price": 73800,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-12",
+  "stock_name": "코오롱인더",
+  "latest_research": {
+    "title": "상반기는 수지, 하반기는 mPPO/아라미드",
+    "broker": "하나증권",
+    "date": "20260511"
+  }
+}

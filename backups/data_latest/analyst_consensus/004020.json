@@ -1,0 +1,20 @@
+{
+  "ticker": "004020",
+  "target_price": 52350,
+  "current_price": 37850,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "현대제철",
+  "latest_research": {
+    "title": "1Q26 Review: 2분기 스프레드 반등 여부에 주목",
+    "broker": "한화투자증권",
+    "date": "20260427"
+  }
+}

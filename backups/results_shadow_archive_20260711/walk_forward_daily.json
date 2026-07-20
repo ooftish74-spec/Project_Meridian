@@ -1,0 +1,100 @@
+[
+  {
+    "date": "2026-06-22",
+    "timestamp": "2026-06-22T20:00:09.970467",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-06-23",
+    "timestamp": "2026-06-23T20:00:09.107202",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: Can't get attribute 'SklearnCompatibleCatBoost' on <module '__main__' from '/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/daily_pipeline.py'>"
+  },
+  {
+    "date": "2026-06-24",
+    "timestamp": "2026-06-24T20:00:12.182191",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: Can't get attribute 'SklearnCompatibleCatBoost' on <module '__main__' from '/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/daily_pipeline.py'>"
+  },
+  {
+    "date": "2026-06-25",
+    "timestamp": "2026-06-25T20:00:14.172714",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: Can't get attribute 'SklearnCompatibleCatBoost' on <module '__main__' from '/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/daily_pipeline.py'>"
+  },
+  {
+    "date": "2026-06-26",
+    "timestamp": "2026-06-26T20:00:14.136787",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: Can't get attribute 'SklearnCompatibleCatBoost' on <module '__main__' from '/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/daily_pipeline.py'>"
+  },
+  {
+    "date": "2026-06-29",
+    "timestamp": "2026-06-29T20:00:14.029483",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: <class 'numpy.random._mt19937.MT19937'> is not a known BitGenerator module."
+  },
+  {
+    "date": "2026-06-30",
+    "timestamp": "2026-06-30T20:00:12.873762",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "모델 로드 실패: <class 'numpy.random._mt19937.MT19937'> is not a known BitGenerator module."
+  },
+  {
+    "date": "2026-07-01",
+    "timestamp": "2026-07-01T20:00:13.439372",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-02",
+    "timestamp": "2026-07-02T20:00:13.511648",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-03",
+    "timestamp": "2026-07-03T01:00:14.957496",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-06",
+    "timestamp": "2026-07-06T01:54:06.402231",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-08",
+    "timestamp": "2026-07-08T20:00:05.391375",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  },
+  {
+    "date": "2026-07-10",
+    "timestamp": "2026-07-10T20:00:04.876111",
+    "window_days": 5,
+    "status": "skip",
+    "reason": "예측 0건 < 최소 10건",
+    "n_predictions": 0
+  }
+]

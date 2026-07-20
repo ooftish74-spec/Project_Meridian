@@ -1,0 +1,31 @@
+{
+  "_meta": {
+    "date": "2026-04-19",
+    "generated_at": "2026-04-19T06:01:52.514582",
+    "version": "1.0"
+  },
+  "collect_module1_evening": {
+    "status": "ok",
+    "rows": 2,
+    "latency_ms": 0.0,
+    "recorded_at": "2026-04-19T06:01:52.514586",
+    "total": 2,
+    "phase": "evening"
+  },
+  "collect_module1_morning": {
+    "status": "ok",
+    "rows": 44,
+    "latency_ms": 0,
+    "recorded_at": "2026-04-19T06:02:08.104561",
+    "total": 44,
+    "phase": "morning",
+    "stale_count": 17
+  },
+  "usa_collector": {
+    "status": "error",
+    "rows": 0,
+    "latency_ms": 0.0,
+    "recorded_at": "2026-04-19T17:58:38.039425",
+    "error": "all_data 비었음"
+  }
+}

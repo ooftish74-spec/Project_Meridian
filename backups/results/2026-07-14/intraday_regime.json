@@ -1,0 +1,12 @@
+{
+  "regime": "normal",
+  "exposure_adjustment": 1.0,
+  "trigger": "",
+  "current_regime": "normal",
+  "n_transitions": 0,
+  "recovery": {
+    "detected": false,
+    "strength": 0
+  },
+  "timestamp": "2026-07-14T03:26:24.435634"
+}

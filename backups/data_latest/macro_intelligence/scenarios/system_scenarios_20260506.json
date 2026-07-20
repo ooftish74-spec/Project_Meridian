@@ -1,0 +1,48 @@
+{
+  "created": "2026-05-06",
+  "updated": "2026-05-06",
+  "scenarios": {
+    "A_bull_continuation": {
+      "name": "BULL 지속",
+      "probability": 0.55,
+      "description": "AI CapEx 유지+확대, HBM 공급부족 지속, 금리 인하 기대",
+      "triggers": [
+        "CapEx 가이던스 유지/상향",
+        "VIX < 20",
+        "HBM ASP 상승"
+      ],
+      "l1": "SOXL/TQQQ 롱 유지, SOXL 비중 > TQQQ",
+      "l2": "ML Top DA 종목 적극 진입",
+      "l3": "글로벌성장 슬리브 확대",
+      "l4": "PENSION 나스닥100 35→40%"
+    },
+    "B_valuation_correction": {
+      "name": "밸류에이션 조정",
+      "probability": 0.3,
+      "description": "AI 투자 ROI 의문 → 단기 조정, 구조적 추세 유지",
+      "triggers": [
+        "CapEx 소폭 하향",
+        "VIX 20~25",
+        "AI 수익화 지연 뉴스"
+      ],
+      "l1": "레버리지 축소, 인버스 15%",
+      "l2": "DA≥60% 종목만 (엄격 필터)",
+      "l3": "안전자산 슬리브 25→30%",
+      "l4": "DCA 유지, 추가 매수 대기"
+    },
+    "C_shadow_banking_crisis": {
+      "name": "그림자금융 위기",
+      "probability": 0.15,
+      "description": "Private Credit 부실 → 유동성 위기 → 전면 방어",
+      "triggers": [
+        "VIX > 25 AND HY Spread > 400bp",
+        "사모펀드 환매 > 10%/월"
+      ],
+      "l1": "즉시 SOXS/SQQQ 전환, 인버스 40%",
+      "l2": "Kill Switch — 신규 진입 중단",
+      "l3": "위기 모드: 금/채권 50%+",
+      "l4": "IRP 안전 50%+",
+      "deo": "exposure → 20% 이하"
+    }
+  }
+}

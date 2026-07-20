@@ -1,0 +1,11 @@
+{
+  "updated": "2026-05-02",
+  "source": "data/raw/indices/VIX.csv",
+  "vix": {
+    "date": "2026-05-01",
+    "current": 16.99,
+    "prev": 16.89,
+    "change_pct": 0.592,
+    "change_20d_pct": -29.706
+  }
+}

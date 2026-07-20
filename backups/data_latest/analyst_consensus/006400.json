@@ -1,0 +1,20 @@
+{
+  "ticker": "006400",
+  "target_price": 843609,
+  "current_price": 602000,
+  "recomm_mean": 3.96,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "삼성SDI",
+  "latest_research": {
+    "title": "AIDC향 ESS의 중장기적인 성장성 확보",
+    "broker": "iM증권",
+    "date": "20260511"
+  }
+}

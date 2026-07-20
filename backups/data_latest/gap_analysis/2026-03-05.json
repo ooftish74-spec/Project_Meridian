@@ -1,0 +1,192 @@
+{
+  "date": "2026-03-05",
+  "gaps": [
+    {
+      "name": "삼성전자",
+      "ticker": "005930",
+      "predicted": 172631.0,
+      "actual": 191600,
+      "gap": 18969.0,
+      "gap_pct": 10.99,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 11.265969802555166,
+      "predicted_return": 0.002504
+    },
+    {
+      "name": "SK하이닉스",
+      "ticker": "000660",
+      "predicted": 841210.0,
+      "actual": 941000,
+      "gap": 99790.0,
+      "gap_pct": 11.86,
+      "direction": false,
+      "in_ci": false,
+      "actual_change": 10.83627797408717,
+      "predicted_return": -0.009175
+    },
+    {
+      "name": "현대차",
+      "ticker": "005380",
+      "predicted": 505686.0,
+      "actual": 548000,
+      "gap": 42314.0,
+      "gap_pct": 8.37,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 9.381237524950103,
+      "predicted_return": 0.009354
+    },
+    {
+      "name": "두산에너빌리티",
+      "ticker": "034020",
+      "predicted": 81400.0,
+      "actual": 90500,
+      "gap": 9100.0,
+      "gap_pct": 11.18,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 12.28287841191067,
+      "predicted_return": 0.009925
+    },
+    {
+      "name": "한국전력",
+      "ticker": "015760",
+      "predicted": 46397.0,
+      "actual": 48200,
+      "gap": 1803.0,
+      "gap_pct": 3.89,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 5.817782656421522,
+      "predicted_return": 0.018601
+    },
+    {
+      "name": "미래에셋증권",
+      "ticker": "006800",
+      "predicted": 56888.0,
+      "actual": 65200,
+      "gap": 8312.0,
+      "gap_pct": 14.61,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 15.398230088495568,
+      "predicted_return": 0.006866
+    },
+    {
+      "name": "기아",
+      "ticker": "000270",
+      "predicted": 159287.0,
+      "actual": 166400,
+      "gap": 7113.0,
+      "gap_pct": 4.47,
+      "direction": true,
+      "in_ci": true,
+      "actual_change": 6.190172303765151,
+      "predicted_return": 0.016507
+    },
+    {
+      "name": "LG에너지솔루션",
+      "ticker": "373220",
+      "predicted": 349658.0,
+      "actual": 371500,
+      "gap": 21842.0,
+      "gap_pct": 6.25,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 6.906474820143882,
+      "predicted_return": 0.006211
+    },
+    {
+      "name": "KB금융",
+      "ticker": "105560",
+      "predicted": 138052.0,
+      "actual": 149000,
+      "gap": 10948.0,
+      "gap_pct": 7.93,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 8.206245461147432,
+      "predicted_return": 0.002555
+    },
+    {
+      "name": "신한지주",
+      "ticker": "055550",
+      "predicted": 91623.0,
+      "actual": 92900,
+      "gap": 1277.0,
+      "gap_pct": 1.39,
+      "direction": true,
+      "in_ci": true,
+      "actual_change": 4.61711711711712,
+      "predicted_return": 0.031796
+    },
+    {
+      "name": "NAVER",
+      "ticker": "035420",
+      "predicted": 209390.0,
+      "actual": 220000,
+      "gap": 10610.0,
+      "gap_pct": 5.07,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 5.769230769230771,
+      "predicted_return": 0.006684
+    },
+    {
+      "name": "셀트리온",
+      "ticker": "068270",
+      "predicted": 198433.0,
+      "actual": 211500,
+      "gap": 13067.0,
+      "gap_pct": 6.59,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 7.14285714285714,
+      "predicted_return": 0.005231
+    },
+    {
+      "name": "한화오션",
+      "ticker": "042660",
+      "predicted": 108276.0,
+      "actual": 122100,
+      "gap": 13824.0,
+      "gap_pct": 12.77,
+      "direction": false,
+      "in_ci": false,
+      "actual_change": 12.53456221198157,
+      "predicted_return": -0.002069
+    },
+    {
+      "name": "KODEX 200",
+      "ticker": "069500",
+      "predicted": 77182.0,
+      "actual": 83570,
+      "gap": 6388.0,
+      "gap_pct": 8.28,
+      "direction": true,
+      "in_ci": false,
+      "actual_change": 10.105401844532281,
+      "predicted_return": 0.016888
+    },
+    {
+      "name": "KODEX 2차전지산업",
+      "ticker": "305720",
+      "predicted": 14857.0,
+      "actual": 16725,
+      "gap": 1868.0,
+      "gap_pct": 12.57,
+      "direction": false,
+      "in_ci": false,
+      "actual_change": 11.240438975723311,
+      "predicted_return": -0.011816
+    }
+  ],
+  "summary": {
+    "avg_gap_pct": 8.41,
+    "avg_signed_gap_pct": 8.41,
+    "direction_accuracy": 80.0,
+    "ci_coverage": 13.3,
+    "n_stocks": 15
+  }
+}

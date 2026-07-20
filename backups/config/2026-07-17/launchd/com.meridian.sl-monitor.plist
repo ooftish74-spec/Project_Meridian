@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.meridian.sl-monitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/scripts/run_pipeline.sh</string>
+        <string>intraday</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Hour</key>
+            <integer>11</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>13</integer>
+            <key>Minute</key>
+            <integer>30</integer>
+        </dict>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+    <key>StandardOutPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/com.meridian.sl-monitor.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian/logs/com.meridian.sl-monitor.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Library/Frameworks/Python.framework/Versions/3.12/bin:/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <key>PYTHONPATH</key>
+        <string>/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian</string>
+    </dict>
+</dict>
+</plist>

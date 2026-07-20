@@ -1,0 +1,91 @@
+# ============================================================
+# Project Meridian — Requirements
+# ============================================================
+# Python 3.11+
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# ── Core ──
+numpy==1.26.4
+pandas==2.3.3
+PyYAML==6.0.3
+python-dotenv==1.2.1
+requests==2.32.5
+schedule==1.2.2
+
+# ── Data Collection ──
+yfinance==1.1.0
+pykrx==1.2.4
+beautifulsoup4==4.14.3
+selenium==4.40.0
+feedparser==6.0.12
+fredapi==0.5.2
+alpha_vantage==3.0.0
+finance-datareader==0.9.110
+newsapi-python==0.2.7
+pytrends==4.9.2
+lxml==6.0.2
+
+# ── ML / Analytics ──
+scikit-learn==1.8.0
+xgboost==3.1.3
+lightgbm==4.6.0
+catboost==1.2.8
+shap==0.51.0
+statsmodels==0.14.6
+scipy==1.16.3
+hmmlearn==0.3.3
+optuna==4.7.0
+pmdarima==2.1.1
+arch==8.0.0
+ta==0.11.0
+
+# ── Deep Learning (optional, for Chronos/Transformers) ──
+torch==2.9.1
+transformers==4.41.0
+# chronos-forecasting==2.2.2
+
+# ── Visualization ──
+matplotlib==3.10.8
+seaborn==0.13.2
+plotly==6.5.2
+streamlit==1.54.0
+
+# ── Storage / Serialization ──
+pyarrow==20.0.0
+openpyxl==3.1.5
+duckdb==1.5.1
+
+# ── Reporting ──
+fpdf2==2.8.7
+reportlab==4.4.9
+weasyprint==68.1
+
+# ── Telegram Bot ──
+python-telegram-bot==22.6
+
+# ── API / Web ──
+Flask==3.1.3
+flask-cors==6.0.2
+fastapi==0.128.4
+uvicorn==0.40.0
+
+# ── Google APIs ──
+google-generativeai==0.8.6
+gspread==6.2.1
+
+# ── Testing ──
+pytest==9.0.2
+pytest-cov==7.0.0
+pytest-timeout==2.4.0
+coverage==7.13.3
+
+# ── Utilities ──
+psutil==7.1.3
+holidays==0.90
+tqdm==4.67.3
+rich==14.3.2
+colorlog==6.10.1
+joblib==1.5.3
+websocket-client==1.8.0
+streamlit-autorefresh>=1.0.1

@@ -1,0 +1,20 @@
+{
+  "ticker": "207940",
+  "target_price": 2083500,
+  "current_price": 1374000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "삼성바이오로직스",
+  "latest_research": {
+    "title": "규모의 경제가 만드는 복리 성장",
+    "broker": "대신증권",
+    "date": "20260520"
+  }
+}

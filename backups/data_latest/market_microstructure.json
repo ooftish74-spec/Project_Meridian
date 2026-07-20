@@ -1,0 +1,14 @@
+{
+  "futures_basis": {},
+  "options": {},
+  "lead_lag": {
+    "composite_signal": -0.4037,
+    "n_assets": 3,
+    "details": {
+      "sp500_overnight": -0.0015,
+      "usdkrw_change": 0.0028,
+      "oil_5d": -0.405
+    }
+  },
+  "orderbook": {}
+}

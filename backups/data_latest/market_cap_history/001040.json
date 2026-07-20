@@ -1,0 +1,41 @@
+{
+  "ticker": "001040",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 6873841926144,
+      "shares": 27058455,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 6806780248064,
+      "shares": 27058455,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 6873841926144,
+      "shares": 27058455,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 7192385683456,
+      "shares": 27058455,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 7192385683456,
+      "shares": 27058455,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 7024730963968,
+      "shares": 27058455,
+      "source": "yfinance"
+    }
+  ]
+}

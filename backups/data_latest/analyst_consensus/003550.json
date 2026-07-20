@@ -1,0 +1,20 @@
+{
+  "ticker": "003550",
+  "target_price": 142000,
+  "current_price": 140000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 2,
+  "eps_revision_down": 1,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "LG",
+  "latest_research": {
+    "title": "드디어 부각되기 시작한 AI + 로봇 밸류",
+    "broker": "키움증권",
+    "date": "20260601"
+  }
+}

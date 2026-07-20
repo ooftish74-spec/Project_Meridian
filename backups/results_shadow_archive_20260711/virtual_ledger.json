@@ -1,0 +1,42 @@
+{
+    "master_cash": 185000000.0,
+    "streams": {
+        "S1": {
+            "allocated": 5000000.0,
+            "used": 0.0
+        },
+        "S6-B": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "S2": {
+            "allocated": 8000000.0,
+            "used": 0.0
+        },
+        "S3": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "S5": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "S9": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "S10": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "S7": {
+            "allocated": 0.0,
+            "used": 0.0
+        },
+        "Beta": {
+            "allocated": 2000000.0,
+            "used": 0.0
+        }
+    },
+    "timestamp": "2026-07-10T09:05:06.693030"
+}

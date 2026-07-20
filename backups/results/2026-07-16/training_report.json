@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-07-15T20:02:28.991172+09:00",
+  "trigger": "weekly",
+  "window_days": 730,
+  "train_size": 21293,
+  "n_features": 35,
+  "ensemble_acc": 0.7339,
+  "ensemble_auc": 0.7805,
+  "models": {
+    "gbr": {
+      "acc": 0.7119,
+      "auc": 0.6406
+    },
+    "xgb": {
+      "acc": 0.7294,
+      "auc": 0.7452
+    },
+    "rf": {
+      "acc": 0.7229,
+      "auc": 0.7292
+    },
+    "lgbm": {
+      "acc": 0.7503,
+      "auc": 0.8726
+    },
+    "catboost": {
+      "acc": 0.7449,
+      "auc": 0.8251
+    }
+  },
+  "pruned_features": [],
+  "challenger": {
+    "status": "adopted",
+    "reason": "Adopted: old_AUC=0.7805 → new_AUC=0.7805 (+0.0000)"
+  },
+  "wf_diagnostics": {
+    "status": "skip",
+    "weak_threshold": 0.5,
+    "n_splits": 5,
+    "reason": "유효한 split 없음"
+  }
+}

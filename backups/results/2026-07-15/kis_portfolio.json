@@ -1,0 +1,296 @@
+{
+  "date": "2026-07-14",
+  "timestamp": "2026-07-14T15:35:07.434113",
+  "kis_mode": "shadow",
+  "account": {
+    "number": "4422****01",
+    "type": "Main (종합 위탁)",
+    "initial_capital": 1000000.0,
+    "nav": 999412.08,
+    "cash": 108772.07999999996,
+    "invested": 890640,
+    "invest_pct": 89.1
+  },
+  "regime": "bull",
+  "streams": {
+    "S1": {
+      "name": "Directional ETF",
+      "tradeable_sessions": [
+        "regular"
+      ],
+      "exchange": "SOR",
+      "asset_type": "ETF",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [],
+      "n_signals": 0,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S2": {
+      "name": "ML Alpha (개별주)",
+      "tradeable_sessions": [
+        "pre",
+        "regular",
+        "after"
+      ],
+      "exchange": "auto (NXT pre/after, SOR regular)",
+      "asset_type": "STOCK",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [
+        {
+          "ticker": "_SYS_META",
+          "name": "_시스템메타",
+          "action": "HOLD",
+          "confidence": 0.814,
+          "score": 0,
+          "type": "STOCK"
+        }
+      ],
+      "n_signals": 1,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S3": {
+      "name": "Sector Rotation ETF",
+      "tradeable_sessions": [
+        "regular"
+      ],
+      "exchange": "SOR",
+      "asset_type": "ETF",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [
+        {
+          "ticker": "379800",
+          "name": "KODEX 미국S&P500",
+          "action": "BUY",
+          "confidence": 0.622,
+          "score": 0,
+          "type": "ETF"
+        },
+        {
+          "ticker": "227550",
+          "name": "TIGER 200 산업재",
+          "action": "BUY",
+          "confidence": 0.656,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "453870",
+          "name": "TIGER 인도니프티50",
+          "action": "BUY",
+          "confidence": 0.607,
+          "score": 0,
+          "type": "ETF"
+        },
+        {
+          "ticker": "192090",
+          "name": "TIGER 차이나CSI300",
+          "action": "BUY",
+          "confidence": 0.607,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "091160",
+          "name": "KODEX 반도체",
+          "action": "BUY",
+          "confidence": 0.489,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000660",
+          "name": "SK하이닉스",
+          "action": "BUY",
+          "confidence": 0.58,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000270",
+          "name": "기아",
+          "action": "BUY",
+          "confidence": 0.511,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "009540",
+          "name": "HD한국조선해양",
+          "action": "BUY",
+          "confidence": 0.505,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "000810",
+          "name": "삼성화재",
+          "action": "BUY",
+          "confidence": 0.461,
+          "score": 0,
+          "type": "STOCK"
+        },
+        {
+          "ticker": "030200",
+          "name": "KT",
+          "action": "BUY",
+          "confidence": 0.453,
+          "score": 0,
+          "type": "STOCK"
+        }
+      ],
+      "n_signals": 10,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": []
+    },
+    "S4": {
+      "name": "Quality-Value (개별주)",
+      "tradeable_sessions": [
+        "pre",
+        "regular",
+        "after"
+      ],
+      "exchange": "auto (NXT pre/after, SOR regular)",
+      "asset_type": "STOCK",
+      "api_eligible": true,
+      "positions": [],
+      "n_positions": 0,
+      "signals": [],
+      "n_signals": 0,
+      "kpi": {
+        "total_trades": 0,
+        "sell_count": 0,
+        "win_count": 0,
+        "loss_count": 0,
+        "win_rate": 0.0,
+        "profit_factor": 0.0,
+        "realized_pnl": 0,
+        "unrealized_pnl": 0,
+        "total_pnl": 0,
+        "invested": 0,
+        "avg_win_pct": 0.0,
+        "avg_loss_pct": 0.0
+      },
+      "recent_trades": [],
+      "advisory": {
+        "isa": {
+          "buy": [
+            {
+              "action": "BUY",
+              "ticker": "490330",
+              "name": "TIGER 미국나스닥100레버리지(합성)",
+              "stream": "S4",
+              "strategy": "S6-B Dual Momentum",
+              "confidence": 0.475,
+              "raw_confidence": 0.95,
+              "size_pct": 0.15,
+              "price": 0,
+              "quantity": 0,
+              "invest_amount": 3000000,
+              "reason": "S6-B (US Dual Momentum) RISK_ON",
+              "auto_execute": false,
+              "event_warning": "이벤트 근접: [뉴스] POLICY: 후기인 척 뒷광고 한 성형외과 3곳, 공정위 제재 (conf 감산 50%)"
+            }
+          ],
+          "sell": [],
+          "hold": []
+        },
+        "irp": {
+          "buy": [],
+          "sell": [],
+          "hold": []
+        },
+        "pension": {
+          "buy": [],
+          "sell": [],
+          "hold": []
+        },
+        "brokerage_auto": [],
+        "summary": {
+          "total_actions": 1,
+          "isa_actions": 1,
+          "irp_actions": 0,
+          "pension_actions": 0,
+          "brokerage_actions": 0,
+          "total_holdings": 0,
+          "isa_holdings": 0,
+          "irp_holdings": 0,
+          "pension_holdings": 0,
+          "brokerage_holdings": 0
+        }
+      },
+      "account_split": {
+        "ISA": {
+          "api": false,
+          "mode": "advisory → 수동 집행"
+        },
+        "IRP": {
+          "api": false,
+          "mode": "advisory → 수동 집행"
+        },
+        "PENSION": {
+          "api": false,
+          "mode": "advisory → 수동 집행"
+        },
+        "BROKERAGE": {
+          "api": true,
+          "mode": "KIS API 자동매매 (Main 계좌)"
+        }
+      }
+    }
+  },
+  "summary": {
+    "total_positions": 0,
+    "total_signals": 11,
+    "total_realized_pnl": 0,
+    "total_unrealized_pnl": 0,
+    "total_pnl": 0,
+    "cash_pct": 10.9
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "ticker": "017670",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 19808282214400,
+      "shares": 212992266,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 19701784641536,
+      "shares": 212992266,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 20894541938688,
+      "shares": 212992266,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 20937139290112,
+      "shares": 212992266,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 20937988636672,
+      "shares": 213000896,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 21363989413888,
+      "shares": 213000896,
+      "source": "yfinance"
+    }
+  ]
+}

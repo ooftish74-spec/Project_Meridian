@@ -1,0 +1,41 @@
+{
+  "ticker": "069960",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 1750124724224,
+      "shares": 21633186,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 1730654896128,
+      "shares": 21633186,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 1856127369216,
+      "shares": 21633186,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 1951313428480,
+      "shares": 21633186,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 1951313428480,
+      "shares": 21633186,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 1985926529024,
+      "shares": 21633186,
+      "source": "yfinance"
+    }
+  ]
+}

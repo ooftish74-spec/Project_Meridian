@@ -1,0 +1,55 @@
+{
+  "date": "2026-03-05",
+  "version": "v2_dynamic_model",
+  "timestamp": "2026-03-05T21:53:34.839686",
+  "analysis": {
+    "original_avg_gap": 8.41,
+    "simulated_avg_gap": 8.25,
+    "improvement_pct": 0.17,
+    "direction_accuracy": 80.0,
+    "ci_coverage": 13.333333333333334,
+    "vix_at_prediction": 21.149999618530273,
+    "vix_at_close": 21.3700008392334,
+    "tau_fixed": 0.025,
+    "tau_dynamic": 0.0292
+  },
+  "impact_on_paper_trading": {
+    "current_value": 160781988.92,
+    "cumulative_return": 60.89,
+    "mdd": -11.86,
+    "n_scenarios": 7,
+    "positive_scenarios": 2
+  },
+  "lessons": [
+    {
+      "type": "dynamic_tau",
+      "severity": "medium",
+      "description": "동적 tau (0.0292 vs 고정 0.025)가 적용되었으면 평균 갭 +0.2%p 개선 가능. 양(+) View 종목에서 효과 극대화."
+    },
+    {
+      "type": "scenario_coverage",
+      "severity": "high",
+      "description": "오늘 +8.28% 급등은 \"상호관세 해제\"라는 예상 못한 이벤트. 긍정 시나리오(러-우 휴전, 이란 종전) 추가로 양방향 리스크 커버리지 확보."
+    },
+    {
+      "type": "bayesian_update",
+      "severity": "medium",
+      "description": "급등 후 VIX 하락 → 엔캐리/중동 시나리오 확률 재조정 필요. 시나리오 엔진이 매일 자동 갱신하므로 내일 반영."
+    },
+    {
+      "type": "ci_widening",
+      "severity": "high",
+      "description": "CI 커버리지 13% (목표 90%). 동적 tau + 시나리오 기반 CI 보정으로 점진적 개선 예상. 급등/급락장에서는 추가 CI 확대 필요."
+    },
+    {
+      "type": "paper_trading_adjustment",
+      "severity": "medium",
+      "description": "Paper Trading MDD -11.86% — 양호. 확장 시나리오(7개)로 포지션 사이징 정밀도 향상. 특히 긍정 시나리오 추가로 과매도 방지 효과."
+    }
+  ],
+  "next_actions": [
+    "내일 06:10 파이프라인에서 Phase 5.4/5.5 자동 실행 → tau 동적 적용",
+    "Cross-Market 데이터 기반 엔캐리/중동 확률 자동 갱신",
+    "CI 커버리지 모니터링 → 50% 미만이면 conformal band 2x로 확대"
+  ]
+}

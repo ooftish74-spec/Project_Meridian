@@ -1,0 +1,22 @@
+{
+  "ticker": "086790",
+  "company": "086790",
+  "market": "KR",
+  "sector": "금융",
+  "period": "2026 Q1",
+  "announcement_date": null,
+  "revenue": 30599490040,
+  "operating_profit": 1267062247971,
+  "net_income": 974663267670,
+  "eps": null,
+  "consensus_revenue": null,
+  "consensus_op": null,
+  "consensus_eps": null,
+  "sue_estimate": 0.0,
+  "conviction": 75,
+  "surprise_direction": "miss",
+  "method_scores": {
+    "trend_extrapolation": 1.0
+  },
+  "predicted_at": "2026-04-22T07:22:13.587636"
+}

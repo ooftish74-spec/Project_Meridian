@@ -1,0 +1,26 @@
+{
+  "created_at": "2026-04-12",
+  "n_samples": 8908,
+  "n_tickers": 282,
+  "n_dates": 36,
+  "date_range": [
+    "2017-04-01",
+    "2026-01-01"
+  ],
+  "regime_dist": {
+    "BULL": 3687,
+    "BEAR": 2751,
+    "NEUTRAL": 2470
+  },
+  "features": [
+    "f1_rs_6m",
+    "f2_rs_pct",
+    "f3_vol_ratio",
+    "f4_pead",
+    "f5_f_score",
+    "f6_ev_ebit_inv"
+  ],
+  "label": "actual_ret_20d",
+  "forward_days": 20,
+  "ready_to_train": true
+}

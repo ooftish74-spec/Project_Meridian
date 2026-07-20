@@ -1,0 +1,41 @@
+{
+  "ticker": "047050",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 12817424973824,
+      "shares": 170444487,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 12749247610880,
+      "shares": 170444487,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 12391314096128,
+      "shares": 170444487,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 12749247610880,
+      "shares": 170444487,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 12749247610880,
+      "shares": 170444487,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 13737825140736,
+      "shares": 170444487,
+      "source": "yfinance"
+    }
+  ]
+}

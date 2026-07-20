@@ -1,0 +1,41 @@
+{
+  "ticker": "066570",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 21319806615552,
+      "shares": 162884638,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 20761601376256,
+      "shares": 162884638,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 22004056981504,
+      "shares": 162884638,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 22364188311552,
+      "shares": 162884638,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 22364188311552,
+      "shares": 162884638,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 23912756805632,
+      "shares": 162884638,
+      "source": "yfinance"
+    }
+  ]
+}

@@ -1,0 +1,289 @@
+{
+  "timestamp": "2026-05-08T16:02:04.341512",
+  "n_tickers": 300,
+  "n_features": 32,
+  "feature_ic": {
+    "lag_1": {
+      "mean_ic": 0.1879,
+      "std_ic": 0.1498,
+      "ir": 1.2543,
+      "t_stat": 21.6884,
+      "pct_positive": 0.896,
+      "n_tickers": 299
+    },
+    "lag_2": {
+      "mean_ic": 0.1762,
+      "std_ic": 0.15,
+      "ir": 1.1751,
+      "t_stat": 20.319,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "lag_3": {
+      "mean_ic": 0.1631,
+      "std_ic": 0.1485,
+      "ir": 1.0984,
+      "t_stat": 18.9927,
+      "pct_positive": 0.876,
+      "n_tickers": 299
+    },
+    "lag_4": {
+      "mean_ic": 0.1626,
+      "std_ic": 0.1471,
+      "ir": 1.1054,
+      "t_stat": 19.1141,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "lag_5": {
+      "mean_ic": 0.1581,
+      "std_ic": 0.1489,
+      "ir": 1.0616,
+      "t_stat": 18.3569,
+      "pct_positive": 0.87,
+      "n_tickers": 299
+    },
+    "rmean_3": {
+      "mean_ic": 0.194,
+      "std_ic": 0.1515,
+      "ir": 1.2809,
+      "t_stat": 22.1487,
+      "pct_positive": 0.903,
+      "n_tickers": 299
+    },
+    "rmean_7": {
+      "mean_ic": 0.1835,
+      "std_ic": 0.1532,
+      "ir": 1.1978,
+      "t_stat": 20.7116,
+      "pct_positive": 0.89,
+      "n_tickers": 299
+    },
+    "rstd_7": {
+      "mean_ic": 0.0626,
+      "std_ic": 0.1433,
+      "ir": 0.4366,
+      "t_stat": 7.5493,
+      "pct_positive": 0.679,
+      "n_tickers": 299
+    },
+    "rmean_14": {
+      "mean_ic": 0.1709,
+      "std_ic": 0.1546,
+      "ir": 1.1051,
+      "t_stat": 19.1081,
+      "pct_positive": 0.883,
+      "n_tickers": 299
+    },
+    "rmean_30": {
+      "mean_ic": 0.1202,
+      "std_ic": 0.1522,
+      "ir": 0.7898,
+      "t_stat": 13.6565,
+      "pct_positive": 0.799,
+      "n_tickers": 299
+    },
+    "ema_30": {
+      "mean_ic": 0.1536,
+      "std_ic": 0.1532,
+      "ir": 1.0025,
+      "t_stat": 17.3355,
+      "pct_positive": 0.863,
+      "n_tickers": 299
+    },
+    "rsi_14": {
+      "mean_ic": 0.0623,
+      "std_ic": 0.1403,
+      "ir": 0.4442,
+      "t_stat": 7.6802,
+      "pct_positive": 0.692,
+      "n_tickers": 299
+    },
+    "price_ma_ratio_30": {
+      "mean_ic": 0.0919,
+      "std_ic": 0.1507,
+      "ir": 0.6102,
+      "t_stat": 10.5513,
+      "pct_positive": 0.716,
+      "n_tickers": 299
+    },
+    "zscore_30": {
+      "mean_ic": 0.0672,
+      "std_ic": 0.1492,
+      "ir": 0.4507,
+      "t_stat": 7.7934,
+      "pct_positive": 0.686,
+      "n_tickers": 299
+    },
+    "trend_golden_cross": {
+      "mean_ic": 0.0876,
+      "std_ic": 0.1368,
+      "ir": 0.6404,
+      "t_stat": 9.8588,
+      "pct_positive": 0.802,
+      "n_tickers": 237
+    },
+    "trend_dist_high_52w": {
+      "mean_ic": 0.1068,
+      "std_ic": 0.1458,
+      "ir": 0.7321,
+      "t_stat": 12.659,
+      "pct_positive": 0.766,
+      "n_tickers": 299
+    },
+    "trend_price_position": {
+      "mean_ic": 0.0948,
+      "std_ic": 0.1414,
+      "ir": 0.6709,
+      "t_stat": 11.6007,
+      "pct_positive": 0.753,
+      "n_tickers": 299
+    },
+    "mtf_weekly_mom": {
+      "mean_ic": 0.0629,
+      "std_ic": 0.1422,
+      "ir": 0.4422,
+      "t_stat": 7.252,
+      "pct_positive": 0.68,
+      "n_tickers": 269
+    },
+    "mtf_vs_ma100": {
+      "mean_ic": 0.1358,
+      "std_ic": 0.1312,
+      "ir": 1.0347,
+      "t_stat": 17.8918,
+      "pct_positive": 0.846,
+      "n_tickers": 299
+    },
+    "mtf_weekly_rsi": {
+      "mean_ic": 0.0858,
+      "std_ic": 0.1504,
+      "ir": 0.5708,
+      "t_stat": 9.8695,
+      "pct_positive": 0.696,
+      "n_tickers": 299
+    },
+    "rsi_x_vol": {
+      "mean_ic": 0.0795,
+      "std_ic": 0.1589,
+      "ir": 0.5005,
+      "t_stat": 8.6538,
+      "pct_positive": 0.699,
+      "n_tickers": 299
+    },
+    "ma_spread": {
+      "mean_ic": 0.0906,
+      "std_ic": 0.1513,
+      "ir": 0.5988,
+      "t_stat": 10.3542,
+      "pct_positive": 0.709,
+      "n_tickers": 299
+    },
+    "bb_x_vol": {
+      "mean_ic": 0.0829,
+      "std_ic": 0.1534,
+      "ir": 0.5406,
+      "t_stat": 9.3471,
+      "pct_positive": 0.709,
+      "n_tickers": 299
+    },
+    "bear_downside_vol_ratio": {
+      "mean_ic": 0.0857,
+      "std_ic": 0.1504,
+      "ir": 0.5701,
+      "t_stat": 9.8583,
+      "pct_positive": 0.706,
+      "n_tickers": 299
+    },
+    "alt_pc_ratio_zscore": {
+      "mean_ic": 0.0034,
+      "std_ic": 0.1507,
+      "ir": 0.0224,
+      "t_stat": 0.3876,
+      "pct_positive": 0.505,
+      "n_tickers": 299
+    },
+    "alt_greed_flag": {
+      "mean_ic": 0.0892,
+      "std_ic": 0.1173,
+      "ir": 0.7602,
+      "t_stat": 13.101,
+      "pct_positive": 0.758,
+      "n_tickers": 297
+    },
+    "id_vwap_ratio": {
+      "mean_ic": -0.0757,
+      "std_ic": 0.1409,
+      "ir": -0.5376,
+      "t_stat": -1.0751,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "id_vol_climax": {
+      "mean_ic": -0.0699,
+      "std_ic": 0.1457,
+      "ir": -0.4799,
+      "t_stat": -0.9598,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "id_opening_mom": {
+      "mean_ic": 0.0853,
+      "std_ic": 0.1396,
+      "ir": 0.6113,
+      "t_stat": 1.2226,
+      "pct_positive": 0.75,
+      "n_tickers": 4
+    },
+    "id_closing_mom": {
+      "mean_ic": 0.0514,
+      "std_ic": 0.1103,
+      "ir": 0.466,
+      "t_stat": 0.932,
+      "pct_positive": 0.75,
+      "n_tickers": 4
+    },
+    "idx_climax_trend": {
+      "mean_ic": -0.099,
+      "std_ic": 0.12,
+      "ir": -0.8245,
+      "t_stat": -1.6491,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    },
+    "idx_intraday_reversal": {
+      "mean_ic": 0.0104,
+      "std_ic": 0.1336,
+      "ir": 0.078,
+      "t_stat": 0.156,
+      "pct_positive": 0.5,
+      "n_tickers": 4
+    }
+  },
+  "top_features": [
+    "rmean_3",
+    "lag_1",
+    "rmean_7",
+    "lag_2",
+    "rmean_14",
+    "lag_3",
+    "lag_4",
+    "lag_5",
+    "ema_30",
+    "mtf_vs_ma100",
+    "rmean_30",
+    "trend_dist_high_52w",
+    "idx_climax_trend",
+    "trend_price_position",
+    "price_ma_ratio_30"
+  ],
+  "noise_features": [
+    "alt_pc_ratio_zscore"
+  ],
+  "reverse_features": [
+    "idx_climax_trend",
+    "id_vwap_ratio",
+    "id_vol_climax"
+  ],
+  "date": "2026-05-08"
+}

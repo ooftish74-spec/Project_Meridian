@@ -1,0 +1,20 @@
+{
+  "ticker": "090430",
+  "target_price": 174882,
+  "current_price": 112000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-12",
+  "stock_name": "아모레퍼시픽",
+  "latest_research": {
+    "title": "1Q26 Review: 차근차근",
+    "broker": "유진투자증권",
+    "date": "20260529"
+  }
+}

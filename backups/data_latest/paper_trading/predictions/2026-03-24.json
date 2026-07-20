@@ -1,0 +1,1358 @@
+{
+  "date": "2026-03-24",
+  "signals": {
+    "000270": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 153400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "000660": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 836000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "000720": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 146400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "000810": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 474500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "000880": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 123500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "001040": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 171600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "001450": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 29850.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "002380": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 493500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "002790": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 25900.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "003490": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 22400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "003550": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 89300.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "003670": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 202500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "004020": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 36900.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "004170": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 313000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "005380": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 507000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "005490": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 336000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "005930": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 173500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "006400": {
+      "up_probability": 0.5511,
+      "prediction": "up",
+      "confidence": 0.1022,
+      "current_price": 389000.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "006800": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 64200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "008770": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 40400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "009150": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 382000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "009830": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 50500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "010130": {
+      "up_probability": 0.5536,
+      "prediction": "up",
+      "confidence": 0.1072,
+      "current_price": 1596000.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "010140": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 28550.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "010950": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 128700.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "011170": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 71200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "011200": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 20650.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "011780": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 114100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "012330": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 409000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "015760": {
+      "up_probability": 0.4962,
+      "prediction": "down",
+      "confidence": 0.0076,
+      "current_price": 44800.0,
+      "n_models": 4,
+      "model_agreement": 0.75,
+      "tier": "core"
+    },
+    "016360": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 91600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "017670": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 75800.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "018260": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 158600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "021240": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 72200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "023530": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 92000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "024110": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 22800.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "024720": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 8850.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "028260": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 270500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "029780": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 58200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "030200": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 59500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "032640": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 14720.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "032830": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 200500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "033780": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 153600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "034020": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 96200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "034220": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 11330.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "034730": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 329000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "035250": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 17750.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "035420": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 218500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "035720": {
+      "up_probability": 0.5503,
+      "prediction": "up",
+      "confidence": 0.1005,
+      "current_price": 50400.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "035760": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 65100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "036460": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 36300.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "036570": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 213500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "036930": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 67000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "039030": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 398500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "039490": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 415000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "041510": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 98700.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "042660": {
+      "up_probability": 0.5499,
+      "prediction": "up",
+      "confidence": 0.0997,
+      "current_price": 123700.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "042700": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 305000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "044820": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13350.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "047050": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 76600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "047810": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 174100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "051600": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 54400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "051910": {
+      "up_probability": 0.5582,
+      "prediction": "up",
+      "confidence": 0.1163,
+      "current_price": 300000.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "052690": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 147700.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "055550": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 88500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "058470": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 118200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "066570": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 113400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "068270": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 204000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "069500": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 78230.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "071050": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 218000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "078930": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 65200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "079550": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 796000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "081660": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 48200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "086280": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 226500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "086520": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 161600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "086790": {
+      "up_probability": 0.522,
+      "prediction": "up",
+      "confidence": 0.0441,
+      "current_price": 107900.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "088980": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 11240.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "090430": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 128100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "091160": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 93250.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "091170": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 14410.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "091180": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 30665.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "091220": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 15080.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "096770": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 118200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "097950": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 190000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "100840": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 42300.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "105560": {
+      "up_probability": 0.4686,
+      "prediction": "down",
+      "confidence": 0.0627,
+      "current_price": 142600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "core"
+    },
+    "114800": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 1801.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "117680": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 14785.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "122630": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 84000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "128940": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 481500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "132030": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 29260.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "138930": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 17830.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "139480": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 92400.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "140700": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 15030.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "144600": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13965.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "145020": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 248000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "148070": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 106930.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "153130": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 113415.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "161390": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 57000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "161510": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 26230.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "180640": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 114000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "192090": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13050.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "192820": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 164000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "195870": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 50700.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "196170": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 360000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "204320": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 50300.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "204420": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 6705.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "207940": {
+      "up_probability": 0.5586,
+      "prediction": "up",
+      "confidence": 0.1173,
+      "current_price": 1579000.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "227540": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 21225.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "227550": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13740.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "229200": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 19810.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "241560": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 56700.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "244580": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 12505.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "244620": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 18540.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "247540": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 202500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "251270": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 55200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "252670": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 314.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "257720": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 37650.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "259960": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 218500.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "263750": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 66100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "267250": {
+      "up_probability": 0.5063,
+      "prediction": "up",
+      "confidence": 0.0127,
+      "current_price": 263000.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "271560": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 126000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "293490": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13200.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "302440": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 41450.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "305720": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 16435.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "316140": {
+      "up_probability": 0.5128,
+      "prediction": "up",
+      "confidence": 0.0256,
+      "current_price": 31550.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "323410": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 23750.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "326030": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 98100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "328130": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 36100.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "352820": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 346000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "360750": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 24625.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "363580": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 29950.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "364690": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 29095.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "364980": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 10070.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "371160": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 8060.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "373220": {
+      "up_probability": 0.5636,
+      "prediction": "up",
+      "confidence": 0.1271,
+      "current_price": 359500.0,
+      "n_models": 4,
+      "model_agreement": 0.25,
+      "tier": "core"
+    },
+    "377300": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 59000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "379810": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 24080.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "383220": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 60000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "383800": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 8110.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "395160": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 25905.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "395270": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 31660.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "395290": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 8150.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "395400": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 5690.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "396500": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 31380.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "396510": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 9630.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "403870": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 43600.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "411060": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 33865.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    },
+    "453810": {
+      "up_probability": 0.458,
+      "prediction": "down",
+      "confidence": 0.084,
+      "current_price": 13000.0,
+      "n_models": 2,
+      "model_agreement": 1.0,
+      "tier": "satellite"
+    }
+  },
+  "weights": {},
+  "gate_pass": false,
+  "gate_reasons": [
+    "앙상블 합의 부족 (25% < 75%)",
+    "최고 신뢰도 부족 (0.13 < 0.30)"
+  ],
+  "regime": "BEAR",
+  "result": {
+    "n_trades": 1,
+    "total_value": 28805925.27,
+    "return_pct": -3.98
+  }
+}

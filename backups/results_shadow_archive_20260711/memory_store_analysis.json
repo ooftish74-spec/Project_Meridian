@@ -1,0 +1,54 @@
+{
+  "analyzed_at": "2026-07-10T12:05:38.899224",
+  "registered": 29,
+  "total_in_memory": 31,
+  "by_regime": {
+    "bear": 2,
+    "caution": 29
+  },
+  "top_penalty_features": [
+    {
+      "feature": "gscpi",
+      "penalty": 0.8387
+    },
+    {
+      "feature": "copper_gold_ratio",
+      "penalty": 0.8387
+    },
+    {
+      "feature": "exog_sc_semi",
+      "penalty": 0.0968
+    },
+    {
+      "feature": "rsi_14",
+      "penalty": 0.0645
+    },
+    {
+      "feature": "exog_kospi_index",
+      "penalty": 0.0645
+    }
+  ],
+  "penalty_map": {
+    "rsi_14": 0.0645,
+    "atr_pct": 0.0323,
+    "volume_ratio": 0.0323,
+    "exog_kospi_index": 0.0645,
+    "zscore_14": 0.0645,
+    "exog_pc_ratio_ma5": 0.0645,
+    "exog_finbert_score": 0.0645,
+    "exog_sc_semi": 0.0968,
+    "gscpi": 0.8387,
+    "copper_gold_ratio": 0.8387,
+    "exog_kr_trend_환율": 0.0323,
+    "exog_bok_export_chg3": 0.0323,
+    "exog_sc_shipping": 0.0323,
+    "exog_xm_gold_oil_ratio": 0.0323,
+    "exog_bok_export_level": 0.0323,
+    "exog_sc_lithium": 0.0323,
+    "exog_kr_trend_부동산": 0.0323,
+    "exog_sc_dram": 0.0323,
+    "exog_kr_trend_반도체": 0.0323,
+    "exog_gt_real_estate": 0.0323
+  },
+  "recommended_ic_penalty_scale": 0.0971
+}

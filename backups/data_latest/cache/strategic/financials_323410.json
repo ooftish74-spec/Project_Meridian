@@ -1,0 +1,16 @@
+{
+  "ticker": "323410",
+  "timestamp": "2026-05-24T20:03:14.486079",
+  "name": "323410",
+  "data_sources": [
+    "pykrx_price"
+  ],
+  "close": 22800.0,
+  "revenue_growth": 0,
+  "ni_growth": 0,
+  "roe": 0,
+  "debt_ratio": 999,
+  "operating_margin": 0,
+  "fcf": 0,
+  "peg": 99
+}

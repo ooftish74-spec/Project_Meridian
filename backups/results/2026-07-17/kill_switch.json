@@ -1,0 +1,25 @@
+{
+  "triggered": false,
+  "can_buy": true,
+  "position_scale": 1.0,
+  "reason": "정상",
+  "active": false,
+  "forward_override": {
+    "override": false,
+    "reason": "",
+    "score": 0,
+    "details": {}
+  },
+  "forward_signals": {
+    "regime": "bull",
+    "regime_confidence": 0.434,
+    "signal_avg_confidence": 0.5725272727272727,
+    "n_signals": 11,
+    "news_sentiment": -0.1093,
+    "ois_score": 50.2,
+    "bench_alpha_5d": 0.61625,
+    "ic": null,
+    "da": 0
+  },
+  "timestamp": "2026-07-16T21:48:25.723854+09:00"
+}

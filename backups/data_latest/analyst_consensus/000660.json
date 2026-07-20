@@ -1,0 +1,20 @@
+{
+  "ticker": "000660",
+  "target_price": 3281250,
+  "current_price": 2187000,
+  "recomm_mean": 4.0,
+  "buy": 2,
+  "hold": 3,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-07-03",
+  "stock_name": "SK하이닉스",
+  "latest_research": {
+    "title": "Agent AI Ecosystem 중심에 서다",
+    "broker": "IBK투자증권",
+    "date": "20260702"
+  }
+}

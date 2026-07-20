@@ -1,0 +1,20 @@
+{
+  "ticker": "088350",
+  "target_price": 6242,
+  "current_price": 4855,
+  "recomm_mean": 3.67,
+  "buy": 1,
+  "hold": 4,
+  "sell": 0,
+  "eps_revision_up": 3,
+  "eps_revision_down": 0,
+  "research_count": 5,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-03",
+  "stock_name": "한화생명",
+  "latest_research": {
+    "title": "1Q26 Review: 연결기준 당기순이익 증가 긍정적",
+    "broker": "교보증권",
+    "date": "20260518"
+  }
+}

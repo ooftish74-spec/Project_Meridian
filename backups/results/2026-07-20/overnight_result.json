@@ -1,0 +1,18 @@
+{
+  "macro": {
+    "us_futures": 3,
+    "sgx_proxy": true
+  },
+  "ois": 52.6,
+  "ois_price": 59.3,
+  "ois_sentiment": 15.7,
+  "ois_label": "neutral",
+  "ois_threshold_adj": 0,
+  "us_regime": "neutral",
+  "us_regime_confidence": 0.383,
+  "us_regime_score": 0.1006,
+  "events": 2,
+  "news_sentiment": -0.03,
+  "cross_asset": "neutral",
+  "timestamp": "2026-07-19T05:15:24.838646"
+}

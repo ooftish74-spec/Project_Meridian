@@ -1,0 +1,41 @@
+{
+  "ticker": "000660",
+  "snapshots": [
+    {
+      "date": "2026-04-11",
+      "market_cap": 727421028401152,
+      "shares": 690455268,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-13",
+      "market_cap": 736628901412864,
+      "shares": 690455268,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-15",
+      "market_cap": 804625414356992,
+      "shares": 690455268,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-17",
+      "market_cap": 798959010316288,
+      "shares": 708297021,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-20",
+      "market_cap": 798959010316288,
+      "shares": 708297021,
+      "source": "yfinance"
+    },
+    {
+      "date": "2026-04-22",
+      "market_cap": 866247256309760,
+      "shares": 708297021,
+      "source": "yfinance"
+    }
+  ]
+}

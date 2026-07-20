@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-07-13T05:15:26.448910",
+  "stocks": {
+    "259960": {
+      "name": "크래프톤",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "세계최고 권위 AI 학회서 크래프톤 논문 10편 채택"
+      ]
+    },
+    "180640": {
+      "name": "한진칼",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "호반건설, 한진칼 지분 20.15%로… “단순 투자”"
+      ]
+    },
+    "030200": {
+      "name": "KT",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "KT, 정보보호 자문위원회 출범"
+      ]
+    }
+  }
+}

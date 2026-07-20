@@ -1,0 +1,596 @@
+{
+  "cash": 526733.1645480234,
+  "positions": {
+    "192820": {
+      "quantity": 34,
+      "avg_price": 198489.12921000092
+    },
+    "139480": {
+      "quantity": 57,
+      "avg_price": 95532.17975788
+    },
+    "052690": {
+      "quantity": 16,
+      "avg_price": 161563.94367721313
+    },
+    "001040": {
+      "quantity": 6,
+      "avg_price": 195378.62366506306
+    },
+    "086520": {
+      "quantity": 8,
+      "avg_price": 162061.72289261536
+    },
+    "006800": {
+      "quantity": 19,
+      "avg_price": 67212.36484012753
+    },
+    "272210": {
+      "quantity": 10,
+      "avg_price": 124542.14363346394
+    },
+    "395270": {
+      "quantity": 40,
+      "avg_price": 33041.72994875873
+    },
+    "005380": {
+      "quantity": 2,
+      "avg_price": 495506.48630916275
+    },
+    "396500": {
+      "quantity": 42,
+      "avg_price": 31505.900611312256
+    },
+    "006400": {
+      "quantity": 3,
+      "avg_price": 405961.7896925503
+    },
+    "012330": {
+      "quantity": 3,
+      "avg_price": 408963.3565706703
+    },
+    "000660": {
+      "quantity": 1,
+      "avg_price": 922972.7852592609
+    },
+    "363580": {
+      "quantity": 41,
+      "avg_price": 31665.961476833607
+    }
+  },
+  "daily_values": [
+    {
+      "date": "2026-03-21",
+      "total_value": 29931298.96,
+      "cash": 6012898.96,
+      "position_value": 23918400.0,
+      "total_return_pct": -0.23,
+      "positions": {
+        "005930": {
+          "quantity": 132,
+          "avg_price": 181693.21,
+          "current_price": 181200.0,
+          "market_value": 23918400.0,
+          "pnl": -65103.51,
+          "pnl_pct": -0.27
+        }
+      },
+      "n_positions": 1,
+      "daily_return_pct": 0
+    },
+    {
+      "date": "2026-03-24",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -3.7599
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -0.0
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -0.0
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -0.0
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -0.0
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28805925.27,
+      "cash": 28805925.27,
+      "position_value": 0,
+      "total_return_pct": -3.98,
+      "positions": {},
+      "n_positions": 0,
+      "daily_return_pct": -0.0
+    },
+    {
+      "date": "2026-03-26",
+      "total_value": 28760804.98,
+      "cash": 8773004.98,
+      "position_value": 19987800.0,
+      "total_return_pct": -4.13,
+      "positions": {
+        "192820": {
+          "quantity": 34,
+          "avg_price": 198489.13,
+          "current_price": 198000.0,
+          "market_value": 6732000.0,
+          "pnl": -16630.39,
+          "pnl_pct": -0.25
+        },
+        "139480": {
+          "quantity": 57,
+          "avg_price": 95532.18,
+          "current_price": 95400.0,
+          "market_value": 5437800.0,
+          "pnl": -7534.25,
+          "pnl_pct": -0.14
+        },
+        "029780": {
+          "quantity": 69,
+          "avg_price": 59110.96,
+          "current_price": 59000.0,
+          "market_value": 4071000.0,
+          "pnl": -7656.32,
+          "pnl_pct": -0.19
+        },
+        "052690": {
+          "quantity": 16,
+          "avg_price": 161563.94,
+          "current_price": 161100.0,
+          "market_value": 2577600.0,
+          "pnl": -7423.1,
+          "pnl_pct": -0.29
+        },
+        "001040": {
+          "quantity": 6,
+          "avg_price": 195378.62,
+          "current_price": 194900.0,
+          "market_value": 1169400.0,
+          "pnl": -2871.74,
+          "pnl_pct": -0.24
+        }
+      },
+      "n_positions": 5,
+      "daily_return_pct": -0.1566
+    },
+    {
+      "date": "2026-03-27",
+      "total_value": 28898984.1,
+      "cash": 12649484.1,
+      "position_value": 16249500.0,
+      "total_return_pct": -3.67,
+      "positions": {
+        "192820": {
+          "quantity": 34,
+          "avg_price": 198489.13,
+          "current_price": 196300.0,
+          "market_value": 6674200.0,
+          "pnl": -74430.39,
+          "pnl_pct": -1.1
+        },
+        "139480": {
+          "quantity": 57,
+          "avg_price": 95532.18,
+          "current_price": 98500.0,
+          "market_value": 5614500.0,
+          "pnl": 169165.75,
+          "pnl_pct": 3.11
+        },
+        "052690": {
+          "quantity": 16,
+          "avg_price": 161563.94,
+          "current_price": 168800.0,
+          "market_value": 2700800.0,
+          "pnl": 115776.9,
+          "pnl_pct": 4.48
+        },
+        "001040": {
+          "quantity": 6,
+          "avg_price": 195378.62,
+          "current_price": 210000.0,
+          "market_value": 1260000.0,
+          "pnl": 87728.26,
+          "pnl_pct": 7.48
+        }
+      },
+      "n_positions": 4,
+      "daily_return_pct": 0.4804
+    },
+    {
+      "date": "2026-03-28",
+      "total_value": 28577002.64,
+      "cash": 526733.16,
+      "position_value": 28050269.48,
+      "total_return_pct": -71.42,
+      "positions": {
+        "192820": {
+          "quantity": 34,
+          "avg_price": 198489.13,
+          "current_price": 198489.13,
+          "market_value": 6748630.39,
+          "pnl": 0.0,
+          "pnl_pct": 0.0
+        },
+        "139480": {
+          "quantity": 57,
+          "avg_price": 95532.18,
+          "current_price": 95532.18,
+          "market_value": 5445334.25,
+          "pnl": 0.0,
+          "pnl_pct": 0.0
+        },
+        "052690": {
+          "quantity": 16,
+          "avg_price": 161563.94,
+          "current_price": 161563.94,
+          "market_value": 2585023.1,
+          "pnl": 0.0,
+          "pnl_pct": 0.0
+        },
+        "001040": {
+          "quantity": 6,
+          "avg_price": 195378.62,
+          "current_price": 195378.62,
+          "market_value": 1172271.74,
+          "pnl": 0.0,
+          "pnl_pct": 0.0
+        },
+        "086520": {
+          "quantity": 8,
+          "avg_price": 162061.72,
+          "current_price": 161600.0,
+          "market_value": 1292800.0,
+          "pnl": -3693.78,
+          "pnl_pct": -0.28
+        },
+        "006800": {
+          "quantity": 19,
+          "avg_price": 67212.36,
+          "current_price": 67100.0,
+          "market_value": 1274900.0,
+          "pnl": -2134.93,
+          "pnl_pct": -0.17
+        },
+        "272210": {
+          "quantity": 10,
+          "avg_price": 124542.14,
+          "current_price": 124100.0,
+          "market_value": 1241000.0,
+          "pnl": -4421.44,
+          "pnl_pct": -0.36
+        },
+        "395270": {
+          "quantity": 40,
+          "avg_price": 33041.73,
+          "current_price": 32985.0,
+          "market_value": 1319400.0,
+          "pnl": -2269.2,
+          "pnl_pct": -0.17
+        },
+        "005380": {
+          "quantity": 2,
+          "avg_price": 495506.49,
+          "current_price": 495000.0,
+          "market_value": 990000.0,
+          "pnl": -1012.97,
+          "pnl_pct": -0.1
+        },
+        "396500": {
+          "quantity": 42,
+          "avg_price": 31505.9,
+          "current_price": 31450.0,
+          "market_value": 1320900.0,
+          "pnl": -2347.83,
+          "pnl_pct": -0.18
+        },
+        "006400": {
+          "quantity": 3,
+          "avg_price": 405961.79,
+          "current_price": 405500.0,
+          "market_value": 1216500.0,
+          "pnl": -1385.37,
+          "pnl_pct": -0.11
+        },
+        "012330": {
+          "quantity": 3,
+          "avg_price": 408963.36,
+          "current_price": 408500.0,
+          "market_value": 1225500.0,
+          "pnl": -1390.07,
+          "pnl_pct": -0.11
+        },
+        "000660": {
+          "quantity": 1,
+          "avg_price": 922972.79,
+          "current_price": 922000.0,
+          "market_value": 922000.0,
+          "pnl": -972.79,
+          "pnl_pct": -0.11
+        },
+        "363580": {
+          "quantity": 41,
+          "avg_price": 31665.96,
+          "current_price": 31610.0,
+          "market_value": 1296010.0,
+          "pnl": -2294.42,
+          "pnl_pct": -0.18
+        }
+      },
+      "n_positions": 14,
+      "daily_return_pct": -1.1142
+    }
+  ],
+  "trades": [
+    {
+      "ticker": "005930",
+      "side": "buy",
+      "quantity": 132,
+      "order_price": 181200.0,
+      "fill_price": 181693.21,
+      "slippage": 493.21,
+      "commission": 3597.53,
+      "tax": 0,
+      "total_cost": 3597.53,
+      "timestamp": "2026-03-21T11:02:18.004516",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "005930",
+      "side": "sell",
+      "quantity": 132,
+      "order_price": 173500.0,
+      "fill_price": 173011.81,
+      "slippage": -488.19,
+      "commission": 3425.63,
+      "tax": 41107.61,
+      "total_cost": 44533.24,
+      "timestamp": "2026-03-24T07:58:21.324957",
+      "reason": "stop_loss (-4.5%)"
+    },
+    {
+      "ticker": "192820",
+      "side": "buy",
+      "quantity": 34,
+      "order_price": 198000.0,
+      "fill_price": 198489.13,
+      "slippage": 489.13,
+      "commission": 1012.29,
+      "tax": 0,
+      "total_cost": 1012.29,
+      "timestamp": "2026-03-26T22:10:03.798981",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "139480",
+      "side": "buy",
+      "quantity": 57,
+      "order_price": 95400.0,
+      "fill_price": 95532.18,
+      "slippage": 132.18,
+      "commission": 816.8,
+      "tax": 0,
+      "total_cost": 816.8,
+      "timestamp": "2026-03-26T22:10:03.799599",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "029780",
+      "side": "buy",
+      "quantity": 69,
+      "order_price": 59000.0,
+      "fill_price": 59110.96,
+      "slippage": 110.96,
+      "commission": 611.8,
+      "tax": 0,
+      "total_cost": 611.8,
+      "timestamp": "2026-03-26T22:10:03.799632",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "052690",
+      "side": "buy",
+      "quantity": 16,
+      "order_price": 161100.0,
+      "fill_price": 161563.94,
+      "slippage": 463.94,
+      "commission": 387.75,
+      "tax": 0,
+      "total_cost": 387.75,
+      "timestamp": "2026-03-26T22:10:03.799658",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "001040",
+      "side": "buy",
+      "quantity": 6,
+      "order_price": 194900.0,
+      "fill_price": 195378.62,
+      "slippage": 478.62,
+      "commission": 175.84,
+      "tax": 0,
+      "total_cost": 175.84,
+      "timestamp": "2026-03-26T22:10:03.799681",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "029780",
+      "side": "sell",
+      "quantity": 69,
+      "order_price": 56400.0,
+      "fill_price": 56290.62,
+      "slippage": -109.38,
+      "commission": 582.61,
+      "tax": 6991.3,
+      "total_cost": 7573.9,
+      "timestamp": "2026-03-27T06:16:40.054467",
+      "reason": "stop_loss (-4.6%)"
+    },
+    {
+      "ticker": "086520",
+      "side": "buy",
+      "quantity": 8,
+      "order_price": 161600.0,
+      "fill_price": 162061.72,
+      "slippage": 461.72,
+      "commission": 194.47,
+      "tax": 0,
+      "total_cost": 194.47,
+      "timestamp": "2026-03-28T23:16:15.574643",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "006800",
+      "side": "buy",
+      "quantity": 19,
+      "order_price": 67100.0,
+      "fill_price": 67212.36,
+      "slippage": 112.36,
+      "commission": 191.56,
+      "tax": 0,
+      "total_cost": 191.56,
+      "timestamp": "2026-03-28T23:16:15.576075",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "272210",
+      "side": "buy",
+      "quantity": 10,
+      "order_price": 124100.0,
+      "fill_price": 124542.14,
+      "slippage": 442.14,
+      "commission": 186.81,
+      "tax": 0,
+      "total_cost": 186.81,
+      "timestamp": "2026-03-28T23:16:15.576106",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "395270",
+      "side": "buy",
+      "quantity": 40,
+      "order_price": 32985.0,
+      "fill_price": 33041.73,
+      "slippage": 56.73,
+      "commission": 198.25,
+      "tax": 0,
+      "total_cost": 198.25,
+      "timestamp": "2026-03-28T23:16:15.576133",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "005380",
+      "side": "buy",
+      "quantity": 2,
+      "order_price": 495000.0,
+      "fill_price": 495506.49,
+      "slippage": 506.49,
+      "commission": 148.65,
+      "tax": 0,
+      "total_cost": 148.65,
+      "timestamp": "2026-03-28T23:16:15.576156",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "396500",
+      "side": "buy",
+      "quantity": 42,
+      "order_price": 31450.0,
+      "fill_price": 31505.9,
+      "slippage": 55.9,
+      "commission": 198.49,
+      "tax": 0,
+      "total_cost": 198.49,
+      "timestamp": "2026-03-28T23:16:15.576178",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "006400",
+      "side": "buy",
+      "quantity": 3,
+      "order_price": 405500.0,
+      "fill_price": 405961.79,
+      "slippage": 461.79,
+      "commission": 182.68,
+      "tax": 0,
+      "total_cost": 182.68,
+      "timestamp": "2026-03-28T23:16:15.576201",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "012330",
+      "side": "buy",
+      "quantity": 3,
+      "order_price": 408500.0,
+      "fill_price": 408963.36,
+      "slippage": 463.36,
+      "commission": 184.03,
+      "tax": 0,
+      "total_cost": 184.03,
+      "timestamp": "2026-03-28T23:16:15.576222",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "000660",
+      "side": "buy",
+      "quantity": 1,
+      "order_price": 922000.0,
+      "fill_price": 922972.79,
+      "slippage": 972.79,
+      "commission": 138.45,
+      "tax": 0,
+      "total_cost": 138.45,
+      "timestamp": "2026-03-28T23:16:15.576242",
+      "reason": "rebalance"
+    },
+    {
+      "ticker": "363580",
+      "side": "buy",
+      "quantity": 41,
+      "order_price": 31610.0,
+      "fill_price": 31665.96,
+      "slippage": 55.96,
+      "commission": 194.75,
+      "tax": 0,
+      "total_cost": 194.75,
+      "timestamp": "2026-03-28T23:16:15.576290",
+      "reason": "rebalance"
+    }
+  ],
+  "updated": "2026-03-28T23:16:15.576833"
+}

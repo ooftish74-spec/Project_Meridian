@@ -1,0 +1,126 @@
+{
+  "date": "2026-06-15",
+  "phase": "morning",
+  "timestamp": "2026-06-15T16:21:57.569602",
+  "fear_greed": {
+    "score": 34,
+    "rating": "fear",
+    "previous": 29.6,
+    "change": 4.4
+  },
+  "news_sentiment": {
+    "score": -0.0667,
+    "positive_count": 1,
+    "negative_count": 3,
+    "total": 30,
+    "details": [
+      {
+        "title": "Lagarde Says Energy Price Hikes Spreading Through Economy",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "IDC, Vision Near Deal to Save Century-Old Africa Sugar Mills",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "LNG Tanker Traverses Hormuz as Deal Lifts Reopening Hopes",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Stocks and Bonds Rally as Oil Drops on Iran Deal: Markets Wrap",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "K-Content Powerhouse JoongAng Seeks Court-led Restructuring",
+        "source": "bloomberg",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Iran and US agree deal to open Strait of Hormuz and extend ceasefire",
+        "source": "ft",
+        "sentiment": 0.0
+      },
+      {
+        "title": "What is in the US-Iran deal?",
+        "source": "ft",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Oil falls on US-Iran deal but Hormuz backlog may last weeks",
+        "source": "ft",
+        "sentiment": -1.0
+      },
+      {
+        "title": "Trump settles for a truce of convenience with Iran",
+        "source": "ft",
+        "sentiment": 0.0
+      },
+      {
+        "title": "Lessons from Ireland’s Revolut revolution",
+        "source": "ft",
+        "sentiment": 0.0
+      }
+    ]
+  },
+  "kospi_futures": {
+    "night": {
+      "close": 1329.7,
+      "change": 93.65,
+      "return": 0.075766,
+      "date": "20260612"
+    },
+    "overnight_signal": {
+      "direction": "up",
+      "strength": 0.0757655434650702,
+      "source": "KRX_Night"
+    }
+  },
+  "vix_term": {
+    "vix": 17.68,
+    "vix3m": 20.51,
+    "ratio": 0.862,
+    "structure": "contango",
+    "panic": "normal"
+  },
+  "geopolitical": {
+    "score": 100,
+    "level": "critical",
+    "high": 10,
+    "medium": 0,
+    "low": 18
+  },
+  "social_media": {
+    "naver": {
+      "score": null,
+      "source": "no_api_key"
+    },
+    "reddit": {
+      "score": null,
+      "source": "failed"
+    },
+    "composite_score": 0
+  },
+  "naver_categories": {
+    "status": "no_api_key"
+  },
+  "contrarian_signal": {
+    "raw_sentiment": -0.04,
+    "is_extreme": "False",
+    "contrarian": 0
+  },
+  "composite_fg": {
+    "index": 42.3,
+    "classification": "Fear",
+    "components": {
+      "cnn_fg": 34,
+      "news": 46.7,
+      "vix": 64.6,
+      "social": 50,
+      "geo": 0
+    }
+  }
+}

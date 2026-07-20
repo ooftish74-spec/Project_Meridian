@@ -1,0 +1,5 @@
+year,quarter,eps_estimate,eps_reported,earnings_surprise,earnings_momentum,surprise_pct,operating_income,prev_operating_income,revenue,prev_revenue,single_q_income,single_q_revenue,revenue_yoy,earnings_yoy,earnings_qoq
+2025,Q2,-0.39,-0.3,0.2238,0.0,22.38,0,0,0,0,0,0,0,0,0
+2025,Q3,0.03,0.29,7.7113,1.0,771.13,0,0,0,0,0,0,0,0,0
+2025,Q4,0.89,1.22,0.3689,0.0,36.89,0,0,0,0,0,0,0,0,0
+2026,Q1,3.54,6.2,0.7497,0.0,74.97,0,0,0,0,0,0,0,0,0

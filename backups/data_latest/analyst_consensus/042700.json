@@ -1,0 +1,15 @@
+{
+  "ticker": "042700",
+  "target_price": 380000,
+  "current_price": 295000,
+  "recomm_mean": 4.0,
+  "buy": 1,
+  "hold": 0,
+  "sell": 0,
+  "eps_revision_up": 1,
+  "eps_revision_down": 0,
+  "research_count": 0,
+  "source": "naver_mobile_api",
+  "updated": "2026-06-19",
+  "stock_name": "한미반도체"
+}

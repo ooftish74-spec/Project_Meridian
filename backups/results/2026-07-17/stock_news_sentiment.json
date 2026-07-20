@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-07-16T05:15:25.498971",
+  "stocks": {
+    "487570": {
+      "name": "HS효성",
+      "sentiment": 0.333,
+      "label": "positive",
+      "mentions": 1,
+      "headlines": [
+        "HS효성 ‘가치, 또 같이’ 미래성장전략 제시"
+      ]
+    },
+    "460860": {
+      "name": "동국제강",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "동국제강 72주년 맞아 ‘기업 재창립’ 선언"
+      ]
+    },
+    "000880": {
+      "name": "한화",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "우주항공·AI에 55조 투자… ‘한국판 스페이스X’ 꿈꾸는 한화"
+      ]
+    },
+    "011780": {
+      "name": "금호석유화학",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "금호석유화학, 고기능 합성 고무로 ‘승부수’"
+      ]
+    },
+    "004170": {
+      "name": "신세계",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "이월상품 90% 세일… 가성비 소비 이끄는 신세계 팩토리스토어"
+      ]
+    },
+    "139480": {
+      "name": "이마트",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "이마트, 몽골에 ‘노브랜드’ 열어 中企 지원"
+      ]
+    },
+    "145170": {
+      "name": "노브랜드",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "이마트, 몽골에 ‘노브랜드’ 열어 中企 지원"
+      ]
+    },
+    "000210": {
+      "name": "DL",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "DL, 에너지 사업 분야 가치사슬 강화"
+      ]
+    },
+    "051900": {
+      "name": "LG생활건강",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "LG생활건강, 정밀 뷰티 솔루션 주력"
+      ]
+    },
+    "000150": {
+      "name": "두산",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "두산, 청정전기 위한 가스터빈·SMR 등 발전기 공급 확대"
+      ]
+    },
+    "155660": {
+      "name": "DSR",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "억대 성과급으로 강남 입성? 대출 조인다…DSR 산정에 일부만 반영"
+      ]
+    },
+    "035720": {
+      "name": "카카오",
+      "sentiment": 0.0,
+      "label": "neutral",
+      "mentions": 1,
+      "headlines": [
+        "PC 카카오톡에서도 챗GPT 쓴다"
+      ]
+    }
+  }
+}

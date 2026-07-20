@@ -1,0 +1,11 @@
+timestamp,bid_price_1,ask_price_1,bid_total,ask_total,imbalance_ratio,note
+2026-03-10 09:16:31,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 10:01:45,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 10:44:27,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 11:03:45,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 11:30:08,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 12:10:25,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 12:30:09,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 13:05:56,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 14:04:51,0,0,0,0,1.0,no_orderbook_api
+2026-03-10 14:31:29,0,0,0,0,1.0,no_orderbook_api

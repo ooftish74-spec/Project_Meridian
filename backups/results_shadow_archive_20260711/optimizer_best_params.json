@@ -1,0 +1,9 @@
+{
+    "s0_beta.max_confidence_threshold": 0.9400000000000001,
+    "s0_beta.zscore_threshold": 1.5,
+    "s0_beta.max_sweep_ratio": 0.30000000000000004,
+    "allocator.risk_parity_blend": 0.8,
+    "allocator.sharpe_alpha": 0.2,
+    "allocator.base_weight.bear.S5": 0.1,
+    "allocator.base_weight.crash.S5": 0.45000000000000007
+}
