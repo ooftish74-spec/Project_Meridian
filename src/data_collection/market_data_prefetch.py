@@ -101,7 +101,8 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
                 logger.info(f'  VIX 캐시 유효 (오늘 {saved_date}, {n}일 이력) → 스킵')
                 return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': saved_date, 'source': 'cache'}
         except (json.JSONDecodeError, OSError):
-            pass
+            from src.utils.error_logger import log_error_rate_limited
+            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
     logger.info('  [Pre-fetch] VIX 데이터 수집 시작...')
     try:
         import yfinance as yf
@@ -219,10 +220,9 @@ def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_h
             logger.warning('[SILENT_BYPASS] Suppressed exception at market_data_prefetch.py:344', exc_info=True)
     logger.info(f'  [Pre-fetch] ATR 수집 시작: {len(tickers)}종목')
     try:
-        import yfinance as yf
-        import pandas as _pd
+        import FinanceDataReader as fdr
     except ImportError as e:
-        logger.error(f'  yfinance 미설치: {e}', exc_info=True)
+        logger.error(f'  FinanceDataReader 미설치: {e}', exc_info=True)
         return {'ok': False, 'n_success': 0, 'n_fail': len(tickers), 'error': str(e)}
     existing_cache: Dict = {}
     if ATR_CACHE.exists():
@@ -233,13 +233,11 @@ def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_h
     success_list, fail_list = ([], [])
     new_entries: Dict = {}
     for ticker in tickers:
-        sym = f'{ticker}.KS'
         try:
-            df = yf.download(sym, period='30d', interval='1d', progress=False, auto_adjust=True, timeout=10)
+            start_date = (today_kst() - timedelta(days=45)).strftime('%Y-%m-%d')
+            df = fdr.DataReader(ticker, start=start_date)
             if df is None or df.empty or len(df) < 15:
                 raise ValueError(f'데이터 부족: {(len(df) if df is not None else 0)}행')
-            if isinstance(df.columns, _pd.MultiIndex):
-                df.columns = [c[0] for c in df.columns]
             close_col = 'Close' if 'Close' in df.columns else df.columns[0]
             prices = df[close_col].dropna().tolist()
             if len(prices) < 15:

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 SS-ETF Liquidity Collector — 단일종목 ETF 유동성 데이터 수집기
 ==============================================================
@@ -24,7 +25,8 @@ Usage:
     collector = SSETFLiquidityCollector()
     df = collector.collect(target_date='20260623')
 """
-from __future__ import annotations
+from src.utils.file_ops import atomic_write_parquet
+
 import logging
 import time
 from datetime import date, datetime, timedelta
@@ -64,7 +66,10 @@ def _get_etf_universe() -> Dict[str, Dict]:
           '000660': { ... },
         }
     """
-    default_universe = {'005930': {'name': '삼성전자', 'lev_ticker': _dcfg('ss_etf.samsung.lev_ticker', '470450'), 'inv_ticker': _dcfg('ss_etf.samsung.inv_ticker', '470460')}, '000660': {'name': 'SK하이닉스', 'lev_ticker': _dcfg('ss_etf.hynix.lev_ticker', '470480'), 'inv_ticker': _dcfg('ss_etf.hynix.inv_ticker', '470490')}}
+    default_universe = {
+        '005930': {'name': '삼성전자', 'lev_ticker': _dcfg('ss_etf.samsung.lev_ticker', '0195R0'), 'inv_ticker': _dcfg('ss_etf.samsung.inv_ticker', '0193L0')}, 
+        '000660': {'name': 'SK하이닉스', 'lev_ticker': _dcfg('ss_etf.hynix.lev_ticker', '0195S0'), 'inv_ticker': _dcfg('ss_etf.hynix.inv_ticker', '0197X0')}
+    }
     cfg_universe = _dcfg('ss_etf.universe', None)
     if cfg_universe and isinstance(cfg_universe, dict):
         default_universe.update(cfg_universe)
@@ -250,7 +255,7 @@ class SSETFLiquidityCollector:
         """수집 결과 parquet 캐시 저장."""
         try:
             path = _CACHE_DIR / f'ss_etf_{target_date}.parquet'
-            df.to_parquet(path, index=False)
+            atomic_write_parquet(df, path, index=False)
         except Exception as e:
             logger.error(f'  SS-ETF 캐시 저장 실패: {e}', exc_info=True)
 

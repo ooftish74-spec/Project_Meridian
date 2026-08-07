@@ -1,3 +1,4 @@
+from __future__ import annotations
 """[Phase 63: MOTIE NLP Parser] 네이버 뉴스 API 기반 수출입동향 속보치 파서.
 
 [Phase 60] 에서 작성된 환각(Hallucination) data.go.kr API 코드를 철거하고,
@@ -8,8 +9,9 @@
   - API 키 없음 / 정규식 매칭 실패 시 DataCollectionError raise
   - 0.0 기본값 주입 절대 금지
 """
-from __future__ import annotations
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 import os
 import re
@@ -158,6 +160,8 @@ class MotieCollector:
         try:
             values = [float(m) for m in matches]
         except (ValueError, TypeError):
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
             return None
         if len(values) == 1:
             val = values[0]
@@ -181,7 +185,7 @@ class MotieCollector:
     def _save_cache(self, stat_date: str, data: dict) -> None:
         fp = _CACHE_DIR / f'motie_{stat_date}.json'
         try:
-            fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+            atomic_write_json(fp, data, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f'  [Phase 63] 캐시 저장 실패: {e}', exc_info=True)
 if __name__ == '__main__':

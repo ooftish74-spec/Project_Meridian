@@ -77,7 +77,7 @@ def check_data_freshness() -> List[Dict]:
         _RESULTS / 'signal_cache.json',
         _RESULTS / 'pipeline_state.json',
         _RESULTS / 'shadow_portfolio.json',
-        _DATA / 'historical_10y' / 'kr_005930.parquet',
+        _DATA / 'kr_markets' / 'kr_005930.parquet',
         _RESULTS / 'models' / 'stock_ranker_ensemble.pkl',
     ]
 

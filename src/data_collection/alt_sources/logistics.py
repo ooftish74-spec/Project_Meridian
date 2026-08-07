@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 src/data_collection/alt_sources/logistics.py
 ==============================================
@@ -24,7 +25,6 @@ Project Meridian — Logistics & Supply Chain Alt Data Source
 FRED API Base: https://fred.stlouisfed.org/graph/fredgraph.csv
 """
 
-from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta
@@ -96,6 +96,8 @@ def _fetch_fred_series(series_id: str, as_of_date: Optional[date] = None) -> Opt
                     try:
                         values.append(float(raw))
                     except ValueError:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                         continue
 
         if not values:
@@ -150,6 +152,8 @@ def _calc_mom_change(series_id: str, as_of_date: Optional[date] = None) -> Optio
                     try:
                         values.append(float(raw))
                     except ValueError:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                         continue
 
         if len(values) >= 2:

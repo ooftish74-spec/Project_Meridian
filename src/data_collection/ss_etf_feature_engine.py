@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 SS-ETF Feature Engine — 단일종목 ETF 유동성 팩터 계산기
 ========================================================
@@ -29,7 +30,6 @@ Usage:
     features = engine.compute(target_ticker='005930', target_date='20260623')
     df_merged = engine.merge_into_ml_df(df_ml, target_date='20260623')
 """
-from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path

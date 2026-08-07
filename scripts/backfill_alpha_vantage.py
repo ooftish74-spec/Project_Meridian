@@ -4,15 +4,16 @@ Alpha Vantage US Macro Data Backfill Script
 
 This script backfills daily historical data for the last 2 years for US Macro 
 indicators and stock indices, using Alpha Vantage as the primary source 
-and yfinance as a fallback.
+and FinanceDataReader as a fallback.
 """
 
 import os
+from src.infra.safe_io import atomic_write_dataframe
 import sys
 import logging
 import pandas as pd
 import requests
-import yfinance as yf
+import FinanceDataReader as fdr
 from datetime import datetime, timedelta
 
 # Add project root to sys.path
@@ -22,18 +23,18 @@ from src.utils.credential_manager import CredentialManager
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("AV_Backfill")
 
-# Symbol mappings for Alpha Vantage and YFinance
+# Symbol mappings for Alpha Vantage and fdr
 SYMBOL_MAP = {
-    'us_sp500': {'av': 'SPY', 'yf': '^GSPC'},
-    'us_nasdaq': {'av': 'QQQ', 'yf': '^IXIC'},
-    'us_dji': {'av': 'DIA', 'yf': '^DJI'},
-    'us_vix': {'av': None, 'yf': '^VIX'}, # AV often lacks direct VIX index, use yf
-    'us_10y': {'av': None, 'yf': '^TNX'}, # AV lacks direct 10y Treasury yield index, use yf
-    'cross_usdkrw': {'av_fx': ('USD', 'KRW'), 'yf': 'KRW=X'},
-    'cross_gold_futures': {'av': 'GLD', 'yf': 'GC=F'},
+    'us_sp500': {'av': 'SPY', 'fdr': 'US500'},
+    'us_nasdaq': {'av': 'QQQ', 'fdr': 'US100'},
+    'us_dji': {'av': 'DIA', 'fdr': 'US30'},
+    'us_vix': {'av': None, 'fdr': 'FRED:VIXCLS'}, 
+    'us_10y': {'av': None, 'fdr': 'FRED:DGS10'}, 
+    'cross_usdkrw': {'av_fx': ('USD', 'KRW'), 'fdr': 'FRED:DEXKOUS'},
+    'cross_gold_futures': {'av': 'GLD', 'fdr': 'GC'},
 }
 
-DATA_DIR = os.path.join("data", "historical_10y")
+DATA_DIR = os.path.join("data", "kr_markets")
 
 def get_av_daily(symbol, api_key):
     """Fetch daily data from Alpha Vantage TIME_SERIES_DAILY."""
@@ -87,15 +88,11 @@ def get_av_fx_daily(from_sym, to_sym, api_key):
     df.index.name = 'date'
     return df.sort_index()
 
-def get_yf_daily(symbol):
-    """Fetch daily data from yfinance."""
-    df = yf.download(symbol, period="2y", auto_adjust=False, progress=False)
+def get_fdr_daily(symbol):
+    """Fetch daily data from fdr."""
+    df = fdr.DataReader(symbol)
     if df.empty:
-        raise ValueError(f"No data returned from yfinance for {symbol}")
-    
-    # Handle multi-level columns from yfinance latest version
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
+        raise ValueError(f"No data returned from fdr for {symbol}")
         
     df.index.name = 'date'
     df = df.rename(columns={
@@ -105,13 +102,20 @@ def get_yf_daily(symbol):
         'Close': 'close',
         'Volume': 'volume'
     })
+    
+    if 'open' not in df.columns and 'close' in df.columns:
+        df['open'] = df['close']
+        df['high'] = df['close']
+        df['low'] = df['close']
+        df['volume'] = 0.0
+        
     return df
 
 def backfill():
     os.makedirs(DATA_DIR, exist_ok=True)
     api_key = CredentialManager().read_from_keychain('ALPHA_VANTAGE_API_KEY') or ''
     if not api_key:
-        logger.warning("ALPHA_VANTAGE_API_KEY not found in keychain. Will rely on yfinance fallback.")
+        logger.warning("ALPHA_VANTAGE_API_KEY not found in keychain. Will rely on fdr fallback.")
     
     end_date = datetime.now()
     start_date = end_date - timedelta(days=730)
@@ -133,13 +137,13 @@ def backfill():
             except Exception as e:
                 logger.warning(f"  [AV] Failed: {e}")
         
-        # 2. Fallback to YFinance
+        # 2. Fallback to fdr
         if df is None:
             try:
-                logger.info(f"  Attempting yfinance fallback ({mapping['yf']})")
-                df = get_yf_daily(mapping['yf'])
+                logger.info(f"  Attempting fdr fallback ({mapping['fdr']})")
+                df = get_fdr_daily(mapping['fdr'])
             except Exception as e:
-                logger.error(f"  [YF] Failed: {e}")
+                logger.error(f"  [FDR] Failed: {e}")
                 
         # 3. Save
         if df is not None and not df.empty:
@@ -148,7 +152,7 @@ def backfill():
             df = df.loc[mask]
             
             out_path = os.path.join(DATA_DIR, f"{ticker_name}.parquet")
-            df.to_parquet(out_path)
+            atomic_write_dataframe(df, out_path, file_format='parquet')
             logger.info(f"  ✅ Saved {len(df)} rows to {out_path}")
         else:
             logger.error(f"  ❌ Could not backfill {ticker_name}")

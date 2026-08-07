@@ -23,6 +23,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from config.dynamic_config import DynamicConfig
@@ -825,7 +827,7 @@ class QVMScorer:
             import json as _json
             from datetime import datetime as _dt
             out = Path(_FEATURE_STORE_DIR).parent.parent / 'results' / 'icir_validation.json'
-            out.write_text(_json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

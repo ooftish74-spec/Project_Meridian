@@ -157,8 +157,9 @@ class EventMarketFilter:
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         RESULTS.mkdir(parents=True, exist_ok=True)
-        with open(RESULTS / 'event_market_filter.json', 'w') as f:
-            json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+        from src.utils.file_ops import atomic_write_json
+
+        atomic_write_json(RESULTS / 'event_market_filter.json', report, indent=2, ensure_ascii=False, default=str)
         return report
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(message)s')

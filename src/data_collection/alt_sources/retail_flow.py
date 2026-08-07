@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 src/data_collection/alt_sources/retail_flow.py
 ================================================
@@ -37,8 +38,9 @@ SPY/시장 전체의 숨겨진 수급 변화를 포착하는 선행 지표로 �
     - 1일 캐시 (시장 데이터는 장중 1회 갱신)
     - logger 전용, print() 금지, except pass 금지
 """
-from __future__ import annotations
 import csv
+from src.utils.file_ops import atomic_write_json
+
 import io
 import json
 import logging
@@ -117,6 +119,8 @@ def _extract_series(rows: List[Dict], value_col: str) -> List[float]:
         try:
             values.append(float(raw))
         except ValueError:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
             continue
     return values
 
@@ -267,6 +271,6 @@ def _save_cache(features: Dict, target_date: Optional[date]=None) -> None:
     """[Phase 46] 캐시 저장 — 날짜별 키 분리."""
     _cf = _CACHE_FILE.parent / (f'retail_flow_{target_date}.json' if target_date else _CACHE_FILE.name)
     try:
-        _cf.write_text(json.dumps({'timestamp': datetime.now().isoformat(), 'features': features}, ensure_ascii=False, indent=2), encoding='utf-8')
+        atomic_write_json(_cf, {'timestamp': datetime.now().isoformat(), 'features': features}, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f'  [RetailFlow] 캐시 저장 실패: {e}', exc_info=True)

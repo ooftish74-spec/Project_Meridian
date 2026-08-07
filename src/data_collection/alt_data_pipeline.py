@@ -36,6 +36,8 @@ import logging
 import math
 import os
 from datetime import date, datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from config.dynamic_config import DynamicConfig
@@ -567,7 +569,7 @@ class AlternativeDataPipeline:
         try:
             backup = {'features': features, 'n_features': len(features), 'timestamp': datetime.now().isoformat()}
             backup_file = _ALT_DATA_DIR / 'pipeline_latest.json'
-            backup_file.write_text(json.dumps(backup, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(backup_file, backup, indent=2, ensure_ascii=False, default=str)
         except Exception as _e:
             logger.warning(f'  [Alt] pipeline_latest.json 백업 저장 실패: {_e}', exc_info=True)
 

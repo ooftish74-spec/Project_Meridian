@@ -118,7 +118,7 @@ case "$ACTION" in
         echo "  09:05  market       — 전체 오케스트레이터"
         echo "  15:10  closing      — 강제 청산"
         echo "  15:35  aftermarket  — 성과 측정 + 학습"
-        echo "  20:00  evening      — 야간 보고서 + S4"
+        echo "  20:30  evening      — 야간 보고서 + S4"
         echo "  20:30  daily_report — 일간 성과 분석 및 이메일 발송"
         echo "  Sat 07:00 weekly_report — 주간 알파 성과/발굴 종합 이메일 발송"
         ;;

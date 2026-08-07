@@ -9,7 +9,7 @@
 #
 # Phases (전체 목록):
 #   overnight       — 05:15  야간 인텔리전스 수집
-#   collect         — 06:00  데이터 수집 (pykrx, yfinance, KIS)
+#   collect         — 06:00  데이터 수집 (pykrx, fdr, KIS)
 #   premarket       — 07:45  프리마켓 분석 + 레짐 판정
 #   morning         — 08:00  Intelligence Cascade + 매매 신호
 #   market          — 09:05  매매 실행

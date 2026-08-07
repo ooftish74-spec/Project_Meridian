@@ -17,6 +17,8 @@ Usage:
 import json
 import logging
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Optional
 from config.dynamic_config import DynamicConfig
@@ -130,7 +132,7 @@ class CreditRateLoader:
                     logger.critical('[SILENT_BYPASS] Suppressed exception at credit_rate_loader.py:217', exc_info=True)
                     send_emergency_page('[FATAL] Suppressed exception at credit_rate_loader.py:217')
             cache[broker] = {'rate': rate, 'cached_at': datetime.now().isoformat(), 'source': 'api' if rate != self._lookup_table(broker, 30) else 'table'}
-            _CACHE_FILE.write_text(json.dumps(cache, indent=2, ensure_ascii=False))
+            atomic_write_json(_CACHE_FILE, cache, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.critical(f'  [CreditRate] 캐시 저장 실패: {e}', exc_info=True)
             send_emergency_page('🚨 [FATAL] {exc} at credit_rate_loader.py:227', exc_info=e)

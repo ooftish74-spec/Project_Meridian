@@ -17,6 +17,8 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 import numpy as np
@@ -77,7 +79,7 @@ class StreamCorrelationMonitor:
         if high_corr_pairs:
             logger.warning(f'  ⚠️ 스트림 상관관계 경고: {[p['pair'] for p in high_corr_pairs]}')
         try:
-            (_RESULTS / 'stream_correlation.json').write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'stream_correlation.json'),  result, indent=2, default=str)
         except Exception as _e0:
             logger.critical(f'  [stream_correlation] 스트림 상관관계 업데이트: {_e0}', exc_info=True)
         return result
@@ -196,7 +198,7 @@ class StreamCorrelationMonitor:
             _log_fn = logger.warning if scale < _warn_threshold else logger.info
             _log_fn(f'  {('⚠️' if scale < _warn_threshold else 'ℹ️')} 집중 리스크: {len(high_corr_pairs)}쌍 고상관 (직교성={orthogonality:.2f}, scale={scale:.2f})')
         try:
-            (_RESULTS / 'concentration_risk.json').write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'concentration_risk.json'),  result, indent=2, default=str)
         except Exception as _e1:
             logger.critical(f'  [stream_correlation] 스트림 상관관계 저장: {_e1}', exc_info=True)
         return result

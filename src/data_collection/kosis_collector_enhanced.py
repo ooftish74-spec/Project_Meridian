@@ -227,6 +227,8 @@ class KOSISCollectorEnhanced:
                 try:
                     value = float(value_str.replace(',', ''))
                 except (ValueError, AttributeError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
                 
                 records.append({

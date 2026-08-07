@@ -1,6 +1,8 @@
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ class AlertManager:
         try:
             if len(alerts) > 100:
                 alerts = alerts[-100:]
-            self._alert_file.write_text(json.dumps(alerts, indent=2, ensure_ascii=False))
+            atomic_write_json(self._alert_file, alerts, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f'AlertManager 저장 실패: {e}')
 

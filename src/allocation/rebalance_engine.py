@@ -20,6 +20,8 @@ import json
 import logging
 import math
 from datetime import date, datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
@@ -66,11 +68,11 @@ class RebalanceEngine:
             state_path = _PROJECT_ROOT / 'results' / 'rebalance_state.json'
             state_path.parent.mkdir(parents=True, exist_ok=True)
             data = {'last_rebalance': self._last_rebalance, 'updated_at': datetime.now().isoformat()}
-            state_path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(state_path, data, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.critical(f'  리밸런싱 상태 저장 실패: {e}', exc_info=True)
 
-    def rebalance(self, stream_id: str, current_positions: Dict[str, Dict], new_signals: List[Dict], market_data: Dict=None) -> Dict:
+    def rebalance(self, stream_id: str, current_positions: Dict[str, Dict], new_signals: List[Dict], market_data: Dict=None, budget: float=0.0) -> Dict:
         """스트림 리밸런싱 실행.
 
         Args:
@@ -220,7 +222,8 @@ class RebalanceEngine:
         current_count = max(0, len(held_tickers) - replacements)
         if current_count < max_positions and entry_candidates:
             remaining_entry = entry_candidates[replacements:]
-            budget = self._get_stream_budget(stream_id)
+            if budget <= 0:
+                budget = self._get_stream_budget(stream_id)
             slot_budget = budget / max_positions if max_positions > 0 else 0
             for candidate in remaining_entry:
                 if current_count >= max_positions:

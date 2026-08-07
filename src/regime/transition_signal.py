@@ -21,6 +21,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 from config.dynamic_config import DynamicConfig
@@ -219,12 +221,14 @@ class TransitionSignalDetector:
             if cache_f.exists():
                 cache = json.loads(cache_f.read_text())
                 data['signal_cache'] = cache
-                vix = cache.get('vix', cache.get('VIX', {}).get('value', 20))
+                from src.utils.metric_parser import parse_vix; vix = parse_vix(cache, 20.0)
                 if isinstance(vix, list):
                     data['vix_history'] = vix
                 else:
                     data['vix_history'] = [float(vix)] * 60
         except Exception as _e_ts:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e_ts}", exc_info=True)
             logger.debug(f'  [transition_signal] 전환 시그널 실패: {_e_ts}')
         return data
 
@@ -232,8 +236,10 @@ class TransitionSignalDetector:
         """결과 저장."""
         try:
             out = _RESULTS / 'transition_signal.json'
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as _e_ts2:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e_ts2}", exc_info=True)
             logger.debug(f'  [transition_signal] 시그널 저장 실패: {_e_ts2}')
 
     def get_signal_history(self, n: int=20) -> List[Dict]:

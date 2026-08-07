@@ -38,6 +38,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from config.dynamic_config import DynamicConfig
@@ -370,8 +372,10 @@ class AdaptiveThreshold:
         """상태 영속화."""
         try:
             state = {'ois_history': self._ois_history[-120:], 'us_change_history': self._us_change_history[-120:], 'vix_history': self._vix_history[-120:], 'pcr_history': self._pcr_history[-120:], 'sentiment_history': self._sentiment_history[-504:], 'last_computed': self._last_computed, 'updated': datetime.now().isoformat()}
-            _STATE_FILE.write_text(json.dumps(state, indent=2))
+            atomic_write_json(_STATE_FILE, state, indent=2)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  State save failed: {e}')
 
     def _load_state(self):
@@ -388,6 +392,8 @@ class AdaptiveThreshold:
             self._last_computed = state.get('last_computed')
             logger.debug(f'  State restored: {len(self._ois_history)} OIS, {len(self._pcr_history)} PCR, {len(self._sentiment_history)} Sentiment')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  State load failed: {e}')
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')

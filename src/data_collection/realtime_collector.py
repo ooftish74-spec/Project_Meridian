@@ -14,6 +14,8 @@ Module 2 분석기(sector_health_v3)가 import해서 사용.
   2. KRX 투자자 수급 (외국인/기관 순매수 — 90일 + 최근 5일)
   3. 밸류에이션 스냅샷 (Forward PE, PEG, EV/EBITDA 등)
 """
+from src.utils.file_ops import atomic_write_json
+
 import json, logging, time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -104,8 +106,7 @@ class RealtimeCollector(NewsSentimentMixin):
                 logger.info(f'    {sector:18s} {data['signal']} Score:{data['score']:5.1f} (Pct:{data.get('percentile_rank', 50):.0f}%)')
         out_dir = DATA_DIR / 'sector_supply_demand'
         out_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_dir / 'all_sectors_supply_demand.json', 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'all_sectors_supply_demand.json', results, indent=2, ensure_ascii=False, default=str)
         return results
 
     def collect_valuation_snapshot(self, sectors: list) -> Dict:
@@ -169,8 +170,7 @@ class RealtimeCollector(NewsSentimentMixin):
                     results.setdefault(sector, {})['kr_stocks'] = kr_data
         out_dir = DATA_DIR / 'sector_valuation'
         out_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_dir / 'realtime_valuation_snapshot.json', 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'realtime_valuation_snapshot.json', results, indent=2, ensure_ascii=False, default=str)
         kr_valuation = {}
         for sector, data in results.items():
             kr_stocks = data.get('kr_stocks', [])
@@ -181,8 +181,7 @@ class RealtimeCollector(NewsSentimentMixin):
             caps = [s.get('market_cap', 0) for s in kr_stocks]
             kr_valuation[sector] = {'sector': sector, 'avg_PER': round(np.mean(pers), 2) if pers else 0, 'avg_PBR': round(np.mean(pbrs), 3) if pbrs else 0, 'total_market_cap': sum(caps), 'stock_count': len(kr_stocks), 'stocks': kr_stocks, 'date': date or datetime.now().strftime('%Y%m%d')}
         if kr_valuation:
-            with open(out_dir / 'kr_sector_valuation.json', 'w', encoding='utf-8') as f:
-                json.dump(kr_valuation, f, indent=2, ensure_ascii=False, default=str)
+            atomic_write_json(out_dir / 'kr_sector_valuation.json', kr_valuation, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  ✅ kr_sector_valuation.json 저장: {len(kr_valuation)}개 섹터')
         return results
     SECTOR_CATEGORIES = {'Semiconductor': 'tech', 'AI': 'tech', 'QuantumComputing': 'tech', 'Robotics': 'tech', 'Software': 'tech', 'Battery': 'tech', 'Finance': 'finance', 'Healthcare': 'traditional', 'Energy': 'commodity', 'Materials': 'commodity', 'Consumer': 'traditional', 'Utilities': 'dividend', 'Telecom': 'traditional', 'Defense': 'fcf', 'RealEstate': 'reit', 'Shipbuilding': 'cyclical_pbr', 'Automotive': 'cyclical'}
@@ -269,8 +268,7 @@ class RealtimeCollector(NewsSentimentMixin):
             logger.info(f'  {sector:18s} [{cat:12s}] Cat:{cat_score:.0f} Rel:{relative_score:.0f} → {final_score:.1f}')
         out_dir = DATA_DIR / 'sector_valuation'
         out_dir.mkdir(parents=True, exist_ok=True)
-        with open(out_dir / 'advanced_valuation_scores.json', 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'advanced_valuation_scores.json', results, indent=2, ensure_ascii=False, default=str)
         return results
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')

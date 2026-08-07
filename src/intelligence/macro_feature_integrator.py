@@ -22,6 +22,8 @@ Date: 2026-05-29
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, Optional
 import numpy as np
@@ -335,7 +337,7 @@ class MacroFeatureIntegrator:
                     logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:493', exc_info=True)
             existing['macro_features'] = features
             existing['macro_features_ts'] = datetime.now().isoformat()
-            sc_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(sc_file, existing, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  signal_cache 적재 실패: {e}', exc_info=True)
 

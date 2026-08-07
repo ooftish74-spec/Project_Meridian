@@ -12,6 +12,9 @@
 
 저장: data/raw/realtime_sentiment/YYYY-MM-DD.json
 """
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import atomic_write_dataframe
+
 import json
 import logging
 import os
@@ -246,8 +249,7 @@ class RealtimeSentimentCollector:
                             logger.info(f'  📊 KRX 야간 방향: {result['overnight_signal']['direction']} ({night['return']:+.2%})')
                             overnight_json = SENTIMENT_CSV / 'krx_futures_overnight.json'
                             overnight_data = {'timestamp': datetime.now().isoformat(), 'date': date, 'close': night['close'], 'change': night['change'], 'change_pct': round(night['return'] * 100, 4), 'overnight_gap': round(night['return'] * 100, 4), 'name': night.get('name', ''), 'direction': result['overnight_signal']['direction'], 'source': 'KRX_Futures_API'}
-                            with open(overnight_json, 'w', encoding='utf-8') as f:
-                                json.dump(overnight_data, f, ensure_ascii=False, indent=2)
+                            atomic_write_json(overnight_json, overnight_data, ensure_ascii=False, indent=2)
                             logger.info(f'  💾 야간선물 저장: {overnight_json.name}')
                         break
         except Exception as e:
@@ -343,8 +345,8 @@ class RealtimeSentimentCollector:
         try:
             from src.utils.credential_manager import CredentialManager as _CM
             _cm = _CM()
-            client_id = _cm.read_from_keychain('NAVER_CLIENT_ID') or ''
-            client_secret = _cm.read_from_keychain('NAVER_CLIENT_SECRET') or ''
+            client_id = _cm.read_from_env('NAVER_CLIENT_ID') or ''
+            client_secret = _cm.read_from_env('NAVER_CLIENT_SECRET') or ''
             if not client_id or not client_secret:
                 return {'score': None, 'source': 'no_api_key'}
             queries = ['코스피 전망', 'SK하이닉스', '삼성전자', '반도체 시장', '인공지능 AI', '바이오 신약', '에너지 전환', '양자컴퓨터', '방산 수출', 'K방산']
@@ -450,11 +452,9 @@ class RealtimeSentimentCollector:
             phase: 'evening' 또는 'morning'
         """
         json_path = DATA_DIR / f'{date}_{phase}.json'
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        atomic_write_json(json_path, data, ensure_ascii=False, indent=2, default=str)
         json_compat = DATA_DIR / f'{date}.json'
-        with open(json_compat, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        atomic_write_json(json_compat, data, ensure_ascii=False, indent=2, default=str)
         csv_path = SENTIMENT_CSV / 'realtime_sentiment.csv'
         row = {'date': date, 'phase': phase, 'fear_greed_score': data.get('fear_greed', {}).get('score', 50), 'fear_greed_rating': data.get('fear_greed', {}).get('rating', 'Neutral'), 'news_sentiment': data.get('news_sentiment', {}).get('score', 0), 'news_positive': data.get('news_sentiment', {}).get('positive_count', 0), 'news_negative': data.get('news_sentiment', {}).get('negative_count', 0), 'geopolitical_risk': data.get('geopolitical', {}).get('score', 0), 'geopolitical_level': data.get('geopolitical', {}).get('level', 'low'), 'vix': data.get('vix_term', {}).get('vix', 0), 'vix_term_ratio': data.get('vix_term', {}).get('ratio', 1), 'vix_structure': data.get('vix_term', {}).get('structure', ''), 'ewy_return': data.get('kospi_futures', {}).get('kospi_etf', {}).get('return', 0), 'overnight_direction': data.get('kospi_futures', {}).get('overnight_signal', {}).get('direction', ''), 'social_naver': data.get('social_media', {}).get('naver', {}).get('composite_score', 0), 'social_reddit': data.get('social_media', {}).get('reddit', {}).get('sentiment_score', 0), 'social_composite': data.get('social_media', {}).get('composite_score', 0)}
         df_new = pd.DataFrame([row])
@@ -467,7 +467,7 @@ class RealtimeSentimentCollector:
             df = pd.concat([df_old, df_new], ignore_index=True)
         else:
             df = df_new
-        df.to_csv(csv_path, index=False)
+        atomic_write_dataframe(df, csv_path, file_format='csv', index=False)
         fg_csv = SENTIMENT_CSV / 'vix_fear_greed_index.csv'
         fg_row = pd.DataFrame([{'Date': date, 'VIX': row['vix'], 'Fear_Greed_Score': row['fear_greed_score']}])
         fg_row = fg_row.set_index('Date')
@@ -477,7 +477,7 @@ class RealtimeSentimentCollector:
             fg = pd.concat([fg_old, fg_row])
         else:
             fg = fg_row
-        fg.to_csv(fg_csv)
+        atomic_write_dataframe(fg, fg_csv, file_format='csv')
         mri_csv = SENTIMENT_CSV / 'market_regime_indicator.csv'
         mri_row = pd.DataFrame([{'Date': date, 'RSI_14': 50 + row['news_sentiment'] * 30, 'Volatility_20': row['vix'] / 100}])
         mri_row = mri_row.set_index('Date')
@@ -487,7 +487,7 @@ class RealtimeSentimentCollector:
             mri = pd.concat([mri_old, mri_row])
         else:
             mri = mri_row
-        mri.to_csv(mri_csv)
+        atomic_write_dataframe(mri, mri_csv, file_format='csv')
         logger.info(f'  💾 저장: {json_path} (phase={phase})')
         logger.info(f'  💾 CSV 업데이트: {csv_path} (date={date}, phase={phase})')
 

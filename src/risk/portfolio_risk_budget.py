@@ -351,14 +351,14 @@ class PortfolioRiskBudget:
         """
         nav = portfolio_data.get('nav')
         if nav is None or (isinstance(nav, float) and math.isnan(nav)) or nav <= 0:
-            nav = portfolio_data.get('initial_capital', self.cfg.get('portfolio.initial_capital', 150000000))
+            nav = portfolio_data.get('initial_capital', self.cfg.get('portfolio.initial_capital', 1000000.0))
         if nav is None or (isinstance(nav, float) and math.isnan(nav)) or nav <= 0:
-            nav = self.cfg.get('portfolio.initial_capital', 150000000)
+            nav = self.cfg.get('portfolio.initial_capital', 1000000.0)
         try:
             return float(nav)
         except (TypeError, ValueError) as _e:
             logger.critical(f'nav float 변환 실패: {nav!r} ({_e}) → initial_capital 사용', exc_info=True)
-            return float(self.cfg.get('portfolio.initial_capital', 150000000))
+            return float(self.cfg.get('portfolio.initial_capital', 1000000.0))
 
     def _update_scale_state(self, scale: float, reason: str, regime: str) -> None:
         """포지션 스케일 판정 결과를 상태에 기록 후 자동 저장."""

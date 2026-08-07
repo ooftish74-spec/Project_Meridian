@@ -30,6 +30,8 @@ Date: 2026-04-17
 """
 from __future__ import annotations
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 import math
 from datetime import datetime, date, timedelta
@@ -271,7 +273,7 @@ class USMarketRegimeEngine:
         confidence = min(0.95, base_conf + score_bonus)
         tier = vix_tier(vix_val)
         result = {'date': date.today().isoformat(), 'regime': regime, 'confidence': round(confidence, 3), 'tier': tier, 'score': round(total_score, 4), 'vix': vix_val, 'components': components, 'generated_at': datetime.now().isoformat()}
-        OUT_FILE.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+        atomic_write_json(OUT_FILE, result, ensure_ascii=False, indent=2)
         logger.info(f'  🌐 US Regime: {regime.upper()} (conf={confidence:.0%}, score={total_score:+.3f}, VIX={vix_val:.1f}/{tier})')
         return result
 

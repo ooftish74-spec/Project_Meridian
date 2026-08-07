@@ -32,7 +32,7 @@ def _mask(key: str, value: str) -> str:
     """민감 키 값을 마스킹하여 반환."""
     if key in SENSITIVE_KEYS and value:
         visible = min(4, len(value))
-        return f'{'*' * (len(value) - visible)}{value[-visible:]}'
+        return f'{"*" * (len(value) - visible)}{value[-visible:]}'
     return value
 
 class CredentialManager:
@@ -70,6 +70,9 @@ class CredentialManager:
 
     def _save_to_keychain_cli(self, key: str, value: str) -> bool:
         """security CLI로 Keychain 저장."""
+        import platform
+        if platform.system() != 'Darwin':
+            return False
         try:
             result = subprocess.run(['security', 'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key, '-w', value, '-U'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
@@ -83,6 +86,9 @@ class CredentialManager:
 
     def _read_from_keychain_cli(self, key: str) -> str:
         """security CLI로 Keychain 조회."""
+        import platform
+        if platform.system() != 'Darwin':
+            return ''
         try:
             result = subprocess.run(['security', 'find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key, '-w'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
@@ -91,22 +97,100 @@ class CredentialManager:
                 return value
             return ''
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+            logger.warning(f"  [Phase 71] Keychain CLI read failed (Tier 3 Retry/Fallback): {e}")
             return ''
 
-    def read_from_env(self, key: str, env_path: Optional[str]=None) -> str:
-        """[Phase 71] 시크릿 조회 (Keychain 우선).
+    def _read_from_aws_secrets(self, key: str) -> str:
+        """[Phase 72] AWS Secrets Manager에서 시크릿 조회 (Production)."""
+        try:
+            import boto3
+            from botocore.exceptions import ClientError
+            import json
+            
+            # AWS 리전 설정 (기본값 ap-northeast-2)
+            region_name = os.getenv('AWS_REGION', 'ap-northeast-2')
+            
+            # Boto3 클라이언트 생성 (IAM Role 기반)
+            session = boto3.session.Session()
+            client = session.client(
+                service_name='secretsmanager',
+                region_name=region_name
+            )
+            
+            # Secret ID 규칙: Project_Meridian/{key} 또는 통짜 JSON
+            # 여기서는 Key별로 저장되어 있다고 가정하거나, 통짜 JSON에서 Key를 파싱
+            # Secret ID 규칙: Meridian/{key} 또는 통짜 JSON Meridian
+            secret_id = f"Meridian/{key}"
+            
+            try:
+                response = client.get_secret_value(SecretId=secret_id)
+                if 'SecretString' in response:
+                    value = response['SecretString']
+                    # 만약 값이 JSON 형태라면 파싱하여 해당 키 추출 시도
+                    try:
+                        secret_dict = json.loads(value)
+                        if key in secret_dict:
+                            value = secret_dict[key]
+                    except json.JSONDecodeError:
+                        from src.utils.error_logger import log_warning_rate_limited
+                        log_warning_rate_limited(__name__, f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: (exception variable 없음)")
+                        # 단일 텍스트 값으로 간주 (Tier 3 Ignore)
+                        logger.debug(f'  [Phase 72] AWS Secrets Manager: {key} is a plaintext string (not JSON).')
+                    logger.debug(f'  [Phase 72] AWS Secrets Manager: {key} = {_mask(key, value)}')
+                    return value
+            except ClientError as ce:
+                # Secret이 단일 파일이 아니라 Project_Meridian 하나로 뭉쳐있을 경우의 Fallback 로직
+                if ce.response['Error']['Code'] == 'ResourceNotFoundException':
+                    try:
+                        master_secret_id = 'Meridian'
+                        response = client.get_secret_value(SecretId=master_secret_id)
+                        if 'SecretString' in response:
+                            secret_dict = json.loads(response['SecretString'])
+                            if key in secret_dict:
+                                value = secret_dict[key]
+                                logger.debug(f'  [Phase 72] AWS Secrets Manager (Master JSON): {key} = {_mask(key, value)}')
+                                return value
+                    except Exception as fallback_err:
+                        logger.debug(f"  [Phase 72] AWS Master JSON Fallback parsing failed: {fallback_err}")
+                else:
+                    logger.error(f'  [Phase 72] AWS Secrets Manager 오류 ({key}): {ce}')
+                
+        except ImportError:
+            logger.error("  [Phase 72] boto3 라이브러리가 설치되어 있지 않습니다.")
+        except Exception as exc:
+            logger.error(f'  [Phase 72] AWS Secrets Manager 예외 ({key}): {exc}')
+        
+        return ''
 
-        우선순위:
+    def read_from_env(self, key: str, env_path: Optional[str]=None) -> str:
+        """[Phase 72] 시크릿 조회 (Environment 분기 처리).
+        
+        Production 환경 (AWS):
+            1. AWS Secrets Manager
+            2. OS 환경변수
+            (※ .env 파일 및 Keychain 무시하여 보안 극대화)
+            
+        로컬 환경 (Mac):
             1. macOS Keychain
             2. .env {key}_ENC (Fernet 복호화)
             3. .env {key} 평문
             4. OS 환경변수
         """
+        is_production = os.environ.get('ENVIRONMENT', '').lower() == 'production'
+        
+        if is_production:
+            # AWS 운영 환경: Secrets Manager 우선 조회
+            _aws_val = self._read_from_aws_secrets(key)
+            if _aws_val:
+                return _aws_val
+            # Fallback: 로컬 테스트나 특수 주입된 OS 환경변수
+            return os.getenv(key, '')
+        
+        # 로컬(개발) 환경: 기존 Keychain -> .env 로직 수행
         _kc = self.read_from_keychain(key)
         if _kc:
             return _kc
+            
         _env = env_path or str(_PROJECT_ROOT / '.env')
         if Path(_env).exists():
             try:
@@ -129,7 +213,10 @@ class CredentialManager:
                     logger.debug(f'  [Phase 71] .env 평문: {key}')
                     return _plain
             except Exception as _exc:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_exc}", exc_info=True)
                 logger.debug(f'  [Phase 71] .env 읽기 실패 ({key}): {_exc}')
+        
         return os.getenv(key, '')
 
     def _derive_key(self) -> bytes:
@@ -142,8 +229,7 @@ class CredentialManager:
                     hw_uuid = line.split('"')[-2]
                     break
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+            logger.debug(f"  [Phase 71] hw_uuid fetch failed (Tier 3 Ignore): {e}")
             hw_uuid = ''
         if not hw_uuid:
             import platform
@@ -197,4 +283,4 @@ if __name__ == '__main__':
     cm = CredentialManager()
     _key = sys.argv[1] if len(sys.argv) > 1 else 'KIS_APP_KEY'
     _val = cm.read_from_env(_key)
-    print(f'{('OK' if _val else 'MISS')}: {_key} = {(_mask(_key, _val) if _val else '(없음)')}')
+    print(f'{"OK" if _val else "MISS"}: {_key} = {_mask(_key, _val) if _val else "(없음)"}')

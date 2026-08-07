@@ -21,6 +21,8 @@ import json
 import logging
 import time
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional
@@ -46,6 +48,8 @@ class KISPriceService:
         self._token_endpoint = '/oauth2/tokenP'
         self._price_endpoint = '/uapi/domestic-stock/v1/quotations/inquire-price'
         self._price_tr_id = 'FHKST01010100'
+        self._futures_price_endpoint = '/uapi/domestic-futureoption/v1/quotations/inquire-price'
+        self._futures_price_tr_id = 'FHMIF10000000'
         self._app_key: str = ''
         self._app_secret: str = ''
         self._access_token: Optional[str] = None
@@ -81,13 +85,14 @@ class KISPriceService:
 
     def _ensure_token(self) -> bool:
         """유효한 토큰이 있는지 확인하고, 없으면 발급/갱신."""
+        if not self._load_credentials():
+            return False
+            
         if self._access_token and self._token_expires:
             if datetime.now() < self._token_expires - timedelta(hours=1):
                 return True
         if self._load_cached_token():
             return True
-        if not self._load_credentials():
-            return False
         return self._request_new_token()
 
     def _load_cached_token(self) -> bool:
@@ -113,7 +118,7 @@ class KISPriceService:
         try:
             self._token_cache_path.parent.mkdir(parents=True, exist_ok=True)
             data = {'access_token': self._access_token, 'expires': self._token_expires.isoformat(), 'service': 'price_service'}
-            self._token_cache_path.write_text(json.dumps(data, indent=2))
+            atomic_write_json(self._token_cache_path, data, indent=2)
         except Exception as e:
             logger.critical(f'  토큰 캐시 저장 실패: {e}', exc_info=True)
 
@@ -260,6 +265,41 @@ class KISPriceService:
         if price <= 0:
             return None
         return {'price': price, 'change_pct': float(output.get('prdy_ctrt', 0)), 'volume': int(output.get('acml_vol', 0)), 'timestamp': datetime.now().isoformat()}
+
+    def get_futures_price(self, ticker: str) -> dict:
+        """파생상품(국내선물) 현재가 조회.
+        
+        Args:
+            ticker: 종목코드 (예: '101VC000' 또는 'F202609' 등 KIS 표준코드)
+        Returns:
+            dict: price(현재가), change_pct(등락률), volume, timestamp
+        """
+        cached = self._get_cached(ticker)
+        if cached is not None:
+            return cached
+            
+        data = self._call_kis_api(
+            endpoint=self._futures_price_endpoint,
+            tr_id=self._futures_price_tr_id,
+            params={'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': ticker}
+        )
+        
+        if not data:
+            return {}
+            
+        output = data.get('output', {})
+        # 선물 가격은 소수점(예: 375.25)이므로 float로 변환
+        price = float(output.get('futs_prpr', output.get('stck_prpr', 0)))
+        if price <= 0:
+            return {}
+            
+        # 등락률 (prdy_ctrt: 전일대비율)
+        change_pct = float(output.get('prdy_ctrt', 0))
+        volume = int(output.get('acml_vol', 0))
+        
+        result = {'price': price, 'change_pct': change_pct, 'volume': volume, 'timestamp': datetime.now().isoformat()}
+        self._set_cached(ticker, result)
+        return result
 
     def get_batch_prices(self, tickers: List[str]) -> Dict[str, dict]:
         """여러 종목 현재가 일괄 조회.

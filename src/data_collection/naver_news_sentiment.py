@@ -24,6 +24,7 @@ Author: Project-A
 Date: 2026-03-21
 """
 import json
+from src.infra.safe_io import atomic_write_dataframe
 import logging
 import os
 import re
@@ -48,8 +49,8 @@ class NaverNewsSentiment:
     def __init__(self):
         from src.utils.credential_manager import CredentialManager
         _cm = CredentialManager()
-        self.client_id = _cm.read_from_keychain('NAVER_CLIENT_ID') or ''
-        self.client_secret = _cm.read_from_keychain('NAVER_CLIENT_SECRET') or ''
+        self.client_id = _cm.read_from_env('NAVER_CLIENT_ID') or ''
+        self.client_secret = _cm.read_from_env('NAVER_CLIENT_SECRET') or ''
         _SENT_DIR.mkdir(parents=True, exist_ok=True)
         self._ticker_names = self._load_ticker_names()
 
@@ -143,7 +144,7 @@ class NaverNewsSentiment:
             if existing is not None:
                 df = pd.concat([existing, df], ignore_index=True)
                 df.drop_duplicates(subset=['title', 'date'], inplace=True)
-        df.to_csv(raw_path, index=False, encoding='utf-8-sig')
+        atomic_write_dataframe(df, raw_path, file_format='csv', index=False, encoding='utf-8-sig')
         self._update_daily_signal(ticker, df)
         return len(records)
 
@@ -233,7 +234,7 @@ class NaverNewsSentiment:
             daily = pd.concat([existing, daily])
             daily = daily[~daily.index.duplicated(keep='last')]
         daily.sort_index(inplace=True)
-        daily.to_csv(signal_path)
+        atomic_write_dataframe(daily, signal_path, file_format='csv')
 
     def get_features(self, ticker: str, target_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
         """

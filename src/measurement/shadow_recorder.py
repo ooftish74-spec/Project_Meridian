@@ -20,6 +20,8 @@ Usage:
 import json
 import logging
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from src.utils.time_utils import now_kst
@@ -67,7 +69,7 @@ class ShadowRecorder:
         if exec_result:
             entry['execution'] = {'mode': exec_result.get('mode', 'shadow'), 'n_filled': exec_result.get('n_filled', 0), 'n_rejected': exec_result.get('n_rejected', 0), 'total_buy': exec_result.get('total_buy_amount', 0), 'total_sell': exec_result.get('total_sell_amount', 0), 'slippage': exec_result.get('estimated_slippage', 0), 'commission': exec_result.get('estimated_commission', 0)}
         existing.append(entry)
-        record_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(record_file, existing, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  📝 Shadow 기록: {today} (regime={entry['regime']}, orders={entry['n_orders']})')
         self._update_summary()
         return entry
@@ -254,8 +256,10 @@ class ShadowRecorder:
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 pass
             summary = {'updated': now_kst().isoformat(), 'n_days': len(stats), 'regime': regime, 'go_nogo': go_nogo, 'daily_stats': stats[-30:], **portfolio_snapshot}
-            self._summary_file.write_text(json.dumps(summary, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(self._summary_file, summary, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  서머리 업데이트 실패: {e}')
 
     def __repr__(self) -> str:

@@ -97,7 +97,7 @@ class TestAlphaAllocator:
         from src.allocation.alpha_allocator import AlphaAllocator
         import unittest.mock as mock
         alloc = AlphaAllocator()
-        with mock.patch('src.allocation.alpha_allocator.cfg.get', side_effect=lambda k, d=None: 0.0 if k == 'allocator.risk_parity_blend' else d):
+        with mock.patch('src.allocation.alpha_allocator.cfg.get', side_effect=lambda k, d=None: False if k == 'allocator.chameleon_v2_enabled' else (0.0 if k == 'allocator.risk_parity_blend' else d)):
             crash_w = alloc.allocate(stream_metrics, regime='crash')
         assert crash_w['S1'] <= 0.25, \
             f"Crash S1={crash_w.get('S1', 0):.3f} 과도하게 높음 (max=0.25)"
@@ -111,7 +111,7 @@ class TestAlphaAllocator:
         from src.allocation.alpha_allocator import AlphaAllocator
         import unittest.mock as mock
         alloc = AlphaAllocator()
-        with mock.patch('src.allocation.alpha_allocator.cfg.get', side_effect=lambda k, d=None: 0.0 if k == 'allocator.risk_parity_blend' else d):
+        with mock.patch('src.allocation.alpha_allocator.cfg.get', side_effect=lambda k, d=None: False if k == 'allocator.chameleon_v2_enabled' else (0.0 if k == 'allocator.risk_parity_blend' else d)):
             bull = alloc.allocate(stream_metrics, regime='bull')
         assert 0.0 <= bull['S1'] <= 0.30, \
             f"Bull S1={bull.get('S1', 0):.3f} 적절 범위에 있어야 함 (0~0.30)"

@@ -50,9 +50,12 @@ class AnalystConsensus:
                             logger.debug(f'  AnalystConsensus: {ticker} 데이터 만료 ({updated})')
                             continue
                     except ValueError:
-                        pass
+                        from src.utils.error_logger import log_error_rate_limited
+                        logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                 self._cache[ticker] = data
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  AnalystConsensus: {fp.name} 로드 실패 — {e}')
         if self._cache:
             logger.info(f'  AnalystConsensus: {len(self._cache)}종목 로드')

@@ -70,44 +70,11 @@ class _PykrxCompatStock:
         """지수 OHLCV (1001=KOSPI, 2001=KOSDAQ 등).
 
         수정 이력:
-          2026-04-18: pykrx 최신버전(name_display=True 기본) '지수명' KeyError 수정.
-                      pykrx 직접 호출(name_display=False)을 0순위로 추가.
+          2026-07-28: KRX API를 최우선 순위로 복원 (pykrx 차단 및 로깅 버그 회피)
         """
         start_d, end_d = (self._fmt_date(start), self._fmt_date(end))
-        try:
-            from pykrx import stock as _pykrx_stock
-            import inspect as _inspect
-            _sig = _inspect.signature(_pykrx_stock.get_index_ohlcv_by_date)
-            _kwargs = {}
-            if 'name_display' in _sig.parameters:
-                _kwargs['name_display'] = False
-            df_raw = _pykrx_stock.get_index_ohlcv_by_date(start_d, end_d, index_code, **_kwargs)
-            if df_raw is not None and (not df_raw.empty):
-                col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량', '시가': '시가', '고가': '고가', '저가': '저가', '종가': '종가', '거래량': '거래량'}
-                df_raw = df_raw.rename(columns={c: col_map[c] for c in df_raw.columns if c in col_map})
-                logger.debug(f'get_index_ohlcv({index_code}): pykrx native OK ({len(df_raw)}행)')
-                return df_raw
-        except Exception as _pykrx_e:
-            logger.error(f'get_index_ohlcv({index_code}): pykrx native 실패 → KRX API: {_pykrx_e}', exc_info=True)
-        _INDEX_YF_MAP = {'1001': '^KS11', '0001': '^KS11', '2001': '^KQ11', '1028': '^KS200'}
-        _yf_code = _INDEX_YF_MAP.get(index_code)
-        if _yf_code:
-            try:
-                import yfinance as yf
-                _start_yf = f'{start_d[:4]}-{start_d[4:6]}-{start_d[6:]}'
-                _end_yf = f'{end_d[:4]}-{end_d[4:6]}-{end_d[6:]}'
-                df_yf = yf.download(_yf_code, start=_start_yf, end=_end_yf, progress=False, auto_adjust=True)
-                if isinstance(df_yf.columns, pd.MultiIndex):
-                    df_yf.columns = df_yf.columns.get_level_values(0)
-                if not df_yf.empty:
-                    result = pd.DataFrame(index=df_yf.index)
-                    for col_src, col_dst in [('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Close', '종가'), ('Volume', '거래량')]:
-                        if col_src in df_yf.columns:
-                            result[col_dst] = df_yf[col_src].values
-                    logger.debug(f'get_index_ohlcv({index_code}): yfinance {_yf_code} OK ({len(result)}행)')
-                    return result
-            except Exception as _yf_e:
-                logger.error(f'get_index_ohlcv yfinance direct({index_code}): {_yf_e}', exc_info=True)
+        
+        # 1순위: KRX API (사용자 키)
         try:
             if index_code in ('1001', '0001'):
                 idx = self.client.get_kospi_index(end_d)
@@ -122,29 +89,7 @@ class _PykrxCompatStock:
                     import logging
                     logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
                     idx = None
-                if idx is None or (hasattr(idx, 'empty') and idx.empty):
-                    _SECTOR_ETF_MAP = {'1001': '069500.KS', '1002': '091160.KS', '1003': '091170.KS', '1004': '091180.KS', '1005': '266410.KS', '1006': '266420.KS', '1007': '117460.KS', '1008': '117680.KS', '1009': '091230.KS'}
-                    etf_ticker = _SECTOR_ETF_MAP.get(index_code)
-                    if etf_ticker:
-                        try:
-                            import yfinance as yf
-                            start_yf = f'{start_d[:4]}-{start_d[4:6]}-{start_d[6:]}'
-                            end_yf = f'{end_d[:4]}-{end_d[4:6]}-{end_d[6:]}'
-                            df_yf = yf.download(etf_ticker, start=start_yf, end=end_yf, progress=False)
-                            if isinstance(df_yf.columns, pd.MultiIndex):
-                                df_yf.columns = df_yf.columns.get_level_values(0)
-                            if not df_yf.empty:
-                                result = pd.DataFrame()
-                                for col_src, col_dst in [('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Close', '종가'), ('Volume', '거래량')]:
-                                    if col_src in df_yf.columns:
-                                        result[col_dst] = df_yf[col_src].values
-                                result.index = df_yf.index
-                                logger.info(f'get_index_ohlcv({index_code}): yfinance ETF fallback → {len(result)} rows')
-                                return result
-                        except Exception as e2:
-                            logger.error(f'yfinance fallback({index_code}): {e2}', exc_info=True)
-                    return pd.DataFrame()
-            if idx is not None and (not idx.empty):
+            if idx is not None and (not getattr(idx, 'empty', True)):
                 result = pd.DataFrame()
                 if 'clpr' in idx.columns:
                     result['종가'] = pd.to_numeric(idx['clpr'], errors='coerce')
@@ -156,9 +101,92 @@ class _PykrxCompatStock:
                     result['저가'] = pd.to_numeric(idx['lopr'], errors='coerce')
                 if 'acc_trdvol' in idx.columns:
                     result['거래량'] = pd.to_numeric(idx['acc_trdvol'], errors='coerce')
-                return result
+                if not result.empty:
+                    logger.debug(f'get_index_ohlcv({index_code}): KRX API OK ({len(result)}행)')
+                    return result
         except Exception as e:
             logger.error(f'get_index_ohlcv({index_code}): KRX API 실패: {e}', exc_info=True)
+
+        # 2순위: Naver Finance API (가장 강력한 오픈 API 대안)
+        _NAVER_SYM_MAP = {'1001': 'KOSPI', '0001': 'KOSPI', '2001': 'KOSDAQ', '1028': 'KPI200'}
+        _naver_sym = _NAVER_SYM_MAP.get(index_code)
+        if _naver_sym:
+            try:
+                import requests, ast
+                url = f"https://api.finance.naver.com/siseJson.naver?symbol={_naver_sym}&requestType=1&startTime={start_d}&endTime={end_d}&timeframe=day"
+                resp = requests.get(url, timeout=10)
+                data_str = resp.text.strip()
+                if data_str:
+                    data = ast.literal_eval(data_str)
+                    if len(data) > 1:
+                        df_nv = pd.DataFrame(data[1:], columns=data[0])
+                        df_nv['날짜'] = pd.to_datetime(df_nv['날짜'].astype(str))
+                        df_nv = df_nv.set_index('날짜')
+                        for c in ['시가', '고가', '저가', '종가', '거래량']:
+                            df_nv[c] = pd.to_numeric(df_nv[c], errors='coerce')
+                        logger.debug(f'get_index_ohlcv({index_code}): Naver API OK ({len(df_nv)}행)')
+                        return df_nv[['시가', '고가', '저가', '종가', '거래량']]
+            except Exception as _nv_e:
+                logger.error(f'get_index_ohlcv Naver API({index_code}): {_nv_e}', exc_info=True)
+
+        # 3순위: KIS API (공식 브로커 API, 트레이딩 영향 최소화를 위해 Rate Limit 안배)
+        _KIS_SYM_MAP = {'1001': '0001', '0001': '0001', '2001': '1001', '1028': '2001', '2203': '1203'} # KIS 업종코드
+        _kis_sym = _KIS_SYM_MAP.get(index_code)
+        if _kis_sym:
+            try:
+                import time
+                from src.data_collection.kis_data_collector import KISDataCollector
+                # 트레이딩 세션에 무리를 주지 않도록 0.2초 딜레이 (Rate Limit 안배)
+                time.sleep(0.2)
+                kis = KISDataCollector()
+                df_kis = kis.get_kr_sector_daily(_kis_sym, start_d, end_d)
+                if df_kis is not None and not df_kis.empty:
+                    col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
+                    df_kis = df_kis.rename(columns=col_map)
+                    logger.debug(f'get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)')
+                    return df_kis[['시가', '고가', '저가', '종가', '거래량']]
+            except Exception as _kis_e:
+                logger.error(f'get_index_ohlcv KIS API({index_code}): {_kis_e}', exc_info=True)
+
+        # 4순위: yfinance ETF proxy (최후의 우회로)
+        _SECTOR_ETF_MAP = {'1001': '069500.KS', '1002': '091160.KS', '1003': '091170.KS', '1004': '091180.KS', '1005': '266410.KS', '1006': '266420.KS', '1007': '117460.KS', '1008': '117680.KS', '1009': '091230.KS'}
+        etf_ticker = _SECTOR_ETF_MAP.get(index_code)
+        if etf_ticker:
+            try:
+                import yfinance as yf
+                start_yf = f'{start_d[:4]}-{start_d[4:6]}-{start_d[6:]}'
+                end_yf = f'{end_d[:4]}-{end_d[4:6]}-{end_d[6:]}'
+                df_yf = yf.download(etf_ticker, start=start_yf, end=end_yf, progress=False)
+                if isinstance(df_yf.columns, pd.MultiIndex):
+                    df_yf.columns = df_yf.columns.get_level_values(0)
+                if not df_yf.empty:
+                    result = pd.DataFrame()
+                    for col_src, col_dst in [('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Close', '종가'), ('Volume', '거래량')]:
+                        if col_src in df_yf.columns:
+                            result[col_dst] = df_yf[col_src].values
+                    result.index = df_yf.index
+                    logger.info(f'get_index_ohlcv({index_code}): yfinance ETF fallback → {len(result)} rows')
+                    return result
+            except Exception as e2:
+                logger.error(f'yfinance fallback({index_code}): {e2}', exc_info=True)
+                
+        # 5순위: pykrx native (최후의 보루, 단 버그를 막기 위해 에러 억제)
+        try:
+            from pykrx import stock as _pykrx_stock
+            import inspect as _inspect
+            _sig = _inspect.signature(_pykrx_stock.get_index_ohlcv_by_date)
+            _kwargs = {}
+            if 'name_display' in _sig.parameters:
+                _kwargs['name_display'] = False
+            df_raw = _pykrx_stock.get_index_ohlcv_by_date(start_d, end_d, index_code, **_kwargs)
+            if df_raw is not None and (not df_raw.empty):
+                col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량', '시가': '시가', '고가': '고가', '저가': '저가', '종가': '종가', '거래량': '거래량'}
+                df_raw = df_raw.rename(columns={c: col_map[c] for c in df_raw.columns if c in col_map})
+                logger.debug(f'get_index_ohlcv({index_code}): pykrx native OK ({len(df_raw)}행)')
+                return df_raw
+        except Exception as _pykrx_e:
+            logger.error(f'get_index_ohlcv({index_code}): 최후의 pykrx native마저 실패: {type(_pykrx_e).__name__}', exc_info=False)
+
         return pd.DataFrame()
 
     def get_index_ohlcv_by_date(self, start: str, end: str, index_code: str, **kwargs) -> pd.DataFrame:

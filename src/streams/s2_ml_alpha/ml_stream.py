@@ -22,6 +22,8 @@ import logging
 import math
 import pickle
 from datetime import datetime, time
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -104,6 +106,8 @@ class S2MLAlphaStream(BaseStream):
                                 _models[_mname] = _jl.load(_mpath)
                                 _loaded += 1
                             except Exception as _me:
+                                from src.utils.error_logger import log_error_rate_limited
+                                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_me}", exc_info=True)
                                 logger.debug(f'  S2: {_mname} joblib 로드 실패: {_me}')
                     if _loaded >= 3:
                         self._models = _models
@@ -127,11 +131,16 @@ class S2MLAlphaStream(BaseStream):
                                 self._conformal_state = self._safe_pickle_load(conformal_path)
                                 logger.info('  S2: Conformal Predictor 로드 완료')
                             except Exception:
+                                from src.utils.error_logger import log_error_rate_limited
+                                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                                 logger.debug('  S2: Conformal state 로드 실패 (무시)')
                         return
             except ImportError as e:
-                pass
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f'🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}', exc_info=True)
             except Exception as _je:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_je}", exc_info=True)
                 logger.debug(f'  S2: joblib 로드 실패, pkl fallback: {_je}')
         if not ensemble_path.exists():
             logger.info('  S2: 앙상블 모델 없음 → Fallback 모드')
@@ -154,7 +163,7 @@ class S2MLAlphaStream(BaseStream):
                     raw_weights = {k: v / total for k, v in exp_s.items()}
             self._model_weights = raw_weights
             if self._model_weights:
-                logger.info(f'  S2: 가중 앙상블 weights 로드: {', '.join((f'{k}={v:.3f}' for k, v in self._model_weights.items()))}')
+                logger.info(f"  S2: 가중 앙상블 weights 로드: {', '.join((f'{k}={v:.3f}' for k, v in self._model_weights.items()))}")
             self._model_meta['model_weights'] = self._model_weights
             feat_means = pkg.get('feature_means')
             feat_stds = pkg.get('feature_stds')
@@ -339,6 +348,8 @@ class S2MLAlphaStream(BaseStream):
                             retrain_file.write_text(_ic_json.dumps(retrain_req, indent=2, ensure_ascii=False))
                             logger.warning(f'  🔄 S2: IC 음수 재학습 트리거 발동 (IC={ic_value:.4f})')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  S2: IC 모니터링 실패 (무시): {e}')
         scored = self._filter_ensemble_disagreement(scored)
         signal_cache_ref = market_data.get('signal_cache', {})
@@ -360,6 +371,8 @@ class S2MLAlphaStream(BaseStream):
                     _s2_target_date = _ts_date
                     logger.info(f'  [Task 1 PIT] S2 백테스트 모드 target_date={_s2_target_date}')
         except Exception as _pit_e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_pit_e}", exc_info=True)
             logger.debug(f'  [Task 1 PIT] target_date 추출 실패 (live 모드): {_pit_e}')
         _p11_vix_neutral = cfg.get('s2.vix_neutral_level', 18.0)
         _p11_vix_scale = cfg.get('s2.vix_prob_scale', 20.0)
@@ -523,6 +536,8 @@ class S2MLAlphaStream(BaseStream):
                     ca['usdkrw_close'] = float(usdkrw)
                     ca['usdkrw_5d_ago'] = float(usdkrw)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  S2: cross-asset 로드 실패: {e}')
         return ca
 
@@ -556,6 +571,8 @@ class S2MLAlphaStream(BaseStream):
                                 else:
                                     logger.warning(f'  S2 PIT AutoML: {stock['ticker']} target_date={target_date} 이전 데이터 없음')
                             except Exception as _pit_am_e:
+                                from src.utils.error_logger import log_error_rate_limited
+                                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_pit_am_e}", exc_info=True)
                                 logger.debug(f'  S2 PIT AutoML 슬라이싱 실패: {_pit_am_e}')
                         df = df.tail(300)
                         if 'date' in df.columns:
@@ -602,6 +619,8 @@ class S2MLAlphaStream(BaseStream):
                         _regime_up_prob = _router.predict(X, regime='caution')
                         logger.debug(f'  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} CAUTION 모델 예측={_regime_up_prob:.4f}')
                 except Exception as _re:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_re}", exc_info=True)
                     logger.debug(f'  [Phase 10] MLRegimeRouter 실패 (기존 앙상블 사용): {_re}')
                 preds = []
                 pred_names = []
@@ -640,6 +659,8 @@ class S2MLAlphaStream(BaseStream):
                         up_prob = max(0.0, min(1.0, up_prob + correction))
                         logger.debug(f'  [Phase 2] FastCorrector: {stock['ticker']} {old_prob:.4f} → {up_prob:.4f} (Δ={correction:+.4f})')
                     except Exception as e:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                         logger.debug(f'  ⚠️ FastCorrector 추론 에러: {e}')
                 ood_score = self._detect_ood(X)
                 if ood_score > cfg.get('s2.ood_threshold', 0.7):
@@ -853,6 +874,8 @@ class S2MLAlphaStream(BaseStream):
                 kelly_raw = kelly_raw * max(0.0, 1.0 - _tca_cost / max(abs(kelly_raw), 1e-06))
                 logger.debug(f'  [Phase80 TCA] {stock.get('ticker', '?')} ADTV={_adtv / 100000000.0:.1f}억 cost={_tca_cost:.4f} kelly->{kelly_raw:.4f}')
         except Exception as _te:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_te}", exc_info=True)
             logger.debug(f'  [Phase80] TCA skip: {_te}')
         if kelly_raw <= 0:
             logger.debug(f'  S2 Kelly: p={p:.3f}, b={b:.2f}(TP={tp_pct:.1f}%/SL={sl_safe:.1f}%) → kelly_raw={kelly_raw:.4f} (음수) → size=0')
@@ -1103,7 +1126,7 @@ class S2MLAlphaStream(BaseStream):
                 pass
         request = {'date': now_kst().strftime('%Y-%m-%d'), 'timestamp': now_kst().isoformat(), 'reason': 'drift_detected', 'accuracy': accuracy, 'calibration_error': drift_result.get('calibration_error', 0), 'confidence_multiplier': drift_result.get('confidence_multiplier', 1.0), 'priority': 'high' if accuracy < cfg.get('s2.retrain_critical_threshold', 0.4) else 'normal', 'requested_by': 'S2MLAlphaStream.drift_detector'}
         try:
-            retrain_file.write_text(json.dumps(request, indent=2, ensure_ascii=False))
+            atomic_write_json(retrain_file, request, indent=2, ensure_ascii=False)
             logger.warning(f'  🔄 S2: 자동 재학습 요청 생성 (accuracy={accuracy:.3f}, priority={request['priority']})')
         except Exception as e:
             logger.error(f'  S2: 재학습 요청 파일 생성 실패: {e}')

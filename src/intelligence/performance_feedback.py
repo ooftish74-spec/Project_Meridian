@@ -91,6 +91,8 @@ class PerformanceFeedback:
                     if not math.isnan(pnl_val):
                         stream_trades.setdefault(stream, []).append(trade)
                 except (ValueError, TypeError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
         for stream_id, trades in stream_trades.items():
             recent = trades[-rolling_window:]
@@ -102,6 +104,8 @@ class PerformanceFeedback:
                 try:
                     pnl_values.append(float(t['pnl_pct']))
                 except (ValueError, TypeError, KeyError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
             if not pnl_values:
                 continue
@@ -322,8 +326,9 @@ class PerformanceFeedback:
         state = {'stream_metrics': self._stream_metrics, 'ticker_sl_count': self._ticker_sl_count, 'blacklist': self._blacklist, 'updated_at': datetime.now().isoformat()}
         try:
             self._state_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._state_file, 'w', encoding='utf-8') as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(self._state_file, state, indent=2, ensure_ascii=False)
             logger.debug('PerformanceFeedback 상태 저장: %s', self._state_file)
         except Exception as e:
             logger.error('PerformanceFeedback 상태 저장 실패: %s', e, exc_info=True)

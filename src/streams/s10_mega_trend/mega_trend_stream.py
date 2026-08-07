@@ -144,6 +144,34 @@ class S10MegaTrendStream(BaseStream):
                 sig = self._evaluate_stock(ticker=ticker, name=name,
                                            f_data=f_data, regime=regime)
 
+                # 1. Dynamic VIX-Adjusted TP/SL & 2. 3D Local Panic Index (LPI) Rejection
+                _cache = market_data.get('signal_cache', {}) if isinstance(market_data.get('signal_cache'), dict) else {}
+                _vix = float(_cache.get('vix', 15.0))
+                _vkospi = float(_cache.get('vkospi', 15.0))
+                _usdkrw = float(_cache.get('usdkrw', 1350.0))
+                _usdkrw_prev = float(_cache.get('usdkrw_prev', 1350.0))
+                
+                # VIX 연동 가변 방어막 (Dynamic TP/SL)
+                if _vix < 15.0:
+                    dyn_tp = 0.30
+                    dyn_sl = 0.10
+                elif _vix < 20.0:
+                    dyn_tp = 0.15
+                    dyn_sl = 0.05
+                else:
+                    dyn_tp = 0.05
+                    dyn_sl = 0.025
+                    
+                # [Red Team 2] 3D Local Panic Index (LPI) 오버나이트 거부
+                # 미장(VIX)뿐만 아니라 한국 장(VKOSPI)과 환율(USD/KRW) 쇼크를 수학적으로 통합
+                _usdkrw_ratio = _usdkrw / _usdkrw_prev if _usdkrw_prev > 0 else 1.0
+                _lpi = max(_vix / 18.0, _vkospi / 22.0, _usdkrw_ratio / 1.015)
+                
+                if _lpi > 1.0:
+                    logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 한국형 디커플링 쉴드 가동 -> {name} 오버나이트 거부 및 강제 청산")
+                    sig['action'] = 'exit'
+                    sig['reason'] = f'LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})'
+
                 if sig['action'] == 'buy':
                     kelly_frac = self._compute_kelly(sig)
                     size_pct   = min(
@@ -160,12 +188,12 @@ class S10MegaTrendStream(BaseStream):
                         'sector':        sector,
                         'reason':        sig['reason'],
                         'is_mega_trend': True,
-                        'tp_pct':        float(cfg.get('s10.default_tp_pct', 0.30)),
-                        'sl_pct':        float(cfg.get('s10.default_sl_pct', 0.10)),
+                        'tp_pct':        dyn_tp,
+                        'sl_pct':        dyn_sl,
                     })
                     logger.info(
                         f"    [S10] BUY {name}({ticker}) "
-                        f"size={size_pct:.1%} conf={sig['confidence']:.2f}"
+                        f"size={size_pct:.1%} conf={sig['confidence']:.2f} (TP:{dyn_tp*100:.1f}%, SL:{dyn_sl*100:.1f}%)"
                     )
                 elif sig['action'] == 'exit':
                     signals.append({

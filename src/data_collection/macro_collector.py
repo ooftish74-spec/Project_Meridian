@@ -1,3 +1,4 @@
+from __future__ import annotations
 """[Phase 69: SSOT] 내부 매크로 데이터 수집기.
 
 Data_Hub_Agent 외부 의존성 완전 제거 후
@@ -15,8 +16,11 @@ Data_Hub_Agent 외부 의존성 완전 제거 후
   Q2. HY Spread: yfinance HYG-IEF 스프레드 프록시, FRED 또는 API 키 있으면 우선
   Q3. 추론 흐름 별도 포함 안 함 — 수집 + parquet 갱신만
 """
-from __future__ import annotations
+from src.utils.file_ops import atomic_write_parquet
+
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 import os
 import sys
@@ -73,6 +77,7 @@ class MacroCollector:
         frames['gscpi'] = self._fetch_gscpi(start, end)
         df = pd.DataFrame(frames)
         df.index.name = 'date'
+        df = df.ffill(limit=5)  # 근원적 해결: 휴장일 불일치로 인한 단기 결측치 1차 방어
         _proxy_for_impute = df.copy()
         try:
             from src.utils.data_imputer import OrthogonalDataImputer, DataNoGoException
@@ -88,17 +93,17 @@ class MacroCollector:
                     df[_col] = df[_col].fillna(_imputer.impute(_col, df[_col], _proxies, df.index))
                     logger.info(f'  [Phase 70] {_col}: PCA 직교 합성 성공')
                 except DataNoGoException as _dne:
-                    logger.error(f'  [Phase 70 DATA_NOGO] {_col}: R²={_dne.r2:.3f} < {_dne.threshold:.2f} — 해당 컬럼 제외')
-                    raise
+                    logger.warning(f'  [Phase 70 DATA_NOGO] {_col}: R²={_dne.r2:.3f} < {_dne.threshold:.2f} — 해당 컬럼은 결측치(NaN)를 유지한 채 Graceful Degradation 진행합니다.')
+                    # raise 대신 패스
         except (ImportError, Exception) as _imp_e:
             if 'DataNoGoException' in type(_imp_e).__name__:
-                raise
-            logger.error(f'  [Phase 70] Imputer 에러: {_imp_e}', exc_info=True)
-            raise
+                logger.warning(f'  [Phase 70] Imputer 예외(Graceful): {_imp_e}')
+            else:
+                logger.error(f'  [Phase 70] Imputer 에러: {_imp_e}', exc_info=True)
         df = df.dropna(how='all')
-        df.to_parquet(_PARQUET, compression='snappy')
+        atomic_write_parquet(df, _PARQUET, compression='snappy')
         logger.info(f'[Phase 65] 매크로 파케 저장: {_PARQUET} ({len(df)}행 x {len(df.columns)}콸럼)')
-        _CACHE_JSON.write_text(json.dumps({'collected_at': datetime.now().isoformat(), 'rows': len(df), 'cols': list(df.columns)}, ensure_ascii=False, indent=2), encoding='utf-8')
+        atomic_write_json(_CACHE_JSON, {'collected_at': datetime.now().isoformat(), 'rows': len(df), 'cols': list(df.columns)}, ensure_ascii=False, indent=2)
         return df
 
     def _fetch_hy_spread(self, yf, start, end) -> pd.Series:
@@ -125,6 +130,8 @@ class MacroCollector:
             hyg_ret = hyg.pct_change().rolling(self._hy_rolling).std() * np.sqrt(252) * 100
             ief_ret = ief.pct_change().rolling(self._hy_rolling).std() * np.sqrt(252) * 100
             spread = (hyg_ret - ief_ret).dropna()
+            if hasattr(spread, 'columns') and len(spread.columns) > 0:
+                spread = spread.iloc[:, 0]
             return spread.rename('high_yield_spread')
         except Exception as _e:
             logger.warning(f'  HY Spread 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
@@ -140,6 +147,8 @@ class MacroCollector:
             _copper = self._vmx.fetch('HG=F', _ss, _es)
             _gold = self._vmx.fetch('GC=F', _ss, _es)
             ratio = (_copper / _gold).replace([float('inf'), float('-inf')], float('nan')).dropna()
+            if hasattr(ratio, 'columns') and len(ratio.columns) > 0:
+                ratio = ratio.iloc[:, 0]
             return ratio[ratio > 0].rename('copper_gold_ratio')
         except Exception as _e:
             logger.warning(f'  Copper/Gold 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
@@ -152,28 +161,62 @@ class MacroCollector:
         if self._vmx is None:
             raise RuntimeError('[Phase 70] VendorMultiplexer가 주입되지 않았습니다.')
         try:
-            return self._vmx.fetch('^SKEW', _ss, _es).rename('cboe_skew')
+            _df = self._vmx.fetch('^SKEW', _ss, _es)
+            if hasattr(_df, 'columns') and len(_df.columns) > 0:
+                return _df.iloc[:, 0].rename('cboe_skew')
+            return _df.rename('cboe_skew')
         except Exception as _e:
             logger.warning(f'  CBOE SKEW 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
             idx = pd.date_range(start, end, freq='B')
             return pd.Series(float('nan'), index=idx, name='cboe_skew')
 
     def _fetch_gscpi(self, start, end) -> pd.Series:
-        """NY Fed GSCPI (FRED 'GSCPI').
-
-        FRED API 실패 시 NaN 반환하여 PCA Imputer가 합성하도록 유도.
+        """NY Fed GSCPI (직접 다운로드).
+        
+        FRED API에 존재하지 않으므로 뉴욕 연준에서 공식 엑셀 파일을 직접 다운로드하여 파싱합니다.
+        실패 시 NaN 반환하여 PCA Imputer가 합성하도록 유도합니다.
         """
-        if self.fred_key:
-            try:
-                gscpi = self._fred_series('GSCPI', start, end, label='GSCPI(FRED)')
-                _gscpi_min = int(self._cfg.get('data.gscpi_min_obs', 6)) if self._cfg and hasattr(self._cfg, 'get') else 6
-                if gscpi is not None and len(gscpi) > _gscpi_min:
-                    idx = pd.date_range(start, end, freq='B')
-                    return gscpi.reindex(idx).ffill().rename('gscpi')
-            except Exception as _e:
-                logger.warning(f'  GSCPI 수집 실패 (FRED 에러): {_e} — PCA 대기', exc_info=True)
+        import requests
+        import io
+        url = 'https://www.newyorkfed.org/medialibrary/research/interactives/gscpi/downloads/gscpi_data.xlsx'
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        
+        try:
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            df = pd.read_excel(io.BytesIO(resp.content), sheet_name='GSCPI Monthly Data', header=3)
+            df = df.iloc[:, [0, 1]].dropna()
+            df.columns = ['date', 'gscpi']
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+            df = df.dropna(subset=['date'])
+            df.set_index('date', inplace=True)
+            
+            gscpi = df['gscpi']
+            gscpi = gscpi.loc[start:end]
+            
+            _gscpi_min = int(self._cfg.get('data.gscpi_min_obs', 1)) if self._cfg and hasattr(self._cfg, 'get') else 1
+            if not gscpi.empty and len(gscpi) >= _gscpi_min:
+                # 시분초 제거하여 자정(00:00:00) 기준으로 맞춤
+                start_norm = pd.to_datetime(start).normalize()
+                end_norm = pd.to_datetime(end).normalize()
+                idx = pd.date_range(start_norm, end_norm, freq='B')
+                
+                # 원본 시계열(gscpi)과 새 인덱스(idx)를 합친 후 ffill하고, idx만 필터링
+                # [Point-in-Time] GSCPI 발표 시차(약 35일) 반영 후 ffill
+                gscpi.index = gscpi.index + pd.DateOffset(days=35)
+                combined_idx = gscpi.index.union(idx).sort_values()
+                gscpi_aligned = gscpi.reindex(combined_idx).ffill().reindex(idx)
+                
+                logger.info(f'  GSCPI(NY Fed): {len(gscpi)}개 월간 관측치 수집 완료')
+                return gscpi_aligned.rename('gscpi')
+                
+        except Exception as _e:
+            logger.warning(f'  GSCPI 수집 실패 (NY Fed 엑셀 에러): {_e} — PCA 대기', exc_info=True)
+            
         logger.warning('  GSCPI: 수집 실패. PCA Imputer 대기.')
-        idx = pd.date_range(start, end, freq='B')
+        start_norm = pd.to_datetime(start).normalize()
+        end_norm = pd.to_datetime(end).normalize()
+        idx = pd.date_range(start_norm, end_norm, freq='B')
         return pd.Series(float('nan'), index=idx, name='gscpi')
 
     def _fred_series(self, series_id: str, start, end, label: str='') -> Optional[pd.Series]:

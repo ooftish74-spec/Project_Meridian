@@ -13,6 +13,8 @@ import json
 import logging
 import re
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
@@ -194,7 +196,7 @@ class NaverNewsSentiment:
             macro['news_naver_updated'] = result['timestamp']
             macro['news_events_count'] = len(result.get('events', []))
             cache['macro_features'] = macro
-            self._cache_file.write_text(json.dumps(cache, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(self._cache_file, cache, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  💾 뉴스 감성 → signal_cache 저장 완료')
         except Exception as e:
             logger.warning(f'  뉴스 감성 저장 실패: {e}', exc_info=True)
@@ -234,7 +236,7 @@ class NaverNewsSentiment:
             if key not in existing_keys:
                 fresh.append(ev)
                 existing_keys.add(key)
-        out_path.write_text(json.dumps(fresh, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(out_path, fresh, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  💾 동적 이벤트 {len(events)}건 → dynamic_events.json (총 {len(fresh)}건)')
 
     def save_stock_sentiment(self, stock_sentiment: Dict[str, Dict]):
@@ -242,7 +244,7 @@ class NaverNewsSentiment:
         _RESULTS.mkdir(parents=True, exist_ok=True)
         out = {'timestamp': datetime.now().isoformat(), 'stocks': stock_sentiment}
         out_path = _RESULTS / 'stock_news_sentiment.json'
-        out_path.write_text(json.dumps(out, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(out_path, out, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  💾 종목별 뉴스 감성 {len(stock_sentiment)}종목 → stock_news_sentiment.json')
 
     def save_headlines(self, headlines: List[str]):
@@ -261,7 +263,7 @@ class NaverNewsSentiment:
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 existing = []
         all_headlines = list(dict.fromkeys(existing + headlines))
-        out_path.write_text(json.dumps(all_headlines, indent=2, ensure_ascii=False))
+        atomic_write_json(out_path, all_headlines, indent=2, ensure_ascii=False)
         logger.info(f'  💾 헤드라인 {len(headlines)}건 → {out_path.name} (누적 {len(all_headlines)}건)')
 
     def _fetch_news(self) -> List[str]:

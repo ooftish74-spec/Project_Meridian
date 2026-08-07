@@ -94,19 +94,13 @@ class USADataCollector:
             all_data['economic'] = economic
         logger.info(f'\n✓ Collected {len(all_data)} US data categories')
         try:
-            import time as _t
-            from scripts.collection_monitor import CollectionMonitor
-            mon = CollectionMonitor('usa_collector', critical=True)
-            mon._start = _t.monotonic()
             total_rows = sum((len(df) if hasattr(df, '__len__') else 0 for df in all_data.values()))
             if all_data:
-                mon.success(rows=total_rows, extra={'categories': list(all_data.keys())})
+                logger.info(f"US Data collection success: {total_rows} rows, categories: {list(all_data.keys())}")
             else:
-                mon.failure(Exception('all_data 비었음'), rows=0)
+                logger.warning("US Data collection returned empty.")
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
-            logger.error('[SILENT_BYPASS] Suppressed exception at usa_collector.py:175', exc_info=True)
+            logger.error(f'[usa_collector] error during logging: {e}', exc_info=True)
         return all_data
 
     def collect_us_indices(self, start_date: str, end_date: str) -> pd.DataFrame:

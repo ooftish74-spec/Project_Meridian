@@ -11,6 +11,8 @@ Usage:
     dc = DARTCollector()
     result = dc.collect_signals('005930')
 """
+from src.utils.file_ops import atomic_write_json
+
 import json
 import logging
 import os
@@ -40,7 +42,7 @@ class DARTCollector:
 
     def __init__(self, api_key: str=None):
         from src.utils.credential_manager import CredentialManager
-        self.api_key = api_key or CredentialManager().read_from_keychain('DART_API_KEY') or ''
+        self.api_key = api_key or CredentialManager().read_from_env('DART_API_KEY') or ''
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         if not self.api_key:
             logger.info('  ⚠️ DART API 키 미설정 (macOS Keychain에 저장 필요)')
@@ -91,8 +93,7 @@ class DARTCollector:
                             cache[stock_code] = corp_code_val
                     if cache:
                         self.CORP_CODE_CACHE.parent.mkdir(parents=True, exist_ok=True)
-                        with open(self.CORP_CODE_CACHE, 'w') as f:
-                            json.dump(cache, f)
+                        atomic_write_json(self.CORP_CODE_CACHE, cache)
                         logger.info(f'  📦 DART corp_code 캐시: {len(cache)}개 종목')
                     return cache.get(ticker)
             except Exception as e:

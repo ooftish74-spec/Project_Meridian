@@ -11,6 +11,8 @@ Usage:
 
 import json, logging, os
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -29,7 +31,7 @@ class EarningsSurprise:
 
     def __init__(self):
         from src.utils.credential_manager import CredentialManager
-        self.api_key = CredentialManager().read_from_keychain('DART_API_KEY') or ''
+        self.api_key = CredentialManager().read_from_env('DART_API_KEY') or ''
 
     @property
     def is_available(self) -> bool:
@@ -146,8 +148,8 @@ class EarningsSurprise:
 
     def _save_cache(self, ticker: str, features: Dict):
         path = _EARN_DIR / f'{ticker}.json'
-        path.write_text(json.dumps({
+        atomic_write_json(path, {
             'date': datetime.now().isoformat(),
             'ticker': ticker,
             'features': features,
-        }, indent=2))
+        }, indent=2)

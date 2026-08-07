@@ -20,6 +20,8 @@ import math
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -191,7 +193,7 @@ class FactorRiskDecomposer:
         try:
             path = _RESULTS / 'factor_risk.json'
             _RESULTS.mkdir(exist_ok=True)
-            path.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(path, result, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  📊 Factor Risk 저장: R²={result['r_squared']:.3f}, Sys={result['systematic_risk_pct']:.1f}%')
         except Exception as e:
             logger.critical(f'Factor Risk 저장 실패: {e}', exc_info=True)

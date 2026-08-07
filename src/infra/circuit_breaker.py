@@ -25,6 +25,8 @@ Usage:
 import json
 import logging
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -192,8 +194,8 @@ class CircuitBreaker:
             safe_json_write(_STATE_FILE, CircuitBreaker._states)
         except ImportError as e:
             try:
-                _STATE_FILE.write_text(json.dumps(
-                    CircuitBreaker._states, indent=2, default=str))
+                atomic_write_json(_STATE_FILE, 
+                    CircuitBreaker._states, indent=2, default=str)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
                 logging.getLogger(__name__).error(f'Targeted fallback: {e}', exc_info=True)
@@ -206,6 +208,8 @@ class CircuitBreaker:
         try:
             return datetime.fromisoformat(ts)
         except (ValueError, TypeError):
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
             return None
 
     @classmethod

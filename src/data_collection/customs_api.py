@@ -19,6 +19,8 @@ Usage:
     semi = client.get_semiconductor_exports('202501', '202512')
     features = client.get_trade_features()
 """
+from src.utils.file_ops import atomic_write_parquet
+
 import json
 import logging
 import os
@@ -52,7 +54,7 @@ class CustomsTradeClient:
     def _load_api_key(self) -> str:
         """[Keychain] DATA_GO_KR API 키 로드."""
         from src.utils.credential_manager import CredentialManager
-        return CredentialManager().read_from_keychain('DATA_GO_KR_API_KEY') or ''
+        return CredentialManager().read_from_env('DATA_GO_KR_API_KEY') or ''
 
     def _call_api(self, params: dict) -> Optional[pd.DataFrame]:
         """API 호출."""
@@ -236,7 +238,7 @@ class CustomsTradeClient:
         if all_data:
             result = pd.concat(all_data, ignore_index=True)
             path = output_dir / 'kr_trade_exports.parquet'
-            result.to_parquet(path)
+            atomic_write_parquet(result, path)
             logger.info(f'  ✅ 수출입 데이터: {len(result)}행 → {path}')
             return result
         return None

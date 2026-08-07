@@ -3,6 +3,8 @@ import logging
 import pickle
 import shutil
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Any, Tuple
 logger = logging.getLogger(__name__)
@@ -34,7 +36,7 @@ class ModelRegistryManager:
         return {'versions': {}, 'active_version': None}
 
     def _save_registry(self, data: Dict):
-        self.registry_file.write_text(json.dumps(data, indent=2))
+        atomic_write_json(self.registry_file, data, indent=2)
 
     def register_candidate(self, models_dict: Dict, metadata: Dict) -> str:
         """

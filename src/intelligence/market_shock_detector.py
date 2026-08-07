@@ -119,8 +119,9 @@ class MarketShockDetector:
             shock_dir = PROJECT_ROOT / 'data' / 'feedback'
             shock_dir.mkdir(parents=True, exist_ok=True)
             date_str = target_date or datetime.now().strftime('%Y-%m-%d')
-            with open(shock_dir / f'shock_{date_str}.json', 'w') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(shock_dir / f'shock_{date_str}.json', result, indent=2, ensure_ascii=False)
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         return result

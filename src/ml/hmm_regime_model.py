@@ -154,6 +154,12 @@ class PredictiveHMMRegimeModel:
         # state 개수가 4개가 아닐 수도 있으므로 안전하게 매핑
         for idx, stat in enumerate(state_stats):
             name = regime_names[min(idx, len(regime_names)-1)]
+            
+            # [Red Team Fix] Semi-supervised Anchoring
+            if name == 'crash' and stat['vix'] < 25.0:
+                name = 'bear'
+                logger.info(f"    [Anchor] State {stat['state_idx']} VIX({stat['vix']:.1f}) < 25. 'crash' -> 'bear' 강등")
+                
             self.state_map[stat['state_idx']] = name
             logger.info(f"    State {stat['state_idx']} -> {name} (Return: {stat['return']*100:.2f}%, Vol: {stat['vol']*100:.2f}%, VIX: {stat['vix']:.1f})")
 

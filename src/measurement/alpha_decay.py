@@ -21,6 +21,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -217,8 +219,7 @@ class AlphaDecayTracker:
     def _save_history(self):
         try:
             _DECAY_HISTORY.parent.mkdir(parents=True, exist_ok=True)
-            _DECAY_HISTORY.write_text(
-                json.dumps(self._history, indent=2, ensure_ascii=False))
+            atomic_write_json(_DECAY_HISTORY, self._history, indent=2, ensure_ascii=False)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

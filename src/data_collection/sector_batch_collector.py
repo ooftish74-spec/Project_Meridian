@@ -12,6 +12,9 @@ Module 1 데이터 파이프라인에 포함되어 실행됨.
   data/raw/supply_chain/
   data/raw/sector_valuation/kr_relative_per_band.json
 """
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import atomic_write_dataframe
+
 import json, logging, time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -64,13 +67,12 @@ class SectorBatchCollector:
                 trend = 'up' if last > sma20 else 'down'
                 self.supply_chain_data[ticker] = {'name': info['name'], 'last_price': round(last, 2), 'chg_1m': round(chg_1m, 2), 'chg_3m': round(chg_3m, 2), 'chg_1y': round(chg_1y, 2), 'trend': trend, 'sma20': round(sma20, 2), 'sectors': info['sectors'], 'correlation': info['correlation']}
                 safe_name = ticker.replace('=', '_').replace('/', '_')
-                hist[['Close', 'Volume']].to_csv(out_dir / f'{safe_name}.csv')
+                atomic_write_dataframe(hist[['Close', 'Volume']], out_dir / f'{safe_name}.csv', file_format='csv')
                 logger.info(f'  ✅ {ticker:8s} {info['name']:25s} ${last:>10.2f} 3M:{chg_3m:+.1f}% [{trend}]')
                 time.sleep(0.3)
             except Exception as e:
                 logger.warning(f'  ⚠️ {ticker}: {e}', exc_info=True)
-        with open(out_dir / 'supply_chain_summary.json', 'w', encoding='utf-8') as f:
-            json.dump(self.supply_chain_data, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'supply_chain_summary.json', self.supply_chain_data, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  → 저장: {out_dir / 'supply_chain_summary.json'}')
 
     def collect_kr_per_band(self):
@@ -111,8 +113,7 @@ class SectorBatchCollector:
                     time.sleep(0.3)
                 except Exception as e:
                     logger.warning(f'  ⚠️ {code}: {e}', exc_info=True)
-        with open(out_dir / 'kr_relative_per_band.json', 'w', encoding='utf-8') as f:
-            json.dump(self.per_band_data, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'kr_relative_per_band.json', self.per_band_data, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  → 저장: {out_dir / 'kr_relative_per_band.json'}')
 
     def collect_us_kr_beta(self):
@@ -122,7 +123,8 @@ class SectorBatchCollector:
         따라서 US Day(T) → KR Day(T+1) 시차 상관이 진짜 영향력.
         """
         import yfinance as yf
-        from src.data_collection.pykrx_compat import stock as pykrx_stock
+        from src.data_collection.kis_data_collector import KISDataCollector
+        kis_collector = KISDataCollector()
         logger.info('\n📌 3. US-KR 섹터 베타 (Lagged Correlation)')
         out_dir = DATA_DIR / 'sector_beta'
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -139,11 +141,11 @@ class SectorBatchCollector:
                 if us_hist.empty or len(us_hist) < 60:
                     raise ValueError(f'US {us_ticker} data insufficient')
                 us_ret = us_hist['Close'].pct_change().dropna()
-                kr_hist = pykrx_stock.get_market_ohlcv(start_date_str, end_date_str, kr_code)
-                if kr_hist.empty or len(kr_hist) < 60:
+                kr_hist = kis_collector.get_kr_daily_ohlcv(kr_code, start_date_str, end_date_str)
+                if kr_hist is None or kr_hist.empty or len(kr_hist) < 60:
                     raise ValueError(f'KR {kr_code} data insufficient')
                 _close_col = None
-                for _cc in ['close', '종가', 'Close']:
+                for _cc in ['Close', 'close', '종가', 'stck_clpr']:
                     if _cc in kr_hist.columns:
                         _close_col = _cc
                         break
@@ -178,8 +180,7 @@ class SectorBatchCollector:
             except Exception as e:
                 self.us_kr_beta[sector] = {'beta': 0.3, 'correlation': 0.3, 'lagged_corr': 0.3, 'same_day_corr': 0.1, 'us_5d_return': 0, 'data_available': False, 'note': str(e)}
                 logger.info(f'  ⚠️ {sector}: {e}')
-        with open(out_dir / 'us_kr_sector_beta.json', 'w', encoding='utf-8') as f:
-            json.dump(self.us_kr_beta, f, indent=2, ensure_ascii=False, default=str)
+        atomic_write_json(out_dir / 'us_kr_sector_beta.json', self.us_kr_beta, indent=2, ensure_ascii=False, default=str)
         logger.info(f'  → 저장: {out_dir / 'us_kr_sector_beta.json'}')
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')

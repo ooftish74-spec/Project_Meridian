@@ -29,6 +29,8 @@ import logging
 import sys
 import time
 from dataclasses import asdict, dataclass, field
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -293,12 +295,12 @@ if __name__ == '__main__':
         report = run_chaos_test(nav_drop_pct=args.nav_drop, initial_nav=args.initial_nav, regime=args.regime, verbose=args.verbose)
         report_dict = report.to_dict()
         if args.report:
-            Path(args.report).write_text(json.dumps(report_dict, indent=2, ensure_ascii=False), encoding='utf-8')
+            atomic_write_json(Path(args.report),  report_dict, indent=2, ensure_ascii=False)
             logger.info(f'\n  📄 리포트 저장: {args.report}')
         else:
             _default_report = _ROOT / 'results' / 'chaos_test_report.json'
             _default_report.parent.mkdir(parents=True, exist_ok=True)
-            _default_report.write_text(json.dumps(report_dict, indent=2, ensure_ascii=False), encoding='utf-8')
+            atomic_write_json(_default_report, report_dict, indent=2, ensure_ascii=False)
             logger.info(f'\n  📄 리포트 저장: {_default_report}')
         logger.debug('═' * 65 + '\n')
         sys.exit(0 if report.all_passed else 1)

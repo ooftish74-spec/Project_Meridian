@@ -180,6 +180,8 @@ class EventCalendar:
                         _desc = f'{meta['description']} ({('전일' if event_date > target else '후일')})'
                         events.append({'id': event_id, 'name': _desc, 'tier': adj_tier, 'type': meta['type'], 'impact': 'pre/post', 'description': _desc, 'date': d, 'confidence_reduction': self.TIER_CONFIDENCE_REDUCTION.get(adj_tier, 0.1), 'source': 'calendar'})
                 except ValueError:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
         events.extend(self._detect_dynamic_geopolitical_risk(target_date))
         events.extend(self._load_news_dynamic_events(target_date))
@@ -279,6 +281,8 @@ class EventCalendar:
                         if delta >= 0:
                             min_t1_distance = min(min_t1_distance, delta)
                     except ValueError:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                         continue
         return {'event_count': len(events), 'event_max_tier': min((e['tier'] for e in events)) if events else 0, 'event_is_today': any((e['date'] == target_date for e in events)), 'event_hours_until_t1': min_t1_distance * 24, 'event_confidence_reduction': self.get_max_confidence_reduction(target_date), 'event_type': events[0]['type'] if events else 'none'}
 

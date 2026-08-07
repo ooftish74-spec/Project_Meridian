@@ -175,10 +175,13 @@ class S3FactorStream(BaseStream):
                             _score_item['alpha_factory_boost'] = round(_adj, 4)
                             _boosted.append(_ticker)
                         except (TypeError, ValueError):
-                            pass
+                            from src.utils.error_logger import log_error_rate_limited
+                            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                 if _boosted:
                     logger.info(f'  🔬 [Alpha Factory] S3 Sector Forecast 가중치: {len(_boosted)}종목 (scale={_boost_scale})')
         except Exception as _s3_af_e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_s3_af_e}", exc_info=True)
             logger.debug(f'  [Alpha Factory] S3 sector_forecast 가점 실패 (무시): {_s3_af_e}')
         sector_scores.sort(key=lambda x: x['score'], reverse=True)
         global_scores.sort(key=lambda x: x['score'], reverse=True)
@@ -211,6 +214,8 @@ class S3FactorStream(BaseStream):
             try:
                 self._qvm_scorer.validate_factors(qvm_scored)
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  [Track B] ICIR 팩터 검증 실패: {e}')
             qvm_safe = self._qvm_scorer.screen_value_traps(qvm_scored)
         current_qvm_tickers = {h['ticker'] for h in self._current_holdings if h.get('_type') == 'QVM'}
@@ -359,6 +364,8 @@ class S3FactorStream(BaseStream):
                         w_vol = adjusted['volatility']
                         logger.info(f'  ★ 매크로 타이밍 후: mom={w_mom:.3f}/val={w_val:.3f}/carry={w_carry:.3f}/vol={w_vol:.3f} (strength={strength:.1f}, mults={{{', '.join((f'{k}:{v:.2f}' for k, v in timing_multipliers.items()))}}})')
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  매크로 타이밍 적용 실패 (fallback 유지): {e}')
         tickers = list(universe.keys())
         etf_infos = [universe[t] for t in tickers]
@@ -574,6 +581,8 @@ class S3FactorStream(BaseStream):
                             adjustments[_sec] = _ms * _macro_weight
                     logger.debug(f'  [Phase 10: Alpha Breakthrough] S3 매크로 팩터 합산: {len(_macro_sector_scores)}개 섹터 (weight={_macro_weight:.0%})')
             except Exception as _mpe:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_mpe}", exc_info=True)
                 logger.debug(f'  [Phase 10] S3 MacroProxy 합산 실패 (무시): {_mpe}')
             return {s: max(0, min(1, v)) for s, v in adjustments.items()}
         except Exception as e:
@@ -824,6 +833,8 @@ class S3FactorStream(BaseStream):
                         w_mom *= 1.5
                         w_vol *= 0.7
                 except Exception as he:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {he}", exc_info=True)
                     logger.debug(f'  S3 HMM 전이 확률 틸팅 실패: {he}')
             if not me_path.exists():
                 return (w_mom, w_val, w_carry, w_vol)
@@ -900,6 +911,8 @@ class S3FactorStream(BaseStream):
                             ml_prob = 1.0 - confidence
                         predictions[ticker] = {'direction': direction, 'probability': ml_prob, 'predicted_return': float(rec.get('predicted_return', 0)), 'raw_confidence': confidence}
                     except (ValueError, KeyError):
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                         continue
             logger.info(f'  ★ ML predictions 로드: {latest_file.name} ({len(predictions)}종목, min_prob={min_prob})')
             return predictions if predictions else None

@@ -15,6 +15,8 @@ import json, logging
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -290,4 +292,4 @@ class FactorIntegrator:
     def _save_weights(self):
         f = _PROJECT_ROOT / 'results' / 'factor_weights.json'
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps(self._weights, indent=2))
+        atomic_write_json(f, self._weights, indent=2)

@@ -38,6 +38,8 @@ import json
 import logging
 import traceback
 from contextlib import contextmanager
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
@@ -189,7 +191,7 @@ class DataHealthMonitor:
         try:
             self._file.parent.mkdir(parents=True, exist_ok=True)
             data = {'errors': self._errors, 'last_updated': datetime.now().isoformat(), 'ttl_sec': self._ttl_sec}
-            self._file.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(self._file, data, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.error(f'DataHealth 저장 실패: {e}')
 dhm = DataHealthMonitor()

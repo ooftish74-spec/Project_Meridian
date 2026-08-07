@@ -431,8 +431,9 @@ def compute_stream_metrics():
     }
 
     out_file = _RESULTS / 'stream_metrics.json'
-    with open(out_file, 'w') as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+    from src.utils.file_ops import atomic_write_json
+
+    atomic_write_json(out_file, payload, indent=2, ensure_ascii=False)
 
     msg = f"✅ stream_metrics.json 재생성 완료: {out_file}"
     print(msg)
@@ -527,8 +528,9 @@ def assign_s4_accounts():
 
     if updated > 0:
         sp['updated'] = datetime.now().isoformat()
-        with open(_RESULTS / 'shadow_portfolio.json', 'w') as f:
-            json.dump(sp, f, indent=2, default=str, ensure_ascii=False)
+        from src.utils.file_ops import atomic_write_json
+
+        atomic_write_json(_RESULTS / 'shadow_portfolio.json', sp, indent=2, default=str, ensure_ascii=False)
         print(f"✅ S4 계좌 배정 완료: {updated}개 포지션 업데이트")
     else:
         print("ℹ️ S4 계좌 배정 변경 없음")
@@ -588,8 +590,10 @@ def migrate_position_keys():
     sp['positions'] = migrated
     sp['updated'] = datetime.now().isoformat()
 
-    with open(_RESULTS / 'shadow_portfolio.json', 'w') as f:
-        json.dump(sp, f, indent=2, default=str, ensure_ascii=False)
+    from src.utils.file_ops import atomic_write_json
+
+
+    atomic_write_json(_RESULTS / 'shadow_portfolio.json', sp, indent=2, default=str, ensure_ascii=False)
 
     print(f"✅ 포지션 키 마이그레이션 완료: {len(positions)} → {len(migrated)}개")
 

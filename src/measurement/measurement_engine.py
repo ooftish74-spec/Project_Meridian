@@ -101,6 +101,8 @@ class MeasurementEngine:
             _beta_rec = _bt.record(_date_str, _p_ret, _b_ret, _regime)
             logger.debug(f'  [BetaTracker] β60={_beta_rec.get('beta_60d')}, α={_beta_rec.get('pure_alpha_pct')} ({_regime})')
         except Exception as _bt_e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_bt_e}", exc_info=True)
             logger.debug(f'  BetaTracker 기록 실패 (비치명적): {_bt_e}')
         sleeves = self._compute_sleeve_views(sp)
         attribution = self._compute_attribution_view(sp)
@@ -657,6 +659,8 @@ class MeasurementEngine:
                     sell_price = float(t.get('price') or 0)
                     avg_price = float(t.get('avg_price') or sell_price)
                 except (ValueError, TypeError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
                 if avg_price <= 0:
                     continue
@@ -955,7 +959,8 @@ class MeasurementEngine:
                     try:
                         candidate_dates.append(date.fromisoformat(latest_date_str))
                     except (ValueError, TypeError):
-                        pass
+                        from src.utils.error_logger import log_error_rate_limited
+                        logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         latest_signals = _load('latest_signals.json')
         if latest_signals:
             sig_date_str = latest_signals.get('date', latest_signals.get('generated', ''))
@@ -963,13 +968,15 @@ class MeasurementEngine:
                 try:
                     candidate_dates.append(date.fromisoformat(str(sig_date_str)[:10]))
                 except (ValueError, TypeError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         sp_updated = sp.get('last_updated', '')
         if sp_updated:
             try:
                 candidate_dates.append(date.fromisoformat(str(sp_updated)[:10]))
             except (ValueError, TypeError):
-                pass
+                from src.utils.error_logger import log_error_rate_limited
+                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         ps = _load('pipeline_state.json')
         if ps:
             ps_date_str = ps.get('date', ps.get('timestamp', ''))
@@ -977,7 +984,8 @@ class MeasurementEngine:
                 try:
                     candidate_dates.append(date.fromisoformat(str(ps_date_str)[:10]))
                 except (ValueError, TypeError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         if candidate_dates:
             best_date = max(candidate_dates)
             prediction_age_days = (today - best_date).days
@@ -997,7 +1005,8 @@ class MeasurementEngine:
                     last_retrain_date = train_date_str[:10]
                     retrain_overdue = days_since_retrain > 14
                 except (ValueError, TypeError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
             total_retrains = ensemble_meta.get('retrain_count', ensemble_meta.get('n_retrains', 1))
         records = sp.get('daily_records', [])
         ic_degradation = 0.0

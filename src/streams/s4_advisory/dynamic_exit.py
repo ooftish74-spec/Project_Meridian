@@ -21,6 +21,8 @@ import json
 import logging
 import math
 from datetime import datetime, date
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from config.dynamic_config import DynamicConfig
@@ -161,6 +163,8 @@ class DynamicExitEvaluator:
                 sl_multiplier *= tighten_ratio
                 logger.info(f'  📉 S4 [Phase 90]: HMM 폭락 예측(P={crash_prob:.1%}) → 손절 민감도 강화 ({tighten_ratio:.2f}x Tighten)')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [DynamicExit] HMM 확률 로드 실패: {e}')
         dynamic_sl_pct = -1 * portfolio_vol * sl_multiplier * vix_scale * 100
         dynamic_sl_pct = max(-30.0, min(-5.0, dynamic_sl_pct))
@@ -199,7 +203,7 @@ class DynamicExitEvaluator:
             urgency = 2
         else:
             urgency = 0
-        return {'rule': 'value_trap', 'exit': exit_flag, 'urgency': urgency, 'detail': f'P&L {pnl_pct:+.1f}% vs SL {dynamic_sl:+.1f}% (vol={thresholds['portfolio_vol']:.3f}, vix_scale={thresholds['vix_scale']:.2f})', 'pnl_pct': pnl_pct, 'sl_threshold': dynamic_sl}
+        return {'rule': 'value_trap', 'exit': exit_flag, 'urgency': urgency, 'detail': f"P&L {pnl_pct:+.1f}% vs SL {dynamic_sl:+.1f}% (vol={thresholds['portfolio_vol']:.3f}, vix_scale={thresholds['vix_scale']:.2f})", 'pnl_pct': pnl_pct, 'sl_threshold': dynamic_sl}
 
     def _check_sector_concentration(self, pos: Dict, all_positions: Dict, thresholds: Dict) -> Dict:
         """Rule 3: Sector Concentration — 동적 섹터 집중도.
@@ -220,12 +224,12 @@ class DynamicExitEvaluator:
         if sector_count > max_per_sector:
             sector_positions.sort(key=lambda x: x[1])
             worst_keys = [k for k, _ in sector_positions[:sector_count - max_per_sector]]
-            pos_key_prefix = f'{pos.get('stream_id', 'S4')}:{pos.get('ticker', '')}'
+            pos_key_prefix = f"{pos.get('stream_id', 'S4')}:{pos.get('ticker', '')}"
             for pk in all_positions:
                 if pk in worst_keys and (pk.endswith(pos.get('ticker', '___')) or pos.get('name', '') in str(all_positions.get(pk, {}).get('name', ''))):
                     exit_flag = True
                     break
-        return {'rule': 'sector_concentration', 'exit': exit_flag, 'urgency': 1 if exit_flag else 0, 'detail': f'Sector "{sector}": {sector_count}/{max_per_sector} ({('OVER' if exit_flag else 'OK')})', 'sector': sector, 'count': sector_count, 'limit': max_per_sector}
+        return {'rule': 'sector_concentration', 'exit': exit_flag, 'urgency': 1 if exit_flag else 0, 'detail': f"Sector '{sector}': {sector_count}/{max_per_sector} ({'OVER' if exit_flag else 'OK'})", 'sector': sector, 'count': sector_count, 'limit': max_per_sector}
 
     def _check_momentum_exhaustion(self, pos: Dict, thresholds: Dict, regime: str) -> Dict:
         """Rule 4: Momentum Exhaustion — 보유기간 + 모멘텀 감쇠.
@@ -286,6 +290,8 @@ class DynamicExitEvaluator:
                                     logger.debug(f'  ATR [{ticker}]: {atr_pct * 100:.2f}% (parquet)')
                                     break
             except Exception as _e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e}", exc_info=True)
                 logger.debug(f'  ATR parquet [{ticker}] 실패: {_e}')
         if atr_pct is None:
             vol = thresholds.get('portfolio_vol', 0.02)
@@ -343,7 +349,7 @@ class DynamicExitEvaluator:
         exit_flag = drawdown_from_peak >= allowed_drawdown_pct
         detail = f'[S2 Catastrophic] 고점 {peak_pnl:+.1f}% → 현재 {pnl_pct:+.1f}% (하락 {drawdown_from_peak:.1f}% vs ATR×{cat_mult:.0f}={allowed_drawdown_pct:.1f}%)'
         if exit_flag:
-            logger.warning(f'  🚨 Catastrophic Stop [{pos.get('ticker', '')}]: {detail}')
+            logger.warning(f"  🚨 Catastrophic Stop [{pos.get('ticker', '')}]: {detail}")
         return {'rule': 'catastrophic_stop', 'exit': exit_flag, 'urgency': 3 if exit_flag else 0, 'detail': detail, 'drawdown_from_peak': round(drawdown_from_peak, 2), 'allowed_drawdown': round(allowed_drawdown_pct, 2), 'atr_pct': round(atr_pct * 100, 2)}
 
     def _check_take_profit(self, pos: Dict, thresholds: Dict, regime: str) -> Dict:
@@ -408,6 +414,8 @@ class DynamicExitEvaluator:
                     self._universe_qv_cache = {'scores': scores}
                     return scores
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  QV distribution load failed: {e}')
         import random
         random.seed(42)
@@ -443,8 +451,10 @@ class DynamicExitEvaluator:
         try:
             path = _RESULTS / 's4_exit_evaluation.json'
             save_data = {'timestamp': result['timestamp'], 'regime': result['regime'], 'total_positions': result['total_positions'], 'exit_count': result['exit_count'], 'hold_count': result['hold_count'], 'dynamic_thresholds': result['dynamic_thresholds'], 'rules_summary': {k: len(v) for k, v in result['rules_applied'].items()}, 'exit_candidates': [{'name': c['name'], 'pnl_pct': c['pnl_pct'], 'urgency': c['urgency'], 'reasons': [r['rule'] for r in c['reasons']]} for c in result['exit_candidates']]}
-            path.write_text(json.dumps(save_data, ensure_ascii=False, indent=2))
+            atomic_write_json(path, save_data, ensure_ascii=False, indent=2)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  Exit evaluation save failed: {e}')
 
     def get_last_evaluation(self) -> Optional[Dict]:
@@ -522,19 +532,20 @@ if __name__ == '__main__':
     positions = sp.get('positions', {})
     s4_positions = {pk: pv for pk, pv in positions.items() if (pk.split(':')[0] if ':' in pk else pv.get('stream_id', '')) == 'S4'}
     result = evaluator.evaluate(s4_positions, regime='bull')
-    logger.debug(f'\n{'=' * 60}')
-    logger.info(f'S4 Dynamic Exit Evaluation')
-    logger.debug(f'{'=' * 60}')
-    logger.info(f'Total: {result['total_positions']}, Exit: {result['exit_count']}, Hold: {result['hold_count']}')
+    logger.debug(f'\n{"─" * 60}')
+    logger.debug(f"🔥 S4 Dynamic Exit Evaluation: {datetime.now().strftime('%Y-%m-%d %H:%M')} 🔥")
+    logger.debug(f'{"─" * 60}')
+    logger.info(f"Total: {result['total_positions']}, Exit: {result['exit_count']}, Hold: {result['hold_count']}")
     logger.info(f'\nDynamic Thresholds:')
     for k, v in result['dynamic_thresholds'].items():
         logger.info(f'  {k}: {v}')
     if result['exit_candidates']:
-        logger.debug(f'\n{'─' * 60}')
+        logger.debug(f'\n{"─" * 60}')
         logger.info(f'Exit Candidates:')
         for c in result['exit_candidates']:
             reasons = ', '.join((r['rule'] for r in c['reasons']))
-            logger.debug(f'  [{c['urgency']}] {c['name']:20s} P&L={c['pnl_pct']:+.1f}% — {reasons}')
-    logger.info(f'\nHold Positions:')
-    for h in result['hold_positions']:
-        logger.debug(f'  ✅ {h['name']:20s} P&L={h['pnl_pct']:+.1f}%')
+            logger.debug(f"  [{c['urgency']}] {c['name']:20s} P&L={c['pnl_pct']:+.1f}% — {reasons}")
+            
+        logger.info(f'Hold Candidates:')
+        for h in result['hold_candidates']:
+            logger.debug(f"  ✅ {h['name']:20s} P&L={h['pnl_pct']:+.1f}%")

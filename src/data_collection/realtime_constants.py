@@ -20,7 +20,7 @@ DATA_DIR = PROJECT_ROOT / 'data' / 'raw'
 def _load_api_key(env_name: str, manager_name: str = '') -> str:
     """[Keychain] CredentialManager \ub2e8\ub3c5 \ub85c\ub4dc."""
     from src.utils.credential_manager import CredentialManager
-    return CredentialManager().read_from_keychain(manager_name or env_name) or ''
+    return CredentialManager().read_from_env(manager_name or env_name) or ''
 from config.dynamic_config import DynamicConfig
 cfg = DynamicConfig()
 

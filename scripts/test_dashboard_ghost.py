@@ -1,8 +1,8 @@
 import sys, json
 from pathlib import Path
 
-base = Path('/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian')
-sys.path.insert(0, str(base))
+base = Path(__file__).parent.parent
+sys.path.append(str(base))
 
 from src.measurement.measurement_engine import MeasurementEngine
 

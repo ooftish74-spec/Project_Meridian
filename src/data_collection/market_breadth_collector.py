@@ -9,6 +9,8 @@ Market Breadth & Options Data Collector
 Author: Project-A
 Date: 2026-03-15
 """
+from src.utils.file_ops import atomic_write_json
+
 import json
 import logging
 import numpy as np
@@ -123,6 +125,9 @@ class MarketBreadthCollector:
                         self._data['put_call'] = result
                         logger.info(f'  ✅ P/C Ratio: {pc_ratio:.3f} (z={z_score:.2f}, {result['sentiment']})')
                         return result
+            except KeyError as ke:
+                logger.warning(f'  ⚠️ P/C Ratio 수집 불가 (KRX API Blocked/Format Changed): {ke}')
+                return {'put_call_ratio': 1.0, 'sentiment': 'unknown', 'source': 'KRX_API_BLOCKED'}
             except Exception as _e:
                 logger.error(f'  P/C Ratio 데이터 로드 중 예외: {_e}', exc_info=True)
         except Exception as e:
@@ -330,7 +335,6 @@ class MarketBreadthCollector:
     def _save_cache(self):
         try:
             self._data['timestamp'] = datetime.now().isoformat()
-            with open(self.cache_file, 'w') as f:
-                json.dump(self._data, f, indent=2, default=str, ensure_ascii=False)
+            atomic_write_json(self.cache_file, self._data, indent=2, default=str, ensure_ascii=False)
         except Exception as e:
             logger.warning(f'캐시 저장 실패: {e}', exc_info=True)

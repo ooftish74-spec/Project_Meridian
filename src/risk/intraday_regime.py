@@ -17,6 +17,8 @@ import json
 import logging
 import math
 from collections import deque
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -132,7 +134,7 @@ class IntradayRegimeDetector:
         exposure_adj_map = {'normal': 1.0, 'recovery': _cfg.get('regime.intraday_recovery_exposure', 1.15) if _cfg else 1.15, 'stress': _cfg.get('regime.intraday_stress_exposure', 0.7) if _cfg else 0.7, 'high_vol': _cfg.get('regime.intraday_highvol_exposure', 0.5) if _cfg else 0.5, 'crisis': _cfg.get('regime.intraday_crisis_exposure', 0.2) if _cfg else 0.2}
         result = {'regime': regime, 'exposure_adjustment': exposure_adj_map.get(regime, 1.0), 'trigger': trigger, 'current_regime': self._current_regime, 'n_transitions': len(self._regime_history), 'recovery': recovery, 'timestamp': datetime.now().isoformat()}
         try:
-            (_RESULTS / 'intraday_regime.json').write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'intraday_regime.json'),  result, indent=2, default=str)
         except Exception as _e0:
             logger.critical(f'  [intraday_regime] 장중 레짐 결과 저장: {_e0}', exc_info=True)
         try:
@@ -141,7 +143,7 @@ class IntradayRegimeDetector:
                 _ps = json.loads(_ps_file.read_text())
                 _ps['intraday_regime'] = regime
                 _ps['intraday_updated_at'] = datetime.now().isoformat()
-                _ps_file.write_text(json.dumps(_ps, indent=2, ensure_ascii=False, default=str))
+                atomic_write_json(_ps_file, _ps, indent=2, ensure_ascii=False, default=str)
         except Exception as _e1:
             logger.critical(f'  [intraday_regime] L221: {_e1}', exc_info=True)
         return result

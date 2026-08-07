@@ -84,17 +84,17 @@ def normal_market():
 
 @pytest.fixture
 def stressed_market():
-    """스트레스 시장 데이터 (VIX 40+)."""
+    """스트레스 시장 데이터 (VIX 60+ 극단 시나리오)."""
     return {
         'signal_cache': {
-            'vix': 45, 'vix_prev': 28,
-            'vkospi': 35, 'usdkrw': 1450, 'usdkrw_prev': 1350,
-            'foreign_net_buy': -800_000_000_000,
-            'kospi_change_pct': -4.5,
+            'vix': 65, 'vix_prev': 28,
+            'vkospi': 55, 'usdkrw': 1500, 'usdkrw_prev': 1350,
+            'foreign_net_buy': -1_500_000_000_000,
+            'kospi_change_pct': -7.0,
         },
         'overnight_intel': {
-            'sp500_change_pct': -3.5,
-            'nasdaq_change_pct': -4.2,
+            'sp500_change_pct': -6.0,
+            'nasdaq_change_pct': -7.5,
         },
     }
 
@@ -420,13 +420,13 @@ class TestCrashDefense:
         assert m['vix'] == 16
 
     def test_measure_stressed_high_score(self, stressed_market, normal_portfolio):
-        """스트레스 시장: stress_score ≥ 70."""
+        """스트레스 시장: stress_score ≥ 50 (동적 Z-Score 임계치 반영)."""
         cd = CrashDefense()
         m = cd.measure(stressed_market, normal_portfolio)
 
-        # VIX=45 → +30, VKOSPI=35 → +20, SP500=-3.5 → +17.5, FX=+7.4% → +10
+        # VIX=65 + VKOSPI=55 + SP500=-6.0% + FX=+11.1% → 동적 모델 기반 고스트레스
         assert m['stress_score'] >= 50
-        assert m['vix'] == 45
+        assert m['vix'] == 65
 
     def test_judge_normal_safe(self, normal_market, normal_portfolio):
         """정상: 방어 불필요."""

@@ -12,6 +12,9 @@ Top 5 보완 지표:
   - Rolling 60일 섹터 베타 자동 계산
   - 이란/중동 유가 충격 프록시
 """
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import atomic_write_dataframe
+
 import json
 import logging
 import os
@@ -117,7 +120,7 @@ class CrossMarketCollector:
                 combined['US_JP_Spread'] = combined['US_10Y'] - combined['JP_10Y']
                 combined['Spread_MA20'] = combined['US_JP_Spread'].rolling(20).mean()
                 combined['Spread_Zscore'] = (combined['US_JP_Spread'] - combined['US_JP_Spread'].rolling(60).mean()) / (combined['US_JP_Spread'].rolling(60).std() + 1e-10)
-                combined.to_csv(DATA_DIR / 'us_jp_spread.csv')
+                atomic_write_dataframe(combined, DATA_DIR / 'us_jp_spread.csv', file_format='csv')
                 logger.info(f'  ✅ US-JP 스프레드: {len(combined)}일, 현재 {combined['US_JP_Spread'].iloc[-1]:.2f}%p')
                 return combined
             else:
@@ -159,7 +162,7 @@ class CrossMarketCollector:
                     results = old_df
         if not results.empty:
             results = results.dropna(how='all')
-            results.to_csv(DATA_DIR / 'china_pmi.csv')
+            atomic_write_dataframe(results, DATA_DIR / 'china_pmi.csv', file_format='csv')
             logger.info(f'  ✅ 중국 PMI proxy: {len(results)}개월')
             return results
         logger.warning('  ⚠️ 중국 PMI 모든 소스 실패 → 스킵')
@@ -195,7 +198,7 @@ class CrossMarketCollector:
                     results = old_df
         if not results.empty:
             results = results.dropna(how='all')
-            results.to_csv(DATA_DIR / 'us_ism_pmi.csv')
+            atomic_write_dataframe(results, DATA_DIR / 'us_ism_pmi.csv', file_format='csv')
             logger.info(f'  ✅ US 경기 지표: {len(results)}개월, 컬럼={list(results.columns)}')
             return results
         logger.warning('  ⚠️ US PMI 모든 소스 실패')
@@ -230,7 +233,7 @@ class CrossMarketCollector:
                     results = old_df
         if not results.empty:
             results = results.dropna(how='all')
-            results.to_csv(DATA_DIR / 'china_monetary.csv')
+            atomic_write_dataframe(results, DATA_DIR / 'china_monetary.csv', file_format='csv')
             logger.info(f'  ✅ 통화/금리 지표: {len(results)}개월')
             return results
         logger.warning('  ⚠️ PBoC LPR 모든 소스 실패')
@@ -269,7 +272,7 @@ class CrossMarketCollector:
                 results['Curve_Inverted'] = (results['Yield_Curve_2Y10Y'] < 0).astype(int)
                 if 'US_3M' in results.columns:
                     results['Yield_Curve_3M10Y'] = results['US_10Y'] - results['US_3M']
-                results.to_csv(DATA_DIR / 'us_yield_curve.csv')
+                atomic_write_dataframe(results, DATA_DIR / 'us_yield_curve.csv', file_format='csv')
                 latest = results['Yield_Curve_2Y10Y'].iloc[-1]
                 logger.info(f'  ✅ 수익률 곡선: {len(results)}일, 2Y-10Y={latest:+.2f}%p ({('역전' if latest < 0 else '정상')})')
                 return results
@@ -315,8 +318,9 @@ class CrossMarketCollector:
             if betas:
                 beta_path = PROJECT_ROOT / 'data' / 'raw' / 'sector_beta'
                 beta_path.mkdir(parents=True, exist_ok=True)
-                with open(beta_path / 'latest_betas.json', 'w') as f:
-                    json.dump({'date': datetime.now().strftime('%Y-%m-%d'), 'lookback_days': lookback_days, 'betas': betas}, f, indent=2)
+                from src.utils.file_ops import atomic_write_json
+
+                atomic_write_json(beta_path / 'latest_betas.json', {'date': datetime.now().strftime('%Y-%m-%d'), 'lookback_days': lookback_days, 'betas': betas}, indent=2)
                 logger.info(f'  ✅ 섹터 베타: {betas}')
             return betas
         except Exception as e:
@@ -346,8 +350,7 @@ class CrossMarketCollector:
         for k, v in results.items():
             logger.info(f'  {('✅' if v else '❌')} {k}')
         summary = {'timestamp': datetime.now().isoformat(), 'results': results, 'sector_betas': betas}
-        with open(DATA_DIR / 'collection_summary.json', 'w') as f:
-            json.dump(summary, f, indent=2, default=str)
+        atomic_write_json(DATA_DIR / 'collection_summary.json', summary, indent=2, default=str)
         return summary
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(message)s')

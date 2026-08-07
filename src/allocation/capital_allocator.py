@@ -142,30 +142,26 @@ class SmartWalletAllocator:
         """
         default_cash = float(self._get('smart_wallet.default_cash_ratio', 0.5))
         fallback_result = {'target_cash_ratio': default_cash, 'target_long_ratio': round(1.0 - default_cash, 6), 'f_long': round(1.0 - default_cash, 6), 'vol_penalty': 1.0, 'p_crash': 0.0, 'p_bear': 0.0, 'p_normal': 1.0, 'regime_source': 'fallback', 'fallback_reason': ''}
-        try:
-            if regime_probs is not None:
-                probs = regime_probs
-                regime_source = 'direct'
-            elif market_data is not None:
-                probs = self._get_regime_probs_from_detector(market_data)
-                regime_source = 'detector'
-            else:
-                probs = self._get_regime_probs_from_cache(signal_cache)
-                regime_source = 'cache'
-            p_crash = float(probs.get('crash', 0.0))
-            p_bear = float(probs.get('bear', 0.0))
-            p_normal = float(probs.get('normal', 1.0 - p_crash - p_bear))
-            vol_penalty = self.compute_vol_penalty(signal_cache)
-            f_long = self.compute_f_long(p_crash, p_bear, vol_penalty)
-            target_cash = self.compute_target_cash(p_crash, p_bear, vol_penalty)
-            target_long = round(1.0 - target_cash, 6)
-            result = {'target_cash_ratio': target_cash, 'target_long_ratio': target_long, 'f_long': f_long, 'vol_penalty': vol_penalty, 'p_crash': round(p_crash, 4), 'p_bear': round(p_bear, 4), 'p_normal': round(p_normal, 4), 'regime_source': regime_source, 'fallback_reason': ''}
-            logger.info(f'  💰 [SmartWallet] cash={target_cash:.1%}, long={target_long:.1%} | P_c={p_crash:.3f}, P_b={p_bear:.3f}, Vol×={vol_penalty:.3f} (src={regime_source})')
-            return result
-        except Exception as e:
-            logger.warning(f'  [SmartWallet] allocate() 실패 → 보수적 Fallback {default_cash:.0%}: {e}')
-            fallback_result['fallback_reason'] = str(e)
-            return fallback_result
+        if regime_probs is not None:
+            probs = regime_probs
+            regime_source = 'direct'
+        elif market_data is not None:
+            probs = self._get_regime_probs_from_detector(market_data)
+            regime_source = 'detector'
+        else:
+            probs = self._get_regime_probs_from_cache(signal_cache)
+            regime_source = 'cache'
+        p_crash = float(probs.get('crash', 0.0))
+        p_bear = float(probs.get('bear', 0.0))
+        p_normal = float(probs.get('normal', 1.0 - p_crash - p_bear))
+        vol_penalty = self.compute_vol_penalty(signal_cache)
+        f_long = self.compute_f_long(p_crash, p_bear, vol_penalty)
+        target_cash = self.compute_target_cash(p_crash, p_bear, vol_penalty)
+        target_long = round(1.0 - target_cash, 6)
+        result = {'target_cash_ratio': target_cash, 'target_long_ratio': target_long, 'f_long': f_long, 'vol_penalty': vol_penalty, 'p_crash': round(p_crash, 4), 'p_bear': round(p_bear, 4), 'p_normal': round(p_normal, 4), 'regime_source': regime_source, 'fallback_reason': ''}
+        logger.info(f'  💰 [SmartWallet] cash={target_cash:.1%}, long={target_long:.1%} | P_c={p_crash:.3f}, P_b={p_bear:.3f}, Vol×={vol_penalty:.3f} (src={regime_source})')
+        return result
+
 
     def _get_regime_probs_from_detector(self, market_data: Dict) -> Dict[str, float]:
         """RegimeDetector를 통해 실시간 확률 계산."""
@@ -183,22 +179,18 @@ class SmartWalletAllocator:
         fb_bear = float(self._get('smart_wallet.cache_fallback_bear', 0.3))
         fb_crash = float(self._get('smart_wallet.cache_fallback_crash', 0.2))
         fallback = {'normal': fb_normal, 'bear': fb_bear, 'crash': fb_crash}
-        try:
-            cache = signal_cache or self._load_signal_cache()
-            stored = cache.get('regime_probabilities', {})
-            if stored and 'crash' in stored:
-                return {'normal': float(stored.get('normal', stored.get('bull', fb_normal))), 'bear': float(stored.get('bear', fb_bear)), 'crash': float(stored.get('crash', fb_crash))}
-        except Exception:
-            logger.critical('[SILENT_BYPASS] Suppressed exception at capital_allocator.py:289', exc_info=True)
+        cache = signal_cache or self._load_signal_cache()
+        stored = cache.get('regime_probabilities', {})
+        if stored and 'crash' in stored:
+            return {'normal': float(stored.get('normal', stored.get('bull', fb_normal))), 'bear': float(stored.get('bear', fb_bear)), 'crash': float(stored.get('crash', fb_crash))}
+
         return fallback
 
     def _load_signal_cache(self) -> Dict:
         """signal_cache.json 로드."""
-        try:
-            if _SIGNAL_CACHE.exists():
-                return json.loads(_SIGNAL_CACHE.read_text())
-        except Exception:
-            logger.critical('[SILENT_BYPASS] Suppressed exception at capital_allocator.py:298', exc_info=True)
+        if _SIGNAL_CACHE.exists():
+            return json.loads(_SIGNAL_CACHE.read_text())
+
         return {}
 try:
     import numpy as _np

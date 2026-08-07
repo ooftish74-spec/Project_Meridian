@@ -39,6 +39,8 @@ def compute_oim_thresholds(days: int=5):
                 if 'imbalance' in df.columns and 'ticker' in df.columns:
                     ob_dfs.append(df[['ticker', 'imbalance']])
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'Failed to read {p}: {e}')
     if not ob_dfs:
         logger.warning('No valid orderbook data found. Proceeding with default values.')
@@ -60,8 +62,9 @@ def compute_oim_thresholds(days: int=5):
 def _save_thresholds(thresholds):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = RESULTS_DIR / 'oim_thresholds.json'
-    with open(out_path, 'w', encoding='utf-8') as f:
-        json.dump(thresholds, f, indent=2)
+    from src.utils.file_ops import atomic_write_json
+
+    atomic_write_json(out_path, thresholds, indent=2)
     logger.info(f'OIM thresholds saved to {out_path} (Tickers analyzed: {len(thresholds) - 1})')
 if __name__ == '__main__':
     compute_oim_thresholds()

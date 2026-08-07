@@ -302,6 +302,8 @@ class GapRiskFilter:
                     if min_days is None or abs(delta) < abs(min_days):
                         min_days = delta
             except (ValueError, TypeError):
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                 continue
 
         if min_days is not None:

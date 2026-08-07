@@ -11,6 +11,8 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 from config.dynamic_config import DynamicConfig
@@ -54,6 +56,8 @@ class MacroCascade:
         regime = regime_result['regime']
         logger.info(f'  Step 1: 레짐 = {regime.upper()} (conf={regime_result['confidence']})')
         macro_signals = self._extract_macro_signals(regime_result.get('signals', {}))
+        self._analyze_overnight_divergence(macro_signals)
+        
         sector_scores = self.sector_scorer.score(regime, macro_signals)
         top_sectors = self.sector_scorer.get_top_sectors(sector_scores)
         bottom_sectors = self.sector_scorer.get_bottom_sectors(sector_scores)
@@ -78,11 +82,48 @@ class MacroCascade:
                 macro['rate_direction'] = 'up' if rate_change > 0.1 else 'down' if rate_change < -0.1 else 'flat'
                 oil_change = data.get('wti_change_1m', 0)
                 macro['oil_direction'] = 'up' if oil_change > 5 else 'down' if oil_change < -5 else 'flat'
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                logger.warning('[SILENT_BYPASS] Suppressed exception at macro_cascade.py:112', exc_info=True)
+            except Exception as e:
+                logger.error(f'Failed to extract macro signals: {e}')
         return macro
+
+    def _analyze_overnight_divergence(self, macro: Dict):
+        """야간선물과 EWY 갭 분석 (Divergence Reasoning)."""
+        night_file = _PROJECT_ROOT / 'data' / 'macro' / 'night_futures.json'
+        if not night_file.exists():
+            return
+            
+        try:
+            with open(night_file, 'r') as f:
+                data = json.load(f)
+            
+            gap = data.get('gap', 0.0)
+            krx_pct = data.get('krx_pct')
+            ewy_pct = data.get('ewy_pct')
+            
+            macro['night_gap'] = gap
+            macro['divergence_state'] = 'NORMAL'
+            
+            if gap >= 1.5 and krx_pct is not None and ewy_pct is not None:
+                logger.warning(f"🚨 [OVERNIGHT_DIVERGENCE_ALERT] 야간선물({krx_pct:+.2f}%)과 EWY({ewy_pct:+.2f}%) 갭 {gap}p 발생!")
+                
+                # Check forex impact or semi-conductor shock (Proxy using Nasdaq)
+                nasdaq = data.get('nasdaq_pct', 0.0)
+                reason = "UNKNOWN_SHOCK"
+                
+                # If EWY drops much more than KRX, but Nasdaq is fine -> likely FX (KRW crash)
+                if ewy_pct < krx_pct - 1.0 and nasdaq > -0.5:
+                    reason = "FX_KRW_WEAKNESS"
+                # If EWY drops alongside a huge Nasdaq drop -> Global tech/semi shock
+                elif ewy_pct < -1.5 and nasdaq < -1.5:
+                    reason = "GLOBAL_TECH_SHOCK"
+                elif ewy_pct > krx_pct + 1.0 and nasdaq > 1.5:
+                    reason = "GLOBAL_TECH_RALLY"
+                    
+                macro['divergence_state'] = reason
+                logger.warning(f"🔍 Divergence 추론 결과: {reason}")
+                
+        except Exception as e:
+            logger.error(f'Divergence 분석 에러: {e}')
 
     def _decide_allocation(self, regime: str) -> Dict:
         """레짐별 자산배분 결정."""
@@ -97,7 +138,7 @@ class MacroCascade:
         try:
             out = _PROJECT_ROOT / 'results' / 'cascade_result.json'
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  캐스케이드 결과 저장 실패: {e}', exc_info=True)
 if __name__ == '__main__':

@@ -41,7 +41,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-import yfinance as yf
+import FinanceDataReader as fdr
 from pykrx import stock
 
 warnings.filterwarnings('ignore')
@@ -92,14 +92,15 @@ def fetch_data(start_date: str, end_date: str) -> pd.DataFrame:
     try:
         start_dt = datetime.strptime(start_date, '%Y%m%d')
         end_dt = datetime.strptime(end_date, '%Y%m%d') + timedelta(days=1)
-        kospi = yf.download(
-            '^KS11',
-            start=start_dt.strftime('%Y-%m-%d'),
-            end=end_dt.strftime('%Y-%m-%d'),
-            progress=False,
-        )
-        if isinstance(kospi.columns, pd.MultiIndex):
-            kospi.columns = kospi.columns.droplevel(1)
+        from src.data_collection.pykrx_compat import stock
+        kospi_raw = stock.get_index_ohlcv(start_dt.strftime('%Y%m%d'), end_dt.strftime('%Y%m%d'), "1001")
+        kospi = pd.DataFrame()
+        if not kospi_raw.empty:
+            kospi['Open'] = pd.to_numeric(kospi_raw['시가'])
+            kospi['High'] = pd.to_numeric(kospi_raw['고가'])
+            kospi['Low']  = pd.to_numeric(kospi_raw['저가'])
+            kospi['Close']= pd.to_numeric(kospi_raw['종가'])
+            kospi['Volume']= pd.to_numeric(kospi_raw['거래량'])
     except Exception as e:
         logger.error(f'Failed to fetch KOSPI: {e}')
         return pd.DataFrame()
@@ -113,11 +114,11 @@ def fetch_data(start_date: str, end_date: str) -> pd.DataFrame:
 
     logger.info('📡 US 야간 지표 다운로드 중...')
     tickers = {
-        '^GSPC': 'sp500',
-        '^IXIC': 'nasdaq',
-        '^VIX': 'vix',
-        '^TNX': 'us10y',
-        'USDKRW=X': 'usdkrw',
+        'US500': 'sp500',
+        'US100': 'nasdaq',
+        'FRED:VIXCLS': 'vix',
+        'FRED:DGS10': 'us10y',
+        'FRED:DEXKOUS': 'usdkrw',
     }
 
     us_data = {}
@@ -126,16 +127,15 @@ def fetch_data(start_date: str, end_date: str) -> pd.DataFrame:
 
     for ticker, name in tickers.items():
         try:
-            df = yf.download(
+            df = fdr.DataReader(
                 ticker,
                 start=start_ext.strftime('%Y-%m-%d'),
                 end=end_ext.strftime('%Y-%m-%d'),
-                progress=False,
             )
             if df.empty:
                 continue
-            if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.droplevel(1)
+            if 'Close' not in df.columns:
+                df['Close'] = df.iloc[:, 0]
 
             # US Close는 한국 시간 다음 날 아침에 반영 → shift(1)
             shifted_close = df['Close'].shift(1)
@@ -327,7 +327,7 @@ def run_optuna_hpo(
             embargo_days=embargo_days),
         n_trials=n_trials,
         show_progress_bar=False,
-        n_jobs=1,  # 안전: 병렬 실행 시 yfinance 충돌 방지
+        n_jobs=1,  # 안전: 병렬 실행 시 외부 데이터 API 충돌 방지
     )
 
     best = study.best_params

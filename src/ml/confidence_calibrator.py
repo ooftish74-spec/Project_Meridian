@@ -13,6 +13,8 @@ import logging
 import math
 import os
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from config.dynamic_config import DynamicConfig
@@ -103,9 +105,11 @@ class ConfidenceCalibrator:
                     logger.info(f'  Calibrator: Platt A={platt_a:.4f} (음수) → bucket WR 사용')
                     platt_a, platt_b = (0, 0)
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  Calibrator: Platt 학습 실패: {e}')
         self.state = {'method': method, 'platt_a': platt_a, 'platt_b': platt_b, 'bucket_wr': bucket_wr, 'n_samples': len(all_pairs), 'n_sources': n_sources, 'last_updated': now_kst().isoformat(), 'convergence': convergence}
-        self.state_path.write_text(json.dumps(self.state, indent=2, ensure_ascii=False), encoding='utf-8')
+        atomic_write_json(self.state_path, self.state, indent=2, ensure_ascii=False)
         logger.info(f'  Calibrator: {len(all_pairs)} samples (pred={n_sources.get('prediction', 0)}, real={n_sources.get('realized', 0)}, unreal={n_sources.get('unrealized', 0)}), method={method}')
 
     def _collect_prediction_verification(self) -> List[Tuple[float, int]]:
@@ -243,6 +247,8 @@ class ConfidenceCalibrator:
         try:
             return self._fit_platt_lbfgsb(confs, labels, b0)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  L-BFGS-B 실패 ({e}), Newton-Raphson fallback')
         return self._fit_platt_newton(confs, labels, b0)
 

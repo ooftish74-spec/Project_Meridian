@@ -1,5 +1,6 @@
 """SPY OHLCV 전체 재수집 — 고급 VIX 추정기(과제 3) 준비"""
 import sys, requests
+from src.infra.safe_io import atomic_write_dataframe
 sys.path.insert(0, '.')
 import pandas as pd
 from pathlib import Path
@@ -22,7 +23,7 @@ if ts:
     df = df.sort_index()
     df.columns = ['open','high','low','close','volume']
     df = df.astype(float)
-    df.to_parquet(CACHE / 'spy.parquet')
+    atomic_write_dataframe(df, CACHE / 'spy.parquet', file_format='parquet')
     sub = df[(df.index >= '2024-07-10') & (df.index <= '2026-07-09')]
     print(f'SPY OHLCV: 전체 {len(df)}일  백테스트={len(sub)}일  컬럼={list(df.columns)}')
 elif 'Information' in d:

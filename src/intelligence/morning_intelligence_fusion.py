@@ -20,6 +20,8 @@ import pandas as pd
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
@@ -266,7 +268,7 @@ class MorningIntelligenceFusion:
         """morning_fusion.json 저장."""
         try:
             out = _RESULTS / 'morning_fusion.json'
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  morning_fusion 저장 실패: {e}', exc_info=True)
 

@@ -3,7 +3,7 @@
   "sizer.stream_scale.S4": 0.9,
   "s2.min_confidence": 0.57,
   "sizer.stream_scale.S3": 0.9,
-  "portfolio.initial_capital": 1001718,
-  "backtest.initial_capital": 1001718,
-  "monitor.initial_capital": 1001718
+  "portfolio.initial_capital": 16601718,
+  "backtest.initial_capital": 16601718,
+  "monitor.initial_capital": 16601718
 }

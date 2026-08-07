@@ -15,6 +15,8 @@ import logging
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, List
 from config.dynamic_config import DynamicConfig
@@ -133,6 +135,8 @@ class RegimeEngine:
                 from src.measurement.event_ledger import log_event
                 log_event('REGIME', {'from': prev_regime, 'to': regime, 'confidence': round(confidence, 3), 'scores': result['scores']}, source='regime_engine')
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  EventLedger 기록 실패 (non-critical): {e}')
         try:
             if self._hmm.is_trained:
@@ -275,14 +279,21 @@ class RegimeEngine:
             elif VolatilityScaledThreshold.is_extreme(ism, ism_hist, z_score_limit=z_ext, percentile_limit=p_ext):
                 _w_ism_bull = cfg.get('regime.w_ism_bull', 0.2)
                 scores['bull'] += w_macro * _w_ism_bull
-            news = macro.get('news_llm_sentiment', macro.get('news_naver_sentiment', 0))
-            news_hist = self._read_macro_history('news_llm_sentiment', default_val=0.0)
-            if VolatilityScaledThreshold.is_extreme(-news, [-n for n in news_hist], z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_news_caution = cfg.get('regime.w_news_caution', 0.1)
-                scores['caution'] += w_macro * _w_news_caution
-            elif VolatilityScaledThreshold.is_extreme(news, news_hist, z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_news_bull = cfg.get('regime.w_news_bull', 0.1)
-                scores['bull'] += w_macro * _w_news_bull
+            # [Phase 4] 뉴스 센티멘트 완전 폐기 및 수급(Flow)/OIS(야간 매크로) 정량 모델로 100% 이관
+            _ois = m.get('ois', 50.0)
+            _prog_net = m.get('program_net_buy', 0)
+            
+            # 수학적 OIS & 수급 합성(Flow-Macro Risk)
+            if _ois < 40 or _prog_net < -5000:
+                _w_quant_bear = cfg.get('regime.w_quant_bear', 0.2)
+                scores['bear'] += w_macro * _w_quant_bear
+                
+                # 심각한 매크로 하락 + 대규모 기관 매도 = 크래시 징후 (Expected Gap Risk)
+                if _ois < 30 and _prog_net < -10000:
+                    scores['crash'] += w_macro * 0.3
+            elif _ois > 60 and _prog_net > 5000:
+                _w_quant_bull = cfg.get('regime.w_quant_bull', 0.2)
+                scores['bull'] += w_macro * _w_quant_bull
         mc = m.get('macro_composite', 0)
         w_mc = cfg.get('regime.weight_macro_composite', 0.2)
         _mc_high = cfg.get('regime.mc_high', 1.5)
@@ -314,16 +325,38 @@ class RegimeEngine:
                 scores['bull'] += w_fx * 0.5
         vkospi = m.get('vkospi', 18)
         w_vk = cfg.get('regime.weight_vkospi', 0.05)
-        vkospi_crash = cfg.get('regime.vkospi_crash', 30)
-        vkospi_caution = cfg.get('regime.vkospi_caution', 22)
-        vkospi_bull = cfg.get('regime.vkospi_bull', 14)
-        if vkospi > vkospi_crash:
-            scores['crash'] += w_vk
-            scores['bear'] += w_vk * 0.5
-        elif vkospi > vkospi_caution:
-            scores['caution'] += w_vk
-        elif vkospi < vkospi_bull:
-            scores['bull'] += w_vk
+        
+        try:
+            from src.utils.adaptive_thresholds import VolatilityScaledThreshold
+            vk_hist = self._read_macro_history('vkospi')
+            if vk_hist and len(vk_hist) >= 20:
+                is_crash = VolatilityScaledThreshold.is_extreme(vkospi, vk_hist, z_score_limit=2.0, percentile_limit=95.0)
+                is_caution = VolatilityScaledThreshold.is_extreme(vkospi, vk_hist, z_score_limit=1.0, percentile_limit=75.0)
+                
+                if is_crash:
+                    scores['crash'] += w_vk
+                    scores['bear'] += w_vk * 0.5
+                elif is_caution:
+                    scores['caution'] += w_vk
+                elif vkospi < float(np.percentile(vk_hist, 25)):
+                    scores['bull'] += w_vk
+            else:
+                if vkospi > 35:
+                    scores['crash'] += w_vk
+                    scores['bear'] += w_vk * 0.5
+                elif vkospi > 25:
+                    scores['caution'] += w_vk
+                elif vkospi < 14:
+                    scores['bull'] += w_vk
+        except Exception as e:
+            logger.warning(f"  [VKOSPI Adaptive] 실패: {e}")
+            if vkospi > 35:
+                scores['crash'] += w_vk
+                scores['bear'] += w_vk * 0.5
+            elif vkospi > 25:
+                scores['caution'] += w_vk
+            elif vkospi < 14:
+                scores['bull'] += w_vk
         return scores
 
     def _decide(self, scores: Dict[str, float]) -> Tuple[str, float]:
@@ -387,13 +420,13 @@ class RegimeEngine:
             existing['kr_regime_updated_by'] = 'regime_engine'
             existing['operating_regime'] = self._compute_operating_regime(existing)
             existing['updated_at'] = datetime.now().isoformat()
-            self._state_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(self._state_file, existing, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  레짐 저장 실패: {e}', exc_info=True)
         try:
             regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
             regime_out = {'regime': result['regime'], 'confidence': result['confidence'], 'scores': result['scores'], 'method': 'regime_engine_ssot', 'measurements': result.get('measurements', {}), 'macro_composite': result.get('measurements', {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
-            regime_file.write_text(json.dumps(regime_out, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(regime_file, regime_out, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  current_regime.json 기록 실패: {e}', exc_info=True)
 
@@ -495,7 +528,13 @@ class RegimeEngine:
         usdkrw = float(sc.get('usdkrw', 1350))
         fx_series = self._read_fx_history()
         if fx_series is not None and len(fx_series) >= 60:
-            fx_mean = fx_series.tail(60).mean()
+            try:
+                from src.utils.adaptive_thresholds import MultiHorizonEWMA
+                ewma_engine = MultiHorizonEWMA()
+                fx_mean = ewma_engine.compute(fx_series.tolist(), weights=(0.2, 0.5, 0.3))
+            except Exception as e:
+                fx_mean = fx_series.tail(60).mean()
+            
             fx_std = fx_series.tail(60).std()
             if fx_std > 0:
                 fx_z = (usdkrw - fx_mean) / fx_std

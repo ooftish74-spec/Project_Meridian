@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+from src.infra.safe_io import atomic_write_dataframe
 import logging
 import sys
 import time
@@ -82,7 +83,7 @@ def backfill_sentiment(ohlcv_dir: Path, sentiment_dir: Path,
     price_proxy 구간만 10년으로 확장합니다.
 
     Args:
-        ohlcv_dir: data/historical_10y
+        ohlcv_dir: data/kr_markets
         sentiment_dir: data/sentiment
         min_days: 최소 OHLCV 행 수
 
@@ -166,7 +167,7 @@ def backfill_sentiment(ohlcv_dir: Path, sentiment_dir: Path,
             # 정렬 후 저장
             proxy_df = proxy_df.sort_values('date').reset_index(drop=True)
             out_dir.mkdir(parents=True, exist_ok=True)
-            proxy_df.to_csv(out_file, index=False)
+            atomic_write_dataframe(proxy_df, out_file, file_format='csv', index=False)
 
             stats['backfilled'] += 1
             stats['total_rows'] += len(proxy_df)
@@ -195,7 +196,7 @@ def backfill_dart(dart_dir: Path, ohlcv_dir: Path) -> dict:
 
     Args:
         dart_dir: data/dart
-        ohlcv_dir: data/historical_10y (거래일 참조용)
+        ohlcv_dir: data/kr_markets (거래일 참조용)
 
     Returns:
         {'backfilled': int, 'total_rows': int}
@@ -339,7 +340,7 @@ def backfill_dart(dart_dir: Path, ohlcv_dir: Path) -> dict:
 
             # 저장 (기존 파일 덮어쓰기)
             out_file = td / 'daily_signal.csv'
-            signal_df.to_csv(out_file, index=False)
+            atomic_write_dataframe(signal_df, out_file, file_format='csv', index=False)
 
             stats['backfilled'] += 1
             stats['total_rows'] += len(signal_df)
@@ -373,7 +374,7 @@ def backfill_flow(ohlcv_dir: Path, flow_dir: Path,
       - short_proxy_score ≈ 급락 + 거래량 급증 패턴
 
     Args:
-        ohlcv_dir: data/historical_10y
+        ohlcv_dir: data/kr_markets
         flow_dir: data/investor_flow
 
     Returns:
@@ -458,7 +459,7 @@ def backfill_flow(ohlcv_dir: Path, flow_dir: Path,
 
             flow_df = flow_df.sort_values('date').reset_index(drop=True)
             out_dir.mkdir(parents=True, exist_ok=True)
-            flow_df.to_csv(out_file, index=False)
+            atomic_write_dataframe(flow_df, out_file, file_format='csv', index=False)
 
             stats['backfilled'] += 1
             stats['total_rows'] += len(flow_df)
@@ -491,7 +492,7 @@ def main():
                         help='백필 후 즉시 재학습')
     args = parser.parse_args()
 
-    ohlcv_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+    ohlcv_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
     sentiment_dir = _PROJECT_ROOT / 'data' / 'sentiment'
     dart_dir = _PROJECT_ROOT / 'data' / 'dart'
     flow_dir = _PROJECT_ROOT / 'data' / 'investor_flow'

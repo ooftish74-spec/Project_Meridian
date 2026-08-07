@@ -133,4 +133,6 @@ def _try_import_fatal():
         from src.execution.exceptions import ExecutionFatalError
         return ExecutionFatalError
     except ImportError as e:
+        from src.utils.error_logger import log_warning_rate_limited
+        log_warning_rate_limited(__name__, f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: {e}")
         return None

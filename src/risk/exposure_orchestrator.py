@@ -11,6 +11,8 @@ Usage:
 """
 import json, logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Optional
 import numpy as np
@@ -157,6 +159,10 @@ class ExposureOrchestrator:
         vix = sentiment.get('vix', 20)
         options_skew = sentiment.get('options_skew', 0.0)
         ois = sentiment.get('ois', 0.5)
+        
+        if ois > 20.0:
+            ois = ois / 100.0  # Convert bps to percent
+            
         if vix > 45.0 or options_skew > 3.5 or ois > 2.0:
             target = 0.0
             reasons.append(f'Boundary Box Exceeded (VIX={vix:.1f}, Skew={options_skew:.1f}, OIS={ois:.1f}) -> 0% Hard Stop')
@@ -253,7 +259,7 @@ class ExposureOrchestrator:
         components['data_penalty'] = data_penalty
         result = {'target_exposure': min(1.0, target), 'target_raw': target, 'sigma_adjustment': round(sigma_adj, 3), 'components': components, 'reason': ' + '.join(reasons) if reasons else 'Normal conditions', 'timestamp': datetime.now().isoformat()}
         try:
-            (_RESULTS / 'exposure_orchestrator.json').write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'exposure_orchestrator.json'),  result, indent=2, default=str)
         except Exception as e:
             logger.critical(f'  ExposureOrchestrator: 결과 저장 실패 (비치명적): {e}', exc_info=True)
         logger.info(f'  Exposure: {min(1.0, target):.0%} ({result['reason']})')
@@ -322,27 +328,17 @@ class ExposureOrchestrator:
         sentiment = {'regime': 'caution', 'vix': 20, 'fear_greed': 50, 'vkospi': 20, 'kospi_ma20_dist': 0}
         try:
             cache = json.loads((_RESULTS / 'signal_cache.json').read_text())
-            if 'vix' in cache and (not isinstance(cache['vix'], dict)):
-                sentiment['vix'] = float(cache['vix'])
-            elif 'VIX' in cache and isinstance(cache['VIX'], dict):
-                sentiment['vix'] = float(cache['VIX'].get('value', 20))
-            if 'fear_greed' in cache and (not isinstance(cache['fear_greed'], dict)):
-                sentiment['fear_greed'] = float(cache['fear_greed'])
-            elif 'fng' in cache and (not isinstance(cache['fng'], dict)):
-                sentiment['fear_greed'] = float(cache['fng'])
-            elif 'FnG' in cache and isinstance(cache['FnG'], dict):
-                sentiment['fear_greed'] = float(cache['FnG'].get('value', 50))
-            if 'vkospi' in cache and (not isinstance(cache['vkospi'], dict)):
-                sentiment['vkospi'] = float(cache['vkospi'])
-            elif 'VKOSPI' in cache and isinstance(cache['VKOSPI'], dict):
-                sentiment['vkospi'] = float(cache['VKOSPI'].get('value', 20))
-            if 'kospi_ma20_dist' in cache:
-                sentiment['kospi_ma20_dist'] = float(cache['kospi_ma20_dist'])
-            sentiment['ois'] = float(cache.get('ois', 0.5))
-            sentiment['options_skew'] = float(cache.get('options_skew', 0.0))
+            from src.utils.metric_parser import parse_vix
+            sentiment['vix'] = parse_vix(cache, 20.0)
+            from src.utils.metric_parser import parse_metric
+            sentiment['fear_greed'] = parse_metric(cache, 'fng', 50.0)
+            sentiment['vkospi'] = parse_metric(cache, 'vkospi', 20.0)
+            sentiment['kospi_ma20_dist'] = parse_metric(cache, 'kospi_ma20_dist', 0.0)
+            sentiment['ois'] = parse_metric(cache, 'ois', 0.5)
+            sentiment['options_skew'] = parse_metric(cache, 'options_skew', 0.0)
             sentiment['crash_type'] = cache.get('crash_type', 'unknown')
-            sentiment['cross_asset_stress'] = float(cache.get('cross_asset_stress', 0.0))
-            sentiment['s3_avg_confidence'] = float(cache.get('s3_avg_confidence', 0.0))
+            sentiment['cross_asset_stress'] = parse_metric(cache, 'cross_asset_stress', 0.0)
+            sentiment['s3_avg_confidence'] = parse_metric(cache, 's3_avg_confidence', 0.0)
         except Exception as e:
             logger.critical(f'  ExposureOrchestrator: signal_cache 로드 실패: {e}', exc_info=True)
         try:
@@ -654,12 +650,8 @@ class ExposureOrchestrator:
             if path.exists():
                 cache = json.loads(path.read_text())
                 result: Dict = {}
-                if 'vix' in cache and (not isinstance(cache['vix'], dict)):
-                    result['vix'] = float(cache['vix'])
-                elif 'VIX' in cache and isinstance(cache['VIX'], dict):
-                    result['vix'] = float(cache['VIX'].get('value', 18.0))
-                else:
-                    result['vix'] = 18.0
+                from src.utils.metric_parser import parse_vix
+                result['vix'] = parse_vix(cache, 18.0)
                 return result
         except Exception as e:
             logger.critical(f'signal_cache 로드 실패: {e}', exc_info=True)
@@ -807,7 +799,7 @@ class ExposureOrchestrator:
         logger.info(f'  ⚔️ [Phase 11: Dynamic Balance] Bear Score 헷지 발동: score={bear_score:.3f} -> {name}({leverage_label}) {final_size:.1%} (VIX amp={vix_amp:.2f})')
         try:
             _bear_score_path = _RESULTS / 'bear_score_hedge.json'
-            _bear_score_path.write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json(_bear_score_path, result, indent=2, default=str)
         except Exception as _e0:
             logger.critical(f'  [exposure_orchestrator] 오케스트레이터 상태 저장: {_e0}', exc_info=True)
         return result

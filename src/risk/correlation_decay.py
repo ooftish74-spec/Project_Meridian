@@ -7,6 +7,8 @@ import logging
 import json
 import math
 from pathlib import Path
+from src.utils.file_ops import atomic_write_json
+
 from typing import Dict, List
 from datetime import datetime
 from config.dynamic_config import DynamicConfig
@@ -40,8 +42,9 @@ class CorrelationDecayMonitor:
     def _save_state(self):
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            with open(self._state_path, 'w') as f:
-                json.dump(self._state, f, indent=2, default=str)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(self._state_path, self._state, indent=2, default=str)
         except Exception as e:
             logger.critical(f'  CorrelationDecay 저장 실패: {e}', exc_info=True)
 
@@ -199,7 +202,7 @@ class CorrelationDecayMonitor:
         result = {'timestamp': datetime.now().isoformat(), 'dcc_correlations': dcc_corr, 'garch_volatilities': garch_vols, 'static_correlations': static_corr, 'dcc_vs_static_diff': dcc_diff, 'garch_params': {'omega': omega, 'alpha': alpha, 'beta': beta}, 'dcc_params': {'a': dcc_a, 'b': dcc_b}, 'n_observations': min_len}
         try:
             path = _RESULTS / 'dcc_garch.json'
-            path.write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json(path, result, indent=2, default=str)
             logger.info(f'  📊 DCC-GARCH: {len(dcc_corr)}쌍 상관 계산 완료')
         except Exception as _e1:
             logger.critical(f'  [correlation_decay] 상관관계 결과 저장: {_e1}', exc_info=True)

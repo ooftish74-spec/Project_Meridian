@@ -1,0 +1,9 @@
+[Unit]
+Description=Meridian Timer for Intraday Continuous ML
+
+[Timer]
+OnCalendar=Mon..Fri 10,12,14:00:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

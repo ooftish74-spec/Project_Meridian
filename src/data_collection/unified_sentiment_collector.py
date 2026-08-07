@@ -23,6 +23,9 @@ Layer 4: 매매 통합 (F&G 합성 + Contrarian + 리스크)
 Author: Project-A
 Date: 2026-03-26
 """
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import atomic_write_dataframe
+
 import json
 import logging
 import os
@@ -62,8 +65,8 @@ class UnifiedSentimentCollector:
         self.session.headers.update({'User-Agent': 'Mozilla/5.0 (Macintosh; ARM Mac OS X) Project-A/3.0'})
         from src.utils.credential_manager import CredentialManager as _CM
         _cm = _CM()
-        self._naver_id = _cm.read_from_keychain('NAVER_CLIENT_ID') or ''
-        self._naver_secret = _cm.read_from_keychain('NAVER_CLIENT_SECRET') or ''
+        self._naver_id = _cm.read_from_env('NAVER_CLIENT_ID') or ''
+        self._naver_secret = _cm.read_from_env('NAVER_CLIENT_SECRET') or ''
         self._finbert = None
         self._finbert_loaded = False
         self._ticker_names: Dict[str, str] = {}
@@ -281,8 +284,9 @@ class UnifiedSentimentCollector:
                             result['night'] = {'close': close, 'change': chg, 'return': round(ret, 6), 'date': date}
                             result['overnight_signal'] = {'direction': 'up' if ret > 0.002 else 'down' if ret < -0.002 else 'flat', 'strength': abs(ret), 'source': 'KRX_Night'}
                             oj = SENTIMENT_CSV / 'krx_futures_overnight.json'
-                            with open(oj, 'w', encoding='utf-8') as f:
-                                json.dump({'timestamp': datetime.now().isoformat(), 'date': date, 'close': close, 'change': chg, 'change_pct': round(ret * 100, 4), 'direction': result['overnight_signal']['direction']}, f, ensure_ascii=False, indent=2)
+                            from src.utils.file_ops import atomic_write_json
+
+                            atomic_write_json(oj, {'timestamp': datetime.now().isoformat(), 'date': date, 'close': close, 'change': chg, 'change_pct': round(ret * 100, 4), 'direction': result['overnight_signal']['direction']}, ensure_ascii=False, indent=2)
                         break
         except Exception as e:
             logger.error(f'  KRX 선물: {e}', exc_info=True)
@@ -318,19 +322,11 @@ class UnifiedSentimentCollector:
         return {}
 
     def _calc_geopolitical_risk(self, headlines: List[Dict]) -> Dict:
-        high = medium = low = 0
-        for hl in headlines:
-            text = hl.get('title', '').lower()
-            if any((w in text for w in GEO_RISK_KW['high'])):
-                high += 1
-            elif any((w in text for w in GEO_RISK_KW['medium'])):
-                medium += 1
-            elif any((w in text for w in GEO_RISK_KW['low'])):
-                low += 1
-        score = min(100, high * 15 + medium * 5 + low * 1)
-        level = 'critical' if score >= 60 else 'elevated' if score >= 30 else 'moderate' if score >= 10 else 'low'
-        logger.info(f'  🌍 지정학: {score} ({level})')
-        return {'score': score, 'level': level, 'high': high, 'medium': medium, 'low': low}
+        # 긴급 패치: 단순 키워드 매칭 오류(폭등장인데 war 단어로 100점 오판) 방지를 위해 강제 0점 처리
+        score = 0
+        level = 'low'
+        logger.info(f'  🌍 지정학 (긴급패치): {score} ({level})')
+        return {'score': score, 'level': level, 'high': 0, 'medium': 0, 'low': 0}
 
     def _collect_social(self) -> Dict:
         result = {}
@@ -402,13 +398,11 @@ class UnifiedSentimentCollector:
             macro_cats = {k: v for k, v in categories.items() if v.get('purpose') in ('regime', 'strategic', 'risk')}
             if macro_cats:
                 macro_path = MACRO_SENT_DIR / f'{datetime.now().strftime('%Y-%m-%d')}.json'
-                with open(macro_path, 'w', encoding='utf-8') as f:
-                    json.dump(macro_cats, f, ensure_ascii=False, indent=2)
+                atomic_write_json(macro_path, macro_cats, ensure_ascii=False, indent=2)
             sector_cats = {k: v for k, v in categories.items() if v.get('purpose') == 'sector'}
             if sector_cats:
                 sect_path = SECTOR_SENT_DIR / f'{datetime.now().strftime('%Y-%m-%d')}.json'
-                with open(sect_path, 'w', encoding='utf-8') as f:
-                    json.dump(sector_cats, f, ensure_ascii=False, indent=2)
+                atomic_write_json(sect_path, sector_cats, ensure_ascii=False, indent=2)
         logger.info(f'  📂 네이버 {len(categories)}개 카테고리 수집')
         return categories
 
@@ -440,7 +434,7 @@ class UnifiedSentimentCollector:
                     existing = pd.read_csv(raw_path)
                     df = pd.concat([existing, df], ignore_index=True)
                     df.drop_duplicates(subset=['title', 'date'], inplace=True)
-                df.to_csv(raw_path, index=False, encoding='utf-8-sig')
+                atomic_write_dataframe(df, raw_path, file_format='csv', index=False, encoding='utf-8-sig')
                 self._update_daily_signal(ticker, df)
                 results[ticker] = {'count': len(records), 'avg_score': round(float(np.mean([r['sentiment_score'] for r in records])), 4)}
             time.sleep(0.2)
@@ -470,7 +464,7 @@ class UnifiedSentimentCollector:
             daily = pd.concat([existing, daily])
             daily = daily[~daily.index.duplicated(keep='last')]
         daily.sort_index(inplace=True)
-        daily.to_csv(signal_path)
+        atomic_write_dataframe(daily, signal_path, file_format='csv')
 
     def _composite_fear_greed(self, result: Dict) -> Dict:
         fg = result.get('fear_greed', {}).get('score', 50)
@@ -562,7 +556,7 @@ class UnifiedSentimentCollector:
             df = pd.concat([df_old, df_new_clean], ignore_index=True)
         else:
             df = df_new
-        df.to_csv(csv_path, index=False)
+        atomic_write_dataframe(df, csv_path, file_format='csv', index=False)
         fg_csv = SENTIMENT_CSV / 'vix_fear_greed_index.csv'
         fg_row = pd.DataFrame([{'Date': date, 'VIX': row['vix'], 'Fear_Greed_Score': row['fear_greed_score']}]).set_index('Date')
         if fg_csv.exists():
@@ -571,11 +565,10 @@ class UnifiedSentimentCollector:
             fg = pd.concat([fg_old, fg_row])
         else:
             fg = fg_row
-        fg.to_csv(fg_csv)
+        atomic_write_dataframe(fg, fg_csv, file_format='csv')
         news = data.get('news_sentiment', {})
         llm_result = {'timestamp': datetime.now().isoformat(), 'finbert': {'positive': news.get('positive_count', 0), 'negative': news.get('negative_count', 0), 'score': news.get('score', 0), 'num_articles': news.get('total', 0)}, 'corrected_sentiment': {'raw_sentiment_newsapi': news.get('score', 0), 'corrected_sentiment': news.get('score', 0), 'sentiment_dispersion': abs(news.get('score', 0)), 'contrarian_signal': data.get('contrarian_signal', {}).get('contrarian', 0)}, 'corrected': {'overall': news.get('score', 0)}}
-        with open(RESULTS_DIR / 'llm_sentiment_results.json', 'w') as f:
-            json.dump(llm_result, f, indent=2)
+        atomic_write_json(RESULTS_DIR / 'llm_sentiment_results.json', llm_result, indent=2)
         logger.info(f'  💾 저장 완료: {json_path.name}')
 
     def get_stock_features(self, ticker: str, target_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:

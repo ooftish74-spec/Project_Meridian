@@ -16,11 +16,11 @@ class EmailService:
     def __init__(self):
         cm = CredentialManager()
         
-        self.sender_email = cm.read_from_keychain('EMAIL_SENDER')
-        self.sender_password = cm.read_from_keychain('EMAIL_PASSWORD')
-        self.recipient_email = cm.read_from_keychain('REPORT_RECIPIENT')
-        self.smtp_server = cm.read_from_keychain('SMTP_SERVER') or 'smtp.gmail.com'
-        self.smtp_port = int(cm.read_from_keychain('SMTP_PORT') or 587)
+        self.sender_email = cm.read_from_env('EMAIL_SENDER')
+        self.sender_password = cm.read_from_env('EMAIL_PASSWORD')
+        self.recipient_email = cm.read_from_env('REPORT_RECIPIENT')
+        self.smtp_server = cm.read_from_env('SMTP_SERVER') or 'smtp.gmail.com'
+        self.smtp_port = int(cm.read_from_env('SMTP_PORT') or 587)
         
         self.is_configured = all([self.sender_email, self.sender_password, self.recipient_email])
         

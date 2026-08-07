@@ -4,8 +4,12 @@ KRX Collector Mixin
 대량 수집 메서드 및 파생상품/ETF/ESG/금시장 API 호출.
 KRXApiClient 에서 mixin 으로 상속하여 사용.
 """
+from src.utils.file_ops import atomic_write_json
+
 import json as _json
 import logging
+from src.utils.retry_utils import with_retry
+from src.utils.file_ops import atomic_write_parquet
 from pathlib import Path
 from typing import Dict, Optional
 import pandas as pd
@@ -30,23 +34,23 @@ class KRXCollectorMixin:
         save_dir.mkdir(parents=True, exist_ok=True)
         kospi = self.get_stock_daily(date)
         if kospi is not None and len(kospi) > 0:
-            path = save_dir / f'kospi_{date}.csv'
-            kospi.to_csv(path, index=False, encoding='utf-8-sig')
+            path = save_dir / f'kospi_{date}.parquet'
+            atomic_write_parquet(kospi, path)
             results['kospi'] = kospi
             logger.info(f'  💾 저장: {path.name}')
         else:
             kospi_yf = self._collect_kospi_via_yfinance(date)
             if kospi_yf is not None and len(kospi_yf) > 0:
-                path = save_dir / f'kospi_{date}.csv'
-                kospi_yf.to_csv(path, index=False, encoding='utf-8-sig')
+                path = save_dir / f'kospi_{date}.parquet'
+                atomic_write_parquet(kospi_yf, path)
                 results['kospi'] = kospi_yf
                 logger.info(f'  💾 [yfinance 폴백] kospi_{date}.csv ({len(kospi_yf)}종목)')
             else:
                 logger.warning(f'  ⚠️ KRX 20260414 데이터 없음, 다음 날짜 시도')
         kosdaq = self.get_kosdaq_daily(date)
         if kosdaq is not None and len(kosdaq) > 0:
-            path = save_dir / f'kosdaq_{date}.csv'
-            kosdaq.to_csv(path, index=False, encoding='utf-8-sig')
+            path = save_dir / f'kosdaq_{date}.parquet'
+            atomic_write_parquet(kosdaq, path)
             results['kosdaq'] = kosdaq
             logger.info(f'  💾 저장: {path.name}')
         if results:
@@ -77,8 +81,8 @@ class KRXCollectorMixin:
         df = self.get_options(date)
         if df is None or len(df) == 0:
             return {}
-        path = save_dir / f'options_{date}.csv'
-        df.to_csv(path, index=False, encoding='utf-8-sig')
+        path = save_dir / f'options_{date}.parquet'
+        atomic_write_parquet(df, path)
         logger.info(f'  💾 옵션 저장: {path.name} ({len(df)}건)')
         summary = {}
         kospi_opt = df[df['PROD_NM'].str.contains('코스피200', na=False)]
@@ -97,8 +101,7 @@ class KRXCollectorMixin:
             put_iv = traded[traded['RGHT_TP_NM'] == 'PUT']['IMP_VOLT'].mean() if len(traded) > 0 else 0
             summary = {'date': date, 'total_options': len(df), 'kospi200_options': len(kospi_opt), 'pcr_volume': round(pcr_vol, 3), 'pcr_open_interest': round(pcr_oi, 3), 'call_volume': int(call_vol), 'put_volume': int(put_vol), 'call_oi': int(call_oi), 'put_oi': int(put_oi), 'avg_iv': round(avg_iv, 2), 'call_iv': round(call_iv, 2), 'put_iv': round(put_iv, 2), 'iv_skew': round(put_iv - call_iv, 2)}
             summary_path = save_dir / f'options_summary_{date}.json'
-            with open(summary_path, 'w', encoding='utf-8') as f:
-                _json.dump(summary, f, ensure_ascii=False, indent=2)
+            atomic_write_json(summary_path, summary, ensure_ascii=False, indent=2)
             logger.info(f'  📊 PCR(거래량): {pcr_vol:.3f} | PCR(미결제): {pcr_oi:.3f}')
             logger.info(f'  📊 IV평균: {avg_iv:.1f}% | 스큐: {summary['iv_skew']:.1f}%')
         return summary
@@ -193,7 +196,7 @@ class KRXCollectorMixin:
                 if df is not None:
                     save_dir = save_base / 'krx_index'
                     save_dir.mkdir(parents=True, exist_ok=True)
-                    df.to_csv(save_dir / f'{name}_{date}.csv', index=False, encoding='utf-8-sig')
+                    atomic_write_parquet(df, save_dir / f'{name}_{date}.parquet')
                     collected[name] = len(df)
             except Exception as e:
                 logger.warning(f'  ⚠️ {name}: {e}', exc_info=True)
@@ -202,7 +205,7 @@ class KRXCollectorMixin:
             if ft is not None:
                 save_dir = save_base / 'krx_futures'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                ft.to_csv(save_dir / f'futures_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(ft, save_dir / f'futures_{date}.parquet')
                 collected['futures'] = len(ft)
         except Exception as e:
             logger.warning(f'  ⚠️ 선물: {e}', exc_info=True)
@@ -217,7 +220,7 @@ class KRXCollectorMixin:
             if etf is not None:
                 save_dir = save_base / 'krx_etf'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                etf.to_csv(save_dir / f'etf_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(etf, save_dir / f'etf_{date}.parquet')
                 collected['etf'] = len(etf)
         except Exception as e:
             logger.warning(f'  ⚠️ ETF: {e}', exc_info=True)
@@ -226,7 +229,7 @@ class KRXCollectorMixin:
             if esg is not None:
                 save_dir = save_base / 'krx_esg'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                esg.to_csv(save_dir / f'esg_index_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(esg, save_dir / f'esg_index_{date}.parquet')
                 collected['esg_index'] = len(esg)
         except Exception as e:
             logger.warning(f'  ⚠️ ESG: {e}', exc_info=True)
@@ -235,7 +238,7 @@ class KRXCollectorMixin:
             if kinfo is not None:
                 save_dir = save_base / 'krx_stock_daily'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                kinfo.to_csv(save_dir / f'kosdaq_info_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(kinfo, save_dir / f'kosdaq_info_{date}.parquet')
                 collected['kosdaq_info'] = len(kinfo)
         except Exception as e:
             logger.warning(f'  ⚠️ 코스닥 기본정보: {e}', exc_info=True)
@@ -244,7 +247,7 @@ class KRXCollectorMixin:
             if gold is not None:
                 save_dir = save_base / 'krx_gold'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                gold.to_csv(save_dir / f'gold_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(gold, save_dir / f'gold_{date}.parquet')
                 collected['gold'] = len(gold)
         except Exception as e:
             logger.warning(f'  ⚠️ 금시장: {e}', exc_info=True)
@@ -253,7 +256,7 @@ class KRXCollectorMixin:
             if ksq_fut is not None:
                 save_dir = save_base / 'krx_futures'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                ksq_fut.to_csv(save_dir / f'kosdaq_futures_{date}.csv', index=False, encoding='utf-8-sig')
+                atomic_write_parquet(ksq_fut, save_dir / f'kosdaq_futures_{date}.parquet')
                 collected['kosdaq_futures'] = len(ksq_fut)
         except Exception as e:
             logger.warning(f'  ⚠️ 주식선물 코스닥: {e}', exc_info=True)

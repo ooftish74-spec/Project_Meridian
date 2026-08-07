@@ -26,6 +26,8 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -324,8 +326,7 @@ class S4AccountTracker:
 
         if updated > 0:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            (_RESULTS / 'shadow_portfolio.json').write_text(
-                json.dumps(sp, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json((_RESULTS / 'shadow_portfolio.json'),  sp, indent=2, ensure_ascii=False, default=str)
             logger.info(f"  ✅ S4 account 필드 보정: {updated}건")
 
         return updated
@@ -361,8 +362,7 @@ class S4AccountTracker:
     def _save(self):
         _RESULTS.mkdir(parents=True, exist_ok=True)
         self._state['last_updated'] = datetime.now().isoformat()
-        _STATE_FILE.write_text(
-            json.dumps(self._state, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(_STATE_FILE, self._state, indent=2, ensure_ascii=False, default=str)
 
     def _load_shadow(self) -> Dict:
         path = _RESULTS / 'shadow_portfolio.json'

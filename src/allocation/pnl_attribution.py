@@ -21,6 +21,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 from config.dynamic_config import DynamicConfig
@@ -181,7 +183,7 @@ class PnLAttributor:
     def _save_result(self, result: Dict) -> None:
         try:
             out = _RESULTS / 'pnl_attribution.json'
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as _e3:
             logger.critical(f'  [pnl_attribution] PnL attribution 섹션 4: {_e3}', exc_info=True)
 PnLAttributionEngine = PnLAttributor

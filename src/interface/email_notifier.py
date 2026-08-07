@@ -37,14 +37,15 @@ class MeridianEmail:
             from src.utils.credential_manager import CredentialManager
             cm = CredentialManager()
         except ImportError as e:
-            pass
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f'🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}', exc_info=True)
 
         def get_env_or_keychain(key: str, default: str='') -> str:
             cfg_val = self._cfg.get(f'email.{key.lower()}', '') if self._cfg else ''
             if cfg_val:
                 return cfg_val
             if cm:
-                kc_val = cm.read_from_keychain(key)
+                kc_val = cm.read_from_env(key)
                 if kc_val:
                     return kc_val
             return default

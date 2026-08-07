@@ -19,6 +19,8 @@ Rate Limit: AV 무료 5 req/min → 12초 간격 자동 대기
   - VIX 대리 보정 계수: SPY 실현변동성 분포 vs 목표 중앙값 동적 계산
 """
 
+from src.utils.file_ops import atomic_write_parquet
+
 import logging
 import math
 import time
@@ -92,7 +94,7 @@ def _is_fresh(name: str) -> bool:
 
 
 def _save_cache(name: str, df: pd.DataFrame) -> None:
-    df.to_parquet(_cache_path(name))
+    atomic_write_parquet(df, _cache_path(name))
 
 
 def _load_cache(name: str) -> pd.DataFrame:
@@ -153,6 +155,8 @@ def fetch_us10y(force: bool = False) -> pd.DataFrame:
             v = float(pt['value'])
             rows.append({'date': pt['date'], 'us10y': v})
         except (ValueError, KeyError):
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
             continue
     df = pd.DataFrame(rows).set_index('date') if rows else pd.DataFrame()
     if df.empty:

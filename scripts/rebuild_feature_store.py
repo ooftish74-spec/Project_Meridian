@@ -1,4 +1,5 @@
 import sys
+from src.infra.safe_io import atomic_write_dataframe
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -19,7 +20,7 @@ def _get_cross_asset_for_date(cross_data, date_str):
     return ca
 
 def main():
-    DATA_DIR = Path('data/historical_10y')
+    DATA_DIR = Path('data/kr_markets')
     FEATURE_STORE = Path('data/feature_store')
     FEATURE_STORE.mkdir(parents=True, exist_ok=True)
     
@@ -68,7 +69,7 @@ def main():
         if features_list:
             feat_df = pd.DataFrame(features_list)
             feat_df.index = pd.to_datetime(date_list)
-            feat_df.to_parquet(FEATURE_STORE / f'{ticker}.parquet')
+            atomic_write_dataframe(feat_df, FEATURE_STORE / f'{ticker}.parquet', file_format='parquet')
 
 if __name__ == '__main__':
     main()

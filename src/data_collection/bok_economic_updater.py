@@ -14,6 +14,7 @@ FRED 의존성을 완전히 제거하고, 한국 원천 데이터만 사용합�
     - 경제활동인구 (취업자수)
 """
 import logging
+from src.utils.file_ops import atomic_write_parquet
 import os
 import time
 import requests
@@ -24,8 +25,8 @@ from datetime import datetime
 from typing import Dict, Optional
 logger = logging.getLogger(__name__)
 from src.utils.credential_manager import CredentialManager as _CM
-BOK_API_KEY = _CM().read_from_keychain('BOK_API_KEY') or ''
-KOSIS_API_KEY = _CM().read_from_keychain('KOSIS_API_KEY') or ''
+BOK_API_KEY = _CM().read_from_env('BOK_API_KEY') or ''
+KOSIS_API_KEY = _CM().read_from_env('KOSIS_API_KEY') or ''
 BOK_BASE_URL = 'https://ecos.bok.or.kr/api/StatisticSearch'
 KOSIS_BASE_URL = 'https://kosis.kr/openapi/Param/statisticsParameterData.do'
 DATA_DIR = Path('data/raw/korea_economic')
@@ -61,6 +62,8 @@ class BOKEconomicUpdater:
                 try:
                     val = float(row['DATA_VALUE'])
                 except (ValueError, TypeError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
                 if cycle == 'M' and len(t) == 6:
                     date = pd.Timestamp(f'{t[:4]}-{t[4:6]}-01')
@@ -101,6 +104,8 @@ class BOKEconomicUpdater:
                     date = pd.Timestamp(f'{prd[:4]}-{prd[4:]}-01')
                     records.append({'Date': date, 'Value': float(val.replace(',', ''))})
                 except (ValueError, TypeError):
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
             if records:
                 df = pd.DataFrame(records)
@@ -111,11 +116,11 @@ class BOKEconomicUpdater:
 
     def _merge_and_save(self, new_data: pd.DataFrame, filename: str, col_name: str) -> bool:
         """새 데이터를 기존 CSV와 병합 후 저장"""
-        csv_path = DATA_DIR / filename
+        pq_path = DATA_DIR / filename
         existing = pd.DataFrame()
-        if csv_path.exists():
+        if pq_path.exists():
             try:
-                existing = pd.read_csv(csv_path, parse_dates=[0])
+                existing = pd.read_parquet(pq_path)
                 existing.columns = ['Date', col_name]
                 existing['Date'] = pd.to_datetime(existing['Date'])
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
@@ -130,7 +135,7 @@ class BOKEconomicUpdater:
         else:
             combined = new_data.sort_values('Date')
         combined = combined.reset_index(drop=True)
-        combined.to_csv(csv_path, index=False)
+        atomic_write_parquet(combined, pq_path, index=False)
         latest = combined['Date'].max().strftime('%Y-%m-%d')
         delta = len(combined) - old_len
         logger.info(f'  ✅ {filename}: {len(combined)} rows (+{delta}), 최신={latest}')
@@ -138,13 +143,13 @@ class BOKEconomicUpdater:
 
     def _get_last_date(self, filename: str, fmt: str='%Y%m') -> str:
         """기존 CSV의 마지막 날짜를 반환 (없으면 기본값, 미래 날짜 방지)"""
-        csv_path = DATA_DIR / filename
+        pq_path = DATA_DIR / filename
         default = '19900101' if fmt == '%Y%m%d' else '199001'
         today = datetime.now()
         today_str = today.strftime(fmt)
-        if csv_path.exists():
+        if pq_path.exists():
             try:
-                df = pd.read_csv(csv_path, parse_dates=[0])
+                df = pd.read_parquet(pq_path)
                 if not df.empty:
                     last = pd.to_datetime(df.iloc[:, 0]).max()
                     last_str = last.strftime(fmt)
@@ -168,10 +173,12 @@ class BOKEconomicUpdater:
         for name, cfg in BOK_MONTHLY.items():
             logger.info(f'\n📌 {name} — {cfg['description']}')
             try:
-                last = self._get_last_date(f'{name}.csv', '%Y%m')
+                last = self._get_last_date(f'{name}.parquet', '%Y%m')
                 df = self.fetch_from_bok(cfg['stat_code'], cfg['item_code'], 'M', last, end_m)
                 if not df.empty:
-                    results[name] = self._merge_and_save(df, f'{name}.csv', name)
+                    # [Point-in-Time] 미래 참조 방지: 기준월을 발표월(익월)로 이연
+                    df['Date'] = df['Date'] + pd.DateOffset(months=1)
+                    results[name] = self._merge_and_save(df, f'{name}.parquet', name)
                 else:
                     logger.warning(f'  ⚠️ {name}: 새 데이터 없음')
                     results[name] = False
@@ -184,11 +191,11 @@ class BOKEconomicUpdater:
         for name, cfg in BOK_DAILY.items():
             logger.info(f'\n📌 {name} — {cfg['description']}')
             try:
-                last = self._get_last_date(f'{name}.csv', '%Y%m%d')
+                last = self._get_last_date(f'{name}.parquet', '%Y%m%d')
                 df = self.fetch_from_bok(cfg['stat_code'], cfg['item_code'], 'D', last, end_d)
                 if not df.empty:
                     daily_dfs[name] = df.copy()
-                    results[name] = self._merge_and_save(df, f'{name}.csv', name)
+                    results[name] = self._merge_and_save(df, f'{name}.parquet', name)
                 else:
                     logger.warning(f'  ⚠️ {name}: 새 데이터 없음')
                     results[name] = False
@@ -207,7 +214,9 @@ class BOKEconomicUpdater:
         try:
             df = self.fetch_from_kosis('DT_1F02011', '101', 'T20+', '10', 'M', '200001', end_m)
             if not df.empty:
-                results['KOR_IndustrialProd'] = self._merge_and_save(df, 'KOR_IndustrialProd.csv', 'KOR_IndustrialProd')
+                # [Point-in-Time] 미래 참조 방지
+                df['Date'] = df['Date'] + pd.DateOffset(months=1)
+                results['KOR_IndustrialProd'] = self._merge_and_save(df, 'KOR_IndustrialProd.parquet', 'KOR_IndustrialProd')
             else:
                 results['KOR_IndustrialProd'] = False
         except Exception as e:
@@ -218,7 +227,9 @@ class BOKEconomicUpdater:
         try:
             df = self.fetch_from_kosis('DT_1DA7001S', '101', 'T20+', '0', 'M', '200001', end_m)
             if not df.empty:
-                results['KOR_Lf'] = self._merge_and_save(df, 'KOR_Lf.csv', 'KOR_Lf')
+                # [Point-in-Time] 미래 참조 방지
+                df['Date'] = df['Date'] + pd.DateOffset(months=1)
+                results['KOR_Lf'] = self._merge_and_save(df, 'KOR_Lf.parquet', 'KOR_Lf')
             else:
                 results['KOR_Lf'] = False
         except Exception as e:
@@ -235,13 +246,13 @@ class BOKEconomicUpdater:
 
     def _update_spread(self) -> bool:
         """장단기 스프레드(10Y-3Y) 계산 및 저장"""
-        csv_10y = DATA_DIR / 'KOR_10Y_Treasury.csv'
-        csv_3y = DATA_DIR / 'KOR_3Y_Treasury.csv'
-        if not csv_10y.exists() or not csv_3y.exists():
+        pq_10y = DATA_DIR / 'KOR_10Y_Treasury.parquet'
+        pq_3y = DATA_DIR / 'KOR_3Y_Treasury.parquet'
+        if not pq_10y.exists() or not pq_3y.exists():
             logger.warning('  ⚠️ 국고채 데이터 없음 → 스프레드 계산 불가')
             return False
-        df_10y = pd.read_csv(csv_10y, parse_dates=[0])
-        df_3y = pd.read_csv(csv_3y, parse_dates=[0])
+        df_10y = pd.read_parquet(pq_10y)
+        df_3y = pd.read_parquet(pq_3y)
         df_10y.columns = ['Date', 'Y10']
         df_3y.columns = ['Date', 'Y3']
         df_10y['Date'] = pd.to_datetime(df_10y['Date'])
@@ -249,7 +260,7 @@ class BOKEconomicUpdater:
         merged = pd.merge(df_10y, df_3y, on='Date', how='inner')
         merged['KOR_Spread'] = merged['Y10'] - merged['Y3']
         spread = merged[['Date', 'KOR_Spread']].copy()
-        return self._merge_and_save(spread, 'KOR_Spread.csv', 'KOR_Spread')
+        return self._merge_and_save(spread, 'KOR_Spread.parquet', 'KOR_Spread')
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
     updater = BOKEconomicUpdater()

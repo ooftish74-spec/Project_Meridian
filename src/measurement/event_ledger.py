@@ -47,7 +47,9 @@ class EventLedger:
     EVENT_TYPES = {'TRADE', 'SIGNAL', 'REGIME', 'RISK', 'MEASUREMENT', 'CONFIG', 'SYSTEM', 'OVERNIGHT', 'REBALANCE', 'ADVISORY', 'KILL_SWITCH', 'STREAM_SIGNAL', 'ALLOCATION', 'CORRELATION', 'LEVERAGE', 'SELF_LEARNING', 'FALLBACK_UPDATE'}
 
     def __init__(self):
+        from filelock import FileLock
         _EVENTS_DIR.mkdir(parents=True, exist_ok=True)
+        self._lock = FileLock(_EVENTS_DIR / "event_ledger.lock", timeout=10)
 
     def append(self, event_type: str, payload: Dict[str, Any], source: str='') -> Dict:
         """이벤트 기록 (append-only).
@@ -63,38 +65,61 @@ class EventLedger:
         if event_type not in self.EVENT_TYPES:
             logger.warning(f'  Unknown event type: {event_type} (allowed: {self.EVENT_TYPES})')
         now = datetime.now()
-        event = {'event_id': f'{event_type}_{now.strftime('%Y%m%d_%H%M%S_%f')}', 'timestamp': now.isoformat(), 'date': now.strftime('%Y-%m-%d'), 'type': event_type, 'source': source, 'payload': payload}
-        try:
-            from config.dynamic_config import DynamicConfig
-            _cfg = DynamicConfig()
-            log_format = _cfg.get('backtest.log_format', 'json')
-            _engine = _cfg.get('backtest.engine', 'pandas')
-            if _engine == 'polars':
-                log_format = 'parquet'
-        except Exception:
-            log_format = 'json'
-        if log_format == 'parquet':
+        event = {'event_id': f"{event_type}_{now.strftime('%Y%m%d_%H%M%S_%f')}", 'timestamp': now.isoformat(), 'date': now.strftime('%Y-%m-%d'), 'type': event_type, 'source': source, 'payload': payload}
+        with self._lock:
             try:
-                import polars as pl
-                parquet_file = _EVENTS_DIR / f'{now.strftime('%Y-%m')}.parquet'
-                event_copy = event.copy()
-                event_copy['payload'] = json.dumps(event_copy['payload'], ensure_ascii=False, default=str)
-                df_new = pl.DataFrame([event_copy])
-                if parquet_file.exists():
-                    df_old = pl.read_parquet(parquet_file)
-                    pl.concat([df_old, df_new]).write_parquet(parquet_file)
-                else:
-                    df_new.write_parquet(parquet_file)
-            except Exception as e:
-                logger.error(f'  EventLedger Parquet 기록 실패: {e}')
+                from config.dynamic_config import DynamicConfig
+                _cfg = DynamicConfig()
+                log_format = _cfg.get('backtest.log_format', 'json')
+                _engine = _cfg.get('backtest.engine', 'pandas')
+                if _engine == 'polars':
+                    log_format = 'parquet'
+            except Exception:
                 log_format = 'json'
-        if log_format == 'json':
-            month_file = _EVENTS_DIR / f'{now.strftime('%Y-%m')}.jsonl'
-            try:
-                with open(month_file, 'a', encoding='utf-8') as f:
-                    f.write(json.dumps(event, ensure_ascii=False, default=str) + '\n')
-            except Exception as e:
-                logger.error(f'  EventLedger 기록 실패: {e}')
+            if log_format == 'parquet':
+                try:
+                    import polars as pl
+                    parquet_file = _EVENTS_DIR / f"{now.strftime('%Y-%m')}.parquet"
+                    event_copy = event.copy()
+                    event_copy['payload'] = json.dumps(event_copy['payload'], ensure_ascii=False, default=str)
+                    
+                    schema = {
+                        'event_id': pl.Utf8,
+                        'timestamp': pl.Utf8,
+                        'date': pl.Utf8,
+                        'type': pl.Utf8,
+                        'source': pl.Utf8,
+                        'payload': pl.Utf8
+                    }
+                    df_new = pl.DataFrame([event_copy], schema=schema)
+                    
+                    import os
+                    tmp_parquet_file = parquet_file.with_suffix('.tmp' + parquet_file.suffix)
+                    if parquet_file.exists():
+                        df_old = pl.read_parquet(parquet_file)
+                        # [Dynamic Schema Alignment] df_old에 schema의 컬럼이 없으면 빈 값으로 채워 넣음
+                        for col_name, col_type in schema.items():
+                            if col_name not in df_old.columns:
+                                df_old = df_old.with_columns(pl.lit(None).cast(col_type).alias(col_name))
+                                
+                        # Ensure old dataframe columns match the strict schema before concatenation
+                        df_old = df_old.cast(schema)
+                        pl.concat([df_old, df_new], how="diagonal").write_parquet(tmp_parquet_file)
+                    else:
+                        df_new.write_parquet(tmp_parquet_file)
+                    
+                    # [Atomic Write]
+                    os.replace(tmp_parquet_file, parquet_file)
+                except Exception as e:
+                    logger.error(f'  EventLedger Parquet 기록 실패: {e}')
+                    log_format = 'json'
+            if log_format == 'json':
+                month_file = _EVENTS_DIR / f"{now.strftime('%Y-%m')}.jsonl"
+                try:
+                    with open(month_file, 'a', encoding='utf-8') as f:
+                        f.write(json.dumps(event, ensure_ascii=False, default=str) + '\n')
+                except Exception as e:
+                    logger.error(f'  EventLedger 기록 실패: {e}')
         return event
 
     def query(self, event_type: str=None, date_from: str=None, date_to: str=None, source: str=None, limit: int=100) -> List[Dict]:
@@ -121,6 +146,8 @@ class EventLedger:
                         try:
                             event = json.loads(line)
                         except json.JSONDecodeError:
+                            from src.utils.error_logger import log_warning_rate_limited
+                            log_warning_rate_limited(__name__, f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: (exception variable 없음)")
                             continue
                         if event_type and event.get('type') != event_type:
                             continue
@@ -152,7 +179,8 @@ class EventLedger:
                     try:
                         row['payload'] = json.loads(row['payload'])
                     except Exception:
-                        pass
+                        from src.utils.error_logger import log_error_rate_limited
+                        logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                     events.append(row)
             except Exception as e:
                 import logging

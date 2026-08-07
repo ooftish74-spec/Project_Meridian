@@ -19,6 +19,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ class LiquidityMonitor:
         portfolio_score = total_liquidity_score / max(n_positions, 1)
         summary = {'portfolio_liquidity_score': round(portfolio_score, 4), 'illiquid_positions': [t for t, r in results.items() if r['liquidity_score'] < 0.5], 'n_positions': n_positions, 'positions': results, 'timestamp': datetime.now().isoformat()}
         try:
-            (_RESULTS / 'liquidity_monitor.json').write_text(json.dumps(summary, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'liquidity_monitor.json'),  summary, indent=2, default=str)
         except Exception as _e0:
             logger.critical(f'  [liquidity_monitor] 유동성 모니터 데이터: {_e0}', exc_info=True)
         if summary['illiquid_positions']:
@@ -125,13 +127,27 @@ class LiquidityMonitor:
              'adjusted_ratio': float}
         """
         adv = self._estimate_adv(ticker, market_data)
+        
+        # 1. Fat Finger Hard Limit Check (최대 주문 금액 제한)
+        try:
+            from config.dynamic_config import DynamicConfig
+            _cfg = DynamicConfig()
+            max_order_krw = _cfg.get('risk.max_order_krw', 1000000000)
+        except Exception:
+            max_order_krw = 1000000000
+            
+        if order_amount > max_order_krw:
+            logger.critical(f"  🛑 [FAT FINGER] 주문 거부: 금액 ₩{order_amount:,.0f} > 한도 ₩{max_order_krw:,.0f}")
+            return {'ok': False, 'reason': 'FAT_FINGER_LIMIT_EXCEEDED', 'participation_rate': 1.0, 'estimated_impact_pct': 999.9, 'adjusted_ratio': 0.0, 'adv_estimated': adv}
+
+        # 2. Liquidity Participation Check
         est_price = order_amount / max(adv * 0.01, 1)
         adv_value = adv * max(est_price, 1000)
         participation = order_amount / max(adv_value, 1)
         impact_pct = 0.1 * math.sqrt(participation) * 100
         ok = participation <= self.DEFAULT_PARTICIPATION_RATE
         adjusted_ratio = min(1.0, self.DEFAULT_PARTICIPATION_RATE / max(participation, 0.001))
-        return {'ok': ok, 'participation_rate': round(participation, 4), 'estimated_impact_pct': round(impact_pct, 4), 'adjusted_ratio': round(adjusted_ratio, 4), 'adv_estimated': adv}
+        return {'ok': ok, 'reason': 'OK' if ok else 'LOW_LIQUIDITY', 'participation_rate': round(participation, 4), 'estimated_impact_pct': round(impact_pct, 4), 'adjusted_ratio': round(adjusted_ratio, 4), 'adv_estimated': adv}
 
     def calculate_market_impact_bps(self, ticker: str, order_value_krw: float, is_etf: bool=False, market_data: Dict=None) -> float:
         """

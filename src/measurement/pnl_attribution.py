@@ -17,6 +17,8 @@ import json
 import logging
 import math
 from collections import defaultdict
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -196,8 +198,7 @@ class PnLAttribution:
         }
 
         try:
-            (_RESULTS / 'pnl_attribution.json').write_text(
-                json.dumps(report, indent=2, default=str, ensure_ascii=False))
+            atomic_write_json((_RESULTS / 'pnl_attribution.json'), report, indent=2, default=str, ensure_ascii=False)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

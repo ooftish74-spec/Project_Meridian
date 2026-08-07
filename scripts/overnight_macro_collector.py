@@ -30,6 +30,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -46,120 +47,57 @@ RESULTS_DIR = PROJECT_ROOT / 'results'
 # ═══════════════════════════════════════════════════════════
 
 def collect_us_futures() -> dict:
-    """미국 주요 선물 야간 변동 수집 (Medallion Philosophy: 유동성 ETF Proxy)."""
-    from src.utils.vendor_multiplexer import VendorMultiplexer
+    """미국 주요 선물 야간 변동 수집 (Streaming Night Watch Proxy)."""
+    import json
     
-    tickers = {
-        'sp500_futures':  {'symbol': 'ES=F',     'name': 'S&P500 선물'},
-        'nasdaq_futures': {'symbol': 'NQ=F',     'name': 'NASDAQ 선물'},
-        'dow_futures':    {'symbol': 'YM=F',     'name': '다우 선물'},
+    stream_file = PROJECT_ROOT / 'data' / 'macro' / 'us_night_stream.json'
+    results = {}
+    
+    # Futures mapping for logging/display
+    mapping = {
+        'ES=F': {'key': 'sp500_futures', 'name': 'S&P500 선물'},
+        'NQ=F': {'key': 'nasdaq_futures', 'name': 'NASDAQ 선물'},
+        'YM=F': {'key': 'dow_futures', 'name': '다우 선물'}
     }
     
-    vmx = VendorMultiplexer()
-    end = datetime.now()
-    start = end - timedelta(days=5)
-    
-    results = {}
-    for key, info in tickers.items():
-        try:
-            h = vmx.fetch(info['symbol'], start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-            if h is not None and len(h) >= 2:
-                prev_close = float(h.iloc[-2])
-                last_close = float(h.iloc[-1])
-                change_pct = (last_close / prev_close - 1) * 100
+    try:
+        if stream_file.exists():
+            from src.utils.file_ops import atomic_write_json
+
+            with open(stream_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
                 
-                # 5일 평균 대비 위치
-                avg_5d = float(h.mean())
-                vs_avg = (last_close / avg_5d - 1) * 100
-                
-                results[key] = {
-                    'name': info['name'],
-                    'symbol': info['symbol'],
-                    'prev_close': round(prev_close, 2),
-                    'last_close': round(last_close, 2),
-                    'change_pct': round(change_pct, 4),
-                    'vs_5d_avg_pct': round(vs_avg, 4),
-                }
-                logger.info(f"  ✅ {info['name']}: {last_close:,.2f} ({change_pct:+.2f}%)")
-        except Exception as e:
-            logger.warning(f"  ❌ {info['name']}: {e}")
-    
-    return results
+            stream_time = datetime.fromisoformat(data['timestamp'])
+            # Check if stream is fresh (within 4 hours)
+            if (datetime.now() - stream_time).total_seconds() < 14400:
+                for sym, futures_info in mapping.items():
+                    if sym in data:
+                        futures_data = data[sym]
+                        results[futures_info['key']] = {
+                            'name': futures_info['name'],
+                            'symbol': sym,
+                            'prev_close': round(futures_data['prev_close'], 2),
+                            'last_close': round(futures_data['price'], 2),
+                            'change_pct': round(futures_data['change_pct'], 4),
+                            'vs_5d_avg_pct': 0.0,
+                            'source': 'night_watch_stream'
+                        }
+                        logger.info(f"  🌊 [Streamed] {futures_info['name']}: {futures_data['price']:,.2f} ({futures_data['change_pct']:+.2f}%)")
+                return results
+            else:
+                logger.warning("  ⚠️ us_night_stream.json 데이터가 오래되었습니다. (Stale)")
+    except Exception as e:
+        logger.warning(f"  ⚠️ us_night_stream.json 읽기 실패: {e}")
+        
+    logger.error("  ❌ Night Watch 스트리밍 데이터 수집 실패. (Critical data missing)")
+    raise RuntimeError("Critical data missing: US Futures Stream")
 
 
 def collect_sgx_proxy() -> dict:
-    """SGX KOSPI200 선물 프록시: EWY (iShares MSCI South Korea ETF).
-    
-    SGX KOSPI200 선물은 무료 API가 없으므로, NYSE 상장 한국 ETF인 EWY를 프록시로 사용합니다.
-    
-    EWY의 장점:
-      - NYSE에서 16:00~20:00 EST (06:00~10:00 KST+1) 거래
-      - 한국 시장이 닫힌 후 미국 투자자들의 한국 심리를 직접 반영
-      - 삼성전자, SK하이닉스 등 KOSPI 주요주로 구성
-      - KOSPI와 상관계수 0.95+
-    
-    추가 프록시:
-      - FLKR (Franklin FTSE South Korea ETF)
-      - 원/달러 환율 움직임 (DXY 역방향)
+    """[DELETED] CME/SGX KOSPI200 야간 선물 프록시 (EWY) 로직 삭제됨.
+    한국 증시(KIS API) 야간 선물 수집 모듈(night_futures_monitor.py)로 대체.
     """
-    from src.utils.vendor_multiplexer import VendorMultiplexer
-    vmx = VendorMultiplexer()
-    end = datetime.now()
-    start_5d = end - timedelta(days=5)
-    start_1m = end - timedelta(days=30)
-    
-    result = {}
-    
-    # 1차: EWY (핵심 프록시)
-    try:
-        h = vmx.fetch('EWY', start_5d.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-        h20 = vmx.fetch('EWY', start_1m.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-        
-        if h is not None and len(h) >= 2:
-            prev = float(h.iloc[-2])
-            last = float(h.iloc[-1])
-            change = (last / prev - 1) * 100
-            
-            ma20 = float(h20.mean()) if h20 is not None and len(h20) > 0 else last
-            vs_ma20 = (last / ma20 - 1) * 100
-            
-            result['ewy'] = {
-                'name': 'EWY (iShares MSCI South Korea)',
-                'prev_close': round(prev, 2),
-                'last_close': round(last, 2),
-                'change_pct': round(change, 4),
-                'vs_ma20_pct': round(vs_ma20, 4),
-                'proxy_for': 'SGX KOSPI200 Futures',
-                'correlation_note': 'KOSPI와 상관계수 0.95+',
-            }
-            logger.info(f"  ✅ EWY(SGX 프록시): ${last:.2f} ({change:+.2f}%)")
-    except Exception as e:
-        logger.warning(f"  ❌ EWY: {e}")
-    
-    # 2차: FLKR (보조 프록시)
-    try:
-        h_flkr = vmx.fetch('FLKR', start_5d.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-        if h_flkr is not None and len(h_flkr) >= 2:
-            prev = float(h_flkr.iloc[-2])
-            last = float(h_flkr.iloc[-1])
-            change = (last / prev - 1) * 100
-            result['flkr'] = {
-                'name': 'FLKR (Franklin FTSE South Korea)',
-                'prev_close': round(prev, 2),
-                'last_close': round(last, 2),
-                'change_pct': round(change, 4),
-            }
-    except Exception as _e:
-        logger.warning(f"  suppressed: {_e}")
-    
-    # ★ SGX 프록시 다중 앙상블 점수 (2026-05-29)
-    # 실증 가중치: EWY(0.40) + NQ선물(0.25) + SOX(0.20) + DXY역방향(0.15)
-    ewy_chg = result.get('ewy', {}).get('change_pct', 0)
-    result['sgx_proxy_components'] = {'ewy': ewy_chg}
-    result['sgx_proxy_source'] = 'ensemble'
-    result['sgx_proxy_score'] = max(5, min(95, 50 + ewy_chg * 10))  # fallback
-    
-    return result
+    return {}
 
 
 def collect_macro_indicators() -> dict:
@@ -180,33 +118,45 @@ def collect_macro_indicators() -> dict:
     
     results = {}
     for key, info in indicators.items():
-        try:
-            h = vmx.fetch(info['symbol'], start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-            if h is not None and len(h) >= 2:
-                prev = float(h.iloc[-2])
-                last = float(h.iloc[-1])
-                change = (last / prev - 1) * 100
-                
-                results[key] = {
-                    'name': info['name'],
-                    'symbol': info['symbol'],
-                    'prev_close': round(prev, 4),
-                    'last_close': round(last, 4),
-                    'change_pct': round(change, 4),
-                    'impact_direction': 'negative' if info['invert'] else 'positive',
-                }
-                logger.info(f"  ✅ {info['name']}: {last:.2f} ({change:+.2f}%)")
-            elif h is not None and len(h) == 1:
-                last = float(h.iloc[-1])
-                results[key] = {
-                    'name': info['name'],
-                    'symbol': info['symbol'],
-                    'last_close': round(last, 4),
-                    'change_pct': 0,
-                    'note': 'only_1_day_available',
-                }
-        except Exception as e:
-            logger.warning(f"  ❌ {info['name']}: {e}")
+        success = False
+        for attempt in range(4):
+            try:
+                h = vmx.fetch(info['symbol'], start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
+                if h is not None and len(h) >= 2:
+                    prev = float(h.iloc[-2].iloc[0]) if isinstance(h.iloc[-2], pd.Series) else float(h.iloc[-2])
+                    last = float(h.iloc[-1].iloc[0]) if isinstance(h.iloc[-1], pd.Series) else float(h.iloc[-1])
+                    change = (last / prev - 1) * 100
+                    
+                    results[key] = {
+                        'name': info['name'],
+                        'symbol': info['symbol'],
+                        'prev_close': round(prev, 4),
+                        'last_close': round(last, 4),
+                        'change_pct': round(change, 4),
+                        'impact_direction': 'negative' if info['invert'] else 'positive',
+                    }
+                    logger.info(f"  ✅ {info['name']}: {last:.2f} ({change:+.2f}%)")
+                    success = True
+                    break
+                elif h is not None and len(h) == 1:
+                    last = float(h.iloc[-1].iloc[0]) if isinstance(h.iloc[-1], pd.Series) else float(h.iloc[-1])
+                    results[key] = {
+                        'name': info['name'],
+                        'symbol': info['symbol'],
+                        'last_close': round(last, 4),
+                        'change_pct': 0,
+                        'note': 'only_1_day_available',
+                    }
+                    success = True
+                    break
+            except Exception as e:
+                import time
+                wait_time = 2 ** attempt
+                logger.warning(f"  ⚠️ {info['name']} 수집 실패 (시도 {attempt+1}/4, {wait_time}초 대기): {e}")
+                time.sleep(wait_time)
+        if not success:
+            logger.error(f"  ❌ {info['name']}: 최대 재시도 초과. 수집 실패.")
+            raise RuntimeError(f"Critical data missing: {info['name']}")
     
     return results
 
@@ -237,31 +187,9 @@ def compute_overnight_score(us_futures: dict, sgx_proxy: dict, macro: dict) -> d
         scores['us_futures'] = max(5, min(95, 50 + avg_us * 10))
         weights['us_futures'] = 0.30
     
-    # 2. SGX 프록시 (★ 앙상블: EWY 40% + NQ 25% + SOX 20% + DXY inv 15%)
-    ewy_chg = sgx_proxy.get('ewy', {}).get('change_pct', 0)
-    nq_chg = us_futures.get('nasdaq_futures', {}).get('change_pct', 0)
-    # SOX: macro 또는 signal_cache에서
-    sox_chg = macro.get('sox', {}).get('change_pct', 0)
-    dxy_chg = macro.get('dxy', {}).get('change_pct', 0)
-
-    ensemble_chg = (
-        ewy_chg * 0.40 +
-        nq_chg * 0.25 +
-        sox_chg * 0.20 +
-        (-dxy_chg) * 0.15  # DXY 역방향
-    )
-    sgx_ensemble_score = max(5, min(95, 50 + ensemble_chg * 10))
-    scores['sgx_proxy'] = sgx_ensemble_score
-    weights['sgx_proxy'] = 0.25
-    # 앙상블 결과를 sgx_proxy에 저장
-    sgx_proxy['sgx_proxy_score'] = round(sgx_ensemble_score, 1)
-    sgx_proxy['sgx_proxy_components'] = {
-        'ewy': round(ewy_chg, 3), 'nq': round(nq_chg, 3),
-        'sox': round(sox_chg, 3), 'dxy_inv': round(-dxy_chg, 3),
-    }
-    logger.info(f"  📊 SGX 앙상블: {sgx_ensemble_score:.0f}/100 "
-                f"(EWY={ewy_chg:+.1f}% NQ={nq_chg:+.1f}% "
-                f"SOX={sox_chg:+.1f}% DXY={dxy_chg:+.1f}%)")
+    # 2. SGX 프록시 (삭제됨 - KIS Night Futures로 대체되므로 점수 계산 생략)
+    scores['sgx_proxy'] = 50
+    weights['sgx_proxy'] = 0.0
     
     # 3. VIX 레벨
     vix = macro.get('vix', {})
@@ -345,7 +273,7 @@ def compute_kospi_gap_estimate(overnight: dict, sgx_proxy: dict,
       순야간정보 = EWY변화 - 전일KOSPI변화
       KOSPI 갭 ≈ 순야간정보 × 0.5 + 미국선물 × 0.3 + VIX보정
     """
-    ewy_chg = sgx_proxy.get('ewy', {}).get('change_pct', 0)
+    ewy_chg = 0
     
     us_changes = [v['change_pct'] for v in us_futures.values() if 'change_pct' in v]
     us_avg = sum(us_changes) / len(us_changes) if us_changes else 0
@@ -419,8 +347,7 @@ def main():
     logger.info("\n─── 미국 선물 ───")
     us_futures = collect_us_futures()
     
-    # 2. SGX KOSPI200 프록시
-    logger.info("\n─── SGX 프록시 (EWY) ───")
+    # 2. SGX KOSPI200 프록시 (삭제됨 - KIS Night Futures로 대체)
     sgx_proxy = collect_sgx_proxy()
     
     # 3. 거시지표
@@ -454,9 +381,7 @@ def main():
     for k, v in us_futures.items():
         briefing_lines.append(f"  {v['name']}: {v['change_pct']:+.2f}%")
     
-    # SGX 프록시
-    if 'ewy' in sgx_proxy:
-        briefing_lines.append(f"  EWY(SGX프록시): {sgx_proxy['ewy']['change_pct']:+.2f}%")
+    # SGX 프록시 출력 삭제됨
     
     briefing_lines.append("")
     
@@ -490,8 +415,7 @@ def main():
     if not dry_run:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         output_file = OUTPUT_DIR / f'{today}.json'
-        with open(output_file, 'w') as f:
-            json.dump(output, f, indent=2, ensure_ascii=False)
+        atomic_write_json(output_file, output, indent=2, ensure_ascii=False)
         logger.info(f"\n  💾 저장: {output_file}")
         
         # 텔레그램 발송

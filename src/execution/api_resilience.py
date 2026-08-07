@@ -399,10 +399,7 @@ class OrderDLQ:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
             # fallback: 직접 write
-            self.dlq_file.write_text(
-                json.dumps(items, indent=2, ensure_ascii=False, default=str),
-                encoding='utf-8',
-            )
+            atomic_write_json(self.dlq_file, items, indent=2, ensure_ascii=False, default=str)
 
     # ------------------------------------------------------------------
     # 공개 API

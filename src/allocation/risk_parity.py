@@ -97,10 +97,8 @@ class RiskParityOptimizer:
         )
         
         if not result.success:
-            logger.warning("Risk Parity Optimization failed. Using inverse volatility instead.")
-            # ZeroDivisionError 방지를 위한 Epsilon(+ 1e-8) 추가
-            inv_vol = 1.0 / (np.sqrt(np.diag(cov_matrix)) + 1e-8)
-            return inv_vol / np.sum(inv_vol)
+            logger.critical("Risk Parity Optimization failed to converge.")
+            raise RuntimeError(f"Risk Parity Optimization failed: {result.message}")
             
         return result.x
 

@@ -20,6 +20,8 @@ import json, logging
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -326,6 +328,6 @@ class RealtimeVaR:
     def _save(self, result: Dict):
         """결과 저장."""
         try:
-            (_RESULTS / 'realtime_var.json').write_text(json.dumps(result, indent=2, default=str))
+            atomic_write_json((_RESULTS / 'realtime_var.json'),  result, indent=2, default=str)
         except Exception as _e1:
             logger.critical(f'  [realtime_var] VaR 저장: {_e1}', exc_info=True)

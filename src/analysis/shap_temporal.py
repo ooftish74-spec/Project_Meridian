@@ -11,6 +11,8 @@ Usage:
 
 import json, logging, numpy as np
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -83,8 +85,7 @@ class SHAPAnalyzer:
         self._save_history()
 
         # 결과 저장
-        (_RESULTS / 'shap_analysis.json').write_text(
-            json.dumps(result, indent=2, ensure_ascii=False))
+        atomic_write_json((_RESULTS / 'shap_analysis.json'), result, indent=2, ensure_ascii=False)
 
         logger.info(f"  SHAP: top3={top_features[:3]}, weak={len(weak_features)}개")
         return result
@@ -178,4 +179,4 @@ class SHAPAnalyzer:
             return []
 
     def _save_history(self):
-        self.history_path.write_text(json.dumps(self.history, indent=2))
+        atomic_write_json(self.history_path, self.history, indent=2)

@@ -22,6 +22,8 @@ import logging
 import math
 import json
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -304,8 +306,7 @@ class OnlineLearner:
                 'last_updated': datetime.now().isoformat(),
             }
             _ONLINE_STATE.parent.mkdir(parents=True, exist_ok=True)
-            _ONLINE_STATE.write_text(
-                json.dumps(state, indent=2, ensure_ascii=False))
+            atomic_write_json(_ONLINE_STATE, state, indent=2, ensure_ascii=False)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

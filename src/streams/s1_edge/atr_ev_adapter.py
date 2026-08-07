@@ -21,8 +21,9 @@ Project Meridian — S1 Edge Stream ATR-Adaptive EV Threshold
   High Vol (ATR > p70):             cost × cost_mult_high_vol  [4.0~5.0]
   + VIX > threshold: × vix_high_extra_mult (고위험 추가 방어)
 """
-import pandas as pd
 from __future__ import annotations
+import pandas as pd
+from src.utils.file_ops import atomic_write_json
 import logging
 import math
 from typing import Dict, List, Optional, Tuple
@@ -148,8 +149,12 @@ def _compute_atr_from_parquet(ticker: str, period: int=14) -> Optional[float]:
                         if last_close > 0 and atr_val > 0:
                             return atr_val / last_close
                     except Exception as _e:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e}", exc_info=True)
                         logger.debug(f'  [AtrEvAdapter] {ticker} parquet 읽기 실패: {_e}')
     except Exception as e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
         logger.debug(f'  [AtrEvAdapter] ATR parquet 계산 실패 ({ticker}): {e}')
     return None
 

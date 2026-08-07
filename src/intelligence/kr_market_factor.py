@@ -16,6 +16,8 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -94,8 +96,7 @@ class KRMarketFactorEngine:
 
         # 결과 저장
         try:
-            (_RESULTS / 'kr_market_factor.json').write_text(
-                json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json((_RESULTS / 'kr_market_factor.json'), result, indent=2, ensure_ascii=False, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

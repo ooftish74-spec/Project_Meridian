@@ -22,6 +22,8 @@ import os
 import time
 import threading
 from collections import deque
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime, timedelta, date
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -145,8 +147,10 @@ class FreshnessMonitor:
         """디스크에 저장."""
         try:
             _FRESHNESS_LOG.parent.mkdir(parents=True, exist_ok=True)
-            _FRESHNESS_LOG.write_text(json.dumps(self._records, ensure_ascii=False, indent=2), encoding='utf-8')
+            atomic_write_json(_FRESHNESS_LOG, self._records, ensure_ascii=False, indent=2)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  Freshness log save: {e}')
 _FRESHNESS = FreshnessMonitor()
 
@@ -216,6 +220,8 @@ class ResilientFetcher:
                     logger.debug(f'  📊 KIS API 실시간 호가 성공: {kis_ticker} ({val:,.0f}원)')
                     return val
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  KIS API 현재가 조회 실패 ({ticker}): {e}')
         price = self._yf_current(ticker)
         if price and price > 0:
@@ -258,6 +264,8 @@ class ResilientFetcher:
             if not hist.empty:
                 return float(hist['Close'].iloc[-1])
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  yfinance current {ticker}: {e}')
         return None
 
@@ -298,6 +306,8 @@ class ResilientFetcher:
             if data and isinstance(data, list):
                 return float(data[0].get('price', 0))
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  FMP current {ticker}: {e}')
         return None
 
@@ -336,6 +346,8 @@ class ResilientFetcher:
             path = self._cache_path(ticker)
             df.to_parquet(path, engine='pyarrow')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  Cache save {ticker}: {e}')
 
     def _load_cache(self, ticker: str) -> Optional[pd.DataFrame]:
@@ -344,6 +356,8 @@ class ResilientFetcher:
             try:
                 return pd.read_parquet(path)
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  Cache load {ticker}: {e}')
         return None
 _FETCHER: Optional[ResilientFetcher] = None

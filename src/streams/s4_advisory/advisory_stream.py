@@ -75,6 +75,8 @@ class S4AdvisoryStream(BaseStream):
             if _macro_cycle in ('Recession', 'Downturn'):
                 logger.warning(f'  🧬 [Alpha Factory] S4 Macro Cycle={_macro_cycle} → QV Decay 임계값 엄격화 모드 활성화')
         except Exception as _s4_af_e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_s4_af_e}", exc_info=True)
             logger.debug(f'  [Alpha Factory] S4 macro_cycle 파싱 실패 (무시): {_s4_af_e}')
         for acct_name, acct_cfg in self.ACCOUNTS.items():
             acct_signals = self._generate_account_advisory(acct_name, acct_cfg, regime, market_data)
@@ -175,6 +177,8 @@ class S4AdvisoryStream(BaseStream):
                     tgat_val = abs(float(alpha_data.get('S2_signal', {}).get('pysr_macro_feature_value', 1.0)))
                     contagion_severity = max(1.0, tgat_val)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  Alpha Factory 신호 로드 실패: {e}')
         is_retirement_acct = account in ('IRP', 'PENSION')
         max_bond_ratio = cfg.get('s4.max_bond_ratio', 0.3)
@@ -331,6 +335,8 @@ class S4AdvisoryStream(BaseStream):
                         evaluator.qv_decay_threshold = _strict_qv
                     logger.info(f'  🧬 [Alpha Factory] QV Decay 임계값: {_base_qv:.2f} → {_strict_qv:.2f} (Recession 엄격화 x{_recession_qv_mult:.2f})')
             except Exception as _qv_e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_qv_e}", exc_info=True)
                 logger.debug(f'  [Alpha Factory] QV Decay 조정 실패 (무시): {_qv_e}')
             result = evaluator.evaluate(positions, market_data, regime)
             exit_candidates = result.get('exit_candidates', [])

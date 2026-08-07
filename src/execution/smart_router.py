@@ -391,7 +391,8 @@ class TWAPDispatcher:
     """
 
     def __init__(self):
-        self.threshold: float = float(cfg.get('execution.twap_threshold_krw') or 10000000)
+        # [User Requested Fix] Disabled TWAP for small retail accounts. Raised threshold to 1 Billion KRW.
+        self.threshold: float = float(cfg.get('execution.twap_threshold_krw') or 1000000000)
         self.duration_min: int = int(cfg.get('execution.twap_duration_min') or 7)
         self.min_slice_amount: float = float(cfg.get('execution.twap_min_slice_amount') or 500000)
         self.max_slices: int = int(cfg.get('execution.twap_max_slices') or 10)

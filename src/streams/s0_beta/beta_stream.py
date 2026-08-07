@@ -162,6 +162,7 @@ class S0BetaStream(BaseStream):
                 'confidence':         bull_prob,
                 'predict_proba':      bull_prob,
                 'direction':          'long',
+                'size_pct':           1.0,
                 'trigger_cash_sweep': True,
                 'target_sweep_ratio': sweep_bull,
                 'expected_return':    exp_bull,
@@ -189,6 +190,7 @@ class S0BetaStream(BaseStream):
                 'confidence':         conf,
                 'predict_proba':      conf,
                 'direction':          'long',   # ETF 자체는 매수
+                'size_pct':           1.0,
                 'trigger_cash_sweep': True,
                 'target_sweep_ratio': sweep,
                 'expected_return':    exp_crash,
@@ -213,6 +215,7 @@ class S0BetaStream(BaseStream):
                 'confidence':         base_conf,
                 'predict_proba':      base_conf,
                 'direction':          'long',
+                'size_pct':           1.0,
                 'trigger_cash_sweep': False,
                 'target_sweep_ratio': base_ratio,
                 'expected_return':    base_exp_ret,

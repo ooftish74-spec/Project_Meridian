@@ -33,6 +33,8 @@ import json as _json
 import logging
 import math
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from config.dynamic_config import DynamicConfig
@@ -91,7 +93,7 @@ class KillSwitch:
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
             _state = {'triggered': triggered, 'trigger_types': list(trigger_types), 'last_alert_times': {k: v.isoformat() for k, v in self._last_alert_times.items()}, 'updated_at': now_kst().isoformat()}
-            _STATE_FILE.write_text(_json.dumps(_state, ensure_ascii=False, indent=2))
+            atomic_write_json(_STATE_FILE, _state, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.critical(f'  [KillSwitch] 상태 저장 실패: {e}', exc_info=True)
 
@@ -327,7 +329,8 @@ class KillSwitch:
                     _d = _fj.loads(_sc.read_text())
                     vix = float(_d.get('vix', vix))
             except Exception:
-                pass
+                from src.utils.error_logger import log_error_rate_limited
+                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
             return float(vix / 100.0 / np.sqrt(252))
 
     def judge_action(self, metrics: Dict, regime: str='caution') -> Dict:
@@ -568,7 +571,7 @@ class KillSwitch:
         check_result = {'triggered': judgment['triggered'], 'can_buy': can_buy, 'position_scale': position_scale, 'reason': '; '.join(reason_parts), 'active': judgment['triggered'], 'forward_override': forward_override, 'forward_signals': result['measurement'].get('forward', {}), 'timestamp': now_kst().isoformat()}
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            (_RESULTS / 'kill_switch.json').write_text(_json.dumps(check_result, ensure_ascii=False, indent=2))
+            atomic_write_json((_RESULTS / 'kill_switch.json'),  check_result, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.critical(f'  kill_switch.json 저장 실패: {e}', exc_info=True)
         return check_result
@@ -646,7 +649,7 @@ class KillSwitch:
                     raise
                     history = []
             history.append(result)
-            record_file.write_text(_json.dumps(history, ensure_ascii=False, indent=2, default=str))
+            atomic_write_json(record_file, history, ensure_ascii=False, indent=2, default=str)
         except Exception as _save_err:
             logger.critical(f'  [HardLiquidate] 기록 저장 실패: {_save_err}', exc_info=True)
         try:
@@ -656,7 +659,7 @@ class KillSwitch:
             logger.critical(f'  [HardLiquidate] 텔레그램 알림 실패: {_tg_err}', exc_info=True)
         try:
             halt_flag = _RESULTS / 'SYSTEM_HALT.flag'
-            halt_flag.write_text(_json.dumps({'halt': True, 'reason': reason, 'timestamp': ts, 'orders_liquidated': result['orders_executed']}, ensure_ascii=False, indent=2))
+            atomic_write_json(halt_flag, {'halt': True, 'reason': reason, 'timestamp': ts, 'orders_liquidated': result['orders_executed']}, ensure_ascii=False, indent=2)
             logger.critical(f'  🛑 [HardLiquidate] 셧다운 플래그 생성: {halt_flag}')
         except Exception as _flag_err:
             logger.critical(f'  [HardLiquidate] 셧다운 플래그 생성 실패: {_flag_err}', exc_info=True)

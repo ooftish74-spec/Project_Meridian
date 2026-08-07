@@ -63,7 +63,7 @@ def objective(trial, start_date, end_date):
     # 최적화 속도를 위해 출력 억제 (혹은 verbose=False 처리)
     try:
         # 백테스터 실행 (약간의 슬리피지/수수료 기본값 적용)
-        result = run_event_backtest(start_date, end_date, initial_capital=150_000_000, 
+        result = run_event_backtest(start_date, end_date, initial_capital=float(cfg.get('portfolio.initial_capital', 1000000.0)), 
                                     slippage_bps=5.0, commission_bps=1.5, verbose=False)
         
         cagr = result.get('cagr', 0.0)
@@ -116,8 +116,9 @@ def run_optimization(start_date: str, end_date: str, n_trials: int = 100):
     # 결과를 파일로 저장
     out_file = _PROJECT_ROOT / 'results' / 'optimizer_best_params.json'
     out_file.parent.mkdir(exist_ok=True)
-    with open(out_file, 'w') as f:
-        json.dump(best_trial.params, f, indent=4)
+    from src.utils.file_ops import atomic_write_json
+
+    atomic_write_json(out_file, best_trial.params, indent=4)
     logger.info(f"💾 파라미터 저장 완료: {out_file}")
 
 if __name__ == "__main__":

@@ -24,7 +24,9 @@ class VirtualAccountManager:
     def _load_ledger(self):
         if self.state_file.exists():
             try:
-                with open(self.state_file, 'r') as f:
+                from src.utils.file_ops import atomic_write_json
+
+                with open(self.state_file, 'r', encoding='utf-8') as f:
                     self.ledger = json.load(f)
             except Exception as e:
                 logger.critical(f'가상 장부 로드 실패: {e}. 기본값 사용.', exc_info=True)
@@ -35,8 +37,7 @@ class VirtualAccountManager:
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         import datetime
         self.ledger['timestamp'] = datetime.datetime.now().isoformat()
-        with open(self.state_file, 'w') as f:
-            json.dump(self.ledger, f, indent=4)
+        atomic_write_json(self.state_file, self.ledger, indent=4)
 
     def allocate_capital(self, target_allocations: Dict[str, float]):
         """

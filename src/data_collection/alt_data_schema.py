@@ -1,10 +1,10 @@
+from __future__ import annotations
 #!/usr/bin/env python3
 """[Phase 54: Alt-Data Safeguards] 대안 데이터 무결성 검증 스키마.
 
 Pydantic v2 기반 스키마를 사용하여 Alt-Data 피처의 타입과 기본값을
 강제 검증한다. 비정상 업로드를 탐지하고 모델에 가는 데이터 오염을 사전 차단한다.
 """
-from __future__ import annotations
 
 from typing import Any
 

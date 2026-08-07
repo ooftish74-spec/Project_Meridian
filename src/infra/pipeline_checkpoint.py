@@ -19,6 +19,8 @@ Usage:
 import json
 import logging
 from datetime import datetime, date
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -192,8 +194,8 @@ class PipelineCheckpoint:
             # 다른 날이면 self._state가 리셋된 상태이므로 그대로 저장
 
             _CKPT_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _CKPT_FILE.write_text(json.dumps(
-                self._state, indent=2, default=str))
+            atomic_write_json(_CKPT_FILE, 
+                self._state, indent=2, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

@@ -91,12 +91,8 @@ def check_api_health():
         cm = CredentialManager()
         
         # mock 모드가 아닌 실계좌(또는 모의투자) 모드로 테스트
-        mode = os.environ.get('KIS_MODE', 'mock')
-        if mode == 'mock':
-            logger.info("🔵 Mock 모드이므로 API 테스트를 패스합니다.")
-            save_and_notify(True, "🔵 [API Health Check] Mock 모드 정상 작동 중")
-            return True
-            
+        mode = os.environ.get('KIS_MODE', 'live')
+        
         prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
         app_key = cm.read_from_env(f'{prefix}_APP_KEY')
         app_secret = cm.read_from_env(f'{prefix}_APP_SECRET')

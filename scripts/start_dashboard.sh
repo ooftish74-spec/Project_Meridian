@@ -2,7 +2,7 @@
 # Project Meridian 대시보드 서버 시작 스크립트
 # launchd에서 호출됨 — 맥 로그인 시 자동 실행
 
-PROJECT_DIR="/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project_Meridian"
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python3"
 STREAMLIT_CMD="${PROJECT_DIR}/venv/bin/streamlit"
 LOG_DIR="${PROJECT_DIR}/logs"

@@ -55,6 +55,8 @@ class MLRegimeRouter:
                 self._meta = json.loads(_REGIME_META_FILE.read_text())
                 logger.info(f'  [MLRegimeRouter] 메타 로드: bull_auc={self._meta.get('bull_val_auc', 0):.4f}, bear_auc={self._meta.get('bear_val_auc', 0):.4f}')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [MLRegimeRouter] 메타 로드 실패: {e}')
 
     def _load_model_for_regime(self, regime: str) -> Optional[object]:
@@ -108,6 +110,8 @@ class MLRegimeRouter:
                 logger.debug(f'  [MLRegimeRouter] {regime.upper()} 모델 예측: {prob:.4f}')
                 return prob
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  [MLRegimeRouter] {regime} 모델 예측 실패: {e}')
         return self._predict_from_unified_ensemble(X, regime)
 
@@ -148,6 +152,8 @@ class MLRegimeRouter:
                 w_sum = sum(ws)
                 return sum((p * w for p, w in zip(preds, ws))) / max(w_sum, 1e-09)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [MLRegimeRouter] 통합 앙상블 fallback 실패: {e}')
         return 0.5
 
@@ -172,6 +178,8 @@ class MLRegimeRouter:
                 elif hasattr(model, 'predict'):
                     return model.predict(X_clean).astype(float)
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  [MLRegimeRouter] 배치 예측 실패: {e}')
         return np.array([self.predict(X[i], regime) for i in range(len(X))])
 

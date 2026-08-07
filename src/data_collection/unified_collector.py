@@ -26,7 +26,10 @@ import logging
 import sys
 import time
 from datetime import datetime, timedelta, date
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
+from src.infra.safe_io import safe_json_write, safe_parquet_write
 from typing import Dict, List, Optional
 import pandas as pd
 try:
@@ -60,7 +63,7 @@ cfg = DynamicConfig()
 universe = Universe()
 if not _HAS_TENACITY:
     logger.warning('  [Step 2] tenacity 미설치 — API 재시도 비활성화. pip install tenacity')
-_DATA_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+_DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 _SIGNAL_DIR = _PROJECT_ROOT / 'data' / 'signals'
 _SIGNAL_CACHE = _PROJECT_ROOT / 'results' / 'signal_cache.json'
 _KR_TICKER_RE = re.compile('^\\d{5}[0-9KLM]$')
@@ -70,47 +73,107 @@ _PYKRX_DELAY = 1.0
 def _fetch_kr_ohlcv_with_retry(pykrx_stock, start: str, end: str, ticker: str):
     """[Step 2: Tenacity] pykrx API 호출 래퍼 — 지수적 백오프 재시도."""
     time.sleep(_PYKRX_DELAY)
-    return pykrx_stock.get_market_ohlcv_by_date(start, end, ticker)
+    try:
+        df = pykrx_stock.get_market_ohlcv_by_date(start, end, ticker)
+        if df is None or df.empty:
+            raise ValueError(f"{ticker} returned empty pykrx data")
+        return df
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"  [pykrx Retry] API failed for {ticker}: {e}")
+        raise e  # Must raise to trigger Tenacity retry
 
 def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optional[pd.DataFrame]:
-    """[Step 1·2] pykrx로 KR 종목 OHLCV 수집 — tenacity 재시도 적용.
+    """KIS API를 최우선(Primary)으로 호출하고 실패 시 pykrx로 Fallback.
 
     Args:
-        ticker: KRX 종목코드 (6자리)
-        days: 수집 일수 (기본 60일)
+        ticker: 종목코드 (6자리)
+        days: 수집 일수
         backfill: True면 10년 백필
-
-    Returns:
-        DataFrame (date, open, high, low, close, volume) or None
     """
-    try:
-        from pykrx import stock as pykrx_stock
-    except ImportError as e:
-        logger.error('pykrx 미설치. pip install pykrx', exc_info=True)
-        return None
     if backfill:
         start = (datetime.now() - timedelta(days=3650)).strftime('%Y%m%d')
     else:
         start = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
     end = datetime.now().strftime('%Y%m%d')
+    
+    # 1. KIS API 호출 시도 (Primary)
     try:
+        from src.data_collection.kis_data_collector import KISDataCollector
+        kis = KISDataCollector()
+        if kis._ensure_auth():
+            df = kis.get_kr_daily_ohlcv(ticker, start, end)
+            if df is not None and not df.empty:
+                # KIS 데이터 포맷을 통일 (소문자 전환 및 이름 변경)
+                df = df.reset_index()
+                df.columns = [c.lower() for c in df.columns]
+                rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
+                df = df.rename(columns=rename)
+                if 'date' not in df.columns:
+                    df = df.rename(columns={df.columns[0]: 'date'})
+                for col in ['open', 'high', 'low', 'close', 'volume']:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
+                df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+                logger.debug(f'  [KIS API] {ticker} 수집 성공')
+                return df
+    except Exception as e:
+        logger.warning(f'  ⚠️ KIS API 호출 오류 ({ticker}): {e} -> pykrx Fallback 시도')
+        
+    # 2. pykrx 호출 (Fallback 1)
+    try:
+        from pykrx import stock as pykrx_stock
         df = _fetch_kr_ohlcv_with_retry(pykrx_stock, start, end, ticker)
+        if df is not None and not df.empty:
+            df = df.reset_index()
+            df.columns = [c.lower() for c in df.columns]
+            rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
+            df = df.rename(columns=rename)
+            if 'date' not in df.columns:
+                df = df.rename(columns={df.columns[0]: 'date'})
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
+            df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+            logger.debug(f'  [pykrx Fallback] {ticker} 수집 성공')
+            return df
+    except Exception as e:
+        logger.warning(f'  {ticker}: pykrx 수집 실패 — {e}')
+
+    # 3. Naver API 호출 (Final Fallback via FinanceDataReader)
+    logger.warning(f'  ⚠️ pykrx Fallback 실패 ({ticker}) -> Naver API(FDR) 최종 Fallback 시도')
+    try:
+        import FinanceDataReader as fdr
+        # start, end formats are YYYYMMDD string. fdr accepts this format natively.
+        df = fdr.DataReader(ticker, start, end)
+        
         if df is None or df.empty:
-            logger.warning(f'  {ticker}: pykrx 데이터 없음')
+            logger.error(f'  {ticker}: Naver API(FDR) 데이터 없음')
             return None
+            
         df = df.reset_index()
-        df.columns = [c.lower() for c in df.columns]
-        rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
+        df.columns = [str(c).lower() for c in df.columns]
+        
+        rename = {'date': 'date', 'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'volume': 'volume'}
         df = df.rename(columns=rename)
         if 'date' not in df.columns:
             df = df.rename(columns={df.columns[0]: 'date'})
+            
         for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        df = df.dropna(subset=['close'])
+        # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
+        df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+        
+        if pd.api.types.is_datetime64tz_dtype(df['date']):
+            df['date'] = df['date'].dt.tz_localize(None)
+            
+        logger.info(f'  ✅ [Naver API Fallback] {ticker} 수집 성공')
         return df
-    except Exception as e:
-        logger.error(f'  {ticker}: pykrx 수집 최종 실패 — {e}', exc_info=False)
+    except Exception as naver_e:
+        logger.error(f'  ❌ {ticker}: Naver API 수집 최종 실패 — {naver_e}')
         return None
 
 def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
@@ -158,7 +221,7 @@ def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
                 existing['date'] = pd.to_datetime(existing['date'])
                 df['date'] = pd.to_datetime(df['date']) if 'date' in df.columns else df
                 combined = pd.concat([existing, df]).drop_duplicates(subset='date', keep='last').sort_values('date')
-                combined.to_parquet(out_file, index=False)
+                safe_parquet_write(combined, out_file)
                 results[ticker] = len(df)
                 logger.info(f'  [{i}/{total}] {ticker}: +{len(df)}행 추가')
             else:
@@ -167,7 +230,7 @@ def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
             df = collect_kr_ohlcv(ticker, backfill=backfill)
             if df is not None and (not df.empty):
                 _DATA_DIR.mkdir(parents=True, exist_ok=True)
-                df.to_parquet(out_file, index=False)
+                safe_parquet_write(df, out_file)
                 results[ticker] = len(df)
                 logger.info(f'  [{i}/{total}] {ticker}: {len(df)}행 저장')
             else:
@@ -209,7 +272,7 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                     df = collect_kr_ohlcv(ticker, backfill=backfill)
                     if df is not None and (not df.empty):
                         _DATA_DIR.mkdir(parents=True, exist_ok=True)
-                        df.to_parquet(out_file, index=False)
+                        safe_parquet_write(df, out_file)
                         results[ticker] = len(df)
                     else:
                         results[ticker] = -1
@@ -239,13 +302,13 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                         combined = pd.concat([existing, df]).drop_duplicates(subset=merge_key, keep='last').sort_values(merge_key)
                     else:
                         combined = df
-                    combined.to_parquet(out_file, index=False)
+                    safe_parquet_write(combined, out_file)
                 except Exception as _merge_e:
                     logger.error(f'  {ticker} parquet merge 실패 — {_merge_e}, 새 데이터로 덮어쓰기', exc_info=True)
-                    df.to_parquet(out_file, index=False)
+                    safe_parquet_write(df, out_file)
             else:
                 _DATA_DIR.mkdir(parents=True, exist_ok=True)
-                df.to_parquet(out_file, index=False)
+                safe_parquet_write(df, out_file)
             results[ticker] = len(df)
         else:
             results[ticker] = -1
@@ -264,16 +327,70 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     _US_STOCKS_SYNC_MAP = {'sp500': ['SPY.parquet'], 'nasdaq': ['QQQ.parquet'], 'vix': ['^VIX.parquet'], 'ewy': ['EWY.parquet']}
     signals = {}
     today_dt = datetime.now()
-    symbols_to_fetch = list(universe.SIGNAL_ONLY.values())
+    from src.data_collection.bok_ecos_collector import BOKEcosCollector
+    from src.data_collection.usa_collector import USADataCollector
+
+    BOK_MACROS = ['KR_BASE_RATE', 'KR_EXPORT', 'KR_LEI', 'KR_CEI']
+    FRED_MACROS = ['UNRATE', 'FEDFUNDS', 'USSLIND']
+    
+    symbols_to_fetch = [v for v in universe.SIGNAL_ONLY.values() if v not in BOK_MACROS and v not in FRED_MACROS]
     logger.info('  🌍 [Alpha Vantage] 글로벌 시그널 수집 시작')
     av_data = collect_global_macro(symbols_to_fetch)
+    
+    bok_collector = None
+    usa_collector = None
+    
     for name, yf_ticker in universe.SIGNAL_ONLY.items():
+        price = None
+        if yf_ticker in BOK_MACROS:
+            if bok_collector is None:
+                bok_collector = BOKEcosCollector()
+            try:
+                if yf_ticker == 'KR_BASE_RATE': df = bok_collector.get_base_rate()
+                elif yf_ticker == 'KR_EXPORT': df = bok_collector.get_export_index()
+                elif yf_ticker == 'KR_LEI': df = bok_collector.get_leading_index()
+                elif yf_ticker == 'KR_CEI': df = bok_collector.get_coincident_index()
+                if df is not None and not df.empty:
+                    price = float(df.iloc[-1].values[0])
+                    av_data[yf_ticker] = {'price': price}
+            except Exception as e:
+                logger.warning(f"Failed to fetch {yf_ticker} via BOK ECOS: {e}")
+        elif yf_ticker in FRED_MACROS:
+            if usa_collector is None:
+                usa_collector = USADataCollector()
+            try:
+                fred_id = usa_collector.FRED_SERIES_MAP.get(yf_ticker, yf_ticker)
+                fred = usa_collector._get_fred()
+                if fred is not None:
+                    series = fred.get_series(fred_id)
+                    if series is not None and not series.empty:
+                        price = float(series.iloc[-1])
+                        av_data[yf_ticker] = {'price': price}
+            except Exception as e:
+                logger.warning(f"Failed to fetch {yf_ticker} via FRED: {e}")
+        
         if yf_ticker in av_data:
             price = av_data[yf_ticker]['price']
+        else:
+            try:
+                import yfinance as yf
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')
+                    vix_data = yf.download(yf_ticker, period='1d', progress=False, timeout=10)
+                if vix_data is not None and not vix_data.empty and len(vix_data) > 0:
+                    close = vix_data['Close']
+                    if hasattr(close, 'columns'): close = close.iloc[:, 0]
+                    price = float(close.iloc[-1])
+                    av_data[yf_ticker] = {'price': price}
+            except Exception as e:
+                logger.warning(f"Failed to fetch {yf_ticker} via yfinance fallback: {e}")
+
+        if price is not None:
             df = pd.DataFrame([{'date': today_dt, 'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}])
             out_file = _SIGNAL_DIR / f'signal_{name.lower()}.parquet'
             _SIGNAL_DIR.mkdir(parents=True, exist_ok=True)
-            df.to_parquet(out_file, index=False)
+            safe_parquet_write(df, out_file)
             name_lower = name.lower()
             for cross_file in _CROSS_SYNC_MAP.get(name_lower, []):
                 cross_path = _DATA_DIR / cross_file
@@ -283,9 +400,9 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                         existing.columns = [c.lower() for c in existing.columns]
                         if 'date' in existing.columns:
                             combined = pd.concat([existing, df]).drop_duplicates(subset='date', keep='last').sort_values('date')
-                            combined.to_parquet(cross_path, index=False)
+                            safe_parquet_write(combined, cross_path)
                     else:
-                        df.to_parquet(cross_path, index=False)
+                        safe_parquet_write(df, cross_path)
                 except Exception as e:
                     logger.error(f'  cross sync {cross_file} 실패: {e}', exc_info=True)
             for us_file in _US_STOCKS_SYNC_MAP.get(name_lower, []):
@@ -297,10 +414,10 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                         existing.columns = [c.lower() for c in existing.columns]
                         combined = pd.concat([existing, df])
                         combined = combined[~combined.index.duplicated(keep='last')]
-                        combined.to_parquet(us_path)
+                        safe_parquet_write(combined, us_path)
                     else:
                         df.set_index('date', inplace=True)
-                        df.to_parquet(us_path)
+                        safe_parquet_write(df, us_path)
                 except Exception as e:
                     logger.error(f'  us_stocks sync {us_file} 실패: {e}', exc_info=True)
             signals[name] = price
@@ -328,7 +445,7 @@ def _save_signal_cache(signals: Dict):
         existing.update(signals)
         existing['last_update'] = datetime.now().isoformat()
         _SIGNAL_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        _SIGNAL_CACHE.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(_SIGNAL_CACHE, existing, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
         logger.error(f'  시그널 캐시 저장 실패: {e}', exc_info=True)
 
@@ -343,7 +460,11 @@ def collect_investor_flow() -> Dict:
     flows = {}
     try:
         time.sleep(_PYKRX_DELAY)
-        df = pykrx_stock.get_market_trading_volume_by_date(start, end, 'KOSPI')
+        try:
+            df = pykrx_stock.get_market_trading_volume_by_date(start, end, 'KOSPI')
+        except Exception as e:
+            logger.warning(f"  [SILENT_BYPASS] pykrx investor flow failed (IP block): {e}")
+            return {}
         if df is not None and (not df.empty):
             out = _DATA_DIR / 'investor_flow_kospi.parquet'
             df.reset_index().to_parquet(out, index=False)
@@ -395,15 +516,23 @@ def update_stock_universe() -> List[str]:
     if ticker_list:
         out = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(ticker_list, indent=2))
+        atomic_write_json(out, ticker_list, indent=2)
         logger.info(f'  유니버스: {len(ticker_list)}종목 저장')
     return ticker_list
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), reraise=False)
+@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), reraise=True)
 def _pykrx_get_etf_list_with_retry(pykrx, biz_day: str) -> list:
     """[Step 2: Tenacity] pykrx ETF 목록 조회 래퍼."""
     time.sleep(_PYKRX_DELAY)
-    return pykrx.get_etf_ticker_list(biz_day)
+    try:
+        res = pykrx.get_etf_ticker_list(biz_day)
+        if not res:
+            raise ValueError(f"Empty ETF list for {biz_day}")
+        return res
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"  [pykrx Retry] get_etf_ticker_list failed: {e}")
+        raise e
 
 class DataStaleException(Exception):
     pass
@@ -441,63 +570,57 @@ def update_parking_etf_universe(keywords: Optional[List[str]]=None, top_n: int=5
         _GLOBAL_FALLBACK_EVENTS.append({'time': datetime.now().isoformat(), 'type': 'STALE_HALT', 'target': 'parking_etfs', 'message': msg})
         raise DataStaleException(msg)
     try:
-        from pykrx import stock as _pykrx
+        import FinanceDataReader as fdr
     except ImportError as e:
-        logger.error('  pykrx 미설치 — 파킹 ETF 탐색 스킵', exc_info=True)
+        logger.error('  FinanceDataReader 미설치 — 파킹 ETF 탐색 스킵', exc_info=True)
         return _load_last_known_good()
+    
     biz_day = _last_business_day()
-    logger.info(f'  🔍 파킹 ETF 동적 탐색 시작 (기준일={biz_day}, keywords={keywords})')
+    logger.info(f'  🔍 파킹 ETF 동적 탐색 시작 (기준일={biz_day}, keywords={keywords}, source=FinanceDataReader)')
+    
     try:
-        all_etf_tickers = _pykrx_get_etf_list_with_retry(_pykrx, biz_day)
+        df_etf = fdr.StockListing('ETF/KR')
     except Exception as e:
-        logger.error(f'  ETF 전체 목록 조회 최종 실패: {e}', exc_info=False)
+        logger.error(f'  ETF 전체 목록 조회 최종 실패 (FDR): {e}', exc_info=False)
         return _load_last_known_good()
-    if not all_etf_tickers:
+        
+    if df_etf is None or df_etf.empty:
         logger.warning('  ETF 목록 비어 있음 — 폴백 사용')
         return _load_last_known_good()
+        
     candidates = []
-    for tk in all_etf_tickers:
-        try:
-            time.sleep(0.05)
-            name = _pykrx.get_etf_ticker_name(tk)
-            if name and any((kw in name for kw in keywords)):
-                candidates.append({'ticker': tk, 'name': name})
-        except Exception as _name_e:
-            logger.error(f'  ETF 이름 조회 실패 {tk}: {_name_e}', exc_info=True)
+    for _, row in df_etf.iterrows():
+        name = str(row.get('Name', ''))
+        tk = str(row.get('Symbol', ''))
+        amount = int(row.get('Amount', 0)) if pd.notna(row.get('Amount')) else 0
+        if name and any((kw in name for kw in keywords)):
+            candidates.append({
+                'ticker': tk,
+                'name': name,
+                'volume': amount
+            })
+            
     if not candidates:
         logger.warning(f'  키워드 매칭 ETF 없음 — 폴백 사용 (keywords={keywords})')
         return _load_last_known_good()
+        
     logger.info(f'  ✅ 키워드 필터: {len(candidates)}종목 발견 → 거래대금 정렬')
-    scored = []
-    for cand in candidates:
-        try:
-            time.sleep(_PYKRX_DELAY)
-            df = _pykrx.get_market_ohlcv_by_date(biz_day, biz_day, cand['ticker'])
-            vol = 0
-            if df is not None and (not df.empty) and ('거래대금' in df.columns):
-                vol = int(df['거래대금'].iloc[0])
-            cand['volume'] = vol
-            scored.append(cand)
-        except Exception as _ve:
-            logger.error(f'  {cand['ticker']} 거래대금 조회 실패: {_ve}', exc_info=True)
-            cand['volume'] = 0
-            scored.append(cand)
-    scored.sort(key=lambda x: x['volume'], reverse=True)
-    selected = scored[:top_n]
+    candidates.sort(key=lambda x: x['volume'], reverse=True)
+    selected = candidates[:top_n]
     if not selected:
         logger.warning('  선정 결과 없음 — 폴백 사용')
         return _load_last_known_good()
     _save_parking_etfs(selected)
     return selected
 
-def _save_parking_etfs(etfs_list: List[Dict]):
+def _save_parking_etfs(etfs_list: List[Dict]) -> None:
     """파킹 ETF 목록을 JSON 캐시에 저장합니다."""
     out_path = _PROJECT_ROOT / 'results' / 'dynamic_parking_etfs.json'
     try:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         import json
-        out_path.write_text(json.dumps(etfs_list, indent=2, ensure_ascii=False))
-        _names_str = ', '.join((f'{s['name']}({s['ticker']})' for s in etfs_list))
+        atomic_write_json(out_path, etfs_list, indent=2, ensure_ascii=False)
+        _names_str = ', '.join((f"{s['name']}({s['ticker']})" for s in etfs_list))
         logger.info(f'  ✅ 동적 파킹 ETF 저장: [{_names_str}] → {out_path.name}')
     except Exception as _se:
         logger.error(f'  dynamic_parking_etfs.json 저장 실패: {_se}', exc_info=True)
@@ -565,7 +688,7 @@ def update_ticker_names() -> Dict[str, str]:
     if names:
         out = _PROJECT_ROOT / 'results' / 'ticker_names.json'
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(names, indent=2, ensure_ascii=False))
+        atomic_write_json(out, names, indent=2, ensure_ascii=False)
         logger.info(f'  ✅ 종목명 갱신 완료: {len(names)}/{len(tickers)}종목 → ticker_names.json')
     return names
 
@@ -695,7 +818,7 @@ def _run_freshness_gate() -> Dict:
     total_stale = _count_stale_files(threshold_h=stale_h)
     gate_results['remaining_stale'] = total_stale
     gate_results['threshold_h'] = stale_h
-    logger.info(f'  📊 Freshness Gate 결과: {gate_results['status']}, 잔여 stale={total_stale}')
+    logger.info(f"  📊 Freshness Gate 결과: {gate_results['status']}, 잔여 stale={total_stale}")
     return gate_results
 
 def run_daily(mode: str='full', **kwargs):
@@ -965,7 +1088,7 @@ def _collect_evening_signals():
                 df.columns = [c.lower() if isinstance(c, str) else c for c in df.columns]
                 if hasattr(df.columns, 'levels'):
                     df.columns = ['_'.join(c).strip('_') if isinstance(c, tuple) else c for c in df.columns]
-                df.to_parquet(out_file, index=False)
+                safe_parquet_write(df, out_file)
                 logger.info(f'  ✅ {name}: {len(df)}행')
                 continue
             except Exception as _save_e:
@@ -980,7 +1103,7 @@ def _collect_evening_signals():
                     if 'date' in last_row.columns:
                         last_row['date'] = pd.Timestamp(date.today())
                     old_df = pd.concat([old_df, last_row], ignore_index=True)
-                    old_df.to_parquet(out_file, index=False)
+                    safe_parquet_write(old_df, out_file)
                     ffill_tickers.append(name)
                     logger.warning(f'  📋 {name}({yf_ticker}): 실시간 실패 → parquet ffill 적용 ({len(old_df)}행, 무결성 유지)')
                     continue
@@ -1011,8 +1134,13 @@ def collect_us_macro() -> Dict:
                 if val is not None:
                     try:
                         if hasattr(val, 'iloc') and len(val) > 0:
-                            cache_updates[dst_key] = float(val.iloc[-1].item() if hasattr(val.iloc[-1], 'item') else val.iloc[-1])
-                        elif isinstance(val, (int, float)):
+                            _v = val.iloc[-1]
+                            _v_val = float(_v.item() if hasattr(_v, 'item') else _v)
+                            if pd.isna(_v_val) or _v_val == float('inf') or _v_val == float('-inf'):
+                                logger.warning(f'  [Data Validation] {dst_key} contains poisoned data: {_v_val}')
+                            else:
+                                cache_updates[dst_key] = _v_val
+                        elif isinstance(val, (int, float)) and not pd.isna(val):
                             cache_updates[dst_key] = float(val)
                     except Exception as _e1379:
                         logger.error(f'  [collect_us_macro] US 매크로 캐시 로드 실패: {_e1379}', exc_info=True)
@@ -1020,7 +1148,10 @@ def collect_us_macro() -> Dict:
             def _extract_last(series):
                 if series is not None and hasattr(series, 'iloc') and (len(series) > 0):
                     v = series.iloc[-1]
-                    return float(v.item() if hasattr(v, 'item') else v)
+                    val = float(v.item() if hasattr(v, 'item') else v)
+                    if pd.isna(val) or val == float('inf') or val == float('-inf'):
+                        return None
+                    return val
                 return None
             gdp_growth_series = economic.get('GDP_Growth')
             gdp_g = _extract_last(gdp_growth_series)
@@ -1064,15 +1195,19 @@ def collect_cross_market() -> Dict:
         if 'us_jp_spread' in result and result['us_jp_spread'] is not None:
             try:
                 spread = result['us_jp_spread']
-                if hasattr(spread, 'iloc'):
-                    cache_updates['us_jp_spread'] = float(spread.iloc[-1, -1])
+                if hasattr(spread, 'iloc') and len(spread) > 0:
+                    _val = float(spread.iloc[-1, -1])
+                    if not pd.isna(_val):
+                        cache_updates['us_jp_spread'] = _val
             except Exception as _e1443:
                 logger.error(f'  [collect_market_breadth] 시장 폭 데이터 1 실패: {_e1443}', exc_info=True)
         if 'yield_curve' in result and result['yield_curve'] is not None:
             try:
                 yc = result['yield_curve']
-                if hasattr(yc, 'iloc'):
-                    cache_updates['us_2y10y_spread'] = float(yc.iloc[-1, -1])
+                if hasattr(yc, 'iloc') and len(yc) > 0:
+                    _val = float(yc.iloc[-1, -1])
+                    if not pd.isna(_val):
+                        cache_updates['us_2y10y_spread'] = _val
             except Exception as _e1450:
                 logger.error(f'  [collect_market_breadth] 시장 폭 데이터 2 실패: {_e1450}', exc_info=True)
         if cache_updates:
@@ -1144,7 +1279,7 @@ def collect_sentiment() -> Dict:
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
                 tickers = json.loads(uni_file.read_text())[:20]
-                nns.collect_all(tickers=tickers, max_pages=2)
+                nns.collect_all(tickers=tickers)
                 results['naver_tickers'] = len(tickers)
                 logger.info(f'  ✅ 네이버 뉴스: {len(tickers)}종목')
     except ImportError as e:
@@ -1267,7 +1402,7 @@ def _save_collection_log(results: Dict):
                 logger.error(f'  [run_initial/run_daily] 수집 진행 로그 실패: {_e1706}', exc_info=True)
         existing.append(results)
         existing = existing[-30:]
-        log_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(log_file, existing, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
         logger.error(f'  수집 로그 저장 실패: {e}', exc_info=True)
 
@@ -1323,7 +1458,7 @@ if __name__ == '__main__':
             if df is not None:
                 out = _DATA_DIR / f'kr_{etf.ticker}.parquet'
                 out.parent.mkdir(parents=True, exist_ok=True)
-                df.to_parquet(out, index=False)
+                safe_parquet_write(df, out)
                 logger.info(f'  ✅ {etf.name} ({etf.ticker}): {len(df)}행')
             else:
                 logger.error(f'  ❌ {etf.name} ({etf.ticker})')

@@ -168,8 +168,9 @@ class OvernightIntelligenceScore:
         suffix = 'full' if include_premarket else 'closing'
         ois_file = ois_dir / f'{datetime.now().strftime('%Y-%m-%d_%H%M')}_{suffix}.json'
         try:
-            with open(ois_file, 'w') as f:
-                json.dump(result, f, indent=2, default=str)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(ois_file, result, indent=2, default=str)
         except Exception as _e:
             logger.warning('skip: %s', _e, exc_info=True)
         logger.info(f'  🌙 OIS: {ois:.1f}/100 → {sentiment} (threshold {threshold_adj:+d})')
@@ -259,7 +260,9 @@ class OvernightIntelligenceScore:
             cutoff = datetime.now() - timedelta(hours=max_age_hours)
             for nf in nxt_files[:10]:
                 try:
-                    with open(nf) as _f:
+                    from src.utils.file_ops import atomic_write_json
+
+                    with open(nf, 'r', encoding='utf-8') as _f:
                         data = json.load(_f)
                     ts = datetime.fromisoformat(data.get('timestamp', '2000-01-01'))
                     if ts < cutoff:
@@ -384,8 +387,7 @@ class OvernightIntelligenceScore:
                 if token:
                     from datetime import timedelta as td
                     token_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(token_file, 'w') as f:
-                        json.dump({'token': token, 'expires': (datetime.now() + td(hours=23)).isoformat()}, f)
+                    atomic_write_json(token_file, {'token': token, 'expires': (datetime.now() + td(hours=23)).isoformat()})
             if not token:
                 return None
             headers = {'Content-Type': 'application/json; charset=utf-8', 'authorization': f'Bearer {token}', 'appkey': app_key, 'appsecret': app_secret, 'tr_id': 'HHDFS00000300'}
@@ -400,8 +402,9 @@ class OvernightIntelligenceScore:
                     cache = {'timestamp': datetime.now().isoformat(), 'ewy_price': last_price, 'rate': rate, 'diff': diff, 'source': 'KIS_API_live'}
                     cache_file = self.sent_dir / 'ewy_overnight.json'
                     cache_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(cache_file, 'w') as f:
-                        json.dump(cache, f, indent=2)
+                    from src.utils.file_ops import atomic_write_json
+
+                    atomic_write_json(cache_file, cache, indent=2)
                     return cache
         except Exception as e:
             logger.error(f'EWY KIS 조회 실패: {e}', exc_info=True)

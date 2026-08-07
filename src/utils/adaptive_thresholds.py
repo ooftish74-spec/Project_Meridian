@@ -201,7 +201,8 @@ def _load_vix_history(window: int=252) -> List[float]:
                 logger.debug(f'  VIX pre-fetch 케시 사용: {len(values)}일')
                 return [float(v) for v in values[-window:] if v and float(v) > 0]
         except (OSError, json.JSONDecodeError, TypeError):
-            pass
+            from src.utils.error_logger import log_error_rate_limited
+            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
     hist_file = results / 'overnight_intelligence_history.json'
     if not hist_file.exists():
         return []
@@ -227,6 +228,8 @@ def _load_vix_history(window: int=252) -> List[float]:
             if vix_val and float(vix_val) > 0:
                 vix_list.append(float(vix_val))
         except (TypeError, ValueError):
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
             continue
     return vix_list
 

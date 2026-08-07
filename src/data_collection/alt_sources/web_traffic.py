@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 src/data_collection/alt_sources/web_traffic.py
 ===============================================
@@ -26,8 +27,9 @@ pytrends (Google Trends 비공식 API)를 활용하여 기업/경제 키워드�
     - 중복 요청 억제: 로컬 캐시 (1시간 TTL)
     - logger 전용, print() 금지, except pass 금지
 """
-from __future__ import annotations
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 import random
 import time
@@ -62,7 +64,7 @@ def _save_cache(features: Dict, target_date: Optional[date]=None) -> None:
     """[Phase 46] 날짜별 캐시 저장."""
     _cf = _CACHE_FILE.parent / (f'web_traffic_{target_date}.json' if target_date else _CACHE_FILE.name)
     try:
-        _cf.write_text(json.dumps({'timestamp': datetime.now().isoformat(), 'features': features}, ensure_ascii=False, indent=2), encoding='utf-8')
+        atomic_write_json(_cf, {'timestamp': datetime.now().isoformat(), 'features': features}, ensure_ascii=False, indent=2)
     except Exception as e:
         logger.error(f'  [WebTraffic] 캐시 저장 실패: {e}', exc_info=True)
 

@@ -18,6 +18,8 @@ Usage:
     stats = fs.get_stats()
 """
 
+from src.utils.file_ops import atomic_write_parquet
+
 import json
 import logging
 import os
@@ -490,7 +492,7 @@ class FeatureStore:
         date_dir.mkdir(parents=True, exist_ok=True)
         
         output_path = date_dir / f'{ticker}_features.parquet'
-        df.to_parquet(str(output_path))
+        atomic_write_parquet(df, str(output_path))
         
         # latest 심볼릭 링크 업데이트 (ml_stream.py 호환용)
         latest_dir = base_dir / 'latest'

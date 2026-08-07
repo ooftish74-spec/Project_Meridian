@@ -26,6 +26,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -56,6 +58,7 @@ class KellyCriterion:
         self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
         self._measurement_data = None
         self._stream_metrics = None
+        self._signal_cache = None
 
     @staticmethod
     def kelly_fraction(win_rate: float, profit_loss_ratio: float) -> float:
@@ -116,10 +119,27 @@ class KellyCriterion:
         full_kelly = self.kelly_fraction(win_rate, pl_ratio)
         fraction = _get('risk.kelly_fraction', 0.5)
         fractional_kelly = full_kelly * fraction
+        
+        # Bayesian Uncertainty Penalty (VIX 기반)
+        bayesian_penalty = 1.0
+        if self._signal_cache is None:
+            self._load_data()
+        if self._signal_cache:
+            vix_data = self._signal_cache.get('VIX', {})
+            current_vix = float(vix_data.get('close', 0.0)) if isinstance(vix_data, dict) else float(vix_data or 0.0)
+            if current_vix > 0:
+                # VIX가 높을수록 페널티를 강하게 주어 비중을 축소
+                # max(0.1, 1.0 - (current_vix / 50.0)): VIX 50이면 0%에 수렴, 20이면 0.6배
+                bayesian_penalty = max(0.1, 1.0 - (current_vix / 50.0))
+                logger.debug(f"    - [Bayesian Kelly] VIX={current_vix:.2f} -> Penalty Factor: {bayesian_penalty:.2f}")
+
         _regime_defaults = {'bull': 1.0, 'caution': 0.8, 'bear': 0.5, 'crash': 0.3}
         _regime_safe = regime if regime in _regime_defaults else 'caution'
         regime_adj = _get(f'risk.kelly_regime_adj.{_regime_safe}', _regime_defaults[_regime_safe])
-        adjusted_kelly = fractional_kelly * regime_adj
+        
+        # 최종 조정된 켈리 = fractional_kelly * regime_adj * bayesian_penalty
+        adjusted_kelly = fractional_kelly * regime_adj * bayesian_penalty
+        
         if full_kelly <= 0:
             return 0.0
         max_pos = _get('risk.kelly_max_position_pct', 0.15)
@@ -184,6 +204,12 @@ class KellyCriterion:
                 self._stream_metrics = json.loads(sm_path.read_text())
         except Exception as e:
             logger.critical(f'stream_metrics 로드 실패: {e}', exc_info=True)
+        try:
+            sc_path = _RESULTS / 'signal_cache.json'
+            if sc_path.exists():
+                self._signal_cache = json.loads(sc_path.read_text())
+        except Exception as e:
+            logger.warning(f'signal_cache 로드 실패 (Bayesian Penalty 스킵): {e}')
 
     def _get_stream_stats(self, stream_id: str) -> Dict:
         """스트림 통계 추출."""
@@ -221,7 +247,7 @@ class KellyCriterion:
         try:
             path = _RESULTS / 'kelly_criterion.json'
             _RESULTS.mkdir(exist_ok=True)
-            path.write_text(json.dumps(output, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(path, output, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  📊 Kelly Criterion 저장: portfolio={output['portfolio_kelly'] * 100:.1f}%')
         except Exception as e:
             logger.critical(f'Kelly 결과 저장 실패: {e}', exc_info=True)

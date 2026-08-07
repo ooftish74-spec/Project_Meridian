@@ -1,3 +1,5 @@
+from __future__ import annotations
+from src.infra.safe_io import atomic_write_dataframe
 """
 pykrx_fetcher.py — 한국 시장 데이터 공식 수집 유틸리티
 =========================================================
@@ -19,7 +21,6 @@ yfinance를 보조 fallback으로만 활용.
         get_5min_bars, get_vkospi
     )
 """
-from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, date
 from typing import Optional, Dict, Any
@@ -322,7 +323,7 @@ def collect_theme_etfs_pykrx(output_dir: str | None=None, period_days: int=30) -
             df = get_ohlcv(ticker, start=start, end=end)
             if not df.empty:
                 csv_path = out / f'{name}.csv'
-                df.to_csv(csv_path)
+                atomic_write_dataframe(df, csv_path, file_format='csv')
                 logger.info('✅ pykrx ETF: %s (%d rows) → %s', name, len(df), csv_path.name)
                 results[name] = True
             else:

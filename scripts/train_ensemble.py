@@ -130,7 +130,7 @@ except ImportError as e:
 
 from src.utils.time_utils import now_kst
 
-DATA_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 MODEL_DIR = _PROJECT_ROOT / 'results' / 'models'
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -559,7 +559,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
 
     try:
         import xgboost as xgb
-        has_xgb = True
+        has_xgb = False # Force disabled due to missing libomp
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
         logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
@@ -567,7 +567,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
 
     try:
         from lightgbm import LGBMClassifier
-        has_lgbm = True
+        has_lgbm = False # Force disabled due to missing libomp
     except (ImportError, OSError):
         has_lgbm = False
 

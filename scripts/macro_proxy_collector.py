@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-매크로 선행 지표 수집 데몬 — yfinance 기반 무료 API
+매크로 선행 지표 수집 데몬 — fdr 기반 무료 API
 ================================================================
 [Phase 10: Alpha Breakthrough] Phase 10-C: 지능의 확장
 
@@ -83,7 +83,7 @@ _CACHE_TTL_SEC = 30 * 60  # 30분
 
 
 class MacroProxyCollector:
-    """yfinance 기반 매크로 선행 지표 수집기.
+    """fdr 기반 매크로 선행 지표 수집기.
 
     [Phase 10: Alpha Breakthrough]
     구리/달러/BDI/NQ 선물을 수집하여 S3 섹터 로테이션 스코어에
@@ -123,24 +123,29 @@ class MacroProxyCollector:
         return None
 
     def _fetch_symbol(self, key: str, config: Dict) -> Optional[Dict]:
-        """yfinance로 단일 심볼 수집.
+        """fdr로 단일 심볼 수집.
 
         [Phase 10: Alpha Breakthrough]
         1일~5일치 데이터를 받아 당일 종가와 5일 모멘텀 산출.
         """
         symbol = config['symbol']
         try:
-            import yfinance as yf  # [Phase 10: Alpha Breakthrough]
-            # [Phase 10: Alpha Breakthrough] Rate Limit 방어: Timeout 10초
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period='10d', timeout=10)
+            import FinanceDataReader as fdr
+            fdr_map = {'HG=F': 'HG', 'DX-Y.NYB': 'DX', 'NQ=F': 'US100', 'CL=F': 'CL', 'BDRY': 'BDRY'}
+            fdr_symbol = fdr_map.get(symbol, symbol)
+            
+            start_dt = (datetime.now() - timedelta(days=20)).strftime('%Y-%m-%d')
+            hist = fdr.DataReader(fdr_symbol, start=start_dt)
 
             if hist is None or hist.empty:
                 logger.debug(f'  [MacroProxy] {symbol}: 빈 데이터')
                 return None
 
             # 최신 2일치 → 당일 등락률 계산
-            closes = hist['Close'].dropna()
+            if 'Close' in hist.columns:
+                closes = hist['Close'].dropna()
+            else:
+                closes = hist.iloc[:, 0].dropna()
             if len(closes) < 2:
                 return None
 
@@ -236,7 +241,7 @@ class MacroProxyCollector:
         logger.info('  🌐 [Phase 10: Alpha Breakthrough] 매크로 선행 지표 수집 시작...')
         result: Dict = {
             'cached_at': datetime.now().isoformat(),
-            'source': 'yfinance',
+            'source': 'fdr',
         }
 
         for key, config in MACRO_SYMBOLS.items():

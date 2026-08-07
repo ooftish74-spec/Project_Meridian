@@ -32,7 +32,8 @@ def generate_report():
         logger.error(f"Failed to read signal_cache.json: {e}")
         return
 
-    vix = float(cache.get('vix', 20.0))
+    from src.utils.metric_parser import parse_vix
+    vix = parse_vix(cache, 20.0)
     vix_ma = float(cache.get('vix_ma_20', vix))
     vix_std = float(cache.get('vix_std_20', 2.0))
     

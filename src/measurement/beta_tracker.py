@@ -19,6 +19,8 @@ measurement_engine.run() 내부에서 자동 호출됨.
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 import numpy as np
@@ -69,7 +71,7 @@ class BetaTracker:
             max_days = int(_dc('beta_tracker.max_history_days', 756))
             if len(self._history) > max_days:
                 self._history = self._history[-max_days:]
-            _BETA_HISTORY_FILE.write_text(json.dumps(self._history, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(_BETA_HISTORY_FILE, self._history, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  BetaTracker 저장 실패: {e}')
 

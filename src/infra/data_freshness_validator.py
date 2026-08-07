@@ -41,6 +41,8 @@ class DataFreshnessValidator:
                         self._report_stale(f'FRED 거시 데이터 갱신 지연 (14일 초과). Cache: {_fred_ts}, Target: {target_ts}')
                         return False
                 except Exception as _fred_e:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_fred_e}", exc_info=True)
                     logger.debug(f'[Phase 54] FRED timestamp 파싱 실패: {_fred_e}')
             if days_delayed > 1:
                 self._report_stale(f'데이터 갱신 지연 (허용치 1일 초과). Cache: {cache_ts}, Target: {target_ts}')

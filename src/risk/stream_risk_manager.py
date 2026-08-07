@@ -38,7 +38,13 @@ class StreamRiskManager:
         """SSOT: system.active_streams 에서 지연 로드 (Red Team: Circular Import 방어)."""
         from config.dynamic_config import DynamicConfig as _DC
         return list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
-    DEFAULT_LIMITS = {'S1': {'max_exposure_pct': 0.3, 'max_single_position': 0.1, 'max_dd_pct': -10.0, 'max_daily_loss_pct': -3.0}, 'S2': {'max_exposure_pct': 0.4, 'max_single_position': 0.08, 'max_dd_pct': -8.0, 'max_daily_loss_pct': -2.5}, 'S3': {'max_exposure_pct': 0.25, 'max_single_position': 0.15, 'max_dd_pct': -12.0, 'max_daily_loss_pct': -3.0}, 'S4': {'max_exposure_pct': 0.3, 'max_single_position': 0.15, 'max_dd_pct': -15.0, 'max_daily_loss_pct': -5.0}}
+    # [Red Team V5] max_exposure_pct (매직 넘버 하드코딩) 완벽 제거. 수학적 통제로 전환.
+    DEFAULT_LIMITS = {
+        'S1': {'max_single_position': 0.1, 'max_dd_pct': -10.0, 'max_daily_loss_pct': -3.0}, 
+        'S2': {'max_single_position': 0.08, 'max_dd_pct': -8.0, 'max_daily_loss_pct': -2.5}, 
+        'S3': {'max_single_position': 0.15, 'max_dd_pct': -12.0, 'max_daily_loss_pct': -3.0}, 
+        'S4': {'max_single_position': 0.15, 'max_dd_pct': -15.0, 'max_daily_loss_pct': -5.0}
+    }
 
     def measure(self, stream_positions: Dict[str, List[Dict]], stream_metrics: Dict[str, Dict]) -> Dict:
         """스트림별 리스크 지표 측정.
@@ -99,9 +105,7 @@ class StreamRiskManager:
             m = streams_data.get(sid, {})
             limits = self.DEFAULT_LIMITS.get(sid, {})
             violations = []
-            max_exp = limits.get('max_exposure_pct', 0.3) * 100
-            if m.get('current_exposure_pct', 0) > max_exp:
-                violations.append({'type': 'exposure_limit', 'current': m['current_exposure_pct'], 'limit': max_exp})
+            # [Red Team V5] max_exposure_pct 하드코딩 검증 삭제 (오케스트레이터의 수학적 캡이 대체함)
             max_single = limits.get('max_single_position', 0.1) * 100
             if m.get('max_single_position_pct', 0) > max_single:
                 violations.append({'type': 'concentration_limit', 'current': m['max_single_position_pct'], 'limit': max_single})

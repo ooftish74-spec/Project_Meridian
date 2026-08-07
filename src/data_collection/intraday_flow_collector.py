@@ -5,6 +5,8 @@ import json
 import logging
 import time
 from datetime import datetime, date
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -128,7 +130,7 @@ class IntradayFlowCollector:
         """원자적 JSON 캐시 저장."""
         tmp = self.cache_file.with_suffix('.tmp')
         try:
-            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+            atomic_write_json(tmp, data, ensure_ascii=False, indent=2)
             tmp.replace(self.cache_file)
             logger.debug('[Flow] 캐시 저장: %s', self.cache_file.name)
         except Exception as e:
@@ -171,7 +173,7 @@ if __name__ == '__main__':
         mock = {'timestamp': datetime.now().isoformat(), 'market_date': date.today().strftime('%Y%m%d'), 'flow_unit_krw': int(_unit), 'tickers': {t: {'institution_net_qty': 50000, 'foreign_net_qty': 30000, 'institution_net_krw': round(_combined_m * 0.625, 1), 'foreign_net_krw': round(_combined_m * 0.375, 1), 'combined_net_krw': _combined_m, 'today_volume': 8000000, 'prev_volume': 10000000, 'volume_ratio': 0.8, 'current_price': 75000, 'flow_unit_krw': int(_unit)} for t in _tickers}}
         _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         _p = _RESULTS_DIR / 'intraday_flow_cache.json'
-        _p.write_text(json.dumps(mock, ensure_ascii=False, indent=2), encoding='utf-8')
+        atomic_write_json(_p, mock, ensure_ascii=False, indent=2)
         logger.info(f'[DryRun] 저장 완료: {_p}')
         logger.debug(json.dumps(mock, ensure_ascii=False, indent=2))
     else:

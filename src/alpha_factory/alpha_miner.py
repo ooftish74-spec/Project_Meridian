@@ -34,6 +34,8 @@ Usage:
 """
 from __future__ import annotations
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 import re
 import warnings
@@ -292,6 +294,8 @@ class ICEvaluator:
             self.ic_threshold = dynamic_thr
             logger.info(f'  ICEvaluator: 동적 IC 임계치 업데이트 {old} → {dynamic_thr:.4f} (P{pct:.0f}, N양수IC={len(pos_ic)}, 윈도={window_days}d)')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  ICEvaluator._update_dynamic_threshold 실패 (비치명적): {e}')
 
     def compute_dynamic_threshold(self, regime: str='neutral') -> float:
@@ -437,6 +441,8 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
         rsi_sig = np.where(rsi < oversold, (oversold - rsi) / max(oversold, 1e-06), np.where(rsi > overbought, (overbought - rsi) / max(100 - overbought, 1e-06), 0.0))
         feats['rsi_signal'] = pd.Series(rsi_sig, index=close.index).fillna(0.0)
     except Exception as _rsi_e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_rsi_e}", exc_info=True)
         logger.debug(f'  contrarian rsi_signal 생성 실패: {_rsi_e}')
     try:
         z_thresh = float(_dc('alpha_factory.contrarian_z_threshold', 2.0))
@@ -445,11 +451,15 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
         z_score = (close - roll_mean) / roll_std
         feats['z_reversion'] = (-z_score.clip(upper=0) * (z_score < -z_thresh)).fillna(0.0)
     except Exception as _z_e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_z_e}", exc_info=True)
         logger.debug(f'  contrarian z_reversion 생성 실패: {_z_e}')
     try:
         vol_20 = close.pct_change().rolling(20).std().replace(0, np.nan)
         feats['vol_adj_reversion'] = (feats.get('reversion_5d', pd.Series(0.0, index=close.index)) / vol_20).fillna(0.0)
     except Exception as _v_e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_v_e}", exc_info=True)
         logger.debug(f'  contrarian vol_adj_reversion 생성 실패: {_v_e}')
     logger.debug(f'  [Contrarian] 피처 생성 완료: {list(feats.keys())}')
     return feats
@@ -533,6 +543,8 @@ def _safe_get_programs(est_gp) -> list:
             logger.debug(f'  [_safe_get_programs] list(est_gp) 성공: {len(programs)}개')
             return programs
     except (TypeError, StopIteration, Exception) as e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
         logger.debug(f'  [_safe_get_programs] list() 실패: {e}')
     try:
         programs = getattr(est_gp, '_best_programs', None)
@@ -540,6 +552,8 @@ def _safe_get_programs(est_gp) -> list:
             logger.debug(f'  [_safe_get_programs] _best_programs 성공: {len(programs)}개')
             return list(programs)
     except Exception as e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
         logger.debug(f'  [_safe_get_programs] _best_programs 실패: {e}')
     try:
         programs = getattr(est_gp, 'best_programs_', None)
@@ -547,6 +561,8 @@ def _safe_get_programs(est_gp) -> list:
             logger.debug(f'  [_safe_get_programs] best_programs_ 성공: {len(programs)}개')
             return list(programs)
     except Exception as e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
         logger.debug(f'  [_safe_get_programs] best_programs_ 실패: {e}')
     try:
         all_programs = getattr(est_gp, '_programs', None)
@@ -559,6 +575,8 @@ def _safe_get_programs(est_gp) -> list:
                 logger.debug(f'  [_safe_get_programs] _programs[-1] 폴백: {len(programs)}개')
                 return programs
     except Exception as e:
+        from src.utils.error_logger import log_error_rate_limited
+        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
         logger.debug(f'  [_safe_get_programs] _programs 폴백 실패: {e}')
     logger.warning('  [_safe_get_programs] 모든 추출 시도 실패 → 빈 목록 반환')
     return []
@@ -612,6 +630,8 @@ class AlphaMiner:
                             df_list.append(df)
                             break
                     except Exception as e:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                         logger.debug(f'  {pattern.name} 로드 실패: {e}')
         if not df_list:
             logger.warning('  AlphaMiner: 학습 데이터 없음')
@@ -793,7 +813,7 @@ class AlphaMiner:
             new_ids = {a['id'] for a in self.discovered_alphas}
             existing = [a for a in existing if a['id'] not in new_ids]
             all_alphas = existing + self.discovered_alphas
-            self.output_file.write_text(json.dumps(all_alphas, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(self.output_file, all_alphas, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  💾 discovered_alphas.json 저장: {len(all_alphas)}개')
         except Exception as e:
             logger.error(f'  알파 저장 실패: {e}')
@@ -840,7 +860,7 @@ class AlphaMemoryStore:
             _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
             if len(self._memory) > self._MAX_MEMORY:
                 self._memory = self._memory[-self._MAX_MEMORY:]
-            self._MEMORY_FILE.write_text(json.dumps(self._memory, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(self._MEMORY_FILE, self._memory, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  AlphaMemoryStore 저장 실패: {e}')
 
@@ -992,11 +1012,13 @@ class FactorPruner:
                     current_regime = _dc('alpha_factory.current_regime', 'unknown')
                     self.memory_store.record_failure(alpha, retire_regime=current_regime)
                 except Exception as _mem_e:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_mem_e}", exc_info=True)
                     logger.debug(f'  AlphaMemoryStore 기록 실패 (비치명적): {_mem_e}')
             else:
                 active.append(alpha['id'])
         try:
-            _DISCOVERED_ALPHAS_FILE.write_text(json.dumps(alphas, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(_DISCOVERED_ALPHAS_FILE, alphas, indent=2, ensure_ascii=False, default=str)
             logger.info(f'  GC 완료: 퇴출={len(retired)}개, 유지={len(active)}개')
         except Exception as e:
             logger.error(f'  GC 저장 실패: {e}')

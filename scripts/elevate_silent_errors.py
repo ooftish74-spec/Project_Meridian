@@ -183,18 +183,13 @@ def _inject_log_line(body_first_line: str, case: str, as_var: Optional[str]) -> 
 
     if case == 'A':
         return (
-            f'{leading}import logging\n'
-            f'{leading}logging.getLogger(__name__).warning(\n'
-            f'{leading}    f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: {var_ref}"\n'
-            f'{leading})\n'
+            f'{leading}from src.utils.error_logger import log_warning_rate_limited\n'
+            f'{leading}log_warning_rate_limited(__name__, f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: {var_ref}")\n'
         )
     else:
         return (
-            f'{leading}import logging\n'
-            f'{leading}logging.getLogger(__name__).error(\n'
-            f'{leading}    f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {var_ref}",\n'
-            f'{leading}    exc_info=True,\n'
-            f'{leading})\n'
+            f'{leading}from src.utils.error_logger import log_error_rate_limited\n'
+            f'{leading}log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {var_ref}", exc_info=True)\n'
         )
 
 

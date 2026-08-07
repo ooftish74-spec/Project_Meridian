@@ -77,13 +77,15 @@ class PolarsAnalyzer:
                 try:
                     slippage_list.append(float(slip))
                 except (ValueError, TypeError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
             pnl = payload.get('pnl', payload.get('realized_pnl', None))
             if pnl is not None:
                 try:
                     pnl_list.append(float(pnl))
                 except (ValueError, TypeError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         stats['buy_count'] = buy_count
         stats['sell_count'] = sell_count
         stats['buy_ratio'] = round(buy_count / max(len(trades), 1), 4)
@@ -118,7 +120,8 @@ class PolarsAnalyzer:
                 payload = json.loads(row.get('payload', '{}'))
                 navs.append(float(payload.get('nav', payload.get('value', 0))))
             except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+                from src.utils.error_logger import log_error_rate_limited
+                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         if len(navs) < 2:
             return {}
         n = len(navs)

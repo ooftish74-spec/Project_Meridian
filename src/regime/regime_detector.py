@@ -18,6 +18,8 @@ import json
 import logging
 import numpy as np
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -65,6 +67,8 @@ class RegimeDetector:
                 logger.debug(f'  [CrashRadar] 상태 복원: active={state.get('is_active')}, 경과={state.get('hold_days_elapsed')}일')
                 return state
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [CrashRadar] 상태 로드 실패 (초기화): {e}')
         return default
 
@@ -72,8 +76,10 @@ class RegimeDetector:
         """CrashRadar Hysteresis 상태 파일에 저장."""
         try:
             self._crash_radar_state_file.parent.mkdir(parents=True, exist_ok=True)
-            self._crash_radar_state_file.write_text(json.dumps(self._crash_radar_state, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(self._crash_radar_state_file, self._crash_radar_state, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [CrashRadar] 상태 저장 실패 (비치명적): {e}')
 
     def _apply_crash_hysteresis(self, raw_result: dict) -> dict:
@@ -147,13 +153,41 @@ class RegimeDetector:
                 logger.debug(f'  [HMM] state_map {n_states}state DynamicConfig 로드: {mapping}')
                 return mapping
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  [HMM] state_map DynamicConfig 로드 실패: {e}')
         if n_states == 4:
             return self.HMM_STATE_MAP_4
         return self.HMM_STATE_MAP_2
 
     def detect(self, market_data: Dict) -> Dict:
-        """레짐 감지.
+        """레짐 감지. (Priority 락 체크 포함)
+        try:
+            import json
+            from datetime import datetime
+            state_file = Path(__file__).resolve().parent.parent.parent / 'results' / 'regime_state.json'
+            if state_file.exists():
+                with open(state_file, 'r') as f:
+                    state_data = json.load(f)
+                
+                # Check Priority & TTL
+                if state_data.get('priority', 3) == 1 and state_data.get('ttl_until'):
+                    ttl = datetime.fromisoformat(state_data['ttl_until'])
+                    if datetime.now() < ttl:
+                        logger.warning(f"  🚨 [Priority Lock] 우선순위가 높은(1) 수동/NightWatch 레짐 상태가 발효 중입니다. 남은 시간: {ttl - datetime.now()}")
+                        logger.warning(f"  🚨 [Priority Lock] 강제로 {state_data.get('current_state')} 상태를 유지합니다. 일반 앙상블 분석은 기각(Bypass)됩니다.")
+                        return {
+                            'regime': state_data.get('current_state', 'crash'),
+                            'confidence': 1.0,
+                            'rule_regime': 'crash',
+                            'rule_score': 0.0,
+                            'hmm_regime': 'crash',
+                            'hmm_state': -1,
+                            'method': 'priority_lock_override'
+                        }
+        except Exception as e:
+            logger.error(f"  Priority Lock 검사 중 오류: {e}")
+
 
         Args:
             market_data: {
@@ -180,11 +214,10 @@ class RegimeDetector:
         import math
         k_decay = float(self._get('regime.watchdog_decay_k', 0.5))
         data_confidence_score = 100.0 * math.exp(-k_decay * missing_count)
+        watchdog_triggered = False
         if data_confidence_score < 75.0:
-            logger.error(f'  🚨 [Data Watchdog] 킬스위치 발동! 핵심 매크로 데이터 {missing_count}개 누락. (Score: {data_confidence_score:.1f}) → 강제 Caution 전환')
-            result = {'regime': 'caution', 'confidence': 0.5, 'rule_regime': 'caution', 'rule_score': 50, 'hmm_regime': None, 'hmm_state': -1, 'gi_season': 'Unknown', 'method': 'watchdog_killswitch', 'crash_type': 'data_missing', 'divergence_state': 'none'}
-            logger.info(f'  🏷️ Regime: {result['regime']} (conf={result['confidence']:.2f}, method={result['method']})')
-            return result
+            logger.error(f'  🚨 [Data Watchdog] 핵심 매크로 데이터 {missing_count}개 누락 (Score: {data_confidence_score:.1f}). Confidence 강제 삭감 대기.')
+            watchdog_triggered = True
         rule_result = self._rule_based(signal, market_data)
         crash_radar_result = self._crash_radar(market_data)
         crash_radar_result = self._apply_crash_hysteresis(crash_radar_result)
@@ -210,7 +243,15 @@ class RegimeDetector:
             logger.info('  [RegimeDetector] G/I Matrix(Goldilocks)가 HMM/Rule(Crash) 거짓 신호를 차단. Regime → caution')
             regime = 'caution'
             confidence = 0.5
-        result = {'regime': regime, 'confidence': round(confidence, 3), 'rule_regime': rule_result['regime'], 'rule_score': rule_result['score'], 'hmm_regime': hmm_result['regime'] if hmm_result else None, 'hmm_state': hmm_result['state'] if hmm_result else -1, 'gi_season': gi_result['season'], 'method': method, 'crash_type': rule_result.get('crash_type'), 'divergence_state': rule_result.get('divergence_state'), 'crash_radar': crash_radar_result}
+        if watchdog_triggered:
+            # [S1 Patch] Citadel-style Confidence Degradation
+            confidence = min(confidence, 0.3)
+            if regime == 'bull':
+                logger.info('  [RegimeDetector] 데이터 불확실성으로 인해 Bull → Caution 하향')
+                regime = 'caution'
+            result = {'regime': regime, 'confidence': round(confidence, 3), 'rule_regime': rule_result['regime'], 'rule_score': rule_result['score'], 'hmm_regime': hmm_result['regime'] if hmm_result else None, 'hmm_state': hmm_result['state'] if hmm_result else -1, 'gi_season': gi_result['season'], 'method': 'watchdog_degraded', 'crash_type': rule_result.get('crash_type'), 'divergence_state': rule_result.get('divergence_state'), 'crash_radar': crash_radar_result}
+        else:
+            result = {'regime': regime, 'confidence': round(confidence, 3), 'rule_regime': rule_result['regime'], 'rule_score': rule_result['score'], 'hmm_regime': hmm_result['regime'] if hmm_result else None, 'hmm_state': hmm_result['state'] if hmm_result else -1, 'gi_season': gi_result['season'], 'method': method, 'crash_type': rule_result.get('crash_type'), 'divergence_state': rule_result.get('divergence_state'), 'crash_radar': crash_radar_result}
         logger.info(f'  🏷️ Regime: {regime} (conf={confidence:.2f}, method={method})')
         try:
             _mri = self._compute_mri(signal, None)
@@ -223,6 +264,7 @@ class RegimeDetector:
         return result
 
     def _crash_radar(self, market_data: Dict) -> Dict:
+        from src.utils.metric_parser import parse_vix, parse_metric
         """CrashRadar — VIX 속도 + 거래량 이상 + 공포지수 복합 분석.
 
         Rule-Based와 독립적으로 실행되어 Crash 조기 경보.
@@ -245,12 +287,15 @@ class RegimeDetector:
         signal = market_data.get('signal_cache', {})
         result = {'crash_prob': 0.0, 'vix_velocity': 0.0, 'volume_zscore': 0.0, 'fear_composite': 0.0, 'is_crash_warning': False}
         try:
-            vix_now = float(signal.get('vix', 0) or 0)
+            from src.utils.metric_parser import parse_vix
+            vix_now = parse_vix(signal, 0.0)
             vix_history = market_data.get('vix_history', [])
             vix_history_clean = [v for v in vix_history if v and (not np.isnan(float(v)))]
             vix_velocity_score = 0.0
-            if vix_history_clean and len(vix_history_clean) >= 5:
-                vix_prev_5d = float(np.mean(vix_history_clean[-5:]))
+            if vix_history_clean and len(vix_history_clean) >= 6:
+                # [S1 Patch] RenTec-style Strict Out-of-Sample
+                # 당일 수집된 VIX(vix_history_clean[-1])가 기준점에 포함되어 급등이 희석되는 현상(Look-ahead bias) 제거
+                vix_prev_5d = float(np.mean(vix_history_clean[-6:-1]))
                 vix_velocity = (vix_now - vix_prev_5d) / max(vix_prev_5d, 1e-09)
                 result['vix_velocity'] = round(vix_velocity, 4)
                 vel_warn = float(self._get('regime.crash_vix_vel_warn', 0.3))
@@ -273,8 +318,8 @@ class RegimeDetector:
                     z_thresh = float(self._get('regime.crash_volume_z_threshold', 3.0))
                     vol_zscore_score = min(1.0, max(0.0, (z - z_thresh) / z_thresh))
             fear_score = 0.0
-            pcr = float(signal.get('options_pcr', 1.0) or 1.0)
-            vkospi = float(signal.get('vkospi', 15.0) or 15.0)
+            pcr = parse_metric(signal, 'options_pcr', 1.0)
+            vkospi = parse_metric(signal, 'vkospi', 15.0)
             pcr_normal = float(self._get('regime.crash_pcr_normal', 0.8))
             pcr_extreme = float(self._get('regime.crash_pcr_extreme', 1.5))
             vkospi_normal = float(self._get('regime.crash_vkospi_normal', 15.0))
@@ -289,16 +334,20 @@ class RegimeDetector:
             crash_prob = w_vix * vix_velocity_score + w_vol * vol_zscore_score + w_fear * fear_score
             result['crash_prob'] = round(min(1.0, crash_prob), 4)
             try:
-                _decay_days = int(self._get('regime.crash_decay_days', 5))
-                _decay_rate = float(self._get('regime.crash_decay_rate', 0.08))
                 _cr_state = self._crash_radar_state
                 _hold_days = int(_cr_state.get('hold_days_elapsed', 0)) if isinstance(_cr_state, dict) else 0
+                _decay_days = int(self._get('regime.crash_decay_days', 5))
+                # [S1 Patch] Bridgewater-style Macro-Conditional Hysteresis
+                # 거시 구조(VIX)가 안정화되었을 때만 기하급수적 감쇠 적용
                 if _hold_days > _decay_days:
-                    _excess = _hold_days - _decay_days
-                    _decay_amt = _decay_rate * _excess
-                    _decayed = max(0.0, result['crash_prob'] - _decay_amt)
-                    logger.info(f'  [CrashDecay] CRASH {_hold_days}일 지속 (초과={_excess}일) → crash_prob {result['crash_prob']:.3f} → {_decayed:.3f} (감쇠율={_decay_rate:.2%}×{_excess}일)')
-                    result['crash_prob'] = round(_decayed, 4)
+                    if vix_now < 25.0:
+                        _excess = _hold_days - _decay_days
+                        _decay_factor = 0.85 ** _excess  # 기하급수적 감쇠 (일당 15% 차감)
+                        _decayed = result['crash_prob'] * _decay_factor
+                        logger.info(f'  [CrashDecay] VIX 안정화(<25.0) 조건 충족. CRASH 지속 초과={_excess}일 → crash_prob {result["crash_prob"]:.3f} → {_decayed:.3f} (지수감쇠 적용)')
+                        result['crash_prob'] = round(_decayed, 4)
+                    else:
+                        logger.info(f'  [CrashDecay] VIX({vix_now:.1f}) >= 25.0 유지중. 기간 경과({_hold_days}일)에도 불구하고 감쇠 보류 (구조적 위기 지속).')
             except Exception as _decay_e:
                 logger.error(f'  [CrashDecay] 감쇠 계산 실패 (비치명적): {_decay_e}', exc_info=True)
             warn_thresh = float(self._get('regime.crash_radar_warn_threshold', 0.5))
@@ -306,15 +355,19 @@ class RegimeDetector:
             if result['is_crash_warning']:
                 logger.warning(f'  🚨 [CrashRadar] 경보! crash_prob={crash_prob:.3f} (vix_vel={vix_velocity_score:.3f}, vol_z={vol_zscore_score:.3f}, fear={fear_score:.3f})')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  CrashRadar 계산 실패 (비치명적): {e}')
         return result
 
     def _rule_based(self, signal: Dict, market_data: Dict) -> Dict:
+        from src.utils.metric_parser import parse_vix, parse_metric
         """이동평균, OIS, VIX, 환율 기반의 룰베이스 레짐 판별."""
-        vix = signal.get('vix', 20)
-        vkospi = signal.get('vkospi', 18)
-        usdkrw = signal.get('usdkrw', 1350)
-        usdkrw_prev = signal.get('usdkrw_prev', usdkrw)
+        from src.utils.metric_parser import parse_vix
+        vix = parse_vix(signal, 20.0)
+        vkospi = parse_metric(signal, 'vkospi', 18.0)
+        usdkrw = parse_metric(signal, 'usdkrw', 1350.0)
+        usdkrw_prev = parse_metric(signal, 'usdkrw_prev', usdkrw)
         score = 50.0
         vix_history = market_data.get('vix_history', [])
         if vix_history and len(vix_history) >= 20:
@@ -378,7 +431,7 @@ class RegimeDetector:
             score -= fx_risk_penalty
         elif fx_change < fx_safe_threshold:
             score += fx_safe_boost
-        ois = signal.get('ois', 50)
+        ois = parse_metric(signal, 'ois', 50.0)
         ois_bull = self._get('regime.rule_ois_bull', 70)
         ois_neutral = self._get('regime.rule_ois_neutral', 50)
         ois_bear = self._get('regime.rule_ois_bear', 30)
@@ -391,7 +444,7 @@ class RegimeDetector:
             score += ois_neutral_boost
         elif ois <= ois_bear:
             score -= ois_bear_penalty
-        pcr = signal.get('options_pcr', 1.0)
+        pcr = parse_metric(signal, 'options_pcr', 1.0)
         pcr_risk_penalty = self._get('regime.pcr_risk_penalty', 15)
         pcr_extreme_th = self._get('regime.pcr_extreme_threshold', 1.5)
         vix_assurance_th = self._get('regime.pcr_vix_assurance', 25.0)
@@ -415,23 +468,27 @@ class RegimeDetector:
                 score -= pcr_risk_penalty * 2
         elif pcr >= pcr_risk_th:
             score -= pcr_risk_penalty
-        kospi = signal.get('kospi', 2600)
-        kospi_ma20 = signal.get('kospi_ma20', 2600)
+        kospi = parse_metric(signal, 'kospi', 2600.0)
+        kospi_ma20 = parse_metric(signal, 'kospi_ma20', 2600.0)
         force_regime = None
         crash_type = None
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
-            if trend_ratio < 0.95:
-                score -= 40
-                force_regime = 'crash'
-                crash_type = 'flash_crash'
-            elif trend_ratio < 0.97:
-                score -= 30
-                force_regime = 'bear'
-            elif trend_ratio < 0.99:
-                score -= 20
-            elif trend_ratio > 1.02:
-                score += 10
+            # [S1 Patch] Sanity Check: 데이터 스케일 오염 방어막 (0.5 ~ 2.0 범위 밖이면 무시)
+            if 0.5 < trend_ratio < 2.0:
+                if trend_ratio < 0.95:
+                    score -= 40
+                    force_regime = 'crash'
+                    crash_type = 'flash_crash'
+                elif trend_ratio < 0.97:
+                    score -= 30
+                    force_regime = 'bear'
+                elif trend_ratio < 0.99:
+                    score -= 20
+                elif trend_ratio > 1.02:
+                    score += 10
+            else:
+                logger.warning(f"  ⚠️ KOSPI vs MA20 괴리율 비정상(ratio={trend_ratio:.2f}). 스케일 오염으로 간주하여 패널티 무시.")
         kospi_rets = market_data.get('kospi_returns', [])
         if len(kospi_rets) >= 10:
             recent_10 = kospi_rets[-10:]
@@ -446,9 +503,9 @@ class RegimeDetector:
                 logger.info(f'  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환')
                 score -= 30
                 force_regime = force_regime or 'bear'
-        export_yoy = signal.get('export_yoy', 0)
+        export_yoy = parse_metric(signal, 'export_yoy', 0.0)
         macro_cycle = market_data.get('alpha_macro_cycle', 'Expansion')
-        argus_scitech = signal.get('argus_scitech', 1.0)
+        argus_scitech = parse_metric(signal, 'argus_scitech', 1.0)
         if force_regime == 'crash':
             if export_yoy < -5.0 or macro_cycle in ('Recession', 'Downturn') or argus_scitech < 0.4:
                 crash_type = 'recession'
@@ -467,16 +524,16 @@ class RegimeDetector:
             regime = 'crash'
         if force_regime:
             regime = force_regime
-        argus_scitech = signal.get('argus_scitech', 1.0)
+        argus_scitech = parse_metric(signal, 'argus_scitech', 1.0)
         ois_stress = max(0.0, min(1.0, (50 - ois) / 30))
         fx_stress = max(0.0, min(1.0, fx_change / 2.0))
         vix_stress = max(0.0, min(1.0, (vix - 18) / 17))
         cross_asset_stress = ois_stress * 0.4 + fx_stress * 0.4 + vix_stress * 0.2
-        bok_rate = signal.get('argus_bok_rate', 0.5)
-        semi_cycle = signal.get('argus_semi_cycle', 0.5)
+        bok_rate = parse_metric(signal, 'argus_bok_rate', 0.5)
+        semi_cycle = parse_metric(signal, 'argus_semi_cycle', 0.5)
         leading_macro_bad = ois < 40 or bok_rate < 0.4 or semi_cycle < 0.4
-        export_yoy = signal.get('export_yoy', 0)
-        macro_inflation = signal.get('argus_inflation', 0.5)
+        export_yoy = parse_metric(signal, 'export_yoy', 0.0)
+        macro_inflation = parse_metric(signal, 'argus_inflation', 0.5)
         lagging_macro_bad = export_yoy < -2.0 or macro_inflation > 0.7 or argus_scitech < 0.5
         market_is_bad = regime in ('bear', 'crash')
         prob_flash_crash = 0.0
@@ -542,6 +599,8 @@ class RegimeDetector:
             confidence = probs[f'{best_regime}_prob']
             return {'regime': best_regime, 'state': 0, 'confidence': confidence, 'transition_probs': probs}
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'HMM 감지 오류: {e}')
             return None
 
@@ -652,20 +711,27 @@ class RegimeDetector:
         return float(max(min_df, min(1.0, val)))
 
     def _compute_gi_matrix(self, market_data: Dict) -> Dict:
+        from src.utils.metric_parser import parse_vix, parse_metric
         """
         경제 성장(Growth)과 물가(Inflation) 모멘텀을 Z-Score 기반으로 
         계산하여 4계절(4 Seasons) 매트릭스를 반환합니다.
         """
         signal = market_data.get('signal_cache', {})
         kospi_rets = market_data.get('kospi_returns', [])
-        hy_spread = signal.get('high_yield_spread', 4.0)
-        us10y = signal.get('us10y', 4.0)
-        ois = signal.get('ois', 50.0)
+        hy_spread = parse_metric(signal, 'high_yield_spread', 4.0)
+        us10y = parse_metric(signal, 'us10y', 4.0)
+        ois = parse_metric(signal, 'ois', 50.0)
         import numpy as np
-        if len(kospi_rets) >= 20:
-            z_kospi = np.mean(kospi_rets[-20:]) / (np.std(kospi_rets[-20:]) + 1e-06)
+        kospi = parse_metric(signal, 'kospi', 2600.0)
+        kospi_ma20 = parse_metric(signal, 'kospi_ma20', 2600.0)
+        # [S1 Patch] Bridgewater-style Macro Trend Oscillator
+        # 일간 수익률 노이즈 대신 KOSPI 중장기 추세 이격도를 Z-Score로 변환하여 실물 성장 모멘텀 반영
+        if kospi_ma20 > 0:
+            trend_ratio = kospi / kospi_ma20
+            # 과거 통계상 KOSPI 이격도 표준편차를 약 4~5%로 가정하여 Z-Score 산출
+            z_kospi = (trend_ratio - 1.0) / 0.045
         else:
-            kospi_1d = signal.get('kospi_change_1d', 0.0)
+            kospi_1d = parse_metric(signal, 'kospi_change_1d', 0.0)
             z_kospi = kospi_1d / 1.5
         if 'hy_spread_zscore' in signal:
             z_hy = signal['hy_spread_zscore']

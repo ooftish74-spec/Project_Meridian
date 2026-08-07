@@ -59,8 +59,8 @@ class Universe:
         'sp500_1x':   ETFInfo('360200', 'KODEX 미국S&P500', 'global', 1.0, 0.0009),
         'nasdaq_2x':  ETFInfo('453010', 'TIGER 미국나스닥100레버리지', 'global', 2.0, 0.0045),
         # 단일 종목 인버스 (S1 Tactic C용)
-        'sec_inv':    ETFInfo('470460', 'KODEX 삼성전자 인버스', 'directional', -1.0),
-        'hynix_inv':  ETFInfo('470490', 'TIGER SK하이닉스 인버스', 'directional', -1.0),
+        'sec_inv':    ETFInfo('0193L0', 'PLUS 삼성전자선물단일종목인버스2X', 'directional', -1.0),
+        'hynix_inv':  ETFInfo('0197X0', 'SOL SK하이닉스선물단일종목인버스2X', 'directional', -1.0),
     }
 
     # ═══════════════════════════════════════════════════════
@@ -146,6 +146,15 @@ class Universe:
         'EWY':     'EWY',        # ★ SGX KOSPI 프록시 (상관 0.95+)
         'FLKR':    'FLKR',       # ★ SGX 보조 프록시
         'FXI':     'FXI',        # ★ 중국 대형주 → 한국 수출 25%
+        # ── 펀더멘털 매크로 (월간/공식 지표) ──
+        'KR_BASE_RATE': 'KR_BASE_RATE', # 한국 기준금리
+        'KR_LEI':       'KR_LEI',       # 한국 경기선행지수
+        'KR_CEI':       'KR_CEI',       # 한국 경기동행지수
+        'KR_EXPORT':    'KR_EXPORT',    # 한국 수출금액지수
+        'US_LEI':       'USSLIND',      # 미국 선행지수 (FRED)
+        'UNRATE':       'UNRATE',       # 미국 실업률 (FRED)
+        'FEDFUNDS':     'FEDFUNDS',     # 미국 기준금리 (FRED)
+        
         'KOSPI':   '^KS11',      # ★ KOSPI 종합지수 — 핵심 지표 직접 수집
         'KOSDAQ':  '^KQ11',      # ★ KOSDAQ 종합지수
     }

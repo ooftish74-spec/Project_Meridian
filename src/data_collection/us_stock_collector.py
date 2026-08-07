@@ -16,6 +16,8 @@ US Stock Data Collector — yfinance 기반 미국 주식 일봉 + 재무 수집
 Author: Project-A
 Date: 2026-05-14
 """
+from src.utils.file_ops import atomic_write_json
+
 import json
 import logging
 import sys
@@ -28,7 +30,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 logger = logging.getLogger(__name__)
-US_L2_UNIVERSE = {'AAPL': {'sector': 'Technology', 'exchange': 'NASD'}, 'MSFT': {'sector': 'Technology', 'exchange': 'NASD'}, 'GOOGL': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMZN': {'sector': 'Technology', 'exchange': 'NASD'}, 'NVDA': {'sector': 'Technology', 'exchange': 'NASD'}, 'META': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSLA': {'sector': 'Consumer Cyclical', 'exchange': 'NASD'}, 'AVGO': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMD': {'sector': 'Technology', 'exchange': 'NASD'}, 'CRM': {'sector': 'Technology', 'exchange': 'NASD'}, 'ORCL': {'sector': 'Technology', 'exchange': 'NASD'}, 'ADBE': {'sector': 'Technology', 'exchange': 'NASD'}, 'NFLX': {'sector': 'Communication', 'exchange': 'NASD'}, 'INTC': {'sector': 'Technology', 'exchange': 'NASD'}, 'QCOM': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMAT': {'sector': 'Technology', 'exchange': 'NASD'}, 'MU': {'sector': 'Technology', 'exchange': 'NASD'}, 'LRCX': {'sector': 'Technology', 'exchange': 'NASD'}, 'KLAC': {'sector': 'Technology', 'exchange': 'NASD'}, 'MRVL': {'sector': 'Technology', 'exchange': 'NASD'}, 'JPM': {'sector': 'Financial', 'exchange': 'NYSE'}, 'V': {'sector': 'Financial', 'exchange': 'NYSE'}, 'MA': {'sector': 'Financial', 'exchange': 'NYSE'}, 'BAC': {'sector': 'Financial', 'exchange': 'NYSE'}, 'GS': {'sector': 'Financial', 'exchange': 'NYSE'}, 'UNH': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'JNJ': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'LLY': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'ABBV': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'MRK': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'PG': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'KO': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'COST': {'sector': 'Consumer Staples', 'exchange': 'NASD'}, 'WMT': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'HD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'MCD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'CAT': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'DE': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'BA': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'XOM': {'sector': 'Energy', 'exchange': 'NYSE'}, 'CVX': {'sector': 'Energy', 'exchange': 'NYSE'}, 'SPY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'QQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'TQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXL': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXS': {'sector': 'ETF', 'exchange': 'NASD'}, 'TLT': {'sector': 'ETF', 'exchange': 'NASD'}, 'GLD': {'sector': 'ETF', 'exchange': 'AMEX'}}
+US_L2_UNIVERSE = {'AAPL': {'sector': 'Technology', 'exchange': 'NASD'}, 'MSFT': {'sector': 'Technology', 'exchange': 'NASD'}, 'GOOGL': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMZN': {'sector': 'Technology', 'exchange': 'NASD'}, 'NVDA': {'sector': 'Technology', 'exchange': 'NASD'}, 'META': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSLA': {'sector': 'Consumer Cyclical', 'exchange': 'NASD'}, 'AVGO': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMD': {'sector': 'Technology', 'exchange': 'NASD'}, 'CRM': {'sector': 'Technology', 'exchange': 'NASD'}, 'ORCL': {'sector': 'Technology', 'exchange': 'NASD'}, 'ADBE': {'sector': 'Technology', 'exchange': 'NASD'}, 'NFLX': {'sector': 'Communication', 'exchange': 'NASD'}, 'INTC': {'sector': 'Technology', 'exchange': 'NASD'}, 'QCOM': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMAT': {'sector': 'Technology', 'exchange': 'NASD'}, 'MU': {'sector': 'Technology', 'exchange': 'NASD'}, 'LRCX': {'sector': 'Technology', 'exchange': 'NASD'}, 'KLAC': {'sector': 'Technology', 'exchange': 'NASD'}, 'MRVL': {'sector': 'Technology', 'exchange': 'NASD'}, 'JPM': {'sector': 'Financial', 'exchange': 'NYSE'}, 'V': {'sector': 'Financial', 'exchange': 'NYSE'}, 'MA': {'sector': 'Financial', 'exchange': 'NYSE'}, 'BAC': {'sector': 'Financial', 'exchange': 'NYSE'}, 'GS': {'sector': 'Financial', 'exchange': 'NYSE'}, 'UNH': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'JNJ': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'LLY': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'ABBV': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'MRK': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'PG': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'KO': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'COST': {'sector': 'Consumer Staples', 'exchange': 'NASD'}, 'WMT': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'HD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'MCD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'CAT': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'DE': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'BA': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'XOM': {'sector': 'Energy', 'exchange': 'NYSE'}, 'CVX': {'sector': 'Energy', 'exchange': 'NYSE'}, 'SPY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'QQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'TQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXL': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXS': {'sector': 'ETF', 'exchange': 'NASD'}, 'TLT': {'sector': 'ETF', 'exchange': 'NASD'}, 'GLD': {'sector': 'ETF', 'exchange': 'AMEX'}, '^VIX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'KRW=X': {'sector': 'Macro', 'exchange': 'FOREX'}, '^TNX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'CL=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'GC=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'DX-Y.NYB': {'sector': 'Macro', 'exchange': 'INDEX'}}
 
 class USStockCollector:
     """미국 주식 일봉 + 피처 수집기."""
@@ -51,88 +53,253 @@ class USStockCollector:
         return result
 
     def collect_all(self, universe: Dict=None) -> Dict:
-        """전체 US 유니버스 수집."""
+        """전체 US 유니버스 수집 (KIS -> Alpha Vantage -> yfinance 3중 Fallback 구조)."""
         universe = universe or US_L2_UNIVERSE
-        import yfinance as yf
         tickers = list(universe.keys())
-        logger.info(f'📡 US 데이터 수집: {len(tickers)}종목')
-        end = datetime.now()
-        start = end - timedelta(days=self.lookback_days)
-        try:
-            data = yf.download(tickers, start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), group_by='ticker', auto_adjust=True, progress=False, threads=True)
-        except Exception as e:
-            logger.error(f'  ❌ yfinance 배치 다운로드 실패: {e}', exc_info=True)
-            return {'success': 0, 'failed': len(tickers)}
+        logger.info(f'📡 US 데이터 수집 (Live/3중 폴백): {len(tickers)}종목')
+        
+        from src.data_collection.kis_data_collector import KISDataCollector
+        from src.data_collection.alpha_vantage_collector import (
+            collect_us_daily_ohlcv as av_collect_raw,
+            collect_fx_daily_ohlcv as fx_collect_raw,
+            collect_econ_indicator_daily_ohlcv as econ_collect_raw
+        )
+        from src.utils.file_ops import atomic_write_parquet
+        from src.utils.retry_utils import with_retry
+        import yfinance as yf
+        
+        # 적용: Exponential Backoff 재시도 래퍼
+        av_collect = with_retry(max_retries=3, initial_delay=2.0)(av_collect_raw)
+        collect_fx_daily_ohlcv = with_retry(max_retries=3, initial_delay=2.0)(fx_collect_raw)
+        collect_econ_indicator_daily_ohlcv = with_retry(max_retries=3, initial_delay=2.0)(econ_collect_raw)
+        
+        kis = KISDataCollector()
+        kis_ready = kis._ensure_auth()
+        
         success = 0
         failed = 0
-        skipped_tickers = []
+        end = datetime.now()
+        start = end - timedelta(days=self.lookback_days)
+        start_str = start.strftime('%Y-%m-%d')
+        end_str = end.strftime('%Y-%m-%d')
+        
+        def _process_and_save(df, t):
+            if df is None or df.empty:
+                return False
+            # Ensure index is date and columns are correct
+            if 'date' in df.columns:
+                df = df.set_index('date')
+            elif df.index.name != 'date':
+                df.index.name = 'date'
+                
+            df.columns = [str(c).lower() for c in df.columns]
+            if 'close' not in df.columns:
+                return False
+                
+            df = df.dropna(subset=['close'])
+            if len(df) < 20:
+                logger.warning(f'  ⚠️ {t}: 데이터 부족 ({len(df)}일)')
+                return False
+                
+            pq_path = self.prices_dir / f'{t}.parquet'
+            atomic_write_parquet(df, pq_path)
+            return True
+
+        def _is_sane(df) -> tuple[bool, float]:
+            """Z-Score 기반 이상치 검증. (정상여부, 수익률) 반환"""
+            if df is None or df.empty or 'close' not in df.columns or len(df) < 20:
+                return False, 0.0
+            
+            # Ensure proper index
+            if df.index.name != 'date' and 'date' in df.columns:
+                df = df.set_index('date')
+            
+            close = df['close'].dropna()
+            if len(close) < 20:
+                return False, 0.0
+                
+            rets = close.pct_change().dropna()
+            if len(rets) < 19:
+                return False, 0.0
+                
+            latest_ret = float(rets.iloc[-1])
+            hist_std = float(rets.iloc[-20:-1].std())
+            
+            # 동적 변동성 임계치: 5-Sigma 초과 및 절대수익률 7% 초과시 이상치로 간주
+            if hist_std > 0:
+                z_score = abs(latest_ret) / hist_std
+                if z_score > 5.0 and abs(latest_ret) > 0.07:
+                    # [NEW] 액면분할 방어 로직 (Corporate Action Check)
+                    # Alpha Vantage 데이터의 경우 split_coefficient가 제공되므로 이를 확인
+                    if 'split_coefficient' in df.columns:
+                        recent_splits = df['split_coefficient'].tail(3)
+                        if (recent_splits != 1.0).any():
+                            logger.info(f"  ℹ️ [Corporate Action] 액면분할 감지 (Split != 1.0). 폭락(Crash) 판정 면제.")
+                            return True, latest_ret
+                    return False, latest_ret
+            return True, latest_ret
+
         for ticker in tickers:
-            try:
-                if data is None:
-                    logger.warning(f'  ⚠️ {ticker}: yfinance data is None (전체 다운로드 실패)')
-                    failed += 1
-                    continue
-                if len(tickers) == 1:
-                    df = data.copy()
+            df_kis = df_av = df_yf = df_fred = None
+            source = ""
+            
+            # [Macro & Commodity Branching]
+            if ticker == '^VIX':
+                # VIX: yfinance (Primary) -> FRED (Fallback)
+                try:
+                    single_data = yf.download('^VIX', start=start_str, end=end_str, auto_adjust=True, progress=False)
+                    if single_data is not None and not single_data.empty:
+                        df_yf = single_data.copy()
+                        if isinstance(df_yf.columns, pd.MultiIndex):
+                            df_yf.columns = [c[0] for c in df_yf.columns]
+                        df_yf.columns = [str(c).lower() for c in df_yf.columns]
+                        if _process_and_save(df_yf, ticker):
+                            source = "yfinance"
+                except Exception as e:
+                    logger.debug(f"yfinance fetch failed for ^VIX: {e}")
+                    
+                if not source:
+                    try:
+                        # Fallback to FRED (VIXCLS)
+                        from src.utils.credential_manager import CredentialManager
+                        import requests
+                        fred_key = CredentialManager().read_from_env('FRED_API_KEY')
+                        if fred_key:
+                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={fred_key}&file_type=json"
+                            resp = requests.get(url, timeout=10).json()
+                            if 'observations' in resp:
+                                records = []
+                                for obs in resp['observations']:
+                                    if obs['value'] == '.': continue
+                                    v = float(obs['value'])
+                                    records.append({'date': obs['date'], 'open': v, 'high': v, 'low': v, 'close': v, 'volume': 0})
+                                df_fred = pd.DataFrame(records)
+                                df_fred['date'] = pd.to_datetime(df_fred['date'])
+                                df_fred = df_fred.set_index('date').sort_index()
+                                if _process_and_save(df_fred, ticker):
+                                    source = "FRED (Fallback)"
+                    except Exception as e:
+                        logger.debug(f"FRED fetch failed for ^VIX: {e}")
+                        
+            elif ticker == 'KRW=X':
+                # USD/KRW: AV FX_DAILY (Primary) -> FDR (Fallback)
+                df_av = collect_fx_daily_ohlcv('USD', 'KRW')
+                if df_av is not None and _process_and_save(df_av, ticker):
+                    source = "AlphaVantage (FX_DAILY)"
                 else:
                     try:
-                        raw = data[ticker]
-                    except (TypeError, KeyError) as _ke:
-                        logger.warning(f'  ⚠️ {ticker}: data subscript 불가 ({type(_ke).__name__}) — 건너뜀', exc_info=True)
-                        skipped_tickers.append(ticker)
-                        failed += 1
-                        continue
-                    if raw is None:
-                        logger.warning(f'  ⚠️ {ticker}: yfinance 반환값 None — 건너뜀 (야후 API 미지원 티커)')
-                        skipped_tickers.append(ticker)
-                        failed += 1
-                        continue
-                    df = raw.copy()
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = [c[0] for c in df.columns]
-                df = df.dropna(subset=['Close'])
-                if len(df) < 20:
-                    logger.warning(f'  ⚠️ {ticker}: 데이터 부족 ({len(df)}일)')
-                    failed += 1
-                    continue
-                df.columns = [c.lower() for c in df.columns]
-                df.index.name = 'date'
-                csv_path = self.prices_dir / f'{ticker}.csv'
-                df.to_csv(csv_path)
+                        import FinanceDataReader as fdr
+                        df_fdr = fdr.DataReader('USD/KRW', start_str)
+                        if df_fdr is not None and not df_fdr.empty:
+                            df_fdr = df_fdr.reset_index()
+                            df_fdr = df_fdr.rename(columns={'Date': 'date', 'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close'})
+                            if _process_and_save(df_fdr, ticker):
+                                source = "FDR (Fallback)"
+                    except Exception as e:
+                        logger.debug(f"FDR fetch failed for KRW=X: {e}")
+                        
+            elif ticker == '^TNX':
+                # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> FRED (Fallback)
+                df_av = collect_econ_indicator_daily_ohlcv('TREASURY_YIELD', maturity='10year')
+                if df_av is not None and _process_and_save(df_av, ticker):
+                    source = "AlphaVantage (TREASURY_YIELD)"
+                else:
+                    try:
+                        from src.utils.credential_manager import CredentialManager
+                        import requests
+                        fred_key = CredentialManager().read_from_env('FRED_API_KEY')
+                        if fred_key:
+                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key={fred_key}&file_type=json"
+                            resp = requests.get(url, timeout=10).json()
+                            if 'observations' in resp:
+                                records = []
+                                for obs in resp['observations']:
+                                    if obs['value'] == '.': continue
+                                    v = float(obs['value'])
+                                    records.append({'date': obs['date'], 'open': v, 'high': v, 'low': v, 'close': v, 'volume': 0})
+                                df_fred = pd.DataFrame(records)
+                                df_fred['date'] = pd.to_datetime(df_fred['date'])
+                                df_fred = df_fred.set_index('date').sort_index()
+                                if _process_and_save(df_fred, ticker):
+                                    source = "FRED (Fallback)"
+                    except Exception as e:
+                        logger.debug(f"FRED fetch failed for ^TNX: {e}")
+                        
+            elif ticker == 'CL=F':
+                # WTI Crude: AV WTI (Primary)
+                df_av = collect_econ_indicator_daily_ohlcv('WTI')
+                if df_av is not None and _process_and_save(df_av, ticker):
+                    source = "AlphaVantage (WTI)"
+                    
+            elif ticker in ['GC=F', 'DX-Y.NYB', '^GSPC', '^IXIC']:
+                # Mapped to ETFs for KIS / AV
+                mapping = {'GC=F': 'GLD', 'DX-Y.NYB': 'UUP', '^GSPC': 'SPY', '^IXIC': 'QQQ'}
+                proxy_ticker = mapping[ticker]
+                logger.info(f"  🔄 {ticker} 우회 수집: {proxy_ticker} ETF 데이터로 대체 수집")
+                
+                # 1. KIS (Primary)
+                if kis_ready:
+                    try: df_kis = kis.get_us_daily_ohlcv(proxy_ticker)
+                    except: pass
+                is_sane_kis, ret_kis = _is_sane(df_kis)
+                if is_sane_kis and _process_and_save(df_kis, ticker):
+                    source = f"KIS (Proxy: {proxy_ticker})"
+                else:
+                    # 2. AV (Fallback)
+                    try: df_av = av_collect(proxy_ticker)
+                    except: pass
+                    is_sane_av, ret_av = _is_sane(df_av)
+                    if is_sane_av and _process_and_save(df_av, ticker):
+                        source = f"AlphaVantage (Proxy: {proxy_ticker})"
+                        
+            else:
+                # [Equity Branching: KIS -> AV ONLY]
+                # 1. KIS API (Primary)
+                if kis_ready:
+                    # KIS API 자체에 백오프 래퍼 적용
+                    kis_get = with_retry(max_retries=3, initial_delay=1.0)(kis.get_us_daily_ohlcv)
+                    try:
+                        df_kis = kis_get(ticker)
+                    except Exception as e:
+                        logger.debug(f"KIS fetch failed for {ticker}: {e}")
+                        
+                is_sane_kis, ret_kis = _is_sane(df_kis)
+                
+                if is_sane_kis and _process_and_save(df_kis, ticker):
+                    source = "KIS"
+                else:
+                    if df_kis is not None and not is_sane_kis:
+                        logger.warning(f"  ⚠️ [Sanity Check] {ticker} KIS 데이터 이상치 감지 (Z-Score 기각). AlphaVantage로 교차 검증 시도...")
+                    
+                    # 2. Alpha Vantage (Fallback 1 / Cross-Validation)
+                    try:
+                        df_av = av_collect(ticker)
+                    except Exception as e:
+                        logger.debug(f"AlphaVantage fetch failed for {ticker}: {e}")
+                        
+                    is_sane_av, ret_av = _is_sane(df_av)
+                    
+                    # 교차 검증 (Cross Validation)
+                    if not is_sane_kis and df_kis is not None and df_av is not None:
+                        # 두 소스가 동일하게 미친 수익률을 뿜는다면(오차 1% 이내), 그것은 현실(Real Crash/Split)이다.
+                        if abs(ret_kis - ret_av) < 0.01:
+                            logger.critical(f"  🚨 [Cross Validated] {ticker} 폭락/폭등 교차 검증 일치! 실제 시장 상황으로 수용.")
+                            if _process_and_save(df_kis, ticker):
+                                source = "KIS (Cross-Verified Anomaly)"
+                    
+                    if not source and is_sane_av and _process_and_save(df_av, ticker):
+                        source = "AlphaVantage"
+            
+            if source:
                 success += 1
-            except Exception as e:
-                logger.warning(f'  ⚠️ {ticker}: 처리 중 오류 ({type(e).__name__}: {e})', exc_info=True)
+                logger.debug(f'      ✅ {ticker} 수집 성공 ({source})')
+            else:
                 failed += 1
-            if (success + failed) % 50 == 0:
-                time.sleep(1)
-        if skipped_tickers:
-            logger.info(f'  🔄 누락 티커 {len(skipped_tickers)}개 개별 재수집 시도 (yfinance bulk 누락 방어): {skipped_tickers}')
-            for ticker in skipped_tickers:
-                try:
-                    logger.debug(f'    - {ticker} 단독 수집 중...')
-                    single_data = yf.download(ticker, start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
-                    if single_data is not None and (not single_data.empty):
-                        df = single_data.copy()
-                        if isinstance(df.columns, pd.MultiIndex):
-                            df.columns = [c[0] for c in df.columns]
-                        df = df.dropna(subset=['Close'])
-                        if len(df) >= 20:
-                            df.columns = [c.lower() for c in df.columns]
-                            df.index.name = 'date'
-                            csv_path = self.prices_dir / f'{ticker}.csv'
-                            df.to_csv(csv_path)
-                            success += 1
-                            failed -= 1
-                            logger.info(f'      ✅ {ticker} 개별 재수집 성공')
-                        else:
-                            logger.warning(f'      ⚠️ {ticker} 개별 수집 실패 (데이터 {len(df)}일 부족)')
-                    else:
-                        logger.warning(f'      ⚠️ {ticker} 개별 수집 실패 (여전히 None/Empty 반환)')
-                except Exception as retry_e:
-                    logger.warning(f'      ⚠️ {ticker} 개별 수집 중 예상치 못한 오류: {retry_e}', exc_info=True)
-                time.sleep(1)
-            logger.warning(f'  🚨 yfinance 개별 재수집 후 최종 누락 티커: {failed}건')
-        logger.info(f'  ✅ US 일봉 수집: {success}/{len(tickers)} 완료')
+                logger.error(f'  🚨 {ticker} 수집 완전 실패 (모든 소스 무응답)')
+                
+            time.sleep(0.1)
+            
+        logger.info(f'  ✅ US 일봉 수집 완료: {success} 성공 / {failed} 실패')
         return {'success': success, 'failed': failed}
 
     def build_features(self, date_str: str=None) -> Dict[str, Dict]:
@@ -151,8 +318,9 @@ class USStockCollector:
             except Exception as e:
                 logger.error(f'  {ticker} 피처 실패: {e}', exc_info=True)
         out_path = self.features_dir / f'{date_str}.json'
-        with open(out_path, 'w') as f:
-            json.dump({'date': date_str, 'n_stocks': len(features), 'features': features}, f, indent=2, default=str)
+        from src.utils.file_ops import atomic_write_json
+
+        atomic_write_json(out_path, {'date': date_str, 'n_stocks': len(features), 'features': features}, indent=2, default=str)
         logger.info(f'  📊 US 피처 생성: {len(features)}종목 → {out_path.name}')
         self._update_atr_cache(features)
         return features
@@ -233,8 +401,7 @@ class USStockCollector:
             if atr_pct > 0:
                 cache[ticker] = {'atr_pct': atr_pct, 'updated': datetime.now().isoformat()}
                 updated += 1
-        with open(cache_path, 'w') as f:
-            json.dump(cache, f, indent=2)
+        atomic_write_json(cache_path, cache, indent=2)
         if updated:
             logger.info(f'  💾 ATR 캐시 갱신: {updated}종목 (US)')
 if __name__ == '__main__':

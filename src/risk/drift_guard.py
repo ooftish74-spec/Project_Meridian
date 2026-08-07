@@ -11,6 +11,8 @@ Usage:
 import json, logging
 import numpy as np
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
@@ -107,7 +109,7 @@ class DriftGuard:
         n_critical = len([d for d in drifted_features if d['severity'] == 'CRITICAL'])
         retrain_needed = n_critical >= 3 and mean_psi > 0.15
         result = {'timestamp': datetime.now().isoformat(), 'drifted': len(drifted_features) > 0, 'retrain_needed': retrain_needed, 'mean_psi': round(mean_psi, 4), 'n_drifted': len(drifted_features), 'n_unavailable': len(unavailable_features), 'n_sparse_tolerated': len(sparse_tolerated), 'drifted_features': drifted_features[:10], 'sparse_tolerated': sparse_tolerated[:5], 'unavailable_features': unavailable_features[:10], 'psi_scores': psi_scores, 'sparse_features': sparse_features}
-        self.state_path.write_text(json.dumps(result, indent=2))
+        atomic_write_json(self.state_path, result, indent=2)
         if sparse_tolerated:
             names_str = ', '.join((f'{t['feature']}(PSI={t['psi']:.3f})' for t in sparse_tolerated[:3]))
             logger.info(f'  ℹ️ Drift Guard: {len(sparse_tolerated)}개 희소 피처 관용 ({names_str})')
@@ -129,7 +131,7 @@ class DriftGuard:
         indices = rng.choice(len(features), size=max_ref, replace=False)
         np.save(self.reference_path.with_suffix('.npy'), features[indices])
         self.reference_path.parent.mkdir(parents=True, exist_ok=True)
-        self.reference_path.write_text(json.dumps(ref, indent=2))
+        atomic_write_json(self.reference_path, ref, indent=2)
         logger.info(f'  Drift Guard: 참조 저장 ({features.shape})')
 
     def _load_reference(self) -> Optional[np.ndarray]:

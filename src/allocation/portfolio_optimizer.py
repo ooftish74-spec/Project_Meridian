@@ -20,6 +20,8 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from config.dynamic_config import DynamicConfig
@@ -175,7 +177,7 @@ class TurnoverLimiter:
         try:
             _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
             data = {'rebalance_history': self._history, 'last_saved': datetime.now().isoformat()}
-            _STATE_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(_STATE_FILE, data, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.critical(f'  Optimizer state 저장 실패: {e}', exc_info=True)
 
@@ -283,26 +285,18 @@ class PortfolioOptimizer:
 
     def _compute_exposure(self, regime: str) -> float:
         """ExposureOrchestrator 호출 → 목표 노출도."""
-        try:
-            from src.risk.exposure_orchestrator import ExposureOrchestrator
-            eo = ExposureOrchestrator()
-            result = eo.calculate()
-            return result.get('target_exposure', cfg.get('optimizer.exposure.caution', 0.65))
-        except Exception as e:
-            logger.critical(f'  [FATAL] [portfolio_optimizer] ExposureOrchestrator 실패, Fallback 적용: {e}', exc_info=True)
-            regime_exposure = {'bull': cfg.get('optimizer.exposure.bull', 1.0), 'caution': cfg.get('optimizer.exposure.caution', 0.65), 'bear': cfg.get('optimizer.exposure.bear', 0.3), 'crash': cfg.get('optimizer.exposure.crash', 0.0)}
-            return regime_exposure.get(regime, cfg.get('optimizer.exposure.caution', 0.65))
+        from src.risk.exposure_orchestrator import ExposureOrchestrator
+        eo = ExposureOrchestrator()
+        result = eo.calculate()
+        return result.get('target_exposure', cfg.get('optimizer.exposure.caution', 0.65))
+
 
     def _compute_allocation(self, stream_metrics: Dict, regime: str) -> Dict[str, float]:
         """AlphaAllocator 호출 → 스트림 비중."""
-        try:
-            from src.allocation.alpha_allocator import AlphaAllocator
-            alloc = AlphaAllocator()
-            return alloc.allocate(stream_metrics, regime)
-        except Exception as e:
-            logger.critical(f'  [FATAL] [portfolio_optimizer] AlphaAllocator 실패, Fallback 적용: {e}', exc_info=True)
-            fallbacks = {'bull': {'S1': cfg.get('optimizer.fallback.bull.S1', 0.15), 'S2': cfg.get('optimizer.fallback.bull.S2', 0.35), 'S3': cfg.get('optimizer.fallback.bull.S3', 0.2), 'S4': cfg.get('optimizer.fallback.bull.S4', 0.3)}, 'caution': {'S1': cfg.get('optimizer.fallback.caution.S1', 0.08), 'S2': cfg.get('optimizer.fallback.caution.S2', 0.3), 'S3': cfg.get('optimizer.fallback.caution.S3', 0.25), 'S4': cfg.get('optimizer.fallback.caution.S4', 0.37)}, 'bear': {'S1': cfg.get('optimizer.fallback.bear.S1', 0.03), 'S2': cfg.get('optimizer.fallback.bear.S2', 0.22), 'S3': cfg.get('optimizer.fallback.bear.S3', 0.3), 'S4': cfg.get('optimizer.fallback.bear.S4', 0.45)}, 'crash': {'S1': cfg.get('optimizer.fallback.crash.S1', 0.0), 'S2': cfg.get('optimizer.fallback.crash.S2', 0.15), 'S3': cfg.get('optimizer.fallback.crash.S3', 0.35), 'S4': cfg.get('optimizer.fallback.crash.S4', 0.5)}}
-            return fallbacks.get(regime, fallbacks['caution'])
+        from src.allocation.alpha_allocator import AlphaAllocator
+        alloc = AlphaAllocator()
+        return alloc.allocate(stream_metrics, regime)
+
 
     def _apply_exposure(self, weights: Dict[str, float], exposure: float) -> Dict[str, float]:
         """노출도를 비중에 적용.
@@ -432,7 +426,7 @@ class PortfolioOptimizer:
         """최적화 결과 저장."""
         try:
             out = _RESULTS / 'portfolio_optimizer.json'
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as _e6:
             logger.critical(f'  [portfolio_optimizer] 현재 비중 파일 2: {_e6}', exc_info=True)
 
@@ -516,7 +510,7 @@ class PortfolioOptimizer:
         result = {'passive_pct': round(passive_pct, 4), 'active_pct': round(active_pct, 4), 'conviction': round(active_conviction, 4), 'ic_mean': round(sum(ic_values) / len(ic_values), 4) if ic_values else None, 'benchmark_etf': benchmark_etf, 'cash_drag_action': cash_drag_action, 'excess_cash': round(excess_cash), 'deploy_to': deploy_to}
         try:
             out = _RESULTS / 'passive_allocation.json'
-            out.write_text(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except Exception as _e7:
             logger.critical(f'  [portfolio_optimizer] 결과 저장: {_e7}', exc_info=True)
         return result

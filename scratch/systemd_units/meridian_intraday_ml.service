@@ -1,0 +1,15 @@
+[Unit]
+Description=Meridian Service for Intraday Continuous ML
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/Project_Meridian
+Environment="PATH=/home/ubuntu/Project_Meridian/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="PYTHONPATH=/home/ubuntu/Project_Meridian"
+
+ExecStart=/home/ubuntu/Project_Meridian/venv/bin/python3 /home/ubuntu/Project_Meridian/src/learning/online_trainer.py
+StandardOutput=append:/home/ubuntu/Project_Meridian/logs/com.meridian.intraday-ml.out.log
+StandardError=append:/home/ubuntu/Project_Meridian/logs/com.meridian.intraday-ml.err.log

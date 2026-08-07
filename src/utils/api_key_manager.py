@@ -19,8 +19,8 @@ _cm = CredentialManager()
 
 
 def get_key(name: str, default: Optional[str] = None) -> Optional[str]:
-    """[Facade] CredentialManager.read_from_keychain()으로 패스스루."""
-    value = _cm.read_from_keychain(name)
+    """[Facade] CredentialManager.read_from_env()으로 패스스루."""
+    value = _cm.read_from_env(name)
     if value:
         return value
     return default

@@ -16,6 +16,8 @@ Usage:
 """
 import json, logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, Optional
 logger = logging.getLogger(__name__)
@@ -93,7 +95,7 @@ class MedallionOrchestrator:
         out = _RESULTS / 'medallion_validation.json'
         result['correlation'] = corr_check
         result['pnl_attribution'] = pnl_summary
-        out.write_text(json.dumps(result, indent=2, default=str))
+        atomic_write_json(out, result, indent=2, default=str)
         return result
 
     def compute_exposure(self, sentiment: Optional[Dict]=None) -> Dict:
@@ -268,12 +270,10 @@ class MedallionOrchestrator:
         sentiment = {'fear_greed': 50, 'vix': 20, 'regime': 'caution'}
         try:
             cache = json.loads((_RESULTS / 'signal_cache.json').read_text())
-            fg = cache.get('FnG', {}).get('value')
-            if fg:
-                sentiment['fear_greed'] = float(fg)
-            vix = cache.get('VIX', {}).get('value')
-            if vix:
-                sentiment['vix'] = float(vix)
+            from src.utils.metric_parser import parse_metric
+            sentiment['fear_greed'] = parse_metric(cache, 'fng', 50.0)
+            from src.utils.metric_parser import parse_vix
+            sentiment['vix'] = parse_vix(cache, 20.0)
         except Exception as _e_mo2:
             logger.critical(f'  [medallion_orchestrator] 오케스트레이터 실패: {_e_mo2}', exc_info=True)
         try:

@@ -19,6 +19,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -324,7 +326,7 @@ class S1InclusionValidator:
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            f.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+            atomic_write_json(f, result, ensure_ascii=False, indent=2)
 
 
 def run() -> Dict:

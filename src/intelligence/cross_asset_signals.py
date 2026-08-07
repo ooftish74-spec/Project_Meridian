@@ -103,8 +103,9 @@ class CrossAssetSignalEngine:
         result = {'composite_signal': round(composite, 4), 'asset_signals': asset_signals, 'regime_adjustment': regime_adj, 'macro_adjustment': round(macro_adj, 4), 'n_assets_available': len(asset_signals), 'timestamp': datetime.now().isoformat()}
         sig_file = RESULTS / 'cross_asset_signals.json'
         try:
-            with open(sig_file, 'w') as f:
-                json.dump(result, f, indent=2, default=str)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(sig_file, result, indent=2, default=str)
         except Exception as e:
             logger.warning(f'  cross_asset_signals.json 저장 실패 (비치명적): {e}', exc_info=True)
         return result
@@ -303,6 +304,8 @@ class CrossAssetSignalEngine:
                 try:
                     change_pct = float(change_pct.replace('%', ''))
                 except ValueError:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     return None
             signal = np.clip(change_pct / 3.0, -1.0, 1.0)
             if asset in ('TLT', 'GLD'):

@@ -27,6 +27,8 @@ import logging
 import math
 import numpy as np
 from pathlib import Path as _Path
+from src.utils.file_ops import atomic_write_json
+
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -178,7 +180,7 @@ class AlphaAllocator:
         """
         try:
             from src.risk.transfer_entropy import TEHRPAllocator
-            _returns = {sid: np.array(m.get('returns', m.get('daily_returns', []))) for sid, m in (stream_metrics or {}).items() if len(m.get('returns', m.get('daily_returns', []))) >= 20}
+            _returns = {sid: np.array(m.get('returns', m.get('daily_returns', []))) for sid, m in (stream_metrics or {}).items() if isinstance(m, dict) and len(m.get('returns', m.get('daily_returns', []))) >= 20}
             if len(_returns) >= 3:
                 _te_hrp = TEHRPAllocator()
                 _base_w = self._get_base_weights(regime, market_data)
@@ -187,7 +189,7 @@ class AlphaAllocator:
                     logger.warning(f'  [Phase 75 TE-HRP] Crowding 감지! alert={_crowd_alert['entropy_alert']:.4f} risk_streams={_crowd_alert['cluster_risk']}')
                     _alert_path = _Path('results') / 'crowding_alert.json'
                     _alert_path.parent.mkdir(exist_ok=True)
-                    _alert_path.write_text(json.dumps({**_crowd_alert, 'timestamp': datetime.now().isoformat()}, ensure_ascii=False), encoding='utf-8')
+                    atomic_write_json(_alert_path, {**_crowd_alert, 'timestamp': datetime.now().isoformat()}, ensure_ascii=False)
                 if _hrp_weights:
                     logger.info(f'  [Phase 75 TE-HRP] 성공 적용: {_hrp_weights}')
         except Exception as _e:

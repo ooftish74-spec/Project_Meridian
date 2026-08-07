@@ -1,3 +1,4 @@
+from __future__ import annotations
 """[Phase 78] 고해상도 수출입 매크로 수집기.
 
 관세청 10/20일 속보 + 산업부 MOTIE 6개 핵심 섹터 + 3개 지역별 데이터.
@@ -5,8 +6,9 @@ Fail-Fast: 외부 통신 실패 시 빈 딕셔너리 반환.
 
 출력: results/export_macro_snapshot.json
 """
-from __future__ import annotations
 import json, logging, re, sys
+from src.utils.file_ops import atomic_write_json
+
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -42,7 +44,7 @@ _REGION_KW: Dict[str, list] = {
 def _naver_creds() -> tuple:
     from src.utils.credential_manager import CredentialManager
     cm = CredentialManager()
-    return cm.read_from_keychain('NAVER_CLIENT_ID') or '', cm.read_from_keychain('NAVER_CLIENT_SECRET') or ''
+    return cm.read_from_env('NAVER_CLIENT_ID') or '', cm.read_from_env('NAVER_CLIENT_SECRET') or ''
 
 def _news_yoy(query: str) -> Optional[float]:
     cid, sec = _naver_creds()
@@ -122,7 +124,7 @@ class ExportMacroCollector:
                     *out['sector'].values(), *out['region'].values()]
             out['confidence'] = round(sum(1 for v in vals if v and v!=0) / max(1, len(vals)), 3)
 
-            _OUTPUT_FILE.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
+            atomic_write_json(_OUTPUT_FILE, out, ensure_ascii=False, indent=2)
             logger.info(f'  [Phase78] 수집완료 surprise={[k for k,v in out["surprise"].items() if v]}')
             return out
         except Exception as e:

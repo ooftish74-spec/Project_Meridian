@@ -1,6 +1,7 @@
 import pandas as pd
 '\n★ Realtime Data Bus — Circuit Breaker + Staleness-Aware Signal Layer\n=====================================================================\n실시간 데이터 수집의 산업 표준 아키텍처.\n\n실제 퀀트 펌(Two Sigma, Citadel, Jane Street) 방법론:\n\n  ① Circuit Breaker (Martin Fowler, Netflix Hystrix 패턴)\n     - CLOSED  → 정상 수집\n     - OPEN    → 연속 실패 N회 시 차단 (캐시 사용)\n     - HALF_OPEN → 일정 시간 후 복구 시도\n\n  ② Staleness-Aware Signal Quality (AQR, Two Sigma 방식)\n     - 데이터 나이(age)에 따라 신호 품질(0-1)을 선형 감쇠\n     - "데이터 없음"이 아닌 "품질 저하"로 처리 → 앙상블에서 자동 가중치 감소\n\n  ③ 종목별 독립 데이터 소스 추적\n     - 한 종목 실패가 다른 종목에 영향 없음\n     - 전략 레벨이 아닌 데이터 레벨에서 격리\n\n  ④ 지수 백오프 + Jitter (Google SRE 표준)\n     - base × 2^attempt + random_jitter\n     - Thundering Herd 방지\n\n데이터 소스별 Staleness Tolerance:\n  - 현재가(price):          5초  (CRITICAL — 초과 시 HALT)\n  - 호가잔량(orderbook):    30초 (HIGH)\n  - 외국인/기관 순매수:     30분 (MEDIUM — KRX 30분 지연 발표)\n  - 섹터 ETF 가격:          60초 (HIGH)\n  - 프로그램 매매:          10분 (MEDIUM)\n\nAuthor: Project-A | Date: 2026-04-18\nReferences:\n  - Fowler, M. (2014). Circuit Breaker. martinfowler.com\n  - Google SRE Book (2016). Chapter 22: Cascading Failures\n  - AQR Capital (2020). Fact, Fiction and Signal Decay\n'
 import json
+import redis
 import logging
 import os
 import random
@@ -8,6 +9,8 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -223,22 +226,55 @@ class StalenessAwareCache:
         self.config = config
         self._cache: Dict[str, DataPoint] = {}
         self._lock = threading.RLock()
-        self._cache_file = REALTIME_CACHE_DIR / f'{source_name}.json'
-        REALTIME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        self._load_from_disk()
+        
+        # Redis Client 초기화 (Fail-Fast)
+        try:
+            self._redis = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+            self._redis.ping()
+        except Exception as e:
+            logger.critical(f"🚨 [Redis SPOF] Redis 연결 실패. Fail-Fast 강제 종료: {e}")
+            raise RuntimeError(f"Redis connection lost: {e}")
 
     def set(self, ticker: str, value: Any, source: str='live') -> DataPoint:
-        """데이터 저장 + quality 계산."""
+        """데이터 저장 + quality 계산 (Redis 퍼블리싱)."""
         dp = DataPoint(value=value, fetched_at=datetime.now(), source=source, quality=1.0)
         with self._lock:
             self._cache[ticker] = dp
-        self._persist()
+            
+        try:
+            # Redis에 즉시 기록 (TTL = staleness_critical_sec + 여유분)
+            ttl = int(self.config.staleness_critical_sec * 1.5)
+            data_json = json.dumps({'value': dp.value, 'fetched_at': dp.fetched_at.isoformat(), 'source': dp.source})
+            self._redis.setex(f"meridian:cache:{self.source_name}:{ticker}", ttl, data_json)
+        except Exception as e:
+            logger.critical(f"🚨 [Redis SPOF] Redis Set 실패. Fail-Fast 강제 종료: {e}")
+            raise RuntimeError(f"Redis Set failed: {e}")
+            
         return dp
 
     def get(self, ticker: str) -> Optional[DataPoint]:
-        """캐시 조회 + 최신 quality 계산."""
+        """캐시 조회 + 최신 quality 계산 (Redis 조회 우선)."""
         with self._lock:
             dp = self._cache.get(ticker)
+            
+        # 로컬 메모리에 없거나 Stale 한 경우 Redis를 우선 조회 (크로스 프로세스 통신)
+        if (dp is None or dp.compute_quality(self.config).is_usable() is False):
+            try:
+                raw = self._redis.get(f"meridian:cache:{self.source_name}:{ticker}")
+                if raw:
+                    parsed = json.loads(raw)
+                    dp = DataPoint(
+                        value=parsed['value'], 
+                        fetched_at=datetime.fromisoformat(parsed['fetched_at']), 
+                        source=parsed['source'], 
+                        quality=1.0
+                    )
+                    with self._lock:
+                        self._cache[ticker] = dp # 로컬 동기화
+            except Exception as e:
+                logger.critical(f"🚨 [Redis SPOF] Redis Get 실패. Fail-Fast 강제 종료: {e}")
+                raise RuntimeError(f"Redis Get failed: {e}")
+                
         if dp is None:
             return None
         return dp.compute_quality(self.config)
@@ -524,7 +560,7 @@ class RealtimeDataBus:
             if df is not None and (not df.empty):
                 result = {'program_net': float(df['순매수'].sum()), 'fetched_method': 'pykrx'}
                 prog_file.parent.mkdir(parents=True, exist_ok=True)
-                prog_file.write_text(json.dumps(result))
+                atomic_write_json(prog_file, result)
                 return result
         except Exception as e:
             logger.warning(f'  suppressed: {e}', exc_info=True)

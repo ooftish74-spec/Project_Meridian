@@ -17,7 +17,7 @@ if _env_file.exists():
 
 from src.utils.telegram_notifier import TelegramNotifier
 from src.utils.logger import setup_logger
-import yfinance as yf
+import FinanceDataReader as fdr
 
 logger = setup_logger('nasdaq_advisor')
 
@@ -29,12 +29,13 @@ def analyze_and_notify():
     futures_trend = "UNKNOWN"
     futures_chg = 0.0
     try:
-        nq = yf.Ticker("NQ=F")
-        hist = nq.history(period="2d")
-        if len(hist) >= 2:
-            prev_close = hist['Close'].iloc[0]
-            curr_price = hist['Close'].iloc[-1]
-            futures_chg = ((curr_price - prev_close) / prev_close) * 100
+        nq = fdr.DataReader("US100")
+        if nq is not None and not nq.empty:
+            hist = nq.tail(2)
+            if len(hist) >= 2:
+                prev_close = float(hist['Close'].iloc[0])
+                curr_price = float(hist['Close'].iloc[-1])
+                futures_chg = ((curr_price - prev_close) / prev_close) * 100
             
             if futures_chg > 0.3:
                 futures_trend = "STRONG_UP 반등확세"

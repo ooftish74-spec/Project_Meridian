@@ -49,15 +49,14 @@ streams:
     description: ISA/IRP/개인연금 절세계좌 관리
 allocator:
   active_streams:
+  - S0
   - S1
-  - S2
-  - S3
-  - S5
+  - S10
 allocation:
   s2_upscale_ratio: 0.5
   penalty_ratio: 0.5
 portfolio:
-  initial_capital: 1601718.0
+  initial_capital: 16601718.0
   sleeve_a_ratio: 0.6
   trailing_ratio:
     bull: 0.2
@@ -213,6 +212,9 @@ execution:
   default_strategy: twap
   n_slices: 5
   min_order_value: 100000
+  impact_threshold_pct: 0.005      # 일평균 거래대금의 0.5% 미만 주문은 1회 체결 (One-shot)
+  slice_chunk_pct: 0.002           # 분할 시 각 조각은 일평균 거래대금의 0.2% 수준 유지
+  absolute_min_slice: 5000000      # 어떤 경우에도 500만 원 미만 분할 금지
   slippage_bps: 7.5
   commission_bps: 1.5
   modes:
@@ -274,7 +276,7 @@ schedule:
 data:
   feature_store: data/feature_store/
   model_cache: data/model_cache/
-  historical_10y: data/historical_10y/
+  kr_markets: data/kr_markets/
   minute_bars: data/minute_bars/
   financials: data/financials_history/
   earnings: data/earnings_database/
@@ -361,6 +363,18 @@ crash:
   stress_fx_threshold: 1
   stress_fx_max_score: 10
   stress_fx_scale: 5
+  # ═══ Dynamic Threshold (Red-Team Resilience 2026-07-24) ═══
+  # 정적 임계치(stress_vix_threshold=30 등)를 252일 Rolling Z-Score +
+  # Mahalanobis Distance로 대체. 정적 값은 fallback 전용.
+  dynamic_threshold:
+    enabled: true
+    rolling_window: 252        # 1년 영업일 Rolling Window
+    z_multiplier: 2.0          # 97.7% 신뢰구간 (2σ)
+    md_chi2_percentile: 0.975  # χ²(df=4, p=0.975) = 11.14
+    min_observations: 60       # 최소 관측 수 (미달 시 fallback)
+    ewma_lambda: 0.94          # RiskMetrics EWMA 표준 감쇠
+    md_weight: 10.0            # MD 스트레스 기여 가중치
+    md_max_score: 15.0         # MD 최대 스트레스 기여 점수
 m6:
   benchmark_etf: 069500
   min_conviction: 0.4
@@ -616,3 +630,8 @@ s1:
 # Model 2 전역 마찰 비용 (adaptive_threshold 내부와 동일값, 실행 레이어와 공유)
 execution:
   min_friction_cost: 0.10         # Slippage + Commission 최소 마찰 비용 (%)
+
+chameleon:
+  use_volatility_targeting: false
+  use_safe_haven: true
+  use_vampire_routing: false

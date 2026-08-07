@@ -1,3 +1,4 @@
+from __future__ import annotations
 """[Phase 64: Project Argus] 메달리온식 전방위 LLM 대안 데이터 추출 엔진.
 
 설계 체계:
@@ -5,7 +6,6 @@
   2. 대수의 법칙: 테마당 상위 100개 기사 집계 및 통계적 스코어
   3. 우아한 성능 저하(Graceful Degradation): LLM 실패 시 Lexicon Fallback
 """
-from __future__ import annotations
 import json
 import logging
 import os

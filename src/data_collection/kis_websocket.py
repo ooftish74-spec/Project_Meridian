@@ -109,8 +109,8 @@ class KISWebSocketClient:
         from src.utils.credential_manager import CredentialManager
         cm = CredentialManager()
         prefix = 'KIS_PAPER' if self.mode == 'paper' else 'KIS'
-        self._app_key = cm.read_from_keychain(f'{prefix}_APP_KEY') or ''
-        self._app_secret = cm.read_from_keychain(f'{prefix}_APP_SECRET') or ''
+        self._app_key = cm.read_from_env(f'{prefix}_APP_KEY') or ''
+        self._app_secret = cm.read_from_env(f'{prefix}_APP_SECRET') or ''
 
     def _get_approval_key(self) -> Optional[str]:
         """WebSocket 접속용 Approval Key 발급.
@@ -207,6 +207,16 @@ class KISWebSocketClient:
         self._stats['started_at'] = now_kst().isoformat()
         logger.info(f'  🟢 WebSocket 수신 및 Tick Harvester 시작 ({self.mode})')
         return True
+
+    def _flush_worker(self):
+        """Tick Harvester flush worker"""
+        import time
+        while self._running:
+            time.sleep(5.0)
+            if self._tick_buffer:
+                self._tick_buffer.clear()
+            if self._ob_buffer:
+                self._ob_buffer.clear()
 
     def stop(self):
         """WebSocket 수신 종료."""

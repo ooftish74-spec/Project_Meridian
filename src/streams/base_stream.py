@@ -139,6 +139,8 @@ class BaseStream(ABC):
             from src.measurement.event_ledger import log_event
             log_event(event_type, {'stream_id': self.stream_id, **payload}, source=f'stream_{self.stream_id.lower()}')
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  EventLedger 기록 실패: {e}')
 
     def __repr__(self) -> str:

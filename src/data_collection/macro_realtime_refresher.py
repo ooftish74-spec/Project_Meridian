@@ -75,9 +75,10 @@ class MacroRealtimeRefresher:
         now = datetime.now()
         result = {'timestamp': now.isoformat(), 'market_open': self._is_market_hours(now), 'tier1': {}, 'tier2': {}, 'skipped': []}
         if not self._is_market_hours(now):
-            result['skipped'].append('장 시간 외 — 갱신 스킵')
-            logger.info('  ⏸ MacroRefresh: 장 시간 외 — 스킵')
-            return result
+            result['skipped'].append('KR 지수: 장 시간 외 — 스킵')
+            kr_market_open = False
+        else:
+            kr_market_open = True
         if tier == 'auto':
             if self._should_refresh('tier1'):
                 result['tier1'] = self._refresh_tier1()
@@ -94,9 +95,10 @@ class MacroRealtimeRefresher:
         elif tier == 'all':
             result['tier1'] = self._refresh_tier1()
             result['tier2'] = self._refresh_tier2()
-        if tier in ('auto', 't1', 'all'):
+        if tier in ('auto', 't1', 'all') and kr_market_open:
             kr_result = self._refresh_kr_indices()
             result['kr_indices'] = kr_result
+            
         total_updated = result['tier1'].get('n_updated', 0) + result['tier2'].get('n_updated', 0) + result.get('kr_indices', {}).get('n_updated', 0)
         if total_updated > 0:
             self._update_cache({'macro_refresh_ts': now.isoformat()})
@@ -133,8 +135,49 @@ class MacroRealtimeRefresher:
                 updates['yield_curve_10y_30y'] = round(us10y - us30y, 4)
             try:
                 import math as _math
+                import pandas as _pd
+                from pathlib import Path
+                
                 vix_window = int(self._get_cfg('s1.vix_rolling_window', 20))
-                vix_now = updates.get('vix', self._cache.get('vix'))
+                
+                # 1차 시도: yfinance를 통한 실시간 VIX 조회
+                if 'vix' not in updates:
+                    try:
+                        import yfinance as _yf
+                        vix_df = _yf.download('^VIX', period='1d', progress=False)
+                        if not vix_df.empty and 'Close' in vix_df.columns:
+                            live_vix = float(vix_df['Close'].iloc[-1])
+                            if live_vix > 0:
+                                updates['vix'] = live_vix
+                                logger.info(f"  ✅ [yfinance] VIX 실시간 조회 성공: {live_vix}")
+                    except Exception as yf_e:
+                        logger.warning(f"  ⚠️ [yfinance] VIX 실시간 조회 에러: {yf_e}")
+                
+                # VIX 폴백 1: 기존 캐시값(전일값) Forward Fill
+                fallback_vix = self._cache.get('vix')
+                
+                # VIX 폴백 2: 캐시도 없으면 SPY 역사적 변동성(HV)으로 합성 (Proxy VIX)
+                if fallback_vix is None or fallback_vix <= 0:
+                    try:
+                        spy_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'us_stocks' / 'prices' / 'SPY.csv'
+                        if spy_path.exists():
+                            spy_df = _pd.read_csv(spy_path)
+                            if 'close' in spy_df.columns and len(spy_df) >= 21:
+                                rets = spy_df['close'].pct_change().dropna()
+                                hv = rets.tail(20).std() * _math.sqrt(252) * 100
+                                fallback_vix = round(hv, 2)
+                                logger.warning(f"  🔄 VIX Cold Start Fallback: SPY 20-day HV 계산 완료 = {fallback_vix}")
+                    except Exception as he:
+                        logger.warning(f"  ⚠️ SPY HV 합성 실패: {he}")
+                        
+                if fallback_vix is None or fallback_vix <= 0:
+                    fallback_vix = 15.0 # 최후의 수단 (시스템 셧다운 방지)
+
+                if 'vix' not in updates:
+                    logger.warning(f"🚨 VIX 수집 실패! Intelligent Fallback 가동: {fallback_vix}")
+                    updates['vix'] = fallback_vix
+                    
+                vix_now = updates.get('vix')
                 vix_hist_raw = self._cache.get('vix_history', [])
                 if not isinstance(vix_hist_raw, list):
                     vix_hist_raw = []
@@ -197,6 +240,7 @@ class MacroRealtimeRefresher:
                     today_close = float(closes.iloc[-1])
                     prev_close = float(closes.iloc[-2])
                     updates['kospi_close'] = today_close
+                    updates['kospi'] = today_close  # [Fix] KOSPI 키 동기화 누락 수정
                     updates['kospi_prev_close'] = prev_close
                     if prev_close > 0:
                         updates['kospi_change_1d'] = round((today_close / prev_close - 1) * 100, 4)
@@ -229,6 +273,9 @@ class MacroRealtimeRefresher:
                     if '^KS11' in av_res:
                         updates['kospi'] = av_res['^KS11']['price']
                         updates['kospi_change_1d'] = av_res['^KS11']['change_1d']
+                        # [S1 Patch] KOSPI 스케일 오염 방지: pykrx(069500) 실패로 MA20 갱신이 멈췄을 때, 
+                        # 백업 수집된 KOSPI(KS11)와 스케일을 일치시키기 위해 임시 동기화
+                        updates['kospi_ma20'] = av_res['^KS11']['price']
                         n_updated += 1
                 except Exception as e:
                     if dhm:
@@ -369,64 +416,79 @@ class MacroRealtimeRefresher:
         updates = {}
         errors = []
         from src.data_collection.alpha_vantage_collector import collect_global_macro
+        
         symbols_to_fetch = list(ticker_map.keys())
+        
+        # KRW=X는 BOK ECOS API 직접 호출 (시차 최소화)
+        if 'KRW=X' in symbols_to_fetch:
+            symbols_to_fetch.remove('KRW=X')
+            fx_val = self._fetch_usdkrw_bok()
+            if fx_val:
+                updates['usdkrw'] = fx_val
+                prev = self._cache.get('usdkrw')
+                if prev and prev > 0:
+                    chg = round((fx_val / prev - 1) * 100, 4)
+                    updates['usdkrw_change_1d'] = chg
+                logger.info(f'  ✅ 환율 BOK ECOS API 성공: {fx_val:.2f}')
+            else:
+                logger.warning('  ⚠️ 환율(KRW=X) BOK ECOS API 수집 실패')
+                errors.append('KRW=X')
+
+        if not symbols_to_fetch:
+            return (updates, errors)
+
         logger.info(f'  🌍 [Alpha Vantage] 배치 조회 시작: {symbols_to_fetch}')
         try:
             av_results = collect_global_macro(symbols_to_fetch)
         except Exception as e:
             logger.error(f'  ❌ Alpha Vantage 배치 조회 중 에러 발생: {e}', exc_info=True)
-            if dhm:
-                dhm.record('av_batch_download', e, 'critical')
             av_results = {}
-        for yf_ticker, cache_key in ticker_map.items():
+            
+        for yf_ticker in symbols_to_fetch:
+            cache_key = ticker_map[yf_ticker]
             if yf_ticker in av_results:
                 res = av_results[yf_ticker]
                 updates[cache_key] = res['price']
                 updates[f'{cache_key}_change_1d'] = res['change_1d']
             else:
                 errors.append(yf_ticker)
-        if 'KRW=X' in errors:
-            logger.warning('  ⚠️ Alpha Vantage 환율 수집 실패 → Naver 크롤링 시도')
-            nav_val = self._fetch_usdkrw_naver()
-            if nav_val:
-                updates['usdkrw'] = nav_val
-                errors.remove('KRW=X')
-                prev = self._cache.get('usdkrw')
-                if prev and prev > 0:
-                    chg = round((nav_val / prev - 1) * 100, 4)
-                    updates['usdkrw_change_1d'] = chg
-                logger.info(f'  ✅ 환율 AV 실패 → Naver 성공: {nav_val:.2f}')
+                
         return (updates, errors)
 
     @staticmethod
     def _fetch_usdkrw_naver() -> Optional[float]:
-        """Naver 금융 환율 페이지에서 USD/KRW 크롤링.
+        """Naver 대신 yfinance 단건 직접 호출로 안정적인 우회 제공."""
+        try:
+            import yfinance as yf
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                df = yf.download('KRW=X', period='1d', progress=False)
+                if not df.empty and 'Close' in df.columns:
+                    return float(df['Close'].iloc[-1].item())
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(f'yfinance KRW=X direct fetch failed: {e}')
+        return None
 
-        URL: https://finance.naver.com/marketindex/
+    @staticmethod
+    def _fetch_usdkrw_bok() -> Optional[float]:
+        """BOK ECOS API에서 USD/KRW 환율을 수집 (가장 최근값).
 
         Returns:
             float (USD/KRW 환율) | None
         """
-        import re as _re
         try:
-            import requests as _req
-            url = 'https://finance.naver.com/marketindex/'
-            headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9'}
-            resp = _req.get(url, headers=headers, timeout=8)
-            resp.raise_for_status()
-            html = resp.text
-            m = _re.search('USD/KRW.*?class="value"[^>]*>([\\d,\\.]+)', html, _re.S)
-            if m:
-                val = float(m.group(1).replace(',', ''))
-                if 900 < val < 2000:
-                    return val
-            m2 = _re.search('class="value"[^>]*>([\\d,\\.]+)', html)
-            if m2:
-                val = float(m2.group(1).replace(',', ''))
-                if 900 < val < 2000:
-                    return val
+            from src.data_collection.bok_economic_updater import BOKEconomicUpdater
+            from datetime import datetime, timedelta
+            updater = BOKEconomicUpdater()
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=7) # 주말/휴일 고려
+            df = updater.fetch_from_bok('731Y001', '0000001', 'D', start_date.strftime('%Y%m%d'), end_date.strftime('%Y%m%d'))
+            if not df.empty and 'Value' in df.columns:
+                return float(df['Value'].iloc[-1])
         except Exception as _e:
-            logger.error(f'  Naver 환율 크롤링 실패: {_e}', exc_info=True)
+            logger.error(f'  BOK 환율 API 수집 실패: {_e}', exc_info=True)
         return None
 
     def _fetch_yf_batch(self, ticker_map: Dict[str, str], period: str='5d') -> Tuple[Dict[str, float], List[str]]:
@@ -613,10 +675,10 @@ class MacroRealtimeRefresher:
                 val = float(df[close_col].iloc[-1])
                 if val > 0:
                     return val
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
+        except Exception as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            logger.warning('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:930', exc_info=True)
+            logger.warning(f'[SILENT_BYPASS] KRX Blocked or Error in _safe_pykrx_index: {e}')
         return None
 
     def _load_signal_cache(self) -> Dict:
@@ -633,35 +695,49 @@ class MacroRealtimeRefresher:
     def _update_cache(self, updates: Dict):
         """signal_cache.json 원자적(Atomic) 쓰기 업데이트.
 
-        ★ S0 Attacker Pipeline (2026-07-17)
-        임시 파일에 먼저 쓴 뒤 os.replace()로 교체하여 JSON 깨짐 원천 차단.
-        오케스트레이터가 읽는 도중 파일이 손상되는 race-condition 방지.
+        [Red Team V5] 다중 프로세스 충돌 방지 (TOC/TOU Data Race 제거).
+        파일 락(fcntl.flock) 기반 safe_json_update 적용.
         """
-        import os, tempfile
         try:
-            existing = {}
-            if _SIGNAL_CACHE.exists():
-                try:
-                    existing = json.loads(_SIGNAL_CACHE.read_text())
-                except (json.JSONDecodeError, OSError):
-                    logger.warning('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:962', exc_info=True)
-            existing.update(updates)
-            existing['timestamp'] = datetime.now().isoformat()
-            _SIGNAL_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            tmp_fd, tmp_path = tempfile.mkstemp(dir=_SIGNAL_CACHE.parent, prefix='.signal_cache_tmp_', suffix='.json')
-            try:
-                with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
-                    json.dump(existing, f, indent=2, ensure_ascii=False, default=str)
-                os.replace(tmp_path, _SIGNAL_CACHE)
-            except Exception:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    logger.error('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:982', exc_info=True)
-                raise
-            self._cache.update(updates)
+            from src.infra.safe_io import safe_json_update
+            
+            def _apply_updates(existing: dict) -> dict:
+                # --- Z-Score / Threshold Sanity Check (르네상스 스타일 교차검증 방어막) ---
+                safe_updates = {}
+                for k, v in updates.items():
+                    if isinstance(v, (int, float)) and not k.endswith('_ts') and not k.endswith('_1d') and 'history' not in k and 'ma' not in k and 'std' not in k:
+                        prev = existing.get(k)
+                        if prev and isinstance(prev, (int, float)) and prev > 0:
+                            jump_pct = abs(v - prev) / prev
+                            
+                            limit = 0.15  # 지수류 15% 초과 변동 차단
+                            is_vix = 'vix' in k
+                            if is_vix: limit = 2.0  # VIX는 특성상 200% 폭등 가능성 있음 (그러나 거부하진 않음)
+                            elif 'usdkrw' in k: limit = 0.05  # 환율은 5% 초과 변동 차단
+                            elif 'yield' in k: limit = 0.50 # 국채금리 50% 변동 차단
+                            
+                            if jump_pct > limit:
+                                if is_vix:
+                                    # [Red Team V6] 오라클 중독 복구: VIX 폭등 시 '오류'로 기각하지 않고 100% 수용한다. (CRASH 레짐 발동용)
+                                    logger.critical(f"  🚨 [VIX BLACK SWAN] {k} 미친 폭등 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 정상 데이터로 강제 수용!")
+                                    safe_updates[k] = v
+                                else:
+                                    logger.critical(f"  🚨 [Sanity Check] {k} 비정상 스파이크 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 갱신 기각 및 캐시 강제 유지(Forward-Fill)!")
+                                    safe_updates[k] = prev
+                                continue
+                    safe_updates[k] = v
+                    
+                existing.update(safe_updates)
+                existing['timestamp'] = datetime.now().isoformat()
+                return existing
+
+            success = safe_json_update(_SIGNAL_CACHE, _apply_updates)
+            if success:
+                self._cache.update(updates)
+            else:
+                logger.error(f'  ❌ signal_cache 업데이트 실패 (File Lock 획득 실패)')
         except Exception as e:
-            logger.warning(f'  signal_cache 업데이트 실패: {e}', exc_info=True)
+            logger.warning(f'  signal_cache 업데이트 예외 발생: {e}', exc_info=True)
 
     def _get_cfg(self, key: str, default: Any=None) -> Any:
         """DynamicConfig에서 값 로드."""
@@ -783,12 +859,23 @@ class MacroRealtimeRefresher:
                     logger.error(f'T-Note 프록시 실패: {_tn_err}', exc_info=True)
             if not av_success or 'usdkrw' not in updates_macro:
                 try:
-                    from src.data_collection.macro_realtime_refresher import _fetch_usdkrw_naver
-                    usdkrw_naver = _fetch_usdkrw_naver()
-                    if usdkrw_naver:
-                        updates_macro['usdkrw'] = usdkrw_naver
+                    from src.data_collection.kis_data_collector import KISDataCollector
+                    kis_fx = KISDataCollector().get_usdkrw_exchange_rate()
+                    if kis_fx:
+                        updates_macro['usdkrw'] = kis_fx
+                        logger.info(f'  🇰🇷 KIS API USDKRW 환율 연동 성공: {kis_fx:.2f}')
                 except Exception:
                     logger.error('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:1179', exc_info=True)
+                
+                # KIS API 실패 시 yfinance fallback
+                if 'usdkrw' not in updates_macro:
+                    try:
+                        from src.data_collection.macro_realtime_refresher import _fetch_usdkrw_naver
+                        usdkrw_naver = _fetch_usdkrw_naver()
+                        if usdkrw_naver:
+                            updates_macro['usdkrw'] = usdkrw_naver
+                    except Exception:
+                        pass
             if 'us10y' not in updates_macro:
                 try:
                     from src.utils.credential_manager import CredentialManager

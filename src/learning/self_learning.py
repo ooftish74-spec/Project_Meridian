@@ -23,6 +23,8 @@ Usage:
 import json
 import logging
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from config.dynamic_config import DynamicConfig
@@ -61,8 +63,10 @@ class SelfLearning:
         """파라미터 모멘텀 상태 저장."""
         try:
             self._momentum_file.parent.mkdir(parents=True, exist_ok=True)
-            self._momentum_file.write_text(json.dumps(self._param_momentum, indent=2, ensure_ascii=False), encoding='utf-8')
+            atomic_write_json(self._momentum_file, self._param_momentum, indent=2, ensure_ascii=False)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  SelfLearning: 모멘텀 저장 실패: {e}')
 
     def _compute_adaptive_lr(self, param_key: str, ic_val: float, ic_std: float=0.0) -> float:
@@ -235,8 +239,10 @@ class SelfLearning:
             max_hist_size = int(cfg.get('self_learning.winsorize_history_size', 252))
             ic_history[ic_key] = (hist + [raw_val])[-max_hist_size:]
         try:
-            ic_hist_file.write_text(json.dumps(ic_history, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            atomic_write_json(ic_hist_file, ic_history, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  IC 히스토리 저장 실패 (비치명적): {e}')
         return clipped_values
 
@@ -304,15 +310,16 @@ class SelfLearning:
         try:
             overrides = {}
             if self._overrides_file.exists():
-                with open(self._overrides_file) as f:
+                from src.utils.file_ops import atomic_write_json
+
+                with open(self._overrides_file, 'r', encoding='utf-8') as f:
                     overrides = json.load(f)
             for change in changes:
                 overrides[change['param']] = change['new_value']
             overrides['_last_updated'] = datetime.now().isoformat()
             overrides['_updated_by'] = 'self_learning'
             self._overrides_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._overrides_file, 'w') as f:
-                json.dump(overrides, f, indent=2, ensure_ascii=False)
+            atomic_write_json(self._overrides_file, overrides, indent=2, ensure_ascii=False)
             cfg.reload()
             self._save_momentum()
             return True

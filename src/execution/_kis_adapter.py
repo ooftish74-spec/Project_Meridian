@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field, asdict
+from src.utils.file_ops import atomic_write_json
 try:
     from src.execution.api_resilience import APICircuitBreaker, OrderDLQ
 except ImportError as e:
@@ -105,7 +106,9 @@ class KISTraderAdapter:
     COMMISSION = {'live': {'KRX': 8.8e-05, 'NXT': 5.3e-05, 'SOR': 7e-05}, 'paper': {'KRX': 0.0, 'NXT': 0.0, 'SOR': 0.0}, 'mock': {'KRX': 0.00015, 'NXT': 9e-05, 'SOR': 0.00012}}
     SLIPPAGE = {'live': {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}, 'paper': {'KRX': 0.0005, 'NXT': 0.0003, 'SOR': 0.0004}, 'mock': {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}}
 
-    def __init__(self, mode: str='mock', app_key: str='', app_secret: str='', account_no: str='', initial_capital: float=None, fetch_balance_on_init: bool=True):
+    def __init__(self, mode: str='live', app_key: str='', app_secret: str='', account_no: str='', initial_capital: float=None, fetch_balance_on_init: bool=True):
+        import threading
+        self._lock = threading.RLock()
         self.mode = mode
         if initial_capital is None:
             try:
@@ -140,22 +143,23 @@ class KISTraderAdapter:
             self.fetch_live_balance()
         mode_label = {'mock': '🔵 Mock', 'paper': '🟡 Paper', 'live': '🔴 Live'}
         logger.info(f'  KISTraderAdapter: {mode_label.get(mode, mode)}')
-        logger.info(f'    계좌: {account_no or 'N/A'}')
+        logger.info(f"    계좌: {account_no or 'N/A'}")
         logger.info(f'    자본: {self.account.cash:,.0f}원')
 
     def authenticate(self) -> bool:
         """API 인증."""
-        if self.mode == 'mock':
-            return True
-        if not self.app_key or not self.app_secret:
-            logger.error('  ❌ APP_KEY/APP_SECRET 미설정')
-            return False
-        if self._access_token and self._token_expires:
-            if datetime.now() < self._token_expires - timedelta(hours=1):
+        with self._lock:
+            if self.mode == 'mock':
                 return True
-        if self._load_cached_token():
-            return True
-        return self._request_new_token()
+            if not self.app_key or not self.app_secret:
+                logger.error('  ❌ APP_KEY/APP_SECRET 미설정')
+                return False
+            if self._access_token and self._token_expires:
+                if datetime.now() < self._token_expires - timedelta(hours=1):
+                    return True
+            if self._load_cached_token():
+                return True
+            return self._request_new_token()
 
     def _load_cached_token(self) -> bool:
         if not self._token_cache.exists():
@@ -167,7 +171,7 @@ class KISTraderAdapter:
             if datetime.now() < expires - timedelta(hours=1):
                 self._access_token = data['access_token']
                 self._token_expires = expires
-                logger.info(f'  🔄 캐시 토큰 로드 (만료: {expires.strftime('%H:%M')})')
+                logger.info(f"  🔄 캐시 토큰 로드 (만료: {expires.strftime('%H:%M')})")
                 return True
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
@@ -179,8 +183,7 @@ class KISTraderAdapter:
         try:
             self._token_cache.parent.mkdir(parents=True, exist_ok=True)
             data = {'access_token': self._access_token, 'expires': self._token_expires.isoformat()}
-            with open(self._token_cache, 'w') as f:
-                json.dump(data, f)
+            atomic_write_json(self._token_cache, data)
         except Exception as e:
             logger.critical(f'  토큰 캐시 저장 실패: {e}', exc_info=True)
 
@@ -201,7 +204,7 @@ class KISTraderAdapter:
                     expires_in = data.get('expires_in', 86400)
                     self._token_expires = datetime.now() + timedelta(seconds=expires_in)
                     self._save_token_cache()
-                    logger.info(f'  ✅ 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})')
+                    logger.info(f"  ✅ 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})")
                     return True
                 error_code = data.get('error_code', '')
                 if error_code == 'EGW00133':
@@ -232,28 +235,29 @@ class KISTraderAdapter:
         Returns:
             Order (IMMEDIATE) 또는 Order (twap_schedule 첨부, status='twap_scheduled')
         """
-        order = Order(order_id=self._gen_order_id(), ticker=ticker, side='buy', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
-        order.notes = f'tif={time_in_force}'
-        order_amount = (price or 0) * (quantity or 0)
-        if time_in_force == 'DAY':
-            try:
-                from src.execution.smart_router import TWAPDispatcher
-                _dispatcher = TWAPDispatcher()
-                if order_amount >= _dispatcher.threshold and quantity > 0:
-                    _dispatch = _dispatcher.dispatch({'ticker': ticker, 'action': 'buy', 'quantity': quantity, 'price': price, 'stream': stream, 'urgency': urgency})
-                    if _dispatch.get('twap_triggered'):
-                        slices = _dispatch.get('slices', [])
-                        logger.info(f'  🔀 [TWAP Routing] BUY {ticker} ₩{order_amount:,.0f} → {len(slices)}분할 @ {_dispatch.get('duration_min')}분')
-                        order.status = 'twap_scheduled'
-                        order.notes = _dispatch.get('reason', '')
-                        order.twap_slices = [s.to_dict() for s in slices]
-                        return order
-            except Exception as _twap_err:
-                logger.critical(f'  TWAP 라우팅 불가 (즉시주문 폴백): {_twap_err}', exc_info=True)
-        if self.mode == 'mock':
-            return self._mock_execute(order)
-        else:
-            return self._api_order(order)
+        with self._lock:
+            order = Order(order_id=self._gen_order_id(), ticker=ticker, side='buy', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
+            order.notes = f'tif={time_in_force}'
+            order_amount = (price or 0) * (quantity or 0)
+            if time_in_force == 'DAY':
+                try:
+                    from src.execution.smart_router import TWAPDispatcher
+                    _dispatcher = TWAPDispatcher()
+                    if order_amount >= _dispatcher.threshold and quantity > 0:
+                        _dispatch = _dispatcher.dispatch({'ticker': ticker, 'action': 'buy', 'quantity': quantity, 'price': price, 'stream': stream, 'urgency': urgency})
+                        if _dispatch.get('twap_triggered'):
+                            slices = _dispatch.get('slices', [])
+                            logger.info(f'  🔀 [TWAP Routing] BUY {ticker} ₩{order_amount:,.0f} → {len(slices)}분할 @ {_dispatch.get("duration_min")}분')
+                            order.status = 'twap_scheduled'
+                            order.notes = _dispatch.get('reason', '')
+                            order.twap_slices = [s.to_dict() for s in slices]
+                            return order
+                except Exception as _twap_err:
+                    logger.critical(f'  TWAP 라우팅 불가 (즉시주문 폴백): {_twap_err}', exc_info=True)
+            if self.mode == 'mock':
+                return self._mock_execute(order)
+            else:
+                return self._api_order(order)
 
     def sell(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY') -> Order:
         """매도 주문.
@@ -270,28 +274,29 @@ class KISTraderAdapter:
         Returns:
             Order (IMMEDIATE) 또는 Order (twap_schedule 첨부, status='twap_scheduled')
         """
-        order = Order(order_id=self._gen_order_id(), ticker=ticker, side='sell', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
-        order.notes = f'tif={time_in_force}'
-        order_amount = (price or 0) * (quantity or 0)
-        if time_in_force == 'DAY':
-            try:
-                from src.execution.smart_router import TWAPDispatcher
-                _dispatcher = TWAPDispatcher()
-                if order_amount >= _dispatcher.threshold and quantity > 0:
-                    _dispatch = _dispatcher.dispatch({'ticker': ticker, 'action': 'sell', 'quantity': quantity, 'price': price, 'stream': stream, 'urgency': urgency})
-                    if _dispatch.get('twap_triggered'):
-                        slices = _dispatch.get('slices', [])
-                        logger.info(f'  🔀 [TWAP Routing] SELL {ticker} ₩{order_amount:,.0f} → {len(slices)}분할 @ {_dispatch.get('duration_min')}분')
-                        order.status = 'twap_scheduled'
-                        order.notes = _dispatch.get('reason', '')
-                        order.twap_slices = [s.to_dict() for s in slices]
-                        return order
-            except Exception as _twap_err:
-                logger.critical(f'  TWAP 라우팅 불가 (즉시주문 폴백): {_twap_err}', exc_info=True)
-        if self.mode == 'mock':
-            return self._mock_execute(order)
-        else:
-            return self._api_order(order)
+        with self._lock:
+            order = Order(order_id=self._gen_order_id(), ticker=ticker, side='sell', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
+            order.notes = f'tif={time_in_force}'
+            order_amount = (price or 0) * (quantity or 0)
+            if time_in_force == 'DAY':
+                try:
+                    from src.execution.smart_router import TWAPDispatcher
+                    _dispatcher = TWAPDispatcher()
+                    if order_amount >= _dispatcher.threshold and quantity > 0:
+                        _dispatch = _dispatcher.dispatch({'ticker': ticker, 'action': 'sell', 'quantity': quantity, 'price': price, 'stream': stream, 'urgency': urgency})
+                        if _dispatch.get('twap_triggered'):
+                            slices = _dispatch.get('slices', [])
+                            logger.info(f'  🔀 [TWAP Routing] SELL {ticker} ₩{order_amount:,.0f} → {len(slices)}분할 @ {_dispatch.get("duration_min")}분')
+                            order.status = 'twap_scheduled'
+                            order.notes = _dispatch.get('reason', '')
+                            order.twap_slices = [s.to_dict() for s in slices]
+                            return order
+                except Exception as _twap_err:
+                    logger.critical(f'  TWAP 라우팅 불가 (즉시주문 폴백): {_twap_err}', exc_info=True)
+            if self.mode == 'mock':
+                return self._mock_execute(order)
+            else:
+                return self._api_order(order)
 
     def _mock_execute(self, order: Order) -> Order:
         """가상 체결."""
@@ -359,6 +364,43 @@ class KISTraderAdapter:
 
           order.notes에 'tif=IOC' / 'tif=FOK'가 있을 때 자동으로 코드 매핑.
         """
+        import math
+        import dataclasses
+        from config.dynamic_config import DynamicConfig
+        
+        # [Execution Firewall] 팻 핑거 및 NaN 방어선 (Fat Finger Protection)
+        try:
+            # 1. NaN 및 Float 검증
+            if math.isnan(order.quantity) or math.isinf(order.quantity):
+                raise ValueError(f"Quantity is NaN/Inf: {order.quantity}")
+            if math.isnan(order.price) or math.isinf(order.price):
+                raise ValueError(f"Price is NaN/Inf: {order.price}")
+            
+            # 수량을 강제로 정수형으로 변환 (실수형 주문 차단)
+            order.quantity = int(float(order.quantity))
+            if order.quantity <= 0:
+                raise ValueError(f"Quantity is zero or negative: {order.quantity}")
+                
+            # 2. Hard Limits (DynamicConfig)
+            _cfg = DynamicConfig()
+            max_qty = _cfg.get('execution.max_order_qty', 100000)
+            max_amount = _cfg.get('execution.max_order_amount_krw', 50000000)
+            
+            if order.quantity > max_qty:
+                raise ValueError(f"Quantity {order.quantity} exceeds MAX_QTY ({max_qty})")
+                
+            order_val = order.quantity * order.price
+            if order_val > max_amount and order.order_type != 'market':
+                raise ValueError(f"Order amount {order_val} exceeds MAX_AMOUNT_KRW ({max_amount})")
+                
+        except Exception as _fw_err:
+            logger.critical(f"  🚨 [Execution Firewall] 비정상 주문 감지 및 차단: {_fw_err}")
+            order.status = 'rejected'
+            order.notes = f"Firewall Blocked: {_fw_err}"
+            if getattr(self, '_dlq', None):
+                self._dlq.add(dataclasses.asdict(order), f"Execution Firewall Blocked: {_fw_err}")
+            return order
+
         if self._cb and (not self._cb.can_execute()):
             logger.warning(f'  🛑 Circuit Breaker 차단: 주문 전송 보류 ({order.ticker})')
             order.status = 'rejected'
@@ -407,6 +449,19 @@ class KISTraderAdapter:
         retry_delays = _rc.get('execution.api_retry_delays', [1, 2, 4]) if _rc else [1, 2, 4]
         if len(retry_delays) < max_retries:
             retry_delays = retry_delays + [retry_delays[-1]] * (max_retries - len(retry_delays))
+            
+        # [09:00:00 Bottleneck Fix] Global Order Lock / Rate Limiter
+        import time
+        if not hasattr(KISTraderAdapter, '_global_last_order_time'):
+            KISTraderAdapter._global_last_order_time = 0.0
+            
+        with self._lock:
+            now = time.time()
+            elapsed = now - KISTraderAdapter._global_last_order_time
+            if elapsed < 0.1:  # Max 10 TPS for orders
+                time.sleep(0.1 - elapsed)
+            KISTraderAdapter._global_last_order_time = time.time()
+            
         for attempt in range(max_retries + 1):
             try:
                 resp = requests.post(url, headers=headers, json=body, timeout=10)
@@ -418,7 +473,7 @@ class KISTraderAdapter:
                         self._cb.record_success()
                     order.status = 'submitted'
                     order.order_id = data.get('output', {}).get('ODNO', order.order_id)
-                    logger.info(f'  📋 API 주문 접수: {data.get('msg1', '')} (주문번호: {order.order_id})')
+                    logger.info(f"  📋 API 주문 접수: {data.get('msg1', '')} (주문번호: {order.order_id})")
                     self.orders.append(order)
                     self._save_state()
                     return order
@@ -433,7 +488,7 @@ class KISTraderAdapter:
                     order.status = 'rejected'
                     logger.error(f'  ❌ API 주문 거부: {data}')
                     if self._dlq:
-                        self._dlq.add(dataclasses.asdict(order), f'API 거부: {data.get('msg1')}')
+                        self._dlq.add(dataclasses.asdict(order), f"API 거부: {data.get('msg1')}")
                     self.orders.append(order)
                     self._save_state()
                     return order
@@ -448,9 +503,8 @@ class KISTraderAdapter:
                     logger.error(f'  ❌ API 주문 최종 실패 (Max Retries 초과): {e}')
                     if self._cb:
                         self._cb.record_failure()
-                    if self._dlq:
                         self._dlq.add(dataclasses.asdict(order), f'Max Retries 초과: {e}')
-        return order
+            return order
 
     def check_order_status(self, order_no: str) -> Dict:
         """미체결 주문 상태 조회.
@@ -728,21 +782,21 @@ class KISTraderAdapter:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
             _s4_tickers = set()
-        tickers = list(self.positions.keys())
+        # [Red Team V6] 좀비 포지션 완벽 척결을 위해 로컬 DB(self.positions) 대신 KIS 실계좌 잔고를 직접 긁어옴
+        live_positions = self.fetch_live_positions()
+        tickers = list(live_positions.keys())
         for ticker in tickers:
+            qty = live_positions[ticker]
             if ticker in _s4_tickers:
-                pos = self.positions[ticker]
-                logger.critical(f'  🛡️  [S4] {ticker} 패닉셀 면제 (qty={pos.quantity}) — 포지션 유지')
+                logger.critical(f'  🛡️  [S4] {ticker} 패닉셀 면제 (qty={qty}) — 포지션 유지')
                 kept_positions.append(ticker)
                 continue
-            pos = self.positions[ticker]
-            qty = pos.quantity
             if qty > 0:
                 logger.critical(f'    - Panic Sell: {ticker} x{qty}')
                 order = self.sell(ticker=ticker, quantity=qty, price=0, order_type='market', exchange='SOR')
                 panic_orders.append(order)
         if kept_positions:
-            logger.critical(f'  🛡️  패닉셀 면제 종목 ({len(kept_positions)}개): {', '.join(kept_positions)}')
+            logger.critical(f"  🛡️  패닉셀 면제 종목 ({len(kept_positions)}개): {', '.join(kept_positions)}")
         return panic_orders
 
     def fetch_live_balance(self) -> bool:
@@ -760,41 +814,90 @@ class KISTraderAdapter:
         """
         if self.mode not in ('live', 'paper'):
             return False
-        if not self._access_token:
-            if not self.authenticate():
-                logger.warning('  ⚠️ fetch_live_balance: 인증 실패 — 잔고 조회 불가')
-                return False
-        try:
-            import requests
-            headers = self._get_headers()
-            headers['tr_id'] = 'TTTC8434R' if self.mode == 'live' else 'VTTC8434R'
-            acnt = self.account_no.split('-')
-            params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
-            url = f'{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance'
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
-            data = resp.json()
-            if data.get('rt_cd') == '0':
-                output2 = data.get('output2', [{}])
-                if output2:
-                    summary = output2[0]
-                    dnca_tot = float(summary.get('dnca_tot_amt', 0))
-                    tot_evlu = float(summary.get('tot_evlu_amt', 0))
-                    if dnca_tot > 0 or tot_evlu > 0:
-                        self.account.cash = dnca_tot
-                        self.account.total_equity = tot_evlu if tot_evlu > 0 else dnca_tot
-                        logger.info(f'  ✅ [Live Patch] 실계좌 잔고 동적 갱신 완료: 예수금={dnca_tot:,.0f}원 / 총자산={tot_evlu:,.0f}원')
-                        return True
+        with self._lock:
+            if not self._access_token:
+                if not self.authenticate():
+                    logger.warning('  ⚠️ fetch_live_balance: 인증 실패 — 잔고 조회 불가')
+                    return False
+            try:
+                import requests
+                headers = self._get_headers()
+                headers['tr_id'] = 'TTTC8434R' if self.mode == 'live' else 'VTTC8434R'
+                acnt = self.account_no.split('-')
+                params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
+                url = f'{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance'
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
+                data = resp.json()
+                if data.get('rt_cd') == '0':
+                    output2 = data.get('output2', [{}])
+                    if output2:
+                        summary = output2[0]
+                        dnca_tot = float(summary.get('dnca_tot_amt', 0))
+                        tot_evlu = float(summary.get('tot_evlu_amt', 0))
+                        if dnca_tot > 0 or tot_evlu > 0:
+                            self.account.cash = dnca_tot
+                            self.account.total_equity = tot_evlu if tot_evlu > 0 else dnca_tot
+                            logger.info(f'  ✅ [Live Patch] 실계좌 잔고 동적 갱신 완료: 예수금={dnca_tot:,.0f}원 / 총자산={tot_evlu:,.0f}원')
+                            return True
+                        else:
+                            logger.warning('  ⚠️ fetch_live_balance: 잔고 데이터 0 — API 응답 확인 필요')
                     else:
-                        logger.warning('  ⚠️ fetch_live_balance: 잔고 데이터 0 — API 응답 확인 필요')
+                        logger.warning('  ⚠️ fetch_live_balance: output2 비어있음')
+                elif data.get('rt_cd') == '1' and '초과' in data.get('msg1', ''):
+                    logger.warning(f'  ⚠️ fetch_live_balance API 속도 제한 (Rate Limit): {data.get("msg1", "")}')
                 else:
-                    logger.warning('  ⚠️ fetch_live_balance: output2 비어있음')
-            elif data.get('rt_cd') == '1' and '초과' in data.get('msg1', ''):
-                logger.warning(f'  ⚠️ fetch_live_balance API 속도 제한 (Rate Limit): {data.get('msg1', '')}')
-            else:
-                logger.error(f'  ❌ fetch_live_balance API 오류: {data.get('msg1', '')} (rt_cd={data.get('rt_cd')})')
-        except Exception as e:
-            logger.error(f'  ❌ fetch_live_balance 예외: {e}')
-        return False
+                    logger.error(f'  ❌ fetch_live_balance API 오류: {data.get("msg1", "")} (rt_cd={data.get("rt_cd")})')
+            except Exception as e:
+                logger.error(f'  ❌ fetch_live_balance 예외: {e}')
+            return False
+
+    def fetch_live_positions(self) -> Dict[str, int]:
+        """[Red Team V6] KIS 실계좌의 실제 보유 종목(positions) 조회.
+        
+        좀비 포지션(상태 비동기화) 해결 및 확실한 패닉셀을 위해 실제 계좌를 뒤집니다.
+        
+        Returns:
+            Dict[str, int]: { '069500': 100, '122630': 50 } 형태의 실제 보유 수량 딕셔너리
+        """
+        if self.mode not in ('live', 'paper'):
+            return {t: p.quantity for t, p in self.positions.items() if p.quantity > 0}
+            
+        with self._lock:
+            if not self._access_token:
+                if not self.authenticate():
+                    return {}
+            try:
+                import requests
+                headers = self._get_headers()
+                headers['tr_id'] = 'TTTC8434R' if self.mode == 'live' else 'VTTC8434R'
+                acnt = self.account_no.split('-')
+                params = {
+                    'CANO': acnt[0], 
+                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 
+                    'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 
+                    'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 
+                    'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''
+                }
+                url = f'{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance'
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
+                data = resp.json()
+                
+                live_pos = {}
+                if data.get('rt_cd') == '0':
+                    output1 = data.get('output1', [])
+                    for item in output1:
+                        ticker = item.get('pdno', '')
+                        qty = int(item.get('hldg_qty', 0))
+                        if ticker and qty > 0:
+                            live_pos[ticker] = qty
+                    logger.info(f'  ✅ [Live Patch] 실계좌 종목 동기화 완료: {live_pos}')
+                    return live_pos
+                else:
+                    logger.error(f'  ❌ fetch_live_positions API 오류: {data.get("msg1", "")}')
+                    return {}
+            except Exception as e:
+                logger.error(f'  ❌ fetch_live_positions 예외: {e}')
+                return {}
 
     def _update_account(self):
         pv = sum((p.current_price * p.quantity for p in self.positions.values()))
@@ -806,8 +909,7 @@ class KISTraderAdapter:
         try:
             state = {'timestamp': datetime.now().isoformat(), 'mode': self.mode, 'account': asdict(self.account), 'positions': {t: asdict(p) for t, p in self.positions.items()}, 'trade_history': self.trade_history[-500:]}
             self.state_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.state_file, 'w') as f:
-                json.dump(state, f, indent=2, default=str)
+            atomic_write_json(self.state_file, state, indent=2, default=str)
         except Exception as e:
             logger.critical(f'상태 저장 실패: {e}', exc_info=True)
 

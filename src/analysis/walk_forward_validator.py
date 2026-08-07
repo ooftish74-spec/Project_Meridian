@@ -10,6 +10,8 @@ Usage:
 """
 import json, logging, numpy as np, pandas as pd
 from pathlib import Path
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 logger = logging.getLogger(__name__)
@@ -92,7 +94,7 @@ class WalkForwardValidator:
         summary = self._summarize(results)
         output = {'timestamp': datetime.now().isoformat(), 'config': {'train_months': train_months, 'test_months': test_months}, 'splits': results, 'summary': summary}
         out_path = _RESULTS_DIR / 'wf_results.json'
-        out_path.write_text(json.dumps(output, indent=2))
+        atomic_write_json(out_path, output, indent=2)
         logger.info(f'  ═══ WF Summary: ACC={summary['mean_acc']:.3f}±{summary['std_acc']:.3f} AUC={summary['mean_auc']:.3f}±{summary['std_auc']:.3f} ═══')
         return output
 

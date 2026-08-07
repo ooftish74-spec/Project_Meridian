@@ -87,9 +87,9 @@ def resolve_ticker_name(ticker: str, fallback: str = '') -> str:
             return CANONICAL_NAMES[clean]
         if ticker in CANONICAL_NAMES:
             return CANONICAL_NAMES[ticker]
-    except ImportError:
-        pass
-    
+    except ImportError as e:
+        import logging
+        logging.getLogger(__name__).warning(f"  [Silent Error 차단] CANONICAL_NAMES 로드 실패: {e}")
     # 2. stock_names.json
     names = _load_stock_names()
     clean = ticker.replace('.KS', '').replace('.KQ', '').zfill(6)
@@ -233,11 +233,11 @@ class ShadowPortfolioManager:
             try:
                 from config.dynamic_config import DynamicConfig
                 _cfg = DynamicConfig()
-                initial_capital = _cfg.get('portfolio.initial_capital', 100_000_000)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                initial_capital = _cfg.get('portfolio.initial_capital')
+            except Exception as e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                initial_capital = 100_000_000
+                initial_capital = None
         self.file_path = _RESULTS / 'shadow_portfolio.json'
         self.initial_capital = initial_capital
         self.data = self._load_or_create()
@@ -248,18 +248,89 @@ class ShadowPortfolioManager:
         # ★ EXIT 설정은 모듈레벨 STREAM_EXIT_PROFILES 참조 (레거시 삭제됨)
 
     # ═══════════════════════════════════════
-    # I/O
+    # I/O & Concurrency
     # ═══════════════════════════════════════
+
+    from contextlib import contextmanager
+    @contextmanager
+    def transaction(self, timeout: int = 10):
+        """[Red Team V7] 다중 프로세스(S1~S5) 환경에서 TOC/TOU Data Race를 원천 방지하는 트랜잭션 락.
+        
+        락을 획득한 후 파일에서 최신 상태를 강제로 다시 읽어오고, 
+        with 블록이 끝날 때 원자적으로(atomic) 자동 저장합니다.
+        
+        Usage:
+            with ShadowPortfolioManager().transaction() as sm:
+                sm.execute_buys(orders)
+        """
+        from src.utils.file_ops import file_lock_transaction
+        lock_path = self.file_path.with_suffix('.json.lock')
+        with file_lock_transaction(lock_path, timeout=timeout):
+            self.data = self._load_or_create()
+            self._migrate_legacy_positions()
+            try:
+                yield self
+            finally:
+                self.save()
+
+
+
+
+    def _fetch_live_nav_from_broker(self):
+        """실제 계좌 잔고를 KIS API를 통해 실시간으로 조회합니다."""
+        try:
+            from config.dynamic_config import DynamicConfig
+            _cfg = DynamicConfig()
+            mode = _cfg.get('execution.current_mode', 'live')
+            if mode not in ('live', 'paper'):
+                return None
+                
+            from src.utils.credential_manager import CredentialManager
+            cm = CredentialManager()
+            prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
+            app_key = cm.read_from_env(f'{prefix}_APP_KEY')
+            app_secret = cm.read_from_env(f'{prefix}_APP_SECRET')
+            account_no = cm.read_from_env(f'{prefix}_ACCOUNT_NO')
+            
+            if not all([app_key, app_secret, account_no]):
+                return None
+                
+            from src.execution._kis_adapter import KISTraderAdapter
+            trader = KISTraderAdapter(mode=mode, app_key=app_key, app_secret=app_secret, account_no=account_no, fetch_balance_on_init=True)
+            if trader.account.total_equity > 0:
+                return trader.account.total_equity
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"  [Self-Healing] KIS 실잔고 조회 실패: {e}")
+        return None
 
     def _load_or_create(self) -> Dict:
         """기존 데이터 로드 또는 신규 생성."""
         if self.file_path.exists():
             try:
-                with open(self.file_path) as f:
+                from src.utils.file_ops import atomic_write_json
+
+                with open(self.file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                logger.info(f"  포트폴리오 로드: NAV=₩{data.get('virtual_nav', 0):,.0f}, "
+                logger.info(f"  포트폴리오 로드: NAV=₩{data.get('virtual_nav', data.get('total_nav', data.get('nav', 0))):,.0f}, "
                             f"포지션={len(data.get('positions', {}))}개")
-                # 호환성: 누락 필드 보충 — 리셋/수동 편집 시에도 KeyError 방지
+                
+                # ★ 하드코딩 제거 및 실계좌 조회 연동 (SSoT)
+                if 'virtual_nav' not in data and 'nav' not in data and 'total_nav' not in data:
+                    live_nav = self._fetch_live_nav_from_broker()
+                    if live_nav is not None and live_nav > 0:
+                        import logging
+                        logging.getLogger(__name__).critical(f"  [Self-Healing] 누락된 NAV를 KIS 실계좌 잔고로 복구: ₩{live_nav:,.0f}")
+                        data['virtual_nav'] = live_nav
+                    elif self.initial_capital:
+                        import logging
+                        logging.getLogger(__name__).warning(f"  [Self-Healing] 실계좌 조회 실패. DynamicConfig 초기 자본으로 임시 복구: ₩{self.initial_capital:,.0f}")
+                        data['virtual_nav'] = self.initial_capital
+                    else:
+                        raise ValueError("virtual_nav가 누락되었고 실계좌 조회 및 초기 자본(DynamicConfig) 로드에도 실패했습니다. 포트폴리오 파일이 손상되었습니다.")
+                else:
+                    data['virtual_nav'] = data.get('virtual_nav', data.get('total_nav', data.get('nav')))
+
                 data.setdefault('trade_history', [])
                 data.setdefault('daily_snapshots', [])
                 data.setdefault('realized_pnl', 0)
@@ -289,13 +360,20 @@ class ShadowPortfolioManager:
             except Exception as e:
                 logger.warning(f"  포트폴리오 로드 실패: {e}")
 
+        # 신규 파일 생성 시 실계좌 잔고 우선 적용
+        live_nav = self._fetch_live_nav_from_broker()
+        base_nav = live_nav if (live_nav is not None and live_nav > 0) else self.initial_capital
+        
+        if base_nav is None:
+            raise ValueError("초기 자본을 결정할 수 없습니다. KIS 조회에 실패했고 DynamicConfig.portfolio.initial_capital이 설정되지 않았습니다.")
+
         return {
             'created': _today(),
             'updated': _now_iso(),
-            'virtual_nav': self.initial_capital,
-            'cash': self.initial_capital,
-            'hwm': self.initial_capital,
-            'initial_capital': self.initial_capital,
+            'virtual_nav': base_nav,
+            'cash': base_nav,
+            'hwm': base_nav,
+            'initial_capital': base_nav,
             'positions': {},
             'trade_history': [],
             'daily_snapshots': [],
@@ -534,8 +612,64 @@ class ShadowPortfolioManager:
             '411060', '500063', '395160', '455890', '290130',
         }
         etf_tickers.update(_KNOWN_ETFS)
+        etf_tickers.update(_KNOWN_ETFS)
         return etf_tickers
 
+    def force_reconcile(self, live_positions: Dict[str, int], live_cash: float):
+        """[Red Team V6] KIS 실계좌 상태와 로컬 섀도우 포트폴리오 강제 동기화 (Zombie Position 척결).
+        
+        KIS 실계좌의 보유 종목(live_positions)과 현금(live_cash)을 기준으로 
+        현재 섀도우 포트폴리오의 불일치를 찾아내어 강제 교정합니다.
+        
+        - KIS에는 있는데 로컬에 없는 종목 (Zombie): 'S_RECON:ticker' 스트림으로 편입하여 관리에 포함.
+        - 로컬에는 있는데 KIS에 없는 종목 (Ghost): 로컬에서 강제 삭제.
+        - 현금 불일치: KIS 현금으로 강제 덮어쓰기.
+        """
+        changed = False
+        local_pos = self.data.get('positions', {})
+        local_aggregated = {}
+        for pos_key, pos in local_pos.items():
+            t = pos.get('ticker')
+            q = pos.get('quantity', 0)
+            if t and q > 0:
+                local_aggregated[t] = local_aggregated.get(t, 0) + q
+                
+        keys_to_delete = []
+        for pos_key, pos in local_pos.items():
+            t = pos.get('ticker')
+            if not t or t not in live_positions:
+                keys_to_delete.append(pos_key)
+                
+        for k in keys_to_delete:
+            logger.critical(f"  🚨 [RECON] KIS에 없는 Ghost 포지션 삭제: {k}")
+            del local_pos[k]
+            changed = True
+            
+        for t, live_qty in live_positions.items():
+            loc_qty = local_aggregated.get(t, 0)
+            diff = live_qty - loc_qty
+            if diff > 0:
+                recon_key = f"S_RECON:{t}"
+                logger.critical(f"  🚨 [RECON] KIS 초과 수량 발견 (Zombie). {recon_key}에 {diff}주 강제 편입!")
+                if recon_key not in local_pos:
+                    local_pos[recon_key] = {
+                        'stream_id': 'S_RECON', 'ticker': t, 'quantity': diff,
+                        'entry_price': 0, 'avg_price': 0, 'current_price': 0,
+                        'amount': 0, 'market_value': 0, 'unrealized_pnl': 0
+                    }
+                else:
+                    local_pos[recon_key]['quantity'] += diff
+                changed = True
+                
+        if live_cash > 0 and abs(self.data.get('cash', 0) - live_cash) > 10:
+            logger.critical(f"  🚨 [RECON] 현금 강제 동기화: {self.data.get('cash',0)} -> {live_cash}")
+            self.data['cash'] = live_cash
+            changed = True
+            
+        if changed:
+            self._heal_positions(self.data)
+            self.save()
+            logger.critical("  ✅ [RECON] 섀도우 포트폴리오 좀비 포지션 치유 및 상태 동기화 완료!")
 
     def save(self):
         """Atomic write: tempfile → os.replace() 패턴."""
@@ -545,8 +679,7 @@ class ShadowPortfolioManager:
         dir_name = os.path.dirname(target)
         fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp', prefix='.shadow_')
         try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, indent=2, default=str, ensure_ascii=False)
+            atomic_write_json(fd, self.data, indent=2, default=str, ensure_ascii=False)
             os.replace(tmp_path, target)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
@@ -764,10 +897,10 @@ class ShadowPortfolioManager:
                     'max_hold_days': cfg.get('exit.deactivated_max_hold', 20),
                     'deactivated': True,
                 }
-        except ImportError:
-            pass
+        except ImportError as e:
+            logger.warning(f"  [Silent Error 차단] M11 exit check 의존성 모듈 로드 실패: {e}")
         except Exception as e:
-            logger.debug(f'M11 exit check error: {e}')
+            logger.error(f'  [Silent Error 차단] M11 exit check error: {e}', exc_info=True)
 
         profiles = get_stream_exit_profiles()
         base = profiles.get(stream_id, profiles['S2'])

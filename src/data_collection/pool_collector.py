@@ -9,6 +9,8 @@ KRX API를 통해 전종목 OHLCV + 시총을 일별로 수집.
     data/pool/metadata.json            — 종목코드, 이름, 시장, 시총
     data/stock_names.json              — 종목명 매핑 (자동 갱신)
 """
+from src.utils.file_ops import atomic_write_json, atomic_write_parquet
+
 import json
 import logging
 import time
@@ -84,7 +86,7 @@ class PoolCollector:
         pool_df = pd.concat(all_dfs, ignore_index=True)
         col_map = {'ISU_SRT_CD': 'ticker', 'ISU_CD': 'ticker', 'ISU_ABBRV': 'name', 'ISU_NM': 'name', 'TDD_CLSPRC': 'close', 'TDD_OPNPRC': 'open', 'TDD_HGPRC': 'high', 'TDD_LWPRC': 'low', 'ACC_TRDVOL': 'volume', 'ACC_TRDVAL': 'trading_value', 'MKTCAP': 'market_cap', 'LIST_SHRS': 'listed_shares', 'CMPPREVDD_PRC': 'change'}
         pool_df = pool_df.rename(columns={k: v for k, v in col_map.items() if k in pool_df.columns})
-        pool_df.to_parquet(parquet_path, index=False)
+        atomic_write_parquet(pool_df, parquet_path, index=False)
         kospi_count = len(pool_df[pool_df['market'] == 'KOSPI'])
         kosdaq_count = len(pool_df[pool_df['market'] == 'KOSDAQ'])
         logger.info(f'  ✅ {date_str}: KOSPI {kospi_count} + KOSDAQ {kosdaq_count} = {len(pool_df)}종목')
@@ -169,8 +171,7 @@ class PoolCollector:
             for _, row in df.iterrows():
                 tickers[row.get('ticker', '')] = {'name': row.get('name', ''), 'market': row.get('market', '')}
             metadata['tickers'] = tickers
-            with open(self.metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, ensure_ascii=False, indent=2)
+            atomic_write_json(self.metadata_file, metadata, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.warning(f'  metadata 갱신 실패: {e}', exc_info=True)
 
@@ -188,8 +189,7 @@ class PoolCollector:
                     existing[ticker] = name
                     updated += 1
             if updated > 0:
-                with open(self.stock_names_file, 'w', encoding='utf-8') as f:
-                    json.dump(existing, f, ensure_ascii=False, indent=2)
+                atomic_write_json(self.stock_names_file, existing, ensure_ascii=False, indent=2)
                 logger.info(f'  📝 stock_names.json: +{updated}개 추가 (총 {len(existing)}개)')
         except Exception as e:
             logger.warning(f'  stock_names 갱신 실패: {e}', exc_info=True)

@@ -3,7 +3,7 @@
 Dynamic Universe Builder — KOSPI + KOSDAQ 유동성 필터 기반
 =========================================================
 feature_store에 데이터가 있는 전 종목을 대상으로,
-historical_10y의 거래대금 기준 유동성 필터를 적용하여
+kr_markets의 거래대금 기준 유동성 필터를 적용하여
 dynamic_universe.json을 갱신합니다.
 
 Usage:
@@ -34,7 +34,7 @@ logger = logging.getLogger('universe_builder')
 cfg = DynamicConfig()
 _RESULTS = _ROOT / 'results'
 _FEATURE_STORE = _ROOT / 'data' / 'feature_store'
-_HIST_10Y = _ROOT / 'data' / 'historical_10y'
+_HIST_10Y = _ROOT / 'data' / 'kr_markets'
 
 
 def get_feature_store_tickers() -> Set[str]:
@@ -45,7 +45,7 @@ def get_feature_store_tickers() -> Set[str]:
 
 
 def compute_liquidity(ticker: str, lookback_days: int = 20) -> float:
-    """historical_10y에서 최근 N일 평균 거래대금 (원) 계산."""
+    """kr_markets에서 최근 N일 평균 거래대금 (원) 계산."""
     for prefix in ['kr_', '']:
         fp = _HIST_10Y / f'{prefix}{ticker}.parquet'
         if fp.exists():
@@ -181,8 +181,9 @@ def main():
     # 저장
     if not args.dry_run:
         _RESULTS.mkdir(exist_ok=True)
-        with open(uni_file, 'w') as f:
-            json.dump(universe, f, indent=2)
+        from src.utils.file_ops import atomic_write_json
+
+        atomic_write_json(uni_file, universe, indent=2)
         logger.info(f"\n  💾 저장: {uni_file} ({len(universe)}종목)")
     else:
         logger.info(f"\n  🔍 Dry-run: 저장하지 않음 ({len(universe)}종목)")

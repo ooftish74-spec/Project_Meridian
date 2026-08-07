@@ -843,56 +843,54 @@ def run_pipeline(phase: str = 'all'):
                 _psd = json.loads(_ps.read_text())
                 _regime = _psd.get('kr_regime', _psd.get('operating_regime', 'caution'))
             _initial = cfg.get('portfolio.initial_capital')
-            _mgr = ShadowPortfolioManager(initial_capital=_initial)
+            with ShadowPortfolioManager(initial_capital=_initial).transaction() as _mgr:
 
-            # ★ 전체 스트림 MTM + TP/SL Exit 체크 (S1/S2/S3/S4 공통)
-            try:
-                from pykrx import stock as _pykrx_exit
-                _today_exit = date.today().strftime('%Y%m%d')
-                _all_tickers = set()
-                for pk in _mgr.positions:
-                    _, _tk = _mgr._parse_position_key(pk)
-                    _all_tickers.add(_tk)
+                # ★ 전체 스트림 MTM + TP/SL Exit 체크 (S1/S2/S3/S4 공통)
+                try:
+                    from pykrx import stock as _pykrx_exit
+                    _today_exit = date.today().strftime('%Y%m%d')
+                    _all_tickers = set()
+                    for pk in _mgr.positions:
+                        _, _tk = _mgr._parse_position_key(pk)
+                        _all_tickers.add(_tk)
 
-                _exit_prices = {}
-                for _tk in _all_tickers:
-                    try:
-                        _df = _pykrx_exit.get_market_ohlcv(
-                            _today_exit, _today_exit, _tk)
-                        if len(_df) > 0:
-                            _p = float(_df.iloc[-1].get('종가', 0))
-                            if _p > 0:
-                                _exit_prices[_tk] = _p
-                    except Exception as _phase_err:  # [Phase 70-E] Silent Error 철거
-                        logger.error(f'[Phase 70-E] 페이즈 오류 은폐 방지: {_phase_err}', exc_info=True)
-                        raise
+                    _exit_prices = {}
+                    for _tk in _all_tickers:
+                        try:
+                            _df = _pykrx_exit.get_market_ohlcv(
+                                _today_exit, _today_exit, _tk)
+                            if len(_df) > 0:
+                                _p = float(_df.iloc[-1].get('종가', 0))
+                                if _p > 0:
+                                    _exit_prices[_tk] = _p
+                        except Exception as _phase_err:  # [Phase 70-E] Silent Error 철거
+                            logger.error(f'[Phase 70-E] 페이즈 오류 은폐 방지: {_phase_err}', exc_info=True)
+                            raise
 
-                if _exit_prices:
-                    _mgr.mark_to_market(_exit_prices)
-                    # ★ S2/S3/S4 TP/SL/Trailing 자동 Exit
-                    _sell_orders = _mgr.check_exit_conditions(_regime)
-                    _s234_sells = [s for s in _sell_orders
-                                   if s.get('stream_id', '') != 'S1']
-                    if _s234_sells:
-                        # S2/S3는 주식 수수료, S4는 ETF 포함
-                        _mgr.execute_sells(_s234_sells, _exit_prices)
-                        _mgr.save()
-                        logger.info(f"  🔴 S2/S3/S4 자동 Exit: {len(_s234_sells)}건")
-                        for _so in _s234_sells:
-                            logger.info(f"    [{_so.get('stream_id','')}] "
-                                       f"{_so.get('name','?')} "
-                                       f"({_so.get('sell_type','')}): "
-                                       f"{_so.get('reason','')[:60]}")
-                    else:
-                        logger.info("  ✅ S2/S3/S4 Exit: 청산 대상 없음")
-            except ImportError as e:
-                logger.error("  pykrx import 실패 — Exit 스킵", exc_info=True)
-            except Exception as e:
-                # ★ NoneType 방어: check_exit_conditions의 base.get() None 방어 실패 시
-                logger.error(f"  S2/S3/S4 Exit 체크 스킵: {e}", exc_info=True)
+                    if _exit_prices:
+                        _mgr.mark_to_market(_exit_prices)
+                        # ★ S2/S3/S4 TP/SL/Trailing 자동 Exit
+                        _sell_orders = _mgr.check_exit_conditions(_regime)
+                        _s234_sells = [s for s in _sell_orders
+                                       if s.get('stream_id', '') != 'S1']
+                        if _s234_sells:
+                            # S2/S3는 주식 수수료, S4는 ETF 포함
+                            _mgr.execute_sells(_s234_sells, _exit_prices)
+                            logger.info(f"  🔴 S2/S3/S4 자동 Exit: {len(_s234_sells)}건")
+                            for _so in _s234_sells:
+                                logger.info(f"    [{_so.get('stream_id','')}] "
+                                           f"{_so.get('name','?')} "
+                                           f"({_so.get('sell_type','')}): "
+                                           f"{_so.get('reason','')[:60]}")
+                        else:
+                            logger.info("  ✅ S2/S3/S4 Exit: 청산 대상 없음")
+                except ImportError as e:
+                    logger.error("  pykrx import 실패 — Exit 스킵", exc_info=True)
+                except Exception as e:
+                    # ★ NoneType 방어: check_exit_conditions의 base.get() None 방어 실패 시
+                    logger.error(f"  S2/S3/S4 Exit 체크 스킵: {e}", exc_info=True)
 
-            record = _mgr.daily_snapshot(regime=_regime)
-            _mgr.save()
+                record = _mgr.daily_snapshot(regime=_regime)
             _nav = _mgr.nav
             _ret = record.get('daily_return_pct', 0)
             _ic = record.get('ic', {}).get('ic', 'N/A') if isinstance(record.get('ic'), dict) else 'N/A'
@@ -905,50 +903,49 @@ def run_pipeline(phase: str = 'all'):
             from src.portfolio.shadow_manager import ShadowPortfolioManager
             _cfg_close = DynamicConfig()
             _initial_close = _cfg_close.get('portfolio.initial_capital')
-            _mgr_close = ShadowPortfolioManager(initial_capital=_initial_close)
+            with ShadowPortfolioManager(initial_capital=_initial_close).transaction() as _mgr_close:
 
-            s1_positions = {pk: pos for pk, pos in _mgr_close.positions.items()
-                          if pk.startswith('S1:')}
+                s1_positions = {pk: pos for pk, pos in _mgr_close.positions.items()
+                              if pk.startswith('S1:')}
 
-            if s1_positions:
-                # 현재가 조회
-                from pykrx import stock as _pykrx_close
-                _today_close = date.today().strftime('%Y%m%d')
-                _close_prices = {}
-                for pk in s1_positions:
-                    _tk = pk.split(':')[1]
-                    try:
-                        _df = _pykrx_close.get_market_ohlcv(
-                            _today_close, _today_close, _tk)
-                        if len(_df) > 0:
-                            _close_prices[_tk] = float(_df.iloc[-1].get('종가', 0))
-                    except Exception as _phase_err:  # [Phase 70-E] Silent Error 철거
-                        logger.error(f'[Phase 70-E] 페이즈 오류 은폐 방지: {_phase_err}', exc_info=True)
-                        raise
+                if s1_positions:
+                    # 현재가 조회
+                    from pykrx import stock as _pykrx_close
+                    _today_close = date.today().strftime('%Y%m%d')
+                    _close_prices = {}
+                    for pk in s1_positions:
+                        _tk = pk.split(':')[1]
+                        try:
+                            _df = _pykrx_close.get_market_ohlcv(
+                                _today_close, _today_close, _tk)
+                            if len(_df) > 0:
+                                _close_prices[_tk] = float(_df.iloc[-1].get('종가', 0))
+                        except Exception as _phase_err:  # [Phase 70-E] Silent Error 철거
+                            logger.error(f'[Phase 70-E] 페이즈 오류 은폐 방지: {_phase_err}', exc_info=True)
+                            raise
 
-                if _close_prices:
-                    _mgr_close.mark_to_market(_close_prices)
+                    if _close_prices:
+                        _mgr_close.mark_to_market(_close_prices)
 
-                    # 전량 강제 청산
-                    _force_sells = []
-                    for pk, pos in s1_positions.items():
-                        _, _tk = pk.split(':', 1)
-                        _force_sells.append({
-                            'pos_key': pk,
-                            'ticker': _tk,
-                            'stream_id': 'S1',
-                            'quantity': pos['quantity'],
-                            'reason': f'장마감 강제 청산 (15:10)',
-                            'sell_type': 'forced_close',
-                        })
+                        # 전량 강제 청산
+                        _force_sells = []
+                        for pk, pos in s1_positions.items():
+                            _, _tk = pk.split(':', 1)
+                            _force_sells.append({
+                                'pos_key': pk,
+                                'ticker': _tk,
+                                'stream_id': 'S1',
+                                'quantity': pos['quantity'],
+                                'reason': f'장마감 강제 청산 (15:10)',
+                                'sell_type': 'forced_close',
+                            })
 
-                    _mgr_close.execute_sells(_force_sells, _close_prices)
-                    _mgr_close.save()
-                    logger.info(f"  🔴 S1 장마감 청산: {len(_force_sells)}건 완료")
+                        _mgr_close.execute_sells(_force_sells, _close_prices)
+                        logger.info(f"  🔴 S1 장마감 청산: {len(_force_sells)}건 완료")
+                    else:
+                        logger.warning("  ⚠️ S1 장마감 청산: 현재가 조회 실패")
                 else:
-                    logger.warning("  ⚠️ S1 장마감 청산: 현재가 조회 실패")
-            else:
-                logger.info("  ⏸ S1 포지션 없음 — 장마감 청산 불필요")
+                    logger.info("  ⏸ S1 포지션 없음 — 장마감 청산 불필요")
         except Exception as e:
             logger.error(f"  S1 장마감 청산 실패: {e}", exc_info=True)
             
@@ -1791,9 +1788,8 @@ def run_pipeline(phase: str = 'all'):
                 _psd = json.loads(_ps.read_text())
                 _regime = _psd.get('kr_regime', _psd.get('operating_regime', 'caution'))
             _initial = cfg.get('portfolio.initial_capital')
-            _mgr = ShadowPortfolioManager(initial_capital=_initial)
-            record = _mgr.daily_snapshot(regime=_regime)
-            _mgr.save()
+            with ShadowPortfolioManager(initial_capital=_initial).transaction() as _mgr:
+                record = _mgr.daily_snapshot(regime=_regime)
             _nav = _mgr.nav
             _ret = record.get('daily_return_pct', 0)
             logger.info(f"  Shadow: NAV=₩{_nav:,.0f} ({_ret:+.2f}%)")

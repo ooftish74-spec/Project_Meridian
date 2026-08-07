@@ -17,6 +17,8 @@ import json
 import logging
 import math
 from datetime import datetime
+from src.utils.file_ops import atomic_write_json
+
 from typing import Dict, List, Optional
 from config.dynamic_config import DynamicConfig
 from src.utils.emergency_pager import send_emergency_page
@@ -134,8 +136,9 @@ class TCAAnalyzer:
         results_dir.mkdir(parents=True, exist_ok=True)
         feedback_path = results_dir / 'tca_feedback.json'
         try:
-            with open(feedback_path, 'w', encoding='utf-8') as f:
-                json.dump(feedback, f, indent=2)
+            from src.utils.file_ops import atomic_write_json
+
+            atomic_write_json(feedback_path, feedback, indent=2)
             logger.info(f'  [TCA] 피드백 루프 파일 저장: ratio={ratio:.3f}, avg_is={avg_actual_bps}bps')
         except Exception as e:
             logger.critical(f'  [TCA] 피드백 저장 실패: {e}', exc_info=True)
@@ -253,7 +256,7 @@ class TCAAnalyzer:
         summary['n_enriched_vwap'] = sum((1 for ef in enriched if ef.get('vwap', 0) != ef.get('signal_price', 0)))
         summary['timestamp'] = datetime.now().isoformat()
         summary_path = results_dir / 'tca_summary.json'
-        summary_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False, default=str))
+        atomic_write_json(summary_path, summary, indent=2, ensure_ascii=False, default=str)
         logger.info(f'TCA 요약 저장: {summary_path} ({summary['n_trades']}건, avg_is={summary.get('avg_is_bps', 0):.1f}bps)')
         self._update_ticker_history(tca_inputs, date_str)
         return summary
@@ -366,5 +369,5 @@ class TCAAnalyzer:
                 hist_list = hist_list[-90:]
             history[ticker] = {'ewma_impact_bps': round(new_ewma, 2), 'n_trades': entry.get('n_trades', 0) + len(impacts), 'last_date': date_str, 'history': hist_list}
         if history:
-            history_path.write_text(json.dumps(history, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(history_path, history, indent=2, ensure_ascii=False, default=str)
             logger.info(f'TCA 종목별 이력 업데이트: {len(ticker_impact)}개 종목 ({date_str})')

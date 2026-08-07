@@ -150,7 +150,7 @@ class LeverageJudge:
         브릿지워터(Macro/Risk-Parity)와 메달리온(Signal Decay) 철학을 반영한 동적 임계값을 사용합니다.
         """
         exit_orders = []
-        etf_tickers_str = cfg.get('leverage_judge.etf_tickers', '114800,252670,122630,233740,470450,470480')
+        etf_tickers_str = cfg.get('leverage_judge.etf_tickers', '114800,252670,122630,233740,0195R0,0195S0')
         etf_tickers = [t.strip() for t in etf_tickers_str.split(',')]
         base_max_hold = int(cfg.get('leverage_judge.max_hold_days', 5))
         macro_vix_threshold = float(cfg.get('leverage_judge.macro_vix_threshold', 22.0))

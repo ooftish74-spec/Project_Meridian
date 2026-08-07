@@ -61,20 +61,26 @@ class AlgoExecutor:
     VOLUME_PROFILE = [0.15, 0.1, 0.08, 0.07, 0.06, 0.06, 0.06, 0.07, 0.08, 0.08, 0.09, 0.1]
 
     def __init__(self):
-        self.min_slice_amount = _cfg.get('execution.min_slice_amount', 500000) if _cfg else 500000
         self.max_slices = _cfg.get('execution.max_slices', 10) if _cfg else 10
         self.participation_rate = _cfg.get('execution.participation_rate', 0.1) if _cfg else 0.1
         self.pov_rate = _cfg.get('execution.pov_rate', 0.05) if _cfg else 0.05
         self.pov_max_duration_min = _cfg.get('execution.pov_max_duration_min', 120) if _cfg else 120
         self.pov_adv_threshold = _cfg.get('execution.pov_adv_threshold', 0.05) if _cfg else 0.05
+        
+        # [V2 Dynamic Slicing Parameters]
+        self.impact_threshold_pct = _cfg.get('execution.impact_threshold_pct', 0.005) if _cfg else 0.005
+        self.slice_chunk_pct = _cfg.get('execution.slice_chunk_pct', 0.002) if _cfg else 0.002
+        self.absolute_min_slice = _cfg.get('execution.absolute_min_slice', 5000000) if _cfg else 5000000
+        self.fallback_min_amount = float(_cfg.get('portfolio.initial_capital', 1000000.0)) if _cfg else 1000000.0
 
-    def twap_schedule(self, order: Dict, duration_minutes: int=30, n_slices: Optional[int]=None) -> List[OrderSlice]:
+    def twap_schedule(self, order: Dict, duration_minutes: int=30, n_slices: Optional[int]=None, adv: float=0) -> List[OrderSlice]:
         """TWAP 분할 스케줄 생성.
 
         Args:
             order: {'ticker', 'action', 'quantity', 'price', 'stream'}
             duration_minutes: 실행 기간 (분)
             n_slices: 분할 수 (None이면 자동 계산)
+            adv: Average Daily Volume (주) - 동적 슬라이싱에 사용
         """
         ticker = order.get('ticker', '')
         total_qty = order.get('quantity', 0)
@@ -82,9 +88,45 @@ class AlgoExecutor:
         action = order.get('action', 'buy')
         if total_qty <= 0:
             return []
+            
+        # 장 마감 방어 로직 (End of Day Limit)
+        now = datetime.now()
+        market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        if market_close > now:
+            minutes_to_close = (market_close - now).total_seconds() / 60.0
+            if 0 < minutes_to_close < duration_minutes:
+                duration_minutes = max(1, int(minutes_to_close))
+                logger.info(f"  [TWAP Edge Case] 장 마감 임박으로 실행 기간을 {duration_minutes}분으로 축소")
+            
+        # [Task 1] AWS 고도화 Option B: 1분 단위 분할 (Micro-TWAP)
+        # 사용자가 1분 단위(Option B)를 선택했으므로, duration_minutes와 n_slices를 일치시킵니다.
+        # 단, 동적 슬라이싱 로직을 통과한 이후에 적용 (아래에서 n_slices 덮어쓰기 방지)
+        
         if n_slices is None:
+            adtv = price * adv if adv > 0 else 0
             total_amount = total_qty * price
-            n_slices = max(1, min(self.max_slices, int(total_amount / self.min_slice_amount)))
+            
+            # 1. Zero Division / No Data Fallback
+            if adtv <= 0:
+                n_slices = 5 if total_amount >= self.fallback_min_amount else 1
+            else:
+                # 2. Commission Floor & ADTV Impact Threshold
+                if total_amount < self.absolute_min_slice or total_amount < adtv * self.impact_threshold_pct:
+                    n_slices = 1
+                else:
+                    # 3. Dynamic Chunking
+                    n_slices = math.ceil(total_amount / max(1.0, (adtv * self.slice_chunk_pct)))
+            
+            # 4. 황제주 소수점 매수 불가 방어 (Price > Slice Value)
+            while n_slices > 1 and (total_amount / n_slices) < price:
+                n_slices -= 1
+                
+            n_slices = max(1, min(self.max_slices, int(n_slices)))
+            
+            # 장 마감 시간 초과 방지
+            if n_slices > duration_minutes:
+                n_slices = max(1, duration_minutes)
+            
         base_qty = total_qty // n_slices
         remainder = total_qty % n_slices
         interval = timedelta(minutes=duration_minutes / n_slices)
@@ -120,10 +162,10 @@ class AlgoExecutor:
         start_idx = max(0, (current_hour - 9) * 2 + (1 if current_min >= 30 else 0))
         remaining_profile = self.VOLUME_PROFILE[start_idx:]
         if not remaining_profile:
-            return self.twap_schedule(order, duration_minutes=30)
+            return self.twap_schedule(order, duration_minutes=30, adv=adv)
         total_weight = sum(remaining_profile)
         if total_weight <= 0:
-            return self.twap_schedule(order, duration_minutes=30)
+            return self.twap_schedule(order, duration_minutes=30, adv=adv)
         slices = []
         cumulative = 0
         base_time = now.replace(minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
@@ -159,7 +201,7 @@ class AlgoExecutor:
             return []
         if adv <= 0:
             logger.warning(f'  POV: {ticker} ADV 없음 → TWAP 폴백')
-            return self.twap_schedule(order, duration_minutes=self.pov_max_duration_min)
+            return self.twap_schedule(order, duration_minutes=self.pov_max_duration_min, adv=adv)
         alpha_decay = float(order.get('alpha_decay', 0.0))
         target_pov_rate = self.pov_rate
         if alpha_decay > 0:
@@ -171,7 +213,7 @@ class AlgoExecutor:
         remaining_profile = self.VOLUME_PROFILE[start_idx:]
         if not remaining_profile:
             logger.warning(f'  POV: {ticker} 장 마감 시간 → TWAP 폴백')
-            return self.twap_schedule(order, duration_minutes=30)
+            return self.twap_schedule(order, duration_minutes=30, adv=adv)
         total_weight = sum(remaining_profile)
         slices = []
         cumulative = 0
@@ -245,7 +287,7 @@ class AlgoExecutor:
         elif algo == 'VWAP':
             return self.vwap_schedule(order, adv)
         else:
-            return self.twap_schedule(order)
+            return self.twap_schedule(order, adv=adv)
 
     def estimate_market_impact(self, order: Dict, adv: float=0, volatility: float=0.0) -> float:
         """시장 충격 비용 추정 (bps).

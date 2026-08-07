@@ -88,6 +88,8 @@ class QVMUniverse:
                 info = stock_info.get(ticker, {})
                 candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'sector': info.get('sector', 'unknown'), 'market_cap': mcap, 'total_assets': ta, 'total_liabilities': tl, 'total_equity': equity, 'revenue': revenue, 'operating_income': op_inc, 'net_income': ni, 'cash_from_operations': cfo, 'gross_profit': gp, 'annual_data': annual, 'is_sector_leader': False})
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  {ticker} 로드 실패: {e}')
                 continue
         candidates.sort(key=lambda x: x['market_cap'], reverse=True)
@@ -186,6 +188,8 @@ class QVMUniverse:
                             self._market_cap_data[ticker] = float(mcap)
                 logger.info(f'  시가총액 캐시: {len(self._market_cap_data)}종목 로드')
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  시가총액 캐시 로드 실패: {e}')
         return self._market_cap_data
 
@@ -202,6 +206,8 @@ class QVMUniverse:
                         self._stock_info[ticker] = {'name': name if isinstance(name, str) else str(name), 'sector': 'unknown'}
                 logger.info(f'  종목명 매핑: {len(self._stock_info)}종목 로드')
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  stock_names.json 로드 실패: {e}')
         if _STOCK_LIST_CACHE.exists():
             try:
@@ -218,5 +224,7 @@ class QVMUniverse:
                             existing = self._stock_info.get(ticker, {})
                             self._stock_info[ticker] = {'name': existing.get('name') or info.get('name', ticker), 'sector': info.get('sector', existing.get('sector', 'unknown'))}
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  stock_list_cache 로드 실패: {e}')
         return self._stock_info

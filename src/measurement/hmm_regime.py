@@ -52,8 +52,28 @@ class HMMRegimePredictor:
         self.model = GaussianHMM(n_components=self.n_components, covariance_type='full', n_iter=100, random_state=42)
         try:
             self.model.fit(X)
+            
+            # --- [Phase 97] HMM Transmat Smoothing & Fallback ---
+            if hasattr(self.model, 'transmat_'):
+                transmat = self.model.transmat_
+                row_sums = transmat.sum(axis=1)
+                
+                # 1. 0(결측)인 행을 균등 분포(1/N) 베이스라인으로 채우기
+                for i in range(self.n_components):
+                    if np.isclose(row_sums[i], 0.0):
+                        logger.warning(f"HMM transmat_ row {i} sums to 0. Applying baseline uniform probability.")
+                        transmat[i, :] = 1.0 / self.n_components
+                
+                # 2. 라플라스 스무딩 (Laplace Smoothing)
+                alpha = 1e-3
+                smoothed_transmat = transmat + alpha
+                
+                # 3. 행별 합이 1이 되도록 정규화 (Normalization)
+                self.model.transmat_ = smoothed_transmat / smoothed_transmat.sum(axis=1, keepdims=True)
+            # ----------------------------------------------------
+            
             self.is_fitted = True
-            logger.info('HMM Regime Model successfully fitted.')
+            logger.info('HMM Regime Model successfully fitted and smoothed.')
         except Exception as e:
             logger.error(f'Failed to fit HMM: {e}')
 

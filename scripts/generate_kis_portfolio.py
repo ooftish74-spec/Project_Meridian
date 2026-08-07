@@ -82,7 +82,8 @@ def generate():
 
     positions = sp.get('positions', {})
     trade_history = sp.get('trade_history', [])
-    initial_capital = sp.get('initial_capital', 150_000_000)
+    from config.dynamic_config import DynamicConfig
+    initial_capital = sp.get('initial_capital', float(DynamicConfig().get('portfolio.initial_capital', 1000000.0)))
     nav = sp.get('virtual_nav', initial_capital)
     cash = sp.get('cash', nav)
 

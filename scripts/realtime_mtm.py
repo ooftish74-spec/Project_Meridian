@@ -151,14 +151,12 @@ def _update_mtm(prices: dict):
     """shadow_portfolio.json을 현재가로 MTM 업데이트."""
     try:
         from src.portfolio.shadow_manager import ShadowPortfolioManager
-        mgr = ShadowPortfolioManager()
+        with ShadowPortfolioManager().transaction() as mgr:
+            if not prices:
+                logger.warning("유효한 가격 데이터 없음, MTM 스킵")
+                return
 
-        if not prices:
-            logger.warning("유효한 가격 데이터 없음, MTM 스킵")
-            return
-
-        result = mgr.mark_to_market(prices)
-        mgr.save()
+            result = mgr.mark_to_market(prices)
 
         updated = result.get('updated_count', 0)
         daily_ret = result.get('daily_return_pct', 0)

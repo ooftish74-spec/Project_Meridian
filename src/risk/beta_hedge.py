@@ -13,6 +13,8 @@ import json
 import logging
 import math
 from datetime import date, datetime, timedelta
+from src.utils.file_ops import atomic_write_json
+
 try:
     from src.utils.time_utils import now_kst
 except ImportError as e:
@@ -69,7 +71,7 @@ class BetaHedge:
         bench_cum = sum(bench_returns)
         alpha_pct = (port_cum - beta * bench_cum) * 100
         result = {'date': date.today().isoformat(), 'portfolio_beta': round(beta, 4), 'alpha_annual_pct': round(alpha * 252 * 100, 2), 'r_squared': round(r_sq, 4), 'n_days': n, 'alpha_decomposition': {'total_return_pct': round(port_cum * 100, 4), 'market_component_pct': round(beta * bench_cum * 100, 4), 'pure_alpha_pct': round(alpha_pct, 4)}, 'hedge_recommendation': hedge}
-        (RESULTS / 'beta_hedge.json').write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding='utf-8')
+        atomic_write_json((RESULTS / 'beta_hedge.json'),  result, indent=2, ensure_ascii=False)
         logger.info(f'  BetaHedge: β={beta:.3f}, R²={r_sq:.3f}, α={alpha * 252 * 100:+.2f}%/yr')
         return result
 

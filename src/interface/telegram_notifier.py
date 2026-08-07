@@ -61,14 +61,15 @@ class MeridianTelegram:
             from src.utils.credential_manager import CredentialManager
             cm = CredentialManager()
         except ImportError as e:
-            pass
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f'🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}', exc_info=True)
 
         def get_cred(key: str, cfg_key: str) -> str:
             cfg_val = self._cfg.get(cfg_key, '') if self._cfg else ''
             if cfg_val:
                 return cfg_val
             if cm:
-                kc_val = cm.read_from_keychain(key)
+                kc_val = cm.read_from_env(key)
                 if kc_val:
                     return kc_val
             logger.warning(f'Key {key} not found in Config or Keychain!')
@@ -151,7 +152,9 @@ class MeridianTelegram:
             today_regime = latest.get('regime', 'bull')
         regime_icon = {'bull': '🐂', 'caution': '⚠️', 'bear': '🐻', 'crash': '🚨'}.get(today_regime, '📊')
         verdict_icon = '✅' if verdict == 'GO' else '🛑' if verdict == 'NO_GO' else '⏳'
-        msg = f'{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {verdict_icon} Go/No-Go: {verdict} (Day {n_days}/14)\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {signal.get('vix', 'N/A')} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━'
+        from src.utils.metric_parser import parse_vix
+        vix = parse_vix(signal, 0.0)
+        msg = f'{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {verdict_icon} Go/No-Go: {verdict} (Day {n_days}/14)\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {vix:.1f} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━'
         self._send(msg)
 
     def send_execution_summary(self, exec_result):
@@ -281,7 +284,9 @@ class MeridianCommandHandler:
         regime = daily[-1].get('regime', 'bull') if daily else 'bull'
         verdict = gonogo.get('verdict', 'N/A')
         n_days = gonogo.get('n_days', 0)
-        return f'{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  Go/No-Go: {verdict} (Day {n_days}/14)\n  VIX: {signal.get('vix', 'N/A')}\n  OIS: {signal.get('ois', 'N/A')}'
+        from src.utils.metric_parser import parse_vix
+        vix = parse_vix(signal, 0.0)
+        return f'{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  Go/No-Go: {verdict} (Day {n_days}/14)\n  VIX: {vix:.1f}\n  OIS: {signal.get('ois', 'N/A')}'
 
     def _cmd_regime(self, args: str) -> str:
         signal = _load_signal()
@@ -289,7 +294,9 @@ class MeridianCommandHandler:
         daily = shadow.get('daily_stats', [])
         regime = daily[-1].get('regime', 'bull') if daily else 'bull'
         icons = {'bull': '🐂', 'caution': '⚠️', 'bear': '🐻', 'crash': '🚨'}
-        return f'{_TAG} {icons.get(regime, '📊')} Regime: {regime.upper()}\n  VIX: {signal.get('vix', 'N/A')}\n  US Regime: {signal.get('us_regime', 'N/A')}\n  OIS: {signal.get('ois', 'N/A')}'
+        from src.utils.metric_parser import parse_vix
+        vix = parse_vix(signal, 0.0)
+        return f'{_TAG} {icons.get(regime, '📊')} Regime: {regime.upper()}\n  VIX: {vix:.1f}\n  US Regime: {signal.get('us_regime', 'N/A')}\n  OIS: {signal.get('ois', 'N/A')}'
 
     def _cmd_gonogo(self, args: str) -> str:
         shadow = _load_shadow()
@@ -311,7 +318,8 @@ class MeridianCommandHandler:
         signal = _load_signal()
         shadow = _load_shadow()
         gonogo = shadow.get('go_nogo', {})
-        vix = signal.get('vix', 0)
+        from src.utils.metric_parser import parse_vix
+        vix = parse_vix(signal, 0.0)
         dd = gonogo.get('max_dd', 0)
         vix_status = '🟢 Safe' if vix < 20 else '🟡 Caution' if vix < 30 else '🔴 Danger'
         return f'{_TAG} 🛡️ Risk Status\n  VIX: {vix:.1f} ({vix_status})\n  MaxDD: {dd:+.1f}% (Limit: -8%)\n  Kill Switch: ✅ Safe\n  Crash Defense: ✅ Safe'
@@ -339,8 +347,8 @@ class MeridianPollingServer:
     def __init__(self):
         from src.utils.credential_manager import CredentialManager as _CM
         _cm = _CM()
-        self._token = _cm.read_from_keychain('TELEGRAM_BOT_TOKEN') or ''
-        self._chat_id = _cm.read_from_keychain('TELEGRAM_CHAT_ID') or ''
+        self._token = _cm.read_from_env('TELEGRAM_BOT_TOKEN') or ''
+        self._chat_id = _cm.read_from_env('TELEGRAM_CHAT_ID') or ''
         self._handler = MeridianCommandHandler()
         self._offset = 0
 

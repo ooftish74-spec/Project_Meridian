@@ -13,6 +13,8 @@ s1_intraday_breakout.py — S1 장중 거래량 돌파 시그널 (S1-B)
 """
 from __future__ import annotations
 import json
+from src.utils.file_ops import atomic_write_json
+
 import logging
 from datetime import datetime, time as dtime
 from pathlib import Path
@@ -134,7 +136,7 @@ class S1IntradayBreakout:
         out = {'generated_at': datetime.now().isoformat(), 'count': len(signals), 'signals': signals}
         path = _RESULTS_DIR / 's1_breakout_signals.json'
         try:
-            path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding='utf-8')
+            atomic_write_json(path, out, ensure_ascii=False, indent=2)
             logger.info('[S1-B] 시그널 저장: %s', path.name)
         except Exception as e:
             logger.error('[S1-B] 저장 실패: %s', e)

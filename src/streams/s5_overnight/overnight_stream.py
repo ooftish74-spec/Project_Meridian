@@ -107,6 +107,8 @@ class S5OvernightStream(BaseStream):
                 _nq_blocked = True
                 logger.warning(f'  🚫 [Phase 10: Alpha Breakthrough] S5 NQ 선물 필터: {_nq_chg:+.2f}% ≤ {_nq_threshold}% → 오버나이트 매수 취소')
         except Exception as _nq_e:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_nq_e}", exc_info=True)
             logger.debug(f'  [Phase 10] S5 NQ 필터 실패 (무시): {_nq_e}')
         vix_spike_flag = market_data.get('alpha_signals', {}).get('S5_signal', {}).get('vix_spike', False)
         _nq_vol = float(market_data.get('nq_vol_pct', market_data.get('nq_1d_vol', 0.0)))
@@ -125,16 +127,11 @@ class S5OvernightStream(BaseStream):
         if ah_score != 0.0:
             overnight_alpha = overnight_alpha * 0.4 + ah_score * 0.6
         base_threshold = cfg.get('s5.overnight_reversion_threshold', 1.0)
-        regime_conf = market_data.get('regime_confidence', 0.5)
-        if regime == 'bull':
-            short_entry_th = base_threshold * (1.0 + 0.5 * regime_conf)
-            long_entry_th = base_threshold * max(0.5, 1.0 - 0.2 * regime_conf)
-        elif regime in ('bear', 'crash'):
-            short_entry_th = base_threshold * max(0.5, 1.0 - 0.5 * regime_conf)
-            long_entry_th = base_threshold * (1.0 + 0.5 * regime_conf)
-        else:
-            short_entry_th = base_threshold
-            long_entry_th = base_threshold
+        # [Phase 95 Decoupling] S5 아비트라지는 상위 레짐(Macro) 방향에 종속되지 않고 철저히 독립적으로 작동.
+        # 거시경제가 CRASH든 BULL이든 수급 갭이 발생하면 기계적으로 역베팅(Arbitrage) 수행.
+        short_entry_th = base_threshold
+        long_entry_th = base_threshold
+        logger.info(f"  [Decoupling] S5 오버나잇 임계치 상위 레짐({regime}) 무시. 고정 임계치(long={long_entry_th:.2f}%, short={short_entry_th:.2f}%) 적용.")
         direction = 'neutral'
         confidence = 0.0
         reason = ''
@@ -182,7 +179,7 @@ class S5OvernightStream(BaseStream):
                 overlay_size_pct = round(overlay_size_pct * (_vk / max(max_alloc, 1e-06)), 3)
                 overlay_size_pct = max(0.0, min(max_alloc, overlay_size_pct))
                 if overlay_size_pct > 0.0:
-                    signals.append({'stream_id': 'S5', 'ticker': ticker, 'name': self.ETF_UNIVERSE.get(ticker, {}).get('name', ticker), 'direction': 'long', 'confidence': round(confidence, 3), 'size_pct': overlay_size_pct, 'strategy': 'overnight_overlay', 'reason': reason, 'tp_pct': cfg.get('s5.tp_pct', 1.0), 'sl_pct': cfg.get('s5.sl_pct', -1.5), 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
+                    signals.append({'stream_id': 'S5', 'ticker': ticker, 'name': self.ETF_UNIVERSE.get(ticker, {}).get('name', ticker), 'direction': 'long', 'confidence': round(confidence, 3), 'size_pct': overlay_size_pct, 'strategy': 'overnight_overlay', 'reason': reason, 'tp_pct': cfg.get('s5.tp_pct', 1.5), 'sl_pct': cfg.get('s5.sl_pct', -1.5), 'trail_activate_pct': 0.3, 'trail_distance_pct': 0.3, 'max_hold_minutes': 60, 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
                     logger.info(f'  🌙 S5 오버레이: {ticker} (conf={confidence:.2f}, 비중={overlay_size_pct:.1%}) - {reason}')
         parking_etfs = None
         _dynamic_cache = None
@@ -197,6 +194,8 @@ class S5OvernightStream(BaseStream):
                     _dynamic_cache = _cache_path.name
                     logger.debug(f'  🅿️ 파킹 ETF 동적 캐시 로드: {[p['name'] for p in parking_etfs]}')
         except Exception as _dce:
+            from src.utils.error_logger import log_error_rate_limited
+            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_dce}", exc_info=True)
             logger.debug(f'  dynamic_parking_etfs 로드 실패 (다음 폴백 시도): {_dce}')
         if parking_etfs is None:
             parking_etfs = cfg.get('s5.parking_etfs', None)

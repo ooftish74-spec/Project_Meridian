@@ -49,11 +49,15 @@ class StatArbEngine:
         sorted_pairs = sorted(pairs, key=lambda x: x['p_value'])
         return sorted_pairs[:self.max_pairs]
 
-    def generate_signals(self, prices_df: pd.DataFrame, pairs: List[Dict], current_aum: float=150000000.0) -> List[Dict]:
+    def generate_signals(self, prices_df: pd.DataFrame, pairs: List[Dict], current_aum: float=None) -> List[Dict]:
         """
         발견된 공적분 페어의 실시간 스프레드 Z-score를 계산하여 롱숏 시그널을 생성합니다.
         :param current_aum: 운용 자산 규모 (원화). 자금 규모에 따라 체결 라우팅 전략(FOK, TWAP 등)이 동적 조정됨.
         """
+        if current_aum is None:
+            from config.dynamic_config import DynamicConfig
+            current_aum = float(DynamicConfig().get('portfolio.initial_capital', 1000000.0))
+            
         is_large_cap = current_aum > 10000000000.0
         routing_algo = 'PASSIVE_TWAP' if is_large_cap else 'ACTIVE_LIMIT'
         fok_timer = 500 if is_large_cap else 2000

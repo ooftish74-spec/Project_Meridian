@@ -26,6 +26,9 @@ DART 일별 증분 수집기 — Daily Pipeline 연동용
 Author: Project-A
 Date: 2026-03-21
 """
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import atomic_write_dataframe
+
 import json
 import logging
 import os
@@ -98,7 +101,7 @@ class DARTDailyCollector:
     def _load_api_key(self) -> str:
         """[Keychain] DART API 키 로드."""
         from src.utils.credential_manager import CredentialManager
-        return CredentialManager().read_from_keychain('DART_API_KEY') or ''
+        return CredentialManager().read_from_env('DART_API_KEY') or ''
 
     def _load_corp_codes(self) -> Dict[str, str]:
         """corp_code 캐시 로드."""
@@ -181,8 +184,7 @@ class DARTDailyCollector:
                 n_items += self._collect_financials(ticker, corp_code)
                 self._update_daily_signal(ticker)
                 meta = {'last_collected': end_date, 'last_update': datetime.now().isoformat(), 'items_collected': n_items}
-                with open(ticker_dir / 'meta.json', 'w') as f:
-                    json.dump(meta, f, indent=2)
+                atomic_write_json(ticker_dir / 'meta.json', meta, indent=2)
                 results['collected'] += n_items
                 results['details'][ticker] = n_items
                 logger.info(f'  📋 DART {ticker}({name}): {n_items}건 수집')
@@ -293,7 +295,7 @@ class DARTDailyCollector:
             df = pd.DataFrame(records)
             df.drop_duplicates(subset=['year', 'report', 'account'], keep='first', inplace=True)
             path = _DART_DATA_DIR / ticker / 'financial_summary.csv'
-            df.to_csv(path, index=False, encoding='utf-8-sig')
+            atomic_write_dataframe(df, path, file_format='csv', index=False, encoding='utf-8-sig')
         return len(records)
 
     def _update_daily_signal(self, ticker: str):
@@ -355,7 +357,7 @@ class DARTDailyCollector:
         signals = pd.concat([signals, new_row])
         signals = signals[~signals.index.duplicated(keep='last')]
         signals.sort_index(inplace=True)
-        signals.to_csv(signal_path)
+        atomic_write_dataframe(signals, signal_path, file_format='csv')
 
     def get_features(self, ticker: str, target_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
         """
@@ -417,13 +419,13 @@ class DARTDailyCollector:
                 existing = pd.read_csv(path)
                 combined = pd.concat([existing, new_df], ignore_index=True)
                 combined.drop_duplicates(inplace=True)
-                combined.to_csv(path, index=False, encoding='utf-8-sig')
+                atomic_write_dataframe(combined, path, file_format='csv', index=False, encoding='utf-8-sig')
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
-                new_df.to_csv(path, index=False, encoding='utf-8-sig')
+                atomic_write_dataframe(new_df, path, file_format='csv', index=False, encoding='utf-8-sig')
         else:
-            new_df.to_csv(path, index=False, encoding='utf-8-sig')
+            atomic_write_dataframe(new_df, path, file_format='csv', index=False, encoding='utf-8-sig')
 
     @staticmethod
     def _parse_num(s) -> int:

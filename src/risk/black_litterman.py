@@ -87,20 +87,21 @@ class BlackLittermanOptimizer:
 
         # 5. 사후 결합 수익률 (Posterior Expected Returns: E[R])
         # E[R] = [(tau * Sigma)^-1 + P^T * Omega^-1 * P]^-1 * [(tau * Sigma)^-1 * Pi + P^T * Omega^-1 * Q]
-        tau_Sigma_inv = np.linalg.inv(self.tau * Sigma)
+        # [Execution Firewall] 특이 행렬(Singular Matrix) 크래시 방지를 위해 inv 대신 pinv(유사역행렬) 사용
+        tau_Sigma_inv = np.linalg.pinv(self.tau * Sigma)
         try:
-            Omega_inv = np.linalg.inv(Omega)
+            Omega_inv = np.linalg.pinv(Omega)
         except np.linalg.LinAlgError:
             logger.critical("Omega matrix is singular. Falling back to market weights.", exc_info=True)
             return mcap_weights
 
-        term1 = np.linalg.inv(tau_Sigma_inv + np.dot(np.dot(P.T, Omega_inv), P))
+        term1 = np.linalg.pinv(tau_Sigma_inv + np.dot(np.dot(P.T, Omega_inv), P))
         term2 = np.dot(tau_Sigma_inv, Pi) + np.dot(np.dot(P.T, Omega_inv), Q)
         posterior_returns = np.dot(term1, term2)
 
         # 6. 최적 포트폴리오 비중 산출 (W_opt)
         # W_opt = (1 / risk_aversion) * Sigma^-1 * E[R]
-        Sigma_inv = np.linalg.inv(Sigma)
+        Sigma_inv = np.linalg.pinv(Sigma)
         optimal_weights_array = (1 / self.risk_aversion) * np.dot(Sigma_inv, posterior_returns)
 
         # 음수 비중(공매도 불가 가정) 제거 후 정규화

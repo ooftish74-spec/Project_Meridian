@@ -23,6 +23,7 @@ Author: Project-A
 Date: 2026-03-27
 """
 import json
+from src.infra.safe_io import atomic_write_dataframe
 import logging
 import time
 import requests
@@ -42,9 +43,10 @@ class KISDataCollector:
 
     def __init__(self):
         self._trader = None
-        self._base_url = None
+        self._base_url = 'https://openapi.koreainvestment.com:9443'
         self._headers = None
         self._last_call = 0
+        self._ensure_auth()
 
     def _ensure_auth(self) -> bool:
         """KIS 인증 (lazy init)."""
@@ -72,8 +74,9 @@ class KISDataCollector:
                 self._headers = self._trader._get_headers()
                 logger.info('✅ KIS API 인증 성공')
                 return True
+            return False
         except Exception as e:
-            logger.error(f'❌ KIS API 인증 실패: {e}', exc_info=True)
+            logger.error(f'  ❌ KIS 인증 실패: {e}', exc_info=True)
         return False
 
     def _call(self, url: str, tr_id: str, params: Dict, max_retries: int=2) -> Optional[Dict]:
@@ -95,14 +98,26 @@ class KISDataCollector:
                         return data
                     else:
                         msg = data.get('msg1', '')
-                        if 'EGW00123' in msg:
-                            time.sleep(1)
+                        if 'EGW00123' in msg or '토큰' in msg or '만료' in msg:
+                            logger.warning(f'  [Token Refresh] KIS API 토큰/한도 오류 감지: {msg} — 강제 재인증 시도')
+                            self._trader = None
+                            self._headers = None
+                            if self._ensure_auth():
+                                time.sleep(1)
+                                continue
+                        elif '초과' in msg or '초당' in msg or 'EGW' in msg:
+                            backoff_time = min(16, 2 ** attempt)
+                            logger.warning(f'  [Rate Limit] KIS API 한도 초과/오류: {msg} — {backoff_time}초 대기 후 재시도 ({attempt+1}/{max_retries})')
+                            time.sleep(backoff_time)
                             continue
+                            
                         logger.debug(f'KIS API 오류: {msg}')
                         return None
             except Exception as e:
                 if attempt < max_retries - 1:
-                    time.sleep(1)
+                    backoff_time = min(16, 2 ** attempt)
+                    logger.warning(f'  [Network Error] API 호출 예외: {e} — {backoff_time}초 대기 후 재시도')
+                    time.sleep(backoff_time)
                     continue
                 logger.error(f'KIS API 호출 실패: {e}', exc_info=True)
         return None
@@ -192,14 +207,38 @@ class KISDataCollector:
                         try:
                             return int(float(str(val).strip()))
                         except (ValueError, TypeError):
-                            pass
+                            from src.utils.error_logger import log_error_rate_limited
+                            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                 logger.warning(f'[KIS Error] 필드값 오류: {prefix} 수급 필드({keys[0]})가 없습니다! API 명세 변경 의심. Keys: {list(row.keys())[:10]}')
                 return 0
             records.append({'date': dt, 'close': int(r.get('stck_clpr', 0)), 'prsn_ntby_qty': _get_q(r, 'prsn'), 'frgn_ntby_qty': _get_q(r, 'frgn'), 'orgn_ntby_qty': _get_q(r, 'orgn'), 'prsn_ntby_tr_pbmn': int(r.get('prsn_ntby_tr_pbmn', 0)), 'frgn_ntby_tr_pbmn': int(r.get('frgn_ntby_tr_pbmn', 0)), 'orgn_ntby_tr_pbmn': int(r.get('orgn_ntby_tr_pbmn', 0)), 'prsn_shnu_vol': int(r.get('prsn_shnu_vol', 0)), 'frgn_shnu_vol': int(r.get('frgn_shnu_vol', 0)), 'orgn_shnu_vol': int(r.get('orgn_shnu_vol', 0)), 'prsn_seln_vol': int(r.get('prsn_seln_vol', 0)), 'frgn_seln_vol': int(r.get('frgn_seln_vol', 0)), 'orgn_seln_vol': int(r.get('orgn_seln_vol', 0))})
+        if not records:
+            return None
         df = pd.DataFrame(records)
         df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date').sort_index()
+        # 🛡️ Data Poisoning Defense: ensure investor trading data has no NaNs
+        df = df.fillna(0)
         return df
+
+    def get_usdkrw_exchange_rate(self) -> Optional[float]:
+        """해외주식 현재가 조회를 통해 KIS 실시간 고시 환율(t_rate) 추출.
+
+        Returns:
+            float: 실시간 USD/KRW 환율, 실패 시 None
+        """
+        url = f'{self._base_url}/uapi/overseas-price/v1/quotations/price'
+        data = self._call(url, 'HHDFS76200200', {'AUTH': '', 'EXCD': 'NAS', 'SYMB': 'AAPL'})
+        if not data:
+            return None
+        out = data.get('output', {})
+        t_rate = out.get('t_rate')
+        if t_rate:
+            try:
+                return float(t_rate)
+            except ValueError:
+                pass
+        return None
 
     def get_us_daily_ohlcv(self, ticker: str, end_date: str='') -> Optional[pd.DataFrame]:
         """해외주식 일별 OHLCV (최대 100일).
@@ -230,6 +269,8 @@ class KISDataCollector:
         df = pd.DataFrame(records)
         df['Date'] = pd.to_datetime(df['Date'])
         df = df.set_index('Date').sort_index()
+        # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
+        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
         return df
 
     def get_current_price(self, ticker: str) -> Optional[Dict]:
@@ -245,8 +286,24 @@ class KISDataCollector:
         premium_pct = 0.0
         if etf_inav > 0 and price > 0:
             premium_pct = round((price - etf_inav) / etf_inav * 100, 3)
-        return {'price': price, 'change': int(output.get('prdy_vrss', 0)), 'change_pct': float(output.get('prdy_ctrt', 0)), 'volume': int(output.get('acml_vol', 0)), 'frgn_hold_pct': float(output.get('hts_frgn_ehrt', 0)), 'frgn_ntby_qty': int(output.get('frgn_ntby_qty', 0)), 'etf_nav': etf_nav, 'etf_inav': etf_inav, 'premium_pct': premium_pct}
-
+            
+        # [HOTFIX] 동시호가 예상 체결 데이터 수집
+        antc_price = int(output.get('antc_cnpr', 0))
+        antc_change_pct = float(output.get('antc_cntg_prdy_ctrt', 0))
+        
+        return {
+            'price': price, 
+            'change': int(output.get('prdy_vrss', 0)), 
+            'change_pct': float(output.get('prdy_ctrt', 0)), 
+            'volume': int(output.get('acml_vol', 0)), 
+            'frgn_hold_pct': float(output.get('hts_frgn_ehrt', 0)), 
+            'frgn_ntby_qty': int(output.get('frgn_ntby_qty', 0)), 
+            'etf_nav': etf_nav, 
+            'etf_inav': etf_inav, 
+            'premium_pct': premium_pct,
+            'antc_price': antc_price,
+            'antc_change_pct': antc_change_pct
+        }
     def collect_kr_stocks(self, tickers: List[str], days: int=5) -> Dict[str, pd.DataFrame]:
         """한국 주식 일괄 수집 (OHLCV + 수급)."""
         end = datetime.now().strftime('%Y%m%d')
@@ -325,16 +382,16 @@ class KISDataCollector:
                 n_saved += 1
         if all_records:
             combined = pd.concat(all_records, ignore_index=True)
-            combined.to_csv(output_dir / f'kis_investor_{today}.csv', index=False)
-            combined.to_csv(output_dir / 'latest_net_buying.csv', index=False)
+            atomic_write_dataframe(combined, output_dir / f'kis_investor_{today}.csv', file_format='csv', index=False)
+            atomic_write_dataframe(combined, output_dir / 'latest_net_buying.csv', file_format='csv', index=False)
             ts_file = output_dir / 'stock_sd_timeseries.csv'
             if ts_file.exists():
                 existing = pd.read_csv(ts_file)
                 combined_ts = pd.concat([existing, combined], ignore_index=True)
                 combined_ts = combined_ts.drop_duplicates(subset=['date', 'ticker'], keep='last')
-                combined_ts.to_csv(ts_file, index=False)
+                atomic_write_dataframe(combined_ts, ts_file, file_format='csv', index=False)
             else:
-                combined.to_csv(ts_file, index=False)
+                atomic_write_dataframe(combined, ts_file, file_format='csv', index=False)
             logger.info(f'  💾 수급 저장: {n_saved}종목 → {output_dir}')
         return n_saved
 
@@ -392,8 +449,8 @@ class KISDataCollector:
                         try:
                             api_gamma = float(output[gk])
                             break
-                        except (KeyError, ValueError, TypeError):
-                            logger.warning('[SILENT_BYPASS] Suppressed exception at kis_data_collector.py:600', exc_info=True)
+                        except (KeyError, ValueError, TypeError) as _gk_e:
+                            logger.warning(f'  [Validation] 감마(gamma) 파싱 실패: {_gk_e} (키: {gk}, 값: {output.get(gk)})')
                     if api_gamma is not None:
                         gamma, gamma_src = (api_gamma, 'api')
                     else:
@@ -436,8 +493,8 @@ class KISDataCollector:
                             return float(max(1, (dt - today).days))
                 except ValueError:
                     break
-        except Exception:
-            logger.error('[SILENT_BYPASS] Suppressed exception at kis_data_collector.py:658', exc_info=True)
+        except Exception as _dte_e:
+            logger.error(f'  [Validation] DTE 계산 실패: {_dte_e}', exc_info=True)
         return 10.0
 
     @staticmethod
@@ -470,6 +527,45 @@ class KISDataCollector:
         except Exception:
             logger.error('[SILENT_BYPASS] Suppressed exception at kis_data_collector.py:690', exc_info=True)
         return 0.2
+
+    def _get_front_month_futures_ticker(self) -> str:
+        """현재 날짜를 기반으로 KOSPI 200 당월물 선물 코드 동적 생성."""
+        from datetime import datetime
+        now = datetime.now()
+        year = now.year
+        month = now.month
+        day = now.day
+        
+        if day > 14 and month in (3, 6, 9, 12):
+            month += 1
+            if month > 12:
+                month = 1
+                year += 1
+                
+        if month <= 3: target_m = 3
+        elif month <= 6: target_m = 6
+        elif month <= 9: target_m = 9
+        else: target_m = 12
+        
+        year_map = {2024: 'V', 2025: 'W', 2026: 'X', 2027: 'Y', 2028: 'Z', 2029: 'A', 2030: 'B'}
+        y_code = year_map.get(year, 'X')
+        m_code = 'C' if target_m == 12 else str(target_m)
+        
+        return f"101{y_code}{m_code}000"
+
+    def get_night_futures_close(self) -> Optional[float]:
+        """KOSPI 야간선물(KRX) 당월물 최종 등락률 1회성(REST) 수집."""
+        ticker = self._get_front_month_futures_ticker()
+        url = f'{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price'
+        data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': ticker})
+        
+        if not data:
+            return None
+            
+        output = data.get('output', {})
+        change_pct = float(output.get('prdy_ctrt', 0.0))
+        logger.info(f"  ✅ [REST] 코스피 선물({ticker}) 수집 완료: {change_pct:+.2f}%")
+        return change_pct
 
     def get_foreign_futures_flow(self) -> Optional[Dict]:
         """외국인 현선물 순매수 동향 — 웩더독(Wag-the-Dog) 센서.
@@ -596,7 +692,7 @@ if __name__ == '__main__':
     inv = collector.get_investor_trading('005930')
     if inv is not None:
         logger.info(f'  삼성전자: {len(inv)}일')
-        logger.info(f'  최근 외국인: {inv['frgn_ntby_qty'].iloc[-1]:+,}')
+        logger.info(f'  최근 외국인: {inv["frgn_ntby_qty"].iloc[-1]:+,}')
     logger.info('\n■ 해외주식')
     us = collector.get_us_daily_ohlcv('AAPL')
     if us is not None:

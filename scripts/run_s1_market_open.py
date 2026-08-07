@@ -112,7 +112,10 @@ def main():
         logger.error("latest_signals.json 없음 — 모닝 파이프라인을 먼저 실행하세요.")
         return
 
-    with open(signals_path) as f:
+    from src.utils.file_ops import atomic_write_json
+
+
+    with open(signals_path, 'r', encoding='utf-8') as f:
         signals_data = json.load(f)
 
     s1_signals = signals_data.get('signals', {}).get('S1', [])
@@ -142,110 +145,109 @@ def main():
 
     # 3. 포트폴리오 로드
     INITIAL_CAPITAL = cfg.get('portfolio.initial_capital')
-    mgr = ShadowPortfolioManager(initial_capital=INITIAL_CAPITAL)
+    with ShadowPortfolioManager(initial_capital=INITIAL_CAPITAL).transaction() as mgr:
 
-    # 기존 보유 종목
-    existing_tickers = mgr.get_position_tickers()
-    existing_s1 = [k for k in mgr.positions if k.startswith('S1:')]
+        # 기존 보유 종목
+        existing_tickers = mgr.get_position_tickers()
+        existing_s1 = [k for k in mgr.positions if k.startswith('S1:')]
 
-    if existing_s1:
-        logger.info(f"\n⚠️ 이미 S1 포지션 {len(existing_s1)}개 보유 중 — 추가 매수 생략")
-        for k in existing_s1:
-            pos = mgr.positions[k]
-            logger.info(f"  {k}: {pos.get('name', '')} qty={pos['quantity']}")
-        return
+        if existing_s1:
+            logger.info(f"\n⚠️ 이미 S1 포지션 {len(existing_s1)}개 보유 중 — 추가 매수 생략")
+            for k in existing_s1:
+                pos = mgr.positions[k]
+                logger.info(f"  {k}: {pos.get('name', '')} qty={pos['quantity']}")
+            return
 
-    # 4. 매수 주문 생성
-    logger.info("\n📋 매수 주문 생성")
+        # 4. 매수 주문 생성
+        logger.info("\n📋 매수 주문 생성")
 
-    s1_budget = cfg.get('allocation.s1_budget', 30_000_000)
-    s1_min_trade = cfg.get('allocation.s1_min_trade', 500_000)
+        s1_budget = cfg.get('allocation.s1_budget', 30_000_000)
+        s1_min_trade = cfg.get('allocation.s1_min_trade', 500_000)
 
-    # S1 기존 투자액 차감
-    s1_invested = 0
-    for pos_key, pos in mgr.positions.items():
-        if pos_key.startswith('S1:'):
-            s1_invested += pos.get('quantity', 0) * pos.get('current_price',
-                                                             pos.get('avg_price', 0))
-    remaining = max(0, s1_budget - s1_invested)
+        # S1 기존 투자액 차감
+        s1_invested = 0
+        for pos_key, pos in mgr.positions.items():
+            if pos_key.startswith('S1:'):
+                s1_invested += pos.get('quantity', 0) * pos.get('current_price',
+                                                                 pos.get('avg_price', 0))
+        remaining = max(0, s1_budget - s1_invested)
 
-    # VaR/리스크 스케일은 현재 상태 참조
-    try:
-        with open(_RESULTS / 'realtime_var.json') as f:
-            var_data = json.load(f)
-        position_scale = var_data.get('position_scale', 0.7)
-    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-        import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-        position_scale = 0.7
+        # VaR/리스크 스케일은 현재 상태 참조
+        try:
+            with open(_RESULTS / 'realtime_var.json') as f:
+                var_data = json.load(f)
+            position_scale = var_data.get('position_scale', 0.7)
+        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
+            import logging
+            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            position_scale = 0.7
 
-    effective_remaining = remaining * position_scale
-    logger.info(f"  S1 예산: ₩{s1_budget:,.0f}, 잔여: ₩{remaining:,.0f}, "
-                f"스케일={position_scale:.3f}, 유효예산: ₩{effective_remaining:,.0f}")
+        effective_remaining = remaining * position_scale
+        logger.info(f"  S1 예산: ₩{s1_budget:,.0f}, 잔여: ₩{remaining:,.0f}, "
+                    f"스케일={position_scale:.3f}, 유효예산: ₩{effective_remaining:,.0f}")
 
-    orders = []
-    for signal in s1_signals:
-        ticker = signal.get('ticker', '')
-        price = signal.get('price', 0)
+        orders = []
+        for signal in s1_signals:
+            ticker = signal.get('ticker', '')
+            price = signal.get('price', 0)
 
-        if not price or price <= 0:
-            logger.warning(f"  ⏭ {ticker}: 가격 없음 — 스킵")
-            continue
+            if not price or price <= 0:
+                logger.warning(f"  ⏭ {ticker}: 가격 없음 — 스킵")
+                continue
 
-        if ticker in existing_tickers:
-            logger.info(f"  ⏭ {ticker}: 기보유 — 스킵")
-            continue
+            if ticker in existing_tickers:
+                logger.info(f"  ⏭ {ticker}: 기보유 — 스킵")
+                continue
 
-        size_pct = signal.get('size_pct', 0.10)
-        amount = round(effective_remaining * size_pct)
+            size_pct = signal.get('size_pct', 0.10)
+            amount = round(effective_remaining * size_pct)
 
-        # S1 최소 사이즈 보장
-        if amount < s1_min_trade and effective_remaining >= s1_min_trade:
-            logger.info(f"  📏 최소 사이즈 보장: {ticker} ₩{amount:,} → ₩{s1_min_trade:,}")
-            amount = s1_min_trade
-        elif amount < 200_000:
-            logger.info(f"  ⏭ {ticker}: 금액 부족 ₩{amount:,}")
-            continue
+            # S1 최소 사이즈 보장
+            if amount < s1_min_trade and effective_remaining >= s1_min_trade:
+                logger.info(f"  📏 최소 사이즈 보장: {ticker} ₩{amount:,} → ₩{s1_min_trade:,}")
+                amount = s1_min_trade
+            elif amount < 200_000:
+                logger.info(f"  ⏭ {ticker}: 금액 부족 ₩{amount:,}")
+                continue
 
-        quantity = max(1, int(amount / price))
-        order_amount = quantity * price
-
-        if order_amount > effective_remaining:
-            quantity = max(1, int(effective_remaining / price))
+            quantity = max(1, int(amount / price))
             order_amount = quantity * price
 
-        orders.append({
-            'stream': 'S1',
-            'ticker': ticker,
-            'name': signal.get('name', ticker),
-            'direction': signal.get('direction', 'long'),
-            'strategy': signal.get('strategy', 'unknown'),
-            'confidence': signal.get('confidence', 0),
-            'price': price,
-            'quantity': quantity,
-            'amount': order_amount,
-            'reason': signal.get('reason', ''),
-        })
+            if order_amount > effective_remaining:
+                quantity = max(1, int(effective_remaining / price))
+                order_amount = quantity * price
 
-        effective_remaining -= order_amount
-        logger.info(f"  ✅ {ticker} ({signal.get('name', '')}) "
-                     f"{quantity}주 × ₩{price:,.0f} = ₩{order_amount:,.0f}")
+            orders.append({
+                'stream': 'S1',
+                'ticker': ticker,
+                'name': signal.get('name', ticker),
+                'direction': signal.get('direction', 'long'),
+                'strategy': signal.get('strategy', 'unknown'),
+                'confidence': signal.get('confidence', 0),
+                'price': price,
+                'quantity': quantity,
+                'amount': order_amount,
+                'reason': signal.get('reason', ''),
+            })
 
-    if not orders:
-        logger.info("\n📋 매수 주문 없음")
-        return
+            effective_remaining -= order_amount
+            logger.info(f"  ✅ {ticker} ({signal.get('name', '')}) "
+                         f"{quantity}주 × ₩{price:,.0f} = ₩{order_amount:,.0f}")
 
-    # 5. 매수 실행
-    logger.info(f"\n📋 매수 실행: {len(orders)}건")
-    buy_result = mgr.execute_buys(orders)
+        if not orders:
+            logger.info("\n📋 매수 주문 없음")
+            return
 
-    # 6. 스냅샷 & 저장
-    mgr.daily_snapshot(regime=signals_data.get('regime', 'caution'),
-                       position_scale=position_scale,
-                       buy_result=buy_result)
-    mgr.save()
+        # 5. 매수 실행
+        logger.info(f"\n📋 매수 실행: {len(orders)}건")
+        buy_result = mgr.execute_buys(orders)
 
-    # 7. 거래 로그 업데이트
+        # 6. 스냅샷 & 저장
+        mgr.daily_snapshot(regime=signals_data.get('regime', 'caution'),
+                           position_scale=position_scale,
+                           buy_result=buy_result)
+
+        # 7. 거래 로그 업데이트
     log_path = _RESULTS / 'logs' / f'virtual_trading_{TODAY.replace("-", "")}.json'
     try:
         if log_path.exists():
@@ -262,8 +264,7 @@ def main():
             'prices_source': 'pykrx_realtime',
         }
 
-        with open(log_path, 'w') as f:
-            json.dump(log, f, indent=2, default=str, ensure_ascii=False)
+        atomic_write_json(log_path, log, indent=2, default=str, ensure_ascii=False)
     except Exception as e:
         logger.warning(f"로그 저장 실패: {e}")
 

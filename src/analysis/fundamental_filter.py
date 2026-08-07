@@ -64,6 +64,8 @@ class MeridianFundamentalFilter:
                     if isinstance(h, dict) and h.get('ticker'):
                         self._qv_cache[h['ticker']] = h
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'qv_portfolio_auto 로드 실패: {e}')
         l4_path = _PA_RESULTS / 'l4_integrated_portfolio.json'
         if l4_path.exists():
@@ -75,6 +77,8 @@ class MeridianFundamentalFilter:
                             if h['ticker'] not in self._qv_cache and h.get('qv_score') is not None:
                                 self._qv_cache[h['ticker']] = h
             except Exception as e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'l4_integrated 로드 실패: {e}')
         if self._qv_cache:
             logger.info(f'  QV 데이터 로드: {len(self._qv_cache)}종목')

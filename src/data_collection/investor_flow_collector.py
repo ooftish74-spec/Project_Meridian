@@ -21,6 +21,7 @@ Author: Project-A
 Date: 2026-03-21
 """
 import logging
+from src.infra.safe_io import atomic_write_dataframe
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -81,11 +82,17 @@ class InvestorFlowCollector:
                 result = self._parse_investor_data(df)
                 if result is not None and len(result) > 0:
                     cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    result.to_csv(cache_path)
+                    atomic_write_dataframe(result, cache_path, file_format='csv')
                     return result
         except Exception as e:
-            logger.error(f'pykrx 수급 수집 실패 ({ticker}): {e}', exc_info=True)
-        return self._generate_proxy(ticker, lookback_days)
+            logger.debug(f'pykrx 수급 수집 실패 ({ticker}), 프록시로 우회: {e}')
+        
+        proxy_result = self._generate_proxy(ticker, lookback_days)
+        if proxy_result is not None and len(proxy_result) > 0:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_dataframe(proxy_result, cache_path, file_format='csv')
+            logger.info(f'  ✅ 프록시 수급 수집 완료 및 저장: {ticker}')
+        return proxy_result
 
     def _parse_investor_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
         """pykrx 결과 파싱."""
@@ -150,6 +157,8 @@ class InvestorFlowCollector:
                 try:
                     idx = pd.to_datetime(date_str, format='%Y%m%d')
                 except ValueError:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
                 rows.append({'date': idx, 'foreign_net': float(row.get('frgn_ntby_qty', 0)), 'inst_net': float(row.get('orgn_ntby_qty', 0)), 'retail_net': float(row.get('prsn_ntby_qty', 0))})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
