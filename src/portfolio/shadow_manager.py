@@ -254,18 +254,18 @@ class ShadowPortfolioManager:
     from contextlib import contextmanager
     @contextmanager
     def transaction(self, timeout: int = 10):
-        """[Red Team V7] 다중 프로세스(S1~S5) 환경에서 TOC/TOU Data Race를 원천 방지하는 트랜잭션 락.
+        """[Red Team V8] 다중 프로세스(S1~S5) 환경에서 TOC/TOU Data Race를 원천 방지하는 분산 트랜잭션 락.
         
-        락을 획득한 후 파일에서 최신 상태를 강제로 다시 읽어오고, 
+        Redis 기반 분산 락(Distributed Lock)을 획득한 후 파일에서 최신 상태를 강제로 다시 읽어오고, 
         with 블록이 끝날 때 원자적으로(atomic) 자동 저장합니다.
         
         Usage:
             with ShadowPortfolioManager().transaction() as sm:
                 sm.execute_buys(orders)
         """
-        from src.utils.file_ops import file_lock_transaction
-        lock_path = self.file_path.with_suffix('.json.lock')
-        with file_lock_transaction(lock_path, timeout=timeout):
+        from src.utils.distributed_lock import redis_lock_transaction
+        lock_name = "shadow_portfolio"
+        with redis_lock_transaction(lock_name, timeout=timeout):
             self.data = self._load_or_create()
             self._migrate_legacy_positions()
             try:

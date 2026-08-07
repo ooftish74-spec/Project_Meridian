@@ -735,13 +735,26 @@ class ExecutionEngine:
                 try:
                     if hasattr(trader, 'fetch_live_positions'):
                         live_pos = trader.fetch_live_positions()
-                        if live_pos:
+                        if live_pos is not None:
                             from src.portfolio.shadow_manager import ShadowPortfolioManager
                             with ShadowPortfolioManager().transaction() as sm:
-                                sm.force_reconcile(live_pos, broker_cash)
-                            result_sync['message'] += " -> 섀도우 포트폴리오 강제 동기화 완료."
-                            result_sync['level'] = 'warn' # 동기화 했으므로 Halt 풀림
-                            result_sync['ok'] = True
+                                # [Red Team V8] Sanity Check: API 글리치로 인한 대규모 자산 삭제 방어
+                                sys_tickers = {k.split(':')[-1] if ':' in k else k for k in sm.positions.keys()}
+                                live_tickers = {p['ticker'] for p in live_pos}
+                                
+                                # 시스템에 2개 이상 종목이 있는데 브로커에서 50% 이상이 갑자기 증발했다고 보고할 경우
+                                if len(sys_tickers) >= 2 and len(live_tickers) <= len(sys_tickers) * 0.5:
+                                    msg = "🚨 [SANITY CHECK FAILED] API 보고 잔고가 기존 대비 50% 이상 증발했습니다 (글리치 의심). force_reconcile을 차단하고 시스템을 Halt 합니다."
+                                    logger.critical(msg)
+                                    result_sync['message'] += f"\n  -> {msg}"
+                                    try:
+                                        TelegramNotifier().send_alert('🚨 SANITY CHECK FAILED', msg)
+                                    except: pass
+                                else:
+                                    sm.force_reconcile(live_pos, broker_cash)
+                                    result_sync['message'] += " -> 섀도우 포트폴리오 강제 동기화 완료."
+                                    result_sync['level'] = 'warn' # 동기화 했으므로 Halt 풀림
+                                    result_sync['ok'] = True
                 except Exception as _recon_err:
                     logger.critical(f'  🚨 강제 동기화 실패: {_recon_err}', exc_info=True)
         return result_sync
