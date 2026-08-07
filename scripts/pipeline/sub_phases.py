@@ -457,37 +457,36 @@ def _phase_aftermarket():
     # 0. ★ 전체 포트폴리오 MTM (마감가 반영 — DA/IC 정상화 필수)
     try:
         from src.portfolio.shadow_manager import ShadowPortfolioManager
-        _mgr = ShadowPortfolioManager()
-        _positions = _mgr.data.get('positions', {})
-        _tickers = set()
-        for _pk, _pos in _positions.items():
-            _tk = _pos.get('ticker', _pk.split(':')[-1] if ':' in _pk else _pk)
-            _tickers.add(_tk)
+        with ShadowPortfolioManager().transaction() as _mgr:
+            _positions = _mgr.data.get('positions', {})
+            _tickers = set()
+            for _pk, _pos in _positions.items():
+                _tk = _pos.get('ticker', _pk.split(':')[-1] if ':' in _pk else _pk)
+                _tickers.add(_tk)
 
-        if False: # Disabled: pykrx bug with future dates (2026)
-            from pykrx import stock as _pykrx_stock
-            from datetime import datetime as _dt
-            _today_short = _dt.now().strftime('%Y%m%d')
-            _mtm_prices = {}
-            for _tk in _tickers:
-                try:
-                    _df = _pykrx_stock.get_market_ohlcv(
-                        _today_short, _today_short, _tk)
-                    if len(_df) > 0:
-                        _price = _df.iloc[-1].get('종가', 0)
-                        if _price > 0:
-                            _mtm_prices[_tk] = float(_price)
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:388", exc_info=True)
+            if False: # Disabled: pykrx bug with future dates (2026)
+                from pykrx import stock as _pykrx_stock
+                from datetime import datetime as _dt
+                _today_short = _dt.now().strftime('%Y%m%d')
+                _mtm_prices = {}
+                for _tk in _tickers:
+                    try:
+                        _df = _pykrx_stock.get_market_ohlcv(
+                            _today_short, _today_short, _tk)
+                        if len(_df) > 0:
+                            _price = _df.iloc[-1].get('종가', 0)
+                            if _price > 0:
+                                _mtm_prices[_tk] = float(_price)
+                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                        import logging
+                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:388", exc_info=True)
 
-            if _mtm_prices:
-                _mgr.mark_to_market(_mtm_prices)
-                _mgr.save()
-                logger.info(f"  ✅ MTM: {len(_mtm_prices)}/{len(_tickers)} 종목 마감가 반영")
-            else:
-                logger.warning(f"  ⚠️ MTM: 마감가 조회 실패 ({len(_tickers)} 종목)")
+                if _mtm_prices:
+                    _mgr.mark_to_market(_mtm_prices)
+                    logger.info(f"  ✅ MTM: {len(_mtm_prices)}/{len(_tickers)} 종목 마감가 반영")
+                else:
+                    logger.warning(f"  ⚠️ MTM: 마감가 조회 실패 ({len(_tickers)} 종목)")
     except Exception as e:
         logger.error(f"  MTM 실패: {e}", exc_info=True)
 
@@ -496,68 +495,67 @@ def _phase_aftermarket():
     try:
         from src.portfolio.shadow_manager import ShadowPortfolioManager
         from datetime import datetime as _dt_s1
-        _mgr_s1 = ShadowPortfolioManager()
-        _s1_keys = [pk for pk in _mgr_s1.positions if pk.startswith('S1:')]
+        with ShadowPortfolioManager().transaction() as _mgr_s1:
+            _s1_keys = [pk for pk in _mgr_s1.positions if pk.startswith('S1:')]
 
-        if _s1_keys:
-            logger.info(f"  🔴 S1 잔존 포지션 {len(_s1_keys)}개 발견 → 강제 청산")
-            _today_s1 = _dt_s1.now().strftime('%Y%m%d')
+            if _s1_keys:
+                logger.info(f"  🔴 S1 잔존 포지션 {len(_s1_keys)}개 발견 → 강제 청산")
+                _today_s1 = _dt_s1.now().strftime('%Y%m%d')
 
-            # 현재가 조회
-            from pykrx import stock as _pyk_s1
-            _s1_prices = {}
-            for _pk in _s1_keys:
-                _tk = _pk.split(':')[1]
-                try:
-                    _df = _pyk_s1.get_market_ohlcv(_today_s1, _today_s1, _tk)
-                    if len(_df) > 0:
-                        _s1_prices[_tk] = float(_df.iloc[-1].get('종가', 0))
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:423", exc_info=True)
+                # 현재가 조회
+                from pykrx import stock as _pyk_s1
+                _s1_prices = {}
+                for _pk in _s1_keys:
+                    _tk = _pk.split(':')[1]
+                    try:
+                        _df = _pyk_s1.get_market_ohlcv(_today_s1, _today_s1, _tk)
+                        if len(_df) > 0:
+                            _s1_prices[_tk] = float(_df.iloc[-1].get('종가', 0))
+                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                        import logging
+                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:423", exc_info=True)
 
-            if _s1_prices:
-                _mgr_s1.mark_to_market(_s1_prices)
+                if _s1_prices:
+                    _mgr_s1.mark_to_market(_s1_prices)
 
-            for _pk in _s1_keys:
-                _pos = _mgr_s1.positions[_pk]
-                _tk = _pk.split(':')[1]
-                _entry = _pos.get('entry_price', _pos.get('avg_price', 0))
-                _cur = _s1_prices.get(_tk, _pos.get('current_price', _entry))
-                _amt = _pos.get('amount', 0)
-                _qty = _pos.get('quantity', int(_amt / _entry) if _entry > 0 else 0)
-                _pnl = (_cur - _entry) * _qty if _qty > 0 else _pos.get('unrealized_pnl', 0)
-                _pnl_pct = ((_cur / _entry) - 1) * 100 if _entry > 0 else 0
+                for _pk in _s1_keys:
+                    _pos = _mgr_s1.positions[_pk]
+                    _tk = _pk.split(':')[1]
+                    _entry = _pos.get('entry_price', _pos.get('avg_price', 0))
+                    _cur = _s1_prices.get(_tk, _pos.get('current_price', _entry))
+                    _amt = _pos.get('amount', 0)
+                    _qty = _pos.get('quantity', int(_amt / _entry) if _entry > 0 else 0)
+                    _pnl = (_cur - _entry) * _qty if _qty > 0 else _pos.get('unrealized_pnl', 0)
+                    _pnl_pct = ((_cur / _entry) - 1) * 100 if _entry > 0 else 0
 
-                # trade_history 기록
-                _mgr_s1.data.setdefault('trade_history', []).append({
-                    'date': _dt_s1.now().strftime('%Y-%m-%d'),
-                    'action': 'SELL',
-                    'ticker': _tk,
-                    'name': _pos.get('name', _tk),
-                    'stream': 'S1',
-                    'quantity': _qty,
-                    'price': _cur,
-                    'avg_price': _entry,
-                    'amount': _amt,
-                    'realized_pnl': round(_pnl),
-                    'pnl_pct': round(_pnl_pct, 2),
-                    'sell_type': 'forced_close',
-                    'reason': 'S1 당일 청산 안전장치 (aftermarket)',
-                })
+                    # trade_history 기록
+                    _mgr_s1.data.setdefault('trade_history', []).append({
+                        'date': _dt_s1.now().strftime('%Y-%m-%d'),
+                        'action': 'SELL',
+                        'ticker': _tk,
+                        'name': _pos.get('name', _tk),
+                        'stream': 'S1',
+                        'quantity': _qty,
+                        'price': _cur,
+                        'avg_price': _entry,
+                        'amount': _amt,
+                        'realized_pnl': round(_pnl),
+                        'pnl_pct': round(_pnl_pct, 2),
+                        'sell_type': 'forced_close',
+                        'reason': 'S1 당일 청산 안전장치 (aftermarket)',
+                    })
 
-                # cash 복원 + 포지션 제거
-                _sell_val = _cur * _qty if _qty > 0 else _pos.get('current_value', _amt)
-                _mgr_s1.data['cash'] = _mgr_s1.data.get('cash', 0) + _sell_val
-                del _mgr_s1.positions[_pk]
-                logger.info(f"    ✅ 청산: {_pos.get('name', _tk)} PnL=₩{_pnl:+,.0f} ({_pnl_pct:+.1f}%)")
+                    # cash 복원 + 포지션 제거
+                    _sell_val = _cur * _qty if _qty > 0 else _pos.get('current_value', _amt)
+                    _mgr_s1.data['cash'] = _mgr_s1.data.get('cash', 0) + _sell_val
+                    del _mgr_s1.positions[_pk]
+                    logger.info(f"    ✅ 청산: {_pos.get('name', _tk)} PnL=₩{_pnl:+,.0f} ({_pnl_pct:+.1f}%)")
 
-            # NAV 재계산 + 저장
-            _total_mv = sum(p.get('market_value', p.get('amount', 0))
-                           for p in _mgr_s1.positions.values())
-            _mgr_s1.data['virtual_nav'] = _mgr_s1.data['cash'] + _total_mv
-            _mgr_s1.save()
+                # NAV 재계산 + 저장
+                _total_mv = sum(p.get('market_value', p.get('amount', 0))
+                               for p in _mgr_s1.positions.values())
+                _mgr_s1.data['virtual_nav'] = _mgr_s1.data['cash'] + _total_mv
             logger.info(f"  ✅ S1 강제 청산 완료: NAV=₩{_mgr_s1.data['virtual_nav']:,.0f}")
         else:
             logger.info("  ✅ S1 잔존 포지션 없음")
@@ -581,9 +579,8 @@ def _phase_aftermarket():
             _psd = json.loads(_ps.read_text())
             _regime = _psd.get('kr_regime', _psd.get('operating_regime', 'caution'))
         _initial = cfg.get('portfolio.initial_capital')
-        _mgr = ShadowPortfolioManager(initial_capital=_initial)
-        record = _mgr.daily_snapshot(regime=_regime)
-        _mgr.save()
+        with ShadowPortfolioManager(initial_capital=_initial).transaction() as _mgr:
+            record = _mgr.daily_snapshot(regime=_regime)
         _nav = _mgr.nav
         _ret = record.get('daily_return_pct', 0)
         _ic = record.get('ic', {}).get('ic', 'N/A') if isinstance(record.get('ic'), dict) else 'N/A'
@@ -1679,85 +1676,84 @@ def _phase_intraday():
     try:
         from src.portfolio.shadow_manager import ShadowPortfolioManager
         _initial = cfg.get('portfolio.initial_capital')
-        _mgr = ShadowPortfolioManager(initial_capital=_initial)
+        with ShadowPortfolioManager(initial_capital=_initial).transaction() as _mgr:
 
-        # 모든 보유 종목 ticker 수집
-        _all_exit_tickers = set()
-        for pk in _mgr.positions:
-            _, _tk = _mgr._parse_position_key(pk)
-            _all_exit_tickers.add(_tk)
+            # 모든 보유 종목 ticker 수집
+            _all_exit_tickers = set()
+            for pk in _mgr.positions:
+                _, _tk = _mgr._parse_position_key(pk)
+                _all_exit_tickers.add(_tk)
 
-        if _all_exit_tickers:
-            logger.info(f"  🔍 장중 Exit 체크: {len(_all_exit_tickers)}종목")
+            if _all_exit_tickers:
+                logger.info(f"  🔍 장중 Exit 체크: {len(_all_exit_tickers)}종목")
 
-            # pykrx로 현재가 조회
-            try:
-                from pykrx import stock as _pykrx_stock
-                _today_short = date.today().strftime('%Y%m%d')
-                rt_prices = {}
-                for _tk in _all_exit_tickers:
-                    try:
-                        _df = _pykrx_stock.get_market_ohlcv(
-                            _today_short, _today_short, _tk)
-                        if len(_df) > 0:
-                            _price = _df.iloc[-1].get('종가', 0)
-                            if _price > 0:
-                                rt_prices[_tk] = float(_price)
-                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                        import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                        logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1614", exc_info=True)
+                # pykrx로 현재가 조회
+                try:
+                    from pykrx import stock as _pykrx_stock
+                    _today_short = date.today().strftime('%Y%m%d')
+                    rt_prices = {}
+                    for _tk in _all_exit_tickers:
+                        try:
+                            _df = _pykrx_stock.get_market_ohlcv(
+                                _today_short, _today_short, _tk)
+                            if len(_df) > 0:
+                                _price = _df.iloc[-1].get('종가', 0)
+                                if _price > 0:
+                                    rt_prices[_tk] = float(_price)
+                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                            import logging
+                            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                            logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1614", exc_info=True)
 
-                if rt_prices:
-                    # MTM 업데이트 + Exit 체크
-                    _mgr.mark_to_market(rt_prices)
+                    if rt_prices:
+                        # MTM 업데이트 + Exit 체크
+                        _mgr.mark_to_market(rt_prices)
 
-                    # 레짐 로드 — ★ pipeline_state.json SSoT
-                    _regime = 'caution'
-                    try:
-                        _rf = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
-                        if _rf.exists():
-                            _ps = json.loads(_rf.read_text())
-                            _regime = _ps.get('kr_regime') or _ps.get('regime', 'caution')
-                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                        import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                        logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1630", exc_info=True)
+                        # 레짐 로드 — ★ pipeline_state.json SSoT
+                        _regime = 'caution'
+                        try:
+                            _rf = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
+                            if _rf.exists():
+                                _ps = json.loads(_rf.read_text())
+                                _regime = _ps.get('kr_regime') or _ps.get('regime', 'caution')
+                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                            import logging
+                            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                            logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1630", exc_info=True)
 
-                    sell_orders = _mgr.check_exit_conditions(_regime)
+                        sell_orders = _mgr.check_exit_conditions(_regime)
 
-                    if sell_orders:
-                        # S1 매도 (ETF 수수료)
-                        s1_sells = [s for s in sell_orders
-                                    if s.get('stream_id') == 'S1']
-                        # S2/S3/S4 매도 (주식 수수료)
-                        other_sells = [s for s in sell_orders
-                                       if s.get('stream_id') != 'S1']
+                        if sell_orders:
+                            # S1 매도 (ETF 수수료)
+                            s1_sells = [s for s in sell_orders
+                                        if s.get('stream_id') == 'S1']
+                            # S2/S3/S4 매도 (주식 수수료)
+                            other_sells = [s for s in sell_orders
+                                           if s.get('stream_id') != 'S1']
 
-                        if s1_sells:
-                            _etf_comm = cfg.get('execution.etf_commission_rate', 0.00015)
-                            _mgr.execute_sells(s1_sells, rt_prices,
-                                               commission_rate=_etf_comm)
-                            logger.info(f"  🔴 S1 장중 긴급 청산: {len(s1_sells)}건")
+                            if s1_sells:
+                                _etf_comm = cfg.get('execution.etf_commission_rate', 0.00015)
+                                _mgr.execute_sells(s1_sells, rt_prices,
+                                                   commission_rate=_etf_comm)
+                                logger.info(f"  🔴 S1 장중 긴급 청산: {len(s1_sells)}건")
 
-                        if other_sells:
-                            _mgr.execute_sells(other_sells, rt_prices)
-                            for _so in other_sells:
-                                logger.info(
-                                    f"  🔴 [{_so.get('stream_id','')}] "
-                                    f"{_so.get('name','?')} 장중 Exit: "
-                                    f"{_so.get('reason','')[:60]}")
+                            if other_sells:
+                                _mgr.execute_sells(other_sells, rt_prices)
+                                for _so in other_sells:
+                                    logger.info(
+                                        f"  🔴 [{_so.get('stream_id','')}] "
+                                        f"{_so.get('name','?')} 장중 Exit: "
+                                        f"{_so.get('reason','')[:60]}")
 
-                        _mgr.save()
-                        logger.info(f"  ✅ 장중 Exit: {len(sell_orders)}건 청산 완료")
+                            logger.info(f"  ✅ 장중 Exit: {len(sell_orders)}건 청산 완료")
+                        else:
+                            logger.info(f"  ✅ 장중 Exit: 청산 대상 없음")
                     else:
-                        logger.info(f"  ✅ 장중 Exit: 청산 대상 없음")
-                else:
-                    logger.warning("  ⚠️ 장중 실시간 가격 조회 실패")
-            except ImportError as e:
-                logger.error("  pykrx import 실패 — Exit 스킵", exc_info=True)
-        else:
-            logger.info("  ⏸ 보유 포지션 없음 — Exit 체크 스킵")
+                        logger.warning("  ⚠️ 장중 실시간 가격 조회 실패")
+                except ImportError as e:
+                    logger.error("  pykrx import 실패 — Exit 스킵", exc_info=True)
+            else:
+                logger.info("  ⏸ 보유 포지션 없음 — Exit 체크 스킵")
     except Exception as e:
         # ★ avg_price KeyError 등 장중 Exit의 비치명적 실패는 info 레벨
         # (중요 Exit는 closing/aftermarket에서 재시도)

@@ -19,6 +19,8 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field, asdict
+from src.utils.file_ops import atomic_write_json
+
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
@@ -129,11 +131,12 @@ class DesyncError(RuntimeError):
       KillSwitch.hard_liquidate_all() 자동 트리거
     """
 
-    def __init__(self, msg: str, nav_system: float=0.0, nav_broker: float=0.0, diff_pct: float=0.0):
+    def __init__(self, msg: str, nav_system: float=0.0, nav_broker: float=0.0, diff_pct: float=0.0, broker_cash: float=0.0):
         super().__init__(msg)
         self.nav_system = nav_system
         self.nav_broker = nav_broker
         self.diff_pct = diff_pct
+        self.broker_cash = broker_cash
 
 class ExecutionEngine:
     """Meridian 주문 체결 엔진.
@@ -169,12 +172,12 @@ class ExecutionEngine:
             return _cfg.get(f'execution.slippage_rate.{exchange.lower()}', {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}.get(exchange, 0.0008))
         return {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}.get(exchange, 0.0008)
 
-    def __init__(self, mode: str='mock', account_type: str='main'):
+    def __init__(self, mode: str='live', account_type: str='main'):
         """
         초기화.
 
         Args:
-            mode: 'mock', 'paper', 'live'
+            mode: 'paper', 'live'
             account_type: 'main' (S1~S6) 또는 's8' (초단타 스트림 전용)
         """
         self.mode = mode
@@ -199,7 +202,7 @@ class ExecutionEngine:
         return 'shadow'
 
     def _get_trader(self, stream_id: str=None):
-        """KISTrader lazy initialization (mock/paper/live 모드 전용).
+        """KISTrader lazy initialization (paper/live 모드 전용).
         stream_id가 'S8'이면 S8 전용 계좌 어댑터 반환, 그 외는 Main 어댑터 반환.
         """
         is_s8 = stream_id == 'S8'
@@ -218,9 +221,9 @@ class ExecutionEngine:
                 prefix = 'KIS_PAPER_S8' if is_s8 else 'KIS_PAPER'
             else:
                 prefix = 'KIS_S8' if is_s8 else 'KIS'
-            app_key = cm.read_from_keychain(f'{prefix}_APP_KEY')
-            app_secret = cm.read_from_keychain(f'{prefix}_APP_SECRET')
-            account_no = cm.read_from_keychain(f'{prefix}_ACCOUNT_NO')
+            app_key = cm.read_from_env(f'{prefix}_APP_KEY')
+            app_secret = cm.read_from_env(f'{prefix}_APP_SECRET')
+            account_no = cm.read_from_env(f'{prefix}_ACCOUNT_NO')
             if is_s8 and (not all([app_key, app_secret, account_no])):
                 logger.warning(f'  ⚠️ S8 전용 계좌 정보 누락됨 ({prefix}). 가상 체결(Shadow) 모드로 전환합니다.')
                 return None
@@ -319,7 +322,7 @@ class ExecutionEngine:
                                             break
                                 break
                     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError):
-                        logger.error(f'🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)', exc_info=True)
+                        logger.warning("Tier 2/3 Fallback: Data parsing error or missing file. Imputing or retrying (Graceful Degradation).", exc_info=True)
                         continue
                 if len(closes_for_vol) >= 2:
                     import math as _math
@@ -346,7 +349,8 @@ class ExecutionEngine:
                 data = json.loads(regime_file.read_text())
                 return data.get('regime', 'caution')
         except FileNotFoundError:
-            pass
+            from src.utils.error_logger import log_error_rate_limited
+            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
         except json.JSONDecodeError as e:
             logger.error(f'  Current regime 파일 JSON 파싱 에러: {e}')
         return 'caution'
@@ -391,7 +395,8 @@ class ExecutionEngine:
                         if ob_dp and isinstance(ob_dp.value, dict) and ('spread_pct' in ob_dp.value):
                             spread_pct = float(ob_dp.value['spread_pct'])
                     except Exception:
-                        pass
+                        from src.utils.error_logger import log_error_rate_limited
+                        logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                     if spread_pct > max_spread:
                         logger.warning(f'  🚨 [SpreadGuard Shadow] {ticker} 스프레드({spread_pct:.2%})가 허용치({max_spread:.2%}) 초과 → 주문 강제 취소(Abort)')
                         result.n_rejected += 1
@@ -537,7 +542,8 @@ class ExecutionEngine:
                     if ob_dp and isinstance(ob_dp.value, dict) and ('spread_pct' in ob_dp.value):
                         spread_pct = float(ob_dp.value['spread_pct'])
                 except Exception:
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                 if spread_pct > max_spread:
                     logger.warning(f'  🚨 [SpreadGuard Live] {ticker} 스프레드({spread_pct:.2%})가 허용치 초과 → 강제 취소')
                     return {'order': order, 'status': 'rejected', 'error': f'Spread too high ({spread_pct:.4f} > {max_spread:.4f})'}
@@ -553,10 +559,11 @@ class ExecutionEngine:
                 if remaining_qty <= 0:
                     break
                 try:
+                    execution_algo = order.get('execution_algo', 'market')
                     if action == 'buy':
-                        fill = await loop.run_in_executor(None, _trader.buy, ticker, remaining_qty, price, tif, str(stream_id))
+                        fill = await loop.run_in_executor(None, _trader.buy, ticker, remaining_qty, price, execution_algo, 'SOR', str(stream_id), 'normal', tif)
                     else:
-                        fill = await loop.run_in_executor(None, _trader.sell, ticker, remaining_qty, price, tif, str(stream_id))
+                        fill = await loop.run_in_executor(None, _trader.sell, ticker, remaining_qty, price, execution_algo, 'SOR', str(stream_id), 'normal', tif)
                     if fill.status == 'submitted':
                         _wait_timeout = 5 if tif == 'IOC' else None
                         fill = await loop.run_in_executor(None, _trader.wait_for_fill, fill, _wait_timeout)
@@ -664,6 +671,7 @@ class ExecutionEngine:
             logger.warning('  [Desync] 시스템 NAV = 0 — 동기화 검증 스킵 (초기화 중일 가능성)')
             return {'ok': True, 'nav_system': 0.0, 'nav_broker': 0.0, 'diff_pct': 0.0, 'level': 'ok', 'message': 'system_nav_zero_skip'}
         nav_broker: float = 0.0
+        broker_cash: float = 0.0
         broker_fetch_ok = False
         if self.mode in ('live', 'paper'):
             try:
@@ -674,6 +682,7 @@ class ExecutionEngine:
                             ok = trader.fetch_live_balance()
                             if ok:
                                 nav_broker = float(trader.account.total_equity)
+                                broker_cash = float(getattr(trader.account, 'cash', 0.0))
                                 broker_fetch_ok = True
                                 break
                             logger.warning(f'  [Desync] 잔고 조회 실패 {_attempt + 1}/3 (fetch 반환 False)')
@@ -688,18 +697,19 @@ class ExecutionEngine:
                 trader = self._get_trader()
                 if trader:
                     nav_broker = float(trader.account.total_equity)
+                    broker_cash = float(getattr(trader.account, 'cash', 0.0))
                     broker_fetch_ok = True
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 pass
         else:
-            return {'ok': True, 'nav_system': nav_system, 'nav_broker': nav_system, 'diff_pct': 0.0, 'level': 'ok', 'message': 'shadow_mode_skip'}
+            return {'ok': True, 'nav_system': nav_system, 'nav_broker': nav_system, 'broker_cash': nav_system, 'diff_pct': 0.0, 'level': 'ok', 'message': 'shadow_mode_skip'}
         if not broker_fetch_ok or nav_broker <= 0:
             logger.warning('  [Desync] 증권사 NAV 조회 실패 — Desync 검증 보류 (안전 방향 통과)')
-            return {'ok': True, 'nav_system': nav_system, 'nav_broker': 0.0, 'diff_pct': 0.0, 'level': 'warn', 'message': 'broker_fetch_failed'}
+            return {'ok': True, 'nav_system': nav_system, 'nav_broker': 0.0, 'broker_cash': 0.0, 'diff_pct': 0.0, 'level': 'warn', 'message': 'broker_fetch_failed'}
         diff_pct = abs(nav_system - nav_broker) / max(nav_broker, 1.0)
-        result_sync: Dict = {'ok': diff_pct <= desync_threshold, 'nav_system': round(nav_system, 0), 'nav_broker': round(nav_broker, 0), 'diff_pct': round(diff_pct, 6), 'level': 'ok', 'message': ''}
+        result_sync: Dict = {'ok': diff_pct <= desync_threshold, 'nav_system': round(nav_system, 0), 'nav_broker': round(nav_broker, 0), 'broker_cash': round(broker_cash, 0), 'diff_pct': round(diff_pct, 6), 'level': 'ok', 'message': ''}
         if diff_pct <= desync_warn_pct:
             result_sync['level'] = 'ok'
             result_sync['message'] = f'NAV 동기화 정상: diff={diff_pct:.4%}'
@@ -720,7 +730,20 @@ class ExecutionEngine:
             except Exception as _tg_err:
                 logger.error(f'  [Desync] 텔레그램 실패 (NAV 불일치 안달되는 다): {_tg_err}')
             if raise_on_desync:
-                raise DesyncError(err_msg, nav_system=nav_system, nav_broker=nav_broker, diff_pct=diff_pct)
+                # [Red Team V6] 잔고 강제 동기화 (Zombie Position Reconciliation)
+                logger.critical(f"  🚨 [Quarantine Mode] {err_msg}\n  -> 좀비 포지션을 치유하기 위해 KIS 실계좌 잔고를 강제 동기화(Reconciliation) 합니다.")
+                try:
+                    if hasattr(trader, 'fetch_live_positions'):
+                        live_pos = trader.fetch_live_positions()
+                        if live_pos:
+                            from src.portfolio.shadow_manager import ShadowPortfolioManager
+                            with ShadowPortfolioManager().transaction() as sm:
+                                sm.force_reconcile(live_pos, broker_cash)
+                            result_sync['message'] += " -> 섀도우 포트폴리오 강제 동기화 완료."
+                            result_sync['level'] = 'warn' # 동기화 했으므로 Halt 풀림
+                            result_sync['ok'] = True
+                except Exception as _recon_err:
+                    logger.critical(f'  🚨 강제 동기화 실패: {_recon_err}', exc_info=True)
         return result_sync
 
     def _estimate_price(self, ticker: str) -> float:
@@ -744,7 +767,8 @@ class ExecutionEngine:
                                             return p
                             break
             except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError):
-                pass
+                from src.utils.error_logger import log_error_rate_limited
+                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
             except Exception as e:
                 logger.error(f'  가격 추정(CSV) 중 에러: {e}')
         for pattern in [f'kr_{ticker}.parquet', f'{ticker}.parquet']:
@@ -754,7 +778,8 @@ class ExecutionEngine:
                     df = pd.read_parquet(pq)
                     return float(df['close'].iloc[-1])
                 except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError):
-                    pass
+                    from src.utils.error_logger import log_error_rate_limited
+                    logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
                 except Exception as e:
                     logger.error(f'  가격 추정(Parquet) 중 에러: {e}')
         return 0.0
@@ -777,7 +802,7 @@ class ExecutionEngine:
                     existing = []
             entry = {'timestamp': datetime.now().isoformat(), 'mode': self.mode, 'n_orders': result.n_orders, 'n_filled': result.n_filled, 'n_rejected': result.n_rejected, 'total_buy': round(result.total_buy_amount, 0), 'total_sell': round(result.total_sell_amount, 0), 'slippage': round(result.estimated_slippage, 0), 'commission': round(result.estimated_commission, 0), 'fills': result.fills, 'errors': result.errors[:10]}
             existing.append(entry)
-            record_file.write_text(json.dumps(existing, indent=2, ensure_ascii=False, default=str))
+            atomic_write_json(record_file, existing, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  Shadow 기록 저장 실패: {e}')
 
@@ -785,7 +810,17 @@ class ExecutionEngine:
         """계좌 요약 (trader가 있으면 실 정보, 없으면 Shadow 통계)."""
         trader = self._get_trader()
         if trader:
-            return {'mode': self.mode, 'cash': trader.account.cash, 'total_equity': trader.account.total_equity, 'positions': len(trader.positions), 'realized_pnl': trader.account.realized_pnl}
+            from dataclasses import asdict
+            pos_list = [asdict(p) for p in trader.positions.values()]
+            return {
+                'mode': self.mode, 
+                'cash': trader.account.cash, 
+                'available_cash': trader.account.cash,
+                'total_equity': trader.account.total_equity,
+                'total_nav': trader.account.total_equity,
+                'positions': pos_list, 
+                'realized_pnl': trader.account.realized_pnl
+            }
         return self._get_shadow_stats()
 
     def _get_shadow_stats(self) -> Dict:

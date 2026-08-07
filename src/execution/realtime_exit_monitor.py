@@ -280,33 +280,33 @@ class RealtimeExitMonitor:
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
             initial_capital = _cfg_get('portfolio.initial_capital', 100000000)
-            mgr = ShadowPortfolioManager(initial_capital=initial_capital)
-            with self._prices_lock:
-                prices = dict(self._latest_prices)
-            if not prices:
-                prices = self._fetch_rest_prices([az.ticker for az in self._alert_zones.values()])
-            if not prices:
-                logger.warning('  Exit 체크 실패: 가격 데이터 없음')
-                return
-            mgr.mark_to_market(prices)
-            regime = self._load_regime()
-            sell_orders = mgr.check_exit_conditions(regime)
-            if sell_orders:
-                try:
-                    from src.execution.execution_engine import ExecutionEngine
-                    mode = _cfg_get('execution.current_mode', 'mock')
-                    ee = ExecutionEngine(mode=mode)
-                    auto_orders = []
-                    manual_orders = []
-                    for so in sell_orders:
-                        ro = {'stream': so.get('stream_id'), 'action': 'sell', 'ticker': so.get('ticker'), 'amount': so.get('quantity', 0) * prices.get(so.get('ticker'), 0), 'quantity': so.get('quantity', 0), 'reason': so.get('reason', 'Intraday TP/SL Triggered')}
-                        if so.get('stream_id') == 'S4':
-                            manual_orders.append(ro)
-                        else:
-                            auto_orders.append(ro)
-                    if manual_orders:
-                        try:
-                            logger.info(f'  🔔 S4 수동 매도 알림 텔레그램 발송 생략 ({len(manual_orders)}건)')
+            with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
+                with self._prices_lock:
+                    prices = dict(self._latest_prices)
+                if not prices:
+                    prices = self._fetch_rest_prices([az.ticker for az in self._alert_zones.values()])
+                if not prices:
+                    logger.warning('  Exit 체크 실패: 가격 데이터 없음')
+                    return
+                mgr.mark_to_market(prices)
+                regime = self._load_regime()
+                sell_orders = mgr.check_exit_conditions(regime)
+                if sell_orders:
+                    try:
+                        from src.execution.execution_engine import ExecutionEngine
+                        mode = _cfg_get('execution.current_mode', 'mock')
+                        ee = ExecutionEngine(mode=mode)
+                        auto_orders = []
+                        manual_orders = []
+                        for so in sell_orders:
+                            ro = {'stream': so.get('stream_id'), 'action': 'sell', 'ticker': so.get('ticker'), 'amount': so.get('quantity', 0) * prices.get(so.get('ticker'), 0), 'quantity': so.get('quantity', 0), 'reason': so.get('reason', 'Intraday TP/SL Triggered')}
+                            if so.get('stream_id') == 'S4':
+                                manual_orders.append(ro)
+                            else:
+                                auto_orders.append(ro)
+                        if manual_orders:
+                            try:
+                                logger.info(f'  🔔 S4 수동 매도 알림 텔레그램 발송 생략 ({len(manual_orders)}건)')
                         except Exception as e:
                             logger.critical(f'  ❌ S4 텔레그램 로직 오류: {e}', exc_info=True)
                             send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
@@ -406,62 +406,62 @@ class RealtimeExitMonitor:
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
             initial_capital = _cfg_get('portfolio.initial_capital', 100000000)
-            mgr = ShadowPortfolioManager(initial_capital=initial_capital)
-            alert_margin = _cfg_get('monitor.alert_margin_pct', 10)
-            cfg = DynamicConfig() if DynamicConfig else None
-            new_zones = {}
-            for pos_key, pos in mgr.positions.items():
-                stream_id, ticker = mgr._parse_position_key(pos_key)
-                avg_price = pos.get('avg_price', pos.get('entry_price', 0))
-                quantity = pos.get('quantity', 0)
-                if avg_price <= 0 or quantity <= 0:
-                    continue
-                regime = self._load_regime()
-                exit_cfg = mgr._get_exit_config_for_stream(stream_id, regime)
-                if stream_id == 'S1' and cfg:
-                    dyn_enabled = cfg.get('s1.exit.dynamic_tp_sl_enabled', True)
-                    if dyn_enabled:
-                        vol_ctx = mgr._load_volatility_context()
-                        dyn = mgr._compute_dynamic_s1_exit(pos, cfg, vol_ctx)
-                        tp_pct = dyn['take_profit_pct']
-                        sl_pct = dyn['stop_loss_pct']
+            with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
+                alert_margin = _cfg_get('monitor.alert_margin_pct', 10)
+                cfg = DynamicConfig() if DynamicConfig else None
+                new_zones = {}
+                for pos_key, pos in mgr.positions.items():
+                    stream_id, ticker = mgr._parse_position_key(pos_key)
+                    avg_price = pos.get('avg_price', pos.get('entry_price', 0))
+                    quantity = pos.get('quantity', 0)
+                    if avg_price <= 0 or quantity <= 0:
+                        continue
+                    regime = self._load_regime()
+                    exit_cfg = mgr._get_exit_config_for_stream(stream_id, regime)
+                    if stream_id == 'S1' and cfg:
+                        dyn_enabled = cfg.get('s1.exit.dynamic_tp_sl_enabled', True)
+                        if dyn_enabled:
+                            vol_ctx = mgr._load_volatility_context()
+                            dyn = mgr._compute_dynamic_s1_exit(pos, cfg, vol_ctx)
+                            tp_pct = dyn['take_profit_pct']
+                            sl_pct = dyn['stop_loss_pct']
+                        else:
+                            tp_pct = None
+                            sl_pct = None
                     else:
                         tp_pct = None
                         sl_pct = None
-                else:
-                    tp_pct = None
-                    sl_pct = None
-                _atr = float(pos.get('atr_14', 0) or 0)
-                if _atr > 0:
-                    _trail_mult = 2.0
-                    _tp_mult = 4.0
-                    _peak = float(pos.get('peak_price', avg_price) or avg_price)
-                    _trail_sl_price = _peak - _atr * _trail_mult
-                    dyn_sl_pct = (_trail_sl_price - avg_price) / avg_price
-                    dyn_tp_pct = _atr * _tp_mult / avg_price
-                    sl_pct = dyn_sl_pct if sl_pct is None else max(sl_pct, dyn_sl_pct)
-                    tp_pct = dyn_tp_pct if tp_pct is None else min(tp_pct, dyn_tp_pct)
-                else:
-                    vix = 20.0
-                    try:
-                        import json as _fj
-                        _sc = _RESULTS / 'signal_cache.json'
-                        if _sc.exists():
-                            _d = _fj.loads(_sc.read_text())
-                            vix = float(_d.get('vix', vix))
-                    except Exception:
-                        pass
-                    daily_vol = vix / 100.0 / math.sqrt(252)
-                    dyn_sl_pct = -daily_vol * 1.5
-                    dyn_tp_pct = daily_vol * 3.0
-                    sl_pct = dyn_sl_pct if sl_pct is None else dyn_sl_pct
-                    tp_pct = dyn_tp_pct if tp_pct is None else dyn_tp_pct
-                az = AlertZone(pos_key=pos_key, ticker=ticker, stream_id=stream_id, avg_price=avg_price, sl_pct=sl_pct, tp_pct=tp_pct, alert_margin_pct=alert_margin)
-                new_zones[pos_key] = az
-                logger.debug(f'    Alert Zone [{stream_id}:{ticker}]: SL=₩{az.sl_price:,.0f} ({sl_pct * 100:+.2f}%), TP=₩{az.tp_price:,.0f} ({tp_pct * 100:+.2f}%), AlertSL=₩{az.sl_alert_price:,.0f}, AlertTP=₩{az.tp_alert_price:,.0f}')
-            with self._alert_zones_lock:
-                self._alert_zones = new_zones
-            logger.info(f'  📊 Alert Zone 계산 완료: {len(new_zones)}포지션')
+                    _atr = float(pos.get('atr_14', 0) or 0)
+                    if _atr > 0:
+                        _trail_mult = 2.0
+                        _tp_mult = 4.0
+                        _peak = float(pos.get('peak_price', avg_price) or avg_price)
+                        _trail_sl_price = _peak - _atr * _trail_mult
+                        dyn_sl_pct = (_trail_sl_price - avg_price) / avg_price
+                        dyn_tp_pct = _atr * _tp_mult / avg_price
+                        sl_pct = dyn_sl_pct if sl_pct is None else max(sl_pct, dyn_sl_pct)
+                        tp_pct = dyn_tp_pct if tp_pct is None else min(tp_pct, dyn_tp_pct)
+                    else:
+                        vix = 20.0
+                        try:
+                            import json as _fj
+                            _sc = _RESULTS / 'signal_cache.json'
+                            if _sc.exists():
+                                _d = _fj.loads(_sc.read_text())
+                                vix = float(_d.get('vix', vix))
+                        except Exception:
+                            pass
+                        daily_vol = vix / 100.0 / math.sqrt(252)
+                        dyn_sl_pct = -daily_vol * 1.5
+                        dyn_tp_pct = daily_vol * 3.0
+                        sl_pct = dyn_sl_pct if sl_pct is None else dyn_sl_pct
+                        tp_pct = dyn_tp_pct if tp_pct is None else dyn_tp_pct
+                    az = AlertZone(pos_key=pos_key, ticker=ticker, stream_id=stream_id, avg_price=avg_price, sl_pct=sl_pct, tp_pct=tp_pct, alert_margin_pct=alert_margin)
+                    new_zones[pos_key] = az
+                    logger.debug(f'    Alert Zone [{stream_id}:{ticker}]: SL=₩{az.sl_price:,.0f} ({sl_pct * 100:+.2f}%), TP=₩{az.tp_price:,.0f} ({tp_pct * 100:+.2f}%), AlertSL=₩{az.sl_alert_price:,.0f}, AlertTP=₩{az.tp_alert_price:,.0f}')
+                with self._alert_zones_lock:
+                    self._alert_zones = new_zones
+                logger.info(f'  📊 Alert Zone 계산 완료: {len(new_zones)}포지션')
         except Exception as e:
             logger.critical(f'  Alert Zone 계산 실패: {e}', exc_info=True)
             send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
