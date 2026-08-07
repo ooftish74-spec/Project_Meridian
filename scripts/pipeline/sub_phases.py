@@ -556,9 +556,9 @@ def _phase_aftermarket():
                 _total_mv = sum(p.get('market_value', p.get('amount', 0))
                                for p in _mgr_s1.positions.values())
                 _mgr_s1.data['virtual_nav'] = _mgr_s1.data['cash'] + _total_mv
-            logger.info(f"  ✅ S1 강제 청산 완료: NAV=₩{_mgr_s1.data['virtual_nav']:,.0f}")
-        else:
-            logger.info("  ✅ S1 잔존 포지션 없음")
+                logger.info(f"  ✅ S1 강제 청산 완료: NAV=₩{_mgr_s1.data['virtual_nav']:,.0f}")
+            else:
+                logger.info("  ✅ S1 잔존 포지션 없음")
     except Exception as e:
         logger.error(f"  S1 안전장치 실패: {e}", exc_info=True)
 

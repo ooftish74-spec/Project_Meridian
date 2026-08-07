@@ -208,6 +208,58 @@ Persistent=true
 WantedBy=timers.target
 TIMER_EOF
 
+# 4.5 Weekly Retrain (Runs at 02:00 AM on Saturdays)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_weekly_retrain.service
+[Unit]
+Description=Meridian Weekly ML Retrain
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=/bin/bash scripts/run_pipeline.sh weekly_retrain
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_weekly_retrain.timer
+[Unit]
+Description=Timer for Meridian Weekly Retrain
+
+[Timer]
+OnCalendar=Sat *-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
+# 4.6 Weekly Validate (Runs at 03:00 AM on Saturdays)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_weekly_validate.service
+[Unit]
+Description=Meridian Weekly Validation
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=/bin/bash scripts/run_pipeline.sh weekly_validate
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_weekly_validate.timer
+[Unit]
+Description=Timer for Meridian Weekly Validation
+
+[Timer]
+OnCalendar=Sat *-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
 cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_night_monitor.service
 [Unit]
 Description=Meridian KIS Night Futures Websocket Monitor
