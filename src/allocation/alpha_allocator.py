@@ -196,10 +196,18 @@ class AlphaAllocator:
         best_stream = max(ev_scores, key=ev_scores.get) if ev_scores else 'S1'
         best_ev = ev_scores.get(best_stream, 0.0)
 
-        # 100% 몰아주기 배분 가중치 초기화
+        # 100% 몰아주기 또는 Softmax EV 유연 분할 배분
+        use_softmax = cfg.get('allocator.use_softmax_ev', False)
         final_weights = {sid: 0.0 for sid in self.STREAMS}
 
-        if best_ev > 0:
+        if use_softmax:
+            import math
+            temp = float(cfg.get('allocator.softmax_temperature', 0.005))
+            exp_evs = {k: math.exp(v / temp) for k, v in ev_scores.items()}
+            total_exp = sum(exp_evs.values())
+            final_weights = {k: round(v / total_exp, 4) for k, v in exp_evs.items()}
+            logger.info(f"  📊 [Competitive EV Softmax] 유연 분할 배분 확정: {final_weights}")
+        elif best_ev > 0:
             final_weights[best_stream] = 1.0
             logger.info(f"  🏆 [Competitive EV Winner-Take-All] 우위 전략 {best_stream} 선택 (EV = {best_ev:+.5f}) → 100% 몰아주기 배분 확정")
         else:
