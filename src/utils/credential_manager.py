@@ -162,6 +162,11 @@ class CredentialManager:
         
         return ''
 
+    def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """dict-like getter alias for read_from_env."""
+        val = self.read_from_env(key)
+        return val if val else default
+
     def read_from_env(self, key: str, env_path: Optional[str]=None) -> str:
         """[Phase 72] 시크릿 조회 (Environment 분기 처리).
         
