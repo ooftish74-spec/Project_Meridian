@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-19T06:01:57.692222",
+  "timestamp": "2026-07-30T16:12:09.093551",
   "results": {
     "us_jp_spread": true,
     "china_pmi": true,
@@ -9,8 +9,8 @@
     "sector_betas": true
   },
   "sector_betas": {
-    "semiconductor": 1.117,
-    "auto": -0.018,
-    "finance": 0.147
+    "semiconductor": 1.158,
+    "auto": 0.457,
+    "finance": 0.221
   }
 }

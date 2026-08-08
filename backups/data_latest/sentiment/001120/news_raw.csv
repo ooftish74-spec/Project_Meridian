@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-11,[단독]유통업 법인세 계상액 44.9% 급감…3곳은 법인세비용 계상 못해 [...,0.0,0,0,http://www.joseilbo.com/news/news_read.php?uid=566366&class=17&grp=
 2026-04-11,"LX인터내셔널, 에너지 안보 위기 속 석탄화력발전 가동률 상승",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444289
 2026-04-13,환경보다 실리 우선...전쟁이 밀고 AI가 끄는 종합상사株,0.0,0,0,https://www.ekn.kr/web/view.php?key=20260413023306560
@@ -164,3 +164,4 @@
 2026-05-21,"LX홀딩스, 1분기 배당수익 급감…""2027년 주주환원 확대가 반전 카드""",0.0,0,0,https://www.financialpost.co.kr/news/articleView.html?idxno=259925
 2026-05-21,"LX홀딩스, PBR 0.3배…못 챙기나 안 챙기나",0.0,0,0,https://news.dealsitetv.com/articles/170389
 2026-05-24,"""중계무역 무역시대 끝났다""…변신 나선 종합상사, '공급망 직접 쥔다’",0.0,0,0,https://www.mediapen.com/news/view/1100666
+2026-07-21,"""중계무역 무역시대 끝났다""…변신 나선 종합상사, '공급망 직접 쥔다’",0.0,0,0,https://www.mediapen.com/news/view/1100666

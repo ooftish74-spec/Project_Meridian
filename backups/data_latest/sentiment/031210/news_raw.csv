@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,“한국은행 꿈 접고 신용불량자 됐다”…취준생 끌어들인 대형 보험대리...,0.0,0,0,https://weekly.khan.co.kr/article/202604130600041
 2026-04-12,동양칼럼/ 보석 결정 후 '당일 석방'을 위해 준비해야 할 것들,0.0,0,0,http://www.dynews.co.kr/news/articleView.html?idxno=846345
 2026-04-12,중동 리스크에 갈린 '순매수 종목'… 외국인 '인프라' vs 기관 '반도체',0.0,0,0,https://www.g-enews.com/view.php?ud=20260412104630163edf69f862c_1
@@ -243,3 +243,19 @@
 2026-05-24,'환불요구' 스벅 선불충전금…4천200억원 넘어도 규제 사각지대,0.0,0,0,https://www.yna.co.kr/view/AKR20260523041100002?input=1195m
 2026-05-23,카드사 10월 사잇돌대출 출시…포용금융과 건전성 사이 ‘딜레마’,0.261,1,0,https://www.mediapen.com/news/view/1100626
 2026-05-23,"서울보증, 보증보험 확대에 실적 체력 회복",0.462,1,0,https://www.bloter.net/news/articleView.html?idxno=663232
+2026-07-21,“4천억원대 충전금 돌려달라”…스타벅스 ‘탱크데이’ 논란에 지급명...,0.0,0,0,https://www.mk.co.kr/article/12056571
+2026-07-21,스타벅스 미사용 선불금 환불 소송전 번지나…법원에 지급명령 신청,-0.38,0,1,https://view.asiae.co.kr/article/2026052415011468832
+2026-07-21,스타벅스 충전카드의 불편한 진실,0.0,0,0,https://www.newscj.com/news/articleView.html?idxno=3403491
+2026-07-21,4200억 스벅 선불금으로 번진 ‘5·18 탱크데이’… 법원에 지급명령 신...,0.0,0,0,https://www.dt.co.kr/article/12064011?ref=naver
+2026-07-21,스타벅스 선불충전금 4200억원 넘는데… 금융당국 감독 사각지대,0.0,0,0,https://www.seoul.co.kr/news/economy/finance/2026/05/24/20260524500035?wlog_tag3=naver
+2026-07-21,스타벅스 고객 충전금 4200억원대…100% 환불·규제는 '사각지대',0.0,0,0,https://www.hankyung.com/article/2026052460307
+2026-07-21,"스벅, 4천억 대 선불충전금을 현금성 자산으로?…금융 사각지대 논란",0.0,0,0,http://mbn.mk.co.kr/pages/news/newsView.php?category=mbn00003&news_seq_no=5195641
+2026-07-21,스타벅스 선불금만 4275억…'탱크데이' 논란에 환불 규정 도마 위,0.0,0,0,https://view.asiae.co.kr/article/2026052410041709597
+2026-07-21,스타벅스 선불충전금 4275억원…금융당국 감독 사각지대 논란,0.0,0,0,https://www.ppss.kr/news/articleView.html?idxno=296949
+2026-07-21,스타벅스 선불금 4275억 돌파…금융당국 규제는 ‘사각지대’,0.261,1,0,https://www.sentv.co.kr/article/view/sentv202605240010
+2026-07-21,여전사 조달비용 부담에 포용금융까지 '진퇴양난',0.0,0,0,https://www.asiatime.co.kr/article/20260519500216
+2026-07-21,스타벅스 선불충전금 4200억원 훌쩍…금융당국 관리 공백 논란,0.0,0,0,https://www.slist.kr/news/articleView.html?idxno=740969
+2026-07-21,스타벅스 충전금 4200억 돌파…금융감독 규제 공백,0.261,1,0,https://www.topstarnews.net/news/articleView.html?idxno=16069935
+2026-07-21,“4천200억 맡겼는데 금융감독은 없다”…스타벅스 선불금 ‘규제 공백...,0.0,0,0,https://www.kyeonggi.com/article/20260524580004
+2026-07-21,"스타벅스코리아 4천200억 선불금, 금융당국 감독 공백 논란",0.0,0,0,https://www.tokenpost.kr/news/economy/362722
+2026-07-21,'환불요구' 스벅 선불충전금…4천200억원 넘어도 규제 사각지대,0.0,0,0,https://www.yna.co.kr/view/AKR20260523041100002?input=1195m

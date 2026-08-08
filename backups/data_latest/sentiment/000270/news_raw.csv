@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"""끝났구나 싶었죠"" 위닝샷 터트린 팀 동료 향한 'King' 르브론의 극찬",0.0,0,0,http://www.rookie.co.kr/news/articleView.html?idxno=120769
 2026-03-23,"전쟁 충격에 업종별 ‘명암’…자동차·화학 급락, 유틸리티·건설은 상...",-0.462,1,2,https://www.sedaily.com/article/20022426?ref=naver
 2026-03-23,"[오늘(23일)의 경제·산업 주요 일정·행사] 'LG전자, 주주총회' 등",0.0,0,0,http://www.popcornnews.net/news/articleView.html?idxno=115734
@@ -4788,3 +4788,16 @@
 2026-05-24,"[재계 이슈] 미래에셋, 증권 업계 최초 '분기 순익 1조' 달성 | '한국판...",0.0,0,0,https://economychosun.com/site/data/html_dir/2026/05/18/2026051800022.html
 2026-05-24,"'첫 이틀연속 세이브' 9회 도파민 즐기는 10R 기적 클로저, ""월요일 쉬는...",0.0,0,0,http://www.osen.co.kr/article/G1112807399
 2026-05-24,[2026 프로야구 일정] 5월 24일 구단별 선발투수와 생중계 채널,0.0,0,0,https://www.gukjenews.com/news/articleView.html?idxno=3590559
+2026-07-21,고유가에… 친환경 전환 주도하는 하이브리드차,0.322,1,0,https://www.segye.com/newsView/20260524506689?OutUrl=naver
+2026-07-21,"""배까지 직접 띄운다""…BYD, '車수출 선단' 앞세워 글로벌 공습",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709857
+2026-07-21,기아 경차 피칸토 단종 위기,0.0,0,0,https://www.g-enews.com/view.php?ud=2026052420385832549a1f309431_1
+2026-07-21,"[PMPS] 대구, 데이 5 1위 '대이변'…파이널 '역대급 혼전' 예고",0.0,0,0,https://www.apnews.kr/news/articleView.html?idxno=3048644
+2026-07-21,"[6·3 선택, 후보에게 묻다] 정명근 화성시장 후보, 4개 구청·30분 이동...",0.0,0,0,https://www.etnews.com/20260525000002
+2026-07-21,"“유럽 공장 사들여 車 생산”… 中 전기차, 관세 장벽 뚫고 달린다",-0.067,1,1,https://www.chosun.com/economy/industry-company/2026/05/25/TR3762KMNNCTVL3VA3N3FGVZRI/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news
+2026-07-21,[PMPS 통신] 키움 DRX의 '삭발 투혼'과 대구 게이밍의 반란...요동치는 서...,0.0,0,0,https://www.techm.kr/news/articleView.html?idxno=152115
+2026-07-21,"날려도 날려도 '또' 던졌다! KIA 정해영 혼신의 24구, 'KBO 최연소 150SV'...",0.0,0,0,https://www.starnewskorea.com/sports/2026/05/25/2026052420591076555
+2026-07-21,기아 중동시장 판매량 28% 급감… 현대차는 사우디 공장 준공 차질,0.0,0,0,https://www.kmib.co.kr/article/view.asp?arcid=1779607600&code=11151400&cp=nv
+2026-07-21,2.6t 무게에도 매끄러운 질주… ‘도루왕 이대호’ 떠올라,0.0,0,0,https://www.kmib.co.kr/article/view.asp?arcid=1779340386&code=14140000&cp=nv
+2026-07-21,"""코스피 1만1000 간다""…삼성전자 59만원·SK하이닉스는 400만원 전망까...",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102143
+2026-07-21,내연차만큼 빨라진 전기차 거래…중고시장도 'EV 바람',0.322,1,0,https://news.tf.co.kr/read/economy/2325503.htm
+2026-07-21,"[연중기획-새로운 리스크, 새로운 규제 ④] 다가오는 피지컬 AI 시대… ...",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90929

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-14,"국민연금 국내주식 평가액 224조↑…""증가분 절반이 삼전·닉스""",0.0,0,0,https://www.newsis.com/view/NISX20260413_0003589273
 2026-04-13,곧 이란 해상 봉쇄…코스피 5800선 턱걸이,0.408,1,0,https://biz.sbs.co.kr/article_hub/20000303985?division=NAVER
 2026-04-13,기업 공시 [4월 13일],0.0,0,0,https://www.sedaily.com/article/20031861?ref=naver
@@ -104,3 +104,4 @@
 2026-05-21,"한국카본, 한화오션과 720억 규모 LNG선 보냉재 공급 계약",0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=663062
 2026-05-21,"한국카본, 한화오션 선박 초저온 보냉자재 720억 공급→매출 기반 확대",0.0,0,0,https://www.topstarnews.net/news/articleView.html?idxno=16067325
 2026-05-21,"한국카본, 한화오션과 720억 규모 공급계약 체결",0.0,0,0,https://biz.heraldcorp.com/article/10742480?ref=naver
+2026-07-21,"[N2 모닝 경제 브리핑-5월 22일] 美 증시, 이란 협상 기대에 일제히 상승...",0.261,1,0,https://www.news2day.co.kr/article/20260521500062

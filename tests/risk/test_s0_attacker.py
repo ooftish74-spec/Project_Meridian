@@ -112,7 +112,7 @@ class TestS0AttackerScenario1SuperBoost(unittest.TestCase):
         total_nav = 1.5억, target_beta = 2.5, inst_beta(leverage) = 2.0
         기대: 1.5억 × (2.5 - 1.0) / 2.0 = 1.5억 × 1.5 / 2.0 = 1.125억
         """
-        total_nav   = 100_000_000   # 1.5억
+        total_nav   = 150_000_000   # 1.5억
         target_beta = 2.5
         inst_beta   = 2.0           # KODEX 레버리지 Beta
 
@@ -128,7 +128,7 @@ class TestS0AttackerScenario1SuperBoost(unittest.TestCase):
 
     def test_formula_components(self):
         """공식 각 항목 검증: (target_beta - 1.0) = 1.5, total_nav × 1.5 = 2.25억"""
-        total_nav   = 100_000_000
+        total_nav   = 150_000_000
         target_beta = 2.5
         excess_beta = target_beta - 1.0          # 1.5
         weighted    = total_nav * excess_beta     # 2.25억
@@ -153,7 +153,7 @@ class TestS0AttackerScenario2NetShort(unittest.TestCase):
         long_exposure  = 90_000_000   # 9000만
         portfolio_beta = 1.0
         target_beta    = -1.0
-        total_nav      = 100_000_000  # 1.5억
+        total_nav      = 150_000_000  # 1.5억
         inst_beta      = -2.0         # 곱버스 Beta
 
         result = compute_attacker_net_short(
@@ -179,7 +179,7 @@ class TestS0AttackerScenario2NetShort(unittest.TestCase):
         portfolio_beta = 1.0
         Y              = 120_000_000  # 1.2억 (Scenario 2 결과)
         inst_beta_abs  = 2.0
-        total_nav      = 100_000_000
+        total_nav      = 150_000_000
 
         net_beta = (long_exposure * portfolio_beta - Y * inst_beta_abs) / total_nav
         self.assertAlmostEqual(net_beta, -1.0, places=9,
@@ -194,7 +194,7 @@ class TestS0AttackerScenario3SimultaneousEquation(unittest.TestCase):
         self.long_exposure  = 90_000_000   # 9000만
         self.portfolio_beta = 1.0
         self.target_beta    = -1.0
-        self.total_nav      = 100_000_000  # 1.5억
+        self.total_nav      = 150_000_000  # 1.5억
         self.inst_beta      = -2.0         # 곱버스
         self.available_cash = 60_000_000   # 6000만 (부족)
 
@@ -290,19 +290,19 @@ class TestS0AttackerMathEdgeCases(unittest.TestCase):
 
     def test_super_boost_exact_1x_boundary(self):
         """target_beta = 1.001 (수퍼부스트 최소 진입)"""
-        result = compute_super_boost_buy_amount(100_000_000, 1.001, 2.0)
-        expected = 100_000_000 * 0.001 / 2.0  # = 75,000
+        result = compute_super_boost_buy_amount(150_000_000, 1.001, 2.0)
+        expected = 150_000_000 * 0.001 / 2.0  # = 75,000
         self.assertAlmostEqual(result, expected, places=0)
         print(f"\n  ✅ 경계 테스트: target_beta=1.001 → 매수액=₩{result:,.0f}")
 
     def test_max_leverage_25(self):
         """수퍼부스트 최대 target_beta=2.5 정확성"""
-        result = compute_super_boost_buy_amount(100_000_000, 2.5, 2.0)
+        result = compute_super_boost_buy_amount(150_000_000, 2.5, 2.0)
         self.assertAlmostEqual(result, 112_500_000, places=0)
 
     def test_attacker_min_target_beta_minus1(self):
         """어태커 최소 beta=-1.0 시 공식 결과 검증"""
-        result = compute_attacker_net_short(90_000_000, 1.0, -1.0, 100_000_000, -2.0)
+        result = compute_attacker_net_short(90_000_000, 1.0, -1.0, 150_000_000, -2.0)
         self.assertAlmostEqual(result, 120_000_000, places=0)
 
     def test_simultaneous_equation_cash_equals_needed(self):
@@ -310,7 +310,7 @@ class TestS0AttackerMathEdgeCases(unittest.TestCase):
         # hedge_amount = (9000만 + 1.5억) / 2.0 = 1.2억
         # available_cash = 1.2억 → X=0, Y=1.2억
         X, Y = compute_simultaneous_equation(
-            90_000_000, 1.0, -1.0, 100_000_000, -2.0,
+            90_000_000, 1.0, -1.0, 150_000_000, -2.0,
             120_000_000  # 현금 = 필요액
         )
         self.assertAlmostEqual(X, 0.0, places=0,
@@ -321,7 +321,7 @@ class TestS0AttackerMathEdgeCases(unittest.TestCase):
     def test_attacker_zero_cash(self):
         """가용 현금=0 극단 케이스 — 전액 현물 매도로 숏 구축"""
         X, Y = compute_simultaneous_equation(
-            90_000_000, 1.0, -1.0, 100_000_000, -2.0, 0.0
+            90_000_000, 1.0, -1.0, 150_000_000, -2.0, 0.0
         )
         # numerator = 9000만×1 - 0×2 - (-1)×1.5억 = 9000만+1.5억 = 2.4억
         # denominator = 1+2 = 3
@@ -331,7 +331,7 @@ class TestS0AttackerMathEdgeCases(unittest.TestCase):
 
         # 넷베타 검증: (9000만-8000만)×1.0 - 8000만×2.0 / 1.5억
         # = (1000만 - 1.6억) / 1.5억 = -1.5억 / 1.5억 = -1.0 ✓
-        net_beta = ((90_000_000 - X) * 1.0 - Y * 2.0) / 100_000_000
+        net_beta = ((90_000_000 - X) * 1.0 - Y * 2.0) / 150_000_000
         self.assertAlmostEqual(net_beta, -1.0, places=9)
         print(f"  ✅ 현금=0 극단: X=₩{X/1e6:.0f}M, Y=₩{Y/1e6:.0f}M, "
               f"넷베타={net_beta:.1f}")

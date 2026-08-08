@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"기다린 만큼 묵직하게, 160㎞…안우진이 웃는다 “많이 그리웠어요”",0.0,0,0,https://www.sportsworldi.com/newsView/20260412510046
 2026-04-13,"[넥스트 코스피 5000] ""반도체만으론 부족""…6000 시대 이끌 '에너지·방...",0.38,1,0,https://www.ziksir.com/news/articleView.html?idxno=130384
 2026-04-13,“로봇이 ‘오케이’ 찍는 공장”…AI는 ‘약한고리’ 하청노동자부터...,0.0,0,0,https://www.khan.co.kr/article/202604130600151
@@ -2881,3 +2881,7 @@
 2026-05-23,[단일종목 레버리지 ETF 개막②] “고수익 뒤엔 고위험”…하루 60% 손실...,0.0,0,0,https://www.news2day.co.kr/article/20260522500010
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,-0.067,1,1,https://www.newspim.com/news/view/20260521000606
 2026-05-23,"1년 맞은 생산적 금융, 향후 1천조 투입… ""선순환 구조 만들어야""",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162649
+2026-07-21,미래·한투는 질주하는데…중소형 증권사 IB 부진에 '한숨',0.0,0,0,https://www.news1.kr/finance/general-stock/6175692
+2026-07-21,"“ASML이 전부가 아니다”… 한·네덜란드 반도체 동맹, 차세대 ‘광자...",0.604,2,0,https://www.g-enews.com/view.php?ud=2026052416474470000c8c1c064d_1
+2026-07-21,"엇갈린 1분기 실적, 투자손익에 생보 웃고 손보 주춤",0.462,1,0,https://www.insnews.co.kr/news/articleView.html?idxno=90934
+2026-07-21,[심층분석] 'TSMC 연합군' 재편하는 HBM4…핵심 원천특허가 소부장 운명...,0.408,1,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=77775

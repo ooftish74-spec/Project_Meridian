@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,울산은 ‘AI 수도’ 될 수 있을까…데이터센터가 지방을 살린다는 환상...,0.0,0,0,https://weekly.khan.co.kr/article/202603230600021
 2026-03-23,"[오늘의 경제뉴스] 외국계 ""韓증시 전형적 버블""…'극단적 과열' 경고음...",0.261,1,0,https://www.newsverse.kr/news/articleView.html?idxno=9968
 2026-03-23,AI 설계 의사결정 시스템 개발한 '빔스온탑',0.0,0,0,http://www.kmecnews.co.kr/news/articleView.html?idxno=46013
@@ -5040,3 +5040,57 @@
 2026-05-24,코스닥 선진화 역행하는 휴온스·휴온스랩 합병,0.0,0,0,https://www.hankyung.com/article/2026052463091
 2026-05-24,"'탱크데이 논란' 속 야구단 SSG, KIA 광주 안방서 3연패 '스윕'",0.0,0,0,https://www.mt.co.kr/society/2026/05/24/2026052417034438306
 2026-05-24,증권가 에쓰오일·SK이노 목표가 상향,0.537,1,0,https://www.mk.co.kr/article/12056591
+2026-07-21,[시론]AI 열풍과 건설인력의 미래,0.0,0,0,http://www.kmecnews.co.kr/news/articleView.html?idxno=47136
+2026-07-21,막 오른 여신협회장 레이스…하반기 금융협회장 줄줄이 바뀐다,0.0,0,0,https://www.news1.kr/finance/general-finance/6175960
+2026-07-21,“반도체 넘어 K뷰티·K푸드 키워야”,0.261,1,0,https://www.segye.com/newsView/20260524506698?OutUrl=naver
+2026-07-21,"NH證 ""이번주 코스피 7200~8500…실적·밸류에이션 주목""",0.0,0,0,https://news.mtn.co.kr/news-detail/2026052413342182606
+2026-07-21,속도 안 나는 석유화학 구조조정… “먼저 감산한 기업만 손해” 불만도,-0.462,0,1,https://biz.chosun.com/industry/company/2026/05/25/EEPA2BW2D5E3JFP3WNF7AEN4VE/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"계룡건설 공공중심 사업 구조로 업계 침체 속 선전, 이승찬 민간 확대로...",0.0,0,0,https://www.businesspost.co.kr/BP?command=article_view&num=438463
+2026-07-21,746만원 vs 269만원… 반도체 호황속 ‘임금 양극화’ 더 커졌다,0.537,1,0,https://www.segye.com/newsView/20260524506852?OutUrl=naver
+2026-07-21,"핵심 인재 붙잡아야 하는데…SK바이오사이언스, R&D 인력 수십명 이탈",0.0,0,0,https://biz.chosun.com/science-chosun/bio/2026/05/25/D6TNKZW2ZFEADGZCAB26CHES5U/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,금주 단일종목 레버리지 출시…증시 변동성 속 당국 노심초사,0.0,0,0,https://www.yna.co.kr/view/AKR20260523050900002?input=1195m
+2026-07-21,"전문가 10명 중 6명 ""연말 기준금리 3.0%""…5월은 동결 예상",0.1,1,1,https://www.mt.co.kr/economy/2026/05/25/2026052214585376985
+2026-07-21,[EBN 칼럼] 한국 대기업은 성과의 과실을 노동자와 나누어 왔다,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709972
+2026-07-21,"[다문화 3.0] ""다문화 친구들, 자신감 갖고 도전하면 꿈 이룰 수 있어""",0.0,0,0,https://www.yna.co.kr/view/AKR20260522081700371?input=1195m
+2026-07-21,[오늘의 주요일정]사회(5월25일 월요일),0.0,0,0,https://www.newsis.com/view/NISX20260524_0003642597
+2026-07-21,'상법 개정·PBR 1배법' 기대…지주사 재평가 본격화,0.0,0,0,http://www.fnnews.com/news/202605241427019659
+2026-07-21,"단일종목 레버리지 출격…'포모' 수요 집중, 단기 변동성 불가피",0.0,0,0,https://www.news1.kr/finance/market-exr/6175811
+2026-07-21,"삼성전자, 성과급도 AI 반도체 전략…""현금유출 줄이고 투자 확대""",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709903
+2026-07-21,[미리보는 증시재료] 금통위·PCE·레버리지 ETF…5월 마지막주 변동성 ...,0.0,0,0,https://www.newspim.com/news/view/20260521001223
+2026-07-21,"""2만원대 데이터 무제한 시대 열린다"" 이통3사, 통합요금제 잇달아 출시",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162673
+2026-07-21,"“ASML이 전부가 아니다”… 한·네덜란드 반도체 동맹, 차세대 ‘광자...",0.408,1,0,https://www.g-enews.com/view.php?ud=2026052416474470000c8c1c064d_1
+2026-07-21,"""우린 삼성후자냐"" 불만 임계점…계열사도 성과급 요구 예고",0.0,0,0,https://www.yna.co.kr/view/AKR20260522153800003?input=1195m
+2026-07-21,"삼성전자 연봉, 보통 회사원 14배?…'K자 양극화' 더 커진다",0.0,0,0,https://www.yna.co.kr/view/AKR20260523000600003?input=1195m
+2026-07-21,"""아이 적금으로 SK하이닉스?""…자녀 계좌로 주식 산 부모 [그래도 가족]",0.0,0,0,http://www.fnnews.com/news/202605242023184931
+2026-07-21,"젠슨 黃 대만 조기 도착…삼성·SK·현대차·LG, '피지컬 AI 담판' 카운트...",0.0,0,0,https://www.g-enews.com/view.php?ud=2026052420423884222bd56fbc3c_1
+2026-07-21,아침논단)양극화 줄이고 화합은 늘리고,0.0,0,0,https://www.idaegu.com/news/articleView.html?idxno=662684
+2026-07-21,[사설] 커지는 “불공정에 분노”… 삼전 성과급 후유증 해소돼야,0.0,0,0,https://www.seoul.co.kr/news/editOpinion/editorial/2026/05/25/20260525027001?wlog_tag3=naver
+2026-07-21,"[사설] 폭행에 원정 성매매, 진흙탕 싸움 벌이는 울산시장 선거전",0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026052418011226238
+2026-07-21,현금 하이닉스·주식 삼성…'성과급 머니' 셔세권 자극,0.537,1,0,https://www.news1.kr/realestate/general/6175469
+2026-07-21,중동전 탓에 ‘더 귀한 몸’… 세계 각국서 온 LNG ‘24시간 하역’,0.0,0,0,https://www.seoul.co.kr/news/economy/industry/2026/05/25/20260525031005?wlog_tag3=naver
+2026-07-21,年 1.5% 사내 대출에 억대 성과급 풀린다… ‘반도체벨트’ 집값 들썩,0.0,0,0,https://www.seoul.co.kr/news/economy/2026/05/25/20260525029004?wlog_tag3=naver
+2026-07-21,[이코노 브리핑] 삼전·닉스 레버리지 상품 27일 상장 외,0.0,0,0,https://www.segye.com/newsView/20260524506750?OutUrl=naver
+2026-07-21,[주간경제전망] 삼전·하이닉스 기초자산 단일종목 '레버리지 ETF' 출격,0.0,0,0,https://www.sidae.com/article/2026052216291326639
+2026-07-21,"[사설] 설비투자 쏟아붓는 마이크론·TSMC, K-반도체 노사는 보고 있나",0.0,0,0,https://www.imaeil.com/page/view/2026052417341450031
+2026-07-21,"""동탄이 20억? 집을 살 걸 그랬나"" 삼성전자 주주지만 세입자 ""전셋값 또...",0.0,0,0,http://www.fnnews.com/news/202605221441492475
+2026-07-21,0.007%가 수출 44% 독식…반도체 호황이 부른 ‘K양극화’,0.537,1,0,https://www.joongang.co.kr/article/25431001
+2026-07-21,"빅테크 AI 투자 1090조, 현금 아닌 '빚'으로 간다",0.583,1,0,https://www.g-enews.com/view.php?ud=202605241856394519fbbec65dfb_1
+2026-07-21,[N2 포커스] '36조 빚투’ 증시 블랙홀…개미들 뛰어들 때 증권사는 ‘이...,0.322,1,0,https://www.news2day.co.kr/article/20260523500023
+2026-07-21,"[인터뷰] ""부산이 원하는 건 돈 몇 푼 아니다""… 전재수 ""해양수도로 양...",0.0,0,0,https://www.hankookilbo.com/news/article/A2026051909140001330?did=NA
+2026-07-21,[지선 현장] 김부겸·추경호 100m 대치…대구FC 경기장 달군 '제3의 더비...,0.0,0,0,https://www.dailian.co.kr/news/view/1648154/?sc=Naver
+2026-07-21,"""이번주 8000선 재도전""…탈출각 재는 롤러코스피",-0.067,1,1,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202605220533&t=NN
+2026-07-21,"AI 거품일까 슈퍼사이클일까… 올해 7400조 M&A 답, '한국 HBM'에",0.408,1,0,https://www.g-enews.com/view.php?ud=202605241525303761fbbec65dfb_1
+2026-07-21,삼성·SK하이닉스 2배 ETF 뜬다…개미 몰리자 “변동성 폭탄” 경고,0.0,0,0,https://www.g-enews.com/view.php?ud=2026052422085731389a1f309431_1
+2026-07-21,"이권재 오산시장 후보, AI·반도체 소부장 도시 위한 자문위 구성 추진...",0.0,0,0,https://www.etnews.com/20260525000003
+2026-07-21,월급 942만원 vs 176만원… 반도체 호황의 그늘 ‘격차 경제’,0.537,1,0,https://www.kmib.co.kr/article/view.asp?arcid=1779613482&code=11151400&cp=nv
+2026-07-21,"삼전-닉스 등 5대 기업, 韓수출 비중 44% 차지",0.732,2,0,https://www.donga.com/news/Economy/article/all/20260524/133984414/2
+2026-07-21,반도체 호황 속 깊어지는 임금 양극화,0.775,2,0,https://www.bigtanews.co.kr/article/view/big202605250002
+2026-07-21,[사설] ‘K형 양극화’ 심화하는 수출…반도체 호황에 도취 안 돼,0.775,2,0,https://www.joongang.co.kr/article/25430994
+2026-07-21,"[글로벌 배터리 대전 (36)] 포스코퓨처엠, 중국의 글로벌 배터리 시장 독...",0.0,0,0,https://www.news2day.co.kr/article/20260524500024
+2026-07-21,"""1억원 성장바우처"" vs ""시내버스 무료화"" 공약 실현 가능성 설전",0.322,1,0,https://www.kado.net/news/articleView.html?idxno=2051908
+2026-07-21,"""코스피 1만1000 간다""…삼성전자 59만원·SK하이닉스는 400만원 전망까...",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102143
+2026-07-21,"'낙동강 오리알’서 ‘하이엔드’로…신반포20차 품은 SK에코플랜트, ‘...",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102015
+2026-07-21,"변수 걷히는 코스피, 5월 마지막 주 '진짜 질주' 시작되나",0.0,0,0,https://news.tf.co.kr/read/economy/2325501.htm
+2026-07-21,"[더페어 돋보기] HBM4 패러다임 전환기, 기관 투자자 '독점적 밸류체인...",0.408,1,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=77776
+2026-07-21,[심층분석] 'TSMC 연합군' 재편하는 HBM4…핵심 원천특허가 소부장 운명...,0.033,1,1,https://www.thefairnews.co.kr/news/articleView.html?idxno=77775
+2026-07-21,Don’t be blinded by the semiconductor export boom,0.0,0,0,https://koreajoongangdaily.joins.com/news/2026-05-25/opinion/editorials/Dont-be-blinded-by-the-semiconductor-export-boom/2599823

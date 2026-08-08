@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,[논현광장_임채운의 경영직설] ‘양극화의 씨앗’ ⋯ 성과급의 역설,0.0,0,0,https://www.etoday.co.kr/news/view/2567946
 2026-03-22,"한화, 경남 조선·방산 산업 생태계 강화 본격 행보",0.0,0,0,https://www.gnnews.co.kr/news/articleView.html?idxno=633089
 2026-03-22,원청교섭까지 산넘어 산… 95% '응답없음',0.0,0,0,http://www.fnnews.com/news/202603221843359790
@@ -3970,3 +3970,10 @@
 2026-05-23,[증시 UP&DOWN] '팔천피' 뒤 요동친 코스피… 다음주 '초고변동성' 속 옥...,0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=305877
 2026-05-23,"1년 맞은 생산적 금융, 향후 1천조 투입… ""선순환 구조 만들어야""",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162649
 2026-05-23,"한화에어로, KAI 주식 추가 매입…방산업계 “인수땐 한화 수직 계열화...",0.38,1,0,https://www.joongang.co.kr/article/25430716
+2026-07-21,"도산안창호함, 1만 4000㎞ 항해… K잠수함 최초 태평양 건넜다",0.38,1,0,https://www.segye.com/newsView/20260524506906?OutUrl=naver
+2026-07-21,"""바다 위 원자로 시대 온다""…美 해사대학, 첫 '원자력 선원' 양성 나섰...",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709853
+2026-07-21,"캐나다 해군이 韓잠수함에 찬사…""99년식 혼다 몰다 테슬라 산 듯해""",0.38,1,0,https://www.newsis.com/view/NISX20260525_0003642655
+2026-07-21,"안창호함, 韓 첫 태평양 횡단… ‘60조’ 잠수함 수주전 총력",0.38,1,0,https://www.seoul.co.kr/news/politics/diplomacy/2026/05/25/20260525006004?wlog_tag3=naver
+2026-07-21,한국 잠수함 1.4만km 항해 끝에 캐나다 입항하자 캐나다 현지 언론 호평...,0.38,1,0,https://www.ytn.co.kr/_ln/0104_202605250358309990
+2026-07-21,"캐나다 해군, '한국산 잠수함' 호평…이르면 6월 수주전 결론",0.38,1,0,https://news.sbs.co.kr/news/endPage.do?news_id=N1008577206&plink=ORI&cooper=NAVER
+2026-07-21,"""99년식 시빅 타다가 테슬라 산듯""…캐나다 해군, 韓잠수함 호평",0.38,1,0,https://www.yna.co.kr/view/AKR20260525000800091?input=1195m

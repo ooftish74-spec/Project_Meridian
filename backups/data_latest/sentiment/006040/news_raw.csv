@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,[DBR]‘비욘드 참치’ 리브랜딩으로 정체성 살리고 평판 높여,0.0,0,0,https://www.donga.com/news/Economy/article/all/20260412/133715469/2
 2026-04-12,롯데웰푸드·빙그레 주가 '방긋'… K-디저트 인기에 가공식품株 매수 후...,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444810
 2026-04-12,"[단독] 동원산업, 바이오사업 진출 모색…‘참치’서 고기능 바이오 원...",0.0,0,0,https://biz.chosun.com/science-chosun/bio/2026/04/12/NLIBDIFP25EAJNKL7GTTQRQOTQ/?utm_source=naver&utm_medium=original&utm_campaign=biz
@@ -229,3 +229,31 @@
 2026-05-21,"동원F&B, 고용부·안전보건공단과 손잡고 안전문화 확산",0.0,0,0,https://www.insightkorea.co.kr/news/articleView.html?idxno=246802
 2026-05-21,"동원F&B, 현장 안전문화 확산 앞장…고용노동부와 맞손",0.0,0,0,https://www.news1.kr/industry/distribution/6173465
 2026-05-21,"""산재사망 감소"" 보고에 이 대통령 ""노동부 할 일 많다""",0.0,0,0,https://www.labortoday.co.kr/news/articleView.html?idxno=234529
+2026-07-21,[식음료] 삼립 '보름달' 美 코스트코 400개 매장 입점 / 동원F&B 안전문화...,0.0,0,0,https://www.webeconomy.co.kr/news/articleView.html?idxno=2179754
+2026-07-21,동원F&B·고용부 맞손…산업재해 예방 앞장,0.0,0,0,https://www.mk.co.kr/article/12054648
+2026-07-21,"동원F&B, 고용부·안전보건공단과 업무협약…""안전문화 확산""",0.0,0,0,https://www.cnbizm.com/news/articleView.html?idxno=303630
+2026-07-21,"동원F&B, 고용부·안전보건공단 안전문화 확산 협약 체결",0.0,0,0,https://www.sportsseoul.com/news/read/1610715?ref=naver
+2026-07-21,"동원F&B, 고용부·안전보건공단과 협약…배송상자에도 안전 메시지 담아",0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095912
+2026-07-21,"동원F&B, 고용부·산업안전공단 손잡고 안전문화 확산 캠페인",0.0,0,0,https://www.mk.co.kr/article/12054487
+2026-07-21,"동원F&B, 배송상자에 안전 슬로건 담는다… 안전문화 캠페인 확대",0.0,0,0,https://www.megaeconomy.co.kr/news/newsview.php?ncode=1065593086246666
+2026-07-21,레위니옹 생드니 식물원 〈2/2〉,0.0,0,0,https://www.imwood.co.kr/news/articleView.html?idxno=41112
+2026-07-21,"동원F&B, 고용노동부와 맞손...산업안전 문화 확산 나선다",0.0,0,0,https://www.joongangenews.com/news/articleView.html?idxno=520837
+2026-07-21,"[유통소식] LF 헤지스, 글로벌 사이트 1주년…19만명 유입",0.0,0,0,http://www.4th.kr/news/articleView.html?idxno=2112056
+2026-07-21,"동원F&B, 산업 현장 안전 강화…정부와 손잡고 '안전문화' 확산 총력",0.0,0,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=77563
+2026-07-21,"동원F&B, 산업재해 예방 협약 체결…제품 포장에 안전 메시지 담는다",0.0,0,0,http://www.dailysmart.co.kr/news/articleView.html?idxno=124423
+2026-07-21,"동원F&B, 안전문화 MOU 체결…상미당홀딩스, 임직원 2억원 기부 [유통 PI...",0.0,0,0,https://www.newspost.kr/news/articleView.html?idxno=223076
+2026-07-21,"동원F&B·토스·하나투어, 기관·기업 협업 확대",0.0,0,0,http://www.kdfnews.com/news/articleView.html?idxno=183442
+2026-07-21,"""택배 상자에도 안전 메시지""… 동원F&B, 생활 속 산업안전 문화 확산 나...",0.0,0,0,https://www.e-science.co.kr/news/articleView.html?idxno=129944
+2026-07-21,"동원F&B, 고용부ㆍ안전보건공단과 안전문화 확산 협약",0.0,0,0,http://www.foodnews.co.kr/news/articleView.html?idxno=118662
+2026-07-21,"안전∙상생∙보훈…""기업 ESG 활동 다변화""",0.0,0,0,http://www.kdfnews.com/news/articleView.html?idxno=183437
+2026-07-21,"동원F&B, 고용부·안전보건공단과 안전문화 확산 맞손",0.0,0,0,https://www.inthenews.co.kr/news/article.html?no=87151
+2026-07-21,[잘먹잘살+]풀무원·비비고·동원F&B·서울우유,0.0,0,0,https://www.businessplus.kr/news/articleView.html?idxno=112077
+2026-07-21,"동원F&B, 고용부·안전보건공단과 업무협약 체결",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=134538
+2026-07-21,"동원F&B, 안전문화 정착 위해 민관 협력 확대",0.0,0,0,https://www.womentimes.co.kr/news/articleView.html?idxno=103107
+2026-07-21,"동원F&B, 고용노동부와 맞손…현장 안전문화 확산 앞장",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454325
+2026-07-21,"“더 거칠어진 패권 시대, 한반도 부전 선언 부른다” [월간중앙]",0.0,0,0,https://www.joongang.co.kr/article/25430172
+2026-07-21,"동원F&B, 고용부·안전보건공단과 안전문화 확산 업무협약",0.0,0,0,https://www.widedaily.com/news/articleView.html?idxno=294383
+2026-07-21,"동원F&B, 고용노동부와 안전문화 확산 협약 체결",0.0,0,0,https://www.m-i.kr/news/articleView.html?idxno=1375030
+2026-07-21,"동원F&B, 고용부·안전보건공단과 손잡고 안전문화 확산",0.0,0,0,https://www.insightkorea.co.kr/news/articleView.html?idxno=246802
+2026-07-21,"동원F&B, 현장 안전문화 확산 앞장…고용노동부와 맞손",0.0,0,0,https://www.news1.kr/industry/distribution/6173465
+2026-07-21,"""산재사망 감소"" 보고에 이 대통령 ""노동부 할 일 많다""",0.0,0,0,https://www.labortoday.co.kr/news/articleView.html?idxno=234529

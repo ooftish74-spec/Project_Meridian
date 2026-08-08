@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"종전 기대 식었다...유가 뛰고 재건 멀어져, 뼈 아픈 항공·건설주",-0.537,0,2,https://www.mt.co.kr/stock/2026/04/14/2026041311211298311
 2026-04-13,"롯데관광개발 주가, 4월 13일 장중 16,680원 2.80% 하락",-0.261,0,1,https://www.joongangenews.com/news/articleView.html?idxno=511088
 2026-04-13,"美, 이란 해상 봉쇄에 국제유가 급등…항공·호텔·여행주 울상",0.408,1,0,https://www.mt.co.kr/stock/2026/04/13/2026041309415940179
@@ -341,3 +341,4 @@
 2026-05-21,"롯데관광개발, 2분기 순익 흑전…연내 고성장 지속 기대-신한",0.322,1,0,http://www.edaily.co.kr/news/newspath.asp?newsid=02296006645451216
 2026-05-24,"7월부터 이자 비용 뚝 떨어진다…데관광개발, 재무구조 개선 청신호",0.462,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454975
 2026-05-23,"유럽여행하던 한국인 모녀, 숙소에서 '비극적인' 사고 당했다",0.0,0,0,https://www.wikitree.co.kr/articles/1137926
+2026-07-21,"7월부터 이자 비용 뚝 떨어진다…데관광개발, 재무구조 개선 청신호",0.462,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454975

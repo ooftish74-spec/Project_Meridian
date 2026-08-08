@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,삼성·SK '배당 잔치'… 광주·전남 상장사 '배당 가뭄',-0.462,0,1,https://www.jnilbo.com/news/articleView.html?idxno=90000027284
 2026-03-22,李 “기업가치 제고” 이틀만에…밸류업 공시 49개 쏟아져,0.0,0,0,https://www.sedaily.com/article/20022507?ref=naver
 2026-03-22,부수는 데만 12년?…짓는 만큼 오래 걸리는 원전 해체[디깅에너지],0.0,0,0,https://view.asiae.co.kr/article/2026032123140424851
@@ -860,3 +860,5 @@
 2026-05-24,"""떠나고 싶지 않다""…사라지는 산업 앞 노동자들",0.0,0,0,https://news.cpbc.co.kr/article/1173082?division=NAVER
 2026-05-24,두산에너빌리티 한전기술 우진엔텍 등 원전주들 전반 '방긋'…연휴 이후...,0.0,1,1,https://www.cbci.co.kr/news/articleView.html?idxno=576669
 2026-05-23,"고기철 ""이번 선거, 투표로 서귀포 정치를 심판해 달라""",0.0,0,0,https://www.jejumaeil.net/news/articleView.html?idxno=401174
+2026-07-21,"""떠나고 싶지 않다""…사라지는 산업 앞 노동자들",0.0,0,0,https://news.cpbc.co.kr/article/1173082?division=NAVER
+2026-07-21,두산에너빌리티 한전기술 우진엔텍 등 원전주들 전반 '방긋'…연휴 이후...,0.0,1,1,https://www.cbci.co.kr/news/articleView.html?idxno=576669

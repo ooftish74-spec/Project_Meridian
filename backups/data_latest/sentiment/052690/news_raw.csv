@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,코스피 반등 뒤 숨은 불안…공매도 타깃 된 금융·소재주,-0.165,1,1,https://www.etoday.co.kr/news/view/2567689
 2026-03-22,유가 변동성 장세에 정책 모멘텀까지… '원자력 ETF' 강세,0.322,1,0,https://www.asiatoday.co.kr/view.php?key=20260323010006555
 2026-03-22,'전쟁 길어질라' 개인 매수세 줄고 '위험상품' 기웃,0.0,0,0,https://www.koreareport.co.kr/news/articleView.html?idxno=50051
@@ -747,3 +747,4 @@
 2026-05-25,"[공사 Pick] 수자원공사·한전KDN·한전, AI·로봇으로 공공 인프라 혁신...",0.0,0,0,https://www.lcnews.co.kr/news/articleView.html?idxno=202561
 2026-05-24,[위클립] 5월 3주,0.0,0,0,https://www.laborplus.co.kr/news/articleView.html?idxno=40894
 2026-05-24,두산에너빌리티 한전기술 우진엔텍 등 원전주들 전반 '방긋'…연휴 이후...,0.261,1,0,https://www.cbci.co.kr/news/articleView.html?idxno=576669
+2026-07-21,"[공사 Pick] 수자원공사·한전KDN·한전, AI·로봇으로 공공 인프라 혁신...",0.0,0,0,https://www.lcnews.co.kr/news/articleView.html?idxno=202561

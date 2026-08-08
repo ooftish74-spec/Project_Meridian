@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"두산퓨얼셀 주가, 4월 13일 37,550원 3.73% 상승 마감",0.261,1,0,https://www.topstarnews.net/news/articleView.html?idxno=16033576
 2026-04-13,"천보, LCD 식각액 1위 넘어 배터리 전해질로 '글로벌 영토 확장'",0.537,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445020
 2026-04-14,[서울데이터랩]주성코퍼레이션 29.92% 상한가 금일 증시 상승률 1위로 마...,0.645,2,0,https://www.seoul.co.kr/news/economy/securities/2026/04/14/20260414500237?wlog_tag3=naver
@@ -208,3 +208,4 @@
 2026-05-21,하이닉스 던지고 로봇株 향한 초고수…레인보우로보틱스 순매수 1위 [주...,0.0,0,0,https://www.sedaily.com/article/20046763?ref=naver
 2026-05-24,"소비재서 중공업, 이젠 AI·반도체로…두산, 5조 빅딜로 DNA 깨웠다[시그...",0.0,0,0,https://www.sedaily.com/article/20047611?ref=naver
 2026-05-23,"두산퓨얼셀 주가 장중 10만원 넘었다, 새주장 움직임은?…추가 수급 유...",0.322,1,0,https://www.cbci.co.kr/news/articleView.html?idxno=576666
+2026-07-21,"소비재서 중공업, 이젠 AI·반도체로…두산, 5조 빅딜로 DNA 깨웠다[시그...",0.0,0,0,https://www.sedaily.com/article/20047611?ref=naver

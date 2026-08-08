@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,설계사 수당이 보험료 30배?… 과당경쟁에 GA만 배불려,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092160213
 2026-04-13,"상장 보험사, 현금 대신 주식 상여금…한화생명 투톱 70억",0.0,0,0,https://www.fetv.co.kr/news/article.html?no=216775
 2026-04-12,[르포] 금융권 개발자들의 치열한 AI 경쟁…'AWS 게임데이' 가보니,0.0,0,0,https://zdnet.co.kr/view/?no=20260412085320
@@ -475,3 +475,6 @@
 2026-05-23,"[금융zip] DB손해보험, 美 보험사 포테그라 인수 완료 外",0.0,0,0,https://www.getnews.co.kr/news/articleView.html?idxno=870774
 2026-05-23,증시 호황에 금융판 뒤집혔다…증권·보험 ‘신흥 주도주’ 부상,0.0,0,0,https://magazine.hankyung.com/business/article/202605210875b
 2026-05-23,거래소 '대표지수' 물갈이…어떤 기업이 포함되고 빠졌나,0.0,0,0,https://www.dailian.co.kr/news/view/1647830/?sc=Naver
+2026-07-21,손 안 대고 코 푼 보험사…5세대 실손 전환 슬쩍 뭉개기,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162665
+2026-07-21,"사기·횡령 등 금융사고 6년여간 1조 넘었다…""작년 역대 최대""",0.0,0,0,https://www.yna.co.kr/view/AKR20260523043200002?input=1195m
+2026-07-21,"미래에셋생명, 1분기 순익 534억원… 건강보험 중심 체질개선 성과",0.322,1,0,https://www.insnews.co.kr/news/articleView.html?idxno=90924

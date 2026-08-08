@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,[테헤란로] 조선업 찬물 끼얹는 은행들,0.38,1,0,http://www.fnnews.com/news/202604131813278521
 2026-04-13,"티엠씨, 전장사업 품고 영역 확장… 종합 케이블 솔루션 도약",-0.261,0,1,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445042
 2026-04-13,"[신아일보tv] K-조선, 기술 초격차로 1위 노린다",0.38,1,0,https://www.shinailbo.co.kr/news/articleView.html?idxno=5010672
@@ -562,3 +562,5 @@
 2026-05-21,삼성중공업 4%대 급등…미국·이란 긴장 완화 속 조선주 전반 강세,0.775,3,0,https://www.cbci.co.kr/news/articleView.html?idxno=576140
 2026-05-23,"거래소, 코스피 200·코스닥 150 등 구성종목 정기변경",0.0,0,0,http://www.metroseoul.co.kr/article/20260523500001
 2026-05-23,거래소 '대표지수' 물갈이…어떤 기업이 포함되고 빠졌나,0.0,0,0,https://www.dailian.co.kr/news/view/1647830/?sc=Naver
+2026-07-21,"거래소, 코스피 200·코스닥 150 등 구성종목 정기변경",0.0,0,0,http://www.metroseoul.co.kr/article/20260523500001
+2026-07-21,거래소 '대표지수' 물갈이…어떤 기업이 포함되고 빠졌나,0.0,0,0,https://www.dailian.co.kr/news/view/1647830/?sc=Naver

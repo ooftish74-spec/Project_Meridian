@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-11,[핀포인트] [전북은행] 비이자이익 기반 흔들…수익 돌파구 마련 '과제...,0.261,1,0,https://news.dealsitetv.com/articles/168253
 2026-04-13,"[브랜드평판] 하나금융지주 함영주, 금융지주 CEO 4월 1위... 아이엠금융...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=48784
 2026-04-13,[업앤다운]은행주 하락…케이뱅크↑·제주은행↓,0.0,1,1,https://www.nspna.com/news/?mode=view&newsid=809548
@@ -376,3 +376,5 @@
 2026-05-24,[업앤다운]은행주 전체 상승…케이뱅크·우리금융↑,0.537,2,0,https://www.nspna.com/news/?mode=view&newsid=814277
 2026-05-24,"새 수익 기반 찾는 BNK금융 JB금융 iM금융, '흥행 확인' 국민성장펀드로...",-0.165,1,1,https://www.businesspost.co.kr/BP?command=article_view&num=438448
 2026-05-23,"[지방금융 재편③] JB금융, 플랫폼·캐피탈 앞세워 전국화 실현할까",0.0,0,0,http://www.finomy.com/news/articleView.html?idxno=254782
+2026-07-21,[업앤다운]은행주 전체 상승…케이뱅크·우리금융↑,0.537,2,0,https://www.nspna.com/news/?mode=view&newsid=814277
+2026-07-21,"새 수익 기반 찾는 BNK금융 JB금융 iM금융, '흥행 확인' 국민성장펀드로...",-0.165,1,1,https://www.businesspost.co.kr/BP?command=article_view&num=438448

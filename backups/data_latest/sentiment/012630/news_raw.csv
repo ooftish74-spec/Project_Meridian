@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,압구정5구역·신반포19·25차 '맞대결 성사'…누구 품으로,0.0,0,0,https://www.newsis.com/view/NISX20260412_0003587515
 2026-04-12,"도심 덮친 예견된 인재… “반성 없는 사회, 비극 반복”",0.0,0,0,http://www.jndn.com/article.php?aid=1775980517430574005
 2026-04-12,"IPARK현대산업개발, 샛강생태공원서 환경정화…""지역사회 상생 강화""",0.38,1,0,https://www.apnews.kr/news/articleView.html?idxno=3047750
@@ -820,3 +820,4 @@
 2026-05-21,"현대차·기아도 반한 모터 기술력… 계양전기, 글로벌 영토 넓힌다",0.732,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454322
 2026-05-20,"IPARK현산, 코가로보틱스 로봇사업부 인수 '제로웍스' 설립",0.0,0,0,https://news.tf.co.kr/read/economy/2324009.htm
 2026-05-23,"[뉴스락 특별기획] 대기업 내부거래, 반복되는 사익편취의 민낯",-0.408,0,1,http://www.newslock.co.kr/news/articleView.html?idxno=130419
+2026-07-21,"[뉴스락 특별기획] 대기업 내부거래, 반복되는 사익편취의 민낯",-0.408,0,1,http://www.newslock.co.kr/news/articleView.html?idxno=130419

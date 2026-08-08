@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-21,"[금주의 건설 톡톡] 허창수 GS건설 회장, 작년 건설업계 연봉킹... 삼성...",0.0,0,0,https://www.mediawatch.kr/news/article.html?no=259013
 2026-03-23,"KAIST, 중부권·3특에 글로벌 메가밸리 육성",0.0,0,0,https://zdnet.co.kr/view/?no=20260323200314
 2026-03-23,4대 과기원 'AX 동맹'···16개 기업과 '지역 산업 혁신 주도',0.0,0,0,http://www.hellodd.com/news/articleView.html?idxno=111242
@@ -658,3 +658,12 @@
 2026-05-21,"조성현 HL만도 부회장, 발명의 날 '은탑산업훈장' 수훈",0.0,0,0,https://www.hankyung.com/article/202605211306i
 2026-05-21,"현대차·기아도 반한 모터 기술력… 계양전기, 글로벌 영토 넓힌다",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454322
 2026-05-21,조성현 HL만도 부회장 '은탑산업훈장'… 발명의 날 기업 포상 잇따라,0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=354047
+2026-07-21,"HL만도 조성현 부회장, 은탑산업훈장 수훈",0.0,0,0,https://www.webeconomy.co.kr/news/articleView.html?idxno=2177788
+2026-07-21,"HL만도 '휴머노이드 기업' 변신…""로봇 관절로 테슬라 공략""",0.0,0,0,https://www.hankyung.com/article/2026052125661
+2026-07-21,"HL그룹, 오너 3세 정지연·정지수 지분 확대",0.0,0,0,http://www.inews24.com/view/1970634
+2026-07-21,"HL만도, 2.7조 수주에도 영업현금 59% 줄었다...매출채권·재고 1720억 증...",0.625,2,0,https://www.newsquest.co.kr/news/articleView.html?idxno=266649
+2026-07-21,"HL그룹, 자율주행·SDV 전환 속도… HL클레무브 레벨4 협력 확대",0.0,0,0,https://www.koreaittimes.com/news/articleView.html?idxno=153912
+2026-07-21,SDV 전환 속 존재감 키우는 HL만도…조성현 부회장 은탑산업훈장,0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303050
+2026-07-21,"조성현 HL만도 부회장, 발명의 날 '은탑산업훈장' 수훈",0.0,0,0,https://www.hankyung.com/article/202605211306i
+2026-07-21,"현대차·기아도 반한 모터 기술력… 계양전기, 글로벌 영토 넓힌다",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454322
+2026-07-21,조성현 HL만도 부회장 '은탑산업훈장'… 발명의 날 기업 포상 잇따라,0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=354047

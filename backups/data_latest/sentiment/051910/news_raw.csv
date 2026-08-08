@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-21,[주간 거래소 기관] 반도체는 사고 2차전지는 팔았다...SK하이닉스 SK스...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438687
 2026-03-21,"100원 더 내고 산 그 봉투, 어디로 갔을까[이유범의 에코&에너지]",0.0,0,0,http://www.fnnews.com/news/202603201334565881
 2026-03-21,나프타 수급난에 석화업계 셧다운 위기…전방산업도 '비상',-0.322,0,1,https://news.tf.co.kr/read/economy/2304528.htm
@@ -3232,3 +3232,7 @@
 2026-05-23,[유통가] 시몬스 부산 팝업·갤러리아百 '분더바 컬렉션' 外,0.0,0,0,https://www.slist.kr/news/articleView.html?idxno=740885
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,-0.067,1,1,https://www.newspim.com/news/view/20260521000606
+2026-07-21,속도 안 나는 석유화학 구조조정… “먼저 감산한 기업만 손해” 불만도,-0.462,0,1,https://biz.chosun.com/industry/company/2026/05/25/EEPA2BW2D5E3JFP3WNF7AEN4VE/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"中, 전략광물 관리 강화…K배터리 공급망 부담 커진다",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=134681
+2026-07-21,"LG화학, OLED 중수소 특허 유효 최종확인...대법원, SFC 상고 기각",-0.38,0,1,https://zdnet.co.kr/view/?no=20260524232542
+2026-07-21,“단 1분도 회사선 글 안 써… 직장인은 일이 먼저죠”,0.0,0,0,https://www.chosun.com/culture-life/culture_general/2026/05/25/WYRBJQQIEBH2TO57X5PZD6CDPQ/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news

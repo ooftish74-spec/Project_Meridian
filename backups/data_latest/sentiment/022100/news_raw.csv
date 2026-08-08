@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"한국CM협회, ‘CM기반 VE를 통한 건설산업 경쟁력 강화’ 세미나",0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202604091552522230699
 2026-04-12,“GPU 올인 시대 끝낸다”…NPU로 판 뒤집는 ‘한국판 딥시크 전략’ 가...,0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=02538726645415464
 2026-04-12,"IT기업들, GPU 대신 NPU로 전환…AI 실용성 높인다",0.0,0,0,https://www.g-enews.com/view.php?ud=202604101115153283d7a510102_1
@@ -478,3 +478,4 @@
 2026-05-23,"국내 IT서비스 산업, ‘AI 전환 속도’가 기업 성패 가른다",0.625,2,0,https://www.m-economynews.com/news/article.html?no=67410
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,[글로벌 질주] ③ 포스코인터 '에너지 잭팟'·포스코DX 'AX 융합'…그룹...,0.261,1,0,https://www.financialpost.co.kr/news/articleView.html?idxno=260170
+2026-07-21,오대산 일대 ‘로드킬 예방 AI 시스템’ 가동,0.0,0,0,https://www.segye.com/newsView/20260524508475?OutUrl=naver

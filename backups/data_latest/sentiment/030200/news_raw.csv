@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"계속되는 해킹 사건, AI 신무기 장착한 해커들[AI 시대, 다시 설계하는...",0.0,0,0,https://economist.co.kr/article/view/ecn202603180066
 2026-03-23,"[창간 26주년] AI 성패 가르는 'AI 데이터센터'…""전력 확보가 관건""",0.0,0,0,http://www.inews24.com/view/1951213
 2026-03-23,"신제품도 못 살린 유통시장… 판매점 ""LG U+ 위약금 면제만 기대""",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092158957
@@ -4763,3 +4763,22 @@
 2026-05-24,"'와' 박해민 미쳤다! 생애 첫 끝내기 스리런... LG, 키움 6-4 꺾고 위닝시...",0.0,0,0,https://www.starnewskorea.com/sports/2026/05/24/2026052411221562165
 2026-05-24,"박해민이 끝냈다! 9회초 마무리 투입한 LG, 박해민 9회말 2아웃 역전 스...",0.0,0,0,https://www.spotvnews.co.kr/news/articleView.html?idxno=818662
 2026-05-24,"'양창섭 9이닝 완봉 역투' 삼성 라이온즈, 롯데 자이언츠 꺾고 단독 선두...",0.0,0,0,https://www.imaeil.com/page/view/2026052411185244458
+2026-07-21,"아쉽다 아쉬워 아시아쿼터! 못 던지고, 못 치고, 심지어 말소되고…울고...",0.0,0,0,https://www.spotvnews.co.kr/news/articleView.html?idxno=818689
+2026-07-21,MS와 AI 동맹 청구서?… KT클라우드 지급수수료 첫 5000억원 돌파,0.537,2,0,https://biz.chosun.com/it-science/ict/2026/05/25/5RPBUBKPHVA4BCQLJWQIFVGUOU/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"""2만원대 데이터 무제한 시대 열린다"" 이통3사, 통합요금제 잇달아 출시",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162673
+2026-07-21,"""야구장 쓰레기 제가 다 주웠어요"" 패패패패패 탈출 몸부림 이렇게 처절...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052420471040162
+2026-07-21,한미 통산 200승… ‘괴물’은 멈추지 않는다,0.0,0,0,https://www.seoul.co.kr/news/sport/baseball/2026/05/25/20260525035002?wlog_tag3=naver
+2026-07-21,클라우드 국경은 존재하는가… 빅테크 침공 속 CSP·MSP의 ‘새 전선’,0.0,0,0,https://www.ddaily.co.kr/page/view/2026051608233320273
+2026-07-21,"'와 파격' ERA 11점대인데, 어떻게 류현진 200승 도우미 발탁됐나…""韓+...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052419431659186
+2026-07-21,"KIA 정해영 25세인데 김재윤→이용찬→김원중만 위에 있다, 탑10 눈앞…...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052502233303836
+2026-07-21,개인 통산 200승… 전설이 된 괴물,0.0,0,0,https://www.kmib.co.kr/article/view.asp?arcid=1779613814&code=12110000&cp=nv
+2026-07-21,"'와' 153km KKKKKKKKK 미쳤다, 진짜 인천→잠실 거친 일본인 오나…""韓 구...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052415332760444
+2026-07-21,"'ERA 9.46' 퇴출 0순위 맞나, KIA 완전히 당황했다…""우리 믿어라"" 대반전...",0.0,0,0,https://www.sportschosun.com/baseball/2026-05-24/202605250100144660009762
+2026-07-21,"부처님 오신날, 데뷔 첫 완봉승...불굴의 오뚜기, 그 뒤에 '내조의 여왕...",0.0,0,0,https://www.sportschosun.com/baseball/2026-05-25/202605250100145280009800
+2026-07-21,"20년째 에이스… 한화 류현진, 한미 통산 200승",0.0,0,0,https://www.chosun.com/sports/baseball/2026/05/25/TNYGL42ZRFDELLXGGLWJ2LOMUI/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news
+2026-07-21,"류현진 韓美 200승, 김광현 190승하고 수술…양현종 189승, 안 아프면 늦...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052421021526343
+2026-07-21,"날려도 날려도 '또' 던졌다! KIA 정해영 혼신의 24구, 'KBO 최연소 150SV'...",0.0,0,0,https://www.starnewskorea.com/sports/2026/05/25/2026052420591076555
+2026-07-21,"'도루 시도→충돌 쾅' 구급차 타고 떠난 살림꾼, 제 발로 경기장 복귀했...",0.0,0,0,https://www.starnewskorea.com/sports/2026/05/25/2026052422543467321
+2026-07-21,“돌로 던져도 너보다 잘 던지겠다”며 오재원이 저격했던 삼성 양창섭...,0.0,0,0,https://www.segye.com/newsView/20260524509226?OutUrl=naver
+2026-07-21,아뿔싸! 응급차까지 탔는데 검진 못 받고 귀가라니…쇄골 다친 육성선수...,0.0,0,0,http://www.osen.co.kr/article/G1112807877
+2026-07-21,"23일 3안타 치고도 고개 떨궜는데, 24일 4안타 치고 드디어 웃었다…""고...",0.0,0,0,https://www.mydaily.co.kr/page/view/2026052418134634091

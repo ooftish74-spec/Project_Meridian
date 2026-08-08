@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,매출 1조 식품사 CEO 14명 중 7명 보수 줄어...김선희·이승준·곽정우 3...,0.0,0,0,http://www.consumernews.co.kr/news/articleView.html?idxno=752399
 2026-03-23,"콜마, 화장품ㆍ건기식 '투트랙'...재정비 속도",0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202603191405577490868
 2026-03-23,‘새청무’ 쌀 편의점 시장 공략,0.0,0,0,https://www.nongmin.com/article/20260320500685
@@ -2874,3 +2874,7 @@
 2026-05-23,"CJ제일제당, 초등학생 170여명 대상 'PHA 활용 자원순환 강의 및 체험 프...",0.0,0,0,http://www.sisacast.kr/news/articleView.html?idxno=96130
 2026-05-23,"KCC, 색 정보 활용 ‘안전 설계’ 연구 성과…산업·일상·공공 영역으로...",0.0,0,0,https://sateconomy.co.kr/news/view/1065595694338806
 2026-05-23,"‘K-리커’ 이끌 CJ의 야심작 ‘자리’, 더 CJ컵서 첫 선",0.0,0,0,https://www.sedaily.com/article/20047414?ref=naver
+2026-07-21,면·김밥·빵·디저트까지 냉동식품 경계 사라진다,0.0,0,0,http://digitalchosun.dizzo.com/site/data/html_dir/2026/05/22/2026052280148.html
+2026-07-21,[단독] 中 ‘반입 불허’ 명단 오른 K푸드... CJ제일제당·사조대림 등,0.0,0,0,https://biz.chosun.com/distribution/food/2026/05/25/SK4ZDIQ2B5DHZFCUN3NEFH6VRI/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"담합 잡는 자진신고제, 재발까진 못막아…비공개 탓 밀실 논란도",0.0,0,0,https://www.yna.co.kr/view/AKR20260524001600002?input=1195m
+2026-07-21,"공정위, 주병기 취임 후 담합과징금 291억원 '자진신고 등' 감면",-0.408,0,1,https://www.yna.co.kr/view/AKR20260524030300002?input=1195m

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,“역대급 수주전은 옛말” 정비사업 대어 ‘무혈 입성’ 확산 [집슐랭],0.38,1,0,https://www.sedaily.com/article/20031444?ref=naver
 2026-04-13,"""중동 미수금 7300억원""…'18조 기회' 앞서 리스크 경고",0.261,1,0,https://www.mt.co.kr/estate/2026/04/13/2026040916112270921
 2026-04-13,대전 도안지구 ‘자이 센텀리체’ 상륙…2293가구 분양,0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202604101458451550799
@@ -2435,3 +2435,9 @@
 2026-05-23,"‘핫플’ 성수동 팝업에 음반-향수 제작까지… 건설사, 호감도 전쟁",0.38,1,0,https://www.donga.com/news/Economy/article/all/20260522/133978146/2
 2026-05-23,"거래소, 코스피 200·코스닥 150등 구성종목 정기변경",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=137233
 2026-05-23,"[단독] 상대원2구역, 조합장 또 해임… 시공사 교체 험난할 듯",0.0,0,0,https://news.mtn.co.kr/news-detail/2026052220451028144
+2026-07-21,강남 아니어도 국평 30억…흑석까지 번진 초고가 분양,0.0,0,0,https://www.news1.kr/realestate/general/6175074
+2026-07-21,[이코노 브리핑] 삼전·닉스 레버리지 상품 27일 상장 외,0.0,0,0,https://www.segye.com/newsView/20260524506750?OutUrl=naver
+2026-07-21,"""브랜드에 자금력까지 갖춰야""…그들만의 리그된 서울 핵심 재건축",0.0,0,0,https://www.mt.co.kr/estate/2026/05/25/2026051910543690224
+2026-07-21,“‘e편한세상’ 대신 ‘아크로’ 달라” 시작… 파국 치닫는 1조 성남...,0.0,0,0,https://www.kmib.co.kr/article/view.asp?arcid=1779613139&code=11151500&cp=nv
+2026-07-21,"'낙동강 오리알’서 ‘하이엔드’로…신반포20차 품은 SK에코플랜트, ‘...",0.38,1,0,https://www.theguru.co.kr/news/article.html?no=102015
+2026-07-21,"의사결정부터 현장 관리까지...건설사, AI 도입 속도전",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102159

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"[오늘(23일)의 경제·산업 주요 일정·행사] 'LG전자, 주주총회' 등",0.0,0,0,http://www.popcornnews.net/news/articleView.html?idxno=115734
 2026-03-23,외형은 커졌지만 수익은 양극화…삼성바이오·셀트리온 '빅2 쏠림',0.322,1,0,https://www.apsk.co.kr/news/articleView.html?idxno=538913
 2026-03-23,[최영운의 소갈머리] K-제약바이오에 던져진 한미약품의 교훈,0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=297405
@@ -845,3 +845,4 @@
 2026-05-21,"이기붕 ""인천의 잠재력을 폭발시켜 첨단도시로 성장시킬 것""",0.322,1,0,http://www.incheonin.com/news/articleView.html?idxno=118097
 2026-05-21,"[바이오 리그테이블]탄력받은 삼성바이오·셀트·SK바팜, 1Q 껑충",0.322,1,0,https://news.bizwatch.co.kr/article/healthcare/2026/05/20/0027
 2026-05-25,"핵심 인재 붙잡아야 하는데…SK바이오사이언스, R&D 인력 수십명 이탈",0.322,1,0,https://biz.chosun.com/science-chosun/bio/2026/05/25/D6TNKZW2ZFEADGZCAB26CHES5U/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"핵심 인재 붙잡아야 하는데…SK바이오사이언스, R&D 인력 수십명 이탈",0.322,1,0,https://biz.chosun.com/science-chosun/bio/2026/05/25/D6TNKZW2ZFEADGZCAB26CHES5U/?utm_source=naver&utm_medium=original&utm_campaign=biz

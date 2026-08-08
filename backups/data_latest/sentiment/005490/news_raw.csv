@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"전쟁 충격에 업종별 ‘명암’…자동차·화학 급락, 유틸리티·건설은 상...",-0.462,1,2,https://www.sedaily.com/article/20022426?ref=naver
 2026-03-22,중동전쟁 충격에 증시 출렁…유틸리티·건설 선방,-0.261,0,1,https://www.namdonews.com/news/articleView.html?idxno=904795
 2026-03-22,"전쟁이 바꾼 증시 판도…자동차·철강 '쇼크', 방산·원전 '반사이익'",0.0,0,0,https://www.g-enews.com/view.php?ud=202603220935582142edf69f862c_1
@@ -718,3 +718,4 @@
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,POSCO홀딩스 주가 5월 셋째 주 하락 후 반등 마감,0.322,2,1,https://www.topstarnews.net/news/articleView.html?idxno=16069478
 2026-05-23,삼전닉스 내다 파는 '큰손'…대체 뭐 담았나 보니,0.0,0,0,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202605230383&t=NN
+2026-07-21,"POSCO(포스코)홀딩스, 중동 변수에 다시 흔들리나…미·이란 충돌 재확산...",0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=576793

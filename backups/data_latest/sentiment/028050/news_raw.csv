@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,[주간수급리포트] 5조 '벚꽃 리턴' 외국인·7.7조 '팔자' 개인…코스피...,0.0,0,0,https://www.etoday.co.kr/news/view/2574738
 2026-04-12,불안한 월요일..개인 '급락하면 매수' 이어질까,-0.229,1,1,https://www.koreareport.co.kr/news/articleView.html?idxno=50131
 2026-04-12,"송탄소방서·삼성전자, 평택캠퍼스 가설울타리(펜스) 활용 화재예방 홍...",0.0,0,0,https://www.siminilbo.co.kr/news/newsview.php?ncode=1160289084547623
@@ -868,3 +868,4 @@
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,삼성E&A 주가 최근 5거래일 상승세 전환,0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521395
 2026-05-23,"삼성E&A·수자원공사, 글로벌 물 사업 협력 확대",0.0,0,0,https://www.thedailypost.kr/news/articleView.html?idxno=114214
+2026-07-21,호르무즈 개방 가능성 부상…유가 하락 시나리오와 수혜주의 조건,0.133,1,1,https://www.g-enews.com/view.php?ud=202605241600246541fbbec65dfb_1

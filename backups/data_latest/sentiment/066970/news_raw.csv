@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,전쟁 덕에 나타난 이차전지 ‘반짝’ 반등...주가 상승세 이어질까,0.775,3,0,https://biz.chosun.com/stock/stock_general/2026/04/13/4TGLCHW7QNFB3JMMFXNICMCZA4/?utm_source=naver&utm_medium=original&utm_campaign=biz
 2026-04-12,새만금 신항 '반쪽 항만' 만들 셈인가,0.0,0,0,http://www.domin.co.kr/news/articleView.html?idxno=1551933
 2026-04-12,[단독]2차전지 소부장 법인세 계상액 11.2% 감소…한솔케미칼 310억으로...,0.0,0,0,http://www.joseilbo.com/news/news_read.php?uid=566388&class=17&grp=
@@ -508,3 +508,5 @@
 2026-05-24,대구 상장사 1분기 실적 호조···매출액·영업이익·순이익 동반 성장,0.322,1,0,https://dgmbc.com/NewsArticle/841843
 2026-05-24,"K-배터리 소재, 고유가 속 전기차 인기에 실적 ‘쑥’",0.0,1,1,https://biz.heraldcorp.com/article/10743418?ref=naver
 2026-05-23,[주간 거래소 기관] 삼성전자·SK하이닉스 폭풍 매수…반도체로 다시 쏠...,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454890
+2026-07-21,대구 상장사 1분기 실적 호조···매출액·영업이익·순이익 동반 성장,0.322,1,0,https://dgmbc.com/NewsArticle/841843
+2026-07-21,"K-배터리 소재, 고유가 속 전기차 인기에 실적 ‘쑥’",0.0,1,1,https://biz.heraldcorp.com/article/10743418?ref=naver

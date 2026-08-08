@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,우판권 빗장 풀린 레바미피드 서방정...처방 격전지 부상,0.322,1,0,https://www.dailypharm.com/user/news/337417?REFERER=NP
 2026-04-14,"한올바이오파마, 'IMVT-1402' 핵심 파이프라인 부각",0.322,1,0,https://www.medipana.com/news/articleView.html?idxno=409713
 2026-04-13,"한올바이오파마, 임상 실패…5조 매출 기대 꿈이었나 [재계톡톡]",0.0,0,0,https://www.mk.co.kr/article/12013767
@@ -318,3 +318,6 @@
 2026-05-23,'불장'에 제약·바이오 4종목 上…소외된 종목도 눈길[바이오맥짚기],0.462,1,0,https://www.edaily.co.kr/news/newspath.asp?newsid=02036886645451872
 2026-05-23,난치성 류마티스 환자서 효과 입증… 한올바이오파마 재평가 시동,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454881
 2026-05-23,선두권 제약사들 항노화로 방향…차세대 먹거리 새 트렌드,0.0,0,0,https://www.medicaltimes.com/Main/News/NewsView.html?ID=1168882&ref=naverpc
+2026-07-21,[업앤다운]제약주 상승…리가켐바이오·삼일제약↑,0.261,1,0,https://www.nspna.com/news/?mode=view&newsid=814284
+2026-07-21,"IBK투자 ""난치성 류마티스 관절염 치료제 시장 지각변동…한올바이오파...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454964
+2026-07-21,"알부민·LDL 부작용 제로…한올바이오파마, 안전성까지 잡은 신약 독주",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454940

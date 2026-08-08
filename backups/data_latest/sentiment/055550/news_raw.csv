@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,스튜어드십 코드 강화… 국민연금 존재감 커진다,0.0,0,0,https://m.skyedaily.com/news_view.html?ID=300750
 2026-03-23,코스피 반등 뒤 숨은 불안…공매도 타깃 된 금융·소재주,-0.165,1,1,https://www.etoday.co.kr/news/view/2567689
 2026-03-23,"‘견제하는 주주’로 나선 국민연금… 신한지주 반대, 우리금융엔 찬성",0.0,0,0,https://www.seoul.co.kr/news/economy/2026/03/23/20260323030005?wlog_tag3=naver
@@ -1748,3 +1748,5 @@
 2026-05-23,[주간 거래소 기관] 삼성전자·SK하이닉스 폭풍 매수…반도체로 다시 쏠...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454890
 2026-05-23,증시 호황에 금융판 뒤집혔다…증권·보험 ‘신흥 주도주’ 부상,0.0,0,0,https://magazine.hankyung.com/business/article/202605210875b
 2026-05-23,"[김의석의 단상] 진옥동의 일류 신한, 판을 바꾸다",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202605221726254603c1c16452b0_18
+2026-07-21,[업앤다운]은행주 전체 상승…케이뱅크·우리금융↑,0.261,1,0,https://www.nspna.com/news/?mode=view&newsid=814277
+2026-07-21,[기자수첩] 美 SEC 논쟁서 더 선명해진 진옥동의 '발품 IR',0.0,0,0,https://www.apnews.kr/news/articleView.html?idxno=3048640

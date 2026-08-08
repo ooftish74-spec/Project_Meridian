@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-22,멈추지 않는 LNG 개발 열풍…국내 EPC·기자재 업계 수주 확대 '청신호',0.38,1,0,https://www.etoday.co.kr/news/view/2567647
 2026-03-21,"한텍, 화공기기 맞춤 설계부터 수소탱크까지… 에너지 설비 강자 입증",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438754
 2026-03-21,"LPG 넘어 LNG까지… E1, '친환경 종합 에너지 기업'으로 체질 개선 주목",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438750
@@ -170,3 +170,12 @@
 2026-05-21,"두산에너빌리티, 기계 상장기업 브랜드평판 5월 1위...""브랜드 영향력 ...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=202605210808177647d0a8833aad_23
 2026-05-21,"'원전·로봇·방산' 삼각축 통했다…두산에너빌리티, 기계기업 브랜드평...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454245
 2026-05-21,"[브랜드평판] 두산에너빌리티, 기계 상장기업 5월 1위···레인보우로보...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=50252
+2026-07-21,"[브랜드평판] 두산에너빌리티, 기계 상장기업 5월 1위... 레인보우로보...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=50252
+2026-07-21,"기계 상장기업 2026년 5월 브랜드평판...두산에너빌리티, 레인보우로보...",0.0,0,0,https://www.energy-news.co.kr/news/articleView.html?idxno=225545
+2026-07-21,"두산에너빌리티, 5월 기계 상장기업 브랜드평판 1위…레인보우로보틱스...",0.0,0,0,https://www.cbci.co.kr/news/articleView.html?idxno=576161
+2026-07-21,오르비텍 주가 더 내달린다... 방사선 관리와 원전 해체 관련 사업 부각,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454402
+2026-07-21,"현대차·기아도 반한 모터 기술력… 계양전기, 글로벌 영토 넓힌다",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454322
+2026-07-21,[부산ㆍ경남 대학 브리핑 모음(5월21일)] 경남 원전산업 미래 모색… 국...,0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202605201419467990477
+2026-07-21,"두산에너빌리티, 기계 상장기업 브랜드평판 5월 1위...""브랜드 영향력 ...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=202605210808177647d0a8833aad_23
+2026-07-21,"'원전·로봇·방산' 삼각축 통했다…두산에너빌리티, 기계기업 브랜드평...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454245
+2026-07-21,"[브랜드평판] 두산에너빌리티, 기계 상장기업 5월 1위···레인보우로보...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=50252

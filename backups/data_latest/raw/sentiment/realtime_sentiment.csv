@@ -48,3 +48,13 @@ date,phase,fear_greed_score,fear_greed_rating,news_sentiment,news_positive,news_
 2026-07-15,morning,43.1,fear,-0.1907,3,15,100,critical,16.5,0.8549,contango,0.0,up,,,0.0
 2026-07-16,morning,46.5,neutral,-0.1093,7,10,100,critical,15.67,0.8438,contango,0.0,up,,,0.0
 2026-07-19,morning,37.1,fear,-0.2053,6,13,100,critical,18.77,0.9138,contango,0.0,up,,,0.0
+2026-07-21,morning,40.5,fear,-0.0499,9,10,100,critical,17.38,0.8827,contango,0.050903,up,0.1155,,0.1155
+2026-07-22,morning,41.3,fear,-0.0227,9,9,100,critical,17.64,0.8588,contango,0.0,up,0.029,,0.029
+2026-07-23,morning,43.2,fear,-0.0314,10,9,100,critical,16.64,0.8101,contango,-0.014286,down,0.2009,,0.2009
+2026-07-24,morning,38.8,fear,0.0204,10,8,100,critical,18.7,0.9104,contango,0.020126,up,-0.0365,,-0.0365
+2026-07-25,morning,39.4,fear,-0.1329,7,10,100,critical,18.58,0.9059,contango,-0.062694,down,0.0297,,0.0297
+2026-07-26,morning,39.4,fear,-0.0226,13,11,100,critical,18.58,0.9059,contango,-0.062694,down,0.0357,,0.0357
+2026-07-27,morning,39.4,fear,-0.0103,10,10,100,critical,,,contango,-0.062694,down,0.0909,,0.0909
+2026-07-28,morning,37.9,fear,-0.0679,11,11,49,elevated,19.24,0.9395,contango,0.0,down,-0.0804,,-0.0804
+2026-07-29,morning,38.8,fear,0.136,13,7,100,critical,18.21,0.9169,contango,0.0,down,-0.129,,-0.129
+2026-07-30,morning,32.4,fear,-0.1742,8,14,82,critical,20.66,0.9609,contango,0.0,down,0.0216,,0.0216

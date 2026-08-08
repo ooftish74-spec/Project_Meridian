@@ -1,9 +1,0 @@
-{
-  "allocator.s1_base_weight": {
-    "prev_ic": 1.5,
-    "direction_count": 3,
-    "current_lr": 0.115,
-    "stability_factor": 1.0,
-    "momentum_factor": 1.15
-  }
-}

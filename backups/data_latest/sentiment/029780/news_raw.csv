@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,“차라리 여기서 멈출까” 기업 성장 가로막는 5대 규제 대해부,0.322,1,0,https://magazine.hankyung.com/business/article/202603180812b
 2026-03-23,"주총 앞둔 카드사, 사외이사 '전문성 경쟁'",0.0,0,0,https://www.kbanker.co.kr/news/articleView.html?idxno=224464
 2026-03-23,"‘부산행ʼ 속도내는 HMM, 노조는 “총파업” [이사회톺아보기]",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202603230200193298dd55077bc2_18
@@ -1697,3 +1697,4 @@
 2026-05-23,"[주간 대형마트 할인템] 한우·꽃게 ""반값 경쟁""…대형마트업계, 여름철...",0.0,0,0,https://www.youthdaily.co.kr/news/article.html?no=219577
 2026-05-23,"삼성금융, C-Lab Outside 본선 17개 스타트업 선발",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108632
 2026-05-23,대형마트 휴무일? 이마트·롯데마트·홈플러스·코스트코 ‘할인품목은...,0.0,0,0,https://www.bntnews.co.kr/article/view/bnt202605220116
+2026-07-21,"""스벅 제휴 겨우 성사됐는데""…카드업계 '탱크데이' 사태에 당혹",0.0,0,0,https://www.yna.co.kr/view/AKR20260523045300002?input=1195m

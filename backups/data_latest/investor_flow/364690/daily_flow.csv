@@ -1400,3 +1400,4 @@ date,close,volume,inst_net_buy,foreign_net_buy,foreign_net_buy_norm,inst_net_buy
 2026-07-01,49105.0,5217,0,0,0.0,-0.1,-0.00567,0.0,ohlcv_proxy
 2026-07-02,45000.0,1170,0,0,-0.0,-0.1,-0.020462,0.0,ohlcv_proxy
 2026-07-03,47330.0,1898,0,0,-0.0,0.0,-0.027626,0.0,ohlcv_proxy
+2026-07-21,47330.0,1898,0,0,-0.0,0.0,-0.027626,0.0,ohlcv_proxy

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,마이너스 종목만 쏙쏙 골라 담은 개미들 ‘눈물’...중동 전쟁 투자 성...,0.261,1,0,https://www.sedaily.com/article/20022581?ref=naver
 2026-03-23,[오늘(23일) 증시 전망] 중동발 '48시간 시한폭탄'…개장 직후 업종별 희...,0.1,1,1,https://www.thefairnews.co.kr/news/articleView.html?idxno=72127
 2026-03-22,"[파워인터뷰] 허희영 한국항공대 총장 ""항공우주 클러스터 구축으로 'K-...",0.0,0,0,https://news.unn.net/news/articleView.html?idxno=590935
@@ -1745,3 +1745,9 @@
 2026-05-23,최근 5거래일 LIG디펜스앤에어로스페이스 주가 92만원대 종가,0.0,0,0,https://www.topstarnews.net/news/articleView.html?idxno=16069474
 2026-05-23,[주간 거래소 기관] 삼성전자·SK하이닉스 폭풍 매수…반도체로 다시 쏠...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454890
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
+2026-07-21,"K방산, 美 함정·자주포 공략 속도",0.0,0,0,http://www.fnnews.com/news/202605241810535775
+2026-07-21,[김수현의 상한가] 삼성전자 총파업 위기 해소에 '8000피' 기반 조성,0.462,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521389
+2026-07-21,K-방산 '美 진출' 가시권… 함정·자주포 등 공략 가속도,0.0,0,0,http://www.fnnews.com/news/202605241003206206
+2026-07-21,삼전 주식 액면분할 없었다면 1500만 원 ‘황제’ [비즈앤피플],0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026052117595414969
+2026-07-21,K-방산 '세계 최강' 美 시장 뚫나…함정·자주포·유도무기 진출 박차,0.0,0,0,https://www.news1.kr/industry/general-industry/6175484
+2026-07-21,"LG이노텍·LIG디펜스, 차기 황제주 넘본다…증권가 목표가 일제히 상향",0.0,0,0,https://www.etoday.co.kr/news/view/2587245

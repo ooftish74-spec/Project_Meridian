@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-11,[1% 초고수의 주간 선택] '삼성전자' 사고 'SK하이닉스' 팔았다,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1705121
 2026-04-11,"씨에스윈드, 포르투갈 법인 채무보증 절반 '뚝'",0.0,0,0,http://www.ferrotimes.com/news/articleView.html?idxno=47394
 2026-04-13,"[주요공시] 광전자, 파두, 동진쎄미켐, 씨에스윈드, 메디콕스 외",0.0,0,0,https://www.kdpress.co.kr/news/articleView.html?idxno=204236
@@ -98,3 +98,6 @@
 2026-05-21,"씨에스윈드 주가, 5월 21일 51,000원 3.03% 상승 마감",0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521077
 2026-05-21,오르비텍 주가 더 내달린다... 방사선 관리와 원전 해체 관련 사업 부각,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454402
 2026-05-21,"英 재생에너지 시장 '열기'···LS전선·씨에스윈드, 북해 공략 '가속'",0.0,0,0,https://www.newsfreezone.co.kr/news/articleView.html?idxno=690932
+2026-07-21,"씨에스윈드 주가, 5월 21일 51,000원 3.03% 상승 마감",0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521077
+2026-07-21,오르비텍 주가 더 내달린다... 방사선 관리와 원전 해체 관련 사업 부각,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454402
+2026-07-21,"英 재생에너지 시장 '열기'···LS전선·씨에스윈드, 북해 공략 '가속'",0.0,0,0,https://www.newsfreezone.co.kr/news/articleView.html?idxno=690932

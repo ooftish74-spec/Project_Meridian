@@ -1,7 +1,7 @@
 {
   "ticker": "449170",
   "target_price": 0,
-  "current_price": 111370,
+  "current_price": 111450,
   "recomm_mean": 0.0,
   "buy": 0,
   "hold": 0,
@@ -10,6 +10,6 @@
   "eps_revision_down": 0,
   "research_count": 0,
   "source": "naver_mobile_api",
-  "updated": "2026-07-16",
+  "updated": "2026-07-28",
   "stock_name": "TIGER KOFR금리액티브(합성)"
 }

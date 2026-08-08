@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,[리츠 성과 해부①] 공모가 웃도는 오피스 리츠…대신밸류리츠만 '나홀...,0.0,0,0,https://www.greened.kr/news/articleView.html?idxno=338360
 2026-03-23,"[공매도 브리핑] 3월 23일 거래대금 3조 2,353억…삼성전자·현대차 상위",-0.462,0,1,https://www.topstarnews.net/news/articleView.html?idxno=16013985
 2026-03-23,"[Deal프리뷰] SK, 회사채 언더 발행 성공할까…우량채 지위 기반 그룹 신...",0.0,0,0,https://www.kfenews.co.kr/news/articleView.html?idxno=655923
@@ -227,3 +227,9 @@
 2026-05-21,"[더벨][글로벌 상장리츠 역설] 코람코라이프인프라리츠, ‘생활형 인프...",0.0,0,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605191419318120107841
 2026-05-21,"코스피, 유가·국채금리 안정에 7500선 회복…삼성전자 29만 회복",-0.322,0,1,https://www.greened.kr/news/articleView.html?idxno=341102
 2026-05-21,"[더벨][PF Radar] 이지스운용, 신도림 디큐브시티 리모델링 본궤도",-0.462,0,1,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605191422419040103880
+2026-07-21,민간제안 임대주택 공모사업자 내달 선정,0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202605191051163490244
+2026-07-21,"[증권 뉴스브리핑] '국민참여성장펀드' 내일 출시…정부, 20% 손실 우선 ...",0.322,1,0,https://www.asiatime.co.kr/article/20260521500420
+2026-07-21,"KB자산운용, 연금·ETF 날개 달고 운용자산 200조 돌파…성장세 가팔라",0.537,2,0,https://www.hankyung.com/article/2026052110391
+2026-07-21,"[더벨][글로벌 상장리츠 역설] 코람코라이프인프라리츠, ‘생활형 인프...",0.0,0,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605191419318120107841
+2026-07-21,"코스피, 유가·국채금리 안정에 7500선 회복…삼성전자 29만 회복",-0.322,0,1,https://www.greened.kr/news/articleView.html?idxno=341102
+2026-07-21,"[더벨][PF Radar] 이지스운용, 신도림 디큐브시티 리모델링 본궤도",-0.462,0,1,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605191422419040103880

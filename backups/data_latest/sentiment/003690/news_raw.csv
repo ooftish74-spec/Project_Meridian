@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"보험료·이자 유예… 업계, 중동사태 피해고객 긴급 지원 [마이머니]",0.408,1,0,https://www.segye.com/newsView/20260412507988?OutUrl=naver
 2026-04-12,"코리안리 ""400명 참여 영상 제작 워크숍…조직문화 혁신""",0.0,0,0,https://www.webeconomy.co.kr/news/articleView.html?idxno=2139015
 2026-04-12,"트루팍프로덕션 박철우 대표, 스마트폰·AI로 기업 조직문화를 바꾸다",0.0,0,0,https://www.aitimes.kr/news/articleView.html?idxno=39514
@@ -232,3 +232,4 @@
 2026-05-21,"""호르무즈 막히면 한국도 멈춘다""…정부, 해운업 안전망 총동원",0.0,0,0,https://www.newsworks.co.kr/news/articleView.html?idxno=841453
 2026-05-24,"""금융권 덮친 '규모의 경제'…보험업계 대형사 독주 심화""",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=137106
 2026-05-23,"미래에셋증권, 5월 넷째주 삼성전자 등 6종목 매수 추천",0.823,2,0,https://www.bigtanews.co.kr/article/view/big202605220014
+2026-07-21,"""금융권 덮친 '규모의 경제'…보험업계 대형사 독주 심화""",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=137106

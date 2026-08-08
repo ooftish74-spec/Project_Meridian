@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-22,이번 진해 벚꽃나들이 때 마창대교 야경 어때요?,0.0,0,0,https://www.newsis.com/view/NISX20260322_0003558695
 2026-03-22,"해양에너지, 노사 신뢰 기반 경영 '성과'…노사협력대상 수상",0.322,1,0,https://www.namdonews.com/news/articleView.html?idxno=904790
 2026-03-21,"해양에너지, 광주경영자총협회 '제27회 노사협력대상' 영예",0.0,0,0,http://www.e2news.com/news/articleView.html?idxno=328873
@@ -54,3 +54,4 @@
 2026-05-19,"㈜해양에너지, 협력회사 안전보건협의체 회의",0.322,1,0,https://www.todayenergy.kr/news/articleView.html?idxno=298024
 2026-05-21,"주가 급락 KB스타리츠, 운용수수료 주가 연동키로…상장리츠 첫 사례",-0.462,0,1,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202605211636558480689
 2026-05-24,"네이버 ‘올인’→배당주 턴한 정원오, 상장폐지 2번 피한 오세훈",0.0,0,0,https://shindonga.donga.com/3/all/13/6237766/1
+2026-07-21,"네이버 ‘올인’→배당주 턴한 정원오, 상장폐지 2번 피한 오세훈",0.0,0,0,https://shindonga.donga.com/3/all/13/6237766/1

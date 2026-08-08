@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,불안한 월요일..개인 '급락하면 매수' 이어질까,-0.229,1,1,https://www.koreareport.co.kr/news/articleView.html?idxno=50131
 2026-04-12,"유통에서 제조까지… 비나텍, 20년 만에 에너지 저장 장치 강자 우뚝",0.488,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444811
 2026-04-12,"코스피, 외국인 수급 주목…금리·달러 변수에 '압축 전략'",0.261,1,0,https://news.mtn.co.kr/news-detail/2026041210252183509
@@ -1318,3 +1318,9 @@
 2026-05-23,AI 특수 올라탄 ‘K-전력기기’‥빅3 올해 영업익 3조원 노린다,0.762,2,0,https://www.sedaily.com/article/20047433?ref=naver
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,0.0,0,0,https://www.newspim.com/news/view/20260521000606
+2026-07-21,[자막뉴스] 반도체에서 시작된 '성과급' 파장...재계 긴장,0.0,0,0,https://www.ytn.co.kr/_ln/0134_202605241007541832
+2026-07-21,반도체 랠리 바통 터치…연휴 이후 'AI 전력·고배당주' 뜰까,-0.261,0,1,https://www.mediapen.com/news/view/1100668
+2026-07-21,"AI 데이터센터·차세대 원전까지…'전력' 꽂힌 HD현대, 북미서 판 키운다",0.322,1,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303205
+2026-07-21,삼전 주식 액면분할 없었다면 1500만 원 ‘황제’ [비즈앤피플],0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026052117595414969
+2026-07-21,"LG이노텍·LIG디펜스, 차기 황제주 넘본다…증권가 목표가 일제히 상향",0.0,0,0,https://www.etoday.co.kr/news/view/2587245
+2026-07-21,"""우리도 삼전·닉스처럼""...영업익 N% 성과급의 저주?",0.0,0,0,https://www.ytn.co.kr/_ln/0102_202605240456132763

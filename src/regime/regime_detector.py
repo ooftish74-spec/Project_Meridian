@@ -681,7 +681,8 @@ class RegimeDetector:
                 std = max(np.std(arr), 1e-05)
                 return (arr[-1] - mean) / std
             else:
-                val = float(signal_cache.get(fallback_val, fallback_base))
+                raw_val = signal_cache.get(fallback_val)
+                val = float(raw_val if raw_val is not None else fallback_base)
                 return (val - fallback_base) / fallback_std
         vixy_z = _get_zscore('VIXY', 'vix', 20.0, 5.0)
         usdkrw_base = self._get('regime.mri_usdkrw_baseline', 1300.0)

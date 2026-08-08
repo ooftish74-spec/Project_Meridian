@@ -155,7 +155,7 @@ class KISTraderAdapter:
                 logger.error('  ❌ APP_KEY/APP_SECRET 미설정')
                 return False
             if self._access_token and self._token_expires:
-                if datetime.now() < self._token_expires - timedelta(hours=1):
+                if datetime.now() < self._token_expires - timedelta(hours=2):
                     return True
             if self._load_cached_token():
                 return True
@@ -168,7 +168,7 @@ class KISTraderAdapter:
             with open(self._token_cache, encoding='utf-8') as _f:
                 data = json.load(_f)
             expires = datetime.fromisoformat(data['expires'])
-            if datetime.now() < expires - timedelta(hours=1):
+            if datetime.now() < expires - timedelta(hours=2):
                 self._access_token = data['access_token']
                 self._token_expires = expires
                 logger.info(f"  🔄 캐시 토큰 로드 (만료: {expires.strftime('%H:%M')})")
@@ -832,12 +832,23 @@ class KISTraderAdapter:
                     output2 = data.get('output2', [{}])
                     if output2:
                         summary = output2[0]
-                        dnca_tot = float(summary.get('dnca_tot_amt', 0))
+                        # [Red Team Patch] D+2 정산 후 실제 주문 가능 금액(prvs_rcdl_exn_amt) 우선 채택
+                        ord_psbl_cash = float(summary.get('prvs_rcdl_exn_amt', 0))
+                        if ord_psbl_cash <= 0:
+                            ord_psbl_cash = float(summary.get('dnca_tot_amt', 0))
+
                         tot_evlu = float(summary.get('tot_evlu_amt', 0))
-                        if dnca_tot > 0 or tot_evlu > 0:
-                            self.account.cash = dnca_tot
-                            self.account.total_equity = tot_evlu if tot_evlu > 0 else dnca_tot
-                            logger.info(f'  ✅ [Live Patch] 실계좌 잔고 동적 갱신 완료: 예수금={dnca_tot:,.0f}원 / 총자산={tot_evlu:,.0f}원')
+
+                        # [Red Team Patch] 08:00~08:50 장전 동시호가 평가액 0원 튀기(Glitch) 방어
+                        if ord_psbl_cash > 0 or tot_evlu > 0:
+                            self.account.cash = ord_psbl_cash
+                            if tot_evlu > 0:
+                                self.account.total_equity = tot_evlu
+                            elif self.account.total_equity > 0:
+                                logger.warning('  ⚠️ [Live Patch] 장전 평가액 0원 감지 → 기존 총자산 보존 방어')
+                            else:
+                                self.account.total_equity = ord_psbl_cash
+                            logger.info(f'  ✅ [Live Patch] 실계좌 잔고 동적 갱신 완료: 주문가능현금={ord_psbl_cash:,.0f}원 / 총자산={self.account.total_equity:,.0f}원')
                             return True
                         else:
                             logger.warning('  ⚠️ fetch_live_balance: 잔고 데이터 0 — API 응답 확인 필요')

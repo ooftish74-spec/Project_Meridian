@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"'성장성에 베팅'…국민연금, 일진전기 지분 늘린 이유는",0.892,4,0,https://www.asiatoday.co.kr/view.php?key=20260412010003390
 2026-04-12,AI發 글로벌 전력 수요 급증… 일진전기 '슈퍼사이클' 기대감,0.8,3,0,https://www.asiatoday.co.kr/view.php?key=20260413010003557
 2026-04-12,"유통에서 제조까지… 비나텍, 20년 만에 에너지 저장 장치 강자 우뚝",0.583,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444811
@@ -282,3 +282,11 @@
 2026-05-21,"NH證 ""일진전기, 북미向 매출 확대 등 긍정적…목표가↑""",0.0,0,0,https://www.widedaily.com/news/articleView.html?idxno=294380
 2026-05-21,"산일전기, 154kV 초고압 변압기 증설로 2500억 매출 날개 단다",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454307
 2026-05-21,"[박정식의 국내 주식시황] 반도체가 이끄는 반등장 오나…오늘 증시, 삼...",0.537,2,0,https://www.newsquest.co.kr/news/articleView.html?idxno=266590
+2026-07-21,"일진전기 주가, 5월 21일 110,400원 10.29% 상승 마감",0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521071
+2026-07-21,"신재생 에너지 타고 흐르는 온기… 선도전기, 글로벌 인프라 시장 '정조...",0.775,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454471
+2026-07-21,"빅테크 공급망 뚫은 가온전선, 4조원대 수주 잭팟에 주가 파죽지세",0.625,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454450
+2026-07-21,"가온전선, AI 데이터센터 스토리 부각…주가 재평가 될까",0.322,1,0,https://www.the-stock.kr/news/articleView.html?idxno=32580
+2026-07-21,[특징주] 가온전선ㆍ대원전선 10%대↑⋯‘전력망 3법’ 상임위 통과에 ...,0.261,1,0,https://www.etoday.co.kr/news/view/2586801
+2026-07-21,"NH證 ""일진전기, 북미向 매출 확대 등 긍정적…목표가↑""",0.0,0,0,https://www.widedaily.com/news/articleView.html?idxno=294380
+2026-07-21,"산일전기, 154kV 초고압 변압기 증설로 2500억 매출 날개 단다",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454307
+2026-07-21,"[박정식의 국내 주식시황] 반도체가 이끄는 반등장 오나…오늘 증시, 삼...",0.537,2,0,https://www.newsquest.co.kr/news/articleView.html?idxno=266590

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"생활용품, 가전, 화장품…이마트 '초저가 경쟁' 전선 확대",0.0,0,0,https://news.mtn.co.kr/news-detail/2026032018035370593
 2026-03-23,"“대형마트 고용 1만 명 줄었다… 일자리, 온라인으로 이동”",0.0,0,0,https://m.skyedaily.com/news_view.html?ID=300734
 2026-03-23,“차라리 여기서 멈출까” 기업 성장 가로막는 5대 규제 대해부,0.322,1,0,https://magazine.hankyung.com/business/article/202603180812b
@@ -4548,3 +4548,10 @@
 2026-05-23,1225회 로또 1등 13명…각 22.3억원씩·경기 4곳 최다 당첨 지역,0.0,0,0,http://www.joseilbo.com/news/news_read.php?uid=568844&class=17&grp=
 2026-05-23,제 1225회 로또당첨번호조회…1등 당첨번호·당첨지역·판매점(종합),0.0,0,0,https://www.topstarnews.net/news/articleView.html?idxno=16069762
 2026-05-23,1225회 로또 1등 13명 22억씩 '잭팟'…명당은 어디,0.0,0,0,https://www.kyeonggi.com/article/20260523580183
+2026-07-21,술 덜 먹는 사회… 주류 출고 10년 새 17% 급감,0.0,0,0,https://www.segye.com/newsView/20260524506688?OutUrl=naver
+2026-07-21,생리대 한 팩 1000원까지…지원금 넓어지자 편의점·마트도 움직였다,0.0,0,0,https://www.segye.com/newsView/20260525500917?OutUrl=naver
+2026-07-21,서울 접근성·생활 인프라 ‘우수’… 김포 풍무역세권 관심 폭발,0.0,0,0,https://www.seoul.co.kr/news/economy/estate/2026/05/25/20260525032001?wlog_tag3=naver
+2026-07-21,"TV홈쇼핑, 세계를 향한 중소기업의 새 플랫폼 [기고]",0.0,0,0,https://www.hankookilbo.com/news/article/A2026052017430003707?did=NA
+2026-07-21,'30대 고소득 부부' 매수 몰린 이곳… GTX·재건축 호재 겹친 아파트는 ...,0.0,0,0,https://www.hankookilbo.com/news/article/A2026051918140003910?did=NA
+2026-07-21,"스타벅스 논란, 선거판 휘젓다",0.0,0,0,https://www.chosun.com/politics/election2026/2026/05/25/WPQCZOHNZNH63OW6XJ3THQEJMA/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news
+2026-07-21,"정용진, '대국민 사과'한다... '탱크데이' 진상 조사 결과도 발표",-0.322,0,1,https://www.greened.kr/news/articleView.html?idxno=341257

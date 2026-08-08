@@ -142,15 +142,20 @@ class SmartWalletAllocator:
         """
         default_cash = float(self._get('smart_wallet.default_cash_ratio', 0.5))
         fallback_result = {'target_cash_ratio': default_cash, 'target_long_ratio': round(1.0 - default_cash, 6), 'f_long': round(1.0 - default_cash, 6), 'vol_penalty': 1.0, 'p_crash': 0.0, 'p_bear': 0.0, 'p_normal': 1.0, 'regime_source': 'fallback', 'fallback_reason': ''}
-        if regime_probs is not None:
-            probs = regime_probs
-            regime_source = 'direct'
-        elif market_data is not None:
-            probs = self._get_regime_probs_from_detector(market_data)
-            regime_source = 'detector'
-        else:
-            probs = self._get_regime_probs_from_cache(signal_cache)
-            regime_source = 'cache'
+        try:
+            if regime_probs is not None:
+                probs = regime_probs
+                regime_source = 'direct'
+            elif market_data is not None:
+                probs = self._get_regime_probs_from_detector(market_data)
+                regime_source = 'detector'
+            else:
+                probs = self._get_regime_probs_from_cache(signal_cache)
+                regime_source = 'cache'
+        except Exception as e:
+            logger.warning(f"Regime calculation failed, returning fallback: {e}")
+            fallback_result['fallback_reason'] = str(e)
+            return fallback_result
         p_crash = float(probs.get('crash', 0.0))
         p_bear = float(probs.get('bear', 0.0))
         p_normal = float(probs.get('normal', 1.0 - p_crash - p_bear))

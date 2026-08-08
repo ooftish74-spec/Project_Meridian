@@ -839,3 +839,4 @@ date,close,volume,inst_net_buy,foreign_net_buy,foreign_net_buy_norm,inst_net_buy
 2019-06-19,6510,10249,0,0,0.0,0.1,0.021118,0.0,ohlcv_proxy
 2019-06-20,6705,1526,0,0,1e-06,0.1,0.024344,0.0,ohlcv_proxy
 2019-06-21,6705,0,0,0,1e-06,0.1,0.02384,0.0,ohlcv_proxy
+2026-07-21,6705,0,0,0,1e-06,0.1,0.02384,0.0,ohlcv_proxy

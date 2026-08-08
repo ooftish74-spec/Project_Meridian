@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,'변액보험 1위' 미래에셋생명…'한국형 버크셔 해서웨이' 전략 본격화,0.0,0,0,https://www.news1.kr/finance/insurance-card/6107452
 2026-03-23,"[10대 증권사 CEO&⑤] 엄주성 키움증권 대표, 사상 최대 실적 견인…리테...",0.583,1,0,http://www.seoulwire.com/news/articleView.html?idxno=712385
 2026-03-23,"‘견제하는 주주’로 나선 국민연금… 신한지주 반대, 우리금융엔 찬성",0.0,0,0,https://www.seoul.co.kr/news/economy/2026/03/23/20260323030005?wlog_tag3=naver
@@ -3975,3 +3975,8 @@
 2026-05-23,"미래에셋증권, 5월 넷째주 삼성전자 등 6종목 매수 추천",0.682,2,0,https://www.bigtanews.co.kr/article/view/big202605220014
 2026-05-23,"[안선영의 아주-머니] 단일종목 레버리지 ETF 출시…""하루 최대 60% 손실...",0.0,0,0,https://www.ajunews.com/view/20260521140205992
 2026-05-23,"""10%이상 수익 깔고가는 셈""...국민성장펀드 오픈런 이유",0.322,1,0,https://www.mt.co.kr/finance/2026/05/23/2026052217445771544
+2026-07-21,미래·한투는 질주하는데…중소형 증권사 IB 부진에 '한숨',0.0,0,0,https://www.news1.kr/finance/general-stock/6175692
+2026-07-21,[N2 포커스] '36조 빚투’ 증시 블랙홀…개미들 뛰어들 때 증권사는 ‘이...,0.0,0,0,https://www.news2day.co.kr/article/20260523500023
+2026-07-21,"""이번주 8000선 재도전""…탈출각 재는 롤러코스피",0.0,0,0,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202605220533&t=NN
+2026-07-21,삼성·SK하이닉스 2배 ETF 뜬다…개미 몰리자 “변동성 폭탄” 경고,-0.067,1,1,https://www.g-enews.com/view.php?ud=2026052422085731389a1f309431_1
+2026-07-21,"[취재수첩] ETF 500조 시대, 소외된 운용사들",0.322,1,0,https://www.hankyung.com/article/2026052464021

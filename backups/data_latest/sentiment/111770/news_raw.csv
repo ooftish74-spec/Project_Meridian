@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"영원무역, OEM 호실적에도 ‘스캇’ 발목…외형 성장 속 수익성은 과제",0.905,3,0,https://www.viva100.com/article/20260409500989
 2026-04-11,"[데스크칼럼] HDC 정몽규 봐주기 논란, 국민은 법원을 본다",0.0,0,0,https://news.ifm.kr/news/articleView.html?idxno=468764
 2026-04-13,[브리프]아모레퍼시픽 LF 센텔리안24 젝시믹스 스파오 애경산업 外,0.0,0,0,http://www.biztribune.co.kr/news/articleView.html?idxno=352316
@@ -294,3 +294,5 @@
 2026-05-20,패션OEM 2강 엇갈린 1분기 실적,-0.38,0,1,https://www.naeil.com/news/read/589263?ref=naver
 2026-05-23,"[뉴스락 특별기획] 대기업 내부거래, 반복되는 사익편취의 민낯",0.0,0,0,http://www.newslock.co.kr/news/articleView.html?idxno=130419
 2026-05-23,"미래에셋증권, 5월 넷째주 삼성전자 등 6종목 매수 추천",0.462,1,0,https://www.bigtanews.co.kr/article/view/big202605220014
+2026-07-21,"[뉴스락 특별기획] 대기업 내부거래, 반복되는 사익편취의 민낯",0.0,0,0,http://www.newslock.co.kr/news/articleView.html?idxno=130419
+2026-07-21,"미래에셋증권, 5월 넷째주 삼성전자 등 6종목 매수 추천",0.462,1,0,https://www.bigtanews.co.kr/article/view/big202605220014

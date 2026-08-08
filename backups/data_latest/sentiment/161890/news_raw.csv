@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,해외서 러브콜 받는 K향수…차세대 K뷰티로 우뚝 [김연하의 킬링이슈],0.0,0,0,https://www.sedaily.com/article/20031463?ref=naver
 2026-04-13,‘기본사회’ 다음은 모두가 브랜드 되는 ‘브랜드 사회’ [모종린의 문...,0.0,0,0,https://www.seoul.co.kr/news/editOpinion/opinion/MoJongryn-AI/2026/04/13/20260413025001?wlog_tag3=naver
 2026-04-12,“서울·제주의 향 궁금해”…넥스트 K뷰티 된 향수,0.0,0,0,https://www.sedaily.com/article/20031413?ref=naver
@@ -1142,3 +1142,5 @@
 2026-05-23,"화장품은 코스맥스가 만들고, 흥행은 틱톡이 시킨다 [브랜드 없는 뷰티...",0.0,0,0,https://economist.co.kr/article/view/ecn202605190024
 2026-05-23,“골프? 저 요새 청소해요” 임원 때려치고 하루 45만원 번다,0.0,0,0,https://www.joongang.co.kr/article/25430756
 2026-05-23,선두권 제약사들 항노화로 방향…차세대 먹거리 새 트렌드,0.0,0,0,https://www.medicaltimes.com/Main/News/NewsView.html?ID=1168882&ref=naverpc
+2026-07-21,"""美 진출할 스타트업 모여라!""…임팩터스·오렌지플래닛, 美 GTM 프로그램...",-0.38,0,1,http://www.bizwnews.com/news/articleView.html?idxno=137114
+2026-07-21,"'기술력'이 화장품 판 바꾼다… 국내 뷰티업계, 연구개발 총력",0.0,0,0,https://www.meconomynews.com/news/articleView.html?idxno=131355

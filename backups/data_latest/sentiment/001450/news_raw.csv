@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,[판결] 보험사가 낸 치료비… 산재 안 겹치면 깎아줘라,-0.38,0,1,https://www.lawtimes.co.kr/news/articleView.html?idxno=218064
 2026-03-23,"산재 요양급여와 항목 다른 치료비, 대법 ""책임보험금서 공제해야""",-0.38,0,1,http://www.edaily.co.kr/news/newspath.asp?newsid=01600646645386272
 2026-03-23,"대법원, 근로복지공단에 상해 책임보험금 지급 인정 원심 파기환송",0.0,0,0,http://www.lawissue.co.kr/view.php?ud=2026032219435915579a8c8bf58f_12
@@ -2138,3 +2138,5 @@
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
 2026-05-23,차보험 손해율 다시 상승곡선…보험료 인상론 고개,0.261,1,0,http://www.fins.co.kr/news/articleView.html?idxno=108633
 2026-05-23,"미래에셋증권, 5월 넷째주 삼성전자 등 6종목 매수 추천",0.462,1,0,https://www.bigtanews.co.kr/article/view/big202605220014
+2026-07-21,"엇갈린 1분기 실적, 투자손익에 생보 웃고 손보 주춤",-0.322,0,1,https://www.insnews.co.kr/news/articleView.html?idxno=90934
+2026-07-21,"[연중기획-새로운 리스크, 새로운 규제 ④] 다가오는 피지컬 AI 시대… ...",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90929

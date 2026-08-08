@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"[넥스트 코스피 5000] ""반도체만으론 부족""…6000 시대 이끌 '에너지·방...",0.0,0,0,https://www.ziksir.com/news/articleView.html?idxno=130384
 2026-04-12,"유통에서 제조까지… 비나텍, 20년 만에 에너지 저장 장치 강자 우뚝",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444811
 2026-04-14,"LS일렉트릭, 북미 빅테크와 1703억원 규모 계약…누적 5000억원 달성",0.0,0,0,http://www.e-platform.net/news/articleView.html?idxno=101427
@@ -870,3 +870,4 @@
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,5월 셋째주 LS ELECTRIC 주가 변동성 속 급반등,0.537,2,0,https://www.topstarnews.net/news/articleView.html?idxno=16069449
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
+2026-07-21,반도체 랠리 바통 터치…연휴 이후 'AI 전력·고배당주' 뜰까,-0.261,0,1,https://www.mediapen.com/news/view/1100668

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-22,"현대엔지니어링, 에너지 사업 확대·원천기술·첨단 산업건축 수주… 성...",0.38,1,0,https://www.mk.co.kr/article/11994813
 2026-03-22,아직 늦지 않은 배당주 투자… 이번 주 노려볼만,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092158938
 2026-03-21,아틀라스 공개 전 이미 30兆… 보스턴다이내믹스 기업 가치 '껑충',0.261,1,0,https://www.thepublic.kr/news/articleView.html?idxno=298227
@@ -1267,3 +1267,8 @@
 2026-05-24,보스턴다이나믹스 상장설 ‘솔솔’…현대차그룹 지배구조 개편에 쏠린...,0.0,0,0,https://biz.heraldcorp.com/article/10755064?ref=naver
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,"현대글로비스, 오션클린업과 협업 연장…""해양쓰레기 제거 활동 지원 확...",0.0,0,0,http://www.econonews.co.kr/news/articleView.html?idxno=438796
+2026-07-21,[데이터 뉴스룸] 운송 업체 임직원 보수왕은 '대한항공 조원태 회장' 얼...,0.0,0,0,https://www.greened.kr/news/articleView.html?idxno=341256
+2026-07-21,전기차 등 ‘사용 후 배터리’ 국가 자원 관리…기업 투자 잰걸음,0.322,1,0,https://www.khan.co.kr/article/202605242025025
+2026-07-21,"현대차그룹, HMG 퓨처콤플렉스 지분 확정…“AI 연구 조직 이동 가능성...",0.0,0,0,http://www.thebigdata.co.kr/view.php?ud=2026052214591349850ecbf9426b_23
+2026-07-21,"폐기물 딱지 뗀 ‘사용후 배터리’, 선점 경쟁 본격화····‘이중규제...",0.0,0,0,https://www.khan.co.kr/article/202605240800001
+2026-07-21,보스턴다이나믹스 상장설 ‘솔솔’…현대차그룹 지배구조 개편에 쏠린...,0.0,0,0,https://biz.heraldcorp.com/article/10755064?ref=naver

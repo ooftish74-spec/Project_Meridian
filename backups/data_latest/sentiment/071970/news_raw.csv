@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,조선 호황 타고 선박엔진 기업도 '수주 잔치',0.38,1,0,https://www.hankyung.com/article/2026041252641
 2026-04-13,[유가증권시장 공시] HD현대마린엔진,0.0,0,0,https://www.mk.co.kr/article/12015715
 2026-04-13,[오늘의 주요공시] 대한항공ㆍ한솔테크닉스ㆍ아이티엠반도체 등,0.0,0,0,https://www.etoday.co.kr/news/view/2575296
@@ -551,3 +551,4 @@
 2026-05-21,"HD현대마린솔루션·LS일렉트릭, 북미 전력설비 슈퍼사이클 공략",0.0,0,0,http://www.wsobi.com/news/articleView.html?idxno=312256
 2026-05-21,"조선 3사, 1분기 영업익 2조 돌파…삼성重 수익률 '꼴찌'",0.261,1,0,https://dealsite.co.kr/articles/162248
 2026-05-24,"AI 데이터센터·차세대 원전까지…'전력' 꽂힌 HD현대, 북미서 판 키운다",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303205
+2026-07-21,"AI 데이터센터·차세대 원전까지…'전력' 꽂힌 HD현대, 북미서 판 키운다",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303205

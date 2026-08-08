@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-14,[기획] 변수를 상수로… 유통街 생존 공식 바뀐다,0.0,0,0,https://www.m-i.kr/news/articleView.html?idxno=1364160
 2026-04-15,[산업공시] 삼성에스디에스 전환사채 발행 결정 등,0.0,0,0,https://www.econovill.com/news/articleView.html?idxno=737459
 2026-04-15,"[이슈] '자사주 소각' 속도 높이는 기업들…""주주환원 판 바뀐다""",0.0,0,0,https://www.seoultimes.news/news/article.html?no=2000095134
@@ -211,3 +211,4 @@
 2026-05-19,“지주사 할인율 사라진다…하반기 재평가 본격화”,0.261,1,0,http://www.edaily.co.kr/news/newspath.asp?newsid=02266486645450560
 2026-05-20,[오늘의 IR] 에스케이바이오팜ㆍ두산로보틱스ㆍ글로벌텍스프리 등,0.0,0,0,https://www.etoday.co.kr/news/view/2586115
 2026-05-21,"“오너家에 부 이전” 휴온스 자회사 합병 논란 확산…주주연대, 금감원...",-0.408,0,1,https://biz.chosun.com/science-chosun/bio/2026/05/21/B4JLSBSLOFHPTERTJQUWZC23EU/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"“오너家에 부 이전” 휴온스 자회사 합병 논란 확산…주주연대, 금감원...",-0.408,0,1,https://biz.chosun.com/science-chosun/bio/2026/05/21/B4JLSBSLOFHPTERTJQUWZC23EU/?utm_source=naver&utm_medium=original&utm_campaign=biz

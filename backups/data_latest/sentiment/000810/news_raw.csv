@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"삼성화재, 본업 악화에도 2년 연속 '2조 클럽' 유지한 비결은",-0.38,1,1,https://daily.hankooki.com/news/articleView.html?idxno=1349839
 2026-03-23,[박종면칼럼] 삼성생명 보유 삼성전자 평가익 100조…삼성이 할일,0.0,0,0,https://www.bloter.net/news/articleView.html?idxno=657370
 2026-03-23,"민간은 현장, 공공은 설계 단계… 보험업 AX 전환 ‘온도차’",0.0,0,0,https://www.etoday.co.kr/news/view/2566817
@@ -3305,3 +3305,11 @@
 2026-05-23,특약 늘리고 신담보 만들고… 보험사 차별화 경쟁 가속,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162633
 2026-05-23,증시 호황에 금융판 뒤집혔다…증권·보험 ‘신흥 주도주’ 부상,0.0,0,0,https://magazine.hankyung.com/business/article/202605210875b
 2026-05-23,"삼성금융, C-Lab Outside 본선 17개 스타트업 선발",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108632
+2026-07-21,"""술병에 음주운전 경고까지""...주류업계의 '한숨' [구서윤의 리테일씬]",0.0,0,0,http://www.inews24.com/view/1970950
+2026-07-21,"[이달의 신상품] 삼성화재, '더심플한 보장' 출시…맞춤형 간편 가입",0.0,0,0,https://www.fetv.co.kr/news/articleView.html?idxno=302921
+2026-07-21,손 안 대고 코 푼 보험사…5세대 실손 전환 슬쩍 뭉개기,0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162665
+2026-07-21,"시설·비전 최고네… 한국인이 운영하는 中 위해중세외국인학교, 배구부...",0.0,0,0,https://sports.hankooki.com/news/articleView.html?idxno=6933580
+2026-07-21,"KB국민은행, 삼성화재와 기업 안전경영 지원 '맞손'…AI 기반 안전진단...",0.0,0,0,https://www.lcnews.co.kr/news/articleView.html?idxno=202565
+2026-07-21,"中 바둑매체 이렇게 뻔뻔할 수가…""韓 변상일, 반칙 신고로 LG배 우승→...",0.0,0,0,https://www.xportsnews.com/article/2152746
+2026-07-21,"엇갈린 1분기 실적, 투자손익에 생보 웃고 손보 주춤",-0.322,0,1,https://www.insnews.co.kr/news/articleView.html?idxno=90934
+2026-07-21,"금융권 오프라인 소통, '체험형 콘텐츠' 중심으로 진화",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90887

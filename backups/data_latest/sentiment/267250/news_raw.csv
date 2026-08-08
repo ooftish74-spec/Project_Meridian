@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,'AX 열차' 본격 출발...해결해야 할 '빛과 그림자'도,0.0,0,0,http://www.inews24.com/view/1951781
 2026-03-23,"HD현대일렉트릭, 배당 3배 확대에도 현금 1조 육박",0.0,0,0,https://dealsite.co.kr/articles/158785
 2026-03-23,코스피 반등 뒤 숨은 불안…공매도 타깃 된 금융·소재주,-0.165,1,1,https://www.etoday.co.kr/news/view/2567689
@@ -4705,3 +4705,11 @@
 2026-05-23,"삼성전자 노사 '성과급 합의'에 하청·농민·주주까지 ""나도""···왜?",0.0,0,0,https://www.sisajournal-e.com/news/articleView.html?idxno=421249
 2026-05-23,"日, K방산 텃밭 노린다…'국가 주도 패키지'로 판도 흔들어",0.0,0,0,http://www.srtimes.kr/news/articleView.html?idxno=203841
 2026-05-23,"'노란봉투법' 소급 피한 산업계 … ""급한 불 껐지만 집단행동 늘어날 가...",0.0,0,0,https://www.newdaily.co.kr/site/data/html/2026/05/22/2026052200110.html
+2026-07-21,속도 안 나는 석유화학 구조조정… “먼저 감산한 기업만 손해” 불만도,-0.462,0,1,https://biz.chosun.com/industry/company/2026/05/25/EEPA2BW2D5E3JFP3WNF7AEN4VE/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"""바다 위 원자로 시대 온다""…美 해사대학, 첫 '원자력 선원' 양성 나섰...",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709853
+2026-07-21,대법 '원청 사용자성 부정'에 뿔난 노동계…이번 주 전방위 집회 예고,0.0,0,0,https://www.newspim.com/news/view/20260522001239
+2026-07-21,"캐나다 해군이 韓잠수함에 찬사…""99년식 혼다 몰다 테슬라 산 듯해""",0.38,1,0,https://www.newsis.com/view/NISX20260525_0003642655
+2026-07-21,"[사설] 폭행에 원정 성매매, 진흙탕 싸움 벌이는 울산시장 선거전",0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026052418011226238
+2026-07-21,"안창호함, 韓 첫 태평양 횡단… ‘60조’ 잠수함 수주전 총력",0.38,1,0,https://www.seoul.co.kr/news/politics/diplomacy/2026/05/25/20260525006004?wlog_tag3=naver
+2026-07-21,'경쟁 사실상 끝났다' 윤곽 드러난 홍명보호 '월드컵 베스트11',0.261,1,0,https://www.starnewskorea.com/sports/2026/05/25/2026052309332781998
+2026-07-21,"의사결정부터 현장 관리까지...건설사, AI 도입 속도전",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102159

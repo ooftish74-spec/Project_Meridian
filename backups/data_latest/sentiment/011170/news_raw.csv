@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,석유화학 재편 속도 붙었지만… ‘울산’·‘여수2호’ 줄다리기 여전,0.0,0,0,https://www.segye.com/newsView/20260322509461?OutUrl=naver
 2026-03-23,"나프타 수급차질ㆍ가격폭등…벼랑 끝 석화, 사업재편 ‘골든타임’",0.0,0,0,https://www.dnews.co.kr/uhtml/view.jsp?idxno=202603201702231630023
 2026-03-23,나프타 곧 바닥… 업계 '사투',0.0,0,0,https://www.mt.co.kr/industry/2026/03/23/2026032220042052381
@@ -2071,3 +2071,5 @@
 2026-05-23,"렌탈 '빅딜' 무산...롯데, 자금 조달 계획 바뀌나",0.0,0,0,https://www.edaily.co.kr/news/newspath.asp?newsid=02063126645451872
 2026-05-23,[주간 거래소 기관] 삼성전자·SK하이닉스 폭풍 매수…반도체로 다시 쏠...,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454890
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,-0.067,1,1,https://www.newspim.com/news/view/20260521000606
+2026-07-21,속도 안 나는 석유화학 구조조정… “먼저 감산한 기업만 손해” 불만도,-0.462,0,1,https://biz.chosun.com/industry/company/2026/05/25/EEPA2BW2D5E3JFP3WNF7AEN4VE/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,백화점·해외시장 공략 통했다… 롯데 실적 승승장구,0.0,0,0,https://www.segye.com/newsView/20260524506399?OutUrl=naver

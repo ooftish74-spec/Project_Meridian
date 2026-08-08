@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-07-18T19:15:18.489455+00:00",
+  "timestamp": "2026-07-29T19:15:21.421910+00:00",
   "S1_signal": {
     "contagion_alert": "CRITICAL",
     "vix_spike": false
   },
   "S2_signal": {
-    "pysr_macro_feature_value": -0.09483452886343002
+    "pysr_macro_feature_value": 0.267963707447052
   },
   "S3_signal": {
     "sector_forecast": {
@@ -17,6 +17,6 @@
     "macro_cycle": "Late-Cycle (Real ML Data Processed)"
   },
   "raw_alpha": {
-    "best_formula": "149.208167177605*Abs(x1)"
+    "best_formula": "-x1 - Abs(x1) + Abs(-135.57854*x1 + x1)"
   }
 }

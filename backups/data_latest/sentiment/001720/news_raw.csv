@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,증권리포트 분석-2025년9월> ① 신한투자증권 정확도 꼴찌,0.0,0,0,https://www.bigtanews.co.kr/article/view/big202604110002
 2026-04-12,예금 3조 늘 때 증시엔 70조 '폭주'…은행 아성 넘보는 증권사,0.0,0,0,https://www.hankyung.com/article/2026041252801
 2026-04-12,진격의 증권산업…은행 아성 넘본다,0.0,0,0,https://www.hankyung.com/article/2026041252921
@@ -957,3 +957,5 @@
 2026-05-23,'국민성장펀드' 출시 첫날부터 완판 행진…776억원만 남아,0.322,1,0,https://www.etnews.com/20260523000003
 2026-05-23,국민성장펀드 첫날 90% 소진…정책 투자상품 흥행,0.322,1,0,https://www.tokenpost.kr/news/economy/362555
 2026-05-23,국민성장펀드 첫날 '흥행'…완판 행렬·한도 87% 소진,0.322,1,0,http://www.babytimes.co.kr/news/articleView.html?idxno=73047
+2026-07-21,"“한은, 28일 기준금리 매파적 동결” “연내 2차례 인상 가능성”",-0.1,1,1,https://www.seoul.co.kr/news/economy/finance/2026/05/25/20260525030004?wlog_tag3=naver
+2026-07-21,국민성장펀드 ‘완판 행진’… 하반기 추가 공급 검토,0.322,1,0,https://www.seoul.co.kr/news/economy/finance/2026/05/25/20260525030006?wlog_tag3=naver

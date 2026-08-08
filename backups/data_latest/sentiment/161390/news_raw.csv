@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-22,전기차 타이어 교체 수요 다가오는데..한국·금호·넥센 차별화 전략은...,0.322,1,0,https://www.mt.co.kr/industry/2026/03/23/2026031914270493717
 2026-03-22,"한국앤컴퍼니, 임직원 건강 증진 맞춤형 건강관리 프로그램 가동",0.0,0,0,https://www.newspim.com/news/view/20260322000112
 2026-03-21,"한국타이어, 중장거리 시외·고속버스용 신제품 '스마트 투어링 AL31' 출...",0.0,0,0,http://www.econonews.co.kr/news/articleView.html?idxno=431991
@@ -1314,3 +1314,5 @@
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
 2026-05-23,"엘디카본, 당진 폐타이어 순환시설 재가동 시작…美에 특허도 등록",0.322,1,0,https://www.munhwa.com/article/11590893?ref=naver
 2026-05-23,"""원료부터 생산까지 깐깐하게""… 한국타이어 中 가흥공장, ISCC PLUS 인증",0.0,0,0,https://www.ggilbo.com/news/articleView.html?idxno=1159925
+2026-07-21,슈퍼레이스에서 펼쳐지는 아스팔트 비명 0.001초의 승부처…영암 서킷 ...,0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=137290
+2026-07-21,"""멈추면 뒤처진다""…타이어 3사, R&D 투자 일제히 확대",0.322,1,0,https://www.newsway.co.kr/news/view?ud=2026052217060718022

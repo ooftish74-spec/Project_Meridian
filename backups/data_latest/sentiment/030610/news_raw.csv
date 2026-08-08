@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,‘인프라 투자’ 건설·반도체 뜨고… ‘유가 급등락’ 에너지 지고 [ET...,0.408,1,0,http://www.fnnews.com/news/202604121842217694
 2026-04-12,시험대 오르는 신현송 통화정책… 외화 보유는 논란 예고,0.604,2,0,http://www.fnnews.com/news/202604121818064352
 2026-04-12,"로레알 체제 전환 고운세상코스메틱, '닥터지' 해외진출 올인",0.0,0,0,https://www.asiatoday.co.kr/view.php?key=20260413010003568
@@ -1194,3 +1194,4 @@
 2026-05-23,난치성 류마티스 환자서 효과 입증… 한올바이오파마 재평가 시동,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454881
 2026-05-23,"LG마그나, 전기차 캐즘 딛고 흑자 전환…LG전자 전장 실적 ‘뒷받침’",0.964,4,0,https://www.ceoscoredaily.com/page/view/2026052116582636599
 2026-05-23,거래소 '대표지수' 물갈이…어떤 기업이 포함되고 빠졌나,0.0,0,0,https://www.dailian.co.kr/news/view/1647830/?sc=Naver
+2026-07-21,미래·한투는 질주하는데…중소형 증권사 IB 부진에 '한숨',0.0,0,0,https://www.news1.kr/finance/general-stock/6175692

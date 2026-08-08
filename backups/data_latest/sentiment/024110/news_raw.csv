@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"코스피·코스닥 전 거래일(20일) 주요공시는?... 삼성바이오로직스 ""미국...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438907
 2026-03-23,"금감원, 새희망홀씨 공급 확대 지원⋯올해 목표 5.1조원",-0.408,0,1,https://www.etoday.co.kr/news/view/2567910
 2026-03-23,코스피 반등 뒤 숨은 불안…공매도 타깃 된 금융·소재주,-0.165,1,1,https://www.etoday.co.kr/news/view/2567689
@@ -4214,3 +4214,6 @@
 2026-05-23,국민성장펀드 첫날 90% 소진…정책 투자상품 흥행,0.322,1,0,https://www.tokenpost.kr/news/economy/362555
 2026-05-23,"[박근종 칼럼] 긴축 공포·금리 급등 속 가계 빚 2,000조 육박, 빚투 '파...",0.408,1,0,https://www.mhns.co.kr/news/articleView.html?idxno=748218
 2026-05-23,국민성장펀드 첫날 '흥행'…완판 행렬·한도 87% 소진,0.322,1,0,http://www.babytimes.co.kr/news/articleView.html?idxno=73047
+2026-07-21,"[이호연의 D톡스] 국민성장펀드, 완판 행진…‘막차 탑승’ 고민한다면...",0.322,1,0,https://www.ddaily.co.kr/page/view/2026052310362357949
+2026-07-21,‘오픈런’ 국민성장펀드 하반기 2차출시 예산 검토 착수,0.322,1,0,https://www.donga.com/news/Economy/article/all/20260524/133984412/2
+2026-07-21,"모잠비크, 가스·전력·회랑 중심 인프라 개발 박차",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102139

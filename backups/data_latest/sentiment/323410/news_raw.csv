@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,작년 새희망홀씨 공급 14% 늘어…올해 목표 5조1천억,0.0,0,0,https://www.asiatime.co.kr/article/20260322500097
 2026-03-23,"금감원 ""올해 銀 새희망홀씨 대출 5.1兆 공급"" 적극 지원",-0.408,0,1,http://www.fnnews.com/news/202603230055110736
 2026-03-23,"금감원, 가상자산·인뱅 금융사고에 칼 빼들었다…""확실한 금전적 페널...",-0.408,0,1,https://www.news1.kr/finance/general-finance/6109678
@@ -3276,3 +3276,5 @@
 2026-05-23,"日 국민 메신저 라인, 네이버와 기술 분리하고 카카오게임즈 품는다",0.0,0,0,https://www.joongang.co.kr/article/25430745
 2026-05-23,"일본 국민 메신저 라인, 네이버와 기술 분리하고 카카오게임즈 품는다",0.0,0,0,https://www.joongang.co.kr/article/25430715
 2026-05-23,"""증시로 가는 머니무브 붙잡아라""…은행권, 예금금리 줄인상",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102077
+2026-07-21,[증시 머니무브] 은행 예금금리 올려 고객잡기… 증권사는 발행어음 방...,0.0,0,0,https://www.g-enews.com/view.php?ud=202605221647569120e30fcb1ba8_1
+2026-07-21,월 250만원까지 압류 방지…은행권 '생계비통장' 출시 경쟁,0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102019

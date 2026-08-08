@@ -2550,3 +2550,4 @@ date,news_sentiment_mean,news_sentiment_std,news_count,volume_ratio,source,news_
 2026-07-01,0.6602,0.1361,0,1.3988,price_proxy,,,,
 2026-07-02,0.8412,0.1573,0,3.2662,price_proxy,,,,
 2026-07-03,0.8667,0.1472,0,1.0774,price_proxy,,,,
+2026-07-21,0.8667,0.1472,0,1.0774,price_proxy,,,,

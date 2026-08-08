@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"[오늘의 경제뉴스] 외국계 ""韓증시 전형적 버블""…'극단적 과열' 경고음...",0.0,0,0,https://www.newsverse.kr/news/articleView.html?idxno=9968
 2026-03-23,중동전 ‘박스피’…삼전·SK하닉 ‘실적 모멘텀’으로 뚫을까,0.0,0,0,https://www.dt.co.kr/article/12053106?ref=naver
 2026-03-23,[성장동력 발굴] 삼성·한화·교보생명 등 빅3 ‘금융그룹화’ 가속…저...,0.322,1,0,https://www.g-enews.com/view.php?ud=202603201534139724e30fcb1ba8_1
@@ -4338,3 +4338,8 @@
 2026-05-23,국민성장펀드 첫날 90% 소진…정책 투자상품 흥행,0.322,1,0,https://www.tokenpost.kr/news/economy/362555
 2026-05-23,"삼성금융, C-Lab Outside 본선 17개 스타트업 선발",0.0,0,0,http://www.fins.co.kr/news/articleView.html?idxno=108632
 2026-05-23,국민성장펀드 첫날 '흥행'…완판 행렬·한도 87% 소진,0.322,1,0,http://www.babytimes.co.kr/news/articleView.html?idxno=73047
+2026-07-21,"OCI홀딩스 에너지 인프라사업 직접 운영 나서, 이우현 태양광 수직계열...",0.0,0,0,https://www.businesspost.co.kr/BP?command=article_view&num=438378
+2026-07-21,"어펄마, 화성코스메틱 해외 매각 노린다… 글로벌 IB 매각 주관 합류",0.0,0,0,https://biz.chosun.com/stock/market_trend/2026/05/25/LRAE5T6ODRFTTGHIZ27OOWCNWA/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,[N2 포커스] '36조 빚투’ 증시 블랙홀…개미들 뛰어들 때 증권사는 ‘이...,0.0,0,0,https://www.news2day.co.kr/article/20260523500023
+2026-07-21,‘오픈런’ 국민성장펀드 하반기 2차출시 예산 검토 착수,0.322,1,0,https://www.donga.com/news/Economy/article/all/20260524/133984412/2
+2026-07-21,워시 연준 의장 취임… 연내 美금리 인상 전망 확산,-0.408,0,1,https://www.donga.com/news/Economy/article/all/20260524/133983916/2

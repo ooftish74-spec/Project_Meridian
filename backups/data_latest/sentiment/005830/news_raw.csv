@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"'매물' 롯데손보, 기본자본 마이너스 가속화",0.0,0,0,https://www.kbanker.co.kr/news/articleView.html?idxno=224692
 2026-04-13,보험금 '기다림' 줄인다… 신속지급 서비스 확대,0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90144
 2026-04-12,환율 급등락에도 보험사는 '선방'… 외화부채 적고 헤지로 방어,0.408,1,0,https://www.s-journal.co.kr/news/articleView.html?idxno=40403
@@ -2133,3 +2133,6 @@
 2026-05-23,차보험 손해율 다시 상승곡선…보험료 인상론 고개,0.261,1,0,http://www.fins.co.kr/news/articleView.html?idxno=108633
 2026-05-23,"[금융zip] DB손해보험, 美 보험사 포테그라 인수 완료 外",0.0,0,0,https://www.getnews.co.kr/news/articleView.html?idxno=870774
 2026-05-23,"DB손해보험, 미국 포테그라 인수로 글로벌 시장 진출 가속",0.0,0,0,https://www.tokenpost.kr/news/economy/362554
+2026-07-21,"보험 팔던 회사가 문화를 판다…가정의 달, 보험업계 '경험 마케팅' 속...",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709978
+2026-07-21,"엇갈린 1분기 실적, 투자손익에 생보 웃고 손보 주춤",-0.322,0,1,https://www.insnews.co.kr/news/articleView.html?idxno=90934
+2026-07-21,"DB손보 '만기 후 재가입' 도입… ""초기 보험료 낮추고, 무심사 연장""",0.0,0,0,https://www.insnews.co.kr/news/articleView.html?idxno=90963

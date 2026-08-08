@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,[제22회 창원야철마라톤대회]한껏 오른 봄기운… 맘껏 즐긴 달림이들,0.0,0,0,http://www.knnews.co.kr/news/articleView.php?idxno=1539211
 2026-04-13,웨이브일렉트로·카티스 동반 상한가… 정밀 타격·보안 솔루션 수요 폭...,0.645,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445093
 2026-04-13,"티엠씨, 전장사업 품고 영역 확장… 종합 케이블 솔루션 도약",0.38,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445042
@@ -160,3 +160,5 @@
 2026-05-21,"유암코, STX엔진 펀드 해산…7년만에 매각 나서나[시그널]",-0.462,0,1,https://www.sedaily.com/article/20046415?ref=naver
 2026-05-23,[주간사모펀드] MBK 홈플러스 이행보증 제시에도…메리츠는 '퇴짜',-0.462,0,1,https://news.tf.co.kr/read/economy/2325617.htm
 2026-05-23,STX엔진 매각 시동…유암코 8년 투자 '5배 잭팟' 터진다,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454877
+2026-07-21,[주간사모펀드] MBK 홈플러스 이행보증 제시에도…메리츠는 '퇴짜',-0.462,0,1,https://news.tf.co.kr/read/economy/2325617.htm
+2026-07-21,STX엔진 매각 시동…유암코 8년 투자 '5배 잭팟' 터진다,0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454877

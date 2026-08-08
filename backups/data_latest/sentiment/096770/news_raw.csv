@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"정통IB 강화 메리츠증권, 김종민 체제 승부수 [빅10 증권사 IB 人사이드...",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202603222251406279dd55077bc2_18
 2026-03-23,[오늘(23일) 증시 전망] 중동발 '48시간 시한폭탄'…개장 직후 업종별 희...,0.583,2,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=72127
 2026-03-22,[특집]제조 AI 전환으로 울산 석유화학산업 새 판 짠다,0.0,0,0,http://www.ujeil.com/news/articleView.html?idxno=382927
@@ -2302,3 +2302,4 @@
 2026-05-23,"중동 위기 장기화에 K-정유 흔들…""원가 경쟁력 비상""",0.0,0,0,https://daily.hankooki.com/news/articleView.html?idxno=1369969
 2026-05-23,"[종목현미경]SK㈜, 주간 27%↑ '대형주 2위'…스퀘어 대체투자 뜨나",0.0,0,0,https://www.news1.kr/finance/general-stock/6175727
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,-0.165,1,1,https://www.newspim.com/news/view/20260521000606
+2026-07-21,속도 안 나는 석유화학 구조조정… “먼저 감산한 기업만 손해” 불만도,-0.462,0,1,https://biz.chosun.com/industry/company/2026/05/25/EEPA2BW2D5E3JFP3WNF7AEN4VE/?utm_source=naver&utm_medium=original&utm_campaign=biz

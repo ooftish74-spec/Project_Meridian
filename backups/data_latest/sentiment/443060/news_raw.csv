@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"지난해 증권사 IPO 경쟁…미래에셋·KB는 '호실적', 한투·하나證은 '주...",0.583,1,0,https://www.ajunews.com/view/20260412120518921
 2026-04-12,"코스피, 외국인 수급 주목…금리·달러 변수에 '압축 전략'",0.261,1,0,https://news.mtn.co.kr/news-detail/2026041210252183509
 2026-04-13,"티엠씨, 전장사업 품고 영역 확장… 종합 케이블 솔루션 도약",-0.261,0,1,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445042
@@ -613,3 +613,4 @@
 2026-05-21,"HD현대마린솔루션·LS일렉트릭, 북미 전력설비 슈퍼사이클 공략",0.0,0,0,http://www.wsobi.com/news/articleView.html?idxno=312256
 2026-05-24,"AI 데이터센터·차세대 원전까지…'전력' 꽂힌 HD현대, 북미서 판 키운다",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303205
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
+2026-07-21,"AI 데이터센터·차세대 원전까지…'전력' 꽂힌 HD현대, 북미서 판 키운다",0.0,0,0,https://www.straightnews.co.kr/news/articleView.html?idxno=303205

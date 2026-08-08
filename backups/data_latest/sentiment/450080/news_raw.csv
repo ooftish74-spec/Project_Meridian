@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,코스피 5800선 방어…미·이란 협상 결렬에 변동성 확대,0.165,2,2,http://www.newsian.co.kr/news/articleView.html?idxno=88471
 2026-04-13,[마감시황] 미·이란 협상 결렬에 코스피 5808 후퇴…개인 '사자'로 낙폭...,-0.537,0,2,https://www.newspim.com/news/view/20260413001013
 2026-04-13,"에코프로머티 주가, 4월 13일 장중 71,100원 3.40% 하락",-0.261,0,1,https://www.topstarnews.net/news/articleView.html?idxno=16033488
@@ -88,3 +88,7 @@
 2026-05-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445
 2026-05-21,"에스피지, 협동로봇 시장 고성장에 핵심 부품 밸류에이션 재평가 본격화",0.583,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454434
 2026-05-21,에코프로 형제들 껑충…코스피·코스닥 매수 사이드카까지,0.261,1,0,https://www.cbci.co.kr/news/articleView.html?idxno=576139
+2026-07-21,"""지금 안 타면 늦는다?""... 에코프로 그룹주 동반 급등 배경 보니",0.604,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454544
+2026-07-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445
+2026-07-21,"에스피지, 협동로봇 시장 고성장에 핵심 부품 밸류에이션 재평가 본격화",0.583,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454434
+2026-07-21,에코프로 형제들 껑충…코스피·코스닥 매수 사이드카까지,0.261,1,0,https://www.cbci.co.kr/news/articleView.html?idxno=576139

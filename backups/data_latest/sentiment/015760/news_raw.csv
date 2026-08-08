@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"전쟁 충격에 업종별 ‘명암’…자동차·화학 급락, 유틸리티·건설은 상...",-0.067,2,2,https://www.sedaily.com/article/20022426?ref=naver
 2026-03-23,"[창간 26주년] AI 성패 가르는 'AI 데이터센터'…""전력 확보가 관건""",0.0,0,0,http://www.inews24.com/view/1951213
 2026-03-23,"""당장 끊기진 않지만""…카타르 LNG 공백, 관건은 '가격 리스크'",0.0,0,0,https://www.news1.kr/economy/trend/6109163
@@ -4607,3 +4607,8 @@
 2026-05-23,“은퇴 뒤 뭐라도 되겠지? 도전 멈추면 도태됩니다”[은퇴 레시피],0.0,0,0,https://www.donga.com/news/Society/article/all/20260522/133978747/2
 2026-05-23,[부고]구영자 별세 外,0.0,0,0,https://www.donga.com/news/People/article/all/20260523/133979425/2
 2026-05-23,[취재수첩] 정부 정책 희생양 된 상장 에너지 공기업,-0.261,0,1,https://www.hankyung.com/article/2026052247521
+2026-07-21,축냉설비 예산 67억원으로 확대…전년대비 158% 증가,0.0,0,0,http://www.kmecnews.co.kr/news/articleView.html?idxno=47109
+2026-07-21,"[공사 Pick] 수자원공사·한전KDN·한전, AI·로봇으로 공공 인프라 혁신...",0.0,0,0,https://www.lcnews.co.kr/news/articleView.html?idxno=202561
+2026-07-21,"‘반도체’ 평택·화성·용인, 서울보다 전기 더 썼다",0.0,0,0,https://www.seoul.co.kr/news/economy/2026/05/25/20260525029003?wlog_tag3=naver
+2026-07-21,삼척시 '안전 위협' 도계읍 중심도로 지중화사업 본격화,0.0,0,0,https://www.kado.net/news/articleView.html?idxno=2051921
+2026-07-21,“홍명보호 수비 무적 아니다” 체코의 자신감... “늙지 않는 아이콘”...,0.0,0,0,http://www.osen.co.kr/article/G1112807572

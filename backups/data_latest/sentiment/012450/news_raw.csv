@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,[주간수급리포트] 5조 '벚꽃 리턴' 외국인·7.7조 '팔자' 개인…코스피...,0.0,0,0,https://www.etoday.co.kr/news/view/2574738
 2026-04-13,"[넥스트 코스피 5000] ""반도체만으론 부족""…6000 시대 이끌 '에너지·방...",0.38,1,0,https://www.ziksir.com/news/articleView.html?idxno=130384
 2026-04-13,한화에어로 이어 한화솔루션까지…증권신고서 정정이란[금알못],-0.408,0,1,https://www.newsis.com/view/NISX20260410_0003586913
@@ -2833,3 +2833,4 @@
 2026-05-23,﻿﻿﻿[AI로 읽는 경제] ⑥ 한국 제조업 공급망 리스크 지도…8개 업종...,0.0,0,0,https://www.newspim.com/news/view/20260521000606
 2026-05-23,"“한국 2000억 달러 흑자, 미국이 그냥 둘까”",0.0,0,0,https://www.joongang.co.kr/article/25430724
 2026-05-23,"한화에어로, KAI 주식 추가 매입…방산업계 “인수땐 한화 수직 계열화...",0.0,0,0,https://www.joongang.co.kr/article/25430716
+2026-07-21,미래전 핵심 무인차량 수주戰 … 한화에어로·현대로템 막판 격돌,0.38,1,0,https://biz.newdaily.co.kr/site/data/html/2026/05/22/2026052200111.html

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"행정기관 식품사 제재, 대상 6건 최다...대한제당 231억 관세추징 '최고...",-0.716,0,2,http://www.consumernews.co.kr/news/articleView.html?idxno=753797
 2026-04-13,[Food & Now] 임직원 참여 헌혈 캠페인 나선 농심…소아암 환아 지원 확...,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1705152
 2026-04-13,“도심서 농사지어요”…‘하늘농장’ 조성,0.0,0,0,https://www.nongmin.com/article/20260410500625
@@ -3028,3 +3028,6 @@
 2026-05-23,"[기획] 농심, 1분기 영업익 20%↑...신라면·해외사업 '쌍끌이'",0.322,1,0,https://www.startuptoday.co.kr/news/articleView.html?idxno=801750
 2026-05-23,[굿모닝금융] 농협중앙회·기업은행·카카오페이 등,0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=137259
 2026-05-23,"식품업계, 아시아 최대 식품박람회 '타이펙스 아누가' 총출동",0.0,0,0,https://www.pointdaily.co.kr/news/articleView.html?idxno=305925
+2026-07-21,"[PMPS] 대구, 데이 5 1위 '대이변'…파이널 '역대급 혼전' 예고",0.0,0,0,https://www.apnews.kr/news/articleView.html?idxno=3048644
+2026-07-21,[PMPS 통신] 키움 DRX의 '삭발 투혼'과 대구 게이밍의 반란...요동치는 서...,0.0,0,0,https://www.techm.kr/news/articleView.html?idxno=152115
+2026-07-21,강원농협 농심천심국민참여단 발대식…농촌 활력 제고 기대,0.322,1,0,https://www.kado.net/news/articleView.html?idxno=2051938

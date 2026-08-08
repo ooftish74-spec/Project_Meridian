@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,'포섭 1순위' 韓 방산 기술자 노리는 대만…왜? [조철오의 방산노트],0.0,0,0,https://www.hankyung.com/article/202604090480i
 2026-04-13,"회장 취임 6개월, HD현대 정기선의 홀로서기",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202604110138108866dd55077bc2_18
 2026-04-13,"[사설]초거대산업 AI 선정, 울산 조선업 AX전환의 분수령",0.0,0,0,https://www.ksilbo.co.kr/news/articleView.html?idxno=1053772
@@ -1775,3 +1775,13 @@
 2026-05-23,“제조업 강한 한국은 디지털트윈 성장성 높은 시장”,0.322,1,0,https://www.sedaily.com/article/20047540?ref=naver
 2026-05-23,[뉴스 속 무기] 대드론 체계 보강하고 중동으로 향한 충무공이순신급 구...,0.0,0,0,https://www.news2day.co.kr/article/20260522500048
 2026-05-23,"국립창원대, 각계 전문가 참여 'SMR 혁신제조 기술정보위' 출범",0.0,0,0,https://www.cnbnews.com/news/articleView.html?idxno=1002572
+2026-07-21,"해운조합, 해수부·HD한국조선해양과 '연안여객선 AI 화재탐지' 해상실...",0.0,0,0,https://www.cstimes.com/news/articleView.html?idxno=707079
+2026-07-21,"K방산, 美 함정·자주포 공략 속도",0.38,1,0,http://www.fnnews.com/news/202605241810535775
+2026-07-21,"""지난해 실적 넘었다""…조선업계, LNG선 수주 릴레이",0.38,1,0,https://daily.hankooki.com/news/articleView.html?idxno=1370030
+2026-07-21,경부울 창업기업 투자·협업 무대 '동남권 창업-BuS 연합 IR' 성료,0.0,0,0,https://www.idomin.com/news/articleView.html?idxno=2006401
+2026-07-21,수주 훈풍 탄 조선업계…'성과급 요구·하청 교섭' 등 리스크도[K조선 슈...,0.38,1,0,https://www.newsis.com/view/NISX20260522_0003641292
+2026-07-21,"조선 빅3, 올해 수주 30조 돌파…""고부가 선박 수주 효과""[K조선 슈퍼사...",0.583,2,0,https://www.newsis.com/view/NISX20260522_0003641140
+2026-07-21,K-방산 '美 진출' 가시권… 함정·자주포 등 공략 가속도,0.38,1,0,http://www.fnnews.com/news/202605241003206206
+2026-07-21,K-방산 '세계 최강' 美 시장 뚫나…함정·자주포·유도무기 진출 박차,0.0,0,0,https://www.news1.kr/industry/general-industry/6175484
+2026-07-21,"HMM 위너호, 호르무즈 탈출은 했지만…K-해운 ""안심은 금물"" [헤비급브리...",0.682,2,0,https://www.ddaily.co.kr/page/view/2026052218585006941
+2026-07-21,"정보 유출·감점으로 불리한 HD현대重, KDDX 사업 참여 두고 ‘장고’",0.0,0,0,https://biz.chosun.com/industry/company/2026/05/24/CLSLEPVHRRCCNCDQ3ITAYZFBRE/?utm_source=naver&utm_medium=original&utm_campaign=biz

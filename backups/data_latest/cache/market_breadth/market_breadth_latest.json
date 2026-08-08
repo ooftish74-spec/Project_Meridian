@@ -1,52 +1,64 @@
 {
   "vkospi": {
-    "vkospi": 15.95,
-    "vix": 18.77,
-    "vkospi_prev": 14.22,
-    "vkospi_change": 12.19,
-    "vkospi_ma20": 14.46,
-    "timestamp": "2026-07-19T17:10:30.512849",
+    "vkospi": 16.8,
+    "vix": 19.76,
+    "vkospi_prev": 17.56,
+    "vkospi_change": -4.36,
+    "vkospi_ma20": 14.76,
+    "timestamp": "2026-07-30T17:03:10.857339",
     "source": "yfinance_vix",
     "level": "greed"
   },
   "global_corr": {
     "correlations": {
       "KOSPI_SP500": {
-        "current": 0.428,
-        "avg_60d": 0.303,
-        "deviation": 0.125
+        "current": 0.47,
+        "avg_60d": 0.365,
+        "deviation": 0.106
       },
       "KOSPI_DXY": {
-        "current": -0.174,
-        "avg_60d": -0.368,
-        "deviation": 0.194
+        "current": -0.201,
+        "avg_60d": -0.286,
+        "deviation": 0.085
       },
       "KOSPI_WTI": {
-        "current": -0.356,
-        "avg_60d": -0.225,
-        "deviation": -0.131
+        "current": -0.003,
+        "avg_60d": -0.192,
+        "deviation": 0.19
       },
       "KOSPI_GOLD": {
-        "current": 0.129,
-        "avg_60d": 0.25,
-        "deviation": -0.121
+        "current": 0.115,
+        "avg_60d": 0.228,
+        "deviation": -0.113
       },
       "KOSPI_US10Y": {
-        "current": -0.258,
-        "avg_60d": -0.151,
-        "deviation": -0.107
+        "current": -0.2,
+        "avg_60d": -0.216,
+        "deviation": 0.016
       }
     },
     "current_corr": {
-      "KOSPI_SP500": 0.428,
-      "KOSPI_DXY": -0.174,
-      "KOSPI_WTI": -0.356,
-      "KOSPI_GOLD": 0.129,
-      "KOSPI_US10Y": -0.258
+      "KOSPI_SP500": 0.47,
+      "KOSPI_DXY": -0.201,
+      "KOSPI_WTI": -0.003,
+      "KOSPI_GOLD": 0.115,
+      "KOSPI_US10Y": -0.2
     },
     "risk_mode": "neutral",
-    "copper_gold_momentum": 0.1222,
-    "timestamp": "2026-07-19T17:10:33.866476"
+    "copper_gold_momentum": 0.2447,
+    "timestamp": "2026-07-30T17:03:15.639661"
   },
-  "timestamp": "2026-07-19T17:10:33.869956"
+  "eco_surprise": {
+    "economic_surprise_index": -0.466,
+    "indicators": {
+      "KOR_CPI": {
+        "latest": 127.27,
+        "expected": 127.78,
+        "z_score": -0.47
+      }
+    },
+    "interpretation": "inline",
+    "timestamp": "2026-07-30T17:03:15.648042"
+  },
+  "timestamp": "2026-07-30T17:03:15.648342"
 }

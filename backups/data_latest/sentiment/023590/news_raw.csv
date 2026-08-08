@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-14,[권가림의 금만세] CJ 이어 삼성·롯데까지…은행 '콜라보 통장' 영토 확...,0.0,0,0,https://www.ajunews.com/view/20260414152034609
 2026-04-14,증권업계 '밸류업' 기대감에… 미래에셋·한화투자증권 주가 폭등랠리,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445288
 2026-04-15,"ERP HR 출입통제 한 번에, 다우오피스, 시스템 연동 1200건 돌파",0.261,1,0,http://www.technoa.co.kr/news/articleView.html?idxno=100786
@@ -88,3 +88,4 @@
 2026-05-21,"사방넷, 데이터·AI 기반 이커머스 운영 전략 세미나 개최",0.0,0,0,https://www.it-b.co.kr/news/articleView.html?idxno=88302
 2026-05-21,"사방넷, 물류 자동화·브랜딩 전략 아우른 실무 세미나 개최",0.0,0,0,https://www.businesskorea.co.kr/news/articleView.html?idxno=269874
 2026-05-23,"[테크 이모저모] NHN KCP, 페이코 연계해 스테이블코인 결제 실증 진행",0.0,0,0,http://www.worktoday.co.kr/news/articleView.html?idxno=84902
+2026-07-21,"[테크 이모저모] NHN KCP, 페이코 연계해 스테이블코인 결제 실증 진행",0.0,0,0,http://www.worktoday.co.kr/news/articleView.html?idxno=84902

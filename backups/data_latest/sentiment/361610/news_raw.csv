@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"성과급 대신 '퇴직금'…재계, 인력 효율화로 적자 탈출 총력",0.322,1,0,https://it.chosun.com/news/articleView.html?idxno=2023092160224
 2026-04-13,‘방산깐부’ 폴란드 총리 만난 李…“중동발 공급망 위기대응 협력”,0.0,0,0,https://www.mk.co.kr/article/12015921
 2026-04-13,"천보, LCD 식각액 1위 넘어 배터리 전해질로 '글로벌 영토 확장'",-0.261,0,1,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445020
@@ -131,3 +131,4 @@
 2026-05-20,"[더벨][Company Watch] SKIET, 폴란드 법인 역량 집중…유럽·북미 '핵심...",0.322,1,0,https://www.thebell.co.kr/free/content/ArticleView.asp?key=202605181817539520104139
 2026-05-22,"[이넷뉴스 브랜드평판] 삼성SDI, 2차전지 상장기업 5월 1위... LG에너지솔...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=50299
 2026-05-21,"에스피지, 협동로봇 시장 고성장에 핵심 부품 밸류에이션 재평가 본격화",0.732,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454434
+2026-07-21,"[이넷뉴스 브랜드평판] 삼성SDI, 2차전지 상장기업 5월 1위... LG에너지솔...",0.0,0,0,https://www.enetnews.co.kr/news/articleView.html?idxno=50299

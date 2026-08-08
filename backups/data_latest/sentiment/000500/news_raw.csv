@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"유통에서 제조까지… 비나텍, 20년 만에 에너지 저장 장치 강자 우뚝",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444811
 2026-04-13,"[공시] 이노인스트루먼트·광전자 '매매 정지', ISC·천보 '공매도 금지...",-0.462,0,1,http://www.newstnt.com/news/articleView.html?idxno=606578
 2026-04-13,"""변압기 없어서 못 판다""… LS 에렉트릭·산일전기, 글로벌 수주 잭팟",0.133,1,1,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444908
@@ -461,3 +461,4 @@
 2026-05-21,"산일전기, 154kV 초고압 변압기 증설로 2500억 매출 날개 단다",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454307
 2026-05-24,"LS그룹, 주간 시총 증가율 대형 그룹 1위…가온전선 '메타 4조 수주'가 ...",0.625,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=455012
 2026-05-23,메타 AI 데이터센터 4조 수주 잭팟 터뜨린 ‘이 회사’,0.38,1,0,https://www.mk.co.kr/article/12055743
+2026-07-21,"LS그룹, 주간 시총 증가율 대형 그룹 1위…가온전선 '메타 4조 수주'가 ...",0.625,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=455012

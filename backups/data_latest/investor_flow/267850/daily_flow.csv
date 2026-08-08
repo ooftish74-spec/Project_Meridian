@@ -1,2 +1,3 @@
 date,close,volume,inst_net_buy,foreign_net_buy,source
-20260102,11340.0,18670.0,0,0,krx_daily
+1970-01-01 00:00:00.020260102,11340.0,18670.0,0,0,krx_daily
+2026-07-21 00:00:00.000000000,11340.0,18670.0,0,0,krx_daily

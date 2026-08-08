@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,포스코인터부터 한온시스템까지…이번주 10곳 수요예측,0.0,0,0,http://www.edaily.co.kr/news/newspath.asp?newsid=01308726645415464
 2026-04-12,[힘내라 K산업]③ 한화솔루션 1분기 흑자 전망… 유상증자로 미래 태양...,0.0,0,0,https://www.asiatime.co.kr/article/20260409500357
 2026-04-11,4월 최근 5거래일 한온시스템 3천원 후반 등락 마감,0.067,1,1,https://www.topstarnews.net/news/articleView.html?idxno=16031830
@@ -369,3 +369,5 @@
 2026-05-21,"현대차·기아도 반한 모터 기술력… 계양전기, 글로벌 영토 넓힌다",0.762,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454322
 2026-05-23,"5월 3주차 한온시스템, 가파른 주가 상승 전환으로 5천원대 재진입",0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521401
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
+2026-07-21,"5월 3주차 한온시스템, 가파른 주가 상승 전환으로 5천원대 재진입",0.261,1,0,https://www.joongangenews.com/news/articleView.html?idxno=521401
+2026-07-21,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"스페이스X 타고 날아오른다… 세아베스틸지주, 우주산업 수혜주 부상",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444768
 2026-04-11,"세아베스틸지주, 美 SST 우주·항공 공급망…스페이스X 상장 모멘텀",0.462,1,0,http://www.ferrotimes.com/news/articleView.html?idxno=47389
 2026-04-11,페로타임즈 손바닥뉴스 4월 10일(금),0.762,3,0,http://www.ferrotimes.com/news/articleView.html?idxno=47377
@@ -175,3 +175,4 @@
 2026-05-21,"[특징주] 스페이스X, 투자설명서 제출ㆍ6월 상장 전망에 관련주 급등",0.604,2,0,https://www.etoday.co.kr/news/view/2586655
 2026-05-21,[이 시각 시황] 반도체주 강세에 소캠 관련주도 '훨훨',0.537,2,0,https://biz.sbs.co.kr/article_hub/20000311763?division=NAVER
 2026-05-24,"[증시 주간 핫리뷰] 美 국채 변동성 이긴 국내 증시, 반도체·국민성장...",0.775,3,0,http://www.the-biz.co.kr/news/articleView.html?idxno=721254
+2026-07-21,"[증시 주간 핫리뷰] 美 국채 변동성 이긴 국내 증시, 반도체·국민성장...",0.775,3,0,http://www.the-biz.co.kr/news/articleView.html?idxno=721254

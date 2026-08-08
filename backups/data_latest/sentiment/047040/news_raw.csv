@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,“역대급 수주전은 옛말” 정비사업 대어 ‘무혈 입성’ 확산 [집슐랭],0.38,1,0,https://www.sedaily.com/article/20031444?ref=naver
 2026-04-13,"""중동 미수금 7300억원""…'18조 기회' 앞서 리스크 경고",0.261,1,0,https://www.mt.co.kr/estate/2026/04/13/2026040916112270921
 2026-04-13,"990원 착한소주 팔던 '이 회사', 49층 아파트로 9000억 돈벼락",0.0,0,0,https://realty.chosun.com/site/data/html_dir/2026/04/10/2026041002020.html
@@ -2384,3 +2384,9 @@
 2026-05-23,"[챗집피티] 하늘이 내린 명당?…""고급상권에 배산임수"" 천지개벽 눈앞",0.0,0,0,https://www.mt.co.kr/estate/2026/05/23/2026052216001330652
 2026-05-23,"‘핫플’ 성수동 팝업에 음반-향수 제작까지… 건설사, 호감도 전쟁",0.0,0,0,https://www.donga.com/news/Economy/article/all/20260522/133978146/2
 2026-05-23,"""이젠 서울 아파트 국평 분양가도 30억"" 브레이크 없는 분양가",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102005
+2026-07-21,강남 아니어도 국평 30억…흑석까지 번진 초고가 분양,0.0,0,0,https://www.news1.kr/realestate/general/6175074
+2026-07-21,"'1.3조 대어' 성수4지구, 결국 '롯데vs대우' 재격돌",0.38,1,0,http://www.inews24.com/view/1970925
+2026-07-21,[이번주 시공사 현장설명회 스케줄(2026.5.26~5.30)],0.38,1,0,https://www.sisaon.co.kr/news/articleView.html?idxno=201318
+2026-07-21,"""브랜드에 자금력까지 갖춰야""…그들만의 리그된 서울 핵심 재건축",0.38,1,0,https://www.mt.co.kr/estate/2026/05/25/2026051910543690224
+2026-07-21,여의도 한강변 '시범·목화' 동시 출격…메이저 브랜드간 '하이엔드 수...,0.38,1,0,https://www.mt.co.kr/estate/2026/05/25/2026051915010245095
+2026-07-21,"의사결정부터 현장 관리까지...건설사, AI 도입 속도전",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102159

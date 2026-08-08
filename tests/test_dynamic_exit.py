@@ -314,8 +314,9 @@ class TestS1IntradayBreakout(unittest.TestCase):
 
         self.assertIsNotNone(result, "조건 충족 시 시그널 반환 기대")
         self.assertEqual(result["signal"], "BREAKOUT_LONG")
-        self.assertGreater(result["weight"], 0)
-        print(f"  ✅ S1-B: BREAKOUT_LONG 시그널 생성 — size={result['weight']:.0%}")
+        weight = result.get("weight", result.get("size_pct", 0))
+        self.assertGreater(weight, 0)
+        print(f"  ✅ S1-B: BREAKOUT_LONG 시그널 생성 — size={weight:.0%}")
 
     def test_scan_below_threshold_returns_none(self):
         """

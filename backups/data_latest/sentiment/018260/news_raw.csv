@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"신세계I&C, 美 AI 기업 투자 추진… 기술력 확보 경쟁",0.0,0,0,https://www.sedaily.com/article/20022565?ref=naver
 2026-03-22,"정용진의 AI 드라이브…신세계I&C, 美기업 투자한다",0.0,0,0,https://www.sedaily.com/article/20022478?ref=naver
 2026-03-22,네이버 R&D 2.2조 돌파…AI 투자비용 청구서 먼저 받은 IT업계,0.537,2,0,https://www.mt.co.kr/tech/2026/03/23/2026032010272513236
@@ -226,3 +226,5 @@
 2026-05-21,[증시 오늘] 삼성전자 노사 합의에 코스피 '불기둥'...여전한 '반도체·...,0.604,2,0,https://www.banronbodo.com/news/articleView.html?idxno=32324
 2026-05-23,"비수기 깨부순 아이티센엔텍, CX 넘어 AI·디지털로 실적 날개",0.38,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454927
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
+2026-07-21,"비수기 깨부순 아이티센엔텍, CX 넘어 AI·디지털로 실적 날개",0.38,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454927
+2026-07-21,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,코스피 반등 뒤 숨은 불안…공매도 타깃 된 금융·소재주,-0.165,1,1,https://www.etoday.co.kr/news/view/2567689
 2026-03-22,"연금 투자 고수들, 반도체 ETF 많이 담았다",0.322,1,0,https://www.hankyung.com/article/2026032280851
 2026-03-22,"퀄리타스반도체, 초고속 인터페이스 IP '국산화' 선봉… 글로벌 팹리스...",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438887
@@ -1698,3 +1698,4 @@
 2026-05-23,"[IPO 돋보기] HBM 수율 쥔 져스텍, 직면한 ‘적자 런웨이’...소부장 멀티...",0.8,2,0,https://www.news2day.co.kr/article/20260522500027
 2026-05-23,국민성장펀드가 끌어올린 코스닥…5% 급등에 매수 사이드카까지,0.762,3,1,https://www.mk.co.kr/article/12056093
 2026-05-23,“반도체·공급망·AI가 힘… 이젠 경제동맹 시대”,0.0,0,0,https://www.chosun.com/politics/assembly/2026/05/23/HXQX3ZPATZA4JF2J2BKNYX4RAQ/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news
+2026-07-21,[심층분석] 'TSMC 연합군' 재편하는 HBM4…핵심 원천특허가 소부장 운명...,0.408,1,0,https://www.thefairnews.co.kr/news/articleView.html?idxno=77775

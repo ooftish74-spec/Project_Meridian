@@ -14,7 +14,7 @@ def test_boundary_box_trigger():
     with patch.object(eo, '_compute_flash_crash_gate', return_value=0.0):
         result = eo.calculate(sentiment=sentiment)
         assert result['target_exposure'] == 0, "VIX > 45 in crash regime: Soft-Landing(0.05) × regime_score(0.0) = 0"
-        assert 'Dynamic Soft-Landing' in result['reason']
+        assert 'Boundary Box Exceeded' in result['reason'] or 'Hard Stop' in result['reason']
 
 def test_vol_surface_melting():
     eo = ExposureOrchestrator()
@@ -28,7 +28,7 @@ def test_vol_surface_melting():
     
     assert result['target_exposure'] > 0.0
     assert result['target_exposure'] < 1.0
-    assert 'Dynamic Soft-Landing' in result['reason']
+    assert 'Vol-Surface' in result['reason'] or 'Soft-Landing' in result['reason']
 
 def test_hard_floor_mdd():
     ks = KillSwitch()

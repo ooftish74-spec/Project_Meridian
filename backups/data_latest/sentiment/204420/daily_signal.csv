@@ -828,3 +828,4 @@ date,news_sentiment_mean,news_sentiment_std,news_count,volume_ratio,source,news_
 2019-06-19,0.5344,0.0766,0,6.2429,price_proxy,,,,
 2019-06-20,0.6085,0.0822,0,0.9285,price_proxy,,,,
 2019-06-21,0.6388,0.0692,0,0.0,price_proxy,,,,
+2026-07-21,0.6388,0.0692,0,0.0,price_proxy,,,,

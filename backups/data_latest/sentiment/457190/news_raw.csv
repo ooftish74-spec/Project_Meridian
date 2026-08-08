@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"남해화학, 비료부터 유류까지... 사업 다각화로 수익 구조 안정화",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=445032
 2026-04-14,국민성장펀드 2차프로젝트 신약개발·소버린AI·현대차 새만금에 투자,0.322,1,0,https://www.inthenews.co.kr/news/article.html?no=85597
 2026-04-14,"국민성장펀드, 소버린AI·차세대 백신 등 '2차 프로젝트' 발표",0.322,1,0,https://news.tf.co.kr/read/economy/2313146.htm
@@ -123,3 +123,5 @@
 2026-05-20,한농화성·대주전자재료 이수스페셜티케미컬 휘청…2차전지 전고체 관련...,-0.261,0,1,https://www.cbci.co.kr/news/articleView.html?idxno=575845
 2026-05-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445
 2026-05-21,삼성전기 한농화성 이수스페셜티케미컬 상승·대주전자재료 하락 엇갈린...,0.322,2,1,https://www.cbci.co.kr/news/articleView.html?idxno=576142
+2026-07-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445
+2026-07-21,삼성전기 한농화성 이수스페셜티케미컬 상승·대주전자재료 하락 엇갈린...,0.322,2,1,https://www.cbci.co.kr/news/articleView.html?idxno=576142

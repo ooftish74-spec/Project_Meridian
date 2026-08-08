@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-22,"세아제강지주, 글로벌 공급망 재편 속 'K-강관' 위상 드높인다",0.537,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438873
 2026-03-22,"[금주의 화장품·패션 톡톡] CJ올리브영, 역대 최대 실적... 윤동한 콜마...",0.0,0,0,https://www.mediawatch.kr/news/article.html?no=259014
 2026-03-21,"[CEO+] ""아모레 '서경배' 1.8배↑·신세계 '정용진' 1.6배↑""…총수 연봉...",0.0,0,0,http://www.bizwnews.com/news/articleView.html?idxno=129982
@@ -247,3 +247,4 @@
 2026-05-20,"外人 또 투매, 코스피 '하락'...하나금융 · 삼성전자 '선방'",-0.823,0,3,http://www.choicenews.co.kr/news/articleView.html?idxno=165536
 2026-05-20,"설화수, 패션브랜드 '르쥬'와 'Rooms of Women' 전시",0.0,0,0,https://www.catchnews.kr/news/articleView.html?idxno=124106
 2026-05-21,"[유통소식] LF 헤지스, 글로벌 사이트 1주년…19만명 유입",0.0,0,0,http://www.4th.kr/news/articleView.html?idxno=2112056
+2026-07-21,"[유통소식] LF 헤지스, 글로벌 사이트 1주년…19만명 유입",0.0,0,0,http://www.4th.kr/news/articleView.html?idxno=2112056

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,증권리포트 분석-2025년9월> ① 신한투자증권 정확도 꼴찌,0.0,0,0,https://www.bigtanews.co.kr/article/view/big202604110002
 2026-04-13,"""중동 미수금 7300억원""…'18조 기회' 앞서 리스크 경고",0.38,1,0,https://www.mt.co.kr/estate/2026/04/13/2026040916112270921
 2026-04-13,"[포토]NH투자증권 Premier Blue 강남2센터, '베스트 PB센터' 수상",0.0,0,0,https://magazine.hankyung.com/money/article/202604125388c
@@ -3189,3 +3189,17 @@
 2026-05-24,코스피 8000 돌파 '재도전'…삼전·닉스 2배 ETF 활약 '기대',0.261,1,0,https://www.news1.kr/finance/general-stock/6175800
 2026-05-24,[증권] 옵티머스 펀드 판매한 NH투자증권에 대한 업무 일부정지 취소 확...,-0.462,0,1,http://www.legaltimes.co.kr/news/articleView.html?idxno=94073
 2026-05-24,"""연휴 끝나면 또 오르겠네""…개미들 기대감 커지는 이유 [주간전망]",0.0,0,0,https://www.hankyung.com/article/2026052245296
+2026-07-21,가전 떼고 AI·로봇 단 LG그룹株… ‘L의 저주’ 깨고 상승 랠리,0.261,1,0,https://biz.chosun.com/stock/stock_general/2026/05/25/3SYW3HXI2VHPBP5X22TFCHRB5Q/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"NH證 ""이번주 코스피 7200~8500…실적·밸류에이션 주목""",0.261,1,0,https://news.mtn.co.kr/news-detail/2026052413342182606
+2026-07-21,[주간증시전망] ’8000피' 재등정 준비… 종목 레버리지 ETF 등장,0.0,0,0,https://biz.chosun.com/stock/stock_general/2026/05/25/FFMJFHSCSRFENG4E3YW4M4KCGE/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,전문가 전원 “신현송 韓銀 총재 첫 금통위서 금리 동결 예상”… 올해...,0.322,1,0,https://biz.chosun.com/policy/policy_sub/2026/05/25/ZQNQJKOVLRG67K357GYWS2A3B4/?utm_source=naver&utm_medium=original&utm_campaign=biz
+2026-07-21,"전문가 10명 중 6명 ""연말 기준금리 3.0%""…5월은 동결 예상",0.261,1,0,https://www.mt.co.kr/economy/2026/05/25/2026052214585376985
+2026-07-21,"'총파업' 일단락 삼성전자, 2Q 영업익 85조 원 '역대 최고' 예약",0.0,0,0,https://www.news1.kr/industry/general-industry/6176342
+2026-07-21,"증권사, 수수료 장사 한계… 신사업 박차 '이런 것도 합니다'",0.0,0,0,https://it.chosun.com/news/articleView.html?idxno=2023092162599
+2026-07-21,"단일종목 레버리지 출격…'포모' 수요 집중, 단기 변동성 불가피",0.0,0,0,https://www.news1.kr/finance/market-exr/6175811
+2026-07-21,[미리보는 증시재료] 금통위·PCE·레버리지 ETF…5월 마지막주 변동성 ...,-0.261,0,1,https://www.newspim.com/news/view/20260521001223
+2026-07-21,"""현대차 로봇훈련 구조, 中업체들 단기간 복제 못해"" [NH투자證]",0.0,0,0,http://www.fnnews.com/news/202605250006543913
+2026-07-21,"[KLPGA] 짜라위 분짠, 태국 선수 최초 정규투어 제패…E1 채리티 오픈 정...",0.0,0,0,https://swtvnews.com/news/newsview.php?ncode=1065558755865834
+2026-07-21,[증시 머니무브] 은행 예금금리 올려 고객잡기… 증권사는 발행어음 방...,0.0,0,0,https://www.g-enews.com/view.php?ud=202605221647569120e30fcb1ba8_1
+2026-07-21,[N2 포커스] '36조 빚투’ 증시 블랙홀…개미들 뛰어들 때 증권사는 ‘이...,0.0,0,0,https://www.news2day.co.kr/article/20260523500023
+2026-07-21,"""이번주 8000선 재도전""…탈출각 재는 롤러코스피",0.261,1,0,http://www.wowtv.co.kr/NewsCenter/News/Read?articleId=A202605220533&t=NN

@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-13,"회장 취임 6개월, HD현대 정기선의 홀로서기",0.0,0,0,http://www.fntimes.com/html/view.php?ud=202604110138108866dd55077bc2_18
 2026-04-13,"[사설]초거대산업 AI 선정, 울산 조선업 AX전환의 분수령",0.0,0,0,https://www.ksilbo.co.kr/news/articleView.html?idxno=1053772
 2026-04-13,조선업 AI 대전환 본격화…5년간 403억 투입,0.0,0,0,https://www.ksilbo.co.kr/news/articleView.html?idxno=1053785
@@ -2880,3 +2880,9 @@
 2026-05-23,"[데스크 칼럼] 미래 기술 내세운 지방선거, R&D 공약이 없다",0.0,0,0,https://biz.chosun.com/opinion/desk_column/2026/05/23/6A6YOKXNQJCPLKMEXOFOBW7EZ4/?utm_source=naver&utm_medium=original&utm_campaign=biz
 2026-05-23,[view] 파업 도미노 ‘병풍’…노봉법 손볼 때다,0.0,0,0,https://www.joongang.co.kr/article/25430733
 2026-05-23,"HD현대중공업, 폴란드 ‘떠다니는 LNG 터미널’ FSRU 진수…고부가가치...",0.0,0,0,https://www.theguru.co.kr/news/article.html?no=102164
+2026-07-21,韓 잠수함 탄 캐나다 해군 “구형 혼다 타다 신형 테슬라 사는 것”,0.38,1,0,https://www.chosun.com/international/international_general/2026/05/25/6FW7ZPY5NRFP5BOZOFELSF4KVQ/?utm_source=naver&utm_medium=referral&utm_campaign=naver-news
+2026-07-21,대법 '원청 사용자성 부정'에 뿔난 노동계…이번 주 전방위 집회 예고,0.0,0,0,https://www.newspim.com/news/view/20260522001239
+2026-07-21,"""바다 위 원자로 시대 온다""…美 해사대학, 첫 '원자력 선원' 양성 나섰...",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709853
+2026-07-21,"캐나다 해군이 韓잠수함에 찬사…""99년식 혼다 몰다 테슬라 산 듯해""",0.38,1,0,https://www.newsis.com/view/NISX20260525_0003642655
+2026-07-21,"[사설] 폭행에 원정 성매매, 진흙탕 싸움 벌이는 울산시장 선거전",0.0,0,0,https://www.busan.com/view/busan/view.php?code=2026052418011226238
+2026-07-21,"안창호함, 韓 첫 태평양 횡단… ‘60조’ 잠수함 수주전 총력",0.38,1,0,https://www.seoul.co.kr/news/politics/diplomacy/2026/05/25/20260525006004?wlog_tag3=naver

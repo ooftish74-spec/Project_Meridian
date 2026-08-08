@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"[인터뷰] 전희석 한국투자증권 싱가포르법인장 ""신규고객 확보·커버리...",0.0,0,0,http://www.consumernews.co.kr/news/articleView.html?idxno=752365
 2026-03-23,"코스피·코스닥 전 거래일(20일) 주요공시는?... 삼성바이오로직스 ""미국...",0.0,0,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438907
 2026-03-22,"‘천수답’ 韓증시, 그 꼬리표 자른 박현주와 김남구 [편집장 레터]",0.0,0,0,https://www.mk.co.kr/article/11993723
@@ -1604,3 +1604,5 @@
 2026-05-23,미래에셋 ‘SpaceX PI’·한투 ‘불장 BK’로 사상최대 순익에 박빙 승부...,0.583,1,0,https://www.ekn.kr/web/view.php?key=20260522028017242
 2026-05-23,역대급 증시 호황에 덩달아 오르는 이 종목[주末머니],0.322,1,0,https://view.asiae.co.kr/article/2026052115300194066
 2026-05-23,증시 호황에 금융판 뒤집혔다…증권·보험 ‘신흥 주도주’ 부상,0.261,1,0,https://magazine.hankyung.com/business/article/202605210875b
+2026-07-21,"[업앤다운]증권주 상승, 삼성증권↑·키움증권↓",0.261,1,0,https://www.nspna.com/news/?mode=view&newsid=814292
+2026-07-21,[기자수첩] 美 SEC 논쟁서 더 선명해진 진옥동의 '발품 IR',0.0,0,0,https://www.apnews.kr/news/articleView.html?idxno=3048640

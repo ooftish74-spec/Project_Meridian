@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"경남대, 40개 기관과 AI 인재양성 협약…제조업 AX 전환 시동",0.0,0,0,https://www.kyosu.net/news/articleView.html?idxno=201537
 2026-03-23,"경남대, 40개 기관과 AI 인재양성 협약",0.0,0,0,https://dhnews.co.kr/news/view/1065600044570297
 2026-03-23,"경남대, AX 혁신인재 양성 위해 40개 기업·기관과 연합전선 구축",0.0,0,0,https://www.etnews.com/20260323000434
@@ -101,3 +101,7 @@
 2026-05-21,[1% 초고수의 선택] '해성디에스' 사고 '두산퓨얼셀' 팔았다,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709709
 2026-05-21,반도체 재료·부품株 유니트론텍 네패스 피엠티 '불기둥'...무슨 호재 있...,0.38,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454486
 2026-05-21,SK하이닉스 다시 200만원 돌파 시동 걸었다...HBM 시장 지배력 확대 기대,0.775,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454335
+2026-07-21,"[사설] 창원산단, 제조 AX 전초기지 도약 박차를",0.0,0,0,http://www.knnews.co.kr/news/articleView.php?idxno=1542204
+2026-07-21,[1% 초고수의 선택] '해성디에스' 사고 '두산퓨얼셀' 팔았다,0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709709
+2026-07-21,반도체 재료·부품株 유니트론텍 네패스 피엠티 '불기둥'...무슨 호재 있...,0.38,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454486
+2026-07-21,SK하이닉스 다시 200만원 돌파 시동 걸었다...HBM 시장 지배력 확대 기대,0.775,3,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454335

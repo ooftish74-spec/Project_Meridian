@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-03-23,"코스피·코스닥 전 거래일(20일) 주요공시는?... 삼성바이오로직스 ""미국...",0.716,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=438907
 2026-03-23,마이너스 종목만 쏙쏙 골라 담은 개미들 ‘눈물’...중동 전쟁 투자 성...,-0.261,0,1,https://www.sedaily.com/article/20022581?ref=naver
 2026-03-22,"삼성중, LNG운반선 1척 3779억 수주",0.38,1,0,http://www.gnmaeil.com/news/articleView.html?idxno=582903
@@ -2695,3 +2695,4 @@
 2026-05-23,[주간 거래소 외국인] 반도체 차익실현 본격화…뭉칫돈 로봇·방산으로...,0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454889
 2026-05-23,"“아범아, 용돈 좀 줄까?”…불장에 돈맛 본 실버개미, 비결이?",0.0,0,0,https://www.mk.co.kr/article/12056118
 2026-05-23,삼성중공업 강세 흐름 시장 관심 촉각...투심 확산,0.625,2,0,https://www.cbci.co.kr/news/articleView.html?idxno=576661
+2026-07-21,"""바다 위 원자로 시대 온다""…美 해사대학, 첫 '원자력 선원' 양성 나섰...",0.0,0,0,https://www.ebn.co.kr/news/articleView.html?idxno=1709853

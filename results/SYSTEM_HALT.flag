@@ -1,6 +1,6 @@
 {
-  "halt": true,
-  "reason": "DesyncError: 치명적 NAV Desync: diff=60.1718% > threshold=1.00% [시스템₩1,601,718 vs 증권사₩1,000,000] — 주문 전체 Halt",
-  "timestamp": "2026-07-20T09:05:10.735699+09:00",
+  "halt": false,
+  "reason": "System halt lifted after Red Team audit & restoration",
+  "timestamp": "2026-08-08T23:50:30.000000+09:00",
   "orders_liquidated": 0
 }

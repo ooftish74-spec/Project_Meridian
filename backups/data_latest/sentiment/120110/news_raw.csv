@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,[핀포인트] [코오롱인더] 핵심 계열사 구하기…이앤피 소액주주 희생양,0.0,0,0,https://news.dealsitetv.com/articles/168487
 2026-04-11,상장 리츠 시총 10조 돌파…도입 25년 만의 이정표,0.1,2,1,https://www.sedaily.com/article/20031199?ref=naver
 2026-04-11,앤스로픽도 자체 칩 개발 검토…AI 빅테크 ‘탈엔비디아’ 가속,-0.462,0,1,https://www.sedaily.com/article/20031196?ref=naver
@@ -125,3 +125,5 @@
 2026-05-20,"코오롱인더, '발명의 날' 대통령 표창…""핵심 소재·특허 경쟁력 인정""",0.0,0,0,https://www.dailian.co.kr/news/view/1646417/?sc=Naver
 2026-05-20,"코오롱인더, 제61회 발명의 날 '대통령 표창' 수상",0.0,0,0,https://www.businessplus.kr/news/articleView.html?idxno=112021
 2026-05-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.537,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445
+2026-07-21,"[소비자민원평가대상-패션] F&F, 온·오프라인 경계 허문 '매장 교환 서...",0.0,0,0,http://www.consumernews.co.kr/news/articleView.html?idxno=756010
+2026-07-21,"전통 제조업에서 친환경 에너지로... 포스코퓨처엠, 체질 개선 결실 주...",0.537,2,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454445

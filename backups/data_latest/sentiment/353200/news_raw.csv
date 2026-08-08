@@ -1,4 +1,4 @@
-﻿date,title,sentiment_score,positive_count,negative_count,source
+date,title,sentiment_score,positive_count,negative_count,source
 2026-04-12,"글로벌 영토 확장 나선 빛샘전자, 신소재·방산 기술로 승부수",0.261,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=444790
 2026-04-12,"코스피, 외국인 수급 주목…금리·달러 변수에 '압축 전략'",0.0,0,0,https://news.mtn.co.kr/news-detail/2026041210252183509
 2026-04-12,[증시전망] 종전 기대감·불확실성 교차…달러 약세 수혜주 '주목',-0.322,0,1,https://www.digitaltoday.co.kr/news/articleView.html?idxno=656081
@@ -355,3 +355,4 @@
 2026-05-21,[이 시각 시황] 반도체주 강세에 소캠 관련주도 '훨훨',0.537,2,0,https://biz.sbs.co.kr/article_hub/20000311763?division=NAVER
 2026-05-21,"지능형 레이저 솔루션 액스비스, 첨단 모빌리티 넘어 방산·우주로 격상",0.322,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454315
 2026-05-23,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
+2026-07-21,[주간 100대 기업] 주성엔지니어링·이오테크닉스 급등...시총 100대 기업...,0.408,1,0,https://www.pinpointnews.co.kr/news/articleView.html?idxno=454918
