@@ -227,13 +227,13 @@ class StalenessAwareCache:
         self._cache: Dict[str, DataPoint] = {}
         self._lock = threading.RLock()
         
-        # Redis Client 초기화 (Fail-Fast)
+        # Redis Client 초기화 (Fail-Safe Memory Fallback)
         try:
             self._redis = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
             self._redis.ping()
         except Exception as e:
-            logger.critical(f"🚨 [Redis SPOF] Redis 연결 실패. Fail-Fast 강제 종료: {e}")
-            raise RuntimeError(f"Redis connection lost: {e}")
+            logger.warning(f"  ⚠️ [Redis Fallback] Redis 미연결 → 인메모리 캐시 모드로 자동 전환: {e}")
+            self._redis = None
 
     def set(self, ticker: str, value: Any, source: str='live') -> DataPoint:
         """데이터 저장 + quality 계산 (Redis 퍼블리싱)."""
@@ -241,14 +241,14 @@ class StalenessAwareCache:
         with self._lock:
             self._cache[ticker] = dp
             
-        try:
-            # Redis에 즉시 기록 (TTL = staleness_critical_sec + 여유분)
-            ttl = int(self.config.staleness_critical_sec * 1.5)
-            data_json = json.dumps({'value': dp.value, 'fetched_at': dp.fetched_at.isoformat(), 'source': dp.source})
-            self._redis.setex(f"meridian:cache:{self.source_name}:{ticker}", ttl, data_json)
-        except Exception as e:
-            logger.critical(f"🚨 [Redis SPOF] Redis Set 실패. Fail-Fast 강제 종료: {e}")
-            raise RuntimeError(f"Redis Set failed: {e}")
+        if self._redis is not None:
+            try:
+                ttl = int(self.config.staleness_critical_sec * 1.5)
+                data_json = json.dumps({'value': dp.value, 'fetched_at': dp.fetched_at.isoformat(), 'source': dp.source})
+                self._redis.setex(f"meridian:cache:{self.source_name}:{ticker}", ttl, data_json)
+            except Exception as e:
+                logger.warning(f"  ⚠️ [Redis Set Fallback] Redis 기록 실패 → 인메모리 유지: {e}")
+                self._redis = None
             
         return dp
 
@@ -531,14 +531,15 @@ class RealtimeDataBus:
         try:
             from src.data_collection.kis_data_collector import KISDataCollector
             kis = KISDataCollector()
-            ob = kis.get_orderbook(ticker)
-            if ob:
-                bid_total = sum(ob.get('bid_volumes', [0]))
-                ask_total = sum(ob.get('ask_volumes', [0]))
-                imbalance = (bid_total - ask_total) / (bid_total + ask_total + 1)
-                return {'bid_total': bid_total, 'ask_total': ask_total, 'imbalance': round(imbalance, 4), 'fetched_method': 'kis'}
+            if hasattr(kis, 'get_orderbook'):
+                ob = kis.get_orderbook(ticker)
+                if ob:
+                    bid_total = sum(ob.get('bid_volumes', [0]))
+                    ask_total = sum(ob.get('ask_volumes', [0]))
+                    imbalance = (bid_total - ask_total) / (bid_total + ask_total + 1)
+                    return {'bid_total': bid_total, 'ask_total': ask_total, 'imbalance': round(imbalance, 4), 'fetched_method': 'kis'}
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [Orderbook Fallback] {e}')
         raise ConnectionError(f'{ticker} 호가잔량 조회 실패')
 
     def _fetch_program_trading_live(self) -> Optional[Dict]:

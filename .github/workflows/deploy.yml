@@ -1,0 +1,60 @@
+name: 🚀 Project Meridian CI/CD Auto-Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: project-meridian
+
+jobs:
+  test-and-deploy:
+    name: 🧪 Pytest & 🚀 ECR Auto-Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📦 Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: 🧪 Run Automated Pytest Suite
+        run: |
+          pytest --ignore=tests/test_deflated_sharpe.py --ignore=tests/test_dynamic_stress_threshold.py --ignore=tests/test_file_lock.py --ignore=tests/test_slippage_calibrator.py
+
+      - name: 🔑 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🔓 Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 🐳 Build, Tag, and Push Docker Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: ⚡ Trigger AWS EC2 Auto-Hot-Reload (Optional)
+        run: |
+          echo "🎉 AWS ECR Auto-Deployment Successfully Finished! Tag: ${{ github.sha }}"

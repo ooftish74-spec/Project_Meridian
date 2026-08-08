@@ -528,7 +528,9 @@ class StreamOrchestrator:
                 _sp_data = _json_rebal.loads(_sp_path.read_text())
             _all_positions = _sp_data.get('positions', {})
 
-            for _rebal_sid in ['S3', 'S4']:
+            # [SSoT Policy] 리밸런싱 주문 생성을 활성화된 주문 스트림(S0, S1, S2) 내로 엄격히 통제 (S3, S4 리밸런싱 차단)
+            _active_rebal_streams = [s for s in ['S0', 'S1', 'S2'] if s in ('S3', 'S4')]
+            for _rebal_sid in _active_rebal_streams:
                 _stream_positions = {
                     pk: pv for pk, pv in _all_positions.items()
                     if pk.startswith(f'{_rebal_sid}:')}
@@ -829,8 +831,13 @@ class StreamOrchestrator:
                     logger.error(f'  [Phase 76 MicroGuard] 체크 실패, 통과: {_mge}', exc_info=True)
 
             _filtered_orders.append(_ord)
-        # orders 교체 (Two-Track 필터 적용 완료)
-        orders = _filtered_orders
+        # ★ [SSoT Live Order Policy] 주문 생성 허용 스트림(S0, S1, S2) 외의 신호는 주문 차단
+        _ORDER_PERMITTED_STREAMS = {'S0', 'S1', 'S2', 'S0_BETA', 'S1_EDGE', 'S2_ML_ALPHA', 'S_YIELD', 'EXIT_MANAGER'}
+        orders = [
+            o for o in _filtered_orders
+            if str(o.get('stream_id', o.get('stream', ''))).upper() in _ORDER_PERMITTED_STREAMS
+            or o.get('strategy') in ('YieldParking', 'sys_tactical_hedge', 'tail_risk_hedge')
+        ]
 
         # [Phase 78] S_YIELD (KOFR) Auto-Liquidation
         # 새로운 매수 주문이 있거나 예산 재분배가 필요할 경우, 파킹된 KOFR 전량을 가용 현금화합니다.

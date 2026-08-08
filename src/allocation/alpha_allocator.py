@@ -178,76 +178,36 @@ class AlphaAllocator:
         Returns:
             배분 비율 {'S1': 0.20, 'S2': 0.50, 'S3': 0.30}
         """
-        try:
-            from src.risk.transfer_entropy import TEHRPAllocator
-            _returns = {sid: np.array(m.get('returns', m.get('daily_returns', []))) for sid, m in (stream_metrics or {}).items() if isinstance(m, dict) and len(m.get('returns', m.get('daily_returns', []))) >= 20}
-            if len(_returns) >= 3:
-                _te_hrp = TEHRPAllocator()
-                _base_w = self._get_base_weights(regime, market_data)
-                _hrp_weights, _crowd_alert = _te_hrp.allocate(_returns, base_weights=_base_w, blend=float(cfg.get('allocator.te_hrp_blend', 0.5)))
-                if _hrp_weights and _crowd_alert.get('crowding_detected'):
-                    logger.warning(f'  [Phase 75 TE-HRP] Crowding 감지! alert={_crowd_alert['entropy_alert']:.4f} risk_streams={_crowd_alert['cluster_risk']}')
-                    _alert_path = _Path('results') / 'crowding_alert.json'
-                    _alert_path.parent.mkdir(exist_ok=True)
-                    atomic_write_json(_alert_path, {**_crowd_alert, 'timestamp': datetime.now().isoformat()}, ensure_ascii=False)
-                if _hrp_weights:
-                    logger.info(f'  [Phase 75 TE-HRP] 성공 적용: {_hrp_weights}')
-        except Exception as _e:
-            logger.critical(f'  [Phase 75] TE-HRP 에러 (Fallback to Basic): {_e}', exc_info=True)
-        alpha = cfg.get('allocator.sharpe_alpha', 0.15)
-        corr_penalty_rate = cfg.get('allocator.correlation_penalty', 0.1)
-        min_weight = cfg.get('allocator.min_stream_weight', 0.03)
-        base_weights = self._get_base_weights(regime, market_data)
-        vols = {}
+        # ★ [SSoT Architecture] 경쟁적 EV(Expected Value) 100% 몰아주기 자산 배분 엔진
+        ev_scores = {}
         for sid in self.STREAMS:
-            returns = stream_metrics.get(sid, {}).get('daily_returns', [])
-            vols[sid] = self._compute_volatility(returns)
-        inv_vols = {}
-        for sid in self.STREAMS:
-            vol = vols[sid]
-            if vol > 0:
-                inv_vols[sid] = 1.0 / vol
-            else:
-                inv_vols[sid] = 1.0
-        sharpe_adj = {}
-        for sid in self.STREAMS:
-            metrics = stream_metrics.get(sid, {})
-            sharpe = metrics.get('sharpe')
-            if sharpe is not None and sharpe > 0:
-                boost = 1.0 + alpha * sharpe ** 2
-            else:
-                boost = 1.0
-            sharpe_adj[sid] = inv_vols[sid] * boost
-        corr_matrix = self._compute_correlation_matrix(stream_metrics)
-        penalties = {}
-        for i_sid in self.STREAMS:
-            penalty = 0
-            for j_sid in self.STREAMS:
-                if i_sid == j_sid:
-                    continue
-                corr_key = f'{min(i_sid, j_sid)}_{max(i_sid, j_sid)}'
-                corr_val = corr_matrix.get(corr_key, 0)
-                penalty += abs(corr_val) * base_weights.get(j_sid, 0.25)
-            penalties[i_sid] = penalty * corr_penalty_rate
-        blend_ratio = cfg.get('allocator.risk_parity_blend', 0.5)
-        _rp_total = sum(sharpe_adj.values())
-        if _rp_total > 0:
-            rp_normalized = {sid: v / _rp_total for sid, v in sharpe_adj.items()}
+            metrics = (stream_metrics or {}).get(sid, {})
+            p_win = float(metrics.get('win_rate', metrics.get('p_win', 0.50)))
+            reward = float(metrics.get('avg_win', metrics.get('expected_return', 0.02)))
+            risk = float(metrics.get('avg_loss', metrics.get('volatility', 0.01)))
+            if risk <= 0:
+                risk = 0.01
+            # Expected Value: EV = p * Reward - (1 - p) * Risk
+            ev = p_win * reward - (1.0 - p_win) * risk
+            ev_scores[sid] = ev
+            logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
+
+        # EV 경쟁 모델: 최우수 EV 전략 탐색 (Winner-Take-All)
+        best_stream = max(ev_scores, key=ev_scores.get) if ev_scores else 'S1'
+        best_ev = ev_scores.get(best_stream, 0.0)
+
+        # 100% 몰아주기 배분 가중치 초기화
+        final_weights = {sid: 0.0 for sid in self.STREAMS}
+
+        if best_ev > 0:
+            final_weights[best_stream] = 1.0
+            logger.info(f"  🏆 [Competitive EV Winner-Take-All] 우위 전략 {best_stream} 선택 (EV = {best_ev:+.5f}) → 100% 몰아주기 배분 확정")
         else:
-            n = len(self.STREAMS)
-            rp_normalized = {sid: 1.0 / n for sid in self.STREAMS}
-        adj_weights = {}
-        for sid in self.STREAMS:
-            rp_weight = rp_normalized[sid]
-            base = base_weights[sid]
-            penalty = penalties[sid]
-            blended = base * (1 - blend_ratio) + rp_weight * blend_ratio
-            adj_weights[sid] = max(min_weight, blended * (1 - penalty))
-        total = sum(adj_weights.values())
-        if total <= 0:
-            return base_weights
-        final_weights = {sid: round(w / total, 4) for sid, w in adj_weights.items()}
-        final_weights = self._enforce_min_weights(final_weights, min_weight)
+            # 모든 전략 EV <= 0 인 경우 안전 자산 S0 (현금/베타 헷지)로 100% 몰아주기
+            fallback_stream = 'S0' if 'S0' in self.STREAMS else self.STREAMS[0]
+            final_weights[fallback_stream] = 1.0
+            logger.warning(f"  ⚠️ [Competitive EV Safety] 모든 전략 EV <= 0 → 안전 자산({fallback_stream}) 100% 현금 파킹 배분")
+        min_weight = cfg.get('allocator.min_stream_weight', 0.0)
         stream_signals = stream_metrics.get('_stream_signals')
         if stream_signals:
             stream_signals = self._apply_sentiment_penalty(stream_signals)
@@ -258,13 +218,13 @@ class AlphaAllocator:
         needs_rebalance = self._needs_rebalance(final_weights, threshold)
         if needs_rebalance:
             self._last_weights = final_weights
-            self._allocation_history.append({'date': datetime.now().isoformat(), 'weights': final_weights, 'regime': regime, 'volatilities': {k: round(v, 6) for k, v in vols.items()}, 'penalties': {k: round(v, 4) for k, v in penalties.items()}, 'method': 'risk_parity_hybrid'})
+            self._allocation_history.append({'date': datetime.now().isoformat(), 'weights': final_weights, 'regime': regime, 'method': 'competitive_ev_winner_take_all'})
             try:
                 from src.measurement.event_ledger import log_event
-                log_event('ALLOCATION', {'weights': final_weights, 'regime': regime, 'trigger': 'rebalance', 'method': 'risk_parity_hybrid'}, source='alpha_allocator')
+                log_event('ALLOCATION', {'weights': final_weights, 'regime': regime, 'trigger': 'rebalance', 'method': 'competitive_ev_winner_take_all'}, source='alpha_allocator')
             except Exception as _e0:
-                logger.critical(f'  [alpha_allocator] IC 롤링 계산: {_e0}', exc_info=True)
-            logger.info(f'  📊 AlphaAllocator (RiskParity): {final_weights} (regime={regime})')
+                logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
+            logger.info(f'  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})')
         try:
             _micro_bound = set(cfg.get('allocator.micro_bound_streams', ['S1', 'S2']))
             _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound))
