@@ -44,7 +44,9 @@ jobs:
           pytest --ignore=tests/test_deflated_sharpe.py --ignore=tests/test_dynamic_stress_threshold.py --ignore=tests/test_file_lock.py --ignore=tests/test_slippage_calibrator.py
 
       - name: 🔑 Configure AWS Credentials
-        if: secrets.AWS_ACCESS_KEY_ID != ''
+        env:
+          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        if: env.AWS_KEY != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
