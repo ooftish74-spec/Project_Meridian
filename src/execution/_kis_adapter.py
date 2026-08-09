@@ -822,18 +822,47 @@ class KISTraderAdapter:
             try:
                 import requests
                 headers = self._get_headers()
+                headers = self._get_headers()
                 headers['tr_id'] = 'TTTC8434R' if self.mode == 'live' else 'VTTC8434R'
                 acnt = self.account_no.split('-')
                 params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
                 url = f'{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance'
                 resp = requests.get(url, headers=headers, params=params, timeout=10)
                 data = resp.json()
+
+                # [Red Team Patch] 미수 발생 없는 100% 당일 즉시 매수가능금액 2차 정밀 조회 (TTTC8908R / VTTC8908R)
+                ord_psbl_cash = 0.0
+                try:
+                    headers_psbl = self._get_headers()
+                    headers_psbl['tr_id'] = 'TTTC8908R' if self.mode == 'live' else 'VTTC8908R'
+                    params_psbl = {
+                        'CANO': acnt[0],
+                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                        'PDNO': '069500',
+                        'ORD_UNPR': '0',
+                        'ORD_DVSN': '01',
+                        'CASH_ORD_CFRM_DVSN': '00',
+                        'CMAX_AMA_YN': 'N',
+                        'CMA_EVLU_AMT_ICLD_YN': 'N',
+                        'OVRS_ICLD_YN': 'N'
+                    }
+                    url_psbl = f'{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-order'
+                    resp_psbl = requests.get(url_psbl, headers=headers_psbl, params=params_psbl, timeout=10)
+                    data_psbl = resp_psbl.json()
+                    if data_psbl.get('rt_cd') == '0':
+                        out_psbl = data_psbl.get('output', {})
+                        nrcvb = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', 0)))
+                        if nrcvb > 0:
+                            ord_psbl_cash = nrcvb
+                except Exception as e_psbl:
+                    logger.debug(f'  [Live Patch] inquire-psbl-order 2차 조회 우회: {e_psbl}')
+
                 if data.get('rt_cd') == '0':
                     output2 = data.get('output2', [{}])
                     if output2:
                         summary = output2[0]
-                        # [Red Team Patch] D+2 정산 후 실제 주문 가능 금액(prvs_rcdl_excc_amt 또는 prvs_rcdl_exn_amt) 우선 채택
-                        ord_psbl_cash = float(summary.get('prvs_rcdl_excc_amt', summary.get('prvs_rcdl_exn_amt', 0)))
+                        if ord_psbl_cash <= 0:
+                            ord_psbl_cash = float(summary.get('prvs_rcdl_excc_amt', summary.get('prvs_rcdl_exn_amt', 0)))
                         if ord_psbl_cash <= 0:
                             ord_psbl_cash = float(summary.get('dnca_tot_amt', 0))
 
