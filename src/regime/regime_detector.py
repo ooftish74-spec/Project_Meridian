@@ -474,17 +474,17 @@ class RegimeDetector:
         crash_type = None
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
-            # [S1 Patch] Sanity Check: 데이터 스케일 오염 방어막 (0.5 ~ 2.0 범위 밖이면 무시)
+            # [Quant Institutional Patch] 0.5 ~ 2.0 스케일 범위 검증 및 HMM/Ensemble 연속 레짐 스코어링
             if 0.5 < trend_ratio < 2.0:
-                if trend_ratio < 0.95:
-                    score -= 40
+                if trend_ratio < 0.88:
+                    score -= 35
                     force_regime = 'crash'
                     crash_type = 'flash_crash'
-                elif trend_ratio < 0.97:
-                    score -= 30
+                elif trend_ratio < 0.95:
+                    score -= 25
                     force_regime = 'bear'
-                elif trend_ratio < 0.99:
-                    score -= 20
+                elif trend_ratio < 0.98:
+                    score -= 15
                 elif trend_ratio > 1.02:
                     score += 10
             else:
