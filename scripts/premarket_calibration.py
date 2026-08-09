@@ -143,11 +143,7 @@ def run_calibration():
             logger.info(f"     └ {name}({ticker}) 동시호가 {stock_gap:+.2f}% (정상 범위)")
 
     if penalty_ratio < 1.0 or modified_s2:
-        # 덮어쓰기 (Atomic)
-        import tempfile, os
-        fd, temp_path = tempfile.mkstemp(dir=str(signals_file.parent))
-        atomic_write_json(fd, data, indent=2)
-        os.replace(temp_path, str(signals_file))
+        atomic_write_json(signals_file, data, indent=2)
         logger.info("  ✅ 교정된 시그널(latest_signals.json) 저장 완료.")
     else:
         logger.info("  ✅ 마이크로 이상징후 없음. 시그널 변동 없이 100% 유지.")
