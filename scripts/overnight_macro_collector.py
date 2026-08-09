@@ -97,23 +97,37 @@ def collect_us_futures() -> dict:
         df = yf.download(yf_tickers, period='2d', progress=False)
         if not df.empty and 'Close' in df.columns:
             close_df = df['Close']
+            open_df = df.get('Open', pd.DataFrame())
             for sym, futures_info in mapping.items():
                 if sym in close_df.columns:
                     col_series = close_df[sym].dropna()
                     if len(col_series) >= 1:
                         last_c = float(col_series.iloc[-1].item())
                         prev_c = float(col_series.iloc[-2].item()) if len(col_series) > 1 else last_c
-                        chg_pct = ((last_c - prev_c) / prev_c) * 100.0 if prev_c > 0 else 0.0
+                        chg_pct_settlement = ((last_c - prev_c) / prev_c) * 100.0 if prev_c > 0 else 0.0
+                        
+                        # Session Open (Globex Sunday Open) 등락률 계산
+                        session_open = last_c
+                        if not open_df.empty and sym in open_df.columns:
+                            o_series = open_df[sym].dropna()
+                            if len(o_series) >= 1:
+                                session_open = float(o_series.iloc[-1].item())
+                        
+                        chg_pct_session = ((last_c - session_open) / session_open) * 100.0 if session_open > 0 else chg_pct_settlement
+                        effective_chg = chg_pct_session if abs(chg_pct_session) > abs(chg_pct_settlement) else chg_pct_settlement
+
                         results[futures_info['key']] = {
                             'name': futures_info['name'],
                             'symbol': sym,
                             'prev_close': round(prev_c, 2),
                             'last_close': round(last_c, 2),
-                            'change_pct': round(chg_pct, 4),
+                            'change_pct': round(effective_chg, 4),
+                            'change_pct_settlement': round(chg_pct_settlement, 4),
+                            'change_pct_session': round(chg_pct_session, 4),
                             'vs_5d_avg_pct': 0.0,
-                            'source': 'yfinance_direct'
+                            'source': 'yfinance_dual_reference'
                         }
-                        logger.info(f"  🌐 [yfinance] {futures_info['name']}: {last_c:,.2f} ({chg_pct:+.2f}%)")
+                        logger.info(f"  🌐 [yfinance Dual] {futures_info['name']}: {last_c:,.2f} (Settlement: {chg_pct_settlement:+.2f}%, Globex Session: {chg_pct_session:+.2f}%)")
             if results:
                 return results
     except Exception as e_yf:
