@@ -33,6 +33,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.utils.file_ops import atomic_write_json
 
 logger = logging.getLogger('overnight_macro')
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -85,11 +86,40 @@ def collect_us_futures() -> dict:
                         logger.info(f"  🌊 [Streamed] {futures_info['name']}: {futures_data['price']:,.2f} ({futures_data['change_pct']:+.2f}%)")
                 return results
             else:
-                logger.warning("  ⚠️ us_night_stream.json 데이터가 오래되었습니다. (Stale)")
+                logger.warning("  ⚠️ us_night_stream.json 데이터가 오래되었습니다. yfinance 실시간 연동 시도...")
     except Exception as e:
         logger.warning(f"  ⚠️ us_night_stream.json 읽기 실패: {e}")
-        
-    logger.error("  ❌ Night Watch 스트리밍 데이터 수집 실패. (Critical data missing)")
+
+    # Fallback: yfinance 실시간 수집
+    try:
+        import yfinance as yf
+        yf_tickers = list(mapping.keys())
+        df = yf.download(yf_tickers, period='2d', progress=False)
+        if not df.empty and 'Close' in df.columns:
+            close_df = df['Close']
+            for sym, futures_info in mapping.items():
+                if sym in close_df.columns:
+                    col_series = close_df[sym].dropna()
+                    if len(col_series) >= 1:
+                        last_c = float(col_series.iloc[-1].item())
+                        prev_c = float(col_series.iloc[-2].item()) if len(col_series) > 1 else last_c
+                        chg_pct = ((last_c - prev_c) / prev_c) * 100.0 if prev_c > 0 else 0.0
+                        results[futures_info['key']] = {
+                            'name': futures_info['name'],
+                            'symbol': sym,
+                            'prev_close': round(prev_c, 2),
+                            'last_close': round(last_c, 2),
+                            'change_pct': round(chg_pct, 4),
+                            'vs_5d_avg_pct': 0.0,
+                            'source': 'yfinance_direct'
+                        }
+                        logger.info(f"  🌐 [yfinance] {futures_info['name']}: {last_c:,.2f} ({chg_pct:+.2f}%)")
+            if results:
+                return results
+    except Exception as e_yf:
+        logger.warning(f"  ⚠️ yfinance 미 선물 수집 실패: {e_yf}")
+
+    logger.error("  ❌ Night Watch 및 yfinance 미 선물 수집 실패.")
     raise RuntimeError("Critical data missing: US Futures Stream")
 
 
