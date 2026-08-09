@@ -832,12 +832,12 @@ class KISTraderAdapter:
                     output2 = data.get('output2', [{}])
                     if output2:
                         summary = output2[0]
-                        # [Red Team Patch] D+2 정산 후 실제 주문 가능 금액(prvs_rcdl_exn_amt) 우선 채택
-                        ord_psbl_cash = float(summary.get('prvs_rcdl_exn_amt', 0))
+                        # [Red Team Patch] D+2 정산 후 실제 주문 가능 금액(prvs_rcdl_excc_amt 또는 prvs_rcdl_exn_amt) 우선 채택
+                        ord_psbl_cash = float(summary.get('prvs_rcdl_excc_amt', summary.get('prvs_rcdl_exn_amt', 0)))
                         if ord_psbl_cash <= 0:
                             ord_psbl_cash = float(summary.get('dnca_tot_amt', 0))
 
-                        tot_evlu = float(summary.get('tot_evlu_amt', 0))
+                        tot_evlu = float(summary.get('tot_evlu_amt', summary.get('nass_amt', 0)))
 
                         # [Red Team Patch] 08:00~08:50 장전 동시호가 평가액 0원 튀기(Glitch) 방어
                         if ord_psbl_cash > 0 or tot_evlu > 0:
