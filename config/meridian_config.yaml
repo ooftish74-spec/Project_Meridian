@@ -56,7 +56,7 @@ allocation:
   s2_upscale_ratio: 0.5
   penalty_ratio: 0.5
 portfolio:
-  initial_capital: 16601718.0
+  initial_capital: 16762186.0
   sleeve_a_ratio: 0.6
   trailing_ratio:
     bull: 0.2
