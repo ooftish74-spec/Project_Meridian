@@ -307,33 +307,33 @@ class RealtimeExitMonitor:
                         if manual_orders:
                             try:
                                 logger.info(f'  🔔 S4 수동 매도 알림 텔레그램 발송 생략 ({len(manual_orders)}건)')
-                        except Exception as e:
-                            logger.critical(f'  ❌ S4 텔레그램 로직 오류: {e}', exc_info=True)
-                            send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
-                    if auto_orders:
-                        ee_result = ee.execute(auto_orders, portfolio=mgr.get_summary())
-                        logger.info(f'  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료')
-                except Exception as ee_err:
-                    logger.critical(f'  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}', exc_info=True)
-                    send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=ee_err)
-                etf_comm = _cfg_get('execution.etf_commission_rate', 0.00015)
-                s1_sells = [s for s in sell_orders if s.get('stream_id') == 'S1']
-                other_sells = [s for s in sell_orders if s.get('stream_id') != 'S1']
-                if s1_sells:
-                    mgr.execute_sells(s1_sells, prices, commission_rate=etf_comm)
-                    for so in s1_sells:
-                        logger.info(f'  🔴 [S1] {so.get('name', '?')} 실시간 Exit: {so.get('reason', '')[:80]}')
-                if other_sells:
-                    mgr.execute_sells(other_sells, prices)
-                    for so in other_sells:
-                        logger.info(f'  🔴 [{so.get('stream_id', '')}] {so.get('name', '?')} 실시간 Exit: {so.get('reason', '')[:80]}')
-                mgr.save()
-                with self._stats_lock:
-                    self._stats['exit_executed'] += len(sell_orders)
-                logger.info(f'  ✅ 실시간 Exit 완료: {len(sell_orders)}건 (사유: {reason})')
-                self._compute_alert_zones()
-            else:
-                logger.debug(f'  Exit 체크 완료: 청산 대상 없음 ({reason})')
+                            except Exception as e:
+                                logger.critical(f'  ❌ S4 텔레그램 로직 오류: {e}', exc_info=True)
+                                send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+                        if auto_orders:
+                            ee_result = ee.execute(auto_orders, portfolio=mgr.get_summary())
+                            logger.info(f'  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료')
+                    except Exception as ee_err:
+                        logger.critical(f'  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}', exc_info=True)
+                        send_emergency_page(f'🚨 [FATAL] {ee_err} at realtime_exit_monitor.py', exc_info=ee_err)
+                    etf_comm = _cfg_get('execution.etf_commission_rate', 0.00015)
+                    s1_sells = [s for s in sell_orders if s.get('stream_id') == 'S1']
+                    other_sells = [s for s in sell_orders if s.get('stream_id') != 'S1']
+                    if s1_sells:
+                        mgr.execute_sells(s1_sells, prices, commission_rate=etf_comm)
+                        for so in s1_sells:
+                            logger.info(f'  🔴 [S1] {so.get("name", "?")} 실시간 Exit: {so.get("reason", "")[:80]}')
+                    if other_sells:
+                        mgr.execute_sells(other_sells, prices)
+                        for so in other_sells:
+                            logger.info(f'  🔴 [{so.get("stream_id", "")}] {so.get("name", "?")} 실시간 Exit: {so.get("reason", "")[:80]}')
+                    mgr.save()
+                    with self._stats_lock:
+                        self._stats['exit_executed'] += len(sell_orders)
+                    logger.info(f'  ✅ 실시간 Exit 완료: {len(sell_orders)}건 (사유: {reason})')
+                    self._compute_alert_zones()
+                else:
+                    logger.debug(f'  Exit 체크 완료: 청산 대상 없음 ({reason})')
             with self._stats_lock:
                 self._stats['last_exit_check'] = datetime.now().isoformat()
         except Exception as e:
@@ -450,6 +450,8 @@ class RealtimeExitMonitor:
                                 _d = _fj.loads(_sc.read_text())
                                 vix = float(_d.get('vix', vix))
                         except Exception:
+                            from src.utils.error_logger import log_error_rate_limited
+                            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                             pass
                         daily_vol = vix / 100.0 / math.sqrt(252)
                         dyn_sl_pct = -daily_vol * 1.5

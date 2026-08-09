@@ -855,6 +855,8 @@ class KISTraderAdapter:
                         if nrcvb > 0:
                             ord_psbl_cash = nrcvb
                 except Exception as e_psbl:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_psbl}", exc_info=True)
                     logger.debug(f'  [Live Patch] inquire-psbl-order 2차 조회 우회: {e_psbl}')
 
                 if data.get('rt_cd') == '0':

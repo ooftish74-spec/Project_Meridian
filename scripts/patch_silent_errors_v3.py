@@ -4,7 +4,7 @@ from pathlib import Path
 target_file = Path('src/data/market_data_bridge.py')
 content = target_file.read_text(encoding='utf-8')
 
-# Fix line 265: except RuntimeError: pass
+# Fix RuntimeError handling
 content = re.sub(r'except RuntimeError:\s*from src\.utils\.error_logger.*?\s*log_error_rate_limited.*?\(exception variable 없음\).*?\s*pass', 
                  r'except RuntimeError as e:\n                    logger.error(f"🚨 [Critical Data Outage] RuntimeError: {e}")\n                    raise', content, flags=re.DOTALL)
 

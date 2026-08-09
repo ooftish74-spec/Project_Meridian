@@ -1196,6 +1196,8 @@ class ShadowPortfolioManager:
                                     atr_pct = atr_val2 / lc2
                                     break
             except Exception as _e:
+                from src.utils.error_logger import log_error_rate_limited
+                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e}", exc_info=True)
                 logger.debug(f"  SM ATR parquet [{ticker}]: {_e}")
 
         # ── 3차: vol proxy ──────────────────────────────────────────
@@ -1683,6 +1685,8 @@ class ShadowPortfolioManager:
                     sl_pct = sl_pct * _time_decay_factor
                     logger.debug(f'  [Phase80 S1-TimeSL] {ticker} rem={_mins_rem:.0f}min decay={_time_decay_factor:.3f} sl={sl_pct:.2f}%')
                 except Exception as _tse:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_tse}", exc_info=True)
                     logger.debug(f'  [Phase80] S1 TimeSL error: {_tse}')
 
             if pnl_pct <= sl_pct:
@@ -1805,6 +1809,8 @@ class ShadowPortfolioManager:
                                 f'파일러 유지 (score={_pos_score:.1f}>={_score_cut})'
                             )
                     except Exception as _he:
+                        from src.utils.error_logger import log_error_rate_limited
+                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_he}", exc_info=True)
                         logger.debug(f'  [Phase79] Hysteresis 실패: {_he}')
                 if not still_in_signals and hold_days >= expire_days and not _s3_hysteresis_hold:
                     sell_reason = (f"신호 소멸 ({stream_for_check} 추천 종료, "
@@ -2123,6 +2129,8 @@ class ShadowPortfolioManager:
                         _pos_stream, _pnl_ratio * 100,
                     )
                 except Exception as _s0_e:
+                    from src.utils.error_logger import log_error_rate_limited
+                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_s0_e}", exc_info=True)
                     logger.debug('[S0 Kelly Feedback] 콜백 실패 (비치명적): %s', _s0_e)
             # ───────────────────────────────────────────────────────────────
 
