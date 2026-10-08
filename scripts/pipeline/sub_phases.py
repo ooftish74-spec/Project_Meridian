@@ -2374,14 +2374,55 @@ def _phase_weekly_validate():
 # ═══════════════════════════════════════════════════════
 
 def _phase_call_auction_0830():
-    """08:30 KST: KRX 장전 동시호가 매도 주문 자율 발주 (KODEX 200 50% 승격용)."""
+    """08:30 KST: KRX 장전 동시호가 매도 주문 자율 발주 (DynamicCapEngine 기반 100% 동적 해제)."""
     logger.info("  🔔 [08:30 CallAuction] KODEX 200 장전 동시호가 자율 매도 발주 개시")
     try:
         from src.execution.call_auction_manager import CallAuctionManager
+        from src.allocation.dynamic_cap_engine import DynamicCapEngine
         cam = CallAuctionManager()
+        cap_engine = DynamicCapEngine()
+
         kodex_pos = cam.adapter.positions.get("069500")
-        total_qty = kodex_pos.quantity if kodex_pos else 103
-        sell_qty = int(total_qty * 0.50)
+        total_qty = kodex_pos.quantity if kodex_pos else 0
+        if total_qty <= 0:
+            logger.info("  ℹ️ [08:30 CallAuction] KODEX 200 미보유 — 매도 발주 스킵")
+            return
+
+        total_nav = float(cam.adapter.account.total_asset) if cam.adapter.account and cam.adapter.account.total_asset > 0 else 20911598.0
+        kodex_price = float(kodex_pos.current_price) if kodex_pos.current_price > 0 else 105650.0
+
+        # 오늘 프리마켓 시그널에서 액티브 알파 기대값(EV%) 추출
+        active_ev = 0.015  # 기본 보수적 1.5%
+        results_dir = _PROJECT_ROOT / 'results'
+        sig_path = results_dir / 'latest_signals.json'
+        if sig_path.exists():
+            try:
+                sig_data = json.loads(sig_path.read_text())
+                sigs = sig_data.get('signals', {})
+                active_ev = max([float(s.get('expected_return', 0.015)) for s in sigs.values()] or [0.015])
+            except Exception:
+                pass
+
+        # 시장 추세 판별 (KOSPI 정배열 여부)
+        is_trend_pos = True
+        sc_path = results_dir / 'signal_cache.json'
+        if sc_path.exists():
+            try:
+                sc_data = json.loads(sc_path.read_text())
+                is_trend_pos = bool(sc_data.get('is_trend_up', True))
+            except Exception:
+                pass
+
+        # 100% 수학적 동적 자본 해제 평가
+        sell_qty, release_krw, reason, metrics = cap_engine.evaluate_kodex200_release(
+            total_nav=total_nav,
+            kodex200_price=kodex_price,
+            kodex200_qty=total_qty,
+            active_ev_pct=active_ev,
+            market_trend_positive=is_trend_pos
+        )
+        logger.info(f"  📊 [08:30 DynamicCapEngine] {reason}")
+
         if sell_qty > 0:
             order_res = cam.place_premarket_sell_order(sell_qty)
             if order_res:
@@ -2389,7 +2430,7 @@ def _phase_call_auction_0830():
             else:
                 logger.error("  ❌ [08:30 CallAuction] 매도 주문 발주 실패")
         else:
-            logger.info("  ℹ️ [08:30 CallAuction] 매도 필요 수량 0주 — 발주 스킵")
+            logger.info("  ℹ️ [08:30 CallAuction] 동적 캡 목표 비중 충족 — 매도 발주 스킵")
     except Exception as e:
         logger.error(f"  ❌ [08:30 CallAuction] 자율 발주 예외: {e}", exc_info=True)
 

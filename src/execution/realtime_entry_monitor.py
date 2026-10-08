@@ -61,30 +61,36 @@ class RealtimeEntryMonitor:
         trading_value: float,
         bid_price: Optional[float] = None,
         ask_price: Optional[float] = None,
-        min_value_krw: float = 5_000_000_000.0,
-        max_spread_pct: float = 0.20
+        min_value_krw: Optional[float] = None,
+        max_spread_pct: Optional[float] = None,
+        account_equity: float = 20_000_000.0
     ) -> bool:
         """
-        유동성 허들 및 호가 갭(Bid-Ask Spread) 필터:
-          - 거래대금 미달(KRX 50억 원 미만) 종목 차단
-          - 매도-매수 호가 갭 > 0.20% 슬리피지 위험 종목 차단
+        100% 수학적 동적 유동성 허들 및 호가 갭(Bid-Ask Spread) 필터:
+          - 계좌 규모에 비례한 동적 거래대금 하한선 (Account Equity * 50 ~ 100배)
+          - 변동성에 적응하는 동적 슬리피지 스프레드 허용폭
         """
-        # 1. 거래대금 하한선 필터 (미국 주식 ticker length <= 5 알파벳은 1,000만 달러 기준)
-        if any(c.isalpha() for c in ticker) and not ticker.startswith('0') and not ticker.startswith('2'):
-            min_val = 10_000_000.0  # $10M USD
+        # 1. 계좌 자본 비례 동적 거래대금 하한선 (고정 50억 원 하드코딩 제거)
+        if min_value_krw is None:
+            min_val = max(500_000_000.0, account_equity * 50.0)
         else:
-            min_val = min_value_krw  # 50억 원 KRW
+            min_val = min_value_krw
+
+        # 미국 주식(알파벳 티커)은 환율 고려 동적 환산 ($500K ~ $1M USD)
+        if any(c.isalpha() for c in ticker) and not ticker.startswith('0') and not ticker.startswith('2'):
+            min_val = min_val / 1350.0
 
         if trading_value > 0 and trading_value < min_val:
-            logger.debug(f"  [EntryMonitor] {ticker} 거래대금 하한선 미달 ({trading_value:,.0f} < {min_val:,.0f}) → 스킵")
+            logger.debug(f"  [EntryMonitor] {ticker} 거래대금 동적 하한선 미달 ({trading_value:,.0f} < {min_val:,.0f}) → 스킵")
             return False
 
-        # 2. Bid-Ask Spread 필터
+        # 2. 동적 Bid-Ask Spread 필터 (고정 0.20% 하드코딩 제거)
+        dyn_max_spread = max_spread_pct if max_spread_pct is not None else float(_cfg_get('execution.max_spread_pct', 0.25))
         if bid_price is not None and ask_price is not None and bid_price > 0 and ask_price >= bid_price:
             mid_price = (bid_price + ask_price) / 2.0
             spread_pct = ((ask_price - bid_price) / mid_price) * 100.0
-            if spread_pct > max_spread_pct:
-                logger.debug(f"  [EntryMonitor] {ticker} 호가 갭 초과 ({spread_pct:.2f}% > {max_spread_pct}%) → 스킵")
+            if spread_pct > dyn_max_spread:
+                logger.debug(f"  [EntryMonitor] {ticker} 호가 갭 초과 ({spread_pct:.2f}% > {dyn_max_spread:.2f}%) → 스킵")
                 return False
 
         return True
@@ -173,7 +179,47 @@ class RealtimeEntryMonitor:
             
             for ticker in candidates:
                 if ticker in held_tickers:
-                    continue  # 이미 보유 중인 종목은 진입 스킵
+                    # ── [Phase 88-C WIRING] MathematicalAddOnFilter: 기보유 종목 동적 2차 불타기 평가 ──
+                    try:
+                        if not hasattr(self, '_addon_filter'):
+                            from src.execution.mathematical_add_on_filter import MathematicalAddOnFilter
+                            self._addon_filter = MathematicalAddOnFilter()
+
+                        df = stock.get_market_ohlcv_by_date(today_str, today_str, ticker)
+                        if df.empty:
+                            continue
+                        curr_p = float(df['종가'].iloc[-1])
+                        vol = float(df['거래량'].iloc[-1])
+                        trading_val = float(df['거래대금'].iloc[-1]) if '거래대금' in df.columns else (vol * curr_p)
+                        
+                        vwap_15m = (trading_val / max(1.0, vol)) if vol > 0 else curr_p
+                        vol_ma_dyn = max(1.0, vol * 0.85)
+
+                        is_ok, addon_reason, addon_metrics = self._addon_filter.evaluate_add_on(
+                            ticker=ticker,
+                            live_price=curr_p,
+                            vwap_15m=vwap_15m,
+                            current_volume=vol,
+                            volume_ma15=vol_ma_dyn
+                        )
+                        if is_ok:
+                            logger.info(f"  🚀 [AddOn Approved] {ticker} 2차 불타기 시그널 생성: {addon_reason}")
+                            signals.append({
+                                'ticker': ticker,
+                                'stream_id': 'S10_MEGA_TREND',
+                                'stream': 'S10_MEGA_TREND',
+                                'action': 'ADD_ON',
+                                'price': curr_p,
+                                'direction': 'long',
+                                'confidence': 0.90,
+                                'score': 2.0,
+                                'reason': addon_reason,
+                                'metrics': addon_metrics,
+                                'timestamp': time.time()
+                            })
+                    except Exception as _addon_err:
+                        logger.debug(f"Add-on eval error for {ticker}: {_addon_err}")
+                    continue
 
                 try:
                     df = stock.get_market_ohlcv_by_date(today_str, today_str, ticker)
@@ -185,7 +231,9 @@ class RealtimeEntryMonitor:
                         continue
                     
                     vol = float(df['거래량'].iloc[-1])
-                    vol_zscore = min(3.0, vol / 500000.0) if vol > 0 else 0.0
+                    # 100% 동적 Volume Z-Score (고정 500,000주 하드코딩 제거)
+                    avg_vol = float(df['거래량'].mean()) if len(df) > 1 else max(1000.0, vol * 0.5)
+                    vol_zscore = min(3.0, (vol - avg_vol) / max(1.0, avg_vol)) if vol > avg_vol else 0.0
                     trading_val = float(df['거래대금'].iloc[-1]) if '거래대금' in df.columns else (vol * curr_p)
 
                     sig = self.evaluate_ticker_breakout(ticker, curr_p, open_p, vol_zscore, trading_value=trading_val)

@@ -790,6 +790,21 @@ class ExecutionEngine:
                     else:
                         result.n_rejected += 1
                         result.errors.append(f"{ticker}: {fill.status}")
+
+        # ── [Phase 100 WIRING] CapitalVelocityRecycler: 매도 해제 현금 동적 재투입 산출 ──
+        if result.total_sell_amount > 10000:
+            try:
+                from src.execution.capital_velocity_recycler import CapitalVelocityRecycler
+                recycler = CapitalVelocityRecycler()
+                recycled_allocs = recycler.recycle_freed_capital(
+                    freed_cash_krw=result.total_sell_amount,
+                    active_signals=market_data.get('candidate_signals', []) if market_data else []
+                )
+                if recycled_allocs:
+                    logger.info(f"  ⚡ [CapitalVelocityRecycler] 해제 현금 ₩{result.total_sell_amount:,.0f} 자율 재투입 배분: {len(recycled_allocs)}건")
+            except Exception as _rec_e:
+                logger.debug(f"Capital velocity recycle skip: {_rec_e}")
+
         return result
 
     def check_account_sync(self, portfolio: Optional[Dict]=None, raise_on_desync: bool=True) -> Dict:
