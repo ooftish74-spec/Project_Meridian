@@ -165,7 +165,7 @@ class USStockCollector:
                         
             elif ticker == 'KRW=X':
                 # USD/KRW: AV FX_DAILY (Primary) -> FDR (Fallback)
-                df_av = collect_fx_daily_ohlcv('USD', 'KRW')
+                df_av = fx_collect_raw('USD', 'KRW')
                 if df_av is not None and _process_and_save(df_av, ticker):
                     source = "AlphaVantage (FX_DAILY)"
                 else:

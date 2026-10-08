@@ -122,6 +122,12 @@ def main():
     send_message("🤖 Meridian 봇이 시작되었습니다. 명령어: /status, /report, /kill")
     
     offset = None
+    # 봇 기동 시점 이전의 밀린 과거 메시지/명령어가 재실행되지 않도록 초기 offset 플러시
+    initial_check = get_updates(None)
+    if initial_check and initial_check.get("ok") and initial_check.get("result"):
+        offset = max(item["update_id"] for item in initial_check["result"]) + 1
+        logger.info(f"봇 기동 시점 이전의 대기 큐 {len(initial_check['result'])}건 플러시 완료 (최신 offset={offset})")
+
     while True:
         updates = get_updates(offset)
         if updates and updates.get("ok"):
