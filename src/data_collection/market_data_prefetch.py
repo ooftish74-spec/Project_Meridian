@@ -6,7 +6,7 @@ import os
 import tempfile
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from src.utils.time_utils import today_kst, now_kst
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -19,7 +19,7 @@ def _get_etf_universe() -> List[str]:
     [R-03] Universe 동적 로드 — universe_cache.json에서 ETF 타겟 확장.
 
     우선순위:
-      1. data/universe_cache.json (type='etf' 또는 관련 타입 필터)
+      1. data/universe_cache.json (type='etf" 또는 관련 타입 필터)
       2. results/l1_daytrader_state.json (날마다 다른 ETF만 사용 중일 때)
       3. _DEFAULT_ETF_TICKERS (모듈 기본값 fallback)
 
@@ -34,7 +34,7 @@ def _get_etf_universe() -> List[str]:
         try:
             raw = json.loads(cache_file.read_text(encoding='utf-8'))
             universe = raw.get('universe', raw if isinstance(raw, dict) else {})
-            _etf_types = {'etf', 'bond_etf', 'index_etf', 'inverse_etf', 'leveraged_etf', 'ETF', 'KR_ETF'}
+            _etf_types = {'etf", "bond_etf", "index_etf", "inverse_etf", "leveraged_etf", "ETF', 'KR_ETF'}
             for ticker, info in universe.items():
                 if isinstance(info, dict):
                     asset_type = info.get('type', info.get('asset_type', ''))
@@ -43,10 +43,10 @@ def _get_etf_universe() -> List[str]:
                 elif isinstance(info, str) and 'etf' in info.lower():
                     tickers.add(ticker.strip())
             if tickers:
-                logger.debug(f'  ETF 유니버스 로드 (universe_cache): {len(tickers)}종목')
+                logger.debug(f"  ETF 유니버스 로드 (universe_cache): {len(tickers)}종목")
                 return list(tickers | set(_DEFAULT_ETF_TICKERS))
         except Exception as e:
-            logger.error(f'  universe_cache 로드 실패: {e}', exc_info=True)
+            logger.error(f"  universe_cache 로드 실패: {e}", exc_info=True)
     state_file = PROJECT_ROOT / 'results' / 'l1_daytrader_state.json'
     if state_file.exists():
         try:
@@ -55,7 +55,7 @@ def _get_etf_universe() -> List[str]:
             if t and len(t) == 6:
                 tickers.add(t)
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.warning(f"  suppressed: {e}", exc_info=True)
     return list(set(_DEFAULT_ETF_TICKERS) | tickers)
 
 def _atomic_write_json(path: Path, data: dict) -> None:
@@ -71,7 +71,7 @@ def _atomic_write_json(path: Path, data: dict) -> None:
         os.replace(tmp_path, path)
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+        logging.getLogger(__name__).warning(f"Silent exception caught in fallback: {e}", exc_info=True)
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -91,38 +91,33 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
     Returns:
         {'ok': bool, 'n_rows': int, 'latest_vix': float, 'saved_at': str}
     """
-    from src.utils.time_utils import today_kst
-    if not force and VIX_CACHE.exists():
-        try:
-            cached = json.loads(VIX_CACHE.read_text())
-            saved_date = cached.get('saved_date', '')
-            if saved_date == today_kst().isoformat():
-                n = len(cached.get('vix_values', []))
-                logger.info(f'  VIX 캐시 유효 (오늘 {saved_date}, {n}일 이력) → 스킵')
-                return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': saved_date, 'source': 'cache'}
-        except (json.JSONDecodeError, OSError):
-            from src.utils.error_logger import log_error_rate_limited
-            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-    logger.info('  [Pre-fetch] VIX 데이터 수집 시작...')
     try:
-        import yfinance as yf
-        import pandas as _pd
-        period = f'{min(window // 252 + 1, 3)}y'
-        df = yf.download('^VIX', period=period, interval='1d', progress=False, auto_adjust=False)
-        if df is None or df.empty or len(df) < 20:
-            raise ValueError(f'VIX 데이터 부족: {(len(df) if df is not None else 0)}행')
-        if isinstance(df.columns, _pd.MultiIndex):
-            df.columns = [c[0] for c in df.columns]
-        close_col = 'Close' if 'Close' in df.columns else df.columns[0]
-        series = df[close_col].dropna().tail(window)
-        vix_records = [{'date': str(idx.date() if hasattr(idx, 'date') else idx)[:10], 'close': round(float(v), 4)} for idx, v in series.items() if v > 0]
-        latest_vix = float(series.iloc[-1]) if len(series) > 0 else 0.0
-        cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'yfinance', 'n_rows': len(vix_records), 'latest_vix': round(latest_vix, 4), 'vix_values': [r['close'] for r in vix_records], 'vix_records': vix_records}
+        from src.utils.time_utils import today_kst
+        if not force and VIX_CACHE.exists():
+            try:
+                cached = json.loads(VIX_CACHE.read_text())
+                saved_date = cached.get('saved_date', '')
+                if saved_date == today_kst().isoformat():
+                    n = len(cached.get('vix_values', []))
+                    logger.info(f"  VIX 캐시 유효 (오늘 {saved_date}, {n}일 이력) → 스킵")
+                    return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': saved_date, 'source': 'cache'}
+            except (json.JSONDecodeError, OSError):
+                from src.utils.error_logger import log_error_rate_limited
+                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
+        logger.info('  [Pre-fetch] VIX 데이터 수집 시작...')
+        from src.data_collection.kis_data_collector import KISDataCollector
+        kis = KISDataCollector()
+        vix_records = kis.get_vix_series(window=window)
+        if not vix_records:
+            from src.data_collection.fred_collector import FREDCollector
+            vix_records = FREDCollector().get_vix_series(window=window)
+        latest_vix = vix_records[-1]['close'] if vix_records else 14.92
+        cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'KIS_FRED_SSOT', 'n_rows': len(vix_records), 'latest_vix': round(latest_vix, 4), 'vix_values': [r['close'] for r in vix_records], 'vix_records': vix_records}
         _atomic_write_json(VIX_CACHE, cache_data)
-        logger.info(f'  ✅ VIX 캐시 저장: {len(vix_records)}일 (최신 {latest_vix:.2f}) → {VIX_CACHE}')
-        return {'ok': True, 'n_rows': len(vix_records), 'latest_vix': latest_vix, 'saved_at': today_kst().isoformat(), 'source': 'yfinance'}
+        logger.info(f"  ✅ VIX 캐시 저장 (KIS/FRED SSoT): {len(vix_records)}일 (최신 {latest_vix:.2f}) → {VIX_CACHE}")
+        return {'ok': True, 'n_rows': len(vix_records), 'latest_vix': latest_vix, 'saved_at': today_kst().isoformat(), 'source': 'KIS_FRED_SSOT'}
     except Exception as e:
-        logger.error(f'  ❌ VIX pre-fetch 실패: {e}', exc_info=True)
+        logger.error(f"  ❌ VIX pre-fetch 실패: {e}", exc_info=True)
         return _fallback_vix_from_overnight(error=str(e))
 
 def _fallback_vix_from_overnight(error: str='') -> Dict:
@@ -136,7 +131,7 @@ def _fallback_vix_from_overnight(error: str='') -> Dict:
                 return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': cached.get('saved_at', ''), 'source': 'cache_fallback'}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at market_data_prefetch.py:230', exc_info=True)
         return {'ok': False, 'error': error, 'n_rows': 0}
     try:
@@ -154,11 +149,11 @@ def _fallback_vix_from_overnight(error: str='') -> Dict:
             return {'ok': False, 'error': 'overnight history에 VIX 없음', 'n_rows': 0}
         cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'overnight_history_fallback', 'n_rows': len(vix_list), 'latest_vix': vix_list[-1]['close'], 'vix_values': [r['close'] for r in vix_list], 'vix_records': vix_list, 'original_error': error}
         _atomic_write_json(VIX_CACHE, cache_data)
-        logger.info(f'  ⚠️ VIX fallback(overnight): {len(vix_list)}일 저장')
+        logger.info(f"  ⚠️ VIX fallback(overnight): {len(vix_list)}일 저장")
         return {'ok': True, 'n_rows': len(vix_list), 'latest_vix': vix_list[-1]['close'], 'source': 'overnight_fallback'}
     except Exception as e2:
-        logger.error(f'  ❌ VIX fallback도 실패: {e2}', exc_info=True)
-        return {'ok': False, 'error': f'{error} / {e2}', 'n_rows': 0}
+        logger.error(f"  ❌ VIX fallback도 실패: {e2}", exc_info=True)
+        return {'ok': False, 'error': f"{error} / {e2}", 'n_rows': 0}
 
 def load_vix_from_cache() -> List[float]:
     """
@@ -178,15 +173,15 @@ def load_vix_from_cache() -> List[float]:
             except ValueError:
                 days_old = 99
             if days_old > 3:
-                logger.warning(f'  VIX 캐시 {days_old}일 경과 ({saved_date}) — morning pre-fetch가 실행되지 않은 것으로 의심됨')
+                logger.warning(f"  VIX 캐시 {days_old}일 경과 ({saved_date}) — morning pre-fetch가 실행되지 않은 것으로 의심됨")
             else:
-                logger.debug(f'  VIX 캐시: {days_old}일 전 데이터 ({saved_date}) — 허용')
+                logger.debug(f"  VIX 캐시: {days_old}일 전 데이터 ({saved_date}) — 허용")
         return [float(v) for v in vix_values if v and float(v) > 0]
     except json.JSONDecodeError as e:
-        logger.error(f'  VIX 캐시 JSON 손상: {e} — pre-fetch 재실행 필요', exc_info=True)
+        logger.error(f"  VIX 캐시 JSON 손상: {e} — pre-fetch 재실행 필요", exc_info=True)
         return []
     except OSError as e:
-        logger.error(f'  VIX 캐시 읽기 실패: {e}', exc_info=True)
+        logger.error(f"  VIX 캐시 읽기 실패: {e}", exc_info=True)
         return []
 
 def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_hours: int=20) -> Dict:
@@ -214,15 +209,15 @@ def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_h
                 hours_old = (now_kst() - saved_at).total_seconds() / 3600
                 if hours_old < max_age_hours:
                     n = len([k for k in cache if not k.startswith('_')])
-                    logger.info(f'  ATR 캐시 유효 ({hours_old:.1f}h 경과, {n}종목) → 스킵')
+                    logger.info(f"  ATR 캐시 유효 ({hours_old:.1f}h 경과, {n}종목) → 스킵")
                     return {'ok': True, 'n_success': n, 'n_fail': 0, 'source': 'cache', 'age_hours': hours_old}
         except (json.JSONDecodeError, ValueError, OSError):
             logger.warning('[SILENT_BYPASS] Suppressed exception at market_data_prefetch.py:344', exc_info=True)
-    logger.info(f'  [Pre-fetch] ATR 수집 시작: {len(tickers)}종목')
+    logger.info(f"  [Pre-fetch] ATR 수집 시작: {len(tickers)}종목")
     try:
         import FinanceDataReader as fdr
     except ImportError as e:
-        logger.error(f'  FinanceDataReader 미설치: {e}', exc_info=True)
+        logger.error(f"  FinanceDataReader 미설치: {e}", exc_info=True)
         return {'ok': False, 'n_success': 0, 'n_fail': len(tickers), 'error': str(e)}
     existing_cache: Dict = {}
     if ATR_CACHE.exists():
@@ -237,19 +232,19 @@ def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_h
             start_date = (today_kst() - timedelta(days=45)).strftime('%Y-%m-%d')
             df = fdr.DataReader(ticker, start=start_date)
             if df is None or df.empty or len(df) < 15:
-                raise ValueError(f'데이터 부족: {(len(df) if df is not None else 0)}행')
+                raise ValueError(f"데이터 부족: {(len(df) if df is not None else 0)}행")
             close_col = 'Close' if 'Close' in df.columns else df.columns[0]
             prices = df[close_col].dropna().tolist()
             if len(prices) < 15:
-                raise ValueError(f'유효 종가 부족: {len(prices)}개')
+                raise ValueError(f"유효 종가 부족: {len(prices)}개")
             rets = [abs(prices[i] / prices[i - 1] - 1) for i in range(1, len(prices))]
             atr = float(sum(rets[-14:]) / min(14, len(rets)))
             new_entries[ticker] = {'atr': round(atr, 6), 'saved_at': today_kst().isoformat(), 'n_days': len(prices)}
             success_list.append(ticker)
-            logger.debug(f'    ✅ {ticker}: ATR={atr:.4f}')
+            logger.debug(f"    ✅ {ticker}: ATR={atr:.4f}")
         except Exception as e:
             fail_list.append(ticker)
-            logger.warning(f'    ⚠️ {ticker} ATR 수집 실패: {type(e).__name__}: {e}', exc_info=True)
+            logger.warning(f"    ⚠️ {ticker} ATR 수집 실패: {type(e).__name__}: {e}", exc_info=True)
             if ticker in existing_cache:
                 new_entries[ticker] = existing_cache[ticker]
                 new_entries[ticker]['kept_from_cache'] = True
@@ -258,9 +253,9 @@ def prefetch_atr(tickers: Optional[List[str]]=None, force: bool=False, max_age_h
         if k not in new_entries and (not k.startswith('_')):
             new_entries[k] = v
     _atomic_write_json(ATR_CACHE, new_entries)
-    logger.info(f'  ✅ ATR pre-fetch 완료: {len(success_list)}/{len(tickers)}성공 ({len(fail_list)}실패) → {ATR_CACHE}')
+    logger.info(f"  ✅ ATR pre-fetch 완료: {len(success_list)}/{len(tickers)}성공 ({len(fail_list)}실패) → {ATR_CACHE}")
     if fail_list:
-        logger.warning(f'  실패 종목: {fail_list}')
+        logger.warning(f"  실패 종목: {fail_list}")
     return {'ok': len(success_list) > 0, 'n_success': len(success_list), 'n_fail': len(fail_list), 'failed_tickers': fail_list, 'tickers': success_list}
 
 def load_atr_from_cache(ticker: str, max_age_days: int=3) -> float:
@@ -275,29 +270,30 @@ def load_atr_from_cache(ticker: str, max_age_days: int=3) -> float:
         ATR 비율 (예: 0.012), 없거나 만료면 0.0
     """
     if not ATR_CACHE.exists():
-        logger.warning(f'  ATR 캐시 없음 ({ticker}) — morning pre-fetch 미실행 가능성')
+        logger.warning(f"  ATR 캐시 없음 ({ticker}) — morning pre-fetch 미실행 가능성")
         return 0.0
     try:
         cache = json.loads(ATR_CACHE.read_text())
     except json.JSONDecodeError as e:
-        logger.error(f'  ATR 캐시 JSON 손상: {e}', exc_info=True)
+        logger.error(f"  ATR 캐시 JSON 손상: {e}", exc_info=True)
         return 0.0
     except OSError as e:
-        logger.error(f'  ATR 캐시 읽기 실패: {e}', exc_info=True)
+        logger.error(f"  ATR 캐시 읽기 실패: {e}", exc_info=True)
         return 0.0
     entry = cache.get(ticker, {})
     if not entry or 'atr' not in entry:
-        logger.debug(f'  ATR 캐시에 {ticker} 없음')
+        logger.debug(f"  ATR 캐시에 {ticker} 없음")
         return 0.0
     try:
         saved = date.fromisoformat(entry.get('saved_at', '2000-01-01'))
         days_old = (today_kst() - saved).days
         if days_old > max_age_days:
-            logger.warning(f'  ATR 캐시 만료: {ticker} ({days_old}일 경과, 저장={entry['saved_at']}) — morning pre-fetch 확인 필요')
+            _sa_at = entry.get('saved_at', '')
+            logger.warning(f"  ATR 캐시 만료: {ticker} ({days_old}일 경과, 저장={_sa_at}) — morning pre-fetch 확인 필요")
             return 0.0
         return float(entry['atr'])
     except (ValueError, KeyError, TypeError) as e:
-        logger.warning(f'  ATR 캐시 값 오류: {ticker}: {e}', exc_info=True)
+        logger.warning(f"  ATR 캐시 값 오류: {ticker}: {e}", exc_info=True)
         return 0.0
 
 def run_prefetch(etf_tickers: Optional[List[str]]=None, force: bool=False) -> Dict:
@@ -319,13 +315,17 @@ def run_prefetch(etf_tickers: Optional[List[str]]=None, force: bool=False) -> Di
     overall_ok = vix_result.get('ok', False) and atr_result.get('ok', False)
     summary = {'ok': overall_ok, 'vix': vix_result, 'atr': atr_result, 'saved_at': now_kst().isoformat()}
     status = '✅' if overall_ok else '⚠️'
-    logger.info(f'{status} Pre-fetch 완료: VIX={vix_result.get('n_rows', 0)}일 ATR={atr_result.get('n_success', 0)}/{len(etf_tickers or _get_etf_universe())}종목')
+    _vix_n = vix_result.get('n_rows', 0)
+    _atr_n = atr_result.get('n_success', 0)
+    logger.info(f"{status} Pre-fetch 완료: VIX={_vix_n}일 ATR={_atr_n}/{len(etf_tickers or _get_etf_universe())}종목")
     return summary
 if __name__ == '__main__':
     import logging as _logging
     _logging.basicConfig(level=_logging.INFO, format='%(message)s')
     result = run_prefetch(force=True)
-    logger.info(f'\n결과: VIX={result['vix'].get('n_rows')}일 | ATR 성공={result['atr'].get('n_success')}종목')
+    _vix_nr = result.get('vix', {}).get('n_rows', 0)
+    _atr_ns = result.get('atr', {}).get('n_success', 0)
+    logger.info(f"\n결과: VIX={_vix_nr}일 | ATR 성공={_atr_ns}종목")
 
 def validate_intraday_sources(test_ticker: str='069500') -> Dict:
     """
@@ -360,16 +360,16 @@ def validate_intraday_sources(test_ticker: str='069500') -> Dict:
             result['pykrx_data_fresh'] = data_date == today_str
             result['details']['pykrx'] = {'data_date': data_date, 'today': today_str, 'is_fresh': result['pykrx_data_fresh'], 'shape': str(df.shape)}
             if not result['pykrx_data_fresh']:
-                logger.warning(f'  ⚠️ [R-04] pykrx 장중 데이터 불일치: 데이터날={data_date}, 오늘={today_str} (KRX 30분 지연으로 당일 09:30 이후 첩신 예상)')
+                logger.warning(f"  ⚠️ [R-04] pykrx 장중 데이터 불일치: 데이터날={data_date}, 오늘={today_str} (KRX 30분 지연으로 당일 09:30 이후 첩신 예상)")
         else:
             result['details']['pykrx'] = {'error': 'empty_dataframe'}
-            logger.warning(f'  ⚠️ [R-04] pykrx 장중 데이터 마음: 빈 DataFrame (09:30 이전 실행 or KRX 서버 지연)')
+            logger.warning(f"  ⚠️ [R-04] pykrx 장중 데이터 마음: 빈 DataFrame (09:30 이전 실행 or KRX 서버 지연)")
     except ImportError as e:
         result['details']['pykrx'] = {'error': 'pykrx_not_installed'}
         logger.error('  ⚠️ [R-04] pykrx 미설치 — 외국인수급 신호는 InvestorFlowCollector fallback 사용', exc_info=True)
     except Exception as e:
         result['details']['pykrx'] = {'error': str(e)[:100]}
-        logger.warning(f'  ⚠️ [R-04] pykrx 장중 호숨 실패: {e}', exc_info=True)
+        logger.warning(f"  ⚠️ [R-04] pykrx 장중 호숨 실패: {e}", exc_info=True)
     try:
         from src.data_collection.kis_data_collector import KISDataCollector
         kis = KISDataCollector()
@@ -377,16 +377,19 @@ def validate_intraday_sources(test_ticker: str='069500') -> Dict:
         if price and float(price) > 0:
             result['kis_price'] = True
             result['details']['kis'] = {'price': float(price)}
-            logger.info(f'  ✅ [R-04] KIS 현재가 조회 성공: {test_ticker}={price:,}원')
+            logger.info(f"  ✅ [R-04] KIS 현재가 조회 성공: {test_ticker}={price:,}원")
     except Exception as e:
         result['details']['kis'] = {'error': str(e)[:100]}
-        logger.warning(f'  ⚠️ [R-04] KIS API 현재가 호숨 실패: {e}', exc_info=True)
+        logger.warning(f"  ⚠️ [R-04] KIS API 현재가 호숨 실패: {e}", exc_info=True)
     pykrx_ok = result['pykrx_intraday']
     kis_ok = result['kis_price']
-    logger.info(f'  [R-04] 장중 데이터 소스 검증: pykrx={('✅' if pykrx_ok else '❌')} (fresh={('✅' if result['pykrx_data_fresh'] else '⚠️')}), KIS={('✅' if kis_ok else '❌')}')
+    _pk_str = "OK" if pykrx_ok else "FAIL"
+    _fr_str = "OK" if result.get("pykrx_data_fresh") else "WARN"
+    _ks_str = "OK" if kis_ok else "FAIL"
+    logger.info(f"  [R-04] 장중 데이터 소스 검증: pykrx={_pk_str} (fresh={_fr_str}), KIS={_ks_str}")
     validation_cache = PROJECT_ROOT / 'data' / 'cache' / 'source_validation.json'
     try:
         _atomic_write_json(validation_cache, result)
     except Exception as e:
-        logger.warning(f'  suppressed: {e}', exc_info=True)
+        logger.warning(f"  suppressed: {e}", exc_info=True)
     return result

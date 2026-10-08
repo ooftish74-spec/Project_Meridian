@@ -7,6 +7,7 @@ Project Meridian — API Health Check
 """
 
 import sys
+import os
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -15,7 +16,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 # .env 자동 로드
-import os
 _env_file = _PROJECT_ROOT / '.env'
 if _env_file.exists():
     with open(_env_file) as _f:
@@ -46,39 +46,51 @@ def check_api_health():
             prev_status = json.loads(status_file.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
             
     today_str = datetime.now().strftime('%Y-%m-%d')
     last_notified_date = prev_status.get('last_success_notified_date', '')
     prev_state = prev_status.get('status', 'UNKNOWN')
 
+    fail_count = int(prev_status.get('consecutive_failures', 0))
+
     # 상태 저장 및 알림 발송 헬퍼 함수
     def save_and_notify(is_success: bool, msg: str, token_expires=None):
-        current_state = 'OK' if is_success else 'ERROR'
-        new_notified_date = last_notified_date
-        
-        # 텔레그램 발송 조건 판별 (스팸 방지)
+        nonlocal fail_count
+        if is_success:
+            current_fail_count = 0
+            current_state = 'OK'
+        else:
+            current_fail_count = fail_count + 1
+            current_state = 'ERROR' if current_fail_count >= 3 else prev_state
+
+        # 텔레그램 발송 조건 판별 (스팸 완전 차단)
         should_notify = False
         if not is_success:
-            should_notify = True  # 에러는 무조건 발송
-        else:
-            # 성공 시: 상태가 에러에서 복구되었거나, 오늘 첫 발송인 경우에만
-            if prev_state != 'OK' or last_notified_date != today_str:
+            # 3회 연속 실패 시에만 정식 에러 알림 발송 (단발성 네트워크 오류 억제)
+            if current_fail_count == 3:
                 should_notify = True
-                new_notified_date = today_str
+                msg = f"🚨 [API Health Check 지속 장애] KIS API 3회 연속 접속 실패: {msg}"
+        else:
+            # 성공 시: 3회 이상 장애(ERROR) 상태였다가 처음 복구된 경우에만 복구 알림 발송
+            if prev_state == 'ERROR':
+                should_notify = True
+                msg = f"✅ [API Health Check 장애 복구] KIS API 정상 작동 복구 완료"
 
         # 대시보드 표시용 상태 파일 저장 (매번 갱신)
         status_data = {
             'status': current_state,
+            'consecutive_failures': current_fail_count,
             'timestamp': datetime.now().isoformat(),
             'message': msg,
             'token_expires': token_expires.isoformat() if token_expires else None,
-            'last_success_notified_date': new_notified_date
+            'last_success_notified_date': last_notified_date
         }
         try:
             status_file.parent.mkdir(parents=True, exist_ok=True)
-            status_file.write_text(json.dumps(status_data, indent=2, ensure_ascii=False))
+            from src.utils.file_ops import atomic_write_json
+            atomic_write_json(status_file, status_data)
         except Exception as e:
             logger.warning(f"상태 파일 저장 실패: {e}")
 
@@ -94,9 +106,9 @@ def check_api_health():
         mode = os.environ.get('KIS_MODE', 'live')
         
         prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
-        app_key = cm.read_from_env(f'{prefix}_APP_KEY')
-        app_secret = cm.read_from_env(f'{prefix}_APP_SECRET')
-        account_no = cm.read_from_env(f'{prefix}_ACCOUNT_NO')
+        app_key = cm.read_from_env(f"{prefix}_APP_KEY")
+        app_secret = cm.read_from_env(f"{prefix}_APP_SECRET")
+        account_no = cm.read_from_env(f"{prefix}_ACCOUNT_NO")
         
         adapter = KISTraderAdapter(
             mode=mode,

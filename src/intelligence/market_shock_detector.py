@@ -27,7 +27,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 _cfg_get = (lambda k, d=None: _cfg.get(k, d)) if _cfg else lambda k, d=None: d
 
@@ -56,7 +56,7 @@ class MarketShockDetector:
     @staticmethod
     def _safe_yf_download(ticker: str, period: str='5d', timeout: int=10) -> Optional[pd.DataFrame]:
         """
-        이중화 데이터 조회 (resilient_download → yfinance → FMP → 캐시).
+        이중화 데이터 조회 (resilient_download → Google Finance / KIS API → 캐시).
 
         timeout 초과 시 None 반환 — 무한 블로킹 방지.
         컬럼명은 소문자로 정규화하여 반환.
@@ -147,29 +147,29 @@ class MarketShockDetector:
                     sp500_ret = float(sp500_ret)
                     if sp500_ret < self.THRESHOLDS['us_sp500_severe']:
                         scores.append(40)
-                        self.shock_signals.append(f'S&P500 {sp500_ret * 100:+.1f}% (SEVERE)')
+                        self.shock_signals.append(f"S&P500 {sp500_ret * 100:+.1f}% (SEVERE)")
                     elif sp500_ret < self.THRESHOLDS['us_sp500_moderate']:
                         scores.append(20)
-                        self.shock_signals.append(f'S&P500 {sp500_ret * 100:+.1f}% (MODERATE)')
+                        self.shock_signals.append(f"S&P500 {sp500_ret * 100:+.1f}% (MODERATE)")
                 nasdaq_ret = sent.get('nasdaq_return', sent.get('us_market', {}).get('nasdaq_return', 0))
                 if nasdaq_ret:
                     nasdaq_ret = float(nasdaq_ret)
                     if nasdaq_ret < self.THRESHOLDS['us_nasdaq_severe']:
                         scores.append(35)
-                        self.shock_signals.append(f'NASDAQ {nasdaq_ret * 100:+.1f}% (SEVERE)')
+                        self.shock_signals.append(f"NASDAQ {nasdaq_ret * 100:+.1f}% (SEVERE)")
                     elif nasdaq_ret < self.THRESHOLDS['us_nasdaq_moderate']:
                         scores.append(15)
-                        self.shock_signals.append(f'NASDAQ {nasdaq_ret * 100:+.1f}% (MODERATE)')
+                        self.shock_signals.append(f"NASDAQ {nasdaq_ret * 100:+.1f}% (MODERATE)")
             if not scores:
                 sp = self._safe_yf_download('^GSPC', timeout=self.YF_TIMEOUT)
                 if sp is not None and len(sp) >= 2:
                     last_ret = float(sp['close'].iloc[-1] / sp['close'].iloc[-2] - 1)
                     if last_ret < self.THRESHOLDS['us_sp500_severe']:
                         scores.append(40)
-                        self.shock_signals.append(f'S&P500(yf) {last_ret * 100:+.1f}% (SEVERE)')
+                        self.shock_signals.append(f"S&P500(yf) {last_ret * 100:+.1f}% (SEVERE)")
                     elif last_ret < self.THRESHOLDS['us_sp500_moderate']:
                         scores.append(20)
-                        self.shock_signals.append(f'S&P500(yf) {last_ret * 100:+.1f}% (MODERATE)')
+                        self.shock_signals.append(f"S&P500(yf) {last_ret * 100:+.1f}% (MODERATE)")
         except Exception as e:
             logger.error(f'  US 시장 체크 실패: {e}', exc_info=True)
         return scores
@@ -190,10 +190,10 @@ class MarketShockDetector:
                         vix = float(vix)
                         if vix > self.THRESHOLDS['vix_severe']:
                             scores.append(30)
-                            self.shock_signals.append(f'VIX {vix:.1f} (SEVERE)')
+                            self.shock_signals.append(f"VIX {vix:.1f} (SEVERE)")
                         elif vix > self.THRESHOLDS['vix_moderate']:
                             scores.append(15)
-                            self.shock_signals.append(f'VIX {vix:.1f} (MODERATE)')
+                            self.shock_signals.append(f"VIX {vix:.1f} (MODERATE)")
                     break
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
@@ -203,10 +203,10 @@ class MarketShockDetector:
                 vix_now = float(vdf['close'].iloc[-1])
                 if vix_now > self.THRESHOLDS['vix_severe']:
                     scores.append(30)
-                    self.shock_signals.append(f'VIX(yf) {vix_now:.1f} (SEVERE)')
+                    self.shock_signals.append(f"VIX(yf) {vix_now:.1f} (SEVERE)")
                 elif vix_now > self.THRESHOLDS['vix_moderate']:
                     scores.append(15)
-                    self.shock_signals.append(f'VIX(yf) {vix_now:.1f} (MODERATE)')
+                    self.shock_signals.append(f"VIX(yf) {vix_now:.1f} (MODERATE)")
         return scores
 
     def _check_futures(self) -> list:
@@ -226,10 +226,10 @@ class MarketShockDetector:
                         night_ret = float(night_ret) / 100 if abs(float(night_ret)) > 1 else float(night_ret)
                         if night_ret < self.THRESHOLDS['futures_severe']:
                             scores.append(25)
-                            self.shock_signals.append(f'야간선물 {night_ret * 100:+.1f}% (SEVERE)')
+                            self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (SEVERE)")
                         elif night_ret < self.THRESHOLDS['futures_moderate']:
                             scores.append(12)
-                            self.shock_signals.append(f'야간선물 {night_ret * 100:+.1f}% (MODERATE)')
+                            self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (MODERATE)")
                     break
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
@@ -247,10 +247,10 @@ class MarketShockDetector:
                     fx_ret = float(usdkrw_chg) / 100 / 21
                     if fx_ret > self.THRESHOLDS['usdkrw_severe']:
                         scores.append(20)
-                        self.shock_signals.append(f'USD/KRW {fx_ret * 100:+.1f}% (원화 급락)')
+                        self.shock_signals.append(f"USD/KRW {fx_ret * 100:+.1f}% (원화 급락)")
                     elif fx_ret > self.THRESHOLDS['usdkrw_moderate']:
                         scores.append(10)
-                        self.shock_signals.append(f'USD/KRW {fx_ret * 100:+.1f}% (원화 약세)')
+                        self.shock_signals.append(f"USD/KRW {fx_ret * 100:+.1f}% (원화 약세)")
                     return scores
         except Exception as _e:
             logger.error(f'  FX 로컬 체크 스킵: {_e}', exc_info=True)
@@ -259,10 +259,10 @@ class MarketShockDetector:
             fx_ret = float(fx['close'].iloc[-1] / fx['close'].iloc[-2] - 1)
             if fx_ret > self.THRESHOLDS['usdkrw_severe']:
                 scores.append(20)
-                self.shock_signals.append(f'USD/KRW {fx_ret * 100:+.1f}% (원화 급락)')
+                self.shock_signals.append(f"USD/KRW {fx_ret * 100:+.1f}% (원화 급락)")
             elif fx_ret > self.THRESHOLDS['usdkrw_moderate']:
                 scores.append(10)
-                self.shock_signals.append(f'USD/KRW {fx_ret * 100:+.1f}% (원화 약세)')
+                self.shock_signals.append(f"USD/KRW {fx_ret * 100:+.1f}% (원화 약세)")
         return scores
 
     def _check_gap_pattern(self) -> list:
@@ -276,11 +276,11 @@ class MarketShockDetector:
                     recent_dirs = [h.get('direction', 50) for h in history[-3:]]
                     if all((d < 50 for d in recent_dirs)):
                         scores.append(15)
-                        self.shock_signals.append(f'연속 방향 오류 {len(recent_dirs)}일 (평균 {np.mean(recent_dirs):.0f}%)')
+                        self.shock_signals.append(f"연속 방향 오류 {len(recent_dirs)}일 (평균 {np.mean(recent_dirs):.0f}%)")
                     recent_gaps = [abs(h.get('avg_gap', 0)) for h in history[-3:]]
                     if all((g > 10 for g in recent_gaps)):
                         scores.append(10)
-                        self.shock_signals.append(f'연속 대형 갭 (평균 {np.mean(recent_gaps):.1f}%)')
+                        self.shock_signals.append(f"연속 대형 갭 (평균 {np.mean(recent_gaps):.1f}%)")
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         return scores

@@ -84,7 +84,7 @@ class GapAnalyzer:
 
         if len(self.trades) < self.min_trades:
             result['reason'] = (
-                f'거래 {len(self.trades)}건 < 최소 {self.min_trades}건')
+                f"거래 {len(self.trades)}건 < 최소 {self.min_trades}건")
             result['n_trades'] = len(self.trades)
             self._save(result)
             return result
@@ -228,7 +228,7 @@ class GapAnalyzer:
                     })
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         return paired
@@ -383,7 +383,7 @@ class GapAnalyzer:
                 result['feature_names'] = meta.get('feature_names', [])[:10]
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         # feature_importance_audit.json
@@ -398,7 +398,7 @@ class GapAnalyzer:
                 }
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         # SHAP 분석 결과
@@ -415,7 +415,7 @@ class GapAnalyzer:
                 }
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         # drift_guard 상태
@@ -430,7 +430,7 @@ class GapAnalyzer:
                 }
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         return result
@@ -488,7 +488,7 @@ class GapAnalyzer:
             })
             if fail_rate > 0.6:
                 suggestions.append(
-                    f'{worst_stream} 스트림 신호 품질 점검 필요')
+                    f"{worst_stream} 스트림 신호 품질 점검 필요")
 
         # 패턴 3: 연속 실패 (3건 이상 연속 손실)
         sorted_trades = sorted(
@@ -527,14 +527,14 @@ class GapAnalyzer:
                         'type': 'regime_mismatch',
                         'description': (
                             f'{regime} 레짐 DA={regime_da:.1%} '
-                            f'({len(regime_trades)}건)'),
+                            f"({len(regime_trades)}건)"),
                         'regime': regime,
                         'da': round(regime_da, 4),
                         'n_trades': len(regime_trades),
                     })
                     suggestions.append(
                         f'{regime} 레짐 전용 파라미터 조정 또는 '
-                        f'거래 축소 검토')
+                        f"거래 축소 검토")
 
         # 패턴 5: 큰 손실 집중 (return < -5%)
         big_losses = [
@@ -654,7 +654,7 @@ class GapAnalyzer:
             return float(ic) if not np.isnan(ic) else 0.0
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return 0.0
 
     def _infer_regime(self, date_str: str) -> str:

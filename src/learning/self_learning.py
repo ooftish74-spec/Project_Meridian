@@ -54,9 +54,9 @@ class SelfLearning:
         try:
             if self._momentum_file.exists():
                 self._param_momentum = json.loads(self._momentum_file.read_text(encoding='utf-8'))
-                logger.debug(f'  SelfLearning: 모멘텀 상태 복원 ({len(self._param_momentum)}개 파라미터)')
+                logger.debug(f"  SelfLearning: 모멘텀 상태 복원 ({len(self._param_momentum)}개 파라미터)")
         except Exception as e:
-            logger.debug(f'  SelfLearning: 모멘텀 상태 로드 실패 (초기화): {e}')
+            logger.debug(f"  SelfLearning: 모멘텀 상태 로드 실패 (초기화): {e}")
             self._param_momentum = {}
 
     def _save_momentum(self) -> None:
@@ -67,26 +67,25 @@ class SelfLearning:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  SelfLearning: 모멘텀 저장 실패: {e}')
+            logger.debug(f"  SelfLearning: 모멘텀 저장 실패: {e}")
 
-    def _compute_adaptive_lr(self, param_key: str, ic_val: float, ic_std: float=0.0) -> float:
-        """IC 안정성과 모멘텀을 기반으로 적응형 학습률 계산.
+    def _compute_adaptive_lr(self, param_key: str, ic_val: float, ic_std: float=0.0, regime: Optional[int] = None) -> float:
+        """IC 안정성, 모멘텀 및 시장 국면(Regime)을 기반으로 적응형 학습률 계산.
 
-        원칙:
-          - IC STD 낮음 (안정적) → 학습률 높임 (확신이 높으므로 빠르게 수렴)
-          - IC STD 높음 (불안정) → 학습률 낮춤 (과적합 방지)
-          - 같은 방향으로 연속 업데이트 → 학습률 단계적 증가 (모멘텀)
-          - 방향 전환 시 → 학습률 리셋 (진동 감쇠)
-
-        Args:
-            param_key: DynamicConfig 파라미터 키
-            ic_val: 현재 IC 값
-            ic_std: IC 표준편차 (안정성 지표)
-
-        Returns:
-            적응형 학습률 (0.01 ~ 0.30 범위로 클램핑)
+        Regime Factors:
+          - Regime 0 (Low Vol Trend): eta_scale = 0.5 (base_lr = 0.05, steady convergence)
+          - Regime 1 (High Vol Crash): eta_scale = 2.0 (base_lr = 0.20, rapid shock adaptation)
+          - Regime 2 (Sideways Range): eta_scale = 1.0 (base_lr = 0.10, balanced)
         """
-        base_lr = float(cfg.get('self_learning.base_lr', self._BASE_LEARNING_RATE))
+        raw_base_lr = float(cfg.get('self_learning.base_lr', self._BASE_LEARNING_RATE))
+        if regime == 1:
+            regime_factor = 2.0
+        elif regime == 0:
+            regime_factor = 0.5
+        else:
+            regime_factor = 1.0
+
+        base_lr = raw_base_lr * regime_factor
         min_lr = float(cfg.get('self_learning.min_lr', 0.01))
         max_lr = float(cfg.get('self_learning.max_lr', 0.3))
         momentum_boost = float(cfg.get('self_learning.momentum_boost', 0.05))
@@ -113,7 +112,7 @@ class SelfLearning:
             momentum_factor = 1.0
         final_lr = max(min_lr, min(max_lr, adjusted_lr * momentum_factor))
         self._param_momentum[param_key] = {'prev_ic': round(ic_val, 5), 'direction_count': direction_count, 'current_lr': round(final_lr, 5), 'stability_factor': round(stability_factor, 4), 'momentum_factor': round(momentum_factor, 4)}
-        logger.debug(f'  [AdaptiveLR] {param_key}: lr={final_lr:.4f} (base={base_lr:.3f}, stability={stability_factor:.3f}, momentum={momentum_factor:.3f}, dir_count={direction_count})')
+        logger.debug(f"  [AdaptiveLR] {param_key}: lr={final_lr:.4f} (base={base_lr:.3f}, stability={stability_factor:.3f}, momentum={momentum_factor:.3f}, dir_count={direction_count})")
         return final_lr
 
     def measure_ic(self, measurement_results: Dict) -> Dict:
@@ -224,12 +223,12 @@ class SelfLearning:
                 hi = float(np.percentile(hist, hi_pct))
                 clipped_val = float(np.clip(raw_val, lo, hi))
                 if clipped_val != raw_val:
-                    logger.debug(f'  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (범위 [{lo:.4f}, {hi:.4f}], N={len(hist)})')
+                    logger.debug(f"  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (범위 [{lo:.4f}, {hi:.4f}], N={len(hist)})")
             else:
                 max_abs = max_abs_sharpe if is_sharpe else max_abs_ic
                 clipped_val = float(np.clip(raw_val, -max_abs, max_abs))
                 if clipped_val != raw_val:
-                    logger.debug(f'  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (절대 상한 ±{max_abs}, 히스토리 부족 {len(hist)}/{winsor_min_hist})')
+                    logger.debug(f"  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (절대 상한 ±{max_abs}, 히스토리 부족 {len(hist)}/{winsor_min_hist})")
             new_data = dict(ic_data)
             new_data['value'] = clipped_val
             new_data['abs_value'] = abs(clipped_val)
@@ -243,7 +242,7 @@ class SelfLearning:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  IC 히스토리 저장 실패 (비치명적): {e}')
+            logger.debug(f"  IC 히스토리 저장 실패 (비치명적): {e}")
         return clipped_values
 
     def _adjust_stream_weight(self, param_key: str, current_val: float, sharpe: float, ic_std: float=0.0) -> float:
@@ -286,7 +285,7 @@ class SelfLearning:
             data_confidence = float(measurement_results.get('data_confidence_score', 100.0))
             if data_confidence < qa_min_score:
                 if qa_freeze_log:
-                    logger.warning(f'  ❄️  [DataQA] 학습 동결: data_confidence={data_confidence:.1f} < 기준 {qa_min_score:.0f}. 파라미터 업데이트 Skip (오염 데이터 방어)')
+                    logger.warning(f"  ❄️  [DataQA] 학습 동결: data_confidence={data_confidence:.1f} < 기준 {qa_min_score:.0f}. 파라미터 업데이트 Skip (오염 데이터 방어)")
                 return {'measurement': {}, 'judgment': {'changes': [], 'n_changes': 0}, 'applied': False, 'reason': f'DataQA 동결: confidence={data_confidence:.1f}', 'data_confidence_score': data_confidence}
         ic_measurement = self.measure_ic(measurement_results)
         update_judgment = self.judge_updates(ic_measurement)
@@ -300,9 +299,9 @@ class SelfLearning:
                 log_event('SELF_LEARNING', {'n_changes': update_judgment['n_changes'], 'changes': [{'param': c['param'], 'old': c['old_value'], 'new': c['new_value']} for c in update_judgment['changes'][:5]]}, source='self_learning')
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
-            logger.info(f'  🧠 SelfLearning: {update_judgment['n_changes']}개 파라미터 갱신')
+            logger.info(f"  🧠 SelfLearning: {update_judgment['n_changes']}개 파라미터 갱신")
         return {'measurement': ic_measurement, 'judgment': update_judgment, 'applied': applied}
 
     def _apply_changes(self, changes: List[Dict]) -> bool:
@@ -324,7 +323,7 @@ class SelfLearning:
             self._save_momentum()
             return True
         except Exception as e:
-            logger.error(f'  SelfLearning 적용 실패: {e}')
+            logger.error(f"  SelfLearning 적용 실패: {e}")
             return False
 
     def get_history(self) -> List[Dict]:

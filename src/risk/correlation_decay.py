@@ -89,9 +89,9 @@ class CorrelationDecayMonitor:
                     matrix[pair] = round(corr, 4)
                     if abs(corr) > self._alert_threshold:
                         severity = 'CRITICAL' if abs(corr) > self._critical_threshold else 'WARNING'
-                        alert = {'pair': pair, 'window': window, 'correlation': round(corr, 4), 'severity': severity, 'message': f'직교성 위반: {pair} 상관={corr:.3f} ({window}일)'}
+                        alert = {'pair': pair, 'window': window, 'correlation': round(corr, 4), 'severity': severity, 'message': f"직교성 위반: {pair} 상관={corr:.3f} ({window}일)"}
                         result['alerts'].append(alert)
-                        logger.warning(f'  ⚠️ {alert['message']}')
+                        logger.warning(f"  ⚠️ {alert['message']}")
             result['windows'][str(window)] = matrix
         self._state['last_analysis'] = result
         self._save_state()
@@ -203,7 +203,7 @@ class CorrelationDecayMonitor:
         try:
             path = _RESULTS / 'dcc_garch.json'
             atomic_write_json(path, result, indent=2, default=str)
-            logger.info(f'  📊 DCC-GARCH: {len(dcc_corr)}쌍 상관 계산 완료')
+            logger.info(f"  📊 DCC-GARCH: {len(dcc_corr)}쌍 상관 계산 완료")
         except Exception as _e1:
             logger.critical(f'  [correlation_decay] 상관관계 결과 저장: {_e1}', exc_info=True)
         return result

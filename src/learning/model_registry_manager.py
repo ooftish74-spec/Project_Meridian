@@ -31,7 +31,7 @@ class ModelRegistryManager:
                 return json.loads(self.registry_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         return {'versions': {}, 'active_version': None}
 
@@ -43,7 +43,7 @@ class ModelRegistryManager:
         새로 학습된 모델을 Candidate로 등록 (버전 지정)
         """
         now = datetime.now()
-        version_id = f'v_{now.strftime('%Y%m%d_%H%M%S')}'
+        version_id = f"v_{now.strftime('%Y%m%d_%H%M%S')}"
         model_path = self.registry_dir / f'ensemble_{version_id}.pkl'
         pkg = {'models': models_dict, 'version': version_id, 'metadata': metadata, 'registered_at': now.isoformat()}
         with open(model_path, 'wb') as f:
@@ -51,7 +51,7 @@ class ModelRegistryManager:
         registry = self._load_registry()
         registry['versions'][version_id] = {'path': str(model_path.name), 'metadata': metadata, 'status': 'candidate', 'registered_at': now.isoformat()}
         self._save_registry(registry)
-        logger.info(f'  📦 Model {version_id} registered as candidate.')
+        logger.info(f"  📦 Model {version_id} registered as candidate.")
         return version_id
 
     def evaluate_and_promote(self, new_version_id: str, new_auc: float, min_improvement: float=0.005) -> Tuple[bool, str]:
@@ -60,7 +60,7 @@ class ModelRegistryManager:
         """
         registry = self._load_registry()
         if new_version_id not in registry['versions']:
-            return (False, f'Version {new_version_id} not found.')
+            return (False, f"Version {new_version_id} not found.")
         active_version = registry.get('active_version')
         if not active_version or active_version not in registry['versions']:
             self._promote(new_version_id, registry, 'No active baseline. Auto-promoted.')
@@ -77,7 +77,7 @@ class ModelRegistryManager:
             registry['versions'][new_version_id]['status'] = 'rejected'
             registry['versions'][new_version_id]['reject_reason'] = msg
             self._save_registry(registry)
-            logger.warning(f'  ⚠️ Challenger {msg}')
+            logger.warning(f"  ⚠️ Challenger {msg}")
             return (False, msg)
 
     def _promote(self, version_id: str, registry: Dict, reason: str):
@@ -91,7 +91,7 @@ class ModelRegistryManager:
                 self.latest_link.unlink()
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         try:
             self.latest_link.symlink_to(target_path.resolve())
@@ -102,7 +102,7 @@ class ModelRegistryManager:
         registry['versions'][version_id]['promoted_at'] = datetime.now().isoformat()
         registry['versions'][version_id]['promote_reason'] = reason
         self._save_registry(registry)
-        logger.info(f'  🚀 Model {version_id} successfully promoted to ACTIVE. Reason: {reason}')
+        logger.info(f"  🚀 Model {version_id} successfully promoted to ACTIVE. Reason: {reason}")
 
     def get_active_model(self) -> Dict:
         """

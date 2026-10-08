@@ -110,8 +110,11 @@ def get_updates(offset=None):
             params["offset"] = offset
         r = requests.get(url, params=params, timeout=40)
         return r.json()
+    except requests.exceptions.ReadTimeout:
+        logger.debug("getUpdates idle poll timeout (normal)")
+        return None
     except Exception as e:
-        logger.error(f"getUpdates error: {e}")
+        logger.warning(f"getUpdates network warning: {e}")
         return None
 
 def main():

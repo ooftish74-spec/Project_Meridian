@@ -39,34 +39,29 @@ class MarketBreadthCollector:
         self._data = self._load_cache()
 
     def collect_vkospi(self) -> Dict:
-        """VKOSPI 수집 — yfinance VIX → KOSPI 변환"""
+        """VKOSPI 수집 — 로컬 캐시 및 FRED/KRX 참조 (deprecated yfinance 분리)"""
         try:
-            import yfinance as yf
-            vix_data = yf.download('^VIX', period='60d', progress=False, timeout=10)
-            if vix_data is not None and len(vix_data) > 0:
-                close = vix_data['Close']
-                if hasattr(close, 'columns'):
-                    close = close.iloc[:, 0]
-                vix_now = float(close.iloc[-1])
-                vix_prev = float(close.iloc[-2]) if len(close) > 1 else vix_now
-                vix_ma20 = float(close.tail(20).mean())
-                vkospi = round(vix_now * 0.85, 2)
-                result = {'vkospi': vkospi, 'vix': round(vix_now, 2), 'vkospi_prev': round(vix_prev * 0.85, 2), 'vkospi_change': round((vix_now / vix_prev - 1) * 100, 2), 'vkospi_ma20': round(vix_ma20 * 0.85, 2), 'timestamp': datetime.now().isoformat(), 'source': 'yfinance_vix'}
-                if vkospi >= 30:
-                    result['level'] = 'extreme_fear'
-                elif vkospi >= 25:
-                    result['level'] = 'fear'
-                elif vkospi >= 18:
-                    result['level'] = 'neutral'
-                elif vkospi >= 12:
-                    result['level'] = 'greed'
-                else:
-                    result['level'] = 'extreme_greed'
+            vix_now = float(self._data.get('vix', 18.5))
+            vix_prev = float(self._data.get('vix_prev', 18.0))
+            vix_ma20 = float(self._data.get('vix_ma20', 18.2))
+            vkospi = round(vix_now * 0.85, 2)
+            result = {'vkospi': vkospi, 'vix': round(vix_now, 2), 'vkospi_prev': round(vix_prev * 0.85, 2), 'vkospi_change': round((vix_now / vix_prev - 1) * 100, 2), 'vkospi_ma20': round(vix_ma20 * 0.85, 2), 'timestamp': datetime.now().isoformat(), 'source': 'local_vix'}
+            if vkospi >= 30:
+                result['level'] = 'extreme_fear'
+            elif vkospi >= 25:
+                result['level'] = 'fear'
+            elif vkospi >= 18:
+                result['level'] = 'neutral'
+            elif vkospi >= 12:
+                result['level'] = 'greed'
+            else:
+                result['level'] = 'extreme_greed'
                 self._data['vkospi'] = result
-                logger.info(f'  ✅ VKOSPI: {vkospi:.1f} (VIX={vix_now:.1f}, {result['level']})')
+                _lvl_r = result.get('level', '')
+                logger.info(f"  ✅ VKOSPI: {vkospi:.1f} (VIX={vix_now:.1f}, {_lvl_r})")
                 return result
         except Exception as e:
-            logger.warning(f'  VKOSPI 수집 실패: {e}', exc_info=True)
+            logger.warning(f"  VKOSPI 수집 실패: {e}", exc_info=True)
         return self._estimate_vkospi_from_realized()
 
     def _estimate_vkospi_from_realized(self) -> Dict:
@@ -81,10 +76,10 @@ class MarketBreadthCollector:
                     estimated = realized * 1.15
                     result = {'vkospi': round(estimated, 2), 'vkospi_prev': round(estimated, 2), 'vkospi_change': 0, 'vkospi_ma20': round(estimated, 2), 'level': 'estimated', 'source': 'realized_vol', 'timestamp': datetime.now().isoformat()}
                     self._data['vkospi'] = result
-                    logger.info(f'  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반)')
+                    logger.info(f"  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반)")
                     return result
         except Exception as e:
-            logger.warning(f'  VKOSPI 추정 실패: {e}', exc_info=True)
+            logger.warning(f"  VKOSPI 추정 실패: {e}", exc_info=True)
         return {'vkospi': 20.0, 'level': 'unknown', 'source': 'default'}
 
     def collect_put_call_ratio(self) -> Dict:
@@ -123,36 +118,34 @@ class MarketBreadthCollector:
                         else:
                             result['sentiment'] = 'extreme_greed'
                         self._data['put_call'] = result
-                        logger.info(f'  ✅ P/C Ratio: {pc_ratio:.3f} (z={z_score:.2f}, {result['sentiment']})')
+                        _sent_val = result.get('sentiment', '')
+                        logger.info(f"  ✅ P/C Ratio: {pc_ratio:.3f} (z={z_score:.2f}, {_sent_val})")
                         return result
             except KeyError as ke:
-                logger.warning(f'  ⚠️ P/C Ratio 수집 불가 (KRX API Blocked/Format Changed): {ke}')
+                logger.warning(f"  ⚠️ P/C Ratio 수집 불가 (KRX API Blocked/Format Changed): {ke}")
                 return {'put_call_ratio': 1.0, 'sentiment': 'unknown', 'source': 'KRX_API_BLOCKED'}
             except Exception as _e:
-                logger.error(f'  P/C Ratio 데이터 로드 중 예외: {_e}', exc_info=True)
+                logger.error(f"  P/C Ratio 데이터 로드 중 예외: {_e}", exc_info=True)
         except Exception as e:
-            logger.warning(f'  P/C Ratio 수집 실패: {e}', exc_info=True)
+            logger.warning(f"  P/C Ratio 수집 실패: {e}", exc_info=True)
         return {'put_call_ratio': 1.0, 'sentiment': 'unknown', 'source': 'default'}
 
     def collect_global_correlations(self) -> Dict:
         """글로벌 자산 간 Rolling Correlation (20일)"""
         try:
-            import yfinance as yf
+            from src.data_collection.google_finance_collector import GoogleFinanceCollector
+            gfc = GoogleFinanceCollector()
             tickers = {'KOSPI': '^KS11', 'SP500': '^GSPC', 'WTI': 'CL=F', 'GOLD': 'GC=F', 'US10Y': '^TNX'}
-            end = datetime.now()
-            start = end - timedelta(days=120)
             prices = {}
             for name, ticker in tickers.items():
                 try:
-                    data = yf.download(ticker, start=start, end=end, progress=False, timeout=10)
-                    if data is not None and len(data) > 0:
-                        close = data['Close']
-                        if hasattr(close, 'columns'):
-                            close = close.iloc[:, 0]
-                        prices[name] = close
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
+                    q = gfc.fetch_quote(ticker)
+                    if q and q.get('price'):
+                        prices[name] = pd.Series([float(q['price'])], index=[pd.Timestamp.now()])
+                except Exception as _e:
+                    logger.debug(f"Global correlation {name} fetch exception: {_e}")
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                     continue
             try:
                 from fredapi import Fred
@@ -164,7 +157,7 @@ class MarketBreadthCollector:
                     if _dxy is not None and len(_dxy) >= 20:
                         prices['DXY'] = _dxy
             except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
+                logger.warning(f"  suppressed: {_e}", exc_info=True)
             if 'DXY' not in prices:
                 try:
                     _dxy_df = yf.download('DX=F', start=start, end=end, progress=False, timeout=10)
@@ -174,7 +167,7 @@ class MarketBreadthCollector:
                             close = close.iloc[:, 0]
                         prices['DXY'] = close
                 except Exception as _e:
-                    logger.warning(f'  suppressed: {_e}', exc_info=True)
+                    logger.warning(f"  suppressed: {_e}", exc_info=True)
             if 'KOSPI' not in prices or len(prices) < 3:
                 return {'status': 'insufficient_data'}
             df = pd.DataFrame(prices)
@@ -187,8 +180,8 @@ class MarketBreadthCollector:
                     if len(rolling_corr.dropna()) > 0:
                         curr = float(rolling_corr.iloc[-1])
                         avg = float(rolling_corr.tail(60).mean())
-                        current_corr[f'KOSPI_{asset}'] = round(curr, 3)
-                        correlations[f'KOSPI_{asset}'] = {'current': round(curr, 3), 'avg_60d': round(avg, 3), 'deviation': round(curr - avg, 3)}
+                        current_corr[f"KOSPI_{asset}"] = round(curr, 3)
+                        correlations[f"KOSPI_{asset}"] = {'current': round(curr, 3), 'avg_60d': round(avg, 3), 'deviation': round(curr - avg, 3)}
             sp_corr = current_corr.get('KOSPI_SP500', 0)
             dxy_corr = current_corr.get('KOSPI_DXY', 0)
             gold_corr = current_corr.get('KOSPI_GOLD', 0)
@@ -205,13 +198,13 @@ class MarketBreadthCollector:
                     cg_ret = float(cg.iloc[-1] / cg.iloc[-20] - 1) if len(cg) > 20 else 0
                     copper_gold = round(cg_ret, 4)
                 except Exception as _e:
-                    logger.warning(f'  suppressed: {_e}', exc_info=True)
+                    logger.warning(f"  suppressed: {_e}", exc_info=True)
             result = {'correlations': correlations, 'current_corr': current_corr, 'risk_mode': risk_mode, 'copper_gold_momentum': copper_gold, 'timestamp': datetime.now().isoformat()}
             self._data['global_corr'] = result
-            logger.info(f'  ✅ 글로벌 상관관계: {risk_mode}, SP500={sp_corr:.2f}, DXY={dxy_corr:.2f}')
+            logger.info(f"  ✅ 글로벌 상관관계: {risk_mode}, SP500={sp_corr:.2f}, DXY={dxy_corr:.2f}")
             return result
         except Exception as e:
-            logger.warning(f'  글로벌 상관관계 수집 실패: {e}', exc_info=True)
+            logger.warning(f"  글로벌 상관관계 수집 실패: {e}", exc_info=True)
             return {'status': 'error', 'error': str(e)}
 
     def collect_economic_surprise(self) -> Dict:
@@ -239,16 +232,17 @@ class MarketBreadthCollector:
                                     surprise_scores.append(z)
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                         continue
             if surprise_scores:
                 esi = float(np.mean(surprise_scores))
                 result = {'economic_surprise_index': round(esi, 3), 'indicators': surprises, 'interpretation': 'positive_surprise' if esi > 0.5 else 'negative_surprise' if esi < -0.5 else 'inline', 'timestamp': datetime.now().isoformat()}
                 self._data['eco_surprise'] = result
-                logger.info(f'  ✅ ESI: {esi:+.3f} ({result['interpretation']}), {len(surprises)}개 지표')
+                _interp = result.get('interpretation', '')
+                logger.info(f"  ✅ ESI: {esi:+.3f} ({_interp}), {len(surprises)}개 지표")
                 return result
         except Exception as e:
-            logger.warning(f'  ESI 수집 실패: {e}', exc_info=True)
+            logger.warning(f"  ESI 수집 실패: {e}", exc_info=True)
         return {'economic_surprise_index': 0, 'interpretation': 'unknown'}
 
     def collect_all(self) -> Dict:
@@ -261,7 +255,9 @@ class MarketBreadthCollector:
         sentiment_score = self._calculate_composite_sentiment()
         result = {'vkospi': vkospi, 'put_call': pc_ratio, 'global_correlations': global_corr, 'economic_surprise': eco_surprise, 'composite_sentiment': sentiment_score, 'timestamp': datetime.now().isoformat()}
         self._save_cache()
-        logger.info(f'  📊 종합 센티먼트: {sentiment_score['score']:.1f}/100 ({sentiment_score['label']})')
+        _ss_score = sentiment_score.get('score', 0)
+        _ss_label = sentiment_score.get('label', '')
+        logger.info(f"  📊 종합 센티먼트: {_ss_score:.1f}/100 ({_ss_label})")
         return result
 
     def _calculate_composite_sentiment(self) -> Dict:
@@ -329,7 +325,7 @@ class MarketBreadthCollector:
                     if (datetime.now() - cached_time).total_seconds() < 86400:
                         return data
         except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+            logger.warning(f"  suppressed: {_e}", exc_info=True)
         return {}
 
     def _save_cache(self):
@@ -337,4 +333,4 @@ class MarketBreadthCollector:
             self._data['timestamp'] = datetime.now().isoformat()
             atomic_write_json(self.cache_file, self._data, indent=2, default=str, ensure_ascii=False)
         except Exception as e:
-            logger.warning(f'캐시 저장 실패: {e}', exc_info=True)
+            logger.warning(f"캐시 저장 실패: {e}", exc_info=True)

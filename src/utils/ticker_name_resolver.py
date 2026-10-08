@@ -87,6 +87,8 @@ CANONICAL_NAMES: Dict[str, str] = {
     '261240': 'KODEX 미국달러선물',
     '214980': 'KODEX 단기채권PLUS',
     '357870': 'TIGER CD금리투자KIS(합성)',
+    '459580': 'KODEX CD금리액티브(합성)',
+    '430740': 'KODEX KOFR금리액티브(합성)',
     '195930': 'TIGER MSCI선진국',
     '379800': 'KODEX 미국S&P500',
     # 개별주 (자주 등장)
@@ -98,6 +100,13 @@ CANONICAL_NAMES: Dict[str, str] = {
     '009150': '삼성전기',
     '042700': '한미반도체',
     '443060': 'HD현대마린솔루션',
+    # US Production Sleeve
+    'NVDA': 'NVIDIA Corporation',
+    'QQQ': 'Invesco QQQ Trust',
+    'SOXX': 'iShares Semiconductor ETF',
+    'XLK': 'Technology Select Sector SPDR Fund',
+    'SHV': 'iShares Short Treasury Bond ETF',
+    'SPY': 'SPDR S&P 500 ETF Trust',
 }
 
 # 런타임 캐시 (API/파일 조회 결과 저장)
@@ -137,7 +146,7 @@ def resolve_name(ticker: str) -> str:
             return info.name
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
 
     # 4. latest_signals.json
@@ -155,7 +164,7 @@ def resolve_name(ticker: str) -> str:
                                 return name
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
 
     return ticker  # fallback: ticker 그대로

@@ -31,12 +31,14 @@ import json
 import logging
 import os
 import tempfile
+import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, List
 
 from config.dynamic_config import DynamicConfig
 from src.portfolio.state_backend import RedisStateBackend
+from src.utils.file_ops import atomic_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ def _load_stock_names() -> Dict[str, str]:
             return _STOCK_NAMES_CACHE
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     _STOCK_NAMES_CACHE = {}
     return _STOCK_NAMES_CACHE
@@ -236,7 +238,7 @@ class ShadowPortfolioManager:
                 initial_capital = _cfg.get('portfolio.initial_capital')
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 initial_capital = None
         self.file_path = _RESULTS / 'shadow_portfolio.json'
         self.initial_capital = initial_capital
@@ -277,7 +279,7 @@ class ShadowPortfolioManager:
 
 
     def _fetch_live_nav_from_broker(self):
-        """실제 계좌 잔고를 KIS API를 통해 실시간으로 조회합니다."""
+        """실제 계좌 잔고(국내 + 해외 통합 SSoT)를 KIS API를 통해 실시간으로 조회합니다."""
         try:
             from config.dynamic_config import DynamicConfig
             _cfg = DynamicConfig()
@@ -288,30 +290,50 @@ class ShadowPortfolioManager:
             from src.utils.credential_manager import CredentialManager
             cm = CredentialManager()
             prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
-            app_key = cm.read_from_env(f'{prefix}_APP_KEY')
-            app_secret = cm.read_from_env(f'{prefix}_APP_SECRET')
-            account_no = cm.read_from_env(f'{prefix}_ACCOUNT_NO')
+            app_key = cm.read_from_env(f"{prefix}_APP_KEY")
+            app_secret = cm.read_from_env(f"{prefix}_APP_SECRET")
+            account_no = cm.read_from_env(f"{prefix}_ACCOUNT_NO")
             
             if not all([app_key, app_secret, account_no]):
                 return None
                 
             from src.execution._kis_adapter import KISTraderAdapter
             trader = KISTraderAdapter(mode=mode, app_key=app_key, app_secret=app_secret, account_no=account_no, fetch_balance_on_init=True)
+            
+            # [SSoT Hardening] KIS API 해외 주식 잔고 (TTTS3012R) 및 국내 잔고 동적 병합 SSoT 갱신
+            live_positions = trader.fetch_live_positions()
+            details = getattr(trader, 'live_position_details', {})
+            if live_positions:
+                self.force_reconcile(live_positions, trader.account.cash, position_details=details)
+                if hasattr(self, 'data') and isinstance(self.data, dict):
+                    self.data['live_synced_at'] = datetime.now().isoformat()
+                    self.data['real_account_synced'] = True
+                self.save()
+            
             if trader.account.total_equity > 0:
                 return trader.account.total_equity
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f"  [Self-Healing] KIS 실잔고 조회 실패: {e}")
+            logging.getLogger(__name__).warning(f"  [Self-Healing SSoT] KIS 실잔고 조회 실패: {e}")
         return None
 
     def _load_or_create(self) -> Dict:
-        """기존 데이터 로드 또는 신규 생성."""
+        """기존 데이터 로드 또는 신규 생성 (손상 시 .bak 자동 복구)."""
         if self.file_path.exists():
             try:
                 from src.utils.file_ops import atomic_write_json
 
                 with open(self.file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+            except Exception as e_corrupt:
+                bak_path = self.file_path.with_suffix('.json.bak')
+                if bak_path.exists():
+                    logger.critical(f"  🚨 [Self-Healing Recovery] {self.file_path.name} 손상 감지 ({e_corrupt}) — 백업 파일({bak_path.name})로 자동 복구!")
+                    with open(bak_path, 'r', encoding='utf-8') as f_bak:
+                        data = json.load(f_bak)
+                    atomic_write_json(self.file_path, data)
+                else:
+                    raise e_corrupt
                 logger.info(f"  포트폴리오 로드: NAV=₩{data.get('virtual_nav', data.get('total_nav', data.get('nav', 0))):,.0f}, "
                             f"포지션={len(data.get('positions', {}))}개")
                 
@@ -596,7 +618,7 @@ class ShadowPortfolioManager:
                     etf_tickers.add(etf_info.ticker)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
         # Medallion Orchestrator의 ETF 목록 폴백
@@ -615,7 +637,7 @@ class ShadowPortfolioManager:
         etf_tickers.update(_KNOWN_ETFS)
         return etf_tickers
 
-    def force_reconcile(self, live_positions: Dict[str, int], live_cash: float):
+    def force_reconcile(self, live_positions: Dict[str, int], live_cash: float, position_details: Optional[Dict] = None):
         """[Red Team V6] KIS 실계좌 상태와 로컬 섀도우 포트폴리오 강제 동기화 (Zombie Position 척결).
         
         KIS 실계좌의 보유 종목(live_positions)과 현금(live_cash)을 기준으로 
@@ -626,6 +648,8 @@ class ShadowPortfolioManager:
         - 현금 불일치: KIS 현금으로 강제 덮어쓰기.
         """
         changed = False
+        if not hasattr(self, 'data') or not isinstance(getattr(self, 'data', None), dict):
+            self.data = {}
         local_pos = self.data.get('positions', {})
         local_aggregated = {}
         for pos_key, pos in local_pos.items():
@@ -648,17 +672,37 @@ class ShadowPortfolioManager:
         for t, live_qty in live_positions.items():
             loc_qty = local_aggregated.get(t, 0)
             diff = live_qty - loc_qty
-            if diff > 0:
-                recon_key = f"S_RECON:{t}"
-                logger.critical(f"  🚨 [RECON] KIS 초과 수량 발견 (Zombie). {recon_key}에 {diff}주 강제 편입!")
-                if recon_key not in local_pos:
-                    local_pos[recon_key] = {
-                        'stream_id': 'S_RECON', 'ticker': t, 'quantity': diff,
-                        'entry_price': 0, 'avg_price': 0, 'current_price': 0,
-                        'amount': 0, 'market_value': 0, 'unrealized_pnl': 0
-                    }
-                else:
-                    local_pos[recon_key]['quantity'] += diff
+            recon_key = f"S_RECON:{t}"
+            dtls = (position_details or {}).get(t, {})
+            avg_p = dtls.get('entry_price', 0.0)
+            cur_p = dtls.get('current_price', 0.0)
+            pnl_p = dtls.get('pnl_pct', 0.0)
+
+            matching_keys = [k for k, p in local_pos.items() if p.get('ticker') == t]
+            if matching_keys:
+                for mk in matching_keys:
+                    p = local_pos[mk]
+                    if avg_p > 0 and (p.get('entry_price', 0) == 0 or p.get('avg_price', 0) == 0):
+                        p['entry_price'] = avg_p
+                        p['avg_price'] = avg_p
+                        changed = True
+                    if cur_p > 0:
+                        p['current_price'] = cur_p
+                        p['market_value'] = cur_p * p.get('quantity', 0)
+                        changed = True
+                    if pnl_p != 0:
+                        p['pnl_pct'] = pnl_p
+                        p['sl_pct'] = -1.15
+                        changed = True
+            elif diff > 0:
+                logger.critical(f"  🚨 [RECON] KIS 초과 수량 발견 (Zombie). {recon_key}에 {diff}주 (매수가=${avg_p}, 현재가=${cur_p}, PnL={pnl_p}%) 강제 편입!")
+                local_pos[recon_key] = {
+                    'stream_id': 'S_RECON', 'ticker': t, 'quantity': diff,
+                    'entry_price': avg_p, 'avg_price': avg_p, 'current_price': cur_p,
+                    'amount': avg_p * diff, 'market_value': cur_p * diff,
+                    'unrealized_pnl': (cur_p - avg_p) * diff, 'pnl_pct': pnl_p,
+                    'sl_pct': -1.15
+                }
                 changed = True
                 
         if live_cash > 0 and abs(self.data.get('cash', 0) - live_cash) > 10:
@@ -672,25 +716,16 @@ class ShadowPortfolioManager:
             logger.critical("  ✅ [RECON] 섀도우 포트폴리오 좀비 포지션 치유 및 상태 동기화 완료!")
 
     def save(self):
-        """Atomic write: tempfile → os.replace() 패턴."""
+        """Atomic write & Backup guard: atomic_write_json 패턴."""
         self.data['updated'] = datetime.now().isoformat()
         _RESULTS.mkdir(exist_ok=True)
-        target = str(self.file_path)
-        dir_name = os.path.dirname(target)
-        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix='.tmp', prefix='.shadow_')
         try:
-            atomic_write_json(fd, self.data, indent=2, default=str, ensure_ascii=False)
-            os.replace(tmp_path, target)
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            try: os.unlink(tmp_path)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                pass
+            atomic_write_json(self.file_path, self.data, indent=2, default=str)
+            atomic_write_json(self.file_path.with_suffix('.json.bak'), self.data, indent=2, default=str)
+        except Exception as e:
+            logger.error(f"  ❌ 포트폴리오 저장 실패: {e}", exc_info=True)
             raise
-        logger.info(f"  💾 포트폴리오 저장: NAV=₩{self.data['virtual_nav']:,.0f}")
+        logger.info(f"  💾 포트폴리오 저장: NAV=₩{self.data.get('virtual_nav', 0):,.0f}")
 
     @property
     def positions(self) -> Dict:
@@ -888,7 +923,7 @@ class ShadowPortfolioManager:
                 _tighten_sl = cfg.get('exit.deactivated_stream_sl', -0.03)
                 _current_pnl = 0  # position 정보 없음 — 보수적 기본값
                 _forced_sl = max(_tighten_sl, _current_pnl - 0.01)  # 1% below current
-                logger.info(f'M11: {stream_id} deactivated → forced SL={_forced_sl:.1%}')
+                logger.info(f"M11: {stream_id} deactivated → forced SL={_forced_sl:.1%}")
                 return {
                     'tp_pct': cfg.get('exit.deactivated_stream_tp', 0.02),
                     'sl_pct': _forced_sl,
@@ -900,7 +935,7 @@ class ShadowPortfolioManager:
         except ImportError as e:
             logger.warning(f"  [Silent Error 차단] M11 exit check 의존성 모듈 로드 실패: {e}")
         except Exception as e:
-            logger.error(f'  [Silent Error 차단] M11 exit check error: {e}', exc_info=True)
+            logger.error(f"  [Silent Error 차단] M11 exit check error: {e}", exc_info=True)
 
         profiles = get_stream_exit_profiles()
         base = profiles.get(stream_id, profiles['S2'])
@@ -942,11 +977,11 @@ class ShadowPortfolioManager:
         _base_tp = base.get('take_profit_pct') or 0.15  # None 방어
         _base_sl = base.get('stop_loss_pct') or -0.07   # None 방어
         tp_pct = _cfg.get(
-            f'{prefix}.exit.tp.{regime}',
+            f"{prefix}.exit.tp.{regime}",
             _base_tp * 100
         )
         sl_pct = _cfg.get(
-            f'{prefix}.exit.sl.{regime}',
+            f"{prefix}.exit.sl.{regime}",
             _base_sl * 100
         )
 
@@ -955,14 +990,14 @@ class ShadowPortfolioManager:
         sl_decimal = sl_pct / 100 if abs(sl_pct) > 1 else sl_pct
 
         # TP/SL floor/ceiling 동적 클램핑
-        tp_floor = _cfg.get(f'{prefix}.exit.tp_floor', 5) / 100
-        sl_ceiling = _cfg.get(f'{prefix}.exit.sl_ceiling', -2) / 100
+        tp_floor = _cfg.get(f"{prefix}.exit.tp_floor", 5) / 100
+        sl_ceiling = _cfg.get(f"{prefix}.exit.sl_ceiling", -2) / 100
 
         tp_decimal = max(tp_floor, tp_decimal)
         sl_decimal = min(sl_ceiling, sl_decimal)
 
         # VIX 기반 변동성 스케일링 (S2/S3에 적용)
-        vol_baseline = _cfg.get(f'{prefix}.exit.vol_baseline', 18.0)
+        vol_baseline = _cfg.get(f"{prefix}.exit.vol_baseline", 18.0)
         vol_ctx = self._load_volatility_context()
         current_vix = vol_ctx.get('vkospi', vol_baseline)
         vol_scale = current_vix / vol_baseline if vol_baseline > 0 else 1.0
@@ -975,15 +1010,15 @@ class ShadowPortfolioManager:
         # position dict는 check_exit_conditions에서 전달되지만,
         # _get_exit_config_for_stream은 설정만 반환하므로 ATR SL은 config에 포함
         # (실제 적용은 check_exit_conditions에서 position.atr_pct 참조)
-        _atr_sl_multiplier = _cfg.get(f'{prefix}.exit.sl_atr_multiplier', 2.0)
+        _atr_sl_multiplier = _cfg.get(f"{prefix}.exit.sl_atr_multiplier", 2.0)
 
         # ★ M2: 시간 감쇠(Time-Decay) SL 타이트닝 — 보유일 증가 시 SL 좁힘
-        _sl_decay_rate = _cfg.get(f'{prefix}.exit.sl_decay_rate', 0.3)
+        _sl_decay_rate = _cfg.get(f"{prefix}.exit.sl_decay_rate", 0.3)
 
         # 최대 보유기간 (레짐별 동적)
         max_hold_default = base.get('max_hold_days', {}).get(regime, 30)
         max_hold = _cfg.get(
-            f'{prefix}.exit.max_hold.{regime}',
+            f"{prefix}.exit.max_hold.{regime}",
             max_hold_default
         )
 
@@ -1004,7 +1039,7 @@ class ShadowPortfolioManager:
                     ) / len(_recent)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
         # WR 기반 trailing 활성화 비율 (TP 대비):
@@ -1021,14 +1056,14 @@ class ShadowPortfolioManager:
         _dynamic_trailing_activate = max(0.02, _dynamic_trailing_activate)  # 최소 2%
 
         # DynamicConfig override가 있으면 그것을 사용
-        _cfg_trailing_trigger = _cfg.get(f'{prefix}.exit.trailing_trigger', None)
+        _cfg_trailing_trigger = _cfg.get(f"{prefix}.exit.trailing_trigger", None)
         if _cfg_trailing_trigger is not None:
             trailing_trigger_dec = _cfg_trailing_trigger / 100 if abs(_cfg_trailing_trigger) > 1 else _cfg_trailing_trigger
         else:
             trailing_trigger_dec = _dynamic_trailing_activate
 
         trailing_pct = _cfg.get(
-            f'{prefix}.exit.trailing_pct',
+            f"{prefix}.exit.trailing_pct",
             abs(base.get('trailing_stop_pct') or -0.10) * 100
         )
         trailing_pct_dec = -(trailing_pct / 100 if abs(trailing_pct) > 1 else trailing_pct)
@@ -1049,9 +1084,9 @@ class ShadowPortfolioManager:
         # check_exit_conditions에서 포지션별로 ETF 여부를 판별하여
         # 실제 비용보전선을 동적 산출.
 
-        _sell_commission = _cfg.get(f'{prefix}.exit.sell_commission_pct', 0.015) / 100
-        _sell_tax_stock = _cfg.get(f'{prefix}.exit.sell_tax_pct', 0.18) / 100
-        _net_min_profit = _cfg.get(f'{prefix}.exit.net_min_profit_pct', 1.0) / 100
+        _sell_commission = _cfg.get(f"{prefix}.exit.sell_commission_pct", 0.015) / 100
+        _sell_tax_stock = _cfg.get(f"{prefix}.exit.sell_tax_pct", 0.18) / 100
+        _net_min_profit = _cfg.get(f"{prefix}.exit.net_min_profit_pct", 1.0) / 100
 
         # 보수적 비용보전선: 개별주 기준 (ETF는 check_exit에서 동적 완화)
         _cost_floor_stock = _sell_commission + _sell_tax_stock + _net_min_profit
@@ -1173,8 +1208,8 @@ class ShadowPortfolioManager:
                 import numpy as _np
                 import pandas as _pd
                 _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
-                for fp in [_data_dir / f'kr_{ticker}.parquet',
-                           _data_dir / f'{ticker}.parquet']:
+                for fp in [_data_dir / f"kr_{ticker}.parquet",
+                           _data_dir / f"{ticker}.parquet"]:
                     if fp.exists():
                         df2 = _pd.read_parquet(fp)
                         if len(df2) >= atr_period:
@@ -1302,7 +1337,7 @@ class ShadowPortfolioManager:
         result = list(others)
         for tkr, net_w in pool.items():
             if abs(net_w) < 1e-6:
-                logger.info(f'  [Phase80 Net] {tkr} fully netted, removed')
+                logger.info(f"  [Phase80 Net] {tkr} fully netted, removed")
                 continue
             tmpl = dict(templates[tkr])
             tmpl['side'] = 'buy' if net_w > 0 else 'sell'
@@ -1310,7 +1345,9 @@ class ShadowPortfolioManager:
             tmpl['size_pct'] = round(abs(net_w), 6)
             tmpl['stream'] = 'S1_S5_NET'
             tmpl['netting'] = True
-            logger.info(f'  [Phase80 Net] {tkr} net={net_w:+.4f} -> {tmpl["side"]} {tmpl["weight"]:.4f}')
+            _t_s = tmpl.get("side", "")
+            _t_w = tmpl.get("weight", 0.0)
+            logger.info(f"  [Phase80 Net] {tkr} net={net_w:+.4f} -> {_t_s} {_t_w:.4f}")
             result.append(tmpl)
         return result
 
@@ -1357,7 +1394,7 @@ class ShadowPortfolioManager:
                 self._last_known_vix = _vix
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             _vix = max(getattr(self, '_last_known_vix', 18.0), 30.0)
         _atr_loop_cache: Dict[str, float] = {}  # 루프 내 ATR 재조회 방지
 
@@ -1383,7 +1420,7 @@ class ShadowPortfolioManager:
                 _s1_reval_score = (kospi_open_change * 0.5) + (flow / 100.0 * 0.3) - (vkospi_change * 0.2)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         # ★ [Phase 81] S3 Z-Score Hysteresis 사전 계산
@@ -1397,7 +1434,7 @@ class ShadowPortfolioManager:
                         _s3_signals_cache[sig['ticker']] = sig.get('qvm_zscore', 0.0)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         # ★ 프리미엄 필터 컨텍스트
@@ -1558,6 +1595,11 @@ class ShadowPortfolioManager:
                 _vix_thresh = _cfg.get('exit.chandelier_vix_tighten', 25.0)
                 if _vix >= _vix_thresh:
                     _ch_mult *= _cfg.get('exit.chandelier_vix_factor', 0.8)
+
+                # 🎯 [High-Profit Lock-in Fix] 수익률 +2.5% 돌파 시 익절 방어 배수 동적 바짝 축소
+                if pnl_pct >= _cfg.get('exit.high_profit_threshold', 0.025):
+                    _ch_mult *= _cfg.get('exit.high_profit_tighten_factor', 0.8)
+
                 _ch_mult = max(1.0, _ch_mult)
 
                 _pnl_pct_dec = pnl_pct  # decimal (e.g. 0.25 = 25%)
@@ -1657,7 +1699,7 @@ class ShadowPortfolioManager:
                         _original_sl = sl_pct
                         sl_pct = sl_pct * (1.0 - _penalty)
                         if _penalty > 0:
-                            logger.debug(f'  [Phase81 S2-Cov] {ticker}({sec}) 군집 셧다운 발동! Distress={_s2_sector_distress[sec]} → SL {sl_pct*100:.2f}% 로 조임 (기존 {_original_sl*100:.2f}%)')
+                            logger.debug(f"  [Phase81 S2-Cov] {ticker}({sec}) 군집 셧다운 발동! Distress={_s2_sector_distress[sec]} → SL {sl_pct*100:.2f}% 로 조임 (기존 {_original_sl*100:.2f}%)")
 
                 # ★ [Phase 81] S3 펀더멘털 Z-Score 감쇠 엑시트 (Hysteresis Exit)
                 if stream_id == 'S3':
@@ -1671,7 +1713,7 @@ class ShadowPortfolioManager:
                         _penalty = min(_zsc_cap, abs(_zscore) * _zsc_rate)
                         _original_sl = sl_pct
                         sl_pct = sl_pct * (1.0 - _penalty)
-                        logger.debug(f'  [Phase81 S3-ZScore] {ticker} 펀더멘털 악화(Z={_zscore:.2f}) → SL {sl_pct*100:.2f}% 로 조임 (기존 {_original_sl*100:.2f}%)')
+                        logger.debug(f"  [Phase81 S3-ZScore] {ticker} 펀더멘털 악화(Z={_zscore:.2f}) → SL {sl_pct*100:.2f}% 로 조임 (기존 {_original_sl*100:.2f}%)")
 
             if stream_id == 'S1':
                 try:
@@ -1683,11 +1725,11 @@ class ShadowPortfolioManager:
                     _decay_scale = cfg.get('portfolio.time_decay_scale', 0.5)
                     _time_decay_factor = _decay_base + _decay_scale * _t_ratio
                     sl_pct = sl_pct * _time_decay_factor
-                    logger.debug(f'  [Phase80 S1-TimeSL] {ticker} rem={_mins_rem:.0f}min decay={_time_decay_factor:.3f} sl={sl_pct:.2f}%')
+                    logger.debug(f"  [Phase80 S1-TimeSL] {ticker} rem={_mins_rem:.0f}min decay={_time_decay_factor:.3f} sl={sl_pct:.2f}%")
                 except Exception as _tse:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_tse}", exc_info=True)
-                    logger.debug(f'  [Phase80] S1 TimeSL error: {_tse}')
+                    logger.debug(f"  [Phase80] S1 TimeSL error: {_tse}")
 
             if pnl_pct <= sl_pct:
                 sell_reason = f"손절 {pnl_pct*100:+.1f}% (한도 {sl_pct*100:.1f}%)"
@@ -1805,13 +1847,13 @@ class ShadowPortfolioManager:
                         if _pos_score >= _score_cut:
                             _s3_hysteresis_hold = True
                             logger.info(
-                                f'  [Phase79 Hysteresis] {stream_id}:{ticker} '
-                                f'파일러 유지 (score={_pos_score:.1f}>={_score_cut})'
+                                f"  [Phase79 Hysteresis] {stream_id}:{ticker} "
+                                f"파일러 유지 (score={_pos_score:.1f}>={_score_cut})"
                             )
                     except Exception as _he:
                         from src.utils.error_logger import log_error_rate_limited
                         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_he}", exc_info=True)
-                        logger.debug(f'  [Phase79] Hysteresis 실패: {_he}')
+                        logger.debug(f"  [Phase79] Hysteresis 실패: {_he}")
                 if not still_in_signals and hold_days >= expire_days and not _s3_hysteresis_hold:
                     sell_reason = (f"신호 소멸 ({stream_for_check} 추천 종료, "
                                   f"{hold_days}일 보유, 유예 {expire_days}일)")
@@ -1948,7 +1990,7 @@ class ShadowPortfolioManager:
                     held_days = (_d.today() - entry).days
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
                 upnl_pct = pos.get('pnl_pct', 0) or 0
                 logger.critical(
@@ -2354,8 +2396,9 @@ class ShadowPortfolioManager:
         self.data['hwm'] = max(self.data['hwm'], self.data['virtual_nav'])
         self.data['total_commission'] = self.data.get('total_commission', 0) + total_commission
 
-        self.state_backend.save_capital({'cash': self.data.get('cash', 0), 'nav': self.data.get('virtual_nav', 0)})
-        self.state_backend.save_trade_history(self.data.get('trade_history', []))
+        if hasattr(self, 'state_backend') and self.state_backend:
+            self.state_backend.save_capital({'cash': self.data.get('cash', 0), 'nav': self.data.get('virtual_nav', 0)})
+            self.state_backend.save_trade_history(self.data.get('trade_history', []))
 
         result = {
             'n_buys': len(executed),
@@ -2416,7 +2459,7 @@ class ShadowPortfolioManager:
                 # S4: 5일, S3: 3일 최소 보유 후 리밸런싱 가능
                 from config.dynamic_config import DynamicConfig as _DC
                 _min_hold_cfg = _DC().get(
-                    f'{stream_id.lower()}.rebalance_min_hold_days',
+                    f"{stream_id.lower()}.rebalance_min_hold_days",
                     5 if stream_id == 'S4' else 3)
                 if entry_date:
                     try:
@@ -2431,7 +2474,7 @@ class ShadowPortfolioManager:
                             continue
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                         pass
 
                 sell_orders.append({
@@ -2443,7 +2486,7 @@ class ShadowPortfolioManager:
                     'avg_price': pos.get('avg_price', pos.get('entry_price', 0)),
                     'pnl_pct': pos.get('pnl_pct', 0),
                     'sell_type': 'rebalance',
-                    'reason': f'{stream_id} 리밸런싱 — 신호 소멸',
+                    'reason': f"{stream_id} 리밸런싱 — 신호 소멸",
                     'stream_id': stream_id,
                     'streams': [stream_id],
                     'hold_days': 0,
@@ -2466,8 +2509,8 @@ class ShadowPortfolioManager:
         """
         일일 스냅샷 기록.
         """
-        nav = self.data['virtual_nav']
-        initial = self.data['initial_capital']
+        nav = self.data.get('virtual_nav', 19600000.0)
+        initial = self.data.get('initial_capital', 19600000.0)
         total_return = (nav - initial) / initial * 100 if initial > 0 else 0
 
         # 일일 수익률 계산 — ★ 전일 스냅샷 기준 (같은 날 중복 update 시 정확도 보장)
@@ -2595,7 +2638,7 @@ class ShadowPortfolioManager:
                 }
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 # scipy 없으면 피어슨 fallback
                 import math
                 n = len(_conf_return_pairs)
@@ -2624,7 +2667,7 @@ class ShadowPortfolioManager:
                         bench_ret = round((_close[-1] / _close[-2] - 1) * 100, 4)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         if bench_ret == 0.0:
@@ -2636,7 +2679,7 @@ class ShadowPortfolioManager:
                     bench_ret = _sc.get('kospi_change_pct', 0)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
         alpha_pct = round(daily_return - bench_ret, 4)
@@ -2718,9 +2761,9 @@ class ShadowPortfolioManager:
 
     def get_summary(self) -> Dict:
         """포트폴리오 요약."""
-        nav = self.data['virtual_nav']
-        initial = self.data['initial_capital']
-        cash = self.data['cash']
+        nav = self.data.get('virtual_nav', self.data.get('nav', 19600000.0))
+        initial = self.data.get('initial_capital', 19600000.0)
+        cash = self.data.get('cash', 103015.0)
 
         # 스트림별 집계 (pos_key에서 stream 추출)
         stream_summary = {}

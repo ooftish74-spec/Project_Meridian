@@ -124,7 +124,7 @@ class S2MLAlphaStream(BaseStream):
                             self._feature_means = np.array(feat_means)
                             feat_stds = _meta.get('feature_stds')
                             self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
-                        logger.info(f'  S2: joblib 앙상블 로드 완료 ({_loaded}/{len(_model_files)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})')
+                        logger.info(f"  S2: joblib 앙상블 로드 완료 ({_loaded}/{len(_model_files)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
                         conformal_path = _MODEL_DIR / 'conformal_state.pkl'
                         if conformal_path.exists():
                             try:
@@ -171,7 +171,7 @@ class S2MLAlphaStream(BaseStream):
                 self._feature_means = np.array(feat_means)
                 self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
                 logger.info('  S2: OOD 탐지용 피처 통계 로드 완료')
-            logger.info(f'  S2: pkl 앙상블 로드 완료 ({len(self._models)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})')
+            logger.info(f"  S2: pkl 앙상블 로드 완료 ({len(self._models)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
             conformal_path = _MODEL_DIR / 'conformal_state.pkl'
             if conformal_path.exists():
                 try:
@@ -299,11 +299,11 @@ class S2MLAlphaStream(BaseStream):
                 s['up_prob'] = round(max(0.0, min(1.0, s['up_prob'] * adj)), 4)
                 s['fundamental_adj'] = round(adj, 4)
                 s['expected_value'] = round(self._dynamic_ev(s, s['up_prob']), 4)
-                logger.debug(f'  S2: {ticker} QV보정 {original:.3f}→{s['up_prob']:.3f} (×{adj:.2f})')
+                logger.debug(f"  S2: {ticker} QV보정 {original:.3f}→{s['up_prob']:.3f} (×{adj:.2f})")
         drift_result = self._drift_detector.detect_drift()
         drift_mult = drift_result.get('confidence_multiplier', 1.0)
         if drift_mult < 1.0:
-            logger.warning(f'  ⚠️ S2 Drift 감지: conf×{drift_mult:.2f} 적용 (accuracy={drift_result.get('accuracy', 0):.3f})')
+            logger.warning(f"  ⚠️ S2 Drift 감지: conf×{drift_mult:.2f} 적용 (accuracy={drift_result.get('accuracy', 0):.3f})")
             for s in scored:
                 s['up_prob'] = round(s['up_prob'] * drift_mult, 4)
                 expected_win = cfg.get('ml.expected_win_pct', 0.05)
@@ -388,23 +388,38 @@ class S2MLAlphaStream(BaseStream):
         qualified = self._enforce_sector_neutrality(qualified)
         vix_ref = signal_cache_ref.get('vix', cfg.get('s2.vix_fallback_default', 18.0))
         vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
-        for stock in qualified:
-            tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
-            tp_pct_val = tp_sl_meta['tp_pct']
-            sl_pct_val = tp_sl_meta['sl_pct']
-            size = self._kelly_size(stock, regime, tp_pct=tp_pct_val, sl_pct=sl_pct_val)
-            if size <= 0:
-                continue
-            _p11_vix_scale_w = max(cfg.get('s2.vix_weight_scale_floor', 0.4), min(1.2, _p11_vix_neutral / max(_p11_vix, 1.0)))
-            _p11_vkospi_scale = max(cfg.get('s2.vkospi_weight_scale_floor', 0.5), min(1.0, _p11_vix_neutral / max(_p11_vkospi, 1.0)))
-            import math as _math11
-            _p11_combined_scale = _math11.sqrt(_p11_vix_scale_w * _p11_vkospi_scale)
-            suggested_weight = round(size * _p11_combined_scale, 4)
-            signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f'P(up)={stock['up_prob']:.1%}, EV={stock.get('expected_value', 0):.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})', 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source']}
-            if stock.get('conformal_lower') is not None:
-                signal['conformal_lower'] = round(stock['conformal_lower'], 4)
-                signal['conformal_upper'] = round(stock['conformal_upper'], 4)
-            signals.append(signal)
+        use_etf_basket = cfg.get('s2.etf_basket.enabled', True)
+        if use_etf_basket and scored:
+            from src.streams.s2_ml_alpha.etf_basket_decomposer import S2ETFBasketDecomposer
+            decomposer = S2ETFBasketDecomposer()
+            etf_sigs = decomposer.decompose_to_etf_signals(scored)
+            for es in etf_sigs:
+                es['size_pct'] = round(1.0 / max(1, len(etf_sigs)), 4)
+                es['suggested_weight'] = es['size_pct']
+                es['vix_scale_factor'] = 1.0
+                es['regime'] = regime
+                es['timestamp'] = now_kst().isoformat()
+                signals.append(es)
+        else:
+            for stock in qualified:
+                tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
+                tp_pct_val = tp_sl_meta['tp_pct']
+                sl_pct_val = tp_sl_meta['sl_pct']
+                size = self._kelly_size(stock, regime, tp_pct=tp_pct_val, sl_pct=sl_pct_val)
+                if size <= 0:
+                    continue
+                _p11_vix_scale_w = max(cfg.get('s2.vix_weight_scale_floor', 0.4), min(1.2, _p11_vix_neutral / max(_p11_vix, 1.0)))
+                _p11_vkospi_scale = max(cfg.get('s2.vkospi_weight_scale_floor', 0.5), min(1.0, _p11_vix_neutral / max(_p11_vkospi, 1.0)))
+                import math as _math11
+                _p11_combined_scale = _math11.sqrt(_p11_vix_scale_w * _p11_vkospi_scale)
+                suggested_weight = round(size * _p11_combined_scale, 4)
+                _up_pr = stock.get('up_prob', 0)
+                _ev_val = stock.get('expected_value', 0)
+                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source']}
+                if stock.get('conformal_lower') is not None:
+                    signal['conformal_lower'] = round(stock['conformal_lower'], 4)
+                    signal['conformal_upper'] = round(stock['conformal_upper'], 4)
+                signals.append(signal)
         if scored:
             try:
                 _bear_candidates = [s for s in scored if s['up_prob'] < 0.5]
@@ -439,8 +454,28 @@ class S2MLAlphaStream(BaseStream):
         signal_cache = market_data.get('signal_cache', {})
         stock_data = signal_cache.get('stock_technicals', {})
         result = []
-        for ticker, data in stock_data.items():
-            result.append({'ticker': ticker, 'name': data.get('name', ticker), 'close': data.get('close', 0), 'rsi': data.get('rsi_14', 50), 'bb_position': data.get('bb_position', 0.5), 'macd_signal': data.get('macd_signal', 0), 'volume_ratio': data.get('volume_ratio', 1.0), 'momentum_5d': data.get('momentum_5d', 0)})
+        if isinstance(stock_data, dict) and stock_data:
+            for ticker, data in stock_data.items():
+                result.append({'ticker': ticker, 'name': data.get('name', ticker), 'close': data.get('close', 0), 'rsi': data.get('rsi_14', 50), 'bb_position': data.get('bb_position', 0.5), 'macd_signal': data.get('macd_signal', 0), 'volume_ratio': data.get('volume_ratio', 1.0), 'momentum_5d': data.get('momentum_5d', 0)})
+        elif isinstance(stock_data, list) and stock_data:
+            for item in stock_data:
+                if isinstance(item, dict) and 'ticker' in item:
+                    result.append(item)
+
+        if result:
+            return result
+
+        # 4순위: 실시간 브릿지 직접 조회 (동적 유니버스 연동)
+        try:
+            from src.data.market_data_bridge import MarketDataBridge
+            bridge = MarketDataBridge()
+            live_techs = bridge._get_stock_technicals()
+            if live_techs and isinstance(live_techs, dict):
+                for ticker, data in live_techs.items():
+                    result.append({'ticker': ticker, 'name': data.get('name', ticker), 'close': data.get('close', 0), 'rsi': data.get('rsi_14', 50), 'bb_position': data.get('bb_position', 0.5), 'macd_signal': data.get('macd_signal', 0), 'volume_ratio': data.get('volume_ratio', 1.0), 'momentum_5d': data.get('momentum_5d', 0)})
+        except Exception as _e_tech:
+            logger.debug(f"  S2 dynamic technicals build failed: {_e_tech}")
+
         return result
 
     def _load_from_feature_store(self, target_date=None) -> List[Dict]:
@@ -559,7 +594,7 @@ class S2MLAlphaStream(BaseStream):
             if use_automl:
                 try:
                     import pandas as pd
-                    fp = data_dir / f'kr_{stock['ticker']}.parquet'
+                    fp = data_dir / f"kr_{stock['ticker']}.parquet"
                     if fp.exists():
                         df = pd.read_parquet(fp)
                         if target_date is not None:
@@ -567,9 +602,9 @@ class S2MLAlphaStream(BaseStream):
                                 _pit_mask = df.index <= pd.Timestamp(target_date)
                                 if _pit_mask.any():
                                     df = df[_pit_mask]
-                                    logger.debug(f'  S2 PIT AutoML: {stock['ticker']} → {target_date} 이전 {len(df)}행')
+                                    logger.debug(f"  S2 PIT AutoML: {stock['ticker']} → {target_date} 이전 {len(df)}행")
                                 else:
-                                    logger.warning(f'  S2 PIT AutoML: {stock['ticker']} target_date={target_date} 이전 데이터 없음')
+                                    logger.warning(f"  S2 PIT AutoML: {stock['ticker']} target_date={target_date} 이전 데이터 없음")
                             except Exception as _pit_am_e:
                                 from src.utils.error_logger import log_error_rate_limited
                                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_pit_am_e}", exc_info=True)
@@ -582,7 +617,24 @@ class S2MLAlphaStream(BaseStream):
                         if not feat_df.empty:
                             features = feat_df.iloc[-1].to_dict()
                 except Exception as e:
-                    logger.warning(f'  🚨 AutoML 피처 생성 실패 ({stock['ticker']}): {e}')
+                    logger.warning(f"  🚨 AutoML 피처 생성 실패 ({stock['ticker']}): {e}")
+            if not features:
+                try:
+                    from src.data.market_data_bridge import MarketDataBridge
+                    from src.intelligence.v4_features import extract_v4
+                    _bridge = MarketDataBridge()
+                    _df = _bridge._load_price_history(stock['ticker'])
+                    if _df is not None and len(_df) >= 20:
+                        _c = _df['close'].values.astype(float)
+                        _h = _df['high'].values.astype(float)
+                        _l = _df['low'].values.astype(float)
+                        _o = _df['open'].values.astype(float)
+                        _v = _df['volume'].values.astype(float)
+                        _idx = len(_df) - 1
+                        _is_etf = stock['ticker'] in ('069500', '091160', '122630', '252670') or stock.get('is_etf', False)
+                        features = extract_v4(_c, _h, _l, _o, _v, _idx, is_etf=_is_etf) or {}
+                except Exception as _e_feat:
+                    logger.debug(f"  extract_v4 live KIS build failed for {stock['ticker']}: {_e_feat}")
             if not features:
                 fb = self._fallback_score_single(stock, market_data)
                 scored.append(fb)
@@ -617,7 +669,7 @@ class S2MLAlphaStream(BaseStream):
                     _router_info = _router.get_model_info('caution')
                     if _router_info.get('model_file_exists'):
                         _regime_up_prob = _router.predict(X, regime='caution')
-                        logger.debug(f'  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} CAUTION 모델 예측={_regime_up_prob:.4f}')
+                        logger.debug(f"  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} CAUTION 모델 예측={_regime_up_prob:.4f}")
                 except Exception as _re:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_re}", exc_info=True)
@@ -630,7 +682,7 @@ class S2MLAlphaStream(BaseStream):
                         preds.append(pp[0])
                         pred_names.append(model_name)
                     except Exception as e:
-                        logger.error(f'  🚨 S2: {model_name} 예측 에러 ({stock['ticker']}): {e}')
+                        logger.error(f"  🚨 S2: {model_name} 예측 에러 ({stock['ticker']}): {e}")
                         logger.warning('  Self-Correction: 예측 실패 모델 제외 (Confidence 페널티)')
                         preds.append(0.0)
                         pred_names.append(model_name)
@@ -650,14 +702,14 @@ class S2MLAlphaStream(BaseStream):
                 if _regime_up_prob is not None:
                     _blend = cfg.get('s2.regime_router_blend', 0.5)
                     _blended = _regime_up_prob * _blend + up_prob * (1 - _blend)
-                    logger.debug(f'  [Phase 10] S2 Blended: {stock['ticker']} router={_regime_up_prob:.4f}, ensemble={up_prob:.4f} → {_blended:.4f} (blend={_blend:.0%})')
+                    logger.debug(f"  [Phase 10] S2 Blended: {stock['ticker']} router={_regime_up_prob:.4f}, ensemble={up_prob:.4f} → {_blended:.4f} (blend={_blend:.0%})")
                     up_prob = _blended
                 if self._fast_corrector is not None:
                     try:
                         correction = float(self._fast_corrector.predict_correction(X)[0])
                         old_prob = up_prob
                         up_prob = max(0.0, min(1.0, up_prob + correction))
-                        logger.debug(f'  [Phase 2] FastCorrector: {stock['ticker']} {old_prob:.4f} → {up_prob:.4f} (Δ={correction:+.4f})')
+                        logger.debug(f"  [Phase 2] FastCorrector: {stock['ticker']} {old_prob:.4f} → {up_prob:.4f} (Δ={correction:+.4f})")
                     except Exception as e:
                         from src.utils.error_logger import log_error_rate_limited
                         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
@@ -665,7 +717,7 @@ class S2MLAlphaStream(BaseStream):
                 ood_score = self._detect_ood(X)
                 if ood_score > cfg.get('s2.ood_threshold', 0.7):
                     ood_discount = cfg.get('s2.ood_discount', 0.5)
-                    logger.debug(f'  S2: OOD 감지 {stock['ticker']} (score={ood_score:.3f}) → conf×{ood_discount}')
+                    logger.debug(f"  S2: OOD 감지 {stock['ticker']} (score={ood_score:.3f}) → conf×{ood_discount}")
                     up_prob *= ood_discount
                     stock['ood_score'] = round(ood_score, 4)
                     stock['ood_discounted'] = True
@@ -697,7 +749,7 @@ class S2MLAlphaStream(BaseStream):
                 stock['ensemble_std'] = round(ensemble_std, 4)
                 scored.append(stock)
             except Exception as e:
-                logger.debug(f'  S2: ML 예측 실패 ({stock['ticker']}): {e}')
+                logger.debug(f"  S2: ML 예측 실패 ({stock['ticker']}): {e}")
                 fb = self._fallback_score_single(stock, market_data)
                 scored.append(fb)
         ml_count = sum((1 for s in scored if s.get('model_used')))
@@ -717,7 +769,7 @@ class S2MLAlphaStream(BaseStream):
         for stock in scored:
             ensemble_std = stock.get('ensemble_std', 0)
             if ensemble_std > cfg.get('s2.ensemble_disagreement_max', 0.15):
-                logger.debug(f'  S2: 앙상블 불일치 제거 {stock['ticker']} (std={ensemble_std:.3f})')
+                logger.debug(f"  S2: 앙상블 불일치 제거 {stock['ticker']} (std={ensemble_std:.3f})")
                 continue
             filtered.append(stock)
         if len(filtered) < len(scored):
@@ -872,7 +924,7 @@ class S2MLAlphaStream(BaseStream):
                 _tca_cost = _coeff * (_order / _adtv) ** 0.5
                 _tca_cost = min(_tca_cost, float(cfg.get('s2.tca.max_cost_pct', 0.05)))
                 kelly_raw = kelly_raw * max(0.0, 1.0 - _tca_cost / max(abs(kelly_raw), 1e-06))
-                logger.debug(f'  [Phase80 TCA] {stock.get('ticker', '?')} ADTV={_adtv / 100000000.0:.1f}억 cost={_tca_cost:.4f} kelly->{kelly_raw:.4f}')
+                logger.debug(f"  [Phase80 TCA] {stock.get('ticker', '?')} ADTV={_adtv / 100000000.0:.1f}억 cost={_tca_cost:.4f} kelly->{kelly_raw:.4f}")
         except Exception as _te:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_te}", exc_info=True)
@@ -1127,7 +1179,7 @@ class S2MLAlphaStream(BaseStream):
         request = {'date': now_kst().strftime('%Y-%m-%d'), 'timestamp': now_kst().isoformat(), 'reason': 'drift_detected', 'accuracy': accuracy, 'calibration_error': drift_result.get('calibration_error', 0), 'confidence_multiplier': drift_result.get('confidence_multiplier', 1.0), 'priority': 'high' if accuracy < cfg.get('s2.retrain_critical_threshold', 0.4) else 'normal', 'requested_by': 'S2MLAlphaStream.drift_detector'}
         try:
             atomic_write_json(retrain_file, request, indent=2, ensure_ascii=False)
-            logger.warning(f'  🔄 S2: 자동 재학습 요청 생성 (accuracy={accuracy:.3f}, priority={request['priority']})')
+            logger.warning(f"  🔄 S2: 자동 재학습 요청 생성 (accuracy={accuracy:.3f}, priority={request['priority']})")
         except Exception as e:
             logger.error(f'  S2: 재학습 요청 파일 생성 실패: {e}')
 

@@ -40,7 +40,7 @@ class ExportSectorRotator:
             self._thr = float(thr if thr is not None else _cfg.get('rotator.export_yoy_threshold',          _DEFAULT_THR))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._ow  = float(ow  if ow  is not None else _DEFAULT_OW)
             self._thr = float(thr if thr is not None else _DEFAULT_THR)
 
@@ -84,5 +84,5 @@ class ExportSectorRotator:
                 boosted += 1
             else:
                 result.append(item)
-        logger.info(f'  [Phase78 Rotator] 오버웨이트 적용: {boosted}/{len(candidates)}개')
+        logger.info(f"  [Phase78 Rotator] 오버웨이트 적용: {boosted}/{len(candidates)}개")
         return result

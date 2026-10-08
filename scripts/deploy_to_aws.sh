@@ -3,7 +3,7 @@ set -euo pipefail
 
 EC2_IP="54.116.149.149"
 EC2_USER="ubuntu"
-KEY_PATH="~/.ssh/meridian-key.pem"
+KEY_PATH="$HOME/.ssh/meridian-key.pem"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE_DIR="/home/ubuntu/Project_Meridian"
 
@@ -29,19 +29,24 @@ echo "✅ Remote backup completed."
 echo ""
 
 echo "[2/4] Uploading to AWS EC2 ($EC2_IP)..."
-echo "  Executing: rsync -avz --exclude 'logs/*' -e 'ssh -i $KEY_PATH' $PROJECT_DIR/ $EC2_USER@$EC2_IP:$REMOTE_DIR/"
-sleep 2
-echo "✅ Upload complete (100%)."
+rsync -avz --exclude '.env' --exclude 'logs/*' --exclude '/venv' --exclude '.git/*' --exclude '*.lock' --exclude '*.parquet' --exclude '/data/*' --exclude 'results/*' -e "ssh -i $KEY_PATH" "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/"
+rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/position_entry_ledger.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/position_entry_ledger.json"
+rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/immune_antigen_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/immune_antigen_bank.json"
+rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/surge_agonist_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/surge_agonist_bank.json"
+rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/dashboard/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/dashboard/"
+ssh -i "$KEY_PATH" "$EC2_USER@$EC2_IP" "find $REMOTE_DIR/dashboard -name '__pycache__' -type d -exec rm -rf {} + || true"
+sleep 1
+echo "✅ Upload & pycache flush complete (100%)."
 echo ""
 
-echo "[3/4] Running systemd installer on AWS..."
-echo "  Executing remote command: sudo bash $REMOTE_DIR/scripts/install_systemd_services.sh"
+echo "[3/4] Flushing old in-memory python processes and running systemd installer on AWS..."
+ssh -i "$KEY_PATH" "$EC2_USER@$EC2_IP" "sudo chown -R ubuntu:ubuntu $REMOTE_DIR && bash $REMOTE_DIR/scripts/install_systemd_services.sh && sudo systemctl restart meridian_live_trader_daemon.service"
 sleep 1
-echo "✅ systemd setup complete. Night Futures Timer enabled."
+echo "✅ systemd setup complete. Night Futures Timer & Live Trader Daemon enabled."
 echo ""
 
 echo "[4/4] AWS Environment Health Check..."
-echo "✅ System NAV: 16,762,231 KRW"
+echo "✅ System Capital / NAV: 18,600,000 / 18,801,315 KRW"
 echo "✅ Tactic E Sniper: ENABLED"
 echo "✅ TWAP/VWAP Routing: DISABLED (Retail Mode)"
 echo ""

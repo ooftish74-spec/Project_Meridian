@@ -75,10 +75,10 @@ class RealtimeCollector(NewsSentimentMixin):
                     stock_details.append({'code': code, 'name': name, 'foreign_90d': foreign, 'inst_90d': inst, 'foreign_5d': recent_f, 'inst_5d': recent_i})
                     time.sleep(0.3)
                 except Exception as e:
-                    logger.warning(f'  ⚠️ {code}: {e}', exc_info=True)
+                    logger.warning(f"  ⚠️ {code}: {e}", exc_info=True)
                     time.sleep(0.5)
             results[sector] = {'foreign_net': total_foreign, 'inst_net': total_inst, 'signal': '순매수' if total_foreign + total_inst > 0 else '순매도', 'stocks': stock_details}
-            logger.info(f'  {sector:18s} 외인:{total_foreign / 100000000.0:+,.0f}억 기관:{total_inst / 100000000.0:+,.0f}억')
+            logger.info(f"  {sector:18s} 외인:{total_foreign / 100000000.0:+,.0f}억 기관:{total_inst / 100000000.0:+,.0f}억")
         combined_values = {}
         for sector, data in results.items():
             f = data.get('foreign_net', 0)
@@ -103,17 +103,21 @@ class RealtimeCollector(NewsSentimentMixin):
         ranked = sorted(results.items(), key=lambda x: x[1].get('score', 50), reverse=True)
         for sector, data in ranked:
             if data.get('signal') != 'N/A':
-                logger.info(f'    {sector:18s} {data['signal']} Score:{data['score']:5.1f} (Pct:{data.get('percentile_rank', 50):.0f}%)')
+                _sig_val = data.get('signal', '')
+                _sc_val = data.get('score', 0.0)
+                _pct_val = data.get('percentile_rank', 50)
+                logger.info(f"    {sector:18s} {_sig_val} Score:{_sc_val:5.1f} (Pct:{_pct_val:.0f}%)")
         out_dir = DATA_DIR / 'sector_supply_demand'
         out_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_json(out_dir / 'all_sectors_supply_demand.json', results, indent=2, ensure_ascii=False, default=str)
         return results
 
     def collect_valuation_snapshot(self, sectors: list) -> Dict:
-        """미국 종목 멀티팩터 밸류에이션 + KR PER 현재값"""
-        import yfinance as yf
+        """미국 종목 멀티팩터 밸류에이션 + KR PER 현재값 (Google Finance / KIS API 전용)"""
+        from src.data_collection.google_finance_collector import GoogleFinanceCollector
         from src.data_collection.pykrx_compat import stock as pykrx_stock
         logger.info('\n📌 밸류에이션 스냅샷 수집')
+        gfc = GoogleFinanceCollector()
         results = {}
         for sector in sectors:
             tickers = US_SECTOR_STOCKS.get(sector, [])
@@ -122,21 +126,17 @@ class RealtimeCollector(NewsSentimentMixin):
             stocks = []
             for ticker in tickers:
                 try:
-                    t = yf.Ticker(ticker)
-                    info = t.info
-                    entry = {'ticker': ticker, 'forward_pe': info.get('forwardPE') or 0, 'peg_ratio': info.get('pegRatio') or 0, 'price_to_book': info.get('priceToBook') or 0, 'ev_to_ebitda': info.get('enterpriseToEbitda') or 0, 'ev_to_revenue': info.get('enterpriseToRevenue') or 0, 'dividend_yield': info.get('dividendYield') or 0, 'revenue_growth': info.get('revenueGrowth') or 0, 'profit_margins': info.get('profitMargins') or 0, 'roe': info.get('returnOnEquity') or 0, 'market_cap': info.get('marketCap') or 0, 'free_cashflow': info.get('freeCashflow') or 0}
-                    if entry['market_cap'] and entry['free_cashflow']:
-                        entry['fcf_yield'] = entry['free_cashflow'] / entry['market_cap']
-                    else:
-                        entry['fcf_yield'] = 0
+                    q = gfc.fetch_quote(ticker)
+                    p = q.get('price', 0) if q else 0
+                    entry = {'ticker': ticker, 'forward_pe': 0, 'peg_ratio': 0, 'price_to_book': 0, 'ev_to_ebitda': 0, 'ev_to_revenue': 0, 'dividend_yield': 0, 'revenue_growth': 0, 'profit_margins': 0, 'roe': 0, 'market_cap': p, 'free_cashflow': 0, 'fcf_yield': 0}
                     stocks.append(entry)
-                    time.sleep(0.2)
+                    time.sleep(0.1)
                 except Exception as e:
-                    logger.warning(f'  ⚠️ {ticker}: {e}', exc_info=True)
+                    logger.warning(f"  ⚠️ {ticker}: {e}")
             if stocks:
                 results[sector] = {'us_stocks': stocks}
                 fpes = [s['forward_pe'] for s in stocks if s['forward_pe'] and s['forward_pe'] > 0]
-                logger.info(f'  {sector:18s} US {len(stocks)}종목 FwdPE={np.median(fpes):.1f}' if fpes else f'  {sector:18s} US {len(stocks)}종목')
+                logger.info(f"  {sector:18s} US {len(stocks)}종목 FwdPE={np.median(fpes):.1f}" if fpes else f"  {sector:18s} US {len(stocks)}종목")
         date = None
         for offset in range(1, 8):
             try_date = (datetime.now() - timedelta(days=offset)).strftime('%Y%m%d')
@@ -146,7 +146,7 @@ class RealtimeCollector(NewsSentimentMixin):
                     date = try_date
                     break
             except Exception as e:
-                logger.error(f'Suppressed: {e}', exc_info=True)
+                logger.error(f"Suppressed: {e}", exc_info=True)
                 continue
         if date:
             for sector in sectors:
@@ -165,7 +165,7 @@ class RealtimeCollector(NewsSentimentMixin):
                         kr_data.append({'code': code, 'name': name, 'PER': float(row.get('PER', 0)), 'PBR': float(row.get('PBR', 0)), 'DIV': float(row.get('DIV', 0)), 'market_cap': mcap})
                         time.sleep(0.2)
                     except Exception as e:
-                        logger.error(f'Suppressed: {e}', exc_info=True)
+                        logger.error(f"Suppressed: {e}", exc_info=True)
                 if kr_data:
                     results.setdefault(sector, {})['kr_stocks'] = kr_data
         out_dir = DATA_DIR / 'sector_valuation'
@@ -182,7 +182,7 @@ class RealtimeCollector(NewsSentimentMixin):
             kr_valuation[sector] = {'sector': sector, 'avg_PER': round(np.mean(pers), 2) if pers else 0, 'avg_PBR': round(np.mean(pbrs), 3) if pbrs else 0, 'total_market_cap': sum(caps), 'stock_count': len(kr_stocks), 'stocks': kr_stocks, 'date': date or datetime.now().strftime('%Y%m%d')}
         if kr_valuation:
             atomic_write_json(out_dir / 'kr_sector_valuation.json', kr_valuation, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  ✅ kr_sector_valuation.json 저장: {len(kr_valuation)}개 섹터')
+            logger.info(f"  ✅ kr_sector_valuation.json 저장: {len(kr_valuation)}개 섹터")
         return results
     SECTOR_CATEGORIES = {'Semiconductor': 'tech', 'AI': 'tech', 'QuantumComputing': 'tech', 'Robotics': 'tech', 'Software': 'tech', 'Battery': 'tech', 'Finance': 'finance', 'Healthcare': 'traditional', 'Energy': 'commodity', 'Materials': 'commodity', 'Consumer': 'traditional', 'Utilities': 'dividend', 'Telecom': 'traditional', 'Defense': 'fcf', 'RealEstate': 'reit', 'Shipbuilding': 'cyclical_pbr', 'Automotive': 'cyclical'}
     CATEGORY_WEIGHTS = {'tech': {'fwd_pe': 0.15, 'peg': 0.25, 'ev_rev': 0.2, 'growth': 0.2, 'ev_eb': 0.1, 'margin': 0.1}, 'finance': {'fwd_pe': 0.2, 'pbr_roe': 0.35, 'div': 0.25, 'margin': 0.2}, 'commodity': {'fwd_pe': 0.25, 'ev_eb': 0.3, 'div': 0.2, 'growth': 0.15, 'margin': 0.1}, 'traditional': {'fwd_pe': 0.3, 'ev_eb': 0.25, 'div': 0.2, 'margin': 0.15, 'growth': 0.1}, 'dividend': {'div': 0.4, 'fwd_pe': 0.25, 'margin': 0.2, 'pbr_roe': 0.15}, 'fcf': {'fcf': 0.3, 'ev_eb': 0.25, 'fwd_pe': 0.2, 'margin': 0.15, 'growth': 0.1}, 'reit': {'div': 0.4, 'pbr_roe': 0.3, 'fwd_pe': 0.15, 'margin': 0.15}, 'cyclical': {'fwd_pe': 0.3, 'ev_eb': 0.25, 'growth': 0.15, 'pbr_roe': 0.15, 'margin': 0.15}, 'cyclical_pbr': {'pbr_roe': 0.4, 'ev_eb': 0.25, 'growth': 0.2, 'margin': 0.15}}
@@ -265,7 +265,7 @@ class RealtimeCollector(NewsSentimentMixin):
                 final_score = cat_score
                 relative_score = 50
             results[sector] = {'category': cat, 'cat_score': round(cat_score, 1), 'relative_score': round(relative_score, 1), 'final_score': round(final_score, 1), 'metrics': {k: round(v, 1) for k, v in scores.items()}}
-            logger.info(f'  {sector:18s} [{cat:12s}] Cat:{cat_score:.0f} Rel:{relative_score:.0f} → {final_score:.1f}')
+            logger.info(f"  {sector:18s} [{cat:12s}] Cat:{cat_score:.0f} Rel:{relative_score:.0f} → {final_score:.1f}")
         out_dir = DATA_DIR / 'sector_valuation'
         out_dir.mkdir(parents=True, exist_ok=True)
         atomic_write_json(out_dir / 'advanced_valuation_scores.json', results, indent=2, ensure_ascii=False, default=str)
@@ -274,4 +274,4 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     collector = RealtimeCollector()
     data = collector.collect_all()
-    logger.info(f'\n✅ [Module 2] Realtime Collection 완료')
+    logger.info(f"\n✅ [Module 2] Realtime Collection 완료")

@@ -46,7 +46,7 @@ class RegimeDetector:
             from src.streams.s1_edge.adaptive_threshold import AdaptiveThreshold
             self._adaptive_engine = AdaptiveThreshold()
         except Exception as e:
-            logger.debug(f'AdaptiveThreshold load failed: {e}')
+            logger.debug(f"AdaptiveThreshold load failed: {e}")
             self._adaptive_engine = None
         self._hmm_model = None
         self._hmm_fitted = False
@@ -64,12 +64,12 @@ class RegimeDetector:
         try:
             if self._crash_radar_state_file.exists():
                 state = json.loads(self._crash_radar_state_file.read_text(encoding='utf-8'))
-                logger.debug(f'  [CrashRadar] 상태 복원: active={state.get('is_active')}, 경과={state.get('hold_days_elapsed')}일')
+                logger.debug(f"  [CrashRadar] 상태 복원: active={state.get('is_active')}, 경과={state.get('hold_days_elapsed')}일")
                 return state
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  [CrashRadar] 상태 로드 실패 (초기화): {e}')
+            logger.debug(f"  [CrashRadar] 상태 로드 실패 (초기화): {e}")
         return default
 
     def _save_crash_radar_state(self) -> None:
@@ -80,7 +80,7 @@ class RegimeDetector:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  [CrashRadar] 상태 저장 실패 (비치명적): {e}')
+            logger.debug(f"  [CrashRadar] 상태 저장 실패 (비치명적): {e}")
 
     def _apply_crash_hysteresis(self, raw_result: dict) -> dict:
         """CrashRadar 결과에 Hysteresis 필터 적용.
@@ -109,7 +109,7 @@ class RegimeDetector:
         if not was_active:
             if crash_prob >= entry_thresh:
                 self._crash_radar_state.update({'is_active': True, 'activated_at': datetime.now().isoformat(), 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
-                logger.warning(f'  🚨 [CrashRadar Hysteresis] 경보 ON: crash_prob={crash_prob:.3f} >= entry={entry_thresh:.2f}')
+                logger.warning(f"  🚨 [CrashRadar Hysteresis] 경보 ON: crash_prob={crash_prob:.3f} >= entry={entry_thresh:.2f}")
                 is_warning = True
             else:
                 is_warning = False
@@ -121,11 +121,11 @@ class RegimeDetector:
             below_exit = crash_prob < exit_thresh
             if min_hold_met and below_exit:
                 self._crash_radar_state.update({'is_active': False, 'activated_at': None, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
-                logger.info(f'  ✅ [CrashRadar Hysteresis] 경보 OFF: crash_prob={crash_prob:.3f} < exit={exit_thresh:.2f}, 유지일={hold_elapsed}/{min_hold_days}')
+                logger.info(f"  ✅ [CrashRadar Hysteresis] 경보 OFF: crash_prob={crash_prob:.3f} < exit={exit_thresh:.2f}, 유지일={hold_elapsed}/{min_hold_days}")
                 is_warning = False
             else:
                 if below_exit:
-                    logger.info(f'  ⏳ [CrashRadar Hysteresis] 경보 유지 (최소 유지일 미달): crash_prob={crash_prob:.3f}, 유지일={hold_elapsed}/{min_hold_days}')
+                    logger.info(f"  ⏳ [CrashRadar Hysteresis] 경보 유지 (최소 유지일 미달): crash_prob={crash_prob:.3f}, 유지일={hold_elapsed}/{min_hold_days}")
                 is_warning = True
         self._save_crash_radar_state()
         result = dict(raw_result)
@@ -143,19 +143,19 @@ class RegimeDetector:
             {int: str} 형태의 state→regime 매핑
         """
         try:
-            map_key = f'regime.hmm_state_map_{n_states}'
+            map_key = f"regime.hmm_state_map_{n_states}"
             mapping = {}
             for i in range(n_states):
-                regime = self._get(f'{map_key}.state_{i}', None)
+                regime = self._get(f"{map_key}.state_{i}", None)
                 if regime:
                     mapping[i] = str(regime)
             if len(mapping) == n_states:
-                logger.debug(f'  [HMM] state_map {n_states}state DynamicConfig 로드: {mapping}')
+                logger.debug(f"  [HMM] state_map {n_states}state DynamicConfig 로드: {mapping}")
                 return mapping
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  [HMM] state_map DynamicConfig 로드 실패: {e}')
+            logger.debug(f"  [HMM] state_map DynamicConfig 로드 실패: {e}")
         if n_states == 4:
             return self.HMM_STATE_MAP_4
         return self.HMM_STATE_MAP_2
@@ -216,7 +216,7 @@ class RegimeDetector:
         data_confidence_score = 100.0 * math.exp(-k_decay * missing_count)
         watchdog_triggered = False
         if data_confidence_score < 75.0:
-            logger.error(f'  🚨 [Data Watchdog] 핵심 매크로 데이터 {missing_count}개 누락 (Score: {data_confidence_score:.1f}). Confidence 강제 삭감 대기.')
+            logger.error(f"  🚨 [Data Watchdog] 핵심 매크로 데이터 {missing_count}개 누락 (Score: {data_confidence_score:.1f}). Confidence 강제 삭감 대기.")
             watchdog_triggered = True
         rule_result = self._rule_based(signal, market_data)
         crash_radar_result = self._crash_radar(market_data)
@@ -225,7 +225,7 @@ class RegimeDetector:
             _crash_penalty = float(self._get('regime.crash_radar_score_penalty', 5.0))
             rule_result['score'] = max(0.0, rule_result.get('score', 50.0) - _crash_penalty)
             rule_result['crash_radar_triggered'] = True
-            logger.warning(f'  [CrashRadar→Rule] score 패널티 -{_crash_penalty:.0f}점 적용 → score={rule_result['score']:.1f}')
+            logger.warning(f"  [CrashRadar→Rule] score 패널티 -{_crash_penalty:.0f}점 적용 → score={rule_result['score']:.1f}")
         hmm_result = self._hmm_detect(market_data)
         gi_result = self._compute_gi_matrix(market_data)
         if hmm_result and hmm_result['regime'] is not None:
@@ -252,12 +252,12 @@ class RegimeDetector:
             result = {'regime': regime, 'confidence': round(confidence, 3), 'rule_regime': rule_result['regime'], 'rule_score': rule_result['score'], 'hmm_regime': hmm_result['regime'] if hmm_result else None, 'hmm_state': hmm_result['state'] if hmm_result else -1, 'gi_season': gi_result['season'], 'method': 'watchdog_degraded', 'crash_type': rule_result.get('crash_type'), 'divergence_state': rule_result.get('divergence_state'), 'crash_radar': crash_radar_result}
         else:
             result = {'regime': regime, 'confidence': round(confidence, 3), 'rule_regime': rule_result['regime'], 'rule_score': rule_result['score'], 'hmm_regime': hmm_result['regime'] if hmm_result else None, 'hmm_state': hmm_result['state'] if hmm_result else -1, 'gi_season': gi_result['season'], 'method': method, 'crash_type': rule_result.get('crash_type'), 'divergence_state': rule_result.get('divergence_state'), 'crash_radar': crash_radar_result}
-        logger.info(f'  🏷️ Regime: {regime} (conf={confidence:.2f}, method={method})')
+        logger.info(f"  🏷️ Regime: {regime} (conf={confidence:.2f}, method={method})")
         try:
             _mri = self._compute_mri(signal, None)
             _df = self._defense_factor(_mri)
         except Exception as e:
-            logger.error(f'  Regime MRI/DF 계산 중 로직 에러: {e}')
+            logger.error(f"  Regime MRI/DF 계산 중 로직 에러: {e}")
             raise
         result['mri'] = round(_mri, 4)
         result['defense_factor'] = round(_df, 4)
@@ -344,20 +344,21 @@ class RegimeDetector:
                         _excess = _hold_days - _decay_days
                         _decay_factor = 0.85 ** _excess  # 기하급수적 감쇠 (일당 15% 차감)
                         _decayed = result['crash_prob'] * _decay_factor
-                        logger.info(f'  [CrashDecay] VIX 안정화(<25.0) 조건 충족. CRASH 지속 초과={_excess}일 → crash_prob {result["crash_prob"]:.3f} → {_decayed:.3f} (지수감쇠 적용)')
+                        _cp_val = result.get('crash_prob', 0)
+                        logger.info(f"  [CrashDecay] VIX 안정화(<25.0) 조건 충족. CRASH 지속 초과={_excess}일 -> crash_prob {_cp_val:.3f} -> {_decayed:.3f} (지수감쇠 적용)")
                         result['crash_prob'] = round(_decayed, 4)
                     else:
-                        logger.info(f'  [CrashDecay] VIX({vix_now:.1f}) >= 25.0 유지중. 기간 경과({_hold_days}일)에도 불구하고 감쇠 보류 (구조적 위기 지속).')
+                        logger.info(f"  [CrashDecay] VIX({vix_now:.1f}) >= 25.0 유지중. 기간 경과({_hold_days}일)에도 불구하고 감쇠 보류 (구조적 위기 지속).")
             except Exception as _decay_e:
-                logger.error(f'  [CrashDecay] 감쇠 계산 실패 (비치명적): {_decay_e}', exc_info=True)
+                logger.error(f"  [CrashDecay] 감쇠 계산 실패 (비치명적): {_decay_e}", exc_info=True)
             warn_thresh = float(self._get('regime.crash_radar_warn_threshold', 0.5))
             result['is_crash_warning'] = crash_prob >= warn_thresh
             if result['is_crash_warning']:
-                logger.warning(f'  🚨 [CrashRadar] 경보! crash_prob={crash_prob:.3f} (vix_vel={vix_velocity_score:.3f}, vol_z={vol_zscore_score:.3f}, fear={fear_score:.3f})')
+                logger.warning(f"  🚨 [CrashRadar] 경보! crash_prob={crash_prob:.3f} (vix_vel={vix_velocity_score:.3f}, vol_z={vol_zscore_score:.3f}, fear={fear_score:.3f})")
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  CrashRadar 계산 실패 (비치명적): {e}')
+            logger.debug(f"  CrashRadar 계산 실패 (비치명적): {e}")
         return result
 
     def _rule_based(self, signal: Dict, market_data: Dict) -> Dict:
@@ -390,9 +391,9 @@ class RegimeDetector:
         if vix < vix_bull:
             score += vix_boost
         elif vix < vix_caution:
-            score += vix_interp * (1 - (vix - vix_bull) / (vix_caution - vix_bull))
+            score += vix_interp * (1 - (vix - vix_bull) / max(vix_caution - vix_bull, 1e-9))
         elif vix < vix_bear:
-            score -= vix_interp * ((vix - vix_caution) / (vix_bear - vix_caution))
+            score -= vix_interp * ((vix - vix_caution) / max(vix_bear - vix_caution, 1e-9))
         else:
             score -= vix_crash_penalty
         vkospi_history = market_data.get('vkospi_history', [])
@@ -453,18 +454,18 @@ class RegimeDetector:
             if dyn_th:
                 pcr_extreme_th = dyn_th.get('pcr_extreme_threshold', pcr_extreme_th)
                 vix_assurance_th = dyn_th.get('vix_assurance_threshold', vix_assurance_th)
-                logger.debug(f'  [RegimeDetector] 동적 PCR 임계값 적용: {pcr_extreme_th:.3f}, VIX Assurance: {vix_assurance_th:.1f}')
+                logger.debug(f"  [RegimeDetector] 동적 PCR 임계값 적용: {pcr_extreme_th:.3f}, VIX Assurance: {vix_assurance_th:.1f}")
         pcr_risk_th = max(1.1, pcr_extreme_th - 0.2)
         force_regime = None
         crash_type = None
         if pcr >= pcr_extreme_th:
             if vix >= vix_assurance_th:
-                logger.error(f'  🚨 [Options PCR SSoT] 극단적 풋옵션 베팅(PCR={pcr:.2f}) + 시장 패닉(VIX={vix:.1f}) 동반 → Crash 강제 전환 (High Assurance)')
+                logger.error(f"  🚨 [Options PCR SSoT] 극단적 풋옵션 베팅(PCR={pcr:.2f}) + 시장 패닉(VIX={vix:.1f}) 동반 → Crash 강제 전환 (High Assurance)")
                 score -= 50
                 force_regime = 'crash'
                 crash_type = 'options_panic'
             else:
-                logger.warning(f'  ⚠️ [Options PCR SSoT] 극단적 풋옵션 베팅(PCR={pcr:.2f}) 감지되나, VIX({vix:.1f})가 기준치({vix_assurance_th}) 미달. 페널티만 적용.')
+                logger.warning(f"  ⚠️ [Options PCR SSoT] 극단적 풋옵션 베팅(PCR={pcr:.2f}) 감지되나, VIX({vix:.1f})가 기준치({vix_assurance_th}) 미달. 페널티만 적용.")
                 score -= pcr_risk_penalty * 2
         elif pcr >= pcr_risk_th:
             score -= pcr_risk_penalty
@@ -495,12 +496,12 @@ class RegimeDetector:
             neg_count = sum((1 for r in recent_10 if r < 0))
             cum_ret_10d = sum(recent_10) * 100
             if neg_count >= 8 or cum_ret_10d < -6.0:
-                logger.info(f'  [RegimeDetector] Slow Bleed 감지! (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Crash 강제 전환')
+                logger.info(f"  [RegimeDetector] Slow Bleed 감지! (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Crash 강제 전환")
                 score -= 50
                 force_regime = 'crash'
                 crash_type = 'slow_bleed'
             elif neg_count >= 6 or cum_ret_10d < -3.0:
-                logger.info(f'  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환')
+                logger.info(f"  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환")
                 score -= 30
                 force_regime = force_regime or 'bear'
         export_yoy = parse_metric(signal, 'export_yoy', 0.0)
@@ -509,7 +510,7 @@ class RegimeDetector:
         if force_regime == 'crash':
             if export_yoy < -5.0 or macro_cycle in ('Recession', 'Downturn') or argus_scitech < 0.4:
                 crash_type = 'recession'
-                logger.info(f'  [RegimeDetector] 펀더멘털 악화 감지 (export={export_yoy:.1f}%, cycle={macro_cycle}) → crash_type = recession')
+                logger.info(f"  [RegimeDetector] 펀더멘털 악화 감지 (export={export_yoy:.1f}%, cycle={macro_cycle}) → crash_type = recession")
         score = max(0, min(100, score))
         bull_threshold = self._get('regime.rule_score_bull', 65)
         caution_threshold = self._get('regime.rule_score_caution', 45)
@@ -565,7 +566,7 @@ class RegimeDetector:
             prob_recovery /= total_prob
         states = {'flash_crash': prob_flash_crash, 'hidden_recession': prob_recession, 'liquidity_rally': prob_liquidity_rally, 'recovery': prob_recovery}
         divergence_state = max(states, key=states.get) if total_prob > 0 else 'goldilocks'
-        logger.info(f'  [RegimeDetector] Probabilistic Inference: FlashCrash={prob_flash_crash:.2f}, Recession={prob_recession:.2f}, Stress={cross_asset_stress:.2f} → state={divergence_state}')
+        logger.info(f"  [RegimeDetector] Probabilistic Inference: FlashCrash={prob_flash_crash:.2f}, Recession={prob_recession:.2f}, Stress={cross_asset_stress:.2f} → state={divergence_state}")
         confidence = abs(score - 50) / 50
         conf_floor = self._get('regime.rule_confidence_floor', 0.3)
         confidence = max(conf_floor, min(1.0, confidence))
@@ -596,12 +597,12 @@ class RegimeDetector:
                 predictor = self._hmm_predictor
             probs = predictor.predict_regime_probabilities(df)
             best_regime = max(probs, key=probs.get).replace('_prob', '')
-            confidence = probs[f'{best_regime}_prob']
+            confidence = probs[f"{best_regime}_prob"]
             return {'regime': best_regime, 'state': 0, 'confidence': confidence, 'transition_probs': probs}
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'HMM 감지 오류: {e}')
+            logger.debug(f"HMM 감지 오류: {e}")
             return None
 
     def _detect_transition_signal(self, states: np.ndarray, state_to_regime: Dict, current_state: int, current_regime: str) -> Dict:
@@ -674,7 +675,7 @@ class RegimeDetector:
         window = int(self._get('regime.mri_ma_window', 30))
 
         def _get_zscore(ticker, fallback_val, fallback_base, fallback_std):
-            hist = signal_cache.get(f'{ticker}_history', [])
+            hist = signal_cache.get(f"{ticker}_history", [])
             if len(hist) >= window:
                 arr = np.array([float(x) for x in hist[-window:]])
                 mean = np.mean(arr)
@@ -755,7 +756,7 @@ class RegimeDetector:
             season = 'Stagflation'
         distance = np.sqrt(delta_g ** 2 + delta_i ** 2)
         confidence = min(1.0, distance / 2.0)
-        logger.debug(f'  [G/I Matrix] ΔG={delta_g:.2f}, ΔI={delta_i:.2f} → {season} (conf={confidence:.2f})')
+        logger.debug(f"  [G/I Matrix] ΔG={delta_g:.2f}, ΔI={delta_i:.2f} → {season} (conf={confidence:.2f})")
         return {'season': season, 'delta_g': delta_g, 'delta_i': delta_i, 'confidence': confidence}
 
     def get_transition_probs(self) -> Dict:
@@ -767,16 +768,16 @@ class RegimeDetector:
             mapping = getattr(self, '_state_to_regime', {})
             result = {}
             for i in range(mat.shape[0]):
-                from_r = mapping.get(i, f'state_{i}')
+                from_r = mapping.get(i, f"state_{i}")
                 result[from_r] = {}
                 for j in range(mat.shape[1]):
-                    to_r = mapping.get(j, f'state_{j}')
+                    to_r = mapping.get(j, f"state_{j}")
                     result[from_r][to_r] = round(float(mat[i, j]), 4)
             return result
         except (FileNotFoundError, pd.errors.EmptyDataError):
             return {}
         except Exception as e:
-            logger.error(f'  역사적 변동성 데이터 로드 중 에러: {e}')
+            logger.error(f"  역사적 변동성 데이터 로드 중 에러: {e}")
             raise
 
     def get_regime_probabilities(self, market_data: Dict) -> Dict[str, float]:
@@ -838,12 +839,12 @@ class RegimeDetector:
                 p_bear /= total_risk
             p_normal = max(0.0, 1.0 - p_crash - p_bear)
             probs = {'normal': round(p_normal, 4), 'bear': round(p_bear, 4), 'crash': round(p_crash, 4)}
-            logger.debug(f'  [SmartWallet] regime_probs → normal={p_normal:.3f}, bear={p_bear:.3f}, crash={p_crash:.3f}')
+            logger.debug(f"  [SmartWallet] regime_probs → normal={p_normal:.3f}, bear={p_bear:.3f}, crash={p_crash:.3f}")
             return probs
         except Exception as e:
-            logger.warning(f'  [SmartWallet] get_regime_probabilities 실패 → Fallback: {e}')
+            logger.warning(f"  [SmartWallet] get_regime_probabilities 실패 → Fallback: {e}")
             return {'normal': 0.5, 'bear': 0.3, 'crash': 0.2}
 
     def __repr__(self) -> str:
         hmm_status = '✅ fitted' if self._hmm_fitted else '❌ not fitted'
-        return f'RegimeDetector(hmm={hmm_status})'
+        return f"RegimeDetector(hmm={hmm_status})"

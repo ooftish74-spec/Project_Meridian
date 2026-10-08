@@ -56,7 +56,7 @@ class ChartGenerator:
                 fm.fontManager.addfont(str(font_path))
                 plt.rcParams['font.family'] = 'NanumGothic'
             else:
-                logger.warning(f'Local NanumGothic not found at {font_path}')
+                logger.warning(f"Local NanumGothic not found at {font_path}")
                 korean_fonts = ['AppleGothic', 'NanumGothic', 'Malgun Gothic']
                 available_fonts = [f.name for f in fm.fontManager.ttflist]
                 for font in korean_fonts:
@@ -65,7 +65,7 @@ class ChartGenerator:
                         break
             plt.rcParams['axes.unicode_minus'] = False
         except Exception as e:
-            logger.error(f'Error setting up Korean font: {e}')
+            logger.error(f"Error setting up Korean font: {e}")
 
     def plot_time_series(self, data: pd.DataFrame, title: str, ylabel: str='Value', filename: str='chart.png', figsize: Tuple[int, int]=(12, 6)) -> str:
         """
@@ -91,10 +91,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Time series chart saved: {output_path}')
+            logger.info(f"✓ Time series chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting time series: {e}')
+            logger.error(f"Error plotting time series: {e}")
             return ''
 
     def plot_comparison(self, data: Dict[str, pd.Series], title: str, ylabel: str='Value', filename: str='comparison.png', figsize: Tuple[int, int]=(12, 6)) -> str:
@@ -120,10 +120,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Comparison chart saved: {output_path}')
+            logger.info(f"✓ Comparison chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting comparison: {e}')
+            logger.error(f"Error plotting comparison: {e}")
             return ''
 
     def plot_correlation_heatmap(self, data: pd.DataFrame, title: str='Correlation Heatmap', filename: str='correlation_heatmap.png', figsize: Tuple[int, int]=(14, 12)) -> str:
@@ -144,10 +144,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Correlation heatmap saved: {output_path}')
+            logger.info(f"✓ Correlation heatmap saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting correlation heatmap: {e}')
+            logger.error(f"Error plotting correlation heatmap: {e}")
             return ''
 
     def plot_bar_chart(self, data: pd.Series, title: str, xlabel: str='Category', ylabel: str='Value', filename: str='bar_chart.png', figsize: Tuple[int, int]=(10, 6)) -> str:
@@ -175,10 +175,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Bar chart saved: {output_path}')
+            logger.info(f"✓ Bar chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting bar chart: {e}')
+            logger.error(f"Error plotting bar chart: {e}")
             return ''
 
     def plot_pie_chart(self, data: pd.Series, title: str, filename: str='pie_chart.png', figsize: Tuple[int, int]=(10, 8)) -> str:
@@ -202,10 +202,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Pie chart saved: {output_path}')
+            logger.info(f"✓ Pie chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting pie chart: {e}')
+            logger.error(f"Error plotting pie chart: {e}")
             return ''
 
     def plot_efficient_frontier(self, returns: np.ndarray, risks: np.ndarray, sharpe_ratios: np.ndarray, max_sharpe_idx: int, min_vol_idx: int, title: str='Efficient Frontier', filename: str='efficient_frontier.png', figsize: Tuple[int, int]=(12, 8)) -> str:
@@ -237,10 +237,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Efficient frontier chart saved: {output_path}')
+            logger.info(f"✓ Efficient frontier chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting efficient frontier: {e}')
+            logger.error(f"Error plotting efficient frontier: {e}")
             return ''
 
     def plot_forecast(self, historical: pd.Series, forecast: pd.Series, confidence_interval: Optional[Tuple[pd.Series, pd.Series]]=None, title: str='Forecast', filename: str='forecast.png', figsize: Tuple[int, int]=(14, 7)) -> str:
@@ -264,9 +264,9 @@ class ChartGenerator:
                         lower, upper = confidence_interval
                         ax.fill_between(forecast.index, lower.values, upper.values, alpha=0.3, color='red', label='95% Confidence Interval')
                     else:
-                        logger.warning(f'Skipping confidence interval - unexpected format: {type(confidence_interval)}')
+                        logger.warning(f"Skipping confidence interval - unexpected format: {type(confidence_interval)}")
                 except Exception as ci_error:
-                    logger.warning(f'Could not plot confidence interval: {ci_error}')
+                    logger.warning(f"Could not plot confidence interval: {ci_error}")
             ax.set_title(title, fontsize=16, fontweight='bold')
             ax.set_xlabel('Date', fontsize=12)
             ax.set_ylabel('Value', fontsize=12)
@@ -277,10 +277,10 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Forecast chart saved: {output_path}')
+            logger.info(f"✓ Forecast chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting forecast: {e}')
+            logger.error(f"Error plotting forecast: {e}")
             return ''
 
     def plot_interactive_time_series(self, data: pd.DataFrame, title: str, filename: str='interactive_chart.html') -> str:
@@ -299,10 +299,10 @@ class ChartGenerator:
             fig.update_layout(title=title, xaxis_title='Date', yaxis_title='Value', hovermode='x unified', template='plotly_white', height=600)
             output_path = self.output_dir / filename
             fig.write_html(str(output_path))
-            logger.info(f'✓ Interactive chart saved: {output_path}')
+            logger.info(f"✓ Interactive chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error creating interactive chart: {e}')
+            logger.error(f"Error creating interactive chart: {e}")
             return ''
 
     def plot_monte_carlo(self, simulations: np.ndarray, percentiles: Dict[str, float], initial_value: float, title: str='Monte Carlo Simulation', filename: str='monte_carlo.png', figsize: Tuple[int, int]=(14, 8)) -> str:
@@ -331,7 +331,7 @@ class ChartGenerator:
             ax1.plot(p5, color='orange', linewidth=2, linestyle='--', label='5th percentile')
             ax1.plot(p95, color='green', linewidth=2, linestyle='--', label='95th percentile')
             ax1.axhline(y=initial_value, color='black', linestyle=':', linewidth=2, label='Initial Value')
-            ax1.set_title(f'{title} - Portfolio Value Over Time', fontsize=14, fontweight='bold')
+            ax1.set_title(f"{title} - Portfolio Value Over Time', fontsize=14, fontweight='bold")
             ax1.set_xlabel('Days', fontsize=12)
             ax1.set_ylabel('Portfolio Value ($)', fontsize=12)
             ax1.legend(loc='best')
@@ -351,8 +351,8 @@ class ChartGenerator:
             output_path = self.output_dir / filename
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
-            logger.info(f'✓ Monte Carlo chart saved: {output_path}')
+            logger.info(f"✓ Monte Carlo chart saved: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error plotting Monte Carlo simulation: {e}')
+            logger.error(f"Error plotting Monte Carlo simulation: {e}")
             return ''

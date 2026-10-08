@@ -75,7 +75,7 @@ class KellyCriterion:
             Kelly 비율 (음수 가능 — 이 경우 투자하지 않음)
         """
         if win_rate >= 1.0:
-            logger.warning(f'win_rate={win_rate:.4f} ≥ 1.0: 비현실적 입력 가능성 높음 — 데이터 확인 권장')
+            logger.warning(f"win_rate={win_rate:.4f} ≥ 1.0: 비현실적 입력 가능성 높음 — 데이터 확인 권장")
             win_rate = min(win_rate, 0.99)
         if profit_loss_ratio <= 0 or win_rate <= 0 or win_rate > 1:
             return 0.0
@@ -114,7 +114,7 @@ class KellyCriterion:
         sufficient_data = n_trades >= min_trades
         if not sufficient_data or avg_loss == 0 or win_rate <= 0:
             default_pct = _get(f'risk.kelly_default.{stream_id}', _get('risk.kelly_default_pct', 0.05))
-            return {'stream_id': stream_id, 'full_kelly': 0.0, 'adjusted_kelly': default_pct, 'max_position_pct': default_pct, 'win_rate': win_rate, 'profit_loss_ratio': 0.0, 'n_trades': n_trades, 'sufficient_data': False, 'regime_adj': 1.0, 'note': f'데이터 부족 ({n_trades}/{min_trades}건) → 기본값 {default_pct * 100:.0f}%'}
+            return {'stream_id': stream_id, 'full_kelly': 0.0, 'adjusted_kelly': default_pct, 'max_position_pct': default_pct, 'win_rate': win_rate, 'profit_loss_ratio': 0.0, 'n_trades': n_trades, 'sufficient_data': False, 'regime_adj': 1.0, 'note': f"데이터 부족 ({n_trades}/{min_trades}건) → 기본값 {default_pct * 100:.0f}%"}
         pl_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 0
         full_kelly = self.kelly_fraction(win_rate, pl_ratio)
         fraction = _get('risk.kelly_fraction', 0.5)
@@ -141,7 +141,13 @@ class KellyCriterion:
         adjusted_kelly = fractional_kelly * regime_adj * bayesian_penalty
         
         if full_kelly <= 0:
-            return 0.0
+            return {
+                'stream_id': stream_id, 'full_kelly': 0.0, 'fractional_kelly': 0.0,
+                'adjusted_kelly': 0.0, 'max_position_pct': 0.0, 'win_rate': round(win_rate, 4),
+                'profit_loss_ratio': round(pl_ratio, 4), 'avg_win_pct': round(avg_win * 100, 2),
+                'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades,
+                'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction
+            }
         max_pos = _get('risk.kelly_max_position_pct', 0.15)
         min_pos = _get('risk.kelly_min_position_pct', 0.01)
         final_kelly = max(min_pos, min(max_pos, adjusted_kelly))
@@ -209,7 +215,7 @@ class KellyCriterion:
             if sc_path.exists():
                 self._signal_cache = json.loads(sc_path.read_text())
         except Exception as e:
-            logger.warning(f'signal_cache 로드 실패 (Bayesian Penalty 스킵): {e}')
+            logger.warning(f"signal_cache 로드 실패 (Bayesian Penalty 스킵): {e}")
 
     def _get_stream_stats(self, stream_id: str) -> Dict:
         """스트림 통계 추출."""
@@ -248,6 +254,6 @@ class KellyCriterion:
             path = _RESULTS / 'kelly_criterion.json'
             _RESULTS.mkdir(exist_ok=True)
             atomic_write_json(path, output, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  📊 Kelly Criterion 저장: portfolio={output['portfolio_kelly'] * 100:.1f}%')
+            logger.info(f"  📊 Kelly Criterion 저장: portfolio={output['portfolio_kelly'] * 100:.1f}%")
         except Exception as e:
             logger.critical(f'Kelly 결과 저장 실패: {e}', exc_info=True)

@@ -35,7 +35,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 
@@ -62,12 +62,31 @@ class PipelineCheckpoint:
         phase_info = self._state.get('phases', {}).get(phase, {})
         status = phase_info.get('status')
 
+        # 실시간 연속 관제 페이즈는 순간 네트워크 오류로 영구 차단되지 않도록 Self-Healing 자가 복구
+        if phase in ('us_regular', 'us_premarket', 'market', 'intraday'):
+            if status == 'failed':
+                last_failed = phase_info.get('failed_at', '')
+                if last_failed:
+                    try:
+                        elapsed = (datetime.now() - datetime.fromisoformat(last_failed)).total_seconds()
+                        if elapsed > 60:
+                            logger.info(f"  🔄 [{phase}] 60초 경과로 체크포인트 FAILED 자가 복구 리셋 (Auto-Healing)")
+                            phase_info['retries'] = 0
+                            phase_info['status'] = 'ready'
+                            self._save()
+                            return True
+                    except Exception:
+                        pass
+            elif status == 'done':
+                # 연속 스트리밍 모드에서는 done이더라도 수급 틱 감시를 지속 수행
+                return True
+
         if status == 'done':
             return False  # 이미 완료
 
         if status == 'failed':
-            max_retries = (_cfg.get('checkpoint.max_retries', 2)
-                             if _cfg else 2)
+            max_retries = (_cfg.get('checkpoint.max_retries', 5)
+                             if _cfg else 5)
             retries = phase_info.get('retries', 0)
             if retries >= max_retries:
                 logger.warning(
@@ -181,7 +200,7 @@ class PipelineCheckpoint:
                     on_disk = json.loads(_CKPT_FILE.read_text())
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
 
             # 같은 날이면 merge, 다른 날이면 현재 state 우선
@@ -198,5 +217,5 @@ class PipelineCheckpoint:
                 self._state, indent=2, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass

@@ -65,7 +65,7 @@ echo "════════════════════════�
 cd "$PROJECT_ROOT"
 
 # daily_pipeline.py 실행
-python3 scripts/daily_pipeline.py "$PHASE" 2>&1 | tee -a "$LOG_FILE"
+python3 scripts/daily_pipeline.py "$PHASE" ${2:-} 2>&1 | tee -a "$LOG_FILE"
 
 EXIT_CODE=${PIPESTATUS[0]}
 

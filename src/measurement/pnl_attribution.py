@@ -32,7 +32,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 
@@ -182,10 +182,10 @@ class PnLAttribution:
                 'n_trades': n_trades,
                 'n_days': len(self._daily_pnl),
                 'mean_daily_pnl': round(mean_daily, 0),
-                'daily_pnl_std': round(std_daily, 0),
+                'daily_pnl_std': round(std_daily, 0) if not math.isnan(std_daily) else 0.0,
                 'daily_sharpe': (
                     round(mean_daily / std_daily * math.sqrt(252), 3)
-                    if std_daily > 0 else 0),
+                    if (not math.isnan(std_daily) and std_daily > 0 and not math.isnan(mean_daily)) else 0.0),
             },
             'stream_attribution': stream_attr,
             'strategy_attribution': strategy_attr,
@@ -201,7 +201,7 @@ class PnLAttribution:
             atomic_write_json((_RESULTS / 'pnl_attribution.json'), report, indent=2, default=str, ensure_ascii=False)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
         logger.info(

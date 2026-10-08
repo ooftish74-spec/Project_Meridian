@@ -42,10 +42,10 @@ def collect_global_macro_sentiment() -> dict:
         response.raise_for_status()
         data = response.json()
         if 'Information' in data:
-            logger.warning(f'  ⚠️ Alpha Vantage API 한도 초과/제한: {data['Information']}')
+            logger.warning(f"  ⚠️ Alpha Vantage API 한도 초과/제한: {data['Information']}")
             return {}
         if 'Note' in data:
-            logger.warning(f'  ⚠️ Alpha Vantage Note: {data['Note']}')
+            logger.warning(f"  ⚠️ Alpha Vantage Note: {data['Note']}")
             return {}
         feed = data.get('feed', [])
         if not feed:
@@ -58,7 +58,7 @@ def collect_global_macro_sentiment() -> dict:
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / 'global_macro_sentiment.json'
         atomic_write_json(out_path, result, indent=2, ensure_ascii=False)
-        logger.info(f'  ✅ [Phase 57] 글로벌 매크로 감성 점수: {avg_score:+.4f} (기사 {len(feed)}건 / 점수 {len(scores)}건) → {out_path}')
+        logger.info(f"  ✅ [Phase 57] 글로벌 매크로 감성 점수: {avg_score:+.4f} (기사 {len(feed)}건 / 점수 {len(scores)}건) → {out_path}")
         return result
     except requests.exceptions.Timeout:
         logger.error('  ❌ Alpha Vantage 타임아웃 (20s 초과)', exc_info=True)
@@ -270,7 +270,7 @@ def collect_global_macro(symbols: list) -> dict:
             route, param = mapping.get(symbol, ('ETF', symbol)) # 기본값은 ETF/주식 취급
             
             if route == 'UNSUPPORTED':
-                logger.warning(f'  ⚠️ [Alpha Vantage] {symbol} (VIX 등)는 지원하지 않는 지표입니다.')
+                logger.warning(f"  ⚠️ [Alpha Vantage] {symbol} (VIX 등)는 지원하지 않는 지표입니다.")
                 continue
                 
             price = None
@@ -283,9 +283,9 @@ def collect_global_macro(symbols: list) -> dict:
                     price = float(resp['Global Quote']['05. price'])
                     chg_pct = float(resp['Global Quote'].get('10. change percent', '0%').replace('%', ''))
                     results[symbol] = {'price': price, 'change_1d': chg_pct}
-                    logger.info(f'  🌍 [Alpha Vantage] {symbol} (Mapped: {param}) 수집 성공: {price} ({chg_pct:+.2f}%)')
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} (Mapped: {param}) 수집 성공: {price} ({chg_pct:+.2f}%)")
                 else:
-                    logger.warning(f'  ⚠️ [Alpha Vantage] {symbol}({param}) 데이터 없음 또는 한도 도달.')
+                    logger.warning(f"  ⚠️ [Alpha Vantage] {symbol}({param}) 데이터 없음 또는 한도 도달.")
                     
             # [2] WTI (원유) 라우팅
             elif route == 'WTI':
@@ -294,7 +294,7 @@ def collect_global_macro(symbols: list) -> dict:
                 if 'data' in resp and len(resp['data']) > 0:
                     price = float(resp['data'][0]['value'])
                     results[symbol] = {'price': price, 'change_1d': 0.0} # 과거값 계산 생략
-                    logger.info(f'  🌍 [Alpha Vantage] {symbol} (WTI) 수집 성공: {price}')
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} (WTI) 수집 성공: {price}")
                     
             # [3] COPPER (구리) 라우팅
             elif route == 'COPPER':
@@ -303,7 +303,7 @@ def collect_global_macro(symbols: list) -> dict:
                 if 'data' in resp and len(resp['data']) > 0 and resp['data'][0]['value'] != '.':
                     price = float(resp['data'][0]['value'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
-                    logger.info(f'  🌍 [Alpha Vantage] {symbol} (COPPER) 수집 성공: {price}')
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} (COPPER) 수집 성공: {price}")
                     
             # [4] 국채 금리 라우팅
             elif route == 'YIELD':
@@ -312,7 +312,7 @@ def collect_global_macro(symbols: list) -> dict:
                 if 'data' in resp and len(resp['data']) > 0:
                     price = float(resp['data'][0]['value'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
-                    logger.info(f'  🌍 [Alpha Vantage] {symbol} ({param} Yield) 수집 성공: {price}')
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} ({param} Yield) 수집 성공: {price}")
                     
             # [5] 환율 (FX) 라우팅
             elif route == 'FX':
@@ -322,7 +322,7 @@ def collect_global_macro(symbols: list) -> dict:
                 if 'Realtime Currency Exchange Rate' in resp:
                     price = float(resp['Realtime Currency Exchange Rate']['5. Exchange Rate'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
-                    logger.info(f'  🌍 [Alpha Vantage] {symbol} (FX {param}) 수집 성공: {price}')
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} (FX {param}) 수집 성공: {price}")
             
             time.sleep(0.15) # Premium Burst 방지 딜레이
             
@@ -350,9 +350,9 @@ def collect_options_pcr(symbol: str='SPY') -> float:
                 calls = sum(int(c.get('volume', 0)) for c in data['data'] if c.get('type') == 'call')
                 if calls > 0:
                     pcr = puts / calls
-                    logger.info(f'  📊 [Alpha Vantage] {symbol} Options PCR 수집 성공: {pcr:.2f}')
+                    logger.info(f"  📊 [Alpha Vantage] {symbol} Options PCR 수집 성공: {pcr:.2f}")
                     return round(pcr, 4)
-            logger.warning(f'  ⚠️ [Alpha Vantage] Options PCR 데이터 없음 (포맷 변경 또는 데이터 부재)')
+            logger.warning(f"  ⚠️ [Alpha Vantage] Options PCR 데이터 없음 (포맷 변경 또는 데이터 부재)")
     except Exception as e:
         logger.error(f'  ❌ [Alpha Vantage] Options PCR 수집 실패: {e}', exc_info=True)
     return 1.0
@@ -385,7 +385,7 @@ def collect_news_sentiment() -> float:
                 out_file = out_dir / 'global_macro_sentiment.json'
                 result = {'average_sentiment_score': round(avg_score, 4), 'article_count': len(scores), 'last_updated': datetime.now().isoformat()}
                 atomic_write_json(out_file, result, indent=2, ensure_ascii=False)
-                logger.info(f'  📰 [Alpha Vantage] News Sentiment 수집 성공: {avg_score:+.3f} ({len(scores)} articles)')
+                logger.info(f"  📰 [Alpha Vantage] News Sentiment 수집 성공: {avg_score:+.3f} ({len(scores)} articles)")
                 return round(avg_score, 4)
             else:
                 logger.warning('  ⚠️ [Alpha Vantage] News Sentiment 데이터 없음.')

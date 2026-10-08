@@ -56,27 +56,24 @@ class AsianMarketSignals:
         Returns:
             {지수명: 변동률 또는 종가}
         """
-        tickers = cfg.get('altdata.asian_tickers', {'nikkei225': '^N225', 'shanghai_comp': '000001.SS', 'hang_seng': '^HSI', 'kospi200_futures': '101S6000'})
+        from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+        front_code = DynamicFuturesContractResolver.get_current_front_month_code()
+        kis_code = DynamicFuturesContractResolver.to_kis_code(front_code)
+        tickers = cfg.get('altdata.asian_tickers', {'nikkei225': '^N225', 'shanghai_comp': '000001.SS', 'hang_seng': '^HSI', 'kospi200_futures': kis_code})
         features = {}
         try:
-            import yfinance as yf
-            period = cfg.get('altdata.asian_period', '5d')
+            from src.data_collection.google_finance_collector import GoogleFinanceCollector
+            gfc = GoogleFinanceCollector()
             for name, ticker in tickers.items():
                 if name == 'kospi200_futures':
                     continue
                 try:
-                    data = yf.download(ticker, period=period, progress=False, timeout=cfg.get('altdata.yf_timeout', 10))
-                    if data is not None and len(data) >= 2:
-                        closes = data['Close'].values.flatten()
-                        latest = float(closes[-1])
-                        prev = float(closes[-2])
-                        if prev > 0:
-                            change = latest / prev - 1
-                            features[f'asian_{name}_close'] = round(latest, 2)
-                            features[f'asian_{name}_change_1d'] = round(change, 6)
-                            if len(closes) >= 5:
-                                change_5d = latest / float(closes[0]) - 1
-                                features[f'asian_{name}_change_5d'] = round(change_5d, 6)
+                    q = gfc.fetch_quote(ticker)
+                    if q and q.get('price'):
+                        latest = float(q['price'])
+                        change = float(q.get('change_pct', 0)) / 100.0
+                        features[f"asian_{name}_close"] = round(latest, 2)
+                        features[f"asian_{name}_change_1d"] = round(change, 6)
                 except Exception as e:
                     logger.error(f'  Asian {name} 실패: {e}', exc_info=True)
         except ImportError as e:
@@ -91,7 +88,7 @@ class AsianMarketSignals:
             composite = w_nk * nk_chg + w_sh * sh_chg + w_hs * hs_chg
             features['asian_composite_signal'] = round(composite, 6)
         if features:
-            logger.info(f'  🌏 아시아 시그널: {len(features)}개')
+            logger.info(f"  🌏 아시아 시그널: {len(features)}개")
         return features
 
 class DerivativesCollector:
@@ -148,7 +145,7 @@ class DerivativesCollector:
                 for key in ['put_call_ratio', 'vix', 'vkospi']:
                     val = cache.get(key)
                     if val is not None and isinstance(val, (int, float)):
-                        features[f'deriv_{key}'] = float(val)
+                        features[f"deriv_{key}"] = float(val)
                 vix = features.get('deriv_vix', 0)
                 vkospi = features.get('deriv_vkospi', 0) or features.get('vkospi_close', 0)
                 if vix > 0 and vkospi > 0:
@@ -156,7 +153,7 @@ class DerivativesCollector:
         except Exception as _e:
             logger.error(f'  파생상품 vix_vkospi_ratio 계산 실패: {_e}', exc_info=True)
         if features:
-            logger.info(f'  📊 파생상품 시그널: {len(features)}개')
+            logger.info(f"  📊 파생상품 시그널: {len(features)}개")
         return features
 
 class TradeDataCollector:
@@ -176,9 +173,9 @@ class TradeDataCollector:
                 trade_features = client.get_trade_features()
                 for k, v in trade_features.items():
                     if isinstance(v, (int, float)) and (not math.isnan(v)):
-                        features[f'trade_{k}'] = float(v)
+                        features[f"trade_{k}"] = float(v)
                 if features:
-                    logger.info(f'  🏛️ 관세청 수출입: {len(features)}개')
+                    logger.info(f"  🏛️ 관세청 수출입: {len(features)}개")
             else:
                 cached = self._load_cached()
                 features.update(cached)
@@ -199,7 +196,7 @@ class TradeDataCollector:
             features = {}
             for k, v in data.items():
                 if isinstance(v, (int, float)) and (not math.isnan(v)):
-                    features[f'trade_cached_{k}'] = float(v)
+                    features[f"trade_cached_{k}"] = float(v)
             return features
         except Exception as _e:
             logger.warning(f'  [Alt] 관세청 캐시 로드 실패: {_e}', exc_info=True)
@@ -224,15 +221,15 @@ class TrendsCollector:
                 if isinstance(data, dict):
                     for k, v in data.items():
                         if isinstance(v, (int, float)):
-                            features[f'trends_{k}'] = float(v)
+                            features[f"trends_{k}"] = float(v)
                         elif isinstance(v, list) and v:
                             last = v[-1]
                             if isinstance(last, (int, float)):
-                                features[f'trends_{k}_latest'] = float(last)
+                                features[f"trends_{k}_latest"] = float(last)
                             elif isinstance(last, dict):
                                 for dk, dv in last.items():
                                     if isinstance(dv, (int, float)):
-                                        features[f'trends_{k}_{dk}'] = float(dv)
+                                        features[f"trends_{k}_{dk}"] = float(dv)
             except Exception as _e:
                 logger.error(f'  [Alt] Trends 캐시 로드 실패: {_e}', exc_info=True)
         try:
@@ -249,14 +246,14 @@ class TrendsCollector:
                         if len(vals) >= 2:
                             latest = float(vals[-1])
                             mean = float(vals.mean())
-                            features[f'trends_kr_{col}_latest'] = latest
+                            features[f"trends_kr_{col}_latest"] = latest
                             if mean > 0:
-                                features[f'trends_kr_{col}_vs_avg'] = round(latest / mean, 4)
-                    logger.info(f'  📈 Google Trends KR: {len(df.columns)} 키워드')
+                                features[f"trends_kr_{col}_vs_avg"] = round(latest / mean, 4)
+                    logger.info(f"  📈 Google Trends KR: {len(df.columns)} 키워드")
         except Exception as e:
             logger.error(f'  Google Trends 실시간 실패: {e}', exc_info=True)
         if features:
-            logger.info(f'  🔍 트렌드 데이터: {len(features)}개')
+            logger.info(f"  🔍 트렌드 데이터: {len(features)}개")
         return features
 
 class SocialSentimentCollector:
@@ -276,16 +273,16 @@ class SocialSentimentCollector:
                 if isinstance(data, dict):
                     for k, v in data.items():
                         if isinstance(v, (int, float)):
-                            features[f'social_reddit_{k}'] = float(v)
+                            features[f"social_reddit_{k}"] = float(v)
                         elif isinstance(v, dict):
                             for dk, dv in v.items():
                                 if isinstance(dv, (int, float)):
-                                    features[f'social_reddit_{k}_{dk}'] = float(dv)
+                                    features[f"social_reddit_{k}_{dk}"] = float(dv)
                 elif isinstance(data, list) and data:
                     latest = data[-1] if isinstance(data[-1], dict) else {}
                     for k, v in latest.items():
                         if isinstance(v, (int, float)):
-                            features[f'social_reddit_{k}'] = float(v)
+                            features[f"social_reddit_{k}"] = float(v)
             except Exception as _e:
                 logger.error(f'  [Alt] Reddit 감성 캐시 로드 실패: {_e}', exc_info=True)
         try:
@@ -296,7 +293,7 @@ class SocialSentimentCollector:
                 if isinstance(data, dict):
                     for k, v in data.items():
                         if isinstance(v, (int, float)):
-                            features[f'social_naver_{k}'] = float(v)
+                            features[f"social_naver_{k}"] = float(v)
         except Exception as _e:
             logger.error(f'  [Alt] 네이버 감성 로드 실패: {_e}', exc_info=True)
         reddit_scores = [v for k, v in features.items() if 'reddit' in k and isinstance(v, (int, float))]
@@ -312,7 +309,7 @@ class SocialSentimentCollector:
             logger.warning('  🚨 [Phase 54 Fallback] Naver 감성 수집 실패: 중립(0.0) 주입')
             features['social_naver_avg'] = 0.0
         if features:
-            logger.info(f'  💬 소셜 감성: {len(features)}개')
+            logger.info(f"  💬 소셜 감성: {len(features)}개")
         return features
 
 class EconomicIndicatorCollector:
@@ -333,7 +330,7 @@ class EconomicIndicatorCollector:
                 data = json.loads(econ_file.read_text())
                 for k, v in data.items():
                     if isinstance(v, (int, float)) and (not math.isnan(v)):
-                        features[f'econ_{k}'] = float(v)
+                        features[f"econ_{k}"] = float(v)
             except Exception as _e:
                 logger.error(f'  [Alt] 경제지표 캐시 로드 실패: {_e}', exc_info=True)
         try:
@@ -344,14 +341,14 @@ class EconomicIndicatorCollector:
                 if isinstance(bok_data, dict):
                     for k, v in bok_data.items():
                         if isinstance(v, (int, float)):
-                            features[f'econ_bok_{k}'] = float(v)
-                    logger.info(f'  🏦 BOK 경제지표: {len(bok_data)}개')
+                            features[f"econ_bok_{k}"] = float(v)
+                    logger.info(f"  🏦 BOK 경제지표: {len(bok_data)}개")
             elif hasattr(bok, 'collect_daily'):
                 bok_data = bok.collect_daily()
                 if isinstance(bok_data, dict):
                     for k, v in bok_data.items():
                         if isinstance(v, (int, float)):
-                            features[f'econ_bok_{k}'] = float(v)
+                            features[f"econ_bok_{k}"] = float(v)
         except ImportError as e:
             logger.error('  BOK updater 미설치', exc_info=True)
         except Exception as e:
@@ -366,9 +363,9 @@ class EconomicIndicatorCollector:
                 for name, df in indicators.items():
                     if df is not None and len(df) > 0:
                         latest = float(df.iloc[-1].values[0])
-                        features[f'econ_kosis_{name}'] = latest
+                        features[f"econ_kosis_{name}"] = latest
                 if indicators:
-                    logger.info(f'  📊 KOSIS 지표: {len(indicators)}개')
+                    logger.info(f"  📊 KOSIS 지표: {len(indicators)}개")
         except ImportError as e:
             logger.error('  KOSIS collector 미설치', exc_info=True)
         except Exception as e:
@@ -380,13 +377,13 @@ class EconomicIndicatorCollector:
                 if isinstance(data, dict):
                     for k, v in data.items():
                         if isinstance(v, (int, float)):
-                            features[f'econ_insider_{k}'] = float(v)
+                            features[f"econ_insider_{k}"] = float(v)
                 elif isinstance(data, list):
                     features['econ_insider_count'] = len(data)
             except Exception as _e:
                 logger.error(f'  [Alt] 내부자 거래 데이터 로드 실패: {_e}', exc_info=True)
         if features:
-            logger.info(f'  📈 경제지표 총: {len(features)}개')
+            logger.info(f"  📈 경제지표 총: {len(features)}개")
         return features
 
 class AltDataValidator:
@@ -410,17 +407,17 @@ class AltDataValidator:
         for k, v in features.items():
             if v is None:
                 invalid += 1
-                issues.append(f'{k}: None')
+                issues.append(f"{k}: None")
             elif isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
                 invalid += 1
-                issues.append(f'{k}: NaN/Inf')
+                issues.append(f"{k}: NaN/Inf")
             else:
                 valid += 1
         total = valid + invalid
         quality = valid / max(total, 1)
         min_quality = cfg.get('altdata.min_quality_score', 0.5)
         if quality < min_quality:
-            logger.warning(f'  ⚠️ {source} 품질 저하: {quality:.1%} ({invalid}건 이상)')
+            logger.warning(f"  ⚠️ {source} 품질 저하: {quality:.1%} ({invalid}건 이상)")
         return {'valid_count': valid, 'invalid_count': invalid, 'quality_score': round(quality, 3), 'source': source, 'issues': issues[:5]}
 
     def clip_outliers(self, features: Dict[str, float]) -> Dict[str, float]:
@@ -443,10 +440,10 @@ class AltDataValidator:
                 continue
             if any((kw in k for kw in _CLIP_KEYS)):
                 if v > 10.0:
-                    logger.warning(f'  🚨 [Phase 54 Clipping] {k} 비정상 상한 돌파 ({v:.4f}) → 10.0으로 삭감')
+                    logger.warning(f"  🚨 [Phase 54 Clipping] {k} 비정상 상한 돌파 ({v:.4f}) → 10.0으로 삭감")
                     clipped[k] = 10.0
                 elif v < -10.0:
-                    logger.warning(f'  🚨 [Phase 54 Clipping] {k} 비정상 하한 돌파 ({v:.4f}) → -10.0으로 삭감')
+                    logger.warning(f"  🚨 [Phase 54 Clipping] {k} 비정상 하한 돌파 ({v:.4f}) → -10.0으로 삭감")
                     clipped[k] = -10.0
                 else:
                     clipped[k] = v
@@ -470,9 +467,9 @@ class AlternativeDataPipeline:
                 mod = importlib.import_module(module_path)
                 cls = getattr(mod, class_name)
                 self._collectors[source_key] = cls()
-                logger.debug(f'  [AltPipeline] {source_key} 수집기 로드 완료')
+                logger.debug(f"  [AltPipeline] {source_key} 수집기 로드 완료")
             except Exception as _ie:
-                logger.warning(f'  [AltPipeline] {source_key} 수집기 로드 실패 (스킵): {_ie}')
+                logger.warning(f"  [AltPipeline] {source_key} 수집기 로드 실패 (스킵): {_ie}")
         self._validator = AltDataValidator()
 
     def run(self, sources: List[str]=None, target_date: Optional[date]=None) -> Dict:
@@ -491,7 +488,7 @@ class AlternativeDataPipeline:
         results = {}
         all_features = {}
         total_collected = 0
-        logger.info(f'  🔄 Alternative Data Pipeline: {len(sources)}개 소스')
+        logger.info(f"  🔄 Alternative Data Pipeline: {len(sources)}개 소스")
         for source in sources:
             collector = self._collectors.get(source)
             if not collector:
@@ -515,7 +512,7 @@ class AlternativeDataPipeline:
         from src.data_collection.motie_collector import MotieCollector as _MotieCollector, DataCollectionError as _DataCollectionError
         _motie_features = _MotieCollector().compute_features()
         all_features.update(_motie_features)
-        logger.info(f'  🌐 [Phase 61] MOTIE 속보치 피체 {len(_motie_features)}개 통합 (Fail-Fast): export_yoy={_motie_features.get('motie_export_yoy', 0):+.1f}% trade_bal={_motie_features.get('motie_trade_balance', 0):.1f}억USD')
+        logger.info(f"  🌐 [Phase 61] MOTIE 속보치 피체 {len(_motie_features)}개 통합 (Fail-Fast): export_yoy={_motie_features.get('motie_export_yoy', 0):+.1f}% trade_bal={_motie_features.get('motie_trade_balance', 0):.1f}억USD")
         try:
             from src.data_collection.alt_sources.naver_argus_engine import collect_argus_features
             _argus_features = collect_argus_features()
@@ -523,7 +520,7 @@ class AlternativeDataPipeline:
                 all_features.update(_argus_features)
                 logger.info(f'  🛡️ [Phase 64] Argus 5대 테마 스코어 통합: ' + ', '.join((f'{k}={v:.2f}' for k, v in _argus_features.items())))
         except Exception as _argus_e:
-            logger.warning(f'  ⚠️ [Phase 64] Argus 피처 통합 실패 (Graceful Degradation): {_argus_e}')
+            logger.warning(f"  ⚠️ [Phase 64] Argus 피처 통합 실패 (Graceful Degradation): {_argus_e}")
         fs_saved = 0
         if all_features:
             try:
@@ -532,7 +529,7 @@ class AlternativeDataPipeline:
                 all_features = _validated_model.model_dump()
                 logger.info('  🛡️ [Phase 54] Schema Validation 통과')
             except Exception as _schema_e:
-                logger.error(f'  ❌ [Phase 54] Schema Validation 실패 (일부 피체 누락 위험): {_schema_e}')
+                logger.error(f"  ❌ [Phase 54] Schema Validation 실패 (일부 피체 누락 위험): {_schema_e}")
             all_features = self._validator.clip_outliers(all_features)
             try:
                 latest_file = _ALT_DATA_DIR / 'pipeline_latest.json'
@@ -543,13 +540,13 @@ class AlternativeDataPipeline:
                     for k, v in prev_features.items():
                         if k not in all_features and isinstance(v, (int, float)):
                             all_features[k] = v * decay_factor
-                            logger.debug(f'  [Fallback] {k} 누락 -> {v * decay_factor:.4f} (Decay FFill)')
+                            logger.debug(f"  [Fallback] {k} 누락 -> {v * decay_factor:.4f} (Decay FFill)")
             except Exception as e:
                 logger.warning(f'  [Fallback] FFill 실패: {e}', exc_info=True)
             fs_saved = self._save_to_feature_store(all_features)
         self._save_backup(all_features)
         summary = {'sources': results, 'total_collected': total_collected, 'feature_store_saved': fs_saved, 'n_sources_ok': sum((1 for r in results.values() if isinstance(r, dict) and r.get('collected', 0) > 0)), 'n_sources_failed': sum((1 for r in results.values() if isinstance(r, dict) and 'error' in r)), 'timestamp': datetime.now().isoformat()}
-        logger.info(f'  ✅ AltData Pipeline: {total_collected}건 수집, {fs_saved}건 적재, {summary['n_sources_ok']}/{len(sources)} 소스 정상')
+        logger.info(f"  ✅ AltData Pipeline: {total_collected}건 수집, {fs_saved}건 적재, {summary['n_sources_ok']}/{len(sources)} 소스 정상")
         return summary
 
     def _save_to_feature_store(self, features: Dict[str, float]) -> int:

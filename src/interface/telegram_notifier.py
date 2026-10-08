@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 _TAG = '🔭 Meridian'
+import threading
+_lock = threading.Lock()
+_TG_CACHE = {}
 
 def _load_json(name: str) -> Dict:
     f = _RESULTS / name
@@ -31,7 +34,7 @@ def _load_json(name: str) -> Dict:
             return json.loads(f.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     return {}
 
@@ -54,7 +57,7 @@ class MeridianTelegram:
             self._cfg = DynamicConfig()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         cm = None
         try:
@@ -72,7 +75,7 @@ class MeridianTelegram:
                 kc_val = cm.read_from_env(key)
                 if kc_val:
                     return kc_val
-            logger.warning(f'Key {key} not found in Config or Keychain!')
+            logger.warning(f"Key {key} not found in Config or Keychain!")
             return ''
         self._token = get_cred('TELEGRAM_BOT_TOKEN', 'telegram.bot_token')
         self._chat_id = get_cred('TELEGRAM_CHAT_ID', 'telegram.chat_id')
@@ -105,7 +108,7 @@ class MeridianTelegram:
         conf = regime_info.get('confidence', 0)
         icons = {'BULL': '🐂', 'CAUTION': '⚠️', 'BEAR': '🐻', 'CRASH': '🚨'}
         icon = icons.get(regime, '📊')
-        msg = f'{_TAG} {icon} Regime Change: {regime}\n  Confidence: {conf:.1%}\n  Time: {datetime.now().strftime('%H:%M KST')}'
+        msg = f"{_TAG} {icon} Regime Change: {regime}\n  Confidence: {conf:.1%}\n  Time: {datetime.now().strftime('%H:%M KST')}"
         self._send(msg)
 
     def send_risk_alert(self, risk_info: Dict):
@@ -113,7 +116,7 @@ class MeridianTelegram:
         level = risk_info.get('level', risk_info.get('risk_level', 'normal'))
         dd = risk_info.get('drawdown', 0)
         gate = risk_info.get('gate', '')
-        msg = f'{_TAG} 🚨 RISK ALERT: {level.upper()}\n  Gate: {gate}\n  Drawdown: {dd:+.1f}%\n  Time: {datetime.now().strftime('%H:%M KST')}'
+        msg = f"{_TAG} 🚨 RISK ALERT: {level.upper()}\n  Gate: {gate}\n  Drawdown: {dd:+.1f}%\n  Time: {datetime.now().strftime('%H:%M KST')}"
         actions = risk_info.get('actions', [])
         for a in actions:
             msg += f'\n  ➡️ {a}'
@@ -128,7 +131,7 @@ class MeridianTelegram:
         dd = gonogo.get('max_dd', 0)
         criteria = gonogo.get('criteria', {})
         verdict_icon = '✅' if verdict == 'GO' else '🛑' if verdict == 'NO_GO' else '⏳'
-        msg = f'{_TAG} {verdict_icon} Go/No-Go: {verdict}\n━━━━━━━━━━━━━━━━━━━━\n  Days: {n_days}/14\n  Sharpe: {sharpe:.3f} {('✅' if criteria.get('sharpe_pass') else '❌')}\n  WinRate: {wr:.1%} {('✅' if criteria.get('winrate_pass') else '❌')}\n  MaxDD: {dd:+.1f}% {('✅' if criteria.get('dd_pass') else '❌')}\n━━━━━━━━━━━━━━━━━━━━'
+        msg = f"{_TAG} {verdict_icon} Go/No-Go: {verdict}\n━━━━━━━━━━━━━━━━━━━━\n  Days: {n_days}/14\n  Sharpe: {sharpe:.3f} {('✅' if criteria.get('sharpe_pass') else '❌')}\n  WinRate: {wr:.1%} {('✅' if criteria.get('winrate_pass') else '❌')}\n  MaxDD: {dd:+.1f}% {('✅' if criteria.get('dd_pass') else '❌')}\n━━━━━━━━━━━━━━━━━━━━"
         self._send(msg)
 
     def send_daily_summary(self):
@@ -154,7 +157,7 @@ class MeridianTelegram:
         verdict_icon = '✅' if verdict == 'GO' else '🛑' if verdict == 'NO_GO' else '⏳'
         from src.utils.metric_parser import parse_vix
         vix = parse_vix(signal, 0.0)
-        msg = f'{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {verdict_icon} Go/No-Go: {verdict} (Day {n_days}/14)\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {vix:.1f} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━'
+        msg = f"{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {verdict_icon} Go/No-Go: {verdict} (Day {n_days}/14)\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {vix:.1f} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━"
         self._send(msg)
 
     def send_execution_summary(self, exec_result):
@@ -171,7 +174,7 @@ class MeridianTelegram:
         mode = d.get('mode', 'shadow')
         if n_orders == 0:
             return
-        msg = f'{_TAG} ⚡ Execution [{mode.upper()}]\n  Orders: {n_orders} | Filled: {n_filled} | Rejected: {n_rejected}\n  Fill Rate: {n_filled / max(n_orders, 1):.0%}\n  Time: {datetime.now().strftime('%H:%M KST')}'
+        msg = f"{_TAG} ⚡ Execution [{mode.upper()}]\n  Orders: {n_orders} | Filled: {n_filled} | Rejected: {n_rejected}\n  Fill Rate: {n_filled / max(n_orders, 1):.0%}\n  Time: {datetime.now().strftime('%H:%M KST')}"
         errors = d.get('errors', [])
         if errors:
             msg += f'\n  ⚠️ Errors: {len(errors)}'
@@ -187,7 +190,7 @@ class MeridianTelegram:
             msg += f'\n  Duration: {duration_sec:.1f}s'
         if error:
             msg += f'\n  Error: {error[:200]}'
-        msg += f'\n  Time: {datetime.now().strftime('%H:%M KST')}'
+        msg += f"\n  Time: {datetime.now().strftime('%H:%M KST')}"
         level = 'WARNING' if status != 'success' else 'INFO'
         if level in self._alert_levels:
             self._send(msg)
@@ -203,27 +206,37 @@ class MeridianTelegram:
             returns_pct = daily[-1].get('daily_return_pct', 0) if daily else 0
         if n_positions is None:
             n_positions = len(sp.get('positions', {}))
-        msg = f'{_TAG} 📈 Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  NAV: ₩{nav:,.0f}' if nav else ''
+        msg = f"{_TAG} 📈 Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  NAV: ₩{nav:,.0f}' if nav else '"
         msg += f'\n  Return: {returns_pct:+.2f}%\n  Positions: {n_positions}\n━━━━━━━━━━━━━━━━━━━━'
         self._send(msg)
 
     def send_test(self):
         """연결 테스트."""
-        msg = f'{_TAG} 🔔 Connection Test\n  Status: OK\n  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S KST')}\n  Bot: Active'
+        msg = f"{_TAG} 🔔 Connection Test\n  Status: OK\n  Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S KST')}\n  Bot: Active"
         self._send(msg)
         return self.enabled
 
     def send(self, message: str, level: str='INFO'):
         """범용 메시지 전송 (레벨 필터링)."""
         if level in self._alert_levels:
-            self._send(f'{_TAG} [{level}] {message}')
+            self._send(f"{_TAG} [{level}] {message}")
 
-    def _send(self, message: str):
-        """메시지 전송."""
+    def _send(self, text: str):
+        """메시지 발송 — 타임스탬프 제외 15분 쿨다운 스팸 방어 락 적용."""
         if not self.enabled:
-            logger.info(f'[TG-Meridian] {message}')
+            logger.info(f"[TG-Meridian] {text}")
             return
-        self._outbound_queue.put(message)
+        import re, time
+        clean_msg = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '', text)
+        msg_key = clean_msg[:120]
+        now = time.time()
+        with _lock:
+            last_sent = _TG_CACHE.get(msg_key, 0.0)
+            if now - last_sent < 900.0:  # 15분 쿨다운
+                logger.debug(f"  [TelegramNotifier] 동일 알림 15분 억제 (스팸 차단): {msg_key[:40]}...")
+                return
+            _TG_CACHE[msg_key] = now
+        self._outbound_queue.put(text)
 
     def _send_worker(self):
         """백그라운드 워커: 큐에서 메시지를 꺼내서 requests.post 실행."""
@@ -241,19 +254,19 @@ class MeridianTelegram:
                         break
                     except Exception as e:
                         if attempt == 2:
-                            logger.warning(f'  텔레그램 전송 실패 (최종): {e}')
+                            logger.warning(f"  텔레그램 전송 실패 (최종): {e}")
                         else:
                             time.sleep(2 * (attempt + 1))
                 self._outbound_queue.task_done()
                 time.sleep(0.1)
             except Exception as e:
-                logger.error(f'Telegram worker error: {e}')
+                logger.error(f"Telegram worker error: {e}")
                 time.sleep(1)
 
     def send_document(self, document_path: str, caption: str='') -> bool:
         """PDF 등 파일 문서 전송."""
         if not self.enabled:
-            logger.info(f'[TG-Meridian] 문서 전송 (비활성): {document_path}')
+            logger.info(f"[TG-Meridian] 문서 전송 (비활성): {document_path}")
             return False
         try:
             import requests
@@ -265,7 +278,7 @@ class MeridianTelegram:
                 response.raise_for_status()
                 return True
         except Exception as e:
-            logger.warning(f'  텔레그램 문서 전송 실패: {e}')
+            logger.warning(f"  텔레그램 문서 전송 실패: {e}")
             return False
 
 class MeridianCommandHandler:
@@ -286,7 +299,7 @@ class MeridianCommandHandler:
         n_days = gonogo.get('n_days', 0)
         from src.utils.metric_parser import parse_vix
         vix = parse_vix(signal, 0.0)
-        return f'{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  Go/No-Go: {verdict} (Day {n_days}/14)\n  VIX: {vix:.1f}\n  OIS: {signal.get('ois', 'N/A')}'
+        return f"{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  Go/No-Go: {verdict} (Day {n_days}/14)\n  VIX: {vix:.1f}\n  OIS: {signal.get('ois', 'N/A')}"
 
     def _cmd_regime(self, args: str) -> str:
         signal = _load_signal()
@@ -296,7 +309,7 @@ class MeridianCommandHandler:
         icons = {'bull': '🐂', 'caution': '⚠️', 'bear': '🐻', 'crash': '🚨'}
         from src.utils.metric_parser import parse_vix
         vix = parse_vix(signal, 0.0)
-        return f'{_TAG} {icons.get(regime, '📊')} Regime: {regime.upper()}\n  VIX: {vix:.1f}\n  US Regime: {signal.get('us_regime', 'N/A')}\n  OIS: {signal.get('ois', 'N/A')}'
+        return f"{_TAG} {icons.get(regime, '📊')} Regime: {regime.upper()}\n  VIX: {vix:.1f}\n  US Regime: {signal.get('us_regime', 'N/A')}\n  OIS: {signal.get('ois', 'N/A')}"
 
     def _cmd_gonogo(self, args: str) -> str:
         shadow = _load_shadow()
@@ -304,7 +317,7 @@ class MeridianCommandHandler:
         criteria = gonogo.get('criteria', {})
         verdict = gonogo.get('verdict', 'N/A')
         n_days = gonogo.get('n_days', 0)
-        return f'{_TAG} 🎯 Go/No-Go Tracker\n━━━━━━━━━━━━━━━━━━━━\n  Verdict: {verdict}\n  Days: {n_days}/14\n  Sharpe: {gonogo.get('sharpe', 0):.3f} {('✅' if criteria.get('sharpe_pass') else '❌')}\n  WinRate: {gonogo.get('win_rate', 0):.1%} {('✅' if criteria.get('winrate_pass') else '❌')}\n  MaxDD: {gonogo.get('max_dd', 0):+.1f}% {('✅' if criteria.get('dd_pass') else '❌')}\n━━━━━━━━━━━━━━━━━━━━'
+        return f"{_TAG} 🎯 Go/No-Go Tracker\n━━━━━━━━━━━━━━━━━━━━\n  Verdict: {verdict}\n  Days: {n_days}/14\n  Sharpe: {gonogo.get('sharpe', 0):.3f} {('✅' if criteria.get('sharpe_pass') else '❌')}\n  WinRate: {gonogo.get('win_rate', 0):.1%} {('✅' if criteria.get('winrate_pass') else '❌')}\n  MaxDD: {gonogo.get('max_dd', 0):+.1f}% {('✅' if criteria.get('dd_pass') else '❌')}\n━━━━━━━━━━━━━━━━━━━━"
 
     def _cmd_positions(self, args: str) -> str:
         shadow = _load_shadow()
@@ -312,7 +325,7 @@ class MeridianCommandHandler:
         if not daily:
             return f'{_TAG} 포지션 데이터 없음'
         latest = daily[-1]
-        return f'{_TAG} 📊 Shadow Execution\n  Date: {latest.get('date', 'N/A')}\n  Runs: {latest.get('n_runs', 0)}\n  Orders: {latest.get('n_orders', 0)}\n  Filled: {latest.get('n_filled', 0)}\n  Buy: ₩{latest.get('total_buy', 0):,.0f}\n  Sell: ₩{latest.get('total_sell', 0):,.0f}'
+        return f"{_TAG} 📊 Shadow Execution\n  Date: {latest.get('date', 'N/A')}\n  Runs: {latest.get('n_runs', 0)}\n  Orders: {latest.get('n_orders', 0)}\n  Filled: {latest.get('n_filled', 0)}\n  Buy: ₩{latest.get('total_buy', 0):,.0f}\n  Sell: ₩{latest.get('total_sell', 0):,.0f}"
 
     def _cmd_risk(self, args: str) -> str:
         signal = _load_signal()
@@ -360,7 +373,7 @@ class MeridianPollingServer:
         if not self.enabled:
             logger.warning('텔레그램 미설정 — polling 불가')
             return
-        logger.info(f'🔭 Meridian Telegram Polling 시작 (chat_id={self._chat_id[:6]}...)')
+        logger.info(f"🔭 Meridian Telegram Polling 시작 (chat_id={self._chat_id[:6]}...)")
         while True:
             try:
                 self._poll_once()
@@ -368,7 +381,7 @@ class MeridianPollingServer:
                 logger.info('Polling 종료')
                 break
             except Exception as e:
-                logger.warning(f'Polling 오류: {e}')
+                logger.warning(f"Polling 오류: {e}")
                 time.sleep(5)
 
     def run_background(self):
@@ -402,12 +415,12 @@ class MeridianPollingServer:
             url = f'https://api.telegram.org/bot{self._token}/sendMessage'
             requests.post(url, json={'chat_id': chat_id, 'text': text}, timeout=10)
         except Exception as e:
-            logger.warning(f'응답 전송 실패: {e}')
+            logger.warning(f"응답 전송 실패: {e}")
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     server = MeridianPollingServer()
     if server.enabled:
-        logger.info(f'🔭 Meridian Telegram Polling 시작...')
+        logger.info(f"🔭 Meridian Telegram Polling 시작...")
         server.run()
     else:
         logger.info('TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 설정 필요')

@@ -63,6 +63,26 @@ class AdvancedSlippageModel:
     def __init__(self):
         self._vol_cache: Dict[str, float] = {}
 
+    def detect_liquidity_vacuum(self, orderbook_depth_1_3_qty: int, adv: float, threshold_pct: float = 0.001) -> bool:
+        """호가창 1~3단 잔량이 ADV 대비 수직 얇아짐(Liquidity Vacuum) 감지.
+
+        Args:
+            orderbook_depth_1_3_qty: 호가창 1~3단 잔량 총합 (주)
+            adv: 일평균 거래량/거래대금
+            threshold_pct: 호가 진공 기준 비율 (기본 0.1%)
+
+        Returns:
+            Liquidity Vacuum 감지 여부 (True이면 아이스버그 분할 스위칭)
+        """
+        if adv <= 0 or orderbook_depth_1_3_qty <= 0:
+            return False
+        vacuum_ratio = orderbook_depth_1_3_qty / adv
+        is_vacuum = vacuum_ratio < threshold_pct
+        if is_vacuum:
+            logger.warning(f"  ⚡ [Liquidity Vacuum Detected] 호가 얇아짐 비율 ({vacuum_ratio:.4%}) < 기준 ({threshold_pct:.4%}) ➔ 아이스버그 분할 매도 스위칭")
+        return is_vacuum
+
+
     def _compute_realized_vol(self, ticker: str) -> float:
         """KRX daily CSV에서 종목별 20일 실현 변동성 계산.
 
@@ -73,7 +93,8 @@ class AdvancedSlippageModel:
         if ticker and ticker in self._vol_cache:
             return self._vol_cache[ticker]
         lookback = cfg.get('slippage.vol_lookback_days', 20)
-        fallback_vol = cfg.get('slippage.default_daily_vol', 0.02)
+        # [Dynamic Mathematical Model] Dynamic Market Baseline Volatility
+        fallback_vol = max(0.01, cfg.get('slippage.default_daily_vol', 0.018))
         if not ticker:
             return fallback_vol
         try:
@@ -204,8 +225,10 @@ class AdvancedSlippageModel:
             time_adj = cfg.get('slippage.midday_multiplier', 1.0)
         regime_mult = cfg.get(f'slippage.regime_multiplier.{regime}', cfg.get('slippage.regime_multiplier.caution', 1.0))
         total_bps = (base_bps + market_impact_bps + liquidity_premium) * time_adj * regime_mult
-        max_bps = cfg.get('slippage.max_total_bps', 50.0)
-        total_bps = min(total_bps, max_bps)
+        
+        # [Almgren-Chriss Flash Crash Defense] 폭락/위기 레짐 시 50bps 인공 상한선 해제 (최대 500bps까지 비선형 반영)
+        stress_max_bps = float(cfg.get('slippage.max_stress_bps', 500.0) if regime in ('crash', 'bear') else cfg.get('slippage.max_total_bps', 150.0))
+        total_bps = min(total_bps, stress_max_bps)
         total_cost = order_size * total_bps / 10000
         return {'slippage_bps': round(total_bps, 2), 'total_cost': round(total_cost, 0), 'components': {'base_bps': round(base_bps, 2), 'market_impact_bps': round(market_impact_bps, 2), 'sigma': round(sigma, 6), 'sigma_source': vol_source, 'eta': round(eta, 4), 'delta': round(delta, 4), 'liquidity_premium_bps': round(liquidity_premium, 2), 'time_adjustment': round(time_adj, 2), 'regime_multiplier': round(regime_mult, 2), 'participation_rate': round(order_size / adv, 6) if adv > 0 else None}}
 

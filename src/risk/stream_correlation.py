@@ -20,7 +20,7 @@ from datetime import datetime
 from src.utils.file_ops import atomic_write_json
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -77,12 +77,35 @@ class StreamCorrelationMonitor:
             max_pair_str = max(high_corr_pairs, key=lambda x: abs(x['correlation']))['pair']
         result = {'sufficient_data': True, 'correlation_matrix': self._correlation_matrix.tolist(), 'orthogonality_score': round(orthogonality, 4), 'high_correlation_pairs': high_corr_pairs, 'max_correlation': round(max_corr, 4), 'max_pair': max_pair_str, 'observations': min_obs, 'timestamp': datetime.now().isoformat()}
         if high_corr_pairs:
-            logger.warning(f'  ⚠️ 스트림 상관관계 경고: {[p['pair'] for p in high_corr_pairs]}')
+            logger.warning(f"  ⚠️ 스트림 상관관계 경고: {[p['pair'] for p in high_corr_pairs]}")
         try:
-            atomic_write_json((_RESULTS / 'stream_correlation.json'),  result, indent=2, default=str)
-        except Exception as _e0:
-            logger.critical(f'  [stream_correlation] 스트림 상관관계 업데이트: {_e0}', exc_info=True)
+            _out = _RESULTS / 'stream_correlation.json'
+            atomic_write_json(_out, result)
+        except (IOError, OSError) as _e:
+            logger.debug(f"Stream correlation write skipped: {_e}")
         return result
+
+    def check_correlation_breakdown_guard(self) -> Tuple[bool, float, Dict]:
+        """스트림 간 극단 상관관계 스파이크(> 0.85) 감지 시 30% 레버리지 자동 감쇄 방어막.
+
+        Returns:
+            (is_breakdown, leverage_scale, details)
+        """
+        report = self.measure()
+        avg_abs_corr = report.get('avg_abs_correlation', 0.0)
+        high_corr_count = report.get('high_corr_count', 0)
+        
+        warn_threshold = float(_cfg.get('risk.corr_warn_threshold', 0.85)) if _cfg else 0.85
+        
+        if avg_abs_corr >= warn_threshold or high_corr_count >= 3:
+            deleveraging_factor = 0.70  # 30% 레버리지 즉시 자동 감쇄
+            logger.warning(
+                f"  🛡️ [Correlation Breakdown Guard] 스트림 간 동시 동조화 스파이크 감지! "
+                f"AvgCorr={avg_abs_corr:.2f} >= {warn_threshold:.2f} ➔ 전체 레버리지 30% 자동 감쇄 (Scale=0.70)"
+            )
+            return True, deleveraging_factor, report
+        
+        return False, 1.0, report
 
     def compute_risk_budget(self) -> Dict[str, float]:
         """상관관계 기반 리스크 예산 배분.
@@ -100,7 +123,7 @@ class StreamCorrelationMonitor:
         inv_corr = [1.0 / (0.1 + c) for c in avg_corr]
         total = sum(inv_corr)
         self._risk_budget = {self.STREAM_IDS[i]: round(inv_corr[i] / total, 4) for i in range(n)}
-        logger.info(f'  Risk Budget 갱신: {self._risk_budget}')
+        logger.info(f"  Risk Budget 갱신: {self._risk_budget}")
         return self._risk_budget
 
     def get_risk_budget(self) -> Dict[str, float]:
@@ -145,7 +168,7 @@ class StreamCorrelationMonitor:
             sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return self._fallback_concentration()
         positions = sp.get('positions', {})
         if len(positions) < 3:
@@ -170,7 +193,7 @@ class StreamCorrelationMonitor:
                     returns_data[ticker] = rets
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
         if len(returns_data) < 3:
             return self._fallback_concentration()
@@ -196,7 +219,7 @@ class StreamCorrelationMonitor:
         _warn_threshold = cfg.get('risk.corr_warn_threshold', 0.85) if cfg else 0.85
         if high_corr_pairs:
             _log_fn = logger.warning if scale < _warn_threshold else logger.info
-            _log_fn(f'  {('⚠️' if scale < _warn_threshold else 'ℹ️')} 집중 리스크: {len(high_corr_pairs)}쌍 고상관 (직교성={orthogonality:.2f}, scale={scale:.2f})')
+            _log_fn(f"  {('⚠️' if scale < _warn_threshold else 'ℹ️')} 집중 리스크: {len(high_corr_pairs)}쌍 고상관 (직교성={orthogonality:.2f}, scale={scale:.2f})")
         try:
             atomic_write_json((_RESULTS / 'concentration_risk.json'),  result, indent=2, default=str)
         except Exception as _e1:

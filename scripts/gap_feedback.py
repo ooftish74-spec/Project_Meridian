@@ -83,7 +83,7 @@ class GapFeedbackEngine:
 
         # 쿨다운 체크
         if self._in_cooldown():
-            result['reason'] = f'쿨다운 중 ({self.cooldown_hours}h)'
+            result['reason'] = f"쿨다운 중 ({self.cooldown_hours}h)"
             result['status'] = 'cooldown'
             logger.info(f"  ⏳ Gap Feedback: 쿨다운 중")
             return result
@@ -377,7 +377,7 @@ class GapFeedbackEngine:
                 return elapsed < self.cooldown_hours
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return False
 

@@ -58,9 +58,9 @@ class ExecutionFatalError(Exception):
     def __str__(self) -> str:
         parts = [self.message]
         if self.ticker:
-            parts.append(f'ticker={self.ticker}')
+            parts.append(f"ticker={self.ticker}")
         if self.stream_id:
-            parts.append(f'stream={self.stream_id}')
+            parts.append(f"stream={self.stream_id}")
         return ' | '.join(parts)
 
     def as_page_text(self) -> str:
@@ -69,8 +69,8 @@ class ExecutionFatalError(Exception):
         return (
             f'{icon} [{self.__class__.__name__}]\n'
             f'{self.message}'
-            + (f'\nticker: {self.ticker}' if self.ticker else '')
-            + (f'\nstream: {self.stream_id}' if self.stream_id else '')
+            + (f"\nticker: {self.ticker}' if self.ticker else '")
+            + (f"\nstream: {self.stream_id}' if self.stream_id else '")
         )
 
 

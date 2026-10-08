@@ -35,20 +35,25 @@ class TestStreamOrchestratorInit:
         assert orch is not None
 
     def test_has_six_streams(self):
-        """6개 스트림이 등록되어야 한다."""
+        """10개 스트림이 등록되어야 한다 (S0~S5, S10, S11, S12, S13 포함)."""
         from scripts.stream_orchestrator import StreamOrchestrator
         orch = StreamOrchestrator()
-        assert len(orch.streams) == 6
+        assert len(orch.streams) == 10
 
     def test_stream_ids(self):
-        """S1~S5 스트림 ID 확인 (S4=Advisory, S5=Overnight 포함)."""
+        """S0~S5, S10, S11, S12, S13 스트림 ID 확인."""
         from scripts.stream_orchestrator import StreamOrchestrator
         orch = StreamOrchestrator()
         ids = [s.stream_id for s in orch.streams]
+        assert 'S0' in ids
         assert 'S1' in ids
         assert 'S2' in ids
         assert 'S3' in ids
         assert 'S5' in ids
+        assert 'S10_MEGA_TREND' in ids
+        assert 'S11_HIGHBETA_SNIPER' in ids
+        assert 'S12_DERIVATIVE_SQUEEZE' in ids
+        assert 'S13' in ids
 
     def test_has_shadow_recorder(self):
         """ShadowRecorder가 존재해야 한다."""
@@ -57,11 +62,11 @@ class TestStreamOrchestratorInit:
         assert orch.shadow_recorder is not None
 
     def test_get_stream_status(self):
-        """get_stream_status()가 6개 항목을 반환."""
+        """get_stream_status()가 10개 항목을 반환."""
         from scripts.stream_orchestrator import StreamOrchestrator
         orch = StreamOrchestrator()
         status = orch.get_stream_status()
-        assert len(status) == 6
+        assert len(status) == 10
         for s in status:
             assert 'stream_id' in s
             assert 'active' in s

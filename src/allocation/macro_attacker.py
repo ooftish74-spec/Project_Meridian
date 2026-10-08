@@ -39,7 +39,7 @@ class MacroAttacker:
         if close_col not in df.columns:
             return pd.Series(dtype=float)
             
-        df['return'] = df[close_col].pct_change()
+        df['return'] = df[close_col].pct_change().replace([np.inf, -np.inf], np.nan)
         return df['return'].dropna().tail(days)
 
     def _compute_ewma_beta(self, stock_returns: pd.Series, bm_returns: pd.Series) -> float:

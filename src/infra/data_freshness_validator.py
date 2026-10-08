@@ -38,14 +38,14 @@ class DataFreshnessValidator:
                     _fred_ts = datetime.fromisoformat(_fred_ts_str).date()
                     _fred_delayed = (target_ts - _fred_ts).days
                     if _fred_delayed > 14:
-                        self._report_stale(f'FRED 거시 데이터 갱신 지연 (14일 초과). Cache: {_fred_ts}, Target: {target_ts}')
+                        self._report_stale(f"FRED 거시 데이터 갱신 지연 (14일 초과). Cache: {_fred_ts}, Target: {target_ts}")
                         return False
                 except Exception as _fred_e:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_fred_e}", exc_info=True)
-                    logger.debug(f'[Phase 54] FRED timestamp 파싱 실패: {_fred_e}')
+                    logger.debug(f"[Phase 54] FRED timestamp 파싱 실패: {_fred_e}")
             if days_delayed > 1:
-                self._report_stale(f'데이터 갱신 지연 (허용치 1일 초과). Cache: {cache_ts}, Target: {target_ts}')
+                self._report_stale(f"데이터 갱신 지연 (허용치 1일 초과). Cache: {cache_ts}, Target: {target_ts}")
                 return False
             if 'vix' not in data or 'vkospi' not in data or 'kospi' not in data:
                 self._report_stale('필수 지수(vix, vkospi, kospi) 데이터가 누락되었습니다.')
@@ -54,16 +54,16 @@ class DataFreshnessValidator:
             return True
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            self._report_stale(f'캐시 파싱 에러: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+            self._report_stale(f"캐시 파싱 에러: {e}")
             return False
 
     def _report_stale(self, reason: str):
-        logger.warning(f'🚨 [Freshness Gate] 실패: {reason}')
+        logger.warning(f"🚨 [Freshness Gate] 실패: {reason}")
         try:
             from src.infra.alert_manager import AlertManager
-            AlertManager().report_error(source='DataFreshnessValidator', message=f'데이터 최신화 실패로 인한 프로세스 차단: {reason}', severity='critical')
+            AlertManager().report_error(source='DataFreshnessValidator', message=f"데이터 최신화 실패로 인한 프로세스 차단: {reason}', severity='critical")
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass

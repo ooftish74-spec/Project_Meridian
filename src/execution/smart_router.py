@@ -26,12 +26,24 @@ from config.dynamic_config import DynamicConfig
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
 
+from src.execution.meta_netting_router import MetaNettingRouter
+
 class SmartOrderRouter:
-    """다차원 최적 거래소 라우팅."""
+    """다차원 최적 거래소 라우팅 및 중앙 메타-넷팅 엔진."""
 
     def __init__(self):
         self._tca_impact_modifier = 1.0
+        self._netting_router = MetaNettingRouter(hysteresis_pct=0.02, friction_bps=28.0)
         self._load_tca_feedback()
+
+    def net_and_route_signals(
+        self,
+        stream_signals: List[Dict],
+        current_positions: List[Dict],
+        total_nav: float
+    ) -> List[Dict]:
+        """[Wall Street Meta-Netting Integration] 다중 스트림 교차 시그널 넷팅 및 2% 히스테리시스 필터링."""
+        return self._netting_router.resolve_signals(stream_signals, current_positions, total_nav)
 
     def _load_tca_feedback(self):
         """[Phase 86] TCA 피드백 루프: 어제자 실제 체결 오차율을 불러옵니다."""
@@ -43,9 +55,9 @@ class SmartOrderRouter:
                 with open(feedback_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     self._tca_impact_modifier = data.get('recommended_impact_modifier', 1.0)
-                    logger.info(f'  [SOR] TCA 피드백 적용: impact_modifier = {self._tca_impact_modifier:.3f}')
+                    logger.info(f"  [SOR] TCA 피드백 적용: impact_modifier = {self._tca_impact_modifier:.3f}")
         except Exception as e:
-            logger.error(f'  [SOR] TCA 피드백 로드 실패: {e}')
+            logger.error(f"  [SOR] TCA 피드백 로드 실패: {e}")
 
     def route(self, order: Dict, market_data: Dict=None) -> Dict:
         """주문에 대한 최적 거래소 선택.
@@ -86,7 +98,7 @@ class SmartOrderRouter:
         if len(available_venues) == 1:
             venue = available_venues[0]
             cost = self._estimate_cost(venue, order_amount, market_data)
-            return {'venue': venue, 'reason': f'{session} 세션 → {venue} 전용', 'estimated_cost_bps': round(cost, 2), 'split_recommendation': None, 'scores': {venue: 1.0}}
+            return {'venue': venue, 'reason': f"{session} 세션 → {venue} 전용", 'estimated_cost_bps': round(cost, 2), 'split_recommendation': None, 'scores': {venue: 1.0}}
         venue_costs = {}
         venue_scores = {}
         for venue in available_venues:
@@ -111,7 +123,7 @@ class SmartOrderRouter:
                 return dtime(int(parts[0]), int(parts[1]))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return fallback
         pre_start_t = _to_time(cfg.get('router.session_pre_start', '08:00'), dtime(8, 0))
         pre_end_t = _to_time(cfg.get('router.session_pre_end', '08:50'), dtime(8, 50))
@@ -148,16 +160,16 @@ class SmartOrderRouter:
         Returns:
             추정 총 비용 (bps)
         """
-        commission_bps = cfg.get(f'router.commission_bps.{venue.lower()}', {'KRX': 0.88, 'NXT': 0.53, 'SOR': 0.7}.get(venue, 0.7))
-        spread_key = f'spread_{venue.lower()}_bps'
-        spread_bps = market_data.get(spread_key, cfg.get(f'router.default_spread_bps.{venue.lower()}', {'KRX': 3.0, 'NXT': 5.0, 'SOR': 3.5}.get(venue, 3.5)))
+        commission_bps = cfg.get(f"router.commission_bps.{venue.lower()}", {'KRX': 0.88, 'NXT': 0.53, 'SOR': 0.7}.get(venue, 0.7))
+        spread_key = f"spread_{venue.lower()}_bps"
+        spread_bps = market_data.get(spread_key, cfg.get(f"router.default_spread_bps.{venue.lower()}", {'KRX': 3.0, 'NXT': 5.0, 'SOR': 3.5}.get(venue, 3.5)))
         half_spread = spread_bps / 2.0
-        adv_key = f'adv_{venue.lower()}'
+        adv_key = f"adv_{venue.lower()}"
         adv = market_data.get(adv_key, 0)
         if adv > 0:
             participation = order_amount / adv
         else:
-            default_adv = cfg.get(f'router.default_adv.{venue.lower()}', {'KRX': 5000000000.0, 'NXT': 1000000000.0, 'SOR': 5000000000.0}.get(venue, 5000000000.0))
+            default_adv = cfg.get(f"router.default_adv.{venue.lower()}", {'KRX': 5000000000.0, 'NXT': 1000000000.0, 'SOR': 5000000000.0}.get(venue, 5000000000.0))
             participation = order_amount / default_adv
         impact_coeff = cfg.get('router.impact_coefficient', 10.0)
         dynamic_impact_coeff = impact_coeff * getattr(self, '_tca_impact_modifier', 1.0)
@@ -240,17 +252,18 @@ class SmartOrderRouter:
 
     def _build_reason(self, venue: str, session: str, order_amount: float, scores: Dict, costs: Dict) -> str:
         """선택 이유 생성."""
-        parts = [f'{session}세션']
+        parts = [f"{session}세션"]
         if order_amount > cfg.get('router.large_order_threshold', 50000000):
-            parts.append(f'대형주문(₩{order_amount:,.0f})')
+            parts.append(f"대형주문(₩{order_amount:,.0f})")
         sorted_venues = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         if len(sorted_venues) >= 2:
             margin = sorted_venues[0][1] - sorted_venues[1][1]
             runner_up = sorted_venues[1][0]
             cost_saving = costs.get(runner_up, 0) - costs.get(venue, 0)
             if cost_saving > 0:
-                parts.append(f'vs {runner_up} -{cost_saving:.1f}bps')
-        return f'{venue} 선택 ({', '.join(parts)})'
+                parts.append(f"vs {runner_up} -{cost_saving:.1f}bps")
+        _parts_str = ', '.join(parts)
+        return f"{venue} 선택 ({_parts_str})"
 
     def route_batch(self, orders: List[Dict], market_data: Dict=None) -> List[Dict]:
         """복수 주문 일괄 라우팅.
@@ -316,22 +329,24 @@ class SmartOrderRouter:
                     buy_thresh = default_th.get('buy_threshold', 0.5)
                     sell_thresh = default_th.get('sell_threshold', -0.3)
         except Exception as e:
-            logger.critical(f'  [SOR] 동적 임계값 로드 실패, 기본값 사용: {e}', exc_info=True)
+            logger.critical(f"  [SOR] 동적 임계값 로드 실패, 기본값 사용: {e}", exc_info=True)
+        raw_price = base_price
         if action == 'buy':
             if oim > buy_thresh:
-                return base_price + tick
+                raw_price = base_price + tick
             elif oim < sell_thresh:
-                return base_price - tick * 2
+                raw_price = base_price - tick * 2
             else:
-                return base_price - tick
+                raw_price = base_price - tick
         elif action == 'sell':
             if oim < sell_thresh:
-                return base_price - tick
+                raw_price = base_price - tick
             elif oim > buy_thresh:
-                return base_price + tick * 2
+                raw_price = base_price + tick * 2
             else:
-                return base_price + tick
-        return base_price
+                raw_price = base_price + tick
+        from src.execution._kis_adapter import _snap_to_exchange_tick
+        return _snap_to_exchange_tick(raw_price, ticker)
 
     def route_with_algo(self, order: Dict, market_data: Optional[Dict]=None) -> Dict:
         """주문 라우팅 + TWAP 자동 연결 (Phase 2 통합 인터페이스).
@@ -364,7 +379,7 @@ class SmartOrderRouter:
             order['price'] = dynamic_price
             order['dynamic_limit_applied'] = True
             order['oim'] = oim
-            logger.info(f'  [SOR] Dynamic Limit: {action.upper()} {original_price:,.0f} -> {dynamic_price:,.0f} (OIM: {oim:.2f})')
+            logger.info(f"  [SOR] Dynamic Limit: {action.upper()} {original_price:,.0f} -> {dynamic_price:,.0f} (OIM: {oim:.2f})")
         routing = self.route(order, market_data)
         dispatcher = TWAPDispatcher()
         dispatch = dispatcher.dispatch(order)
@@ -425,8 +440,8 @@ class TWAPDispatcher:
         action = order.get('action', 'buy')
         price_limit: Optional[float] = order.get('price_limit') or price
         if order_amount < self.threshold or qty <= 0:
-            logger.debug(f'  통합라우터: {ticker} {action} ₩{order_amount:,.0f} < TWAP 임계 ₩{self.threshold:,.0f} → IMMEDIATE')
-            return {'algo': 'IMMEDIATE', 'slices': [], 'twap_triggered': False, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': 0, 'duration_min': 0, 'reason': f'₩{order_amount:,.0f} < TWAP 임계: IMMEDIATE'}
+            logger.debug(f"  통합라우터: {ticker} {action} ₩{order_amount:,.0f} < TWAP 임계 ₩{self.threshold:,.0f} → IMMEDIATE")
+            return {'algo': 'IMMEDIATE', 'slices': [], 'twap_triggered': False, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': 0, 'duration_min': 0, 'reason': f"₩{order_amount:,.0f} < TWAP 임계: IMMEDIATE"}
         try:
             from src.execution.algo_executor import AlgoExecutor
             algo = AlgoExecutor()
@@ -435,8 +450,8 @@ class TWAPDispatcher:
                 if sl.price_limit is None:
                     sl.price_limit = price_limit
             n = len(slices)
-            logger.info(f'  통합라우터: {ticker} {action} ₩{order_amount:,.0f} ≥ TWAP 임계 ₩{self.threshold:,.0f} → TWAP {n}분할 @ {self.duration_min}분')
-            return {'algo': 'TWAP', 'slices': slices, 'twap_triggered': True, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': n, 'duration_min': self.duration_min, 'reason': f'₩{order_amount:,.0f} ≥ TWAP 임계: {n}분할 @ {self.duration_min}분 지정가로 실행'}
+            logger.info(f"  통합라우터: {ticker} {action} ₩{order_amount:,.0f} ≥ TWAP 임계 ₩{self.threshold:,.0f} → TWAP {n}분할 @ {self.duration_min}분")
+            return {'algo': 'TWAP', 'slices': slices, 'twap_triggered': True, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': n, 'duration_min': self.duration_min, 'reason': f"₩{order_amount:,.0f} ≥ TWAP 임계: {n}분할 @ {self.duration_min}분 지정가로 실행"}
         except Exception as exc:
-            logger.error(f'  ❌ TWAPDispatcher: AlgoExecutor 연동 실패 → IMMEDIATE fallback: {exc}')
-            return {'algo': 'IMMEDIATE', 'slices': [], 'twap_triggered': False, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': 0, 'duration_min': 0, 'reason': f'AlgoExecutor 오류: IMMEDIATE fallback ({exc})'}
+            logger.error(f"  ❌ TWAPDispatcher: AlgoExecutor 연동 실패 → IMMEDIATE fallback: {exc}")
+            return {'algo': 'IMMEDIATE', 'slices': [], 'twap_triggered': False, 'order_amount': order_amount, 'threshold': self.threshold, 'n_slices': 0, 'duration_min': 0, 'reason': f"AlgoExecutor 오류: IMMEDIATE fallback ({exc})"}

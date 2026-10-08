@@ -47,8 +47,9 @@ class HMMRegimePredictor:
             logger.warning('Not enough data to fit HMM.')
             return
         train_data = historical_data.iloc[-self.lookback_window:].copy()
-        X = (train_data - train_data.mean()) / train_data.std()
-        X = X.fillna(0).values
+        std = train_data.std().replace(0.0, 1e-9)
+        X = (train_data - train_data.mean()) / std
+        X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
         self.model = GaussianHMM(n_components=self.n_components, covariance_type='full', n_iter=100, random_state=42)
         try:
             self.model.fit(X)
@@ -75,7 +76,7 @@ class HMMRegimePredictor:
             self.is_fitted = True
             logger.info('HMM Regime Model successfully fitted and smoothed.')
         except Exception as e:
-            logger.error(f'Failed to fit HMM: {e}')
+            logger.error(f"Failed to fit HMM: {e}")
 
     def predict_regime_probabilities(self, recent_data: pd.DataFrame) -> Dict[str, float]:
         """
@@ -86,15 +87,25 @@ class HMMRegimePredictor:
         """
         if not self.is_fitted or self.model is None:
             return {'bull_prob': 0.33, 'caution_prob': 0.33, 'bear_prob': 0.34}
-        X = (recent_data - recent_data.mean()) / recent_data.std()
-        X = X.fillna(0).values
+        std = recent_data.std().replace(0.0, 1e-9)
+        X = (recent_data - recent_data.mean()) / std
+        X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
         hidden_states = self.model.predict_proba(X)
         current_state_prob = hidden_states[-1]
         state_means = self.model.means_[:, 0]
         sorted_states = np.argsort(state_means)
-        bull_idx = sorted_states[0]
-        caution_idx = sorted_states[1]
-        bear_idx = sorted_states[2]
-        probs = {'bull_prob': round(float(current_state_prob[bull_idx]), 3), 'caution_prob': round(float(current_state_prob[caution_idx]), 3), 'bear_prob': round(float(current_state_prob[bear_idx]), 3)}
-        logger.debug(f'HMM Regime Probabilities: {probs}')
+        
+        probs = {'bull_prob': 0.0, 'caution_prob': 0.0, 'bear_prob': 0.0}
+        n_st = len(sorted_states)
+        if n_st == 1:
+            probs['bull_prob'] = 1.0
+        elif n_st == 2:
+            probs['bull_prob'] = round(float(current_state_prob[sorted_states[0]]), 3)
+            probs['bear_prob'] = round(float(current_state_prob[sorted_states[1]]), 3)
+        elif n_st >= 3:
+            probs['bull_prob'] = round(float(current_state_prob[sorted_states[0]]), 3)
+            probs['caution_prob'] = round(float(current_state_prob[sorted_states[1]]), 3)
+            probs['bear_prob'] = round(float(current_state_prob[sorted_states[2]]), 3)
+        
+        logger.debug(f"HMM Regime Probabilities: {probs}")
         return probs

@@ -137,7 +137,8 @@ class ExposureOrchestrator:
             sig_type = t_signal.get('signal_type', 'none')
             is_v_recovery = sig_type == 'v_recovery'
             if sig_type != 'none':
-                reasons.append(f'Transition={sig_type}(str={t_signal.get('strength', 0):.2f})')
+                _t_str = t_signal.get('strength', 0)
+                reasons.append(f"Transition={sig_type}(str={_t_str:.2f})")
                 components['transition'] = {'score': transition_adj, 'value': sig_type, 'strength': t_signal.get('strength', 0)}
         except Exception as e:
             logger.critical(f'  ExposureOrchestrator: TransitionSignalDetector 실패: {e}', exc_info=True)
@@ -150,11 +151,11 @@ class ExposureOrchestrator:
             if flash_score > regime_score:
                 regime_score = flash_score
                 reasons.append('Regime=crash (FlashCrash Override)')
-                logger.info(f'  ⚡ FlashCrash 예외 발동! Regime Score 조정: 0.0 -> {regime_score:.4f}')
+                logger.info(f"  ⚡ FlashCrash 예외 발동! Regime Score 조정: 0.0 -> {regime_score:.4f}")
             else:
-                reasons.append(f'Regime={regime}')
+                reasons.append(f"Regime={regime}")
         elif regime == 'bear':
-            reasons.append(f'Regime={regime}')
+            reasons.append(f"Regime={regime}")
         components['regime'] = {'score': regime_score, 'value': regime}
         vix = sentiment.get('vix', 20)
         options_skew = sentiment.get('options_skew', 0.0)
@@ -165,7 +166,7 @@ class ExposureOrchestrator:
             
         if vix > 45.0 or options_skew > 3.5 or ois > 2.0:
             target = 0.0
-            reasons.append(f'Boundary Box Exceeded (VIX={vix:.1f}, Skew={options_skew:.1f}, OIS={ois:.1f}) -> 0% Hard Stop')
+            reasons.append(f"Boundary Box Exceeded (VIX={vix:.1f}, Skew={options_skew:.1f}, OIS={ois:.1f}) -> 0% Hard Stop")
             components['vol_surface'] = {'score': 0.0, 'vix': vix, 'skew': options_skew, 'ois': ois}
         else:
             k_vix, x0_vix = (0.2, 30.0)
@@ -176,7 +177,7 @@ class ExposureOrchestrator:
             ois_score = 1.0 / (1.0 + np.exp(k_ois * (ois - x0_ois)))
             raw_multiplier = min(vix_score, skew_score, ois_score)
             target = max(0.1, min(1.0, raw_multiplier))
-            reasons.append(f'Vol-Surface Melting (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> {target:.2f}')
+            reasons.append(f"Vol-Surface Melting (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> {target:.2f}")
             components['vol_surface'] = {'score': target, 'vix': vix, 'skew': options_skew, 'ois': ois}
         target = round(max(0, min(1, target * regime_score)), 3)
         intraday_adj = 1.0
@@ -185,7 +186,7 @@ class ExposureOrchestrator:
                 intraday = self._intraday.detect()
                 intraday_adj = intraday.get('exposure_adjustment', 1.0)
                 if intraday_adj < 1.0:
-                    reasons.append(f'Intraday={intraday.get('regime', '?')}')
+                    reasons.append(f"Intraday={intraday.get('regime', '?')}")
                     components['intraday'] = {'score': intraday_adj, 'value': intraday.get('regime', 'normal')}
             except Exception as e:
                 logger.critical(f'  ExposureOrchestrator: IntradayRegimeDetector 실패 (bitrading 무시): {e}', exc_info=True)
@@ -214,7 +215,7 @@ class ExposureOrchestrator:
                 _sigma_cap = _cfg.get('risk.sigma_scale_cap', 1.3) if _cfg else 1.3
                 sigma_adj = max(_sigma_floor, min(_sigma_cap, _raw_ratio))
                 if sigma_adj < 0.9:
-                    reasons.append(f'σ-target={_sigma_target:.0%}/realized={_realized_vol:.0%}→{sigma_adj:.2f}')
+                    reasons.append(f"σ-target={_sigma_target:.0%}/realized={_realized_vol:.0%}→{sigma_adj:.2f}")
                 components['sigma_target'] = {'score': round(sigma_adj, 3), 'realized_vol': round(_realized_vol, 4), 'target_vol': _sigma_target, 'raw_ratio': round(_raw_ratio, 3)}
         except Exception as e:
             logger.critical(f'  σ-target 계산 실패: {e}', exc_info=True)
@@ -247,22 +248,22 @@ class ExposureOrchestrator:
             target = round(max(0, min(_cfg_get('exposure.max_leveraged_exposure', 1.3), target * final_adj)), 3)
             components['joint_risk'] = {'final_adj': final_adj, 'defense': joint_defense, 'jrm_adj': _jrm_adj, 'avg_pairwise_corr': _jrm.get('avg_pairwise_corr', 0.0), 'high_corr_pairs': _jrm.get('high_corr_pairs', [])}
             if final_adj < intraday_adj * transition_adj * sigma_adj:
-                reasons.append(f'JointRisk(adj={final_adj:.2f})')
+                reasons.append(f"JointRisk(adj={final_adj:.2f})")
         else:
             combined_adj = intraday_adj * transition_adj * sigma_adj * _jrm_adj
             target = round(max(0, min(_cfg_get('exposure.max_leveraged_exposure', 1.3), target * combined_adj)), 3)
         if data_penalty < 1.0:
             _pre_penalty = target
             target = round(target * data_penalty, 4)
-            logger.info(f'  [Phase 62] 데이터 결손 패널티 적용: {_pre_penalty:.4f} × {data_penalty:.2f} = {target:.4f}')
-            reasons.append(f'DataDegradation(x{data_penalty:.1f})')
+            logger.info(f"  [Phase 62] 데이터 결손 패널티 적용: {_pre_penalty:.4f} × {data_penalty:.2f} = {target:.4f}")
+            reasons.append(f"DataDegradation(x{data_penalty:.1f})")
         components['data_penalty'] = data_penalty
         result = {'target_exposure': min(1.0, target), 'target_raw': target, 'sigma_adjustment': round(sigma_adj, 3), 'components': components, 'reason': ' + '.join(reasons) if reasons else 'Normal conditions', 'timestamp': datetime.now().isoformat()}
         try:
             atomic_write_json((_RESULTS / 'exposure_orchestrator.json'),  result, indent=2, default=str)
         except Exception as e:
             logger.critical(f'  ExposureOrchestrator: 결과 저장 실패 (비치명적): {e}', exc_info=True)
-        logger.info(f'  Exposure: {min(1.0, target):.0%} ({result['reason']})')
+        logger.info(f"  Exposure: {min(1.0, target):.0%} ({result['reason']})")
         return result
 
     def _compute_flash_crash_gate(self, default_score: float, sentiment: Dict, cfg_get, is_v_recovery: bool=False) -> float:
@@ -290,7 +291,7 @@ class ExposureOrchestrator:
         gate_open = is_v_recovery and cross_stress < float(_get('flash_crash_gate.stress_gate', 0.3)) and (vkospi < float(_get('flash_crash_gate.vkospi_gate', 23.0))) and (s3_conf >= float(_get('flash_crash_gate.v_recovery_conf_discount', 0.35)))
         if not gate_open:
             if cross_stress < float(_get('flash_crash_gate.stress_gate', 0.3)) and (not is_v_recovery):
-                logger.debug(f'  ⚡ [FlashCrashGate] 거시 평온(stress={cross_stress:.3f}) 충족되나 V-Recovery 부재로 게이트 차단.')
+                logger.debug(f"  ⚡ [FlashCrashGate] 거시 평온(stress={cross_stress:.3f}) 충족되나 V-Recovery 부재로 게이트 차단.")
             return default_score
         stress_cap = float(_get('flash_crash_gate.stress_normalization_cap', 0.5))
         vkospi_floor = float(_get('flash_crash_gate.vkospi_floor', 10.0))
@@ -315,7 +316,7 @@ class ExposureOrchestrator:
         scale_cap = float(_get('flash_crash_gate.regime_score_cap', 0.45))
         flash_score = scale_floor + gate_score * (scale_cap - scale_floor)
         flash_score = round(min(scale_cap, max(scale_floor, flash_score)), 4)
-        logger.info(f'  ⚡ [FlashCrashGate] type={crash_type} | stress={cross_stress:.3f} vkospi={vkospi:.1f} ma20={ma20_dist:.1f}% s3_conf={s3_conf:.3f} | f=({f_stress:.2f},{f_vkospi:.2f},{f_oversold:.2f},{f_signal:.2f}) | gate={gate_score:.3f} → score {default_score:.3f}→{flash_score:.4f}')
+        logger.info(f"  ⚡ [FlashCrashGate] type={crash_type} | stress={cross_stress:.3f} vkospi={vkospi:.1f} ma20={ma20_dist:.1f}% s3_conf={s3_conf:.3f} | f=({f_stress:.2f},{f_vkospi:.2f},{f_oversold:.2f},{f_signal:.2f}) | gate={gate_score:.3f} → score {default_score:.3f}→{flash_score:.4f}")
         return flash_score
 
     def _load_sentiment(self) -> Dict:
@@ -426,7 +427,7 @@ class ExposureOrchestrator:
                     _positions = _sp_raw.get('positions', {})
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     _positions = {}
             else:
                 _positions = {}
@@ -445,7 +446,7 @@ class ExposureOrchestrator:
             buy_amount = total_nav * (target_beta - 1.0) / inst_beta_abs
             available_cash = float(sp.get('cash', sp.get('s5_cash', total_nav)))
             if buy_amount > available_cash:
-                logger.warning(f'  ⚠️ [수퍼부스트] 현금 부족 — 필요 ₩{buy_amount / 1000000.0:.1f}M, 가용 ₩{available_cash / 1000000.0:.1f}M → 현금 한도로 조정')
+                logger.warning(f"  ⚠️ [수퍼부스트] 현금 부족 — 필요 ₩{buy_amount / 1000000.0:.1f}M, 가용 ₩{available_cash / 1000000.0:.1f}M → 현금 한도로 조정")
                 buy_amount = available_cash
             diff = buy_amount - current_hedge_amount
             tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
@@ -453,10 +454,10 @@ class ExposureOrchestrator:
                 action = 'HOLD'
             else:
                 action = 'BUY' if current_hedge_amount == 0 else 'ADJUST'
-            result = self._build_hedge_result(action, inst['ticker'], buy_amount, diff, target_beta, long_exposure, buy_amount, current_hedge_amount, regime, reason=f'수퍼부스트 β={target_beta:.2f} → {inst['name']} ₩{buy_amount / 1000000.0:.1f}M')
+            result = self._build_hedge_result(action, inst['ticker'], buy_amount, diff, target_beta, long_exposure, buy_amount, current_hedge_amount, regime, reason=f"수퍼부스트 β={target_beta:.2f} → {inst['name']} ₩{buy_amount / 1000000.0:.1f}M")
             result['name'] = inst['name']
             result['mode'] = 'super_boost'
-            logger.info(f'  🚀 [수퍼부스트] β={target_beta:.2f} → {inst['name']} ₩{buy_amount / 1000000.0:.1f}M ({action})')
+            logger.info(f"  🚀 [수퍼부스트] β={target_beta:.2f} → {inst['name']} ₩{buy_amount / 1000000.0:.1f}M ({action})")
             return result
         if target_beta < 0.0:
             inst = dict(self.ATTACKER_INSTRUMENTS.get('inverse', self._ATTACKER_INSTRUMENTS_DEFAULT['inverse']))
@@ -465,7 +466,7 @@ class ExposureOrchestrator:
             inst['name'] = str(_cfg.get('exposure.instrument.inverse.name', inst['name']) if _cfg else inst['name'])
             inst_beta_abs = abs(inst['beta'])
             hedge_amount = (long_exposure * portfolio_beta + total_nav * abs(target_beta)) / inst_beta_abs
-            logger.info(f'  ⚡ [어태커 넷숏] max_hedge_ratio 바이패스 활성화 — β={target_beta:.2f}, hedge_target=₩{hedge_amount / 1000000.0:.1f}M')
+            logger.info(f"  ⚡ [어태커 넷숏] max_hedge_ratio 바이패스 활성화 — β={target_beta:.2f}, hedge_target=₩{hedge_amount / 1000000.0:.1f}M")
             available_cash = float(sp.get('cash', sp.get('s5_cash', 0.0)))
             if hedge_amount <= available_cash:
                 final_short_buy = hedge_amount
@@ -482,7 +483,7 @@ class ExposureOrchestrator:
                 Y = X + available_cash
                 final_equity_sell = X
                 final_short_buy = Y
-                logger.warning(f'  🔢 [동시 방정식] 현금 부족 ₩{available_cash / 1000000.0:.1f}M < 필요 ₩{hedge_amount / 1000000.0:.1f}M → 현물 매도 X=₩{final_equity_sell / 1000000.0:.1f}M, 숏 매수 Y=₩{final_short_buy / 1000000.0:.1f}M 재계산 완료')
+                logger.warning(f"  🔢 [동시 방정식] 현금 부족 ₩{available_cash / 1000000.0:.1f}M < 필요 ₩{hedge_amount / 1000000.0:.1f}M → 현물 매도 X=₩{final_equity_sell / 1000000.0:.1f}M, 숏 매수 Y=₩{final_short_buy / 1000000.0:.1f}M 재계산 완료")
                 hedge_amount = final_short_buy
             diff = hedge_amount - current_hedge_amount
             tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
@@ -490,11 +491,11 @@ class ExposureOrchestrator:
                 action = 'HOLD'
             else:
                 action = 'BUY' if current_hedge_amount == 0 else 'ADJUST'
-            result = self._build_hedge_result(action, inst['ticker'], hedge_amount, diff, target_beta, long_exposure, hedge_amount, current_hedge_amount, regime, reason=f'어태커 넷숏 β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M')
+            result = self._build_hedge_result(action, inst['ticker'], hedge_amount, diff, target_beta, long_exposure, hedge_amount, current_hedge_amount, regime, reason=f"어태커 넷숏 β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M")
             result['name'] = inst['name']
             result['mode'] = 'attacker_net_short'
             result['equity_sell_amount'] = final_equity_sell if hedge_amount < available_cash + long_exposure else 0.0
-            logger.warning(f'  🚨 [어태커 넷숏] β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M ({action})')
+            logger.warning(f"  🚨 [어태커 넷숏] β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M ({action})")
             return result
         hedge_needed = long_exposure * max(0.0, portfolio_beta - target_beta)
         max_ratio = _cfg.get('hedge.max_hedge_ratio', 0.5) if _cfg else 0.5
@@ -502,7 +503,7 @@ class ExposureOrchestrator:
         hedge_needed = min(hedge_needed, max_hedge)
         if hedge_needed < min_amount:
             if current_hedge_amount > 0:
-                return self._build_hedge_result('SELL', current_hedge_ticker, 0, 0, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime, reason=f'헤지 필요액 ₩{hedge_needed:,.0f} < 최소 ₩{min_amount:,.0f}')
+                return self._build_hedge_result('SELL', current_hedge_ticker, 0, 0, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime, reason=f"헤지 필요액 ₩{hedge_needed:,.0f} < 최소 ₩{min_amount:,.0f}")
             return {'action': 'HOLD', 'reason': '필요 헤지 < 최소금액', 'regime': regime, 'target_beta': target_beta, 'hedge_needed': hedge_needed}
         use_2x_regimes = _cfg.get('hedge.use_2x_regime', ['bear', 'crash']) if _cfg else ['bear', 'crash']
         if regime in use_2x_regimes:
@@ -515,7 +516,7 @@ class ExposureOrchestrator:
         diff = position_amount - current_hedge_amount
         tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
         if current_hedge_amount > 0 and abs(diff) / max(current_hedge_amount, 1) < tolerance:
-            return self._build_hedge_result('HOLD', ticker, position_amount, 0, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime, reason=f'변동 {abs(diff) / max(current_hedge_amount, 1) * 100:.0f}% < 허용 {tolerance * 100:.0f}%')
+            return self._build_hedge_result('HOLD', ticker, position_amount, 0, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime, reason=f"변동 {abs(diff) / max(current_hedge_amount, 1) * 100:.0f}% < 허용 {tolerance * 100:.0f}%")
         if current_hedge_amount == 0:
             action = 'BUY'
         elif diff > 0:
@@ -524,7 +525,7 @@ class ExposureOrchestrator:
             action = 'ADJUST'
         result = self._build_hedge_result(action, ticker, position_amount, diff, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime)
         result['mode'] = 'partial_hedge'
-        logger.info(f'  🛡️ β헤지: long=₩{long_exposure / 1000000.0:.0f}M → β={target_beta:.1f} → {inst['name']} ₩{position_amount / 1000000.0:.1f}M ({action})')
+        logger.info(f"  🛡️ β헤지: long=₩{long_exposure / 1000000.0:.0f}M → β={target_beta:.1f} → {inst['name']} ₩{position_amount / 1000000.0:.1f}M ({action})")
         return result
 
     def _read_portfolio_exposure(self):
@@ -599,7 +600,7 @@ class ExposureOrchestrator:
             min_beta = float(cfg.get('exposure.min_target_beta', -1.0) if cfg else -1.0)
             attacker_beta = -0.5 + (min_beta + 0.5) * combined_severity
             attacker_beta = round(max(min_beta, min(-0.5, attacker_beta)), 3)
-            logger.warning(f'  ⚡ [S0 어태커 발동] gex_crash={gex_crash} | wag_the_dog={wag_the_dog} | severity={combined_severity:.2f} → target_beta={attacker_beta:.3f} (넷숏 구축 시작)')
+            logger.warning(f"  ⚡ [S0 어태커 발동] gex_crash={gex_crash} | wag_the_dog={wag_the_dog} | severity={combined_severity:.2f} → target_beta={attacker_beta:.3f} (넷숏 구축 시작)")
             target = attacker_beta
             attacker_mode = True
         if attacker_mode:
@@ -608,7 +609,7 @@ class ExposureOrchestrator:
             if vix_trailing_enabled and vix_momentum < 0:
                 prior_target = target
                 target = max(0.0, target)
-                logger.warning(f'  🛑 [VIX Trailing Stop 발동] vix_momentum={vix_momentum:.4f} < 0 (공포 완화) → target_beta {prior_target:.3f} → {target:.3f} (넷숏 강제 청산)')
+                logger.warning(f"  🛑 [VIX Trailing Stop 발동] vix_momentum={vix_momentum:.4f} < 0 (공포 완화) → target_beta {prior_target:.3f} → {target:.3f} (넷숏 강제 청산)")
                 attacker_mode = False
         if not attacker_mode and regime == 'bull':
             stress_threshold = float(cfg.get('exposure.super_boost_stress_threshold', 0.2) if cfg else 0.2)
@@ -618,7 +619,7 @@ class ExposureOrchestrator:
                 stress_ratio = 1.0 - cross_stress / stress_threshold
                 boost_beta = 1.0 + (max_lev - 1.0) * stress_ratio
                 boost_beta = round(min(max_lev, boost_beta), 3)
-                logger.info(f'  🚀 [골디락스 수퍼부스트] cross_asset_stress={cross_stress:.3f} < {stress_threshold} | stress_ratio={stress_ratio:.3f} → target_beta {target:.3f} → {boost_beta:.3f} (레버리지 ETF 매수)')
+                logger.info(f"  🚀 [골디락스 수퍼부스트] cross_asset_stress={cross_stress:.3f} < {stress_threshold} | stress_ratio={stress_ratio:.3f} → target_beta {target:.3f} → {boost_beta:.3f} (레버리지 ETF 매수)")
                 target = boost_beta
         if attacker_mode or target < 0 or target > 1.0:
             floor = float(cfg.get('exposure.min_target_beta', -1.0) if cfg else -1.0)
@@ -636,7 +637,7 @@ class ExposureOrchestrator:
                 result = 0.0
         except Exception as _brake_e:
             logger.error(f'  [S0 Brake] 드로다운 계산 실패 (Brake 미적용): {_brake_e}', exc_info=True)
-        logger.debug(f'  β-dynamic: base={base:.3f} vix_adj={vix_adj:+.3f} dd_adj={dd_adj:+.3f} vol_adj={vol_adj:+.3f} attacker={attacker_mode} → target_β={result:.3f}')
+        logger.debug(f"  β-dynamic: base={base:.3f} vix_adj={vix_adj:+.3f} dd_adj={dd_adj:+.3f} vol_adj={vol_adj:+.3f} attacker={attacker_mode} → target_β={result:.3f}")
         return result
 
     def _load_signal_cache(self) -> Dict:
@@ -658,11 +659,30 @@ class ExposureOrchestrator:
         return {'vix': 18.0}
 
     def _load_shadow_portfolio(self) -> Dict:
-        """results/shadow_portfolio.json 로드.
+        """실시간 계좌 상태 동기화 (Live 모드 시 shadow_portfolio.json 우회 배제)."""
+        try:
+            from src.execution._kis_adapter import KISTraderAdapter
+            adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=True)
+            if adapter.mode == 'live':
+                adapter.fetch_live_account_balance()
+                positions_dict = {}
+                for t, p in adapter.positions.items():
+                    positions_dict[f"LIVE:{t}"] = {
+                        'ticker': t,
+                        'quantity': p.quantity,
+                        'avg_price': p.avg_price,
+                        'current_price': p.current_price,
+                        'market_value': p.quantity * (p.current_price or p.avg_price or 0.0)
+                    }
+                return {
+                    'nav': adapter.account.total_equity,
+                    'cash': adapter.account.cash,
+                    'positions': positions_dict,
+                    'is_live_ssot': True
+                }
+        except Exception as _e_live:
+            logger.debug(f"Live SSoT query fallback in exposure_orchestrator: {_e_live}")
 
-        Returns:
-            shadow_portfolio dict. 실패 시 빈 dict.
-        """
         try:
             path = _RESULTS / 'shadow_portfolio.json'
             if path.exists():
@@ -791,12 +811,12 @@ class ExposureOrchestrator:
             leverage_label = '1x'
             reason = f'[Phase 11] Moderate Bear: score={bear_score:.3f}>={moderate_threshold} -> 인버스(1x) size={final_size:.2%}(VIX={vix:.1f} amp={vix_amp:.2f})'
         else:
-            logger.debug(f'  [Phase 11] Bear Score={bear_score:.3f} < {moderate_threshold} -> HOLD')
-            return {'action': 'HOLD', 'ticker': '', 'name': 'no hedge', 'size_pct': 0.0, 'leverage_label': 'none', 'bear_score': round(bear_score, 4), 'vix_amp': round(vix_amp, 4), 'reason': f'bear_score={bear_score:.3f} < threshold={moderate_threshold}'}
+            logger.debug(f"  [Phase 11] Bear Score={bear_score:.3f} < {moderate_threshold} -> HOLD")
+            return {'action': 'HOLD', 'ticker': '', 'name': 'no hedge', 'size_pct': 0.0, 'leverage_label': 'none', 'bear_score': round(bear_score, 4), 'vix_amp': round(vix_amp, 4), 'reason': f"bear_score={bear_score:.3f} < threshold={moderate_threshold}"}
         ticker = inst['ticker']
         name = inst['name']
         result = {'action': 'BUY' if final_size > 0 else 'HOLD', 'ticker': ticker, 'name': f'{name} (Bear Score 헷지)', 'stream_id': 'H', 'size_pct': final_size, 'leverage_label': leverage_label, 'bear_score': round(bear_score, 4), 'vix_amp': round(vix_amp, 4), 'regime': regime, 'reason': reason, 'timestamp': datetime.now().isoformat()}
-        logger.info(f'  ⚔️ [Phase 11: Dynamic Balance] Bear Score 헷지 발동: score={bear_score:.3f} -> {name}({leverage_label}) {final_size:.1%} (VIX amp={vix_amp:.2f})')
+        logger.info(f"  ⚔️ [Phase 11: Dynamic Balance] Bear Score 헷지 발동: score={bear_score:.3f} -> {name}({leverage_label}) {final_size:.1%} (VIX amp={vix_amp:.2f})")
         try:
             _bear_score_path = _RESULTS / 'bear_score_hedge.json'
             atomic_write_json(_bear_score_path, result, indent=2, default=str)

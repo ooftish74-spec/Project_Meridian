@@ -26,7 +26,7 @@ KRX 시장 캘린더 유틸리티
 
 import logging
 from datetime import datetime, timedelta, time
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -456,6 +456,30 @@ def is_kr_open_today() -> bool:
     return get_calendar().is_trading_day()
 
 
+def is_us_dst() -> bool:
+    """뉴욕(US/Eastern) 서머타임(DST) 적용 여부 동적 판단."""
+    try:
+        import pytz
+        from datetime import datetime as _dt
+        eastern = pytz.timezone('US/Eastern')
+        now_et = _dt.now(eastern)
+        return bool(now_et.dst() and now_et.dst().total_seconds() > 0)
+    except Exception:
+        from datetime import datetime as _dt
+        m = _dt.now().month
+        return 3 <= m <= 11
+
+
+def get_us_market_open_time() -> Tuple[int, int]:
+    """서머타임 여부에 따른 미국 정규장 개장 시각 (KST) 반환.
+    
+    Returns:
+        (22, 30) — EDT (서머타임, 22:30 KST)
+        (23, 30) — EST (표준시, 23:30 KST)
+    """
+    return (22, 30) if is_us_dst() else (23, 30)
+
+
 def get_full_market_status() -> Dict:
     """한국+미국 전체 시장 상태 조회."""
     now = datetime.now()
@@ -486,7 +510,7 @@ def gate_kr() -> bool:
     """한국 개장일이 아니면 False (후속 스크립트 차단용)."""
     if not is_kr_open_today():
         from datetime import date as _date
-        logger.info(f'🚫 KR 휴장 ({_date.today()}) → 스킵')
+        logger.info(f"🚫 KR 휴장 ({_date.today()}) → 스킵")
         return False
     return True
 
@@ -495,7 +519,8 @@ def gate_us() -> bool:
     """미국 개장일이 아니면 False (후속 스크립트 차단용)."""
     if not is_us_open_now():
         us_dt = _kst_to_us_trading_date()
-        logger.info(f'🚫 US 휴장 ({us_dt.strftime("%Y-%m-%d")}) → 스킵')
+        _dt_str = us_dt.strftime('%Y-%m-%d')
+        logger.info(f"🚫 US 휴장 ({_dt_str}) -> 스킵")
         return False
     return True
 

@@ -52,12 +52,12 @@ class QVMUniverse:
         """
         if top_n is None:
             top_n = cfg.get('s3.universe_size', 50)
-        logger.info(f'  S3 QVM 유니버스 구축 시작 (TOP {top_n})')
+        logger.info(f"  S3 QVM 유니버스 구축 시작 (TOP {top_n})")
         market_caps = self._load_market_caps()
         stock_info = self._load_stock_info()
         candidates = []
         if not _FINANCIALS_DIR.exists():
-            logger.warning(f'  재무제표 디렉토리 없음: {_FINANCIALS_DIR}')
+            logger.warning(f"  재무제표 디렉토리 없음: {_FINANCIALS_DIR}")
             return []
         for fp in sorted(_FINANCIALS_DIR.glob('*.json')):
             ticker = fp.stem
@@ -90,7 +90,7 @@ class QVMUniverse:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  {ticker} 로드 실패: {e}')
+                logger.debug(f"  {ticker} 로드 실패: {e}")
                 continue
         candidates.sort(key=lambda x: x['market_cap'], reverse=True)
         sector_leaders = self._get_sector_leaders(candidates)
@@ -109,13 +109,13 @@ class QVMUniverse:
                         s['is_sector_leader'] = True
                         break
         universe = top_universe
-        logger.info(f'  S3 QVM 유니버스: {len(candidates)}후보 → {len(universe)}종목 선정 (섹터 대표주 {len(sector_leaders)}종목, 추가편입 {added_leaders}종목)')
+        logger.info(f"  S3 QVM 유니버스: {len(candidates)}후보 → {len(universe)}종목 선정 (섹터 대표주 {len(sector_leaders)}종목, 추가편입 {added_leaders}종목)")
         if universe:
-            top3 = ', '.join((f'{s['name']}({s['ticker']})' for s in universe[:3]))
-            logger.info(f'    상위 3: {top3}')
-            leaders_str = ', '.join((f'{s['name']}({s['sector']})' for s in universe if s.get('is_sector_leader')))
+            top3 = ', '.join((f"{s.get('name', '')}({s.get('ticker', '')})" for s in universe[:3]))
+            logger.info(f"    상위 3: {top3}")
+            leaders_str = ', '.join((f"{s.get('name', '')}({s.get('sector', '')})" for s in universe if s.get('is_sector_leader')))
             if leaders_str:
-                logger.info(f'    섹터 대표주: {leaders_str}')
+                logger.info(f"    섹터 대표주: {leaders_str}")
         return universe
 
     def _get_sector_leaders(self, candidates: List[Dict]) -> List[Dict]:
@@ -186,11 +186,11 @@ class QVMUniverse:
                             continue
                         if mcap and mcap > 0:
                             self._market_cap_data[ticker] = float(mcap)
-                logger.info(f'  시가총액 캐시: {len(self._market_cap_data)}종목 로드')
+                logger.info(f"  시가총액 캐시: {len(self._market_cap_data)}종목 로드")
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  시가총액 캐시 로드 실패: {e}')
+                logger.debug(f"  시가총액 캐시 로드 실패: {e}")
         return self._market_cap_data
 
     def _load_stock_info(self) -> Dict[str, Dict]:
@@ -204,11 +204,11 @@ class QVMUniverse:
                 if isinstance(names, dict):
                     for ticker, name in names.items():
                         self._stock_info[ticker] = {'name': name if isinstance(name, str) else str(name), 'sector': 'unknown'}
-                logger.info(f'  종목명 매핑: {len(self._stock_info)}종목 로드')
+                logger.info(f"  종목명 매핑: {len(self._stock_info)}종목 로드")
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  stock_names.json 로드 실패: {e}')
+                logger.debug(f"  stock_names.json 로드 실패: {e}")
         if _STOCK_LIST_CACHE.exists():
             try:
                 data = json.loads(_STOCK_LIST_CACHE.read_text())
@@ -226,5 +226,5 @@ class QVMUniverse:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  stock_list_cache 로드 실패: {e}')
+                logger.debug(f"  stock_list_cache 로드 실패: {e}")
         return self._stock_info

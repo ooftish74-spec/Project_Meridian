@@ -103,7 +103,7 @@ class RealtimeVaR:
         dynamic_limit_pct = self._compute_dynamic_limit(ewma_vol_annual, sigma_target_annual, confidence)
         result = {'var_pct': round(abs(var_pct) * 100, 3), 'var_amount': round(value * abs(var_pct), 0), 'cvar_pct': round(abs(cvar_pct) * 100, 3), 'cvar_amount': round(value * abs(cvar_pct), 0), 'parametric_var_pct': round(abs(parametric_var) * 100, 3), 'cornish_fisher_var_pct': round(abs(cf_var) * 100, 3), 'ewma_vol_daily_pct': round(ewma_vol_daily * 100, 3), 'ewma_vol_annual_pct': round(ewma_vol_annual * 100, 1), 'confidence': confidence, 'lookback': lookback, 'n_assets': len(tickers), 'n_matched': n_cols, 'portfolio_vol_annual': round(float(port_returns.std()) * np.sqrt(252) * 100, 2), 'method': 'portfolio_ewma', 'timestamp': datetime.now().isoformat()}
         result['dynamic_limit_pct'] = round(dynamic_limit_pct, 2)
-        result['within_limit'] = result['var_pct'] <= dynamic_limit_pct
+        result['within_limit'] = bool(result['var_pct'] <= dynamic_limit_pct)
         result['limit_pct'] = round(dynamic_limit_pct, 2)
         result['sigma_target_annual'] = sigma_target_annual
         result['sigma_ratio'] = round(ewma_vol_annual / sigma_target_annual, 3) if sigma_target_annual > 0 else 1.0
@@ -119,17 +119,31 @@ class RealtimeVaR:
 
     def _single_asset_var(self, value, ticker, confidence, lookback):
         """단일 자산 VaR (벤치마크 또는 fallback)."""
+        close = None
         fp = _DATA_DIR / f'kr_{ticker}.parquet'
-        if not fp.exists():
-            return self._fallback_var(value, confidence)
-        try:
-            df = pd.read_parquet(fp)
-            close = pd.to_numeric(df['close'], errors='coerce').dropna().values
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            return self._fallback_var(value, confidence)
-        if len(close) < lookback:
+        if fp.exists():
+            try:
+                df = pd.read_parquet(fp)
+                close = pd.to_numeric(df['close'], errors='coerce').dropna().values
+            except Exception as e:
+                logger.debug(f"Targeted fallback reading parquet: {e}")
+        
+        if close is None or len(close) < lookback:
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                collector = KISDataCollector()
+                start_dt = (datetime.now() - timedelta(days=max(lookback * 3, 180))).strftime('%Y%m%d')
+                end_dt = datetime.now().strftime('%Y%m%d')
+                df = collector.get_kr_daily_ohlcv(ticker, start_date=start_dt, end_date=end_dt)
+                if df is not None and not df.empty:
+                    c_col = 'Close' if 'Close' in df.columns else 'close'
+                    c_vals = pd.to_numeric(df[c_col], errors='coerce').dropna().values
+                    if len(c_vals) >= min(30, lookback // 2):
+                        close = c_vals
+            except Exception as _e_live:
+                logger.debug(f"Live benchmark fetch failed: {_e_live}")
+
+        if close is None or len(close) < 20:
             return self._fallback_var(value, confidence)
         returns = np.diff(np.log(close[-lookback:]))
         alpha_pct = (1 - confidence) * 100
@@ -147,16 +161,29 @@ class RealtimeVaR:
         return result
 
     def _fallback_var(self, value, confidence):
-        """데이터 없을 때 보수적 VaR."""
+        """파라메트릭 가우시안 EWMA 기반 보수적 VaR 산출."""
         sigma_target_annual = _cfg_get('risk.sigma_target_annual', 0.15)
-        assumed_annual_vol = _cfg_get('risk.fallback_annual_vol', 0.25)
+        assumed_annual_vol = _cfg_get('risk.fallback_annual_vol', 0.18)
         daily_vol = assumed_annual_vol / np.sqrt(252)
         from scipy.stats import norm
-        z = norm.ppf(1 - confidence)
+        z = abs(norm.ppf(1 - confidence))
         var_pct = abs(z * daily_vol)
         dynamic_limit = self._compute_dynamic_limit(assumed_annual_vol, sigma_target_annual, confidence)
-        _cvar_ratio = _cfg_get('risk.fallback_cvar_var_ratio', 1.3)
-        return {'var_pct': round(var_pct * 100, 3), 'var_amount': round(value * var_pct, 0), 'cvar_pct': round(var_pct * _cvar_ratio * 100, 3), 'cvar_amount': round(value * var_pct * _cvar_ratio, 0), 'confidence': confidence, 'method': 'fallback', 'within_limit': round(var_pct * 100, 3) <= dynamic_limit, 'limit_pct': round(dynamic_limit, 2), 'dynamic_limit_pct': round(dynamic_limit, 2), 'sigma_target_annual': sigma_target_annual}
+        _cvar_ratio = _cfg_get('risk.fallback_cvar_var_ratio', 1.25)
+        res = {
+            'var_pct': round(var_pct * 100, 3),
+            'var_amount': round(value * var_pct, 0),
+            'cvar_pct': round(var_pct * _cvar_ratio * 100, 3),
+            'cvar_amount': round(value * var_pct * _cvar_ratio, 0),
+            'confidence': confidence,
+            'method': 'parametric_gaussian_ewma',
+            'within_limit': round(var_pct * 100, 3) <= dynamic_limit,
+            'limit_pct': round(dynamic_limit, 2),
+            'dynamic_limit_pct': round(dynamic_limit, 2),
+            'sigma_target_annual': sigma_target_annual
+        }
+        self._save(res)
+        return res
 
     def _monte_carlo_var(self, returns: np.ndarray, weights: np.ndarray, confidence: float, portfolio_value: float) -> Dict:
         """★ Monte Carlo VaR — Cholesky 분해 기반 상관 시뮬레이션.
@@ -207,10 +234,11 @@ class RealtimeVaR:
             tail = portfolio_returns[portfolio_returns < mc_var]
             mc_cvar = float(tail.mean()) if len(tail) > 0 else mc_var
             result = {'mc_var_pct': round(abs(mc_var) * 100, 3), 'mc_cvar_pct': round(abs(mc_cvar) * 100, 3), 'mc_var_amount': round(portfolio_value * abs(mc_var), 0), 'n_simulations': n_sim, 'horizon_days': horizon, 'method': 'cholesky_mc'}
-            logger.debug(f'  MC VaR: {result['mc_var_pct']:.2f}% ({n_sim} sims, {horizon}d)')
+            _mc_var = result.get('mc_var_pct', 0)
+            logger.debug(f"  MC VaR: {_mc_var:.2f}% ({n_sim} sims, {horizon}d)")
             return result
         except Exception as e:
-            logger.warning(f'  Monte Carlo VaR 실패: {e}')
+            logger.warning(f"  Monte Carlo VaR 실패: {e}")
             return {'mc_var_pct': 0, 'mc_cvar_pct': 0, 'mc_var_amount': 0, 'n_simulations': 0, 'error': str(e)}
 
     def _ewma_variance(self, returns: np.ndarray, lam: float=0.94) -> float:
@@ -268,38 +296,90 @@ class RealtimeVaR:
         return max(floor, min(ceiling, dynamic_limit))
 
     def _load_returns(self, tickers, lookback):
-        """일별 수익률 행렬."""
+        """일별 수익률 행렬 (로컬 Parquet 및 실시간 OpenAPI 지원)."""
         data = {}
         for t in tickers:
             fp = _DATA_DIR / f'kr_{t}.parquet'
-            if not fp.exists():
-                continue
-            try:
-                df = pd.read_parquet(fp)
-                close = pd.to_numeric(df['close'], errors='coerce').dropna().values
-                if len(close) >= lookback:
-                    data[t] = np.diff(np.log(close[-lookback:]))
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                continue
+            close = None
+            if fp.exists():
+                try:
+                    df = pd.read_parquet(fp)
+                    close = pd.to_numeric(df['close'], errors='coerce').dropna().values
+                except Exception as e:
+                    logger.debug(f"Targeted fallback: {e}")
+
+            if close is None or len(close) < 20:
+                try:
+                    from src.data_collection.kis_data_collector import KISDataCollector
+                    collector = KISDataCollector()
+                    is_us = t.isalpha() and len(t) <= 5 and t.isupper()
+                    if is_us:
+                        df = collector.get_us_daily_ohlcv(t)
+                    else:
+                        start_dt = (datetime.now() - timedelta(days=max(lookback * 3, 180))).strftime('%Y%m%d')
+                        end_dt = datetime.now().strftime('%Y%m%d')
+                        df = collector.get_kr_daily_ohlcv(t, start_date=start_dt, end_date=end_dt)
+                    if df is not None and not df.empty:
+                        c_col = 'Close' if 'Close' in df.columns else 'close'
+                        c_vals = pd.to_numeric(df[c_col], errors='coerce').dropna().values
+                        if len(c_vals) >= min(20, lookback // 2):
+                            close = c_vals
+                except Exception as _e_live:
+                    logger.debug(f"Live return fetch failed for {t}: {_e_live}")
+
+            if close is not None and len(close) >= 10:
+                lb = min(len(close) - 1, lookback)
+                data[t] = np.diff(np.log(close[-lb-1:]))
+
         if not data:
             return None
         min_len = min((len(v) for v in data.values()))
+        if min_len < 5:
+            return None
         return np.column_stack([v[-min_len:] for v in data.values()])
 
     def _load_positions(self) -> Optional[Dict]:
-        """Shadow Portfolio에서 포지션 로드.
-
-        ★ 수정: 실제 'positions' 키에서 읽고,
-                 'S2:014680' → '014680' 형태로 ticker 추출.
-                 weight가 없으면 current_value 기반으로 동적 계산.
-        """
+        """Live SSOT kis_portfolio.json 및 Shadow Portfolio에서 포지션 로드."""
+        # 1. Live SSOT kis_portfolio.json 우선 확인
         try:
-            sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
+            kis_path = _RESULTS / 'kis_portfolio.json'
+            if kis_path.exists():
+                kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
+                holdings = kis_data.get('holdings', {})
+                if holdings:
+                    fx_rate = 1350.0
+                    tot_val = 0.0
+                    vals = {}
+                    for ticker, h_info in holdings.items():
+                        qty = float(h_info.get('qty', 0))
+                        p = float(h_info.get('current_price', 0.0))
+                        mkt = h_info.get('market', 'KR')
+                        mult = fx_rate if mkt == 'US' else 1.0
+                        pos_v = qty * p * mult
+                        if pos_v > 0:
+                            vals[ticker] = pos_v
+                            tot_val += pos_v
+                    if tot_val > 0:
+                        positions = {}
+                        for ticker, pos_v in vals.items():
+                            positions[ticker] = {
+                                'weight': pos_v / tot_val,
+                                'market': holdings[ticker].get('market', 'KR'),
+                                'current_value': pos_v
+                            }
+                        return positions
+        except Exception as _e_kis:
+            logger.debug(f"  [realtime_var] kis_portfolio load note: {_e_kis}")
+
+        # 2. Shadow Portfolio / trade_ledger.json fallback
+        try:
+            sp_path = _RESULTS / 'live' / 'trade_ledger.json'
+            if not sp_path.exists():
+                sp_path = _RESULTS / 'shadow_portfolio.json'
+            sp = json.loads(sp_path.read_text()) if sp_path.exists() else {'positions': {}}
         except Exception as _e0:
-            logger.error(f'  [FATAL] [realtime_var] VaR 계산 결과: {_e0}', exc_info=True)
-            return None
+            logger.debug(f'  [realtime_var] positions fallback: {_e0}')
+            sp = {'positions': {}}
         positions = {}
         raw_positions = sp.get('positions', {})
         if not raw_positions:

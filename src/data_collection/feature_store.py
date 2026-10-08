@@ -501,7 +501,7 @@ class FeatureStore:
                 latest_dir.unlink()
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 import shutil
                 shutil.rmtree(latest_dir, ignore_errors=True)
         try:

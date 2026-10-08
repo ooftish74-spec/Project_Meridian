@@ -124,7 +124,7 @@ class GeneticFeatureGenerator:
             _c1 = random.choice(cols)
             _c2 = random.choice(cols)
             _op = random.choice(_OPS)[0]
-            _pop.append(f'{_op}({_c1},{_c2})')
+            _pop.append(f"{_op}({_c1},{_c2})")
         return _pop
 
     def _evaluate_feature(
@@ -213,8 +213,8 @@ class GeneticFeatureGenerator:
         while len(_next) < self._population_size:
             if survivors and random.random() > self._mutation_rate:
                 _op = random.choice(_op_names)
-                _next.append(f'{_op}({random.choice(survivors)},{random.choice(survivors)})')
+                _next.append(f"{_op}({random.choice(survivors)},{random.choice(survivors)})")
             else:
                 _op = random.choice(_op_names)
-                _next.append(f'{_op}({random.choice(cols)},{random.choice(cols)})')
+                _next.append(f"{_op}({random.choice(cols)},{random.choice(cols)})")
         return _next[:self._population_size]

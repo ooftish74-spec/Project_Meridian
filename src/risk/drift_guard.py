@@ -111,12 +111,12 @@ class DriftGuard:
         result = {'timestamp': datetime.now().isoformat(), 'drifted': len(drifted_features) > 0, 'retrain_needed': retrain_needed, 'mean_psi': round(mean_psi, 4), 'n_drifted': len(drifted_features), 'n_unavailable': len(unavailable_features), 'n_sparse_tolerated': len(sparse_tolerated), 'drifted_features': drifted_features[:10], 'sparse_tolerated': sparse_tolerated[:5], 'unavailable_features': unavailable_features[:10], 'psi_scores': psi_scores, 'sparse_features': sparse_features}
         atomic_write_json(self.state_path, result, indent=2)
         if sparse_tolerated:
-            names_str = ', '.join((f'{t['feature']}(PSI={t['psi']:.3f})' for t in sparse_tolerated[:3]))
-            logger.info(f'  ℹ️ Drift Guard: {len(sparse_tolerated)}개 희소 피처 관용 ({names_str})')
+            names_str = ', '.join((f"{t['feature']}(PSI={t['psi']:.3f})" for t in sparse_tolerated[:3]))
+            logger.info(f"  ℹ️ Drift Guard: {len(sparse_tolerated)}개 희소 피처 관용 ({names_str})")
         if unavailable_features:
-            logger.info(f'  ℹ️ Drift Guard: {len(unavailable_features)}개 피처 데이터 미가용 ({', '.join((f['feature'] for f in unavailable_features[:3]))}...)')
+            logger.info(f"  ℹ️ Drift Guard: {len(unavailable_features)}개 피처 데이터 미가용 ({', '.join((f['feature'] for f in unavailable_features[:3]))}...)")
         if retrain_needed:
-            logger.warning(f'  ⚠️ Drift Guard: 재학습 필요 (PSI={mean_psi:.3f}, {len(drifted_features)}피처 드리프트)')
+            logger.warning(f"  ⚠️ Drift Guard: 재학습 필요 (PSI={mean_psi:.3f}, {len(drifted_features)}피처 드리프트)")
         return result
 
     def save_reference(self, features: np.ndarray, feature_names: Optional[List[str]]=None):
@@ -132,7 +132,7 @@ class DriftGuard:
         np.save(self.reference_path.with_suffix('.npy'), features[indices])
         self.reference_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(self.reference_path, ref, indent=2)
-        logger.info(f'  Drift Guard: 참조 저장 ({features.shape})')
+        logger.info(f"  Drift Guard: 참조 저장 ({features.shape})")
 
     def _load_reference(self) -> Optional[np.ndarray]:
         """저장된 참조 데이터 로드."""

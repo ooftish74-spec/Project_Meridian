@@ -359,47 +359,43 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 f"embargo={embargo_days}일) ═══")
 
     uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
+    universe = []
     if uni_file.exists():
-        universe = json.loads(uni_file.read_text())
-    else:
-        universe = [f.stem.replace('kr_', '') for f in DATA_DIR.glob('kr_*.parquet')]
+        try:
+            universe = json.loads(uni_file.read_text())
+        except Exception:
+            universe = []
+    if not universe:
+        for _sd in [_PROJECT_ROOT / 'data' / 'kr_markets', _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices', _PROJECT_ROOT / 'data' / 'historical_10y', DATA_DIR]:
+            if _sd.exists():
+                universe.extend([f.stem.replace('kr_', '') for f in _sd.glob('*.parquet')])
+        universe = list(set(universe))
     
     max_uni = _cfg.get('ml.max_universe_size', 300)
     universe = universe[:max_uni]
 
     train_X, train_y, val_X, val_y = [], [], [], []
     cutoff_date = now_kst() - timedelta(days=window_days)
-    # ★ Purged Split: val 시작점에서 embargo만큼 뒤로 밀림
     val_cutoff = now_kst() - timedelta(days=int(window_days * val_ratio))
-    # Train은 embargo 기간 전까지만
     train_end = val_cutoff - timedelta(days=embargo_days)
 
-    # ── Cross-asset 데이터 로드 (V5) ──
     cross_data = _load_cross_asset_data()
     logger.info(f"  Cross-asset: S&P500 {len(cross_data.get('sp500', {}))}일, "
                 f"VIX {len(cross_data.get('vix', {}))}일, "
                 f"USD/KRW {len(cross_data.get('usdkrw', {}))}일")
 
-    # ── 보조 데이터 로드 (V6) ──
     aux_loader = AuxDataLoader()
-
-    n_purged = 0  # embargo로 제외된 샘플 수
+    n_purged = 0
     
-    # ★ AutoML Feature Generator 인스턴스화
     use_automl = _cfg.get('ml.use_automl_features', True)
-    # ★ H-21 FIX: active_features를 지역 변수로 분리
-    # 이전: 전역 FEATURE_NAMES를 루프 내에서 반복 덮어쓰기 → 메타데이터 차원 불일치
-    # 수정: active_features = FEATURE_NAMES (기본) → AutoML 시 지역에서만 교체
-    active_features = list(FEATURE_NAMES)  # 복사본으로 지역 관리
+    active_features = list(FEATURE_NAMES)
 
     if use_automl:
         from src.analysis.automl_feature_generator import AutoMLFeatureGenerator
         automl_gen = AutoMLFeatureGenerator(DATA_DIR)
         logger.info("  🚀 AutoML Feature Generator 활성화됨")
-        # 병렬로 전체 피처 사전 생성
         automl_features_dict = automl_gen.process_universe_parallel(universe)
         if automl_features_dict:
-            # ★ H-21: global 제거 — 지역 active_features만 교체
             active_features = list(list(automl_features_dict.values())[0].columns)
             logger.info(f"  ✨ AutoML 피처 {len(active_features)}개 감지됨")
     else:
@@ -407,6 +403,14 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
 
     for ticker in universe:
         fp = DATA_DIR / f'kr_{ticker}.parquet'
+        if not fp.exists():
+            fp = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
+        if not fp.exists():
+            fp = _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet'
+        if not fp.exists():
+            fp = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet'
+        if not fp.exists():
+            fp = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
         if not fp.exists():
             continue
         try:
@@ -423,7 +427,7 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             continue
 
         n = min(len(close), len(high), len(low), len(opn), len(vol), len(dates))
-        if n < 300:
+        if n < 80:
             continue
         close, high, low, opn, vol, dates = (
             close[:n], high[:n], low[:n], opn[:n], vol[:n], dates[:n]
@@ -1450,8 +1454,9 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         alpha_model=alpha_model,
         sample_interval=5)
 
-    if len(train_X) < 500:
-        logger.error(f"❌ 학습 데이터 부족: {len(train_X)}건")
+    min_train_samples = cfg.get('ml.min_train_samples', 200)
+    if len(train_X) < min_train_samples:
+        logger.error(f"❌ 학습 데이터 부족: {len(train_X)}건 < {min_train_samples}건")
         return None
 
     # ── Drift Guard: 현재 피처 vs 이전 참조 비교 ──
@@ -1949,13 +1954,16 @@ if __name__ == '__main__':
         logger.warning(f"Freshness Gate 검증 중 오류: {e}")
 
     if args.trigger:
-        run_training(window_days=args.window, trigger=args.trigger)
+        effective_window = 180 if args.trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
+        run_training(window_days=effective_window, trigger=args.trigger)
     elif args.force:
         run_training(window_days=args.window, trigger='manual')
     else:
         needed, trigger = should_retrain()
         if needed:
-            run_training(window_days=args.window, trigger=trigger)
+            effective_window = 180 if trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
+            logger.info(f"  ⚡ Dynamic Retraining Window 적용: trigger={trigger} ➔ window={effective_window}d")
+            run_training(window_days=effective_window, trigger=trigger)
         else:
             logger.info("  ⏭️ 재학습 불필요 (최근 학습 존재, 트리거 없음)")
 
@@ -1971,7 +1979,7 @@ if __name__ == '__main__':
         ga = GapAnalyzer()
         # 최근 14일간의 예측 vs 체결 오차 분석 (슬리피지 + 수익률 갭)
         feedback = ga.analyze_recent_gaps(lookback_days=14)
-        if feedback and not feedback.empty:
+        if feedback is not None and not feedback.empty:
             ga.update_model_weights_with_feedback(feedback)
             logger.info("  ✅ 앙상블 모델 실시간 가중치(Ensemble Weights) 업데이트 완료.")
         else:

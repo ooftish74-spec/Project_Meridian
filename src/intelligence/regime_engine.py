@@ -56,10 +56,10 @@ class HMMRegimeLayer:
                 m = _GaussianHMM(n_components=self._n, covariance_type='diag', n_iter=_hmm_n_iter, random_state=_hmm_rs)
                 m.fit(X)
                 self._mdl, self._ok = (m, True)
-                self._log.info(f'[Phase 74 HMM] 학습 완료: {self._n}상태 {len(X)}샘플')
+                self._log.info(f"[Phase 74 HMM] 학습 완료: {self._n}상태 {len(X)}샘플")
                 return True
             except Exception as e:
-                self._log.warning(f'[Phase 74 HMM] 학습 실패: {e}')
+                self._log.warning(f"[Phase 74 HMM] 학습 실패: {e}")
         self._ok = False
         return False
 
@@ -74,7 +74,7 @@ class HMMRegimeLayer:
             pp = self._mdl.predict_proba(np.array([[r, v]]))[0]
             return {self._STATE_NAMES[i]: round(float(p), 4) for i, p in enumerate(pp)}
         except Exception as e:
-            self._log.debug(f'[Phase 74 HMM] predict_proba 실패: {e}')
+            self._log.debug(f"[Phase 74 HMM] predict_proba 실패: {e}")
             return default
 
     def best_state(self, proba: dict) -> str:
@@ -124,7 +124,7 @@ class RegimeEngine:
                 base_score = scores.get(regime, 0.0)
                 hmm_prob = hmm_probs.get(regime, 0.0)
                 scores[regime] = base_score * (1.0 - self._hmm_blend) + hmm_prob * self._hmm_blend
-            logger.info(f'  [Regime] HMM 예측 반영 - HMM Regime: {hmm_pred.get('regime')}')
+            logger.info(f"  [Regime] HMM 예측 반영 - HMM Regime: {hmm_pred.get('regime')}")
         regime, confidence = self._decide(scores)
         regime, confidence = self._apply_smoothing(regime, confidence)
         result = {'regime': regime, 'confidence': round(confidence, 3), 'scores': {r: round(s, 3) for r, s in scores.items()}, 'measurements': measurements, 'signals': measurements, 'timestamp': datetime.now().isoformat()}
@@ -137,7 +137,7 @@ class RegimeEngine:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  EventLedger 기록 실패 (non-critical): {e}')
+                logger.debug(f"  EventLedger 기록 실패 (non-critical): {e}")
         try:
             if self._hmm.is_trained:
                 result['hmm_state_proba'] = hmm_probs
@@ -152,7 +152,7 @@ class RegimeEngine:
             result['hmm_state_proba'] = {'bull': 0.25, 'caution': 0.25, 'bear': 0.25, 'crash': 0.25}
             result['hmm_regime'] = regime
         self._save_state(result)
-        logger.info(f'  레짐: {regime.upper()} (conf={confidence:.2f})')
+        logger.info(f"  레짐: {regime.upper()} (conf={confidence:.2f})")
         return result
 
     def _measure(self) -> Dict:
@@ -387,7 +387,7 @@ class RegimeEngine:
                 return json.loads(self._state_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:465', exc_info=True)
         legacy = _PROJECT_ROOT / 'results' / 'current_regime.json'
         if legacy.exists():
@@ -395,7 +395,7 @@ class RegimeEngine:
                 return json.loads(legacy.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:474', exc_info=True)
         return None
 
@@ -409,7 +409,7 @@ class RegimeEngine:
                     existing = json.loads(self._state_file.read_text())
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:489', exc_info=True)
             existing['kr_prev_regime'] = existing.get('kr_regime')
             existing['kr_regime'] = result['regime']
@@ -439,7 +439,7 @@ class RegimeEngine:
                 return float(data.get(name, default))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:538', exc_info=True)
         return default
 
@@ -464,7 +464,7 @@ class RegimeEngine:
                 return data.get('macro_features', {})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:563', exc_info=True)
         return {}
 
@@ -476,7 +476,7 @@ class RegimeEngine:
                 return json.loads(cache_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:575', exc_info=True)
         return {}
 
@@ -511,7 +511,7 @@ class RegimeEngine:
                     values.append(float(val))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:614', exc_info=True)
         return values
 
@@ -552,7 +552,7 @@ class RegimeEngine:
                     vix_std = float(np.std(_arr))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         vix_z = (vix - vix_baseline) / max(vix_std, 0.1)
         scores.append(vix_z)

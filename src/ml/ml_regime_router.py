@@ -53,11 +53,11 @@ class MLRegimeRouter:
         try:
             if _REGIME_META_FILE.exists():
                 self._meta = json.loads(_REGIME_META_FILE.read_text())
-                logger.info(f'  [MLRegimeRouter] 메타 로드: bull_auc={self._meta.get('bull_val_auc', 0):.4f}, bear_auc={self._meta.get('bear_val_auc', 0):.4f}')
+                logger.info(f"  [MLRegimeRouter] 메타 로드: bull_auc={self._meta.get('bull_val_auc', 0):.4f}, bear_auc={self._meta.get('bear_val_auc', 0):.4f}")
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  [MLRegimeRouter] 메타 로드 실패: {e}')
+            logger.debug(f"  [MLRegimeRouter] 메타 로드 실패: {e}")
 
     def _load_model_for_regime(self, regime: str) -> Optional[object]:
         """레짐에 맞는 모델 로드 (캐시 우선).
@@ -68,16 +68,16 @@ class MLRegimeRouter:
             return self._models[regime]
         model_file = REGIME_MODEL_FILES.get(regime, _MODEL_DIR / 'train_bear_model.pkl')
         if not model_file.exists():
-            logger.debug(f'  [MLRegimeRouter] {regime} 모델 파일 없음: {model_file.name} → 통합 앙상블 fallback 사용')
+            logger.debug(f"  [MLRegimeRouter] {regime} 모델 파일 없음: {model_file.name} → 통합 앙상블 fallback 사용")
             return None
         try:
             with open(model_file, 'rb') as f:
                 model = pickle.load(f)
             self._models[regime] = model
-            logger.info(f'  ✅ [Phase 10: Alpha Breakthrough] MLRegimeRouter {regime.upper()} 모델 로드: {model_file.name}')
+            logger.info(f"  ✅ [Phase 10: Alpha Breakthrough] MLRegimeRouter {regime.upper()} 모델 로드: {model_file.name}")
             return model
         except Exception as e:
-            logger.warning(f'  [MLRegimeRouter] {regime} 모델 로드 실패: {e}')
+            logger.warning(f"  [MLRegimeRouter] {regime} 모델 로드 실패: {e}")
             return None
 
     def predict(self, features: np.ndarray, regime: str='caution', feature_names: Optional[List[str]]=None) -> float:
@@ -107,12 +107,12 @@ class MLRegimeRouter:
                     prob = float(model.predict(X_clean)[0])
                 else:
                     prob = 0.5
-                logger.debug(f'  [MLRegimeRouter] {regime.upper()} 모델 예측: {prob:.4f}')
+                logger.debug(f"  [MLRegimeRouter] {regime.upper()} 모델 예측: {prob:.4f}")
                 return prob
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  [MLRegimeRouter] {regime} 모델 예측 실패: {e}')
+                logger.debug(f"  [MLRegimeRouter] {regime} 모델 예측 실패: {e}")
         return self._predict_from_unified_ensemble(X, regime)
 
     def _predict_from_unified_ensemble(self, X: np.ndarray, regime: str) -> float:
@@ -146,7 +146,7 @@ class MLRegimeRouter:
                         ws.append(weights.get(model_name, 1.0))
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     continue
             if preds:
                 w_sum = sum(ws)
@@ -154,7 +154,7 @@ class MLRegimeRouter:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  [MLRegimeRouter] 통합 앙상블 fallback 실패: {e}')
+            logger.debug(f"  [MLRegimeRouter] 통합 앙상블 fallback 실패: {e}")
         return 0.5
 
     def predict_batch(self, X: np.ndarray, regime: str='caution') -> np.ndarray:
@@ -180,7 +180,7 @@ class MLRegimeRouter:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  [MLRegimeRouter] 배치 예측 실패: {e}')
+                logger.debug(f"  [MLRegimeRouter] 배치 예측 실패: {e}")
         return np.array([self.predict(X[i], regime) for i in range(len(X))])
 
     def get_model_info(self, regime: str) -> Dict:
@@ -191,10 +191,10 @@ class MLRegimeRouter:
         model_file = REGIME_MODEL_FILES.get(regime, _MODEL_DIR / 'train_bear_model.pkl')
         info = {'regime': regime, 'model_file': model_file.name, 'model_file_exists': model_file.exists(), 'cached': regime in self._models}
         regime_key = 'bull' if regime in ('bull', 'recovery') else 'bear'
-        info['val_auc'] = self._meta.get(f'{regime_key}_val_auc', 0.0)
-        info['val_acc'] = self._meta.get(f'{regime_key}_val_acc', 0.0)
-        info['train_samples'] = self._meta.get(f'{regime_key}_train_samples', 0)
-        info['trained_at'] = self._meta.get(f'{regime_key}_trained_at', 'N/A')
+        info['val_auc'] = self._meta.get(f"{regime_key}_val_auc", 0.0)
+        info['val_acc'] = self._meta.get(f"{regime_key}_val_acc", 0.0)
+        info['train_samples'] = self._meta.get(f"{regime_key}_train_samples", 0)
+        info['trained_at'] = self._meta.get(f"{regime_key}_trained_at', 'N/A")
         return info
 
     def clear_cache(self):

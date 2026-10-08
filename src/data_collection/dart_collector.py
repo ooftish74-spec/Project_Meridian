@@ -54,7 +54,7 @@ class DARTCollector:
             return CANONICAL_NAMES
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+            logging.getLogger(__name__).warning(f"Silent exception caught in fallback: {e}", exc_info=True)
             return {}
 
     def _resolve_corp_code(self, ticker: str) -> Optional[str]:
@@ -72,14 +72,14 @@ class DARTCollector:
                 if ticker in cache:
                     return cache[ticker]
             except Exception as e:
-                logger.warning(f'  suppressed: {e}', exc_info=True)
+                logger.warning(f"  suppressed: {e}", exc_info=True)
         if self.api_key:
             try:
                 import requests
                 import zipfile
                 import io
                 import xml.etree.ElementTree as ET
-                url = f'{self.BASE_URL}/corpCode.xml'
+                url = f"{self.BASE_URL}/corpCode.xml"
                 resp = requests.get(url, params={'crtfc_key': self.api_key}, timeout=30)
                 if resp.status_code == 200:
                     zf = zipfile.ZipFile(io.BytesIO(resp.content))
@@ -94,10 +94,10 @@ class DARTCollector:
                     if cache:
                         self.CORP_CODE_CACHE.parent.mkdir(parents=True, exist_ok=True)
                         atomic_write_json(self.CORP_CODE_CACHE, cache)
-                        logger.info(f'  📦 DART corp_code 캐시: {len(cache)}개 종목')
+                        logger.info(f"  📦 DART corp_code 캐시: {len(cache)}개 종목")
                     return cache.get(ticker)
             except Exception as e:
-                logger.error(f'  corp_code 다운로드 실패: {e}', exc_info=True)
+                logger.error(f"  corp_code 다운로드 실패: {e}", exc_info=True)
         return None
 
     def collect_signals(self, ticker: str, lookback_days: int=90) -> Dict:
@@ -107,24 +107,25 @@ class DARTCollector:
         if not self.api_key:
             return self._unavailable_result(ticker, result, 'API 키 미설정')
         if not corp_code:
-            return self._unavailable_result(ticker, result, f'{ticker} corp_code 없음 (ETF 등)')
+            return self._unavailable_result(ticker, result, f"{ticker} corp_code 없음 (ETF 등)")
         end_date = datetime.now().strftime('%Y%m%d')
         start_date = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y%m%d')
         try:
             result['insider_trades'] = self._get_insider_trades(corp_code, start_date, end_date)
         except Exception as e:
-            logger.error(f'  내부자 매매 조회 실패: {e}', exc_info=True)
+            logger.error(f"  내부자 매매 조회 실패: {e}", exc_info=True)
         try:
             result['buyback'] = self._get_buyback(corp_code, start_date, end_date)
         except Exception as e:
-            logger.error(f'  자사주 조회 실패: {e}', exc_info=True)
+            logger.error(f"  자사주 조회 실패: {e}", exc_info=True)
         try:
             result['major_shareholders'] = self._get_major_shareholders(corp_code, start_date, end_date)
         except Exception as e:
-            logger.error(f'  대량보유 조회 실패: {e}', exc_info=True)
+            logger.error(f"  대량보유 조회 실패: {e}", exc_info=True)
         result['composite_signal'] = self._calc_composite_signal(result)
         result['features'] = self._extract_features(result)
-        logger.info(f'  📋 DART {ticker}: signal={result['composite_signal']:+.2f}')
+        _cs_val = result.get('composite_signal', 0.0)
+        logger.info(f"  📋 DART {ticker}: signal={_cs_val:+.2f}")
         return result
 
     def collect_all(self, tickers: Dict[str, str]=None) -> Dict[str, Dict]:
@@ -136,24 +137,25 @@ class DARTCollector:
             try:
                 results[ticker] = self.collect_signals(ticker)
             except Exception as e:
-                logger.warning(f'  {ticker} DART 실패: {e}', exc_info=True)
+                logger.warning(f"  {ticker} DART 실패: {e}", exc_info=True)
         return results
 
     def _api_call(self, endpoint: str, params: Dict) -> Dict:
         """DART API 호출."""
         import requests
         params['crtfc_key'] = self.api_key
-        url = f'{self.BASE_URL}/{endpoint}.json'
+        url = f"{self.BASE_URL}/{endpoint}.json"
         try:
             resp = requests.get(url, params=params, timeout=15)
             data = resp.json()
             if data.get('status') == '000':
                 return data
             else:
-                logger.debug(f'  DART API: {data.get('message', 'unknown')}')
+                _msg_d = data.get('message', 'unknown')
+                logger.debug(f"  DART API: {_msg_d}")
                 return {}
         except Exception as e:
-            logger.error(f'  DART API 호출 실패: {e}', exc_info=True)
+            logger.error(f"  DART API 호출 실패: {e}", exc_info=True)
             return {}
 
     def _get_insider_trades(self, corp_code: str, start: str, end: str) -> Dict:
@@ -204,7 +206,7 @@ class DARTCollector:
           '모름'과 '중립'을 구분할 수 있다.
         """
         nan = float('nan')
-        result['insider_trades'] = {'trade_count': 0, 'net_buy': 0, 'signal': nan, 'interpretation': f'데이터 불가 — {reason}', 'data_available': False}
+        result['insider_trades'] = {'trade_count': 0, 'net_buy': 0, 'signal': nan, 'interpretation': f"데이터 불가 — {reason}", 'data_available': False}
         result['buyback'] = {'active': False, 'signal': nan, 'data_available': False}
         result['major_shareholders'] = {'recent_changes': 0, 'signal': nan, 'data_available': False}
         result['composite_signal'] = nan

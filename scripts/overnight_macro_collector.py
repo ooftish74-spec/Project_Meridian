@@ -86,54 +86,81 @@ def collect_us_futures() -> dict:
                         logger.info(f"  🌊 [Streamed] {futures_info['name']}: {futures_data['price']:,.2f} ({futures_data['change_pct']:+.2f}%)")
                 return results
             else:
-                logger.warning("  ⚠️ us_night_stream.json 데이터가 오래되었습니다. yfinance 실시간 연동 시도...")
+                logger.warning("  ⚠️ us_night_stream.json 데이터가 오래되었습니다. Google Finance / VendorMultiplexer 실시간 연동 시도...")
     except Exception as e:
         logger.warning(f"  ⚠️ us_night_stream.json 읽기 실패: {e}")
 
-    # Fallback: yfinance 실시간 수집
+    # 1st Fallback: GoogleFinanceCollector Direct T-0 Quote Details (0-Lag Live)
     try:
-        import yfinance as yf
-        yf_tickers = list(mapping.keys())
-        df = yf.download(yf_tickers, period='2d', progress=False)
-        if not df.empty and 'Close' in df.columns:
-            close_df = df['Close']
-            open_df = df.get('Open', pd.DataFrame())
-            for sym, futures_info in mapping.items():
-                if sym in close_df.columns:
-                    col_series = close_df[sym].dropna()
-                    if len(col_series) >= 1:
-                        last_c = float(col_series.iloc[-1].item())
-                        prev_c = float(col_series.iloc[-2].item()) if len(col_series) > 1 else last_c
-                        chg_pct_settlement = ((last_c - prev_c) / prev_c) * 100.0 if prev_c > 0 else 0.0
-                        
-                        # Session Open (Globex Sunday Open) 등락률 계산
-                        session_open = last_c
-                        if not open_df.empty and sym in open_df.columns:
-                            o_series = open_df[sym].dropna()
-                            if len(o_series) >= 1:
-                                session_open = float(o_series.iloc[-1].item())
-                        
-                        chg_pct_session = ((last_c - session_open) / session_open) * 100.0 if session_open > 0 else chg_pct_settlement
-                        effective_chg = chg_pct_session if abs(chg_pct_session) > abs(chg_pct_settlement) else chg_pct_settlement
+        from src.utils.google_finance_collector import GoogleFinanceCollector
+        for sym, futures_info in mapping.items():
+            try:
+                details = GoogleFinanceCollector.get_quote_details(sym)
+                if details and details.get('price', 0) > 0:
+                    last_c = float(details['price'])
+                    prev_c = float(details.get('prev_close', last_c))
+                    chg_pct = float(details.get('change_pct', 0.0))
+                    results[futures_info['key']] = {
+                        'name': futures_info['name'],
+                        'symbol': sym,
+                        'prev_close': round(prev_c, 2),
+                        'last_close': round(last_c, 2),
+                        'change_pct': round(chg_pct, 4),
+                        'change_pct_settlement': round(chg_pct, 4),
+                        'change_pct_session': round(chg_pct, 4),
+                        'vs_5d_avg_pct': 0.0,
+                        'source': 'google_finance_t0'
+                    }
+                    logger.info(f"  ⚡ [Google Finance T-0] {futures_info['name']}: {last_c:,.2f} ({chg_pct:+.2f}%)")
+            except Exception as _gfe:
+                logger.warning(f"  ⚠️ Google Finance 수집 실패 ({futures_info['name']}): {_gfe}")
+        if len(results) == len(mapping):
+            return results
+    except Exception as e_gf:
+        logger.warning(f"  ⚠️ Google Finance 전반 오류: {e_gf}")
 
+    # 2nd Fallback: FRED Official Direct CSV 수집
+    try:
+        fred_futures_map = {
+            'ES=F': ('SP500', 'S&P500 선물'),
+            'NQ=F': ('NASDAQ100', 'NASDAQ 선물'),
+            'YM=F': ('DJIA', '다우 선물')
+        }
+        for sym, (fred_id, name) in fred_futures_map.items():
+            if sym in results:
+                continue
+            try:
+                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={fred_id}"
+                df = pd.read_csv(url)
+                if not df.empty and len(df.columns) >= 2:
+                    df.columns = ['date', 'value']
+                    df['value'] = pd.to_numeric(df['value'], errors='coerce')
+                    df = df.dropna()
+                    if len(df) >= 1:
+                        last_c = float(df['value'].iloc[-1])
+                        prev_c = float(df['value'].iloc[-2]) if len(df) > 1 else last_c
+                        chg_pct = ((last_c - prev_c) / prev_c) * 100.0 if prev_c > 0 else 0.0
+                        futures_info = mapping.get(sym, {'key': sym, 'name': name})
                         results[futures_info['key']] = {
-                            'name': futures_info['name'],
+                            'name': name,
                             'symbol': sym,
                             'prev_close': round(prev_c, 2),
                             'last_close': round(last_c, 2),
-                            'change_pct': round(effective_chg, 4),
-                            'change_pct_settlement': round(chg_pct_settlement, 4),
-                            'change_pct_session': round(chg_pct_session, 4),
+                            'change_pct': round(chg_pct, 4),
+                            'change_pct_settlement': round(chg_pct, 4),
+                            'change_pct_session': round(chg_pct, 4),
                             'vs_5d_avg_pct': 0.0,
-                            'source': 'yfinance_dual_reference'
+                            'source': 'fred_official_ssot'
                         }
-                        logger.info(f"  🌐 [yfinance Dual] {futures_info['name']}: {last_c:,.2f} (Settlement: {chg_pct_settlement:+.2f}%, Globex Session: {chg_pct_session:+.2f}%)")
-            if results:
-                return results
-    except Exception as e_yf:
-        logger.warning(f"  ⚠️ yfinance 미 선물 수집 실패: {e_yf}")
+                        logger.info(f"  🌐 [FRED SSoT] {name}: {last_c:,.2f} ({chg_pct:+.2f}%)")
+            except Exception as _fe:
+                logger.warning(f"  ⚠️ FRED 지수 수집 실패 ({name}): {_fe}")
+    except Exception as e:
+        logger.error(f"  ❌ FRED 지수 수집 예외: {e}")
+    if results:
+        return results
 
-    logger.error("  ❌ Night Watch 및 yfinance 미 선물 수집 실패.")
+    logger.error("  ❌ US Futures 수집 실패.")
     raise RuntimeError("Critical data missing: US Futures Stream")
 
 
@@ -152,12 +179,12 @@ def collect_macro_indicators() -> dict:
     start = end - timedelta(days=5)
     
     indicators = {
-        'vix':       {'symbol': '^VIX',      'name': 'VIX (공포지수)',        'invert': True},
-        'dxy':       {'symbol': 'DX-Y.NYB',  'name': 'DXY (달러인덱스)',      'invert': True},
-        'us10y':     {'symbol': '^TNX',       'name': '미국 10년물 국채',      'invert': True},
-        'wti_oil':   {'symbol': 'CL=F',      'name': 'WTI 원유',             'invert': False},
-        'gold':      {'symbol': 'GC=F',      'name': '금 선물',              'invert': False},
-        'usdkrw':    {'symbol': 'USDKRW=X',  'name': '원/달러 환율',          'invert': True},
+        'vix':       {'symbol': 'VIX',       'name': 'VIX (공포지수)',        'invert': True},
+        'dxy':       {'symbol': 'DXY',       'name': 'DXY (달러인덱스)',      'invert': True},
+        'us10y':     {'symbol': 'US10Y',     'name': '미국 10년물 국채',      'invert': True},
+        'wti_oil':   {'symbol': 'WTI',       'name': 'WTI 원유',             'invert': False},
+        'gold':      {'symbol': 'GOLD',      'name': '금 선물',              'invert': False},
+        'usdkrw':    {'symbol': 'USDKRW',    'name': '원/달러 환율',          'invert': True},
     }
     
     results = {}
@@ -166,10 +193,13 @@ def collect_macro_indicators() -> dict:
         for attempt in range(4):
             try:
                 h = vmx.fetch(info['symbol'], start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
-                if h is not None and len(h) >= 2:
-                    prev = float(h.iloc[-2].iloc[0]) if isinstance(h.iloc[-2], pd.Series) else float(h.iloc[-2])
+                if h is not None and len(h) >= 1:
                     last = float(h.iloc[-1].iloc[0]) if isinstance(h.iloc[-1], pd.Series) else float(h.iloc[-1])
-                    change = (last / prev - 1) * 100
+                    if len(h) >= 2:
+                        prev = float(h.iloc[-2].iloc[0]) if isinstance(h.iloc[-2], pd.Series) else float(h.iloc[-2])
+                    else:
+                        prev = last
+                    change = (last / prev - 1) * 100 if prev != 0 else 0.0
                     
                     results[key] = {
                         'name': info['name'],
@@ -195,12 +225,15 @@ def collect_macro_indicators() -> dict:
                     break
             except Exception as e:
                 import time
-                wait_time = 2 ** attempt
-                logger.warning(f"  ⚠️ {info['name']} 수집 실패 (시도 {attempt+1}/4, {wait_time}초 대기): {e}")
-                time.sleep(wait_time)
+                logger.warning(f"  ⚠️ {info['name']} 수집 실패 (시도 {attempt+1}/4): {e}")
+                time.sleep(2 ** attempt)
         if not success:
-            logger.error(f"  ❌ {info['name']}: 최대 재시도 초과. 수집 실패.")
-            raise RuntimeError(f"Critical data missing: {info['name']}")
+            if key in ['vix', 'usdkrw', 'dxy', 'us10y']:
+                logger.error(f"  ❌ {info['name']}: 최대 재시도 초과. 수집 실패.")
+                raise RuntimeError(f"Critical data missing: {info['name']}")
+            else:
+                logger.warning(f"  ⚠️ {info['name']}: 선택 지표 수집 실패 -> 기본값 0.0 설정")
+                results[key] = {'name': info['name'], 'symbol': info['symbol'], 'prev_close': 0.0, 'last_close': 0.0, 'change_pct': 0.0, 'impact_direction': 'neutral'}
     
     return results
 
@@ -210,95 +243,53 @@ def collect_macro_indicators() -> dict:
 # ═══════════════════════════════════════════════════════════
 
 def compute_overnight_score(us_futures: dict, sgx_proxy: dict, macro: dict) -> dict:
-    """Overnight Macro Δ 종합 점수 계산.
-    
-    가중치:
-      미국 선물 변동: 30% (S&P/NQ/YM 평균)
-      SGX 프록시:    25% (EWY 변화)
-      VIX 레벨:     15% (공포 수준)
-      DXY 방향:     10% (달러 강세 = 외국인 매도)
-      국채 금리:     10% (금리 상승 = 성장주 약세)
-      유가:         10% (에너지/인플레)
-    """
-    scores = {}
-    weights = {}
-    
-    # 1. 미국 선물 평균 변화 → 점수
-    us_changes = [v['change_pct'] for v in us_futures.values() if 'change_pct' in v]
-    if us_changes:
-        avg_us = sum(us_changes) / len(us_changes)
-        # +1% → 60, +2% → 70, -1% → 40, -2% → 30
-        scores['us_futures'] = max(5, min(95, 50 + avg_us * 10))
-        weights['us_futures'] = 0.30
-    
-    # 2. SGX 프록시 (삭제됨 - KIS Night Futures로 대체되므로 점수 계산 생략)
-    scores['sgx_proxy'] = 50
-    weights['sgx_proxy'] = 0.0
-    
-    # 3. VIX 레벨
-    vix = macro.get('vix', {})
-    if 'last_close' in vix:
-        vix_val = vix['last_close']
-        # VIX 15=80, 20=65, 25=50, 30=35, 40=15
-        vix_score = max(5, min(95, 100 - vix_val * 2))
-        scores['vix'] = vix_score
-        weights['vix'] = 0.15
-    
-    # 4. DXY (달러 역방향)
-    dxy = macro.get('dxy', {})
-    if 'change_pct' in dxy:
-        # DXY 상승 = 원화 약세 = 외국인 매도 → 부정적
-        dxy_score = max(5, min(95, 50 - dxy['change_pct'] * 20))
-        scores['dxy'] = dxy_score
-        weights['dxy'] = 0.10
-    
-    # 5. 미국 10년물 (금리 역방향)
-    us10y = macro.get('us10y', {})
-    if 'change_pct' in us10y:
-        # 금리 상승 → 성장주 약세
-        bond_score = max(5, min(95, 50 - us10y['change_pct'] * 15))
-        scores['us10y'] = bond_score
-        weights['us10y'] = 0.10
-    
-    # 6. 유가
-    oil = macro.get('wti_oil', {})
-    if 'change_pct' in oil:
-        # 유가 급등 → 인플레 우려 → 약간 부정적
-        oil_score = max(5, min(95, 50 - oil['change_pct'] * 5))
-        scores['oil'] = oil_score
-        weights['oil'] = 0.10
-    
-    # 가중 평균
-    if weights:
-        total_weight = sum(weights.values())
-        weighted_score = sum(scores[k] * weights[k] for k in scores) / total_weight
-    else:
-        weighted_score = 50
-    
-    # 시장 방향 판정
-    if weighted_score >= 65:
-        direction = 'bullish'
-        label = '🟢 강세'
-    elif weighted_score >= 55:
-        direction = 'mildly_bullish'
-        label = '🟢 약세강세'
-    elif weighted_score >= 45:
-        direction = 'neutral'
-        label = '⚪ 중립'
-    elif weighted_score >= 35:
-        direction = 'mildly_bearish'
-        label = '🟡 약세약세'
-    else:
-        direction = 'bearish'
-        label = '🔴 약세'
-    
-    return {
-        'overnight_score': round(weighted_score, 1),
-        'direction': direction,
-        'label': label,
-        'component_scores': {k: round(v, 1) for k, v in scores.items()},
-        'weights': weights,
-    }
+    """Overnight Macro Δ 종합 점수 계산 (SSOT OvernightIntelligenceScore 엔진 연동)."""
+    try:
+        from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
+        ois_engine = OvernightIntelligenceScore()
+        ois_res = ois_engine.calculate()
+        score = ois_res['ois']
+        sentiment = ois_res.get('sentiment', 'neutral')
+        
+        label_map = {
+            'strong_bullish': '🟢🟢 강력강세',
+            'bullish': '🟢 강세',
+            'neutral': '⚪ 중립',
+            'bearish': '🔴 약세',
+            'strong_bearish': '🔴🔴 강력약세'
+        }
+        label = label_map.get(sentiment, '⚪ 중립')
+        
+        comp_scores = {}
+        for k, v in ois_res.get('components', {}).items():
+            comp_scores[k] = v.get('score', 50.0)
+            
+        return {
+            'overnight_score': score,
+            'direction': sentiment,
+            'label': label,
+            'component_scores': comp_scores,
+            'weights': ois_engine.WEIGHTS,
+            'ois_raw': ois_res
+        }
+    except Exception as _e:
+        logger.warning(f"  ⚠️ SSOT OIS 연동 실패, 레거시 산출 사용: {_e}")
+        # Legacy fallback...
+        scores = {}
+        weights = {}
+        us_changes = [v['change_pct'] for v in us_futures.values() if 'change_pct' in v]
+        if us_changes:
+            avg_us = sum(us_changes) / len(us_changes)
+            scores['us_futures'] = max(5, min(95, 50 + avg_us * 10))
+            weights['us_futures'] = 0.30
+        weighted_score = sum(scores.values()) / max(len(scores), 1)
+        return {
+            'overnight_score': round(weighted_score, 1),
+            'direction': 'neutral',
+            'label': '⚪ 중립',
+            'component_scores': scores,
+            'weights': weights,
+        }
 
 
 def compute_kospi_gap_estimate(overnight: dict, sgx_proxy: dict,
@@ -349,7 +340,7 @@ def compute_kospi_gap_estimate(overnight: dict, sgx_proxy: dict,
             vix_adj = 0
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         vix_adj = 0
     
     # 보정된 갭 모델: 순야간 × 0.5 + 미국선물 × 0.3 + VIX
@@ -398,13 +389,25 @@ def main():
     logger.info("\n─── 거시경제 지표 ───")
     macro = collect_macro_indicators()
     
+    # 3.5. 1차 저장 (SSoT OIS 엔진이 당일 지표를 즉시 참조하도록 보장)
+    if not dry_run:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        output_file = OUTPUT_DIR / f'{today}.json'
+        atomic_write_json(output_file, {
+            'date': today,
+            'timestamp': datetime.now().isoformat(),
+            'us_futures': us_futures,
+            'macro_indicators': macro
+        }, indent=2, ensure_ascii=False)
+
     # 4. 종합 점수
     logger.info("\n─── 종합 Overnight Score ───")
     overnight = compute_overnight_score(us_futures, sgx_proxy, macro)
     logger.info(f"  📊 Overnight Score: {overnight['overnight_score']:.0f}/100 → {overnight['label']}")
     for k, v in overnight['component_scores'].items():
         w = overnight['weights'].get(k, 0)
-        logger.info(f"    {k:15s}: {v:5.1f}/100 (가중 {w:.0%})")
+        val = float(v) if v is not None else 50.0
+        logger.info(f"    {k:15s}: {val:5.1f}/100 (가중 {w:.0%})")
     
     # 5. KOSPI 갭 예측
     logger.info("\n─── KOSPI 시가 갭 예측 ───")
@@ -464,7 +467,7 @@ def main():
         
         # 텔레그램 발송
         try:
-            from src.notifications.telegram_notifier import TelegramNotifier
+            from src.utils.telegram_notifier import TelegramNotifier
             tg = TelegramNotifier()
             if tg.enabled:
                 tg.send_message(briefing)

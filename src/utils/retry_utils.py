@@ -46,7 +46,7 @@ def with_retry(
                             )
                         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
                             import logging
-                            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                             pass
                         
                         # 예외를 던지지 않고 시스템 붕괴를 막기 위해 fallback 반환

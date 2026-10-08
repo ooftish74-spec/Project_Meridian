@@ -32,7 +32,7 @@ class EventCalendar:
             self._cfg = DynamicConfig()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._cfg = None
 
     def _get_event_dates(self, event_id: str, year: int=None) -> List[str]:
@@ -107,7 +107,7 @@ class EventCalendar:
 
     def _compute_boj_dates(self, year: int) -> list:
         """BOJ 금리 결정일 (연 8회). 통상 1/3/4/6/7/9/10/12월."""
-        dates_2026 = [f'{year}-01-24', f'{year}-03-14', f'{year}-04-30', f'{year}-06-17', f'{year}-07-31', f'{year}-09-19', f'{year}-10-30', f'{year}-12-19']
+        dates_2026 = [f"{year}-01-24", f"{year}-03-14", f"{year}-04-30", f"{year}-06-17", f"{year}-07-31", f"{year}-09-19", f"{year}-10-30", f"{year}-12-19"]
         if year == 2026:
             return dates_2026
         from datetime import date
@@ -130,7 +130,7 @@ class EventCalendar:
 
     def _compute_export_dates(self, year: int) -> List[str]:
         """수출입: 매월 1일."""
-        return [f'{year}-{m:02d}-01' for m in range(1, 13)]
+        return [f"{year}-{m:02d}-01" for m in range(1, 13)]
 
     def _compute_earnings_dates(self, year: int) -> List[str]:
         """주요 실적: 1/4/7/10월 하순."""
@@ -177,7 +177,9 @@ class EventCalendar:
                     delta = abs((event_date - target).days)
                     if delta == 1:
                         adj_tier = min(meta['tier'] + 1, 3)
-                        _desc = f'{meta['description']} ({('전일' if event_date > target else '후일')})'
+                        _meta_desc = meta.get('description', '')
+                        _day_lbl = '전일' if event_date > target else '후일'
+                        _desc = f"{_meta_desc} ({_day_lbl})"
                         events.append({'id': event_id, 'name': _desc, 'tier': adj_tier, 'type': meta['type'], 'impact': 'pre/post', 'description': _desc, 'date': d, 'confidence_reduction': self.TIER_CONFIDENCE_REDUCTION.get(adj_tier, 0.1), 'source': 'calendar'})
                 except ValueError:
                     from src.utils.error_logger import log_error_rate_limited
@@ -216,21 +218,23 @@ class EventCalendar:
                         continue
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     continue
                 tier = ev.get('tier', 2)
                 conf_reduction = ev.get('confidence_reduction', self.TIER_CONFIDENCE_REDUCTION.get(tier, 0.15))
                 entities = ev.get('entities', [])
                 entity_names = ', '.join((e.get('name', '') for e in entities[:3]))
                 headline = ev.get('headline', '알 수 없음')
-                desc = f'[뉴스] {ev.get('type', 'EVENT')}: {headline[:60]}'
+                _ev_tp = ev.get('type', 'EVENT')
+                desc = f"[뉴스] {_ev_tp}: {headline[:60]}"
                 if entity_names:
-                    desc += f' ({entity_names})'
-                events.append({'id': f'NEWS_{ev.get('type', 'EVENT')}', 'name': desc, 'tier': tier, 'type': ev.get('event_type', 'news'), 'impact': 'high' if tier == 1 else 'medium', 'description': desc, 'date': target_date, 'confidence_reduction': conf_reduction, 'source': 'news', 'headline': headline, 'entities': entities, 'relevance': ev.get('relevance', 0)})
+                    desc += f" ({entity_names})"
+                _ev_tp2 = ev.get('type', 'EVENT')
+                events.append({'id': f"NEWS_{_ev_tp2}", 'name': desc, 'tier': tier, 'type': ev.get('event_type', 'news'), 'impact': 'high' if tier == 1 else 'medium', 'description': desc, 'date': target_date, 'confidence_reduction': conf_reduction, 'source': 'news', 'headline': headline, 'entities': entities, 'relevance': ev.get('relevance', 0)})
             if events:
-                logger.info(f'  📰 뉴스 동적 이벤트 {len(events)}건 로드')
+                logger.info(f"  📰 뉴스 동적 이벤트 {len(events)}건 로드")
         except Exception as e:
-            logger.error(f'  뉴스 동적 이벤트 로드 실패: {e}', exc_info=True)
+            logger.error(f"  뉴스 동적 이벤트 로드 실패: {e}", exc_info=True)
         return events
 
     def _detect_dynamic_geopolitical_risk(self, target_date: str) -> List[Dict]:
@@ -240,7 +244,7 @@ class EventCalendar:
             ois_dir = DATA / 'raw' / 'overnight_macro'
             if not ois_dir.exists():
                 return events
-            ois_file = ois_dir / f'{target_date}.json'
+            ois_file = ois_dir / f"{target_date}.json"
             if not ois_file.exists():
                 ois_files = sorted(ois_dir.glob('*.json'), reverse=True)
                 ois_file = ois_files[0] if ois_files else None
@@ -248,14 +252,15 @@ class EventCalendar:
                 ois = json.load(open(ois_file))
                 gap_est = ois.get('kospi_gap_estimate', {}).get('estimated_gap_pct', 0)
                 if isinstance(gap_est, (int, float)) and gap_est < -2.0:
-                    events.append({'id': 'OIS_GAP_WARNING', 'tier': 1, 'type': 'geopolitical', 'impact': 'high', 'description': f'OIS 갭 다운 경고 ({gap_est:+.1f}%)', 'date': target_date, 'confidence_reduction': 0.5})
-                risk_keywords = ['tariff', 'trade war', 'sanction', 'embargo', 'retaliatory', 'escalation', 'geopolitical']
+                    events.append({'id': 'OIS_GAP_WARNING', 'tier': 1, 'type': 'geopolitical', 'impact': 'high', 'description': f"OIS 갭 다운 경고 ({gap_est:+.1f}%)", 'date': target_date, 'confidence_reduction': 0.5})
+                risk_keywords = ['tariff", "trade war', 'sanction', 'embargo', 'retaliatory', 'escalation', 'geopolitical']
                 ois_text = json.dumps(ois, ensure_ascii=False).lower()
                 matched = [kw for kw in risk_keywords if kw in ois_text]
                 if matched:
-                    events.append({'id': 'DYNAMIC_GEOPOLITICAL', 'tier': 1, 'type': 'geopolitical', 'impact': 'high', 'description': f'지정학 리스크 감지: {', '.join(matched[:3])}', 'date': target_date, 'confidence_reduction': 0.4})
+                    _mt_str = ', '.join(matched[:3])
+                    events.append({'id': 'DYNAMIC_GEOPOLITICAL', 'tier': 1, 'type': 'geopolitical', 'impact': 'high', 'description': f"지정학 리스크 감지: {_mt_str}", 'date': target_date, 'confidence_reduction': 0.4})
         except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+            logger.warning(f"  suppressed: {_e}", exc_info=True)
         return events
 
     def get_max_confidence_reduction(self, target_date: str=None, macro_only: bool=True) -> float:
@@ -295,7 +300,7 @@ class IntradayEventDetector:
             self._cfg = DynamicConfig()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._cfg = None
 
     @property
@@ -311,9 +316,9 @@ class IntradayEventDetector:
         kospi_chg = current_data.get('kospi_intraday_pct', 0)
         vix_chg = current_data.get('vix_15min_pct', 0)
         if kospi_chg <= thresholds['kospi_drop_pct']:
-            alerts.append({'type': 'KOSPI_DROP', 'severity': 'HIGH', 'value': kospi_chg, 'action': 'FREEZE_30MIN', 'detail': f'KOSPI {kospi_chg:+.1f}% 급락 → 30분 주문 동결'})
+            alerts.append({'type': 'KOSPI_DROP', 'severity': 'HIGH', 'value': kospi_chg, 'action': 'FREEZE_30MIN', 'detail': f"KOSPI {kospi_chg:+.1f}% 급락 → 30분 주문 동결"})
         if kospi_chg >= thresholds['kospi_surge_pct']:
-            alerts.append({'type': 'KOSPI_SURGE', 'severity': 'MEDIUM', 'value': kospi_chg, 'action': 'TIGHTEN_SL', 'detail': f'KOSPI {kospi_chg:+.1f}% 급등 → SL 타이트하게'})
+            alerts.append({'type': 'KOSPI_SURGE', 'severity': 'MEDIUM', 'value': kospi_chg, 'action': 'TIGHTEN_SL', 'detail': f"KOSPI {kospi_chg:+.1f}% 급등 → SL 타이트하게"})
         if vix_chg >= thresholds['vix_spike_pct']:
-            alerts.append({'type': 'VIX_SPIKE', 'severity': 'HIGH', 'value': vix_chg, 'action': 'FREEZE_30MIN', 'detail': f'VIX {vix_chg:+.1f}% 급등 → 30분 주문 동결'})
+            alerts.append({'type': 'VIX_SPIKE', 'severity': 'HIGH', 'value': vix_chg, 'action': 'FREEZE_30MIN', 'detail': f"VIX {vix_chg:+.1f}% 급등 → 30분 주문 동결"})
         return {'has_event': len(alerts) > 0, 'alerts': alerts, 'freeze': any((a['action'] == 'FREEZE_30MIN' for a in alerts)), 'freeze_until': (datetime.now() + timedelta(minutes=thresholds['freeze_minutes'])).isoformat() if alerts else None}

@@ -136,7 +136,7 @@ class AlgoExecutor:
             qty = base_qty + (1 if i < remainder else 0)
             scheduled = now + interval * i
             slices.append(OrderSlice(slice_id=i + 1, ticker=ticker, action=action, quantity=qty, scheduled_time=scheduled.isoformat(), algo='TWAP'))
-        logger.info(f'  TWAP: {ticker} {action} {total_qty}주 → {n_slices}분할, {duration_minutes}분 간격')
+        logger.info(f"  TWAP: {ticker} {action} {total_qty}주 → {n_slices}분할, {duration_minutes}분 간격")
         return slices
 
     def vwap_schedule(self, order: Dict, adv: float=0) -> List[OrderSlice]:
@@ -154,7 +154,7 @@ class AlgoExecutor:
         if adv > 0:
             max_qty = int(adv * self.participation_rate)
             if total_qty > max_qty:
-                logger.warning(f'  VWAP: {ticker} 주문량({total_qty}) > 참여한도({max_qty}), 제한 적용')
+                logger.warning(f"  VWAP: {ticker} 주문량({total_qty}) > 참여한도({max_qty}), 제한 적용")
                 total_qty = max_qty
         now = datetime.now()
         current_hour = now.hour
@@ -179,7 +179,7 @@ class AlgoExecutor:
                 continue
             scheduled = base_time + timedelta(minutes=30 * i)
             slices.append(OrderSlice(slice_id=len(slices) + 1, ticker=ticker, action=action, quantity=qty, scheduled_time=scheduled.isoformat(), algo='VWAP'))
-        logger.info(f'  VWAP: {ticker} {action} {total_qty}주 → {len(slices)}분할 (거래량 가중)')
+        logger.info(f"  VWAP: {ticker} {action} {total_qty}주 → {len(slices)}분할 (거래량 가중)")
         return slices
 
     def pov_schedule(self, order: Dict, adv: float=0) -> List[OrderSlice]:
@@ -200,7 +200,7 @@ class AlgoExecutor:
         if total_qty <= 0:
             return []
         if adv <= 0:
-            logger.warning(f'  POV: {ticker} ADV 없음 → TWAP 폴백')
+            logger.warning(f"  POV: {ticker} ADV 없음 → TWAP 폴백")
             return self.twap_schedule(order, duration_minutes=self.pov_max_duration_min, adv=adv)
         alpha_decay = float(order.get('alpha_decay', 0.0))
         target_pov_rate = self.pov_rate
@@ -212,9 +212,11 @@ class AlgoExecutor:
         start_idx = max(0, (current_hour - 9) * 2 + (1 if current_min >= 30 else 0))
         remaining_profile = self.VOLUME_PROFILE[start_idx:]
         if not remaining_profile:
-            logger.warning(f'  POV: {ticker} 장 마감 시간 → TWAP 폴백')
+            logger.warning(f"  POV: {ticker} 장 마감 시간 → TWAP 폴백")
             return self.twap_schedule(order, duration_minutes=30, adv=adv)
         total_weight = sum(remaining_profile)
+        if total_weight <= 0:
+            return self.twap_schedule(order, duration_minutes=30, adv=adv)
         slices = []
         cumulative = 0
         base_time = now.replace(minute=0 if now.minute < 30 else 30, second=0, microsecond=0)
@@ -234,12 +236,12 @@ class AlgoExecutor:
                 break
         unfilled = total_qty - cumulative
         if unfilled > 0 and slices:
-            logger.warning(f'  POV: {ticker} 잔여 {unfilled}주 미처리 → VWAP 전환')
+            logger.warning(f"  POV: {ticker} 잔여 {unfilled}주 미처리 → VWAP 전환")
             vwap_order = dict(order)
             vwap_order['quantity'] = unfilled
             vwap_slices = self.vwap_schedule(vwap_order, adv)
             slices.extend(vwap_slices)
-        logger.info(f'  POV: {ticker} {action} {total_qty}주 → {len(slices)}분할 (참여율={target_pov_rate:.1%}, ADV={adv:,.0f}주)')
+        logger.info(f"  POV: {ticker} {action} {total_qty}주 → {len(slices)}분할 (참여율={target_pov_rate:.1%}, ADV={adv:,.0f}주)")
         return slices
 
     def select_algo(self, order: Dict, adv: float=0) -> str:
@@ -264,7 +266,7 @@ class AlgoExecutor:
             impact_score = tca.get_market_impact_score(ticker)
             tca_threshold = _cfg.get('execution.tca_adaptive_threshold_bps', 10.0) if _cfg else 10.0
             if impact_score > tca_threshold:
-                logger.warning(f'  TCA 피드백: {ticker} 과거 슬리피지({impact_score}bps) 초과. VWAP으로 우회합니다.')
+                logger.warning(f"  TCA 피드백: {ticker} 과거 슬리피지({impact_score}bps) 초과. VWAP으로 우회합니다.")
                 return 'VWAP'
         except Exception as e:
             logger.critical(f'TCA 연동 오류: {e}', exc_info=True)

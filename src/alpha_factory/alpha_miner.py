@@ -57,7 +57,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 def _dc(key: str, default):
@@ -114,7 +114,7 @@ class AlphaTranslator:
             expr, _ = self._parse(tokens, 0)
             return expr
         except Exception as e:
-            logger.debug(f'  AlphaTranslator 변환 실패 [{gplearn_expr[:50]}]: {e}')
+            logger.debug(f"  AlphaTranslator 변환 실패 [{gplearn_expr[:50]}]: {e}")
             return '0.0'
 
     def apply(self, gplearn_expr: str, df: pd.DataFrame, col_name: str='auto_alpha') -> pd.DataFrame:
@@ -145,10 +145,10 @@ class AlphaTranslator:
             arr = np.where(np.isfinite(arr), arr, 0.0)
             df_out[col_name] = arr
         except ZeroDivisionError:
-            logger.debug(f'  AlphaTranslator ZeroDivisionError [{col_name}] → 0.0')
+            logger.debug(f"  AlphaTranslator ZeroDivisionError [{col_name}] → 0.0")
             df_out[col_name] = 0.0
         except Exception as e:
-            logger.debug(f'  AlphaTranslator apply 실패 [{col_name}]: {e} → 0.0')
+            logger.debug(f"  AlphaTranslator apply 실패 [{col_name}]: {e} → 0.0")
             df_out[col_name] = 0.0
         return df_out
 
@@ -165,7 +165,7 @@ class AlphaTranslator:
             result = np.where(np.isfinite(result), result, 0.0)
             return result
         except Exception as e:
-            logger.debug(f'  program.execute 실패: {e}')
+            logger.debug(f"  program.execute 실패: {e}")
             return np.zeros(len(X))
 
     def _col(self, idx: int) -> str:
@@ -220,7 +220,7 @@ class AlphaTranslator:
             inner, pos = self._parse(tokens, pos)
             pos = self._skip(tokens, pos, ')')
             return (f'({inner})', pos)
-        logger.debug(f'  AlphaTranslator 알 수 없는 토큰: {tok!r}')
+        logger.debug(f"  AlphaTranslator 알 수 없는 토큰: {tok!r}")
         return ('0.0', pos + 1)
 
     def _skip(self, tokens: List[str], pos: int, expected: str) -> int:
@@ -277,7 +277,7 @@ class ICEvaluator:
             all_ic = df['mean_ic'].dropna().values
             pos_ic = all_ic[all_ic > 0]
             if len(pos_ic) < int(_dc('alpha_factory.ic_min_positive_samples', 10)):
-                logger.debug(f'  ICEvaluator: 양수 IC 샘플 부족 ({len(pos_ic)}) → 기본 임계치')
+                logger.debug(f"  ICEvaluator: 양수 IC 샘플 부족 ({len(pos_ic)}) → 기본 임계치")
                 return
             pct = float(_dc('alpha_factory.ic_dynamic_percentile', 25.0))
             dynamic_thr = float(np.percentile(pos_ic, pct))
@@ -292,11 +292,11 @@ class ICEvaluator:
                     yaml_val = self._ic_thresholds_by_regime[regime]
                     self._ic_thresholds_by_regime[regime] = float(np.clip((yaml_val * dynamic_thr) ** 0.5, min_thr, max_thr))
             self.ic_threshold = dynamic_thr
-            logger.info(f'  ICEvaluator: 동적 IC 임계치 업데이트 {old} → {dynamic_thr:.4f} (P{pct:.0f}, N양수IC={len(pos_ic)}, 윈도={window_days}d)')
+            logger.info(f"  ICEvaluator: 동적 IC 임계치 업데이트 {old} → {dynamic_thr:.4f} (P{pct:.0f}, N양수IC={len(pos_ic)}, 윈도={window_days}d)")
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  ICEvaluator._update_dynamic_threshold 실패 (비치명적): {e}')
+            logger.debug(f"  ICEvaluator._update_dynamic_threshold 실패 (비치명적): {e}")
 
     def compute_dynamic_threshold(self, regime: str='neutral') -> float:
         """현재 레짐와 동적 IC 분포를 결합한 실시간 임계치 반환.
@@ -314,7 +314,7 @@ class ICEvaluator:
         """
         self._update_dynamic_threshold()
         regime_thr = self._ic_thresholds_by_regime.get(str(regime).lower().strip(), self.ic_threshold)
-        logger.debug(f'  [ICEvaluator] 동적 IC 임계치: base={self.ic_threshold:.4f}, 레짐({regime})={regime_thr:.4f}')
+        logger.debug(f"  [ICEvaluator] 동적 IC 임계치: base={self.ic_threshold:.4f}, 레짐({regime})={regime_thr:.4f}")
         return float(regime_thr)
 
     def evaluate(self, program, X: np.ndarray, y: np.ndarray) -> Dict:
@@ -359,7 +359,7 @@ class ICEvaluator:
                     ic, pval = _scipy_stats.spearmanr(alpha_signal[valid_mask], y_test[valid_mask])
                     ics.append(float(ic) if np.isfinite(ic) else 0.0)
                 except Exception as _e:
-                    logger.debug(f'  IC split 계산 실패: {_e}')
+                    logger.debug(f"  IC split 계산 실패: {_e}")
                     ics.append(0.0)
             if not ics:
                 return results
@@ -374,11 +374,11 @@ class ICEvaluator:
                 _, pval = _scipy_stats.spearmanr(sig_full[valid], y_test_full[valid])
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pval = 1.0
             results.update({'oos_ic': round(mean_ic, 5), 'oos_ic_std': round(std_ic, 5), 'ic_pvalue': round(float(pval), 5), 'pass': mean_ic >= self.ic_threshold, 'n_splits': len(ics), 'ic_per_split': [round(v, 5) for v in ics]})
         except Exception as e:
-            logger.warning(f'  ICEvaluator.evaluate 실패: {e}')
+            logger.warning(f"  ICEvaluator.evaluate 실패: {e}")
         return results
 
     def get_regime_threshold(self, regime: str) -> float:
@@ -443,7 +443,7 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
     except Exception as _rsi_e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_rsi_e}", exc_info=True)
-        logger.debug(f'  contrarian rsi_signal 생성 실패: {_rsi_e}')
+        logger.debug(f"  contrarian rsi_signal 생성 실패: {_rsi_e}")
     try:
         z_thresh = float(_dc('alpha_factory.contrarian_z_threshold', 2.0))
         roll_mean = close.rolling(60).mean()
@@ -453,15 +453,15 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
     except Exception as _z_e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_z_e}", exc_info=True)
-        logger.debug(f'  contrarian z_reversion 생성 실패: {_z_e}')
+        logger.debug(f"  contrarian z_reversion 생성 실패: {_z_e}")
     try:
         vol_20 = close.pct_change().rolling(20).std().replace(0, np.nan)
         feats['vol_adj_reversion'] = (feats.get('reversion_5d', pd.Series(0.0, index=close.index)) / vol_20).fillna(0.0)
     except Exception as _v_e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_v_e}", exc_info=True)
-        logger.debug(f'  contrarian vol_adj_reversion 생성 실패: {_v_e}')
-    logger.debug(f'  [Contrarian] 피처 생성 완료: {list(feats.keys())}')
+        logger.debug(f"  contrarian vol_adj_reversion 생성 실패: {_v_e}")
+    logger.debug(f"  [Contrarian] 피처 생성 완료: {list(feats.keys())}")
     return feats
 
 class OrthogonalityFilter:
@@ -513,18 +513,18 @@ class OrthogonalityFilter:
                         max_feat_name = names[i] if i < len(names) else f'X{i}'
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     continue
             info.update({'max_corr': round(max_abs_corr, 4), 'max_corr_feature': max_feat_name})
             if max_abs_corr >= self.corr_threshold:
                 info['pass'] = False
-                info['reason'] = f'corr={max_abs_corr:.3f} >= threshold={self.corr_threshold} (feature: {max_feat_name})'
+                info['reason'] = f"corr={max_abs_corr:.3f} >= threshold={self.corr_threshold} (feature: {max_feat_name})"
                 logger.info(f"  🔴 직교화 기각: 최대상관 {max_abs_corr:.3f} ('{max_feat_name}') ≥ {self.corr_threshold}")
                 return (False, info)
-            logger.debug(f'  ✅ 직교화 통과: 최대상관 {max_abs_corr:.3f}')
+            logger.debug(f"  ✅ 직교화 통과: 최대상관 {max_abs_corr:.3f}")
             return (True, info)
         except Exception as e:
-            logger.warning(f'  OrthogonalityFilter 오류: {e}')
+            logger.warning(f"  OrthogonalityFilter 오류: {e}")
             return (True, info)
 
 def _safe_get_programs(est_gp) -> list:
@@ -540,30 +540,30 @@ def _safe_get_programs(est_gp) -> list:
     try:
         programs = list(est_gp)
         if programs:
-            logger.debug(f'  [_safe_get_programs] list(est_gp) 성공: {len(programs)}개')
+            logger.debug(f"  [_safe_get_programs] list(est_gp) 성공: {len(programs)}개")
             return programs
     except (TypeError, StopIteration, Exception) as e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-        logger.debug(f'  [_safe_get_programs] list() 실패: {e}')
+        logger.debug(f"  [_safe_get_programs] list() 실패: {e}")
     try:
         programs = getattr(est_gp, '_best_programs', None)
         if programs:
-            logger.debug(f'  [_safe_get_programs] _best_programs 성공: {len(programs)}개')
+            logger.debug(f"  [_safe_get_programs] _best_programs 성공: {len(programs)}개")
             return list(programs)
     except Exception as e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-        logger.debug(f'  [_safe_get_programs] _best_programs 실패: {e}')
+        logger.debug(f"  [_safe_get_programs] _best_programs 실패: {e}")
     try:
         programs = getattr(est_gp, 'best_programs_', None)
         if programs:
-            logger.debug(f'  [_safe_get_programs] best_programs_ 성공: {len(programs)}개')
+            logger.debug(f"  [_safe_get_programs] best_programs_ 성공: {len(programs)}개")
             return list(programs)
     except Exception as e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-        logger.debug(f'  [_safe_get_programs] best_programs_ 실패: {e}')
+        logger.debug(f"  [_safe_get_programs] best_programs_ 실패: {e}")
     try:
         all_programs = getattr(est_gp, '_programs', None)
         if all_programs and isinstance(all_programs, list) and all_programs[-1]:
@@ -572,15 +572,14 @@ def _safe_get_programs(est_gp) -> list:
             last_gen.sort(key=lambda p: getattr(p, 'fitness_', 0.0), reverse=True)
             programs = last_gen[:hof_size]
             if programs:
-                logger.debug(f'  [_safe_get_programs] _programs[-1] 폴백: {len(programs)}개')
+                logger.debug(f"  [_safe_get_programs] _programs[-1] 폴백: {len(programs)}개")
                 return programs
     except Exception as e:
         from src.utils.error_logger import log_error_rate_limited
         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-        logger.debug(f'  [_safe_get_programs] _programs 폴백 실패: {e}')
+        logger.debug(f"  [_safe_get_programs] _programs 폴백 실패: {e}")
     logger.warning('  [_safe_get_programs] 모든 추출 시도 실패 → 빈 목록 반환')
     return []
-from src.alpha_factory.garbage_collector import AlphaGarbageCollector
 
 class AlphaMiner:
     """Genetic Programming 기반 알파 탐색기 v2.
@@ -621,7 +620,7 @@ class AlphaMiner:
         df_list = []
         sample_tickers = _dc('alpha_factory.sample_tickers', ['005930', '000660', '035420', '005380', '051910'])
         for ticker in sample_tickers:
-            for pattern in [_FEATURE_STORE / f'kr_{ticker}_features.parquet', _FEATURE_STORE / f'{ticker}.parquet', _DATA_DIR / 'historical_10y' / f'kr_{ticker}.parquet']:
+            for pattern in [_FEATURE_STORE / f"kr_{ticker}_features.parquet', _FEATURE_STORE / f'{ticker}.parquet', _DATA_DIR / 'historical_10y' / f'kr_{ticker}.parquet"]:
                 if pattern.exists():
                     try:
                         df = pd.read_parquet(pattern)
@@ -632,17 +631,17 @@ class AlphaMiner:
                     except Exception as e:
                         from src.utils.error_logger import log_error_rate_limited
                         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                        logger.debug(f'  {pattern.name} 로드 실패: {e}')
+                        logger.debug(f"  {pattern.name} 로드 실패: {e}")
         if not df_list:
             logger.warning('  AlphaMiner: 학습 데이터 없음')
             return pd.DataFrame()
         common_cols = list(set.intersection(*(set(d.columns) for d in df_list)))
         if not common_cols or 'target' not in common_cols:
-            logger.warning(f'  AlphaMiner: 공통 컬럼 없음 ({len(df_list)}개 파일)')
+            logger.warning(f"  AlphaMiner: 공통 컬럼 없음 ({len(df_list)}개 파일)")
             return pd.DataFrame()
         df_all = pd.concat([d[common_cols] for d in df_list], ignore_index=True)
         df_all = df_all.dropna(subset=['target'])
-        logger.info(f'  AlphaMiner 데이터 로드: {len(df_all):,}행 × {len(df_all.columns)}컬럼')
+        logger.info(f"  AlphaMiner 데이터 로드: {len(df_all):,}행 × {len(df_all.columns)}컬럼")
         return df_all
 
     def _preprocess(self, df: pd.DataFrame, ticker: str) -> Optional[pd.DataFrame]:
@@ -657,7 +656,7 @@ class AlphaMiner:
                     break
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
         if not df.index.is_monotonic_increasing:
             df = df.sort_index()
@@ -667,7 +666,7 @@ class AlphaMiner:
                 fwd = _dc('alpha_factory.forward_return_days', 1)
                 df['target'] = df[close_col].pct_change(fwd).shift(-fwd) * 100
             else:
-                logger.debug(f'  {ticker}: 종가 컬럼 없음, target 생성 불가')
+                logger.debug(f"  {ticker}: 종가 컬럼 없음, target 생성 불가")
                 return None
         num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if 'target' not in num_cols:
@@ -701,7 +700,7 @@ class AlphaMiner:
             return []
         gens = n_generations or self.generations
         pop = pop_size or self.pop_size
-        logger.info(f'  🧬 AlphaMiner v2 시작 (세대: {gens}, 인구: {pop})')
+        logger.info(f"  🧬 AlphaMiner v2 시작 (세대: {gens}, 인구: {pop})")
         data = self.load_data()
         if data.empty or 'target' not in data.columns:
             logger.error('  AlphaMiner: 학습 데이터 없음')
@@ -709,26 +708,30 @@ class AlphaMiner:
         features = [c for c in data.columns if c != 'target']
         X = data[features].values.astype(float)
         y = data['target'].values.astype(float)
-        logger.info(f'  학습 데이터: X={X.shape}, y={y.shape}')
+        logger.info(f"  학습 데이터: X={X.shape}, y={y.shape}")
         est_gp = SymbolicTransformer(population_size=pop, generations=gens, stopping_criteria=self.stopping, p_crossover=self.p_crossover, p_subtree_mutation=self.p_subtree, p_hoist_mutation=self.p_hoist, p_point_mutation=self.p_point, max_samples=self.max_samples, verbose=1, parsimony_coefficient=self.parsimony, random_state=self.random_state, function_set=self.function_set, n_jobs=_dc('alpha_factory.n_jobs', -1), hall_of_fame=_dc('alpha_factory.hall_of_fame', 20), n_components=self.top_k)
         try:
             est_gp.fit(X, y)
         except Exception as e:
-            logger.error(f'  GP 학습 실패: {e}')
+            logger.error(f"  GP 학습 실패: {e}")
             return []
         new_alphas: List[Dict] = []
         translator = AlphaTranslator(features)
         programs = _safe_get_programs(est_gp)
-        logger.info(f'  Hall of Fame 평가: {len(programs)}개 수식')
+        logger.info(f"  Hall of Fame 평가: {len(programs)}개 수식")
         for rank, program in enumerate(programs):
             formula_str = str(program)
-            logger.info(f'\n  [{rank + 1}] 수식: {formula_str}')
+            logger.info(f"\n  [{rank + 1}] 수식: {formula_str}")
             adaptive_ic_threshold = self.memory_store.get_adaptive_ic_threshold(base_threshold=self.ic_evaluator.ic_threshold, features_used=features)
             original_threshold = self.ic_evaluator.ic_threshold
             self.ic_evaluator.ic_threshold = adaptive_ic_threshold
             ic_result = self.ic_evaluator.evaluate(program, X, y)
             self.ic_evaluator.ic_threshold = original_threshold
-            logger.info(f'     OOS IC={ic_result['oos_ic']:.4f} (std={ic_result['oos_ic_std']:.4f}, p={ic_result['ic_pvalue']:.4f}) → {('✅ 통과' if ic_result['pass'] else '❌ IC 미달')}')
+            _pass_str = "✅ 통과" if ic_result.get("pass") else "❌ IC 미달"
+            _oos_ic = ic_result.get("oos_ic", 0)
+            _oos_std = ic_result.get("oos_ic_std", 0)
+            _ic_pv = ic_result.get("ic_pvalue", 0)
+            logger.info(f"     OOS IC={_oos_ic:.4f} (std={_oos_std:.4f}, p={_ic_pv:.4f}) → {_pass_str}")
             if not ic_result['pass']:
                 continue
             try:
@@ -736,22 +739,24 @@ class AlphaMiner:
                 alpha_signal = np.where(np.isfinite(alpha_signal), alpha_signal, 0.0)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 alpha_signal = np.zeros(len(X))
-            is_ortho, ortho_info = self.ortho_filter.is_orthogonal(alpha_signal, X, features)
             if not is_ortho:
-                logger.info(f'     ❌ 직교화 기각: {ortho_info.get('reason', '')}')
+                _r_reason = ortho_info.get('reason', '')
+                logger.info(f"     ❌ 직교화 기각: {_r_reason}")
                 continue
             py_expr = translator.translate(formula_str)
-            logger.info(f'     ✅ 번역된 수식: {py_expr[:80]}')
-            alpha_id = f'alpha_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{rank:02d}'
-            alpha_info = {'id': alpha_id, 'formula': formula_str, 'py_expr': py_expr, 'fitness': float(getattr(program, 'fitness_', 0.0)), 'oos_ic': ic_result['oos_ic'], 'oos_ic_std': ic_result['oos_ic_std'], 'ic_pvalue': ic_result['ic_pvalue'], 'ic_per_split': ic_result.get('ic_per_split', []), 'max_corr': ortho_info['max_corr'], 'max_corr_feature': ortho_info['max_corr_feature'], 'features_used': features, 'n_features': len(features), 'discovered_at': datetime.now().isoformat(), 'status': 'active', 'ic_history': [], 'col_name': f'auto_alpha_{len(self._load_existing()) + len(new_alphas) + 1:03d}'}
+            logger.info(f"     ✅ 번역된 수식: {py_expr[:80]}")
+            _dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            alpha_id = f"alpha_{_dt_str}_{rank:02d}"
+            _new_col_num = len(self._load_existing()) + len(new_alphas) + 1
+            alpha_info = {'id': alpha_id, 'formula': formula_str, 'py_expr': py_expr, 'fitness': float(getattr(program, 'fitness_', 0.0)), 'oos_ic': ic_result['oos_ic'], 'oos_ic_std': ic_result['oos_ic_std'], 'ic_pvalue': ic_result['ic_pvalue'], 'ic_per_split': ic_result.get('ic_per_split', []), 'max_corr': ortho_info['max_corr'], 'max_corr_feature': ortho_info['max_corr_feature'], 'features_used': features, 'n_features': len(features), 'discovered_at': datetime.now().isoformat(), 'status': 'active', 'ic_history': [], 'col_name': f"auto_alpha_{_new_col_num:03d}"}
             new_alphas.append(alpha_info)
             self.discovered_alphas.append(alpha_info)
-            logger.info(f'     ✅ 알파 저장: {alpha_id}')
+            logger.info(f"     ✅ 알파 저장: {alpha_id}")
         if new_alphas:
             self._save_results()
-            logger.info(f'\n  🎉 AlphaMiner 완료: {len(new_alphas)}개 신규 알파 발굴')
+            logger.info(f"\n  🎉 AlphaMiner 완료: {len(new_alphas)}개 신규 알파 발굴")
         else:
             logger.info('\n  ⚠️ 모든 수식이 IC/직교화 필터에서 기각됨')
         try:
@@ -759,7 +764,7 @@ class AlphaMiner:
             joblib.dump(est_gp, _RESULTS_DIR / 'alpha_model.joblib')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return new_alphas
 
@@ -792,7 +797,8 @@ class AlphaMiner:
             ic, _ = _scipy_stats.spearmanr(signal[valid], y[valid])
             return float(ic) if np.isfinite(ic) else 0.0
         except Exception as e:
-            logger.debug(f'  IC 재계산 실패 [{alpha.get('id', '')}]: {e}')
+            _aid = alpha.get('id', '')
+            logger.debug(f"  IC 재계산 실패 [{_aid}]: {e}")
             return 0.0
 
     def _load_existing(self) -> List[Dict]:
@@ -803,7 +809,7 @@ class AlphaMiner:
             return json.loads(self.output_file.read_text(encoding='utf-8'))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     def _save_results(self) -> None:
@@ -814,9 +820,9 @@ class AlphaMiner:
             existing = [a for a in existing if a['id'] not in new_ids]
             all_alphas = existing + self.discovered_alphas
             atomic_write_json(self.output_file, all_alphas, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  💾 discovered_alphas.json 저장: {len(all_alphas)}개')
+            logger.info(f"  💾 discovered_alphas.json 저장: {len(all_alphas)}개")
         except Exception as e:
-            logger.error(f'  알파 저장 실패: {e}')
+            logger.error(f"  알파 저장 실패: {e}")
 
 class AlphaMemoryStore:
     """실패(퇴출)된 알파의 특성을 기억하여 다음 탐색에서 같은 공간을 반복하지 않도록 안내.
@@ -849,9 +855,9 @@ class AlphaMemoryStore:
         try:
             if self._MEMORY_FILE.exists():
                 self._memory = json.loads(self._MEMORY_FILE.read_text(encoding='utf-8'))
-                logger.debug(f'  AlphaMemoryStore: {len(self._memory)}개 기억 로드')
+                logger.debug(f"  AlphaMemoryStore: {len(self._memory)}개 기억 로드")
         except Exception as e:
-            logger.debug(f'  AlphaMemoryStore 로드 실패 (초기화): {e}')
+            logger.debug(f"  AlphaMemoryStore 로드 실패 (초기화): {e}")
             self._memory = []
 
     def _save(self) -> None:
@@ -862,7 +868,7 @@ class AlphaMemoryStore:
                 self._memory = self._memory[-self._MAX_MEMORY:]
             atomic_write_json(self._MEMORY_FILE, self._memory, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
-            logger.warning(f'  AlphaMemoryStore 저장 실패: {e}')
+            logger.warning(f"  AlphaMemoryStore 저장 실패: {e}")
 
     def record_failure(self, alpha: dict, retire_regime: str='unknown') -> None:
         """퇴출 알파를 메모리에 기록.
@@ -882,7 +888,7 @@ class AlphaMemoryStore:
         record = {'formula': formula[:200], 'features_used': alpha.get('features_used', []), 'retire_regime': retire_regime, 'avg_ic_before_retire': round(avg_ic, 5), 'ic_trend': [round(v, 5) for v in recent_ic], 'complexity': complexity, 'retire_reason': alpha.get('retire_reason', ''), 'original_oos_ic': alpha.get('oos_ic', 0.0), 'retired_at': alpha.get('retired_at', datetime.now().isoformat())}
         self._memory.append(record)
         self._save()
-        logger.info(f'  📝 AlphaMemoryStore: 퇴출 알파 기록 완료 (복잡도={complexity}, 레짐={retire_regime}, IC={avg_ic:.4f})')
+        logger.info(f"  📝 AlphaMemoryStore: 퇴출 알파 기록 완료 (복잡도={complexity}, 레짐={retire_regime}, IC={avg_ic:.4f})")
 
     def get_penalty_features(self) -> dict:
         """실패 알파에서 자주 등장한 피처→패널티 점수 계산.
@@ -919,7 +925,7 @@ class AlphaMemoryStore:
         max_penalty_scale = _dc('alpha_factory.memory_ic_penalty_scale', 0.05)
         adjusted = base_threshold + avg_penalty * max_penalty_scale
         if adjusted > base_threshold:
-            logger.debug(f'  AlphaMemoryStore: IC 임계치 조정 {base_threshold:.4f} → {adjusted:.4f} (패널티={avg_penalty:.3f})')
+            logger.debug(f"  AlphaMemoryStore: IC 임계치 조정 {base_threshold:.4f} → {adjusted:.4f} (패널티={avg_penalty:.3f})")
         return min(adjusted, base_threshold * 2.0)
 
     def get_regime_failure_rate(self, regime: str) -> float:
@@ -975,7 +981,7 @@ class FactorPruner:
         target_date = target_date or datetime.now().strftime('%Y%m%d')
         alphas = self.miner._load_existing()
         active_alphas = [a for a in alphas if a.get('status') == 'active']
-        logger.info(f'\n  🗑️ FactorPruner 실행 ({target_date}): 활성 알파 {len(active_alphas)}개 검사')
+        logger.info(f"\n  🗑️ FactorPruner 실행 ({target_date}): 활성 알파 {len(active_alphas)}개 검사")
         if not active_alphas:
             return {'retired': [], 'active': [], 'n_checked': 0}
         data = self.miner.load_data()
@@ -987,7 +993,7 @@ class FactorPruner:
             data_recent = data.tail(n_keep).copy()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             data_recent = data
         retired = []
         active = []
@@ -1001,27 +1007,29 @@ class FactorPruner:
             recent_history = alpha['ic_history'][-self.decay_window:]
             ic_values = [e.get('ic', 0.0) for e in recent_history]
             avg_ic = float(np.mean(ic_values)) if ic_values else 0.0
-            logger.info(f'  [{alpha['id']}] 최근 IC={recent_ic:.4f}, 평균({len(ic_values)}일)={avg_ic:.4f} → {('✅ 유지' if avg_ic >= self.decay_threshold else '⚰️ RETIRE')}')
+            _al_id = alpha.get('id', '')
+            _st_dec = '✅ 유지' if avg_ic >= self.decay_threshold else '⚰️ RETIRE'
+            logger.info(f"  [{_al_id}] 최근 IC={recent_ic:.4f}, 평균({len(ic_values)}일)={avg_ic:.4f} → {_st_dec}")
             if avg_ic < self.decay_threshold:
                 alpha['status'] = 'retired'
                 alpha['retired_at'] = datetime.now().isoformat()
-                alpha['retire_reason'] = f'IC decay: 최근{len(ic_values)}일 평균 IC {avg_ic:.4f} < threshold {self.decay_threshold}'
+                alpha['retire_reason'] = f"IC decay: 최근{len(ic_values)}일 평균 IC {avg_ic:.4f} < threshold {self.decay_threshold}"
                 retired.append(alpha['id'])
-                logger.warning(f'  ⚰️ 알파 퇴출: {alpha['id']} (avg_ic={avg_ic:.4f})')
+                logger.warning(f"  ⚰️ 알파 퇴출: {_al_id} (avg_ic={avg_ic:.4f})")
                 try:
                     current_regime = _dc('alpha_factory.current_regime', 'unknown')
                     self.memory_store.record_failure(alpha, retire_regime=current_regime)
                 except Exception as _mem_e:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_mem_e}", exc_info=True)
-                    logger.debug(f'  AlphaMemoryStore 기록 실패 (비치명적): {_mem_e}')
+                    logger.debug(f"  AlphaMemoryStore 기록 실패 (비치명적): {_mem_e}")
             else:
                 active.append(alpha['id'])
         try:
             atomic_write_json(_DISCOVERED_ALPHAS_FILE, alphas, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  GC 완료: 퇴출={len(retired)}개, 유지={len(active)}개')
+            logger.info(f"  GC 완료: 퇴출={len(retired)}개, 유지={len(active)}개")
         except Exception as e:
-            logger.error(f'  GC 저장 실패: {e}')
+            logger.error(f"  GC 저장 실패: {e}")
         return {'retired': retired, 'active': active, 'n_checked': len(active_alphas), 'target_date': target_date}
 
 def inject_auto_alphas(df: pd.DataFrame, alpha_file: Optional[Path]=None, max_alphas: Optional[int]=None) -> pd.DataFrame:
@@ -1047,7 +1055,7 @@ def inject_auto_alphas(df: pd.DataFrame, alpha_file: Optional[Path]=None, max_al
     try:
         all_alphas = json.loads(alpha_file.read_text(encoding='utf-8'))
     except Exception as e:
-        logger.debug(f'  inject_auto_alphas: JSON 로드 실패: {e}')
+        logger.debug(f"  inject_auto_alphas: JSON 로드 실패: {e}")
         return df
     active_alphas = [a for a in all_alphas if a.get('status') == 'active']
     active_alphas = sorted(active_alphas, key=lambda a: a.get('oos_ic', 0.0), reverse=True)[:max_n]
@@ -1056,12 +1064,13 @@ def inject_auto_alphas(df: pd.DataFrame, alpha_file: Optional[Path]=None, max_al
     df_out = df.copy()
     injected = 0
     for alpha in active_alphas:
-        col_name = alpha.get('col_name', f'auto_alpha_{alpha['id'][-6:]}')
+        _aid_sub = alpha.get('id', '')[-6:]
+        col_name = alpha.get('col_name', f"auto_alpha_{_aid_sub}")
         py_expr = alpha.get('py_expr', '')
         features_needed = alpha.get('features_used', [])
         missing = [f for f in features_needed if f not in df_out.columns]
         if missing and len(missing) == len(features_needed):
-            logger.debug(f'  inject: {col_name} 필요 피처 전부 없음 → 0.0')
+            logger.debug(f"  inject: {col_name} 필요 피처 전부 없음 → 0.0")
             df_out[col_name] = 0.0
             injected += 1
             continue
@@ -1080,17 +1089,18 @@ def inject_auto_alphas(df: pd.DataFrame, alpha_file: Optional[Path]=None, max_al
                 arr = np.where(np.isfinite(arr), arr, 0.0)
                 df_out[col_name] = arr
             injected += 1
-            logger.debug(f'  inject: {col_name} ✅ (IC={alpha.get('oos_ic', 0):.4f})')
+            _oic_val = alpha.get('oos_ic', 0)
+            logger.debug(f"  inject: {col_name} ✅ (IC={_oic_val:.4f})")
         except ZeroDivisionError:
-            logger.debug(f'  inject: {col_name} ZeroDivisionError → 0.0')
+            logger.debug(f"  inject: {col_name} ZeroDivisionError → 0.0")
             df_out[col_name] = 0.0
             injected += 1
         except Exception as e:
-            logger.debug(f'  inject: {col_name} 실패 ({e}) → 0.0')
+            logger.debug(f"  inject: {col_name} 실패 ({e}) → 0.0")
             df_out[col_name] = 0.0
             injected += 1
     if injected:
-        logger.info(f'  ✅ inject_auto_alphas: {injected}개 알파 주입 완료')
+        logger.info(f"  ✅ inject_auto_alphas: {injected}개 알파 주입 완료")
     return df_out
 
 def get_active_alpha_names(alpha_file: Optional[Path]=None, max_alphas: Optional[int]=None) -> List[str]:
@@ -1108,10 +1118,10 @@ def get_active_alpha_names(alpha_file: Optional[Path]=None, max_alphas: Optional
         alphas = json.loads(alpha_file.read_text(encoding='utf-8'))
         active = [a for a in alphas if a.get('status') == 'active']
         active = sorted(active, key=lambda a: a.get('oos_ic', 0.0), reverse=True)[:max_n]
-        return [a.get('col_name', f'auto_alpha_{a['id'][-6:]}') for a in active]
+        return [a.get('col_name', f"auto_alpha_{a['id'][-6:]}") for a in active]
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return []
 if __name__ == '__main__':
     import argparse, sys
@@ -1124,21 +1134,24 @@ if __name__ == '__main__':
     if args.mode == 'mine':
         miner = AlphaMiner()
         new_alphas = miner.mine_alphas(n_generations=args.gens, pop_size=args.pop)
-        logger.info(f'신규 알파: {len(new_alphas)}개')
+        logger.info(f"신규 알파: {len(new_alphas)}개")
     elif args.mode == 'gc':
         gc = AlphaGarbageCollector()
         result = gc.run()
-        logger.info(f'GC 결과: {result}')
+        logger.info(f"GC 결과: {result}")
     elif args.mode == 'status':
         if _DISCOVERED_ALPHAS_FILE.exists():
             data = json.loads(_DISCOVERED_ALPHAS_FILE.read_text())
             active = [a for a in data if a.get('status') == 'active']
             retired = [a for a in data if a.get('status') == 'retired']
-            logger.info(f'\n📊 Alpha Factory 현황')
-            logger.info(f'  총 알파: {len(data)}개')
-            logger.info(f'  활성:   {len(active)}개')
-            logger.info(f'  퇴출:   {len(retired)}개')
+            logger.info(f"\n📊 Alpha Factory 현황")
+            logger.info(f"  총 알파: {len(data)}개")
+            logger.info(f"  활성:   {len(active)}개")
+            logger.info(f"  퇴출:   {len(retired)}개")
             for a in active:
-                logger.info(f'  [{a['id']}] IC={a.get('oos_ic', 'N/A'):.4f} col={a.get('col_name', 'N/A')}')
+                _aid_l = a.get('id', '')
+                _ic_l = a.get('oos_ic', 0)
+                _cn_l = a.get('col_name', 'N/A')
+                logger.info(f"  [{_aid_l}] IC={_ic_l:.4f} col={_cn_l}")
         else:
             logger.info('discovered_alphas.json 없음')

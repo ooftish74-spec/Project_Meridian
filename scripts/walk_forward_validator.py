@@ -72,8 +72,8 @@ class WalkForwardValidator:
                 return result
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            result['reason'] = f'모델 로드 실패: {e}'
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+            result['reason'] = f"모델 로드 실패: {e}"
             self._save(result)
             return result
 
@@ -89,7 +89,7 @@ class WalkForwardValidator:
             predictions = sc.get('ml_predictions', {})
 
             if len(predictions) < min_samples:
-                result['reason'] = f'예측 {len(predictions)}건 < 최소 {min_samples}건'
+                result['reason'] = f"예측 {len(predictions)}건 < 최소 {min_samples}건"
                 result['n_predictions'] = len(predictions)
                 self._save(result)
                 return result
@@ -113,7 +113,7 @@ class WalkForwardValidator:
                 ic_pairs.append((pred_prob, actual_return))
 
             if total < min_samples:
-                result['reason'] = f'검증 가능 {total}건 < 최소 {min_samples}건'
+                result['reason'] = f"검증 가능 {total}건 < 최소 {min_samples}건"
                 self._save(result)
                 return result
 
@@ -133,9 +133,9 @@ class WalkForwardValidator:
             ic_warn = cfg.get('ml.wf_ic_warning_threshold', 0.02)
             warnings = []
             if acc < acc_warn:
-                warnings.append(f'ACC {acc:.1%} < {acc_warn:.1%} 경고')
+                warnings.append(f"ACC {acc:.1%} < {acc_warn:.1%} 경고")
             if ic < ic_warn:
-                warnings.append(f'IC {ic:.4f} < {ic_warn} 경고')
+                warnings.append(f"IC {ic:.4f} < {ic_warn} 경고")
             result['warnings'] = warnings
 
             if warnings:
@@ -146,7 +146,7 @@ class WalkForwardValidator:
                     f"({total}건)")
 
         except Exception as e:
-            result['reason'] = f'검증 실패: {e}'
+            result['reason'] = f"검증 실패: {e}"
             logger.debug(f"  Walk-Forward 검증 실패: {e}")
 
         self._save(result)
@@ -163,7 +163,7 @@ class WalkForwardValidator:
             return float(ic) if not np.isnan(ic) else 0.0
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return 0.0
 
     def _save(self, result: Dict):

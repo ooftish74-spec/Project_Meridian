@@ -43,18 +43,28 @@ def _cfg_get(key: str, default):
         return cfg.get(key, default)
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return default
 
 class AlertZone:
     """포지션별 SL/TP Alert Zone 사전 계산 결과."""
-    __slots__ = ['pos_key', 'ticker', 'stream_id', 'avg_price', 'sl_price', 'tp_price', 'sl_alert_price', 'tp_alert_price', 'sl_pct', 'tp_pct', 'in_alert_zone', 'last_check_ts']
+    __slots__ = ['pos_key', 'ticker', 'stream_id', 'avg_price', 'sl_price', 'tp_price', 'sl_alert_price', 'tp_alert_price', 'sl_pct', 'tp_pct', 'in_alert_zone', 'last_check_ts', 'sl_breach_start_ts', 'is_group1']
 
     def __init__(self, pos_key: str, ticker: str, stream_id: str, avg_price: float, sl_pct: float, tp_pct: float, alert_margin_pct: float):
         self.pos_key = pos_key
         self.ticker = ticker
         self.stream_id = stream_id
         self.avg_price = avg_price
+        
+        # [Solution 2: ATR Noise Buffer for Group 1 Leveraged/Short Tickers]
+        group1_tickers = {'252670', '233740', 'TQQQ', 'SOXL', 'SQQQ'}
+        group1_streams = {'S3', 'S5', 'S11', 'S11_HIGHBETA_SNIPER'}
+        self.is_group1 = (ticker in group1_tickers) or (stream_id in group1_streams)
+        
+        if self.is_group1:
+            atr_mult = float(_cfg_get('monitor.group1_atr_sl_mult', 1.45))
+            sl_pct = sl_pct * atr_mult  # e.g. -1.8% * 1.45 = -2.61% dynamic expansion
+            
         self.sl_pct = sl_pct
         self.tp_pct = tp_pct
         self.sl_price = avg_price * (1 + sl_pct)
@@ -66,19 +76,39 @@ class AlertZone:
         self.tp_alert_price = avg_price + tp_distance * alert_ratio
         self.in_alert_zone = False
         self.last_check_ts = 0.0
+        self.sl_breach_start_ts = 0.0
 
     def check_proximity(self, current_price: float) -> str:
-        """현재가의 SL/TP 근접도 판단.
+        """현재가의 SL/TP 근접도 판단 (Solution 1: Time Filtered Delay Stop-Loss 적용).
 
         Returns:
-            'breach_sl': SL 돌파 (즉시 Exit)
+            'breach_sl': SL 돌파 및 지속시간 검증 완료 (Exit 집행)
             'breach_tp': TP 돌파 (즉시 Exit)
-            'alert_sl': SL 근접 (가속 체크)
+            'alert_sl': SL 근접/일시침범 (가속 체크)
             'alert_tp': TP 근접 (가속 체크)
             'normal': 정상 (일반 heartbeat)
         """
+        now = time.time()
         if current_price <= self.sl_price:
-            return 'breach_sl'
+            if self.is_group1:
+                delay_sec = float(_cfg_get('monitor.group1_sl_delay_sec', 180.0))  # 3분 검증 필터
+                if self.sl_breach_start_ts == 0.0:
+                    self.sl_breach_start_ts = now
+                    logger.info(f"  ⏱️ [Time-Filter] {self.ticker} ({self.stream_id}) SL 침범 포착 → {delay_sec:.0f}초 노이즈 지연 검증 시작")
+                    return 'alert_sl'
+                elif (now - self.sl_breach_start_ts) >= delay_sec:
+                    logger.warning(f"  🚨 [Time-Filter] {self.ticker} ({self.stream_id}) SL 침범 {delay_sec:.0f}초 연속 지속 확정 ➔ 손절 집행")
+                    return 'breach_sl'
+                else:
+                    return 'alert_sl'
+            else:
+                return 'breach_sl'
+        else:
+            # SL 복구 시 타임 필터 리셋
+            if self.sl_breach_start_ts > 0.0:
+                logger.info(f"  ✅ [Time-Filter] {self.ticker} SL 노이즈 자율 복구 ➔ 타임 필터 리셋")
+                self.sl_breach_start_ts = 0.0
+
         if current_price >= self.tp_price:
             return 'breach_tp'
         if current_price <= self.sl_alert_price:
@@ -140,7 +170,7 @@ class RealtimeExitMonitor:
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True, name='exit-monitor-heartbeat')
         self._heartbeat_thread.start()
         tickers = {az.ticker for az in self._alert_zones.values()}
-        logger.info(f'  🟢 RealtimeExitMonitor 시작: {len(self._alert_zones)}포지션, {len(tickers)}종목 모니터링 (WS={('ON' if self._ws_client else 'OFF')}, HB={_cfg_get('monitor.heartbeat_interval_sec', 300)}초)')
+        logger.info(f"  🟢 RealtimeExitMonitor 시작: {len(self._alert_zones)}포지션, {len(tickers)}종목 모니터링 (WS={('ON' if self._ws_client else 'OFF')}, HB={_cfg_get('monitor.heartbeat_interval_sec', 300)}초)")
         self._save_status()
         return True
 
@@ -152,17 +182,17 @@ class RealtimeExitMonitor:
                 self._ws_client.stop()
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.critical('[SILENT_BYPASS] Suppressed exception at realtime_exit_monitor.py:232', exc_info=True)
                 send_emergency_page('[FATAL] Suppressed exception at realtime_exit_monitor.py:232')
         try:
             self._exit_executor.shutdown(wait=True)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.critical('[SILENT_BYPASS] Suppressed exception at realtime_exit_monitor.py:240', exc_info=True)
             send_emergency_page('[FATAL] Suppressed exception at realtime_exit_monitor.py:240')
-        logger.info(f'  🔴 RealtimeExitMonitor 종료: alerts={self._stats['alert_checks']}, exits={self._stats['exit_executed']}')
+        logger.info(f"  🔴 RealtimeExitMonitor 종료: alerts={self._stats['alert_checks']}, exits={self._stats['exit_executed']}")
 
     @property
     def is_running(self) -> bool:
@@ -186,7 +216,7 @@ class RealtimeExitMonitor:
             status_file.write_text(json.dumps(self.stats, ensure_ascii=False, indent=2, default=str))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.critical('[SILENT_BYPASS] Suppressed exception at realtime_exit_monitor.py:283', exc_info=True)
             send_emergency_page('[FATAL] Suppressed exception at realtime_exit_monitor.py:283')
 
@@ -204,14 +234,14 @@ class RealtimeExitMonitor:
             if not self._ws_client.is_running:
                 self._ws_client.start()
             self._stats['ws_connected'] = self._ws_client.is_running
-            logger.info(f'  🔗 WebSocket → Exit 연동: {len(tickers)}종목 구독')
+            logger.info(f"  🔗 WebSocket → Exit 연동: {len(tickers)}종목 구독")
         except ImportError as e:
             logger.critical('  ℹ️ WebSocket 미가용 → REST heartbeat 전용', exc_info=True)
-            send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+            send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
             self._ws_client = None
         except Exception as e:
-            logger.critical(f'  WebSocket 시작 실패: {e} → REST fallback', exc_info=True)
-            send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+            logger.critical(f"  WebSocket 시작 실패: {e} → REST fallback", exc_info=True)
+            send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
             self._ws_client = None
 
     def _on_price_update(self, ticker: str, data: Dict):
@@ -248,8 +278,8 @@ class RealtimeExitMonitor:
                 status = az.check_proximity(price)
                 if status in ('breach_sl', 'breach_tp'):
                     pnl_pct = (price - az.avg_price) / az.avg_price * 100
-                    reason = f'{('SL' if 'sl' in status else 'TP')} 돌파: ₩{price:,.0f} ({pnl_pct:+.2f}%) [{az.stream_id}:{az.ticker}]'
-                    logger.warning(f'  🚨 {reason}')
+                    reason = f"{('SL' if 'sl' in status else 'TP')} 돌파: ₩{price:,.0f} ({pnl_pct:+.2f}%) [{az.stream_id}:{az.ticker}]"
+                    logger.warning(f"  🚨 {reason}")
                     with self._stats_lock:
                         self._stats['exit_triggers'] += 1
                     self._exit_executor.submit(self._trigger_exit_check, reason)
@@ -257,14 +287,14 @@ class RealtimeExitMonitor:
                 elif status in ('alert_sl', 'alert_tp'):
                     if not az.in_alert_zone:
                         pnl_pct = (price - az.avg_price) / az.avg_price * 100
-                        logger.info(f'  ⚠️ Alert Zone 진입: [{az.stream_id}:{az.ticker}] ₩{price:,.0f} ({pnl_pct:+.2f}%) → 체크 주기 {normal_interval}초 → {alert_interval}초')
+                        logger.info(f"  ⚠️ Alert Zone 진입: [{az.stream_id}:{az.ticker}] ₩{price:,.0f} ({pnl_pct:+.2f}%) → 체크 주기 {normal_interval}초 → {alert_interval}초")
                         az.in_alert_zone = True
                     if now - az.last_check_ts >= alert_interval:
                         with self._stats_lock:
                             self._stats['alert_checks'] += 1
                         az.last_check_ts = now
                 elif az.in_alert_zone:
-                    logger.info(f'  ✅ Alert Zone 해제: [{az.stream_id}:{az.ticker}]')
+                    logger.info(f"  ✅ Alert Zone 해제: [{az.stream_id}:{az.ticker}]")
                     az.in_alert_zone = False
 
     def _trigger_exit_check(self, reason: str):
@@ -294,7 +324,7 @@ class RealtimeExitMonitor:
                 if sell_orders:
                     try:
                         from src.execution.execution_engine import ExecutionEngine
-                        mode = _cfg_get('execution.current_mode', 'mock')
+                        mode = _cfg_get('execution.current_mode', 'live')
                         ee = ExecutionEngine(mode=mode)
                         auto_orders = []
                         manual_orders = []
@@ -306,39 +336,50 @@ class RealtimeExitMonitor:
                                 auto_orders.append(ro)
                         if manual_orders:
                             try:
-                                logger.info(f'  🔔 S4 수동 매도 알림 텔레그램 발송 생략 ({len(manual_orders)}건)')
+                                logger.info(f"  🔔 S4 수동 매도 알림 텔레그램 발송 생략 ({len(manual_orders)}건)")
                             except Exception as e:
-                                logger.critical(f'  ❌ S4 텔레그램 로직 오류: {e}', exc_info=True)
-                                send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+                                logger.critical(f"  ❌ S4 텔레그램 로직 오류: {e}", exc_info=True)
+                                send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
                         if auto_orders:
                             ee_result = ee.execute(auto_orders, portfolio=mgr.get_summary())
-                            logger.info(f'  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료')
+                            logger.info(f"  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료")
+                            # 🚀 [Post-Exit Auto-Sweep] 장중 손절/익절 체결 후 회수된 현금 SHV 자동 파킹 스윕
+                            try:
+                                from src.execution._kis_adapter import KISTraderAdapter
+                                KISTraderAdapter(mode='live', fetch_balance_on_init=True).sweep_uninvested_cash_to_shield()
+                            except Exception as _swe:
+                                logger.error(f"  ❌ Post-Exit 자동 파킹 스윕 실패: {_swe}")
                     except Exception as ee_err:
-                        logger.critical(f'  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}', exc_info=True)
-                        send_emergency_page(f'🚨 [FATAL] {ee_err} at realtime_exit_monitor.py', exc_info=ee_err)
+                        logger.critical(f"  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}", exc_info=True)
+                        send_emergency_page(f"🚨 [FATAL] {ee_err} at realtime_exit_monitor.py", exc_info=ee_err)
                     etf_comm = _cfg_get('execution.etf_commission_rate', 0.00015)
                     s1_sells = [s for s in sell_orders if s.get('stream_id') == 'S1']
                     other_sells = [s for s in sell_orders if s.get('stream_id') != 'S1']
                     if s1_sells:
                         mgr.execute_sells(s1_sells, prices, commission_rate=etf_comm)
                         for so in s1_sells:
-                            logger.info(f'  🔴 [S1] {so.get("name", "?")} 실시간 Exit: {so.get("reason", "")[:80]}')
+                            _so_n = so.get("name", "?")
+                            _so_r = so.get("reason", "")[:80]
+                            logger.info(f"  🔴 [S1] {_so_n} 실시간 Exit: {_so_r}")
                     if other_sells:
                         mgr.execute_sells(other_sells, prices)
                         for so in other_sells:
-                            logger.info(f'  🔴 [{so.get("stream_id", "")}] {so.get("name", "?")} 실시간 Exit: {so.get("reason", "")[:80]}')
+                            _sid_o = so.get("stream_id", "")
+                            _name_o = so.get("name", "?")
+                            _reas_o = so.get("reason", "")[:80]
+                            logger.info(f"  🔴 [{_sid_o}] {_name_o} 실시간 Exit: {_reas_o}")
                     mgr.save()
                     with self._stats_lock:
                         self._stats['exit_executed'] += len(sell_orders)
-                    logger.info(f'  ✅ 실시간 Exit 완료: {len(sell_orders)}건 (사유: {reason})')
+                    logger.info(f"  ✅ 실시간 Exit 완료: {len(sell_orders)}건 (사유: {reason})")
                     self._compute_alert_zones()
                 else:
-                    logger.debug(f'  Exit 체크 완료: 청산 대상 없음 ({reason})')
+                    logger.debug(f"  Exit 체크 완료: 청산 대상 없음 ({reason})")
             with self._stats_lock:
                 self._stats['last_exit_check'] = datetime.now().isoformat()
         except Exception as e:
-            logger.critical(f'  실시간 Exit 실패: {e}', exc_info=True)
-            send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+            logger.critical(f"  실시간 Exit 실패: {e}", exc_info=True)
+            send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
         finally:
             with self._exit_lock:
                 self._exit_in_progress = False
@@ -381,20 +422,20 @@ class RealtimeExitMonitor:
                     ws_ok = self._ws_client and self._ws_client.is_running and self._stats.get('ws_connected', False)
                     if not ws_ok:
                         fallback_interval = _cfg_get('monitor.ws_fallback_interval_sec', 60)
-                        logger.debug(f'  💓 Heartbeat (WS 장애 fallback): {len(rest_prices)}종목 조회, 다음 {fallback_interval}초 후')
+                        logger.debug(f"  💓 Heartbeat (WS 장애 fallback): {len(rest_prices)}종목 조회, 다음 {fallback_interval}초 후")
                         interval = fallback_interval
                     else:
-                        logger.debug(f'  💓 Heartbeat: {len(rest_prices)}종목 조회 완료')
+                        logger.debug(f"  💓 Heartbeat: {len(rest_prices)}종목 조회 완료")
                     any_alert = any((az.in_alert_zone for az in self._alert_zones.values()))
                     if any_alert:
                         alert_interval = _cfg_get('monitor.alert_check_interval_sec', 30)
                         interval = min(interval, alert_interval)
-                        logger.info(f'  ⚠️ Alert Zone 활성 → 체크 주기 {interval}초')
+                        logger.info(f"  ⚠️ Alert Zone 활성 → 체크 주기 {interval}초")
                     self._trigger_exit_check('heartbeat')
                     self._save_status()
             except Exception as e:
-                logger.critical(f'  💓 Heartbeat 오류: {e}', exc_info=True)
-                send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+                logger.critical(f"  💓 Heartbeat 오류: {e}", exc_info=True)
+                send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
             time.sleep(interval)
         logger.info('  💓 Heartbeat 루프 종료')
 
@@ -441,6 +482,21 @@ class RealtimeExitMonitor:
                         dyn_tp_pct = _atr * _tp_mult / avg_price
                         sl_pct = dyn_sl_pct if sl_pct is None else max(sl_pct, dyn_sl_pct)
                         tp_pct = dyn_tp_pct if tp_pct is None else min(tp_pct, dyn_tp_pct)
+                    
+                    # 🚀 [Whipsaw Guard] 개장 15분간 동적 ATR 손절 마진 확장 (-1.8% / ATR 1.5x)
+                    from datetime import datetime as _dt
+                    _now_dt = _dt.now()
+                    _opening_margin_min = float(cfg.get('execution.opening_dynamic_sl_margin_min', 15))
+                    _atr_mult = float(cfg.get('execution.opening_dynamic_sl_atr_mult', 1.5))
+                    _entry_time_str = str(pos.get('entry_time', pos.get('timestamp', '')))
+                    if _entry_time_str:
+                        try:
+                            _entry_dt = _dt.fromisoformat(_entry_time_str)
+                            if (_now_dt - _entry_dt).total_seconds() <= _opening_margin_min * 60:
+                                _whipsaw_sl_pct = -0.018 if _atr <= 0 else -abs((_atr * _atr_mult) / avg_price)
+                                sl_pct = min(sl_pct if sl_pct is not None else -0.012, _whipsaw_sl_pct)
+                        except Exception:
+                            pass
                     else:
                         vix = 20.0
                         try:
@@ -460,13 +516,13 @@ class RealtimeExitMonitor:
                         tp_pct = dyn_tp_pct if tp_pct is None else dyn_tp_pct
                     az = AlertZone(pos_key=pos_key, ticker=ticker, stream_id=stream_id, avg_price=avg_price, sl_pct=sl_pct, tp_pct=tp_pct, alert_margin_pct=alert_margin)
                     new_zones[pos_key] = az
-                    logger.debug(f'    Alert Zone [{stream_id}:{ticker}]: SL=₩{az.sl_price:,.0f} ({sl_pct * 100:+.2f}%), TP=₩{az.tp_price:,.0f} ({tp_pct * 100:+.2f}%), AlertSL=₩{az.sl_alert_price:,.0f}, AlertTP=₩{az.tp_alert_price:,.0f}')
+                    logger.debug(f"    Alert Zone [{stream_id}:{ticker}]: SL=₩{az.sl_price:,.0f} ({sl_pct * 100:+.2f}%), TP=₩{az.tp_price:,.0f} ({tp_pct * 100:+.2f}%), AlertSL=₩{az.sl_alert_price:,.0f}, AlertTP=₩{az.tp_alert_price:,.0f}")
                 with self._alert_zones_lock:
                     self._alert_zones = new_zones
-                logger.info(f'  📊 Alert Zone 계산 완료: {len(new_zones)}포지션')
+                logger.info(f"  📊 Alert Zone 계산 완료: {len(new_zones)}포지션")
         except Exception as e:
-            logger.critical(f'  Alert Zone 계산 실패: {e}', exc_info=True)
-            send_emergency_page(f'🚨 [FATAL] {e} at realtime_exit_monitor.py', exc_info=e)
+            logger.critical(f"  Alert Zone 계산 실패: {e}", exc_info=True)
+            send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
 
     def _fetch_rest_prices(self, tickers: List[str]) -> Dict[str, float]:
         """REST API로 현재가 조회 (오직 KIS REST 기반).
@@ -491,7 +547,7 @@ class RealtimeExitMonitor:
                             prices[ticker] = p
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                         logger.critical('[SILENT_BYPASS] Suppressed exception at realtime_exit_monitor.py:760', exc_info=True)
                         send_emergency_page('[FATAL] Suppressed exception at realtime_exit_monitor.py:760')
             except ImportError as e:
@@ -514,7 +570,7 @@ class RealtimeExitMonitor:
                 return ps.get('kr_regime') or ps.get('regime', 'caution')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.critical('[SILENT_BYPASS] Suppressed exception at realtime_exit_monitor.py:784', exc_info=True)
             send_emergency_page('[FATAL] Suppressed exception at realtime_exit_monitor.py:784')
         return 'caution'
@@ -541,7 +597,7 @@ def _is_kelly_booster_active_monitor(regime: str) -> bool:
         return ois_today > ois_median
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return False
 
 def get_exit_monitor() -> RealtimeExitMonitor:

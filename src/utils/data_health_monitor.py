@@ -127,7 +127,7 @@ class DataHealthMonitor:
             self.clear(source)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self.record(source, e, severity=severity, context=context, fallback_used=fallback_used)
 
     def get_health_summary(self) -> Dict:
@@ -183,7 +183,7 @@ class DataHealthMonitor:
                 self._errors = data.get('errors', {})
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._errors = {}
 
     def _save(self) -> None:
@@ -193,5 +193,5 @@ class DataHealthMonitor:
             data = {'errors': self._errors, 'last_updated': datetime.now().isoformat(), 'ttl_sec': self._ttl_sec}
             atomic_write_json(self._file, data, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
-            logger.error(f'DataHealth 저장 실패: {e}')
+            logger.error(f"DataHealth 저장 실패: {e}")
 dhm = DataHealthMonitor()

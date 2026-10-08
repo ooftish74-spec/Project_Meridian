@@ -60,11 +60,23 @@ def _write_local_log(message: str, exc_text: str='') -> None:
             f.write(line + '\n')
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
 
+_TG_THROTTLE_CACHE: Dict[str, float] = {}
+
 def _send_telegram_async(message: str) -> None:
-    """백그라운드 스레드에서 텔레그램 발송 — 메인 스레드를 절대 차단하지 않음."""
+    """백그라운드 스레드에서 텔레그램 발송 — 15분 수프레션 락 적용으로 스팸 100% 방지."""
+    import time
+    now = time.time()
+    # 🎯 [Throttle Rule] 타임스탬프를 제거한 핵심 메시지로 15분(900초) 이내 재발송 100% 차단
+    clean_msg = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '', message)
+    msg_key = clean_msg[:120]
+    last_sent = _TG_THROTTLE_CACHE.get(msg_key, 0.0)
+    if now - last_sent < 900.0:
+        logger.debug(f"  [EmergencyPager] 텔레그램 15분 억제 락 활성화 (스팸 차단): {msg_key[:50]}...")
+        return
+    _TG_THROTTLE_CACHE[msg_key] = now
 
     def _worker():
         try:
@@ -82,9 +94,9 @@ def _send_telegram_async(message: str) -> None:
             if resp.ok:
                 logger.info('  ✉️ [EmergencyPager] 텔레그램 발송 OK')
             else:
-                logger.warning(f'  [EmergencyPager] 텔레그램 발송 실패: HTTP {resp.status_code}')
+                logger.warning(f"  [EmergencyPager] 텔레그램 발송 실패: HTTP {resp.status_code}")
         except Exception as _tg_e:
-            logger.warning(f'  [EmergencyPager] 텔레그램 예외: {_tg_e}')
+            logger.warning(f"  [EmergencyPager] 텔레그램 예외: {_tg_e}")
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
 
@@ -119,7 +131,7 @@ def send_emergency_page(message: Union[str, Exception], exc_info: Optional[BaseE
     except Exception as _fmt_e:
         text = f'🚨 MERIDIAN EMERGENCY (포맷 실패): {message}'
         exc_text = ''
-        logger.warning(f'  [EmergencyPager] 메시지 포맷 실패: {_fmt_e}')
+        logger.warning(f"  [EmergencyPager] 메시지 포맷 실패: {_fmt_e}")
     logger.error(f'  [EMERGENCY_PAGE] {text[:200]}', exc_info=exc_info is not None)
     _write_local_log(text, exc_text)
     if _is_rate_limited(text):

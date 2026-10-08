@@ -112,12 +112,12 @@ class BaseStream(ABC):
     def enable(self):
         """스트림 활성화."""
         self._enabled = True
-        logger.info(f'  ✅ {self.stream_id} ({self.name}) 활성화')
+        logger.info(f"  ✅ {self.stream_id} ({self.name}) 활성화")
 
     def disable(self):
         """스트림 비활성화."""
         self._enabled = False
-        logger.info(f'  ❌ {self.stream_id} ({self.name}) 비활성화')
+        logger.info(f"  ❌ {self.stream_id} ({self.name}) 비활성화")
 
     @property
     def is_shadow(self) -> bool:
@@ -127,7 +127,7 @@ class BaseStream(ABC):
     def set_live(self):
         """실거래 모드 전환."""
         self._shadow_mode = False
-        logger.info(f'  🔴 {self.stream_id} ({self.name}) LIVE 모드 전환')
+        logger.info(f"  🔴 {self.stream_id} ({self.name}) LIVE 모드 전환")
 
     def record_daily_return(self, return_pct: float):
         """일별 수익률 기록."""
@@ -137,11 +137,11 @@ class BaseStream(ABC):
         """이벤트 로그 기록 (EventLedger 연동)."""
         try:
             from src.measurement.event_ledger import log_event
-            log_event(event_type, {'stream_id': self.stream_id, **payload}, source=f'stream_{self.stream_id.lower()}')
+            log_event(event_type, {'stream_id': self.stream_id, **payload}, source=f"stream_{self.stream_id.lower()}")
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  EventLedger 기록 실패: {e}')
+            logger.debug(f"  EventLedger 기록 실패: {e}")
 
     def __repr__(self) -> str:
         mode = 'SHADOW' if self._shadow_mode else 'LIVE'

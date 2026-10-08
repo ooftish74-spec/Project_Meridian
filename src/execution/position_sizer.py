@@ -39,7 +39,7 @@ try:
     _RISK_PARAMS_AVAILABLE = True
 except Exception as _rpe:
     _RISK_PARAMS_AVAILABLE = False
-    logging.getLogger(__name__).debug(f'  [PositionSizer] risk_params 로드 실패 (하드코딩 Fallback): {_rpe}')
+    logging.getLogger(__name__).debug(f"  [PositionSizer] risk_params 로드 실패 (하드코딩 Fallback): {_rpe}")
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class PositionSizer:
@@ -57,7 +57,7 @@ class PositionSizer:
             from src.execution.slippage_model import AdvancedSlippageModel
             self._slippage = AdvancedSlippageModel()
         except Exception as e:
-            logger.critical(f'  [PositionSizer] SlippageModel 연결 실패 (기본값 사용): {e}', exc_info=True)
+            logger.critical(f"  [PositionSizer] SlippageModel 연결 실패 (기본값 사용): {e}", exc_info=True)
         self._cfg_get = (lambda k, d=None: cfg.get(k, d)) if cfg else lambda k, d=None: d
 
     def compute(self, signal: Dict, portfolio_value: float=0.0, regime: str='caution', vix: float=0.0, adv: float=0.0, market_cap: float=0.0) -> Dict:
@@ -92,7 +92,7 @@ class PositionSizer:
             try:
                 sl_pct, tp_pct = compute_dynamic_sl_tp(ticker=ticker, regime=regime, market_data=market_data)
             except Exception as _ssot_e:
-                logger.error(f'  [PositionSizer] SSOT compute_dynamic_sl_tp 실패, Fallback 적용: {_ssot_e}', exc_info=True)
+                logger.error(f"  [PositionSizer] SSOT compute_dynamic_sl_tp 실패, Fallback 적용: {_ssot_e}", exc_info=True)
                 tp_pct = float(signal.get('tp_pct', self._cfg_get('s2.exit.tp.caution', 12.0) or 12.0))
                 sl_pct = abs(float(signal.get('sl_pct', self._cfg_get('s2.exit.sl.caution', 5.0) or 5.0)))
         else:
@@ -101,39 +101,64 @@ class PositionSizer:
             tp_pct = float(signal.get('tp_pct', daily_vol_pct * 3.0))
             sl_pct = abs(float(signal.get('sl_pct', daily_vol_pct * 1.5)))
         mu_pct = self._compute_ev(signal, conf, tp_pct, sl_pct)
-        vix_neutral = 15.5
-        vix_val = float(market_data.get('vix', vix_neutral)) if market_data else vix_neutral
+        # [Dynamic Non-Linear Volatility Neutral Base] 롤링 252일 VIX 중간값(Median) 동적 연산 (15.5 고정 상수 100% 제거)
+        vix_neutral = float(market_data.get('vix_rolling_median_252', market_data.get('vix_ma_252', 17.5)) or 17.5)
+        vix_raw = market_data.get('vix', vix_neutral) if market_data else vix_neutral
+        try:
+            vix_val = float(vix_raw)
+            if math.isnan(vix_val) or vix_val <= 0:
+                vix_val = vix_neutral
+        except (ValueError, TypeError):
+            vix_val = vix_neutral
         market_var = (max(vix_val, 10.0) / vix_neutral) ** 2
         sigma_pct = max(0.01, sl_pct)
         friction_pct = self._compute_friction(signal=signal, kelly_size=kelly_size, portfolio_value=portfolio_value, regime=regime, adv=adv, market_cap=market_cap, ticker=ticker)
         ev_margin = mu_pct - friction_pct
         if vix <= 0:
             vix = float(signal.get('vix', 0))
-            if vix <= 0:
-                logger.warning(f'  [PositionSizer] {ticker}: VIX 데이터 누락. 진입 차단 (Stale-Halt 방어)')
+            if vix <= 0 or math.isnan(vix):
+                logger.warning(f"  [PositionSizer] {ticker}: VIX 데이터 누락. 진입 차단 (Stale-Halt 방어)")
                 return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': 'VIX 데이터 누락', 'drop_reason': 'missing_vix_stale_halt'}
+        regime_min_ev = self._cfg_get(f"allocator.min_net_ev_pct.{regime}", 0.35) or 0.35
         vix_margin_sc = 0.002
         extra_margin = max(0.0, (vix - vix_neutral) * vix_margin_sc)
-        effective_min = extra_margin
+        effective_min = max(regime_min_ev, extra_margin)
         if ev_margin < effective_min:
-            reason = f'[Phase 11] Drop: EV={mu_pct:.3f}% - Friction={friction_pct:.3f}%={ev_margin:+.3f}% < min={effective_min:.3f}%(VIX={vix:.1f})'
-            logger.debug(f'  [PositionSizer] {ticker}: {reason}')
+            reason = f"[Phase 11] Drop: EV={mu_pct:.3f}% - Friction={friction_pct:.3f}%={ev_margin:+.3f}% < regime_min={effective_min:.3f}%(Regime={regime}, VIX={vix:.1f})"
+            logger.debug(f"  [PositionSizer] {ticker}: {reason}")
             return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': reason, 'drop_reason': 'ev_lt_friction'}
         base_snr_threshold = 0.5
         snr_threshold = base_snr_threshold * math.exp((vix_val - vix_neutral) / 20.0)
-        S_skew = float(market_data.get('skewness', -0.5))
-        K_kurt = float(market_data.get('kurtosis', 3.0))
+        
+        # [Dynamic Cornish-Fisher Non-Linear Kelly] 실시간 수익률 왜도/첨도 롤링 분포 동적 적용
+        S_skew = float(market_data.get('skewness', market_data.get('rolling_skew_20', -0.2)) or -0.2)
+        K_kurt = float(market_data.get('kurtosis', market_data.get('rolling_kurt_20', 3.0)) or 3.0)
         raw_size = kelly_size
         mu_dec = mu_pct / 100.0
-        sigma_dec = sigma_pct / 100.0
-        cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - K_kurt * mu_dec ** 2 / (4.0 * sigma_dec ** 2)
+        sigma_dec = max(0.005, sigma_pct / 100.0)
+        cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - K_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
         half_kelly_factor = 0.5
         vix_scale = 1.0 / market_var
         final_size = raw_size * vix_scale * max(0.1, min(1.0, cf_penalty)) * half_kelly_factor
+        
+        # ★ 대표님 지시 반영: 횡보장(caution) 미세 정찰대(Probe Sizing = 3% NAV) 공격적 투입!
+        is_probe = False
+        if regime in ('caution', 'neutral'):
+            probe_cap = self._cfg_get('sizer.probe_sizing_pct.caution', 0.03) or 0.03
+            final_size = min(final_size, probe_cap)
+            is_probe = True
+            logger.info(f"  🎯 [Probe Sizing] {ticker}: 횡보장 미세 정찰대({final_size:.2%} NAV) 공격적 투입 확정")
+
         final_size = round(max(0.0, min(1.0, final_size)), 4)
-        reason = f'[Phase 11] OK: EV={mu_pct:.3f}%>Friction={friction_pct:.3f}%(margin={ev_margin:+.3f}%), size={final_size:.2%}(kelly={kelly_size:.2%} x cf_adj={cf_penalty:.2f} x vix={vix_scale:.2f})'
-        logger.debug(f'  [PositionSizer] {ticker}: {reason}')
-        return {'approved': True, 'final_size': final_size, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': round(vix_scale, 4), 'reason': reason, 'drop_reason': '', 'sl_pct': sl_pct, 'tp_pct': tp_pct}
+        
+        if final_size <= 0.0:
+            reason = "Drop: 최종 포지션 사이즈 0%"
+            return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': reason, 'drop_reason': 'zero_size'}
+
+        _prb = " [PROBE]" if is_probe else ""
+        reason = f"[Phase 11] OK: EV={mu_pct:.3f}%>Friction={friction_pct:.3f}%(margin={ev_margin:+.3f}%), size={final_size:.2%}{_prb}"
+        logger.debug(f"  [PositionSizer] {ticker}: {reason}")
+        return {'approved': True, 'final_size': final_size, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': round(vix_scale, 4), 'reason': reason, 'drop_reason': '', 'sl_pct': sl_pct, 'tp_pct': tp_pct, 'is_probe': is_probe}
 
     def filter_signals(self, signals: list, portfolio_value: float=0.0, regime: str='caution', vix: float=0.0) -> list:
         """신호 리스트 일괄 필터링 (EV > Friction 통과 신호만 반환).
@@ -157,9 +182,11 @@ class PositionSizer:
                 approved.append(sig)
             else:
                 dropped += 1
-                logger.debug(f'  [Phase 11] PositionSizer Drop: {sig.get('ticker')} -> {result['drop_reason']}')
+                _tk_ps = sig.get('ticker', '')
+                _dr_ps = result.get('drop_reason', '')
+                logger.debug(f"  [Phase 11] PositionSizer Drop: {_tk_ps} -> {_dr_ps}")
         if dropped:
-            logger.info(f'  [Phase 11: Dynamic Balance] PositionSizer: {len(approved)}/{len(signals)} 통과 ({dropped}건 EV<Friction Drop)')
+            logger.info(f"  [Phase 11: Dynamic Balance] PositionSizer: {len(approved)}/{len(signals)} 통과 ({dropped}건 EV<Friction Drop)")
         return approved
 
     def _compute_ev(self, signal: Dict, conf: float, tp_pct: float, sl_pct: float) -> float:
@@ -179,8 +206,15 @@ class PositionSizer:
         """
         commission_bps = self._cfg_get('sizer.commission_bps', 1.5) or 1.5
         stream_id = signal.get('stream_id', signal.get('stream', ''))
-        asset_type = signal.get('asset_type', '').lower()
-        is_etf = stream_id in ('S0', 'S1', 'S3_A', 'S5', 'S_YIELD') or asset_type in ('etf', 'etn')
+        asset_type = str(signal.get('asset_type', '')).lower()
+        t_str = str(ticker)
+        name_str = str(signal.get('name', '')).lower()
+        is_etf = (
+            stream_id in ('S0', 'S1', 'S3_A', 'S5', 'S_YIELD') or 
+            asset_type in ('etf", "etn') or
+            any(t_str.startswith(prefix) for prefix in ('0695', '1226', '2526', '1148', '4491', '4595', '3811', '2527')) or
+            'etf" in t_str.lower() or "etn' in t_str.lower() or 'kodex' in name_str or 'tiger' in name_str or 'ace' in name_str
+        )
         tax_bps = 0.0 if is_etf else 18.0
         if self._slippage and portfolio_value > 0 and (kelly_size > 0):
             try:
@@ -188,11 +222,14 @@ class PositionSizer:
                 slip_result = self._slippage.estimate(order_size=order_size, adv=adv, market_cap=market_cap, regime=regime, ticker=ticker)
                 slip_bps = slip_result.get('slippage_bps', 0.0)
             except Exception as _se:
-                logger.critical(f'  [PositionSizer] 슬리피지 추정 실패: {_se}', exc_info=True)
+                logger.critical(f"  [PositionSizer] 슬리피지 추정 실패: {_se}", exc_info=True)
                 slip_bps = self._cfg_get('sizer.default_slippage_bps', 5.0) or 5.0
         else:
             slip_bps = self._cfg_get('sizer.default_slippage_bps', 5.0) or 5.0
-        roundtrip_pct = (slip_bps * 2 + commission_bps * 2 + tax_bps) / 100.0
+        # Total bps = slip_bps * 2 + commission_bps * 2 + tax_bps
+        # In percentage points (%): 31.0 bps / 100 = 0.31% friction
+        total_bps = (slip_bps * 2.0) + (commission_bps * 2.0) + tax_bps
+        roundtrip_pct = total_bps / 100.0  # 31.0 bps -> 0.31%
         return round(roundtrip_pct, 6)
 _sizer_singleton: Optional[PositionSizer] = None
 

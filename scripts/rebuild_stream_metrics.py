@@ -54,7 +54,7 @@ def _resolve_tracking_start() -> str:
             return str(_start)[:10]
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
 
     # 2~4순위: shadow_portfolio.json
@@ -76,7 +76,7 @@ def _resolve_tracking_start() -> str:
                 return str(_buys[0]['date'])[:10]
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
 
     # 5순위: 오늘 날짜 (rollback-safe fallback)
@@ -108,7 +108,7 @@ def _load_shadow_trades():
             result[day] = records
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             continue
     return result
 

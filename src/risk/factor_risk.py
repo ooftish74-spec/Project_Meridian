@@ -101,7 +101,7 @@ class FactorRiskDecomposer:
             return result
         except Exception as e:
             logger.critical(f'  팩터 분해 실패: {e}', exc_info=True)
-            return self._empty_result(f'회귀 실패: {e}')
+            return self._empty_result(f"회귀 실패: {e}")
 
     def _load_portfolio_returns(self, lookback: int) -> Optional[np.ndarray]:
         """포트폴리오 일일 수익률 로드."""
@@ -173,13 +173,13 @@ class FactorRiskDecomposer:
         all_returns = {}
         for ticker in tickers:
             try:
-                df = pd.read_parquet(_DATA_DIR / f'kr_{ticker}.parquet')
+                df = pd.read_parquet(_DATA_DIR / f"kr_{ticker}.parquet")
                 close = df['close'].tail(lookback + 1).values
                 if len(close) > lookback:
                     all_returns[ticker] = np.diff(close) / close[:-1]
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
         if len(all_returns) < 10:
             return None
@@ -194,7 +194,7 @@ class FactorRiskDecomposer:
             path = _RESULTS / 'factor_risk.json'
             _RESULTS.mkdir(exist_ok=True)
             atomic_write_json(path, result, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  📊 Factor Risk 저장: R²={result['r_squared']:.3f}, Sys={result['systematic_risk_pct']:.1f}%')
+            logger.info(f"  📊 Factor Risk 저장: R²={result['r_squared']:.3f}, Sys={result['systematic_risk_pct']:.1f}%")
         except Exception as e:
             logger.critical(f'Factor Risk 저장 실패: {e}', exc_info=True)
 

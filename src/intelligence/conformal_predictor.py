@@ -22,7 +22,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 
@@ -220,10 +220,10 @@ class SignalMetaCalibrator:
         try:
             self._model.fit(X, y)
             self._fitted = True
-            self._log.info(f'[Phase 74 Meta] 학습 완료: {len(self._history)}샘플')
+            self._log.info(f"[Phase 74 Meta] 학습 완료: {len(self._history)}샘플")
             return True
         except Exception as e:  # noqa: BLE001
-            self._log.warning(f'[Phase 74 Meta] 학습 실패: {e}')
+            self._log.warning(f"[Phase 74 Meta] 학습 실패: {e}")
             return False
 
     def calibrate(
@@ -243,8 +243,8 @@ class SignalMetaCalibrator:
                 float(rolling_vol),
             ]])
             cal = float(self._model.predict_proba(X)[0][1])
-            self._log.debug(f'  [Phase 74 Meta] {regime}: {confidence:.3f} → {cal:.3f}')
+            self._log.debug(f"  [Phase 74 Meta] {regime}: {confidence:.3f} → {cal:.3f}")
             return round(cal, 4)
         except Exception as e:  # noqa: BLE001
-            self._log.debug(f'  [Phase 74 Meta] calibrate 실패: {e}')
+            self._log.debug(f"  [Phase 74 Meta] calibrate 실패: {e}")
             return confidence

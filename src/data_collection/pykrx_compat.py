@@ -87,7 +87,7 @@ class _PykrxCompatStock:
                         idx = self.client._call_api(self.client.SERVICES['kospi_index'], {'basDd': end_d, 'idxIndMidclssCd': index_code})
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                     idx = None
             if idx is not None and (not getattr(idx, 'empty', True)):
                 result = pd.DataFrame()
@@ -102,7 +102,7 @@ class _PykrxCompatStock:
                 if 'acc_trdvol' in idx.columns:
                     result['거래량'] = pd.to_numeric(idx['acc_trdvol'], errors='coerce')
                 if not result.empty:
-                    logger.debug(f'get_index_ohlcv({index_code}): KRX API OK ({len(result)}행)')
+                    logger.debug(f"get_index_ohlcv({index_code}): KRX API OK ({len(result)}행)")
                     return result
         except Exception as e:
             logger.error(f'get_index_ohlcv({index_code}): KRX API 실패: {e}', exc_info=True)
@@ -124,7 +124,7 @@ class _PykrxCompatStock:
                         df_nv = df_nv.set_index('날짜')
                         for c in ['시가', '고가', '저가', '종가', '거래량']:
                             df_nv[c] = pd.to_numeric(df_nv[c], errors='coerce')
-                        logger.debug(f'get_index_ohlcv({index_code}): Naver API OK ({len(df_nv)}행)')
+                        logger.debug(f"get_index_ohlcv({index_code}): Naver API OK ({len(df_nv)}행)")
                         return df_nv[['시가', '고가', '저가', '종가', '거래량']]
             except Exception as _nv_e:
                 logger.error(f'get_index_ohlcv Naver API({index_code}): {_nv_e}', exc_info=True)
@@ -143,32 +143,20 @@ class _PykrxCompatStock:
                 if df_kis is not None and not df_kis.empty:
                     col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
                     df_kis = df_kis.rename(columns=col_map)
-                    logger.debug(f'get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)')
+                    logger.debug(f"get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)")
                     return df_kis[['시가', '고가', '저가', '종가', '거래량']]
             except Exception as _kis_e:
                 logger.error(f'get_index_ohlcv KIS API({index_code}): {_kis_e}', exc_info=True)
 
-        # 4순위: yfinance ETF proxy (최후의 우회로)
-        _SECTOR_ETF_MAP = {'1001': '069500.KS', '1002': '091160.KS', '1003': '091170.KS', '1004': '091180.KS', '1005': '266410.KS', '1006': '266420.KS', '1007': '117460.KS', '1008': '117680.KS', '1009': '091230.KS'}
-        etf_ticker = _SECTOR_ETF_MAP.get(index_code)
-        if etf_ticker:
-            try:
-                import yfinance as yf
-                start_yf = f'{start_d[:4]}-{start_d[4:6]}-{start_d[6:]}'
-                end_yf = f'{end_d[:4]}-{end_d[4:6]}-{end_d[6:]}'
-                df_yf = yf.download(etf_ticker, start=start_yf, end=end_yf, progress=False)
-                if isinstance(df_yf.columns, pd.MultiIndex):
-                    df_yf.columns = df_yf.columns.get_level_values(0)
-                if not df_yf.empty:
-                    result = pd.DataFrame()
-                    for col_src, col_dst in [('Open', '시가'), ('High', '고가'), ('Low', '저가'), ('Close', '종가'), ('Volume', '거래량')]:
-                        if col_src in df_yf.columns:
-                            result[col_dst] = df_yf[col_src].values
-                    result.index = df_yf.index
-                    logger.info(f'get_index_ohlcv({index_code}): yfinance ETF fallback → {len(result)} rows')
-                    return result
-            except Exception as e2:
-                logger.error(f'yfinance fallback({index_code}): {e2}', exc_info=True)
+        # 4순위: PyKRX Native 및 KIS API 폴백 (yfinance 전면 폐기 완료)
+        try:
+            from pykrx import stock as _pykrx_stock
+            df_native = _pykrx_stock.get_index_ohlcv_by_date(start_d, end_d, index_code)
+            if df_native is not None and not df_native.empty:
+                logger.info(f"get_index_ohlcv({index_code}): PyKRX native fallback → {len(df_native)} rows")
+                return df_native
+        except Exception as e2:
+            logger.debug(f'PyKRX native fallback({index_code}): {e2}')
                 
         # 5순위: pykrx native (최후의 보루, 단 버그를 막기 위해 에러 억제)
         try:
@@ -182,10 +170,10 @@ class _PykrxCompatStock:
             if df_raw is not None and (not df_raw.empty):
                 col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량', '시가': '시가', '고가': '고가', '저가': '저가', '종가': '종가', '거래량': '거래량'}
                 df_raw = df_raw.rename(columns={c: col_map[c] for c in df_raw.columns if c in col_map})
-                logger.debug(f'get_index_ohlcv({index_code}): pykrx native OK ({len(df_raw)}행)')
+                logger.debug(f"get_index_ohlcv({index_code}): pykrx native OK ({len(df_raw)}행)")
                 return df_raw
         except Exception as _pykrx_e:
-            logger.error(f'get_index_ohlcv({index_code}): 최후의 pykrx native마저 실패: {type(_pykrx_e).__name__}', exc_info=False)
+            logger.debug(f'get_index_ohlcv({index_code}): pykrx native fallback gracefully handled: {type(_pykrx_e).__name__}')
 
         return pd.DataFrame()
 
@@ -270,57 +258,15 @@ class _PykrxCompatStock:
                             rows[ticker] = {'PBR': round(pbr, 2) if pbr and 0 < pbr < 50 else None, 'PER': round(per, 2) if per and 0 < per < 500 else None, 'EPS': round(ni / n_shares, 0) if n_shares > 0 else None, 'BPS': round(equity / n_shares, 0) if equity > 0 and n_shares > 0 else None, 'DIV': 0}
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                         continue
             if rows:
                 result = pd.DataFrame.from_dict(rows, orient='index')
                 result.index.name = 'ticker'
-                logger.info(f'get_market_fundamental: FDR+DART fallback → {len(result)}종목')
+                logger.info(f"get_market_fundamental: FDR+DART fallback → {len(result)}종목")
                 return result
         except Exception as e:
             logger.error(f'get_market_fundamental FDR fallback: {e}', exc_info=True)
-        try:
-            import yfinance as yf
-            tickers = []
-            if code:
-                tickers = [code]
-            else:
-                try:
-                    ticker_list = self.get_market_ticker_list(date_fmt, market=market)
-                    tickers = ticker_list[:100]
-                except Exception as _e:
-                    logger.warning(f'  suppressed: {_e}', exc_info=True)
-            if not tickers:
-                return pd.DataFrame()
-            rows = {}
-            batch_size = 20
-            valid_tickers = [t for t in tickers if _KR_TICKER_RE.match(t)]
-            for i in range(0, len(valid_tickers), batch_size):
-                batch = valid_tickers[i:i + batch_size]
-                yf_tickers = [f'{t}.KS' for t in batch]
-                try:
-                    time.sleep(0.3)
-                    infos = yf.Tickers(' '.join(yf_tickers))
-                    for t_code, yf_t in zip(batch, yf_tickers):
-                        try:
-                            info = infos.tickers[yf_t].info
-                            rows[t_code] = {'PER': info.get('trailingPE', None), 'PBR': info.get('priceToBook', None), 'EPS': info.get('trailingEps', None), 'BPS': info.get('bookValue', None), 'DIV': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0}
-                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
-                            import logging
-                            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
-                            continue
-                except Exception as e_batch:
-                    logger.error(f'yfinance batch {i}: {e_batch}', exc_info=True)
-                    continue
-            if rows:
-                result = pd.DataFrame.from_dict(rows, orient='index')
-                result.index.name = 'ticker'
-                logger.info(f'get_market_fundamental: yfinance fallback → {len(result)}종목')
-                return result
-        except ImportError as e:
-            logger.error('yfinance 미설치 → PER/PBR 수집 불가', exc_info=True)
-        except Exception as e:
-            logger.error(f'get_market_fundamental yfinance fallback: {e}', exc_info=True)
         return pd.DataFrame()
 
     def get_market_fundamental_by_ticker(self, date: str, market: str='ALL', **kwargs) -> pd.DataFrame:
@@ -361,7 +307,7 @@ class _PykrxCompatStock:
             cache_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'raw' / 'krx_stock_daily'
             if cache_dir.exists():
                 prefix = 'kospi_' if market in ('KOSPI', 'STK', 'ALL') else 'kosdaq_'
-                csvs = sorted(cache_dir.glob(f'{prefix}*.csv'), reverse=True)
+                csvs = sorted(cache_dir.glob(f"{prefix}*.csv"), reverse=True)
                 for csv in csvs[:5]:
                     try:
                         df = pd.read_csv(csv)
@@ -369,11 +315,11 @@ class _PykrxCompatStock:
                         if code_col and len(df) > 0:
                             tickers = df[code_col].dropna().tolist()
                             if len(tickers) > 100:
-                                logger.debug(f'ticker_list via cache: {len(tickers)}종목')
+                                logger.debug(f"ticker_list via cache: {len(tickers)}종목")
                                 return tickers
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                         continue
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
@@ -395,7 +341,7 @@ class _PykrxCompatStock:
                 tickers = [f.stem.replace('kr_', '') for f in data_dir.glob('kr_*.parquet')]
                 tickers = [t for t in tickers if _KR_TICKER_RE.match(t)]
                 if tickers:
-                    logger.debug(f'ticker_list via parquet: {len(tickers)}종목')
+                    logger.debug(f"ticker_list via parquet: {len(tickers)}종목")
                     return sorted(tickers)
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)

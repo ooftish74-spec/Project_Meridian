@@ -43,7 +43,7 @@ def _cfg_get(key: str, default: float) -> float:
         return default
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return default
 
 def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
@@ -67,7 +67,7 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
         _atr_min = _cfg_get('risk_params.atr_min_pct', 0.005)
         _atr_max = _cfg_get('risk_params.atr_max_pct', 0.15)
         if atr_pct and isinstance(atr_pct, (int, float)) and (_atr_min <= atr_pct <= _atr_max):
-            logger.debug(f'  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (signal_cache)')
+            logger.debug(f"  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (signal_cache)")
             return float(atr_pct)
     atr_pct: Optional[float] = None
     atr_period = int(_cfg_get('exit.atr_period', 14))
@@ -101,7 +101,7 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
                     last_close = float(c.iloc[-1])
                     if last_close > 0 and atr_val > 0:
                         atr_pct = atr_val / last_close
-                        logger.debug(f'  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (parquet)')
+                        logger.debug(f"  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (parquet)")
                         break
                 except Exception as _e:
                     logger.critical(f'  [risk_params] ATR parquet [{ticker}] 실패: {_e}', exc_info=True)
@@ -113,7 +113,7 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
         vix = (market_data or {}).get('vix') or (market_data or {}).get('signal_cache', {}).get('vix')
         if vix is None or float(vix) <= 0:
             vix = float(_cfg_get('risk.vix_fallback', 18.0))
-            logger.warning(f'  ⚠️ [risk_params] ATR proxy 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})')
+            logger.warning(f"  ⚠️ [risk_params] ATR proxy 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})")
         else:
             vix = float(vix)
         try:
@@ -121,10 +121,10 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
             vol_proxy = float(vix) / 100.0 / math.sqrt(252)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             vol_proxy = 0.01
         atr_pct = vol_proxy * _cfg_get('exit.atr_vol_proxy_factor', 1.5)
-        logger.debug(f'  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (vix_proxy, VIX={vix})')
+        logger.debug(f"  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (vix_proxy, VIX={vix})")
     return max(_cfg_get('risk_params.atr_min_pct', 0.005), min(_cfg_get('risk_params.atr_max_pct', 0.15), atr_pct))
 
 def _compute_chandelier_mult(regime: str, vix: float=None) -> float:
@@ -171,7 +171,7 @@ def compute_dynamic_sl_tp(ticker: str, regime: str='caution', market_data: Optio
         vix = (market_data or {}).get('vix') or (market_data or {}).get('signal_cache', {}).get('vix')
         if vix is None or float(vix) <= 0:
             vix = float(_cfg_get('risk.vix_fallback', 18.0))
-            logger.warning(f'  ⚠️ [risk_params] {ticker} SSOT 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})')
+            logger.warning(f"  ⚠️ [risk_params] {ticker} SSOT 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})")
         else:
             vix = float(vix)
         atr_pct = _estimate_atr_pct(ticker, market_data)
@@ -181,7 +181,7 @@ def compute_dynamic_sl_tp(ticker: str, regime: str='caution', market_data: Optio
         tp_pct = atr_pct * tp_mult * 100
         sl_pct = max(_cfg_get('risk_params.sl_min_pct', 1.5), min(_cfg_get('risk_params.sl_max_pct', 20.0), sl_pct))
         tp_pct = max(_cfg_get('risk_params.tp_min_pct', 3.0), min(_cfg_get('risk_params.tp_max_pct', 40.0), tp_pct))
-        logger.debug(f'  [risk_params] {ticker} SSOT: ATR={atr_pct * 100:.2f}%, chandelier×{chan_mult:.2f} → SL={sl_pct:.2f}%, TP={tp_pct:.2f}% (regime={regime}, VIX={vix:.1f})')
+        logger.debug(f"  [risk_params] {ticker} SSOT: ATR={atr_pct * 100:.2f}%, chandelier×{chan_mult:.2f} → SL={sl_pct:.2f}%, TP={tp_pct:.2f}% (regime={regime}, VIX={vix:.1f})")
         return (round(sl_pct, 3), round(tp_pct, 3))
     except Exception as e:
         logger.error(f'  [risk_params] compute_dynamic_sl_tp({ticker}) 실패 — 기본값 SL={_DEFAULT_SL}%/TP={_DEFAULT_TP}% 사용: {e}', exc_info=True)

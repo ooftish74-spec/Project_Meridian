@@ -158,7 +158,7 @@ class AdaptiveThreshold:
         result = {'gap_min_us_change_pct': round(gap_threshold, 3), 'ois_long_threshold': round(ois_long, 3), 'ois_short_threshold': round(ois_short, 3), 'single_stock_min_score': round(single_min, 3), 'single_stock_max_inv_score': round(single_max_inv, 3), 'pcr_extreme_threshold': round(pcr_extreme_th, 3), 'vix_assurance_threshold': round(vix_assurance_th, 3), 'sentiment_risk_threshold': round(sentiment_thresholds['risk'], 3), 'sentiment_extreme_threshold': round(sentiment_thresholds['extreme'], 3), 'method': 'adaptive_v1', 'vix_scale_factor': round(vix_scale, 3), 'regime': regime, 'regime_adjustments': regime_adj, 'confidence': confidence, 'history_depth': n_ois, 'neutral_band_width': round(ois_long - ois_short, 3), 'timestamp': datetime.now().isoformat()}
         self._last_computed = result
         self._save_state()
-        logger.info(f'  🎯 AdaptiveThreshold: gap={gap_threshold:.3f}%, OIS=[{ois_short:.3f}, {ois_long:.3f}], VIX_scale={vix_scale:.2f}, conf={confidence}')
+        logger.info(f"  🎯 AdaptiveThreshold: gap={gap_threshold:.3f}%, OIS=[{ois_short:.3f}, {ois_long:.3f}], VIX_scale={vix_scale:.2f}, conf={confidence}")
         return result
 
     def get_last(self) -> Optional[Dict]:
@@ -344,7 +344,7 @@ class AdaptiveThreshold:
                         returns = close.pct_change().dropna() * 100
                         recent = returns.tail(self.PERCENTILE_WINDOW).tolist()
                         self._us_change_history = recent
-                        logger.info(f'  📊 Bootstrap US returns: {len(recent)}일 ({sp_path.name})')
+                        logger.info(f"  📊 Bootstrap US returns: {len(recent)}일 ({sp_path.name})")
                         break
             for vix_path in [_SIG_DIR / 'signal_vix.parquet', _DATA_DIR / 'us_vix.parquet', _DATA_DIR / 'cross_vix.parquet']:
                 if vix_path.exists():
@@ -356,7 +356,7 @@ class AdaptiveThreshold:
                         vix = pd.to_numeric(df['close'], errors='coerce').dropna()
                         recent = vix.tail(self.PERCENTILE_WINDOW).tolist()
                         self._vix_history = recent
-                        logger.info(f'  📊 Bootstrap VIX: {len(recent)}일 ({vix_path.name})')
+                        logger.info(f"  📊 Bootstrap VIX: {len(recent)}일 ({vix_path.name})")
                         break
             if self._us_change_history:
                 arr = self._us_change_history
@@ -364,9 +364,9 @@ class AdaptiveThreshold:
                 var = sum(((x - mu) ** 2 for x in arr)) / len(arr)
                 std = var ** 0.5 if var > 0 else 1.0
                 self._ois_history = [max(0, min(100, 50 + x / std * 15)) for x in arr]
-                logger.info(f'  📊 Bootstrap OIS (synthetic): {len(self._ois_history)}일')
+                logger.info(f"  📊 Bootstrap OIS (synthetic): {len(self._ois_history)}일")
         except Exception as e:
-            logger.warning(f'  Bootstrap 실패: {e}')
+            logger.warning(f"  Bootstrap 실패: {e}")
 
     def _save_state(self):
         """상태 영속화."""
@@ -376,7 +376,7 @@ class AdaptiveThreshold:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  State save failed: {e}')
+            logger.debug(f"  State save failed: {e}")
 
     def _load_state(self):
         """저장된 상태 복원."""
@@ -390,11 +390,11 @@ class AdaptiveThreshold:
             self._pcr_history = state.get('pcr_history', [])
             self._sentiment_history = state.get('sentiment_history', [])
             self._last_computed = state.get('last_computed')
-            logger.debug(f'  State restored: {len(self._ois_history)} OIS, {len(self._pcr_history)} PCR, {len(self._sentiment_history)} Sentiment')
+            logger.debug(f"  State restored: {len(self._ois_history)} OIS, {len(self._pcr_history)} PCR, {len(self._sentiment_history)} Sentiment")
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  State load failed: {e}')
+            logger.debug(f"  State load failed: {e}")
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     at = AdaptiveThreshold()
@@ -405,11 +405,11 @@ if __name__ == '__main__':
     scenarios = [('Low VIX + Bull', 12.0, 'bull'), ('Normal VIX + Caution', 18.0, 'caution'), ('High VIX + Bear', 28.0, 'bear'), ('Spike VIX + Crash', 40.0, 'crash')]
     for name, vix, regime in scenarios:
         result = at.compute(vix=vix, regime=regime, ois_current=50, us_change_current=0.5)
-        logger.info(f'\n── {name} (VIX={vix}, {regime}) ──')
-        logger.info(f'  Gap threshold:  {result['gap_min_us_change_pct']:.3f}%  (fixed: 0.500%)')
-        logger.info(f'  OIS long:       {result['ois_long_threshold']:.3f}  (fixed: 0.650)')
-        logger.info(f'  OIS short:      {result['ois_short_threshold']:.3f}  (fixed: 0.350)')
-        logger.info(f'  Neutral band:   {result['neutral_band_width']:.3f}  (fixed: 0.300)')
-        logger.info(f'  Single min:     {result['single_stock_min_score']:.3f}  (fixed: 0.600)')
-        logger.info(f'  VIX scale:      {result['vix_scale_factor']:.3f}')
-        logger.info(f'  Confidence:     {result['confidence']}')
+        logger.info(f"\n── {name} (VIX={vix}, {regime}) ──")
+        logger.info(f"  Gap threshold:  {result['gap_min_us_change_pct']:.3f}%  (fixed: 0.500%)")
+        logger.info(f"  OIS long:       {result['ois_long_threshold']:.3f}  (fixed: 0.650)")
+        logger.info(f"  OIS short:      {result['ois_short_threshold']:.3f}  (fixed: 0.350)")
+        logger.info(f"  Neutral band:   {result['neutral_band_width']:.3f}  (fixed: 0.300)")
+        logger.info(f"  Single min:     {result['single_stock_min_score']:.3f}  (fixed: 0.600)")
+        logger.info(f"  VIX scale:      {result['vix_scale_factor']:.3f}")
+        logger.info(f"  Confidence:     {result['confidence']}")

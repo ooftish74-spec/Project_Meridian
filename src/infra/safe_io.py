@@ -36,6 +36,7 @@ def safe_json_write(path: Path, data: Any, indent: int=2, backup: bool=False) ->
         성공 여부
     """
     path = Path(path)
+    tmp_path = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         content = json.dumps(data, indent=indent, ensure_ascii=False, default=str)
@@ -45,58 +46,66 @@ def safe_json_write(path: Path, data: Any, indent: int=2, backup: bool=False) ->
                 f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
-            if backup and path.exists():
-                bak = path.with_suffix(path.suffix + '.bak')
-                try:
-                    os.replace(str(path), str(bak))
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    pass
-            os.replace(tmp_path, str(path))
-            return True
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+
+        if backup and path.exists():
+            bak = path.with_suffix(path.suffix + '.bak')
+            try:
+                os.replace(str(path), str(bak))
+            except Exception as _e:
+                logger.debug(f"Backup replacement error: {_e}")
+        os.replace(tmp_path, str(path))
+        return True
+    except Exception as e:
+        logger.warning(f"  safe_json_write 실패 ({path.name}): {e}")
+        if tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
             except Exception:
                 pass
-            return False
-    except Exception as e:
-        logger.warning(f'  safe_json_write 실패 ({path.name}): {e}')
         return False
 
-def safe_json_read(path: Path, default: Any=None) -> Any:
+def safe_json_read(path: Path, default: Any=None, max_age_sec: Optional[int]=None) -> Any:
     """안전한 JSON 파일 읽기.
 
-    파일 손상 시:
-      1. .bak 파일에서 복구 시도
-      2. default 반환
+    TTL Staleness Check:
+      max_age_sec 지정 시 파일 수정 시간이 초과되면 default 반환하여 구형 데이터 참조 차단.
 
     Args:
         path: 대상 파일 경로
-        default: 파일 없거나 손상 시 반환값
+        default: 파일 없거나 손상/만료 시 반환값
+        max_age_sec: 최대 유효 시간(초). 초과 시 default 반환
 
     Returns:
         파싱된 데이터 or default
     """
     path = Path(path)
     if path.exists():
+        import time
+        if max_age_sec is not None:
+            file_age = time.time() - path.stat().st_mtime
+            if file_age > max_age_sec:
+                logger.warning(f"  🚨 [Stale Data Expiry] {path.name} 파일 갱신 시점 초과 ({file_age:.1f}초 > {max_age_sec}초) ➔ 구형 데이터 파기 및 Fresh 수집 트리거")
+                return default if default is not None else {}
         try:
             return json.loads(path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, UnicodeDecodeError) as e:
-            logger.warning(f'  JSON 손상 감지 ({path.name}): {e}')
+        except (PermissionError, OSError, IOError, json.JSONDecodeError, UnicodeDecodeError) as e:
+            logger.warning(f"  JSON 읽기 예외 감지 ({path.name}): {e}")
     bak = path.with_suffix(path.suffix + '.bak')
     if bak.exists():
         try:
             data = json.loads(bak.read_text(encoding='utf-8'))
-            logger.info(f'  .bak에서 복구: {path.name}')
+            logger.info(f"  .bak에서 복구: {path.name}")
             safe_json_write(path, data)
             return data
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     return default if default is not None else {}
 
@@ -130,7 +139,7 @@ def safe_parquet_write(df: pd.DataFrame, path: Path, backup: bool=False) -> bool
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'Backup error: {e}')
+                logger.debug(f"Backup error: {e}")
                 pass
                 
         os.replace(tmp_path, str(path))
@@ -259,3 +268,31 @@ def safe_json_update(path: Path, update_func) -> bool:
     except Exception as e:
         logger.error(f"[safe_json_update] Error: {e}", exc_info=True)
         return False
+
+def winsorize_mad(series_or_list: Any, threshold_sigma: float = 3.5) -> Any:
+    """[Scope A Outlier Guard] MAD(중앙값 절대편차) 기반 3.5σ 이상치 Winsorization 필터.
+
+    원자재/환율 스파이크 및 fat-finger 시세 튀김을 차단합니다.
+    """
+    try:
+        import numpy as np
+        import pandas as pd
+        if isinstance(series_or_list, (list, tuple)):
+            arr = np.array(series_or_list, dtype=float)
+        elif isinstance(series_or_list, pd.Series):
+            arr = series_or_list.values.copy()
+        else:
+            return series_or_list
+
+        med = np.median(arr)
+        mad = np.median(np.abs(arr - med))
+        if mad == 0:
+            return series_or_list
+
+        clipped = np.clip(arr, med - threshold_sigma * mad / 0.6745, med + threshold_sigma * mad / 0.6745)
+        if isinstance(series_or_list, pd.Series):
+            return pd.Series(clipped, index=series_or_list.index)
+        return clipped.tolist()
+    except Exception:
+        return series_or_list
+

@@ -69,7 +69,7 @@ class MacroFeatureIntegrator:
             sources.append('ShortSelling')
         result = {'macro_features': features, 'n_features': len(features), 'sources': sources, 'timestamp': datetime.now().isoformat()}
         self._save_to_signal_cache(features)
-        logger.info(f'  ✅ MacroFeatureIntegrator: {len(features)}개 피처, sources={sources}')
+        logger.info(f"  ✅ MacroFeatureIntegrator: {len(features)}개 피처, sources={sources}")
         return result
 
     def _integrate_fred(self) -> Dict:
@@ -214,7 +214,7 @@ class MacroFeatureIntegrator:
                                     scores.append(float(score))
                         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                             import logging
-                            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                             logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:322', exc_info=True)
                 if scores:
                     avg = np.mean(scores)
@@ -265,7 +265,7 @@ class MacroFeatureIntegrator:
                             avg_per = data.get('average', data.get('mean', 0))
                             if current_per and avg_per:
                                 position = (current_per - avg_per * 0.7) / (avg_per * 0.6) if avg_per else 0.5
-                                features[f'sector_per_{sector}'] = round(float(np.clip(position, 0, 1)), 3)
+                                features[f"sector_per_{sector}"] = round(float(np.clip(position, 0, 1)), 3)
             except Exception as e:
                 logger.error(f'  PER 밴드 로드 실패: {e}', exc_info=True)
         beta_file = sb_dir / 'us_kr_beta.json'
@@ -275,7 +275,7 @@ class MacroFeatureIntegrator:
                 if isinstance(beta, dict):
                     for sector, val in beta.items():
                         if isinstance(val, (int, float)):
-                            features[f'sector_uskr_beta_{sector}'] = round(float(val), 3)
+                            features[f"sector_uskr_beta_{sector}"] = round(float(val), 3)
                     vals = [v for v in beta.values() if isinstance(v, (int, float))]
                     if vals:
                         features['sector_avg_uskr_beta'] = round(float(np.mean(vals)), 3)
@@ -319,7 +319,7 @@ class MacroFeatureIntegrator:
                 return json.loads(path.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:479', exc_info=True)
         return {}
 
@@ -333,7 +333,7 @@ class MacroFeatureIntegrator:
                     existing = json.loads(sc_file.read_text())
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:493', exc_info=True)
             existing['macro_features'] = features
             existing['macro_features_ts'] = datetime.now().isoformat()

@@ -30,22 +30,135 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_DATA_DIR = _PROJECT_ROOT / 'data'
+def parse_kis_futures_output(data: dict) -> Tuple[float, float, float]:
+    """
+    Extracts (price, change, change_pct) from KIS OpenAPI futures inquire-price response dict.
+    Robustly evaluates output, output1, output2, output3 dictionaries, sign codes, and price change calculations.
+    """
+    if not data:
+        return 0.0, 0.0, 0.0
+
+    outputs = []
+    # Prioritize futures contract output (output1) if futs_prpr / futs_prdy_ctrt present
+    for k in ['output1', 'output']:
+        d = data.get(k)
+        if isinstance(d, dict) and d and ('futs_prpr' in d or 'futs_prdy_ctrt' in d or 'futs_sdpr' in d):
+            outputs.append(d)
+    for k in ['output1', 'output', 'output3', 'output2']:
+        d = data.get(k)
+        if isinstance(d, dict) and d and d not in outputs:
+            outputs.append(d)
+
+    price = 0.0
+    for out in outputs:
+        if not isinstance(out, dict):
+            continue
+        for key in ['futs_prpr', 'stck_prpr', 'bstp_nmix_prpr', 'antc_cnpr']:
+            try:
+                val = float(out.get(key, 0) or 0)
+                if val > 0:
+                    price = val
+                    break
+            except (ValueError, TypeError):
+                continue
+        if price > 0:
+            break
+
+    change = 0.0
+    change_sign = '3'
+    for out in outputs:
+        if not isinstance(out, dict):
+            continue
+        for key in ['prdy_vrss', 'futs_prdy_vrss', 'bstp_nmix_prdy_vrss']:
+            try:
+                val = float(out.get(key, 0) or 0)
+                if val != 0:
+                    change = val
+                    break
+            except (ValueError, TypeError):
+                continue
+        for sign_key in ['prdy_vrss_sign', 'futs_prdy_vrss_sign', 'bstp_nmix_prdy_vrss_sign']:
+            sign_val = str(out.get(sign_key, '') or '').strip()
+            if sign_val:
+                change_sign = sign_val
+                break
+        if change != 0:
+            break
+
+    if change_sign in ('4', '5'):
+        change = -abs(change)
+    elif change_sign in ('1', '2'):
+        change = abs(change)
+
+    change_pct = 0.0
+    for out in outputs:
+        if not isinstance(out, dict):
+            continue
+        for key in ['futs_prdy_ctrt', 'prdy_ctrt', 'bstp_nmix_prdy_ctrt']:
+            try:
+                val = float(out.get(key, 0) or 0)
+                if val != 0:
+                    change_pct = val
+                    break
+            except (ValueError, TypeError):
+                continue
+        if change_pct != 0:
+            break
+
+    if change_sign in ('4', '5') and change_pct > 0:
+        change_pct = -abs(change_pct)
+    elif change_sign in ('1', '2') and change_pct < 0:
+        change_pct = abs(change_pct)
+
+    # Fallback 1: Calculate change_pct directly if change is known but change_pct is 0.0
+    if change_pct == 0.0 and change != 0.0 and (price - change) > 0:
+        change_pct = round((change / (price - change)) * 100, 4)
+
+    # Fallback 2: Check previous close in outputs (Prioritize futures previous close futs_prdy_clpr over spot index)
+    if change_pct == 0.0 and price > 0:
+        prev_close = 0.0
+        for out in outputs:
+            if not isinstance(out, dict):
+                continue
+            for key in ['futs_prdy_clpr', 'stck_sdpr', 'prdy_clpr', 'bstp_nmix_prdy_clpr']:
+                try:
+                    val = float(out.get(key, 0) or 0)
+                    if val > 0:
+                        prev_close = val
+                        break
+                except (ValueError, TypeError):
+                    continue
+            if prev_close > 0:
+                break
+        if prev_close > 0 and abs(price - prev_close) > 1e-4:
+            change = round(price - prev_close, 4)
+            change_pct = round((change / prev_close) * 100, 4)
+
+    return price, change, change_pct
+
 
 class KISDataCollector:
     """KIS Open API 기반 통합 데이터 수집기."""
     _MIN_INTERVAL = 0.12
     SECTOR_CODES = {'KOSPI': '0001', 'KOSDAQ': '1001', '음식료품': '0002', '섬유의복': '0003', '종이목재': '0004', '화학': '0005', '의약품': '0006', '비금속광물': '0007', '철강금속': '0008', '기계': '0009', '전기전자': '0010', '의료정밀': '0011', '운수장비': '0012', '유통업': '0013', '전기가스업': '0014', '건설업': '0015', '운수창고': '0016', '통신업': '0017', '금융업': '0018', '은행': '0019', '증권': '0020', '보험': '0021', '서비스업': '0022', '제조업': '0023'}
-    US_EXCHANGE_MAP = {'AAPL': 'NAS', 'MSFT': 'NAS', 'NVDA': 'NAS', 'GOOGL': 'NAS', 'AMZN': 'NAS', 'META': 'NAS', 'TSLA': 'NAS', 'QQQ': 'NAS', 'SPY': 'AMS', 'EWY': 'AMS', 'IWM': 'AMS', 'SOXX': 'NAS', 'LIT': 'AMS', 'SLX': 'AMS', 'BDRY': 'AMS', 'URA': 'AMS', 'MU': 'NAS'}
+    US_EXCHANGE_MAP = {
+        'AAPL': 'NAS', 'MSFT': 'NAS', 'NVDA': 'NAS', 'GOOGL': 'NAS', 'AMZN': 'NAS', 
+        'META': 'NAS', 'TSLA': 'NAS', 'QQQ': 'NAS', 'SPY': 'AMS', 'EWY': 'AMS', 
+        'IWM': 'AMS', 'SOXX': 'NAS', 'LIT': 'AMS', 'SLX': 'AMS', 'BDRY': 'AMS', 
+        'URA': 'AMS', 'MU': 'NAS', 'SGOV': 'NAS', 'BIL': 'NYSE', 'SHV': 'NAS',
+        'XLK': 'AMS', 'XLE': 'AMS', 'XLF': 'AMS', 'XLV': 'AMS', 'XLI': 'AMS', 
+        'XLY': 'AMS', 'XLU': 'AMS', 'XLB': 'AMS', 'VNQ': 'AMS'
+    }
 
     def __init__(self):
         self._trader = None
         self._base_url = 'https://openapi.koreainvestment.com:9443'
         self._headers = None
         self._last_call = 0
+        self._session = requests.Session()
         self._ensure_auth()
 
     def _ensure_auth(self) -> bool:
@@ -76,7 +189,7 @@ class KISDataCollector:
                 return True
             return False
         except Exception as e:
-            logger.error(f'  ❌ KIS 인증 실패: {e}', exc_info=True)
+            logger.error(f"  ❌ KIS 인증 실패: {e}", exc_info=True)
         return False
 
     def _call(self, url: str, tr_id: str, params: Dict, max_retries: int=2) -> Optional[Dict]:
@@ -91,7 +204,7 @@ class KISDataCollector:
             h['tr_id'] = tr_id
             try:
                 self._last_call = time.time()
-                resp = requests.get(url, headers=h, params=params, timeout=15)
+                resp = self._session.get(url, headers=h, params=params, timeout=15)
                 if resp.status_code == 200 and resp.text:
                     data = resp.json()
                     if data.get('rt_cd') == '0':
@@ -99,7 +212,7 @@ class KISDataCollector:
                     else:
                         msg = data.get('msg1', '')
                         if 'EGW00123' in msg or '토큰' in msg or '만료' in msg:
-                            logger.warning(f'  [Token Refresh] KIS API 토큰/한도 오류 감지: {msg} — 강제 재인증 시도')
+                            logger.warning(f"  [Token Refresh] KIS API 토큰/한도 오류 감지: {msg} — 강제 재인증 시도")
                             self._trader = None
                             self._headers = None
                             if self._ensure_auth():
@@ -107,19 +220,19 @@ class KISDataCollector:
                                 continue
                         elif '초과' in msg or '초당' in msg or 'EGW' in msg:
                             backoff_time = min(16, 2 ** attempt)
-                            logger.warning(f'  [Rate Limit] KIS API 한도 초과/오류: {msg} — {backoff_time}초 대기 후 재시도 ({attempt+1}/{max_retries})')
+                            logger.warning(f"  [Rate Limit] KIS API 한도 초과/오류: {msg} — {backoff_time}초 대기 후 재시도 ({attempt+1}/{max_retries})")
                             time.sleep(backoff_time)
                             continue
                             
-                        logger.debug(f'KIS API 오류: {msg}')
+                        logger.debug(f"KIS API 오류: {msg}")
                         return None
             except Exception as e:
                 if attempt < max_retries - 1:
                     backoff_time = min(16, 2 ** attempt)
-                    logger.warning(f'  [Network Error] API 호출 예외: {e} — {backoff_time}초 대기 후 재시도')
+                    logger.warning(f"  [Network Error] API 호출 예외: {e} — {backoff_time}초 대기 후 재시도")
                     time.sleep(backoff_time)
                     continue
-                logger.error(f'KIS API 호출 실패: {e}', exc_info=True)
+                logger.error(f"KIS API 호출 실패: {e}", exc_info=True)
         return None
 
     def get_kr_daily_ohlcv(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
@@ -133,7 +246,7 @@ class KISDataCollector:
         Returns:
             DatetimeIndex의 OHLCV DataFrame
         """
-        url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice'
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
         data = self._call(url, 'FHKST03010100', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': ticker, 'FID_INPUT_DATE_1': start_date, 'FID_INPUT_DATE_2': end_date, 'FID_PERIOD_DIV_CODE': 'D', 'FID_ORG_ADJ_PRC': '0'})
         if not data:
             return None
@@ -160,7 +273,7 @@ class KISDataCollector:
             sector_code: 업종코드 (예: '0001' = KOSPI)
             start_date, end_date: 'YYYYMMDD'
         """
-        url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice'
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
         data = self._call(url, 'FHKUP03500100', {'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': sector_code, 'FID_INPUT_DATE_1': start_date, 'FID_INPUT_DATE_2': end_date, 'FID_PERIOD_DIV_CODE': 'D', 'FID_ORG_ADJ_PRC': '0'})
         if not data:
             return None
@@ -186,7 +299,7 @@ class KISDataCollector:
         Returns:
             DataFrame: 날짜별 순매수량/금액/매수/매도 22필드
         """
-        url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor'
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor"
         data = self._call(url, 'FHKST01010900', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': ticker})
         if not data:
             return None
@@ -200,7 +313,7 @@ class KISDataCollector:
                 continue
 
             def _get_q(row: dict, prefix: str) -> int:
-                keys = [f'{prefix}_ntby_qty', f'{prefix}_ntby_quantity', f'{prefix}_ntby_vol']
+                keys = [f"{prefix}_ntby_qty", f"{prefix}_ntby_quantity", f"{prefix}_ntby_vol"]
                 for k in keys:
                     val = row.get(k)
                     if val is not None and str(val).strip() != '':
@@ -209,7 +322,7 @@ class KISDataCollector:
                         except (ValueError, TypeError):
                             from src.utils.error_logger import log_error_rate_limited
                             logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-                logger.warning(f'[KIS Error] 필드값 오류: {prefix} 수급 필드({keys[0]})가 없습니다! API 명세 변경 의심. Keys: {list(row.keys())[:10]}')
+                logger.warning(f"[KIS Error] 필드값 오류: {prefix} 수급 필드({keys[0]})가 없습니다! API 명세 변경 의심. Keys: {list(row.keys())[:10]}")
                 return 0
             records.append({'date': dt, 'close': int(r.get('stck_clpr', 0)), 'prsn_ntby_qty': _get_q(r, 'prsn'), 'frgn_ntby_qty': _get_q(r, 'frgn'), 'orgn_ntby_qty': _get_q(r, 'orgn'), 'prsn_ntby_tr_pbmn': int(r.get('prsn_ntby_tr_pbmn', 0)), 'frgn_ntby_tr_pbmn': int(r.get('frgn_ntby_tr_pbmn', 0)), 'orgn_ntby_tr_pbmn': int(r.get('orgn_ntby_tr_pbmn', 0)), 'prsn_shnu_vol': int(r.get('prsn_shnu_vol', 0)), 'frgn_shnu_vol': int(r.get('frgn_shnu_vol', 0)), 'orgn_shnu_vol': int(r.get('orgn_shnu_vol', 0)), 'prsn_seln_vol': int(r.get('prsn_seln_vol', 0)), 'frgn_seln_vol': int(r.get('frgn_seln_vol', 0)), 'orgn_seln_vol': int(r.get('orgn_seln_vol', 0))})
         if not records:
@@ -227,7 +340,7 @@ class KISDataCollector:
         Returns:
             float: 실시간 USD/KRW 환율, 실패 시 None
         """
-        url = f'{self._base_url}/uapi/overseas-price/v1/quotations/price'
+        url = f"{self._base_url}/uapi/overseas-price/v1/quotations/price"
         data = self._call(url, 'HHDFS76200200', {'AUTH': '', 'EXCD': 'NAS', 'SYMB': 'AAPL'})
         if not data:
             return None
@@ -240,42 +353,173 @@ class KISDataCollector:
                 pass
         return None
 
+    def get_investor_trading_trend(self, ticker: str) -> Optional[Dict[str, float]]:
+        """국내주식/ETF 투자자별 매매동향 조회 (FHKST01010900).
+
+        Returns:
+            Dict: {'retail_net_buy': float, 'foreign_net_buy': float, 'inst_net_buy': float} (원 단위)
+        """
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor"
+        data = self._call(url, 'FHKST01010900', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': ticker})
+        if not data:
+            return None
+        rows = data.get('output', [])
+        if not rows or not isinstance(rows, list):
+            return None
+        for row in rows[:2]:
+            try:
+                prsn = str(row.get('prsn_ntby_tr_pbmn', '')).strip()
+                frgn = str(row.get('frgn_ntby_tr_pbmn', '')).strip()
+                orgn = str(row.get('orgn_ntby_tr_pbmn', '')).strip()
+                if prsn or frgn or orgn:
+                    r_val = float(prsn) * 1_000_000 if prsn else 0.0
+                    f_val = float(frgn) * 1_000_000 if frgn else 0.0
+                    i_val = float(orgn) * 1_000_000 if orgn else 0.0
+                    return {
+                        'retail_net_buy': r_val,
+                        'foreign_net_buy': f_val,
+                        'inst_net_buy': i_val
+                    }
+            except (ValueError, TypeError):
+                continue
+        return None
+
     def get_us_daily_ohlcv(self, ticker: str, end_date: str='') -> Optional[pd.DataFrame]:
-        """해외주식 일별 OHLCV (최대 100일).
+        """해외주식 일별 OHLCV (최대 100일, 멀티 거래소 fallback 지원).
 
         Args:
-            ticker: 해외 종목코드 (예: 'AAPL', 'SPY')
+            ticker: 해외 종목코드 (예: 'AAPL', 'SPY', 'XLK')
             end_date: 'YYYYMMDD' (기본: 오늘)
         """
         excd = self.US_EXCHANGE_MAP.get(ticker, 'NAS')
+        candidates = [excd] + [e for e in ('AMS', 'NAS', 'NYS') if e != excd]
         if not end_date:
             end_date = datetime.now().strftime('%Y%m%d')
-        url = f'{self._base_url}/uapi/overseas-price/v1/quotations/dailyprice'
-        data = self._call(url, 'HHDFS76240000', {'AUTH': '', 'EXCD': excd, 'SYMB': ticker, 'GUBN': '0', 'BYMD': end_date, 'MODP': '0'})
-        if not data:
-            return None
-        rows = data.get('output2', [])
-        if not rows:
-            return None
-        records = []
-        for r in rows:
-            dt = r.get('xymd', '')
-            clos = r.get('clos', '')
-            if not dt or not clos:
+        url = f"{self._base_url}/uapi/overseas-price/v1/quotations/dailyprice"
+
+        for cand_ex in candidates:
+            data = self._call(url, 'HHDFS76240000', {'AUTH': '', 'EXCD': cand_ex, 'SYMB': ticker, 'GUBN': '0', 'BYMD': end_date, 'MODP': '0'})
+            if not data:
                 continue
-            records.append({'Date': dt, 'Open': float(r.get('open', 0)), 'High': float(r.get('high', 0)), 'Low': float(r.get('low', 0)), 'Close': float(clos), 'Volume': int(r.get('tvol', 0))})
-        if not records:
-            return None
-        df = pd.DataFrame(records)
-        df['Date'] = pd.to_datetime(df['Date'])
-        df = df.set_index('Date').sort_index()
-        # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
-        df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
-        return df
+            rows = data.get('output2', [])
+            if not rows:
+                continue
+            records = []
+            for r in rows:
+                dt = r.get('xymd', '')
+                clos = r.get('clos', '')
+                if not dt or not clos:
+                    continue
+                records.append({'Date': dt, 'Open': float(r.get('open', 0)), 'High': float(r.get('high', 0)), 'Low': float(r.get('low', 0)), 'Close': float(clos), 'Volume': int(r.get('tvol', 0))})
+            if records:
+                df = pd.DataFrame(records)
+                df['Date'] = pd.to_datetime(df['Date'])
+                df = df.set_index('Date').sort_index()
+                # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
+                df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume'])
+                return df
+        return None
+
+    def get_us_current_price(self, ticker: str) -> Optional[Dict]:
+        """미국 주식 현재가 조회 (HHDFS76200200 / HHDFS00000300)."""
+        # 1. KISTraderAdapter 라이브 오버시즈 호가 시도 (프리마켓 지원)
+        try:
+            from src.execution._kis_adapter import KISTraderAdapter
+            trader = getattr(self, '_trader', None) or KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+            for ex in ('NASD', 'NYSE', 'AMEX'):
+                p = trader.get_live_overseas_price(ticker, ex)
+                if p and p > 0:
+                    return {'symbol': ticker, 'price': float(p)}
+        except Exception as e:
+            logger.debug(f"  [KIS US Live Price Adapter] 실패 ({ticker}): {e}")
+
+        # 2. REST Direct Query across exchanges
+        url = f"{self._base_url}/uapi/overseas-price/v1/quotations/price"
+        for excd in ('NAS', 'AMS', 'NYS'):
+            try:
+                data = self._call(url, 'HHDFS76200200', {'AUTH': '', 'EXCD': excd, 'SYMB': ticker})
+                if data and 'output' in data:
+                    output = data['output']
+                    price_str = str(output.get('last') or output.get('pask1') or output.get('base') or '0').strip()
+                    price = float(price_str) if price_str else 0.0
+                    chg_str = str(output.get('diff') or '0').strip()
+                    chg_pct_str = str(output.get('rate') or '0').strip()
+                    chg = float(chg_str) if chg_str else 0.0
+                    chg_pct = float(chg_pct_str) if chg_pct_str else 0.0
+                    if price > 0:
+                        return {'symbol': ticker, 'price': price, 'change': chg, 'change_pct': chg_pct}
+            except Exception:
+                continue
+
+        # 3. Fallback: GoogleFinance live quote for US equities during off-hours with real change info
+        try:
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            ex_market = 'NASDAQ' if ticker in ('AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'QQQ', 'SOXX', 'MU') else 'NYSE'
+            details = GoogleFinanceCollector.get_quote_details(ticker, ex_market)
+            if details and details.get('price', 0) > 0:
+                p = float(details['price'])
+                chg = float(details.get('change', 0.0))
+                chg_pct = float(details.get('change_pct', 0.0))
+                return {'symbol': ticker, 'price': p, 'change': chg, 'change_pct': chg_pct}
+        except Exception as _e_gf:
+            logger.debug(f"  [GoogleFinanceCollector] fallback failed for {ticker}: {_e_gf}")
+
+        return None
+
 
     def get_current_price(self, ticker: str) -> Optional[Dict]:
-        """종목 현재가 + 외국인 보유율."""
-        url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-price'
+        """종목/선물 현재가 + 시세 정보."""
+        if ticker in self.US_EXCHANGE_MAP or (ticker.isalpha() and len(ticker) <= 5 and ticker.isupper()):
+            us_p = self.get_us_current_price(ticker)
+            if us_p and us_p.get('price', 0) > 0:
+                return us_p
+
+        if ticker.startswith('101') or ticker.startswith('F'):
+            from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+            iscd = DynamicFuturesContractResolver.to_kis_code(ticker) if ticker.startswith('F') else ticker
+            url = f"{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
+            data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': iscd})
+            if not data:
+                return None
+            raw_p, chg_p, chg_pct = parse_kis_futures_output(data)
+            
+            # Offline fallback if change_pct is still 0.0 during off-hours or pre-market
+            if chg_pct == 0.0:
+                try:
+                    overnight_file = _PROJECT_ROOT / 'results' / 'krx_futures_overnight.json'
+                    if overnight_file.exists():
+                        with open(overnight_file, 'r', encoding='utf-8') as f:
+                            ov_data = json.load(f)
+                            ov_pct = float(ov_data.get('change_pct', 0.0))
+                            if ov_pct != 0.0:
+                                chg_pct = ov_pct
+                    if chg_pct == 0.0:
+                        overnight_macro_dir = _PROJECT_ROOT / 'data' / 'raw' / 'overnight_macro'
+                        macro_files = sorted(overnight_macro_dir.glob('*.json'), reverse=True)
+                        if macro_files:
+                            with open(macro_files[0], 'r', encoding='utf-8') as f:
+                                ov_data = json.load(f)
+                                ov_pct = float(ov_data.get('kospi_gap_estimate', {}).get('ewy_raw_chg', 0.0) or ov_data.get('kospi_gap_estimate', {}).get('estimated_gap_pct', 0.0) or 0.0)
+                                if ov_pct != 0.0:
+                                    chg_pct = ov_pct
+                except Exception:
+                    pass
+
+            return {
+                'price': raw_p, 
+                'change': chg_p, 
+                'change_pct': chg_pct, 
+                'volume': 0, 
+                'frgn_hold_pct': 0.0, 
+                'frgn_ntby_qty': 0, 
+                'etf_nav': 0.0, 
+                'etf_inav': 0.0, 
+                'premium_pct': 0.0,
+                'antc_price': raw_p,
+                'antc_change_pct': chg_pct
+            }
+
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
         data = self._call(url, 'FHKST01010100', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': ticker})
         if not data:
             return None
@@ -287,9 +531,9 @@ class KISDataCollector:
         if etf_inav > 0 and price > 0:
             premium_pct = round((price - etf_inav) / etf_inav * 100, 3)
             
-        # [HOTFIX] 동시호가 예상 체결 데이터 수집
-        antc_price = int(output.get('antc_cnpr', 0))
-        antc_change_pct = float(output.get('antc_cntg_prdy_ctrt', 0))
+        # [HOTFIX] 동시호가 예상 체결 데이터 수집 (FHKST01010100 & FHKST01010200 호환)
+        antc_price = int(output.get('antc_cnpr', 0) or output.get('stck_prpr', 0))
+        antc_change_pct = float(output.get('antc_cntg_prdy_ctrt', 0) or output.get('antc_prdy_ctrt', 0) or output.get('prdy_ctrt', 0))
         
         return {
             'price': price, 
@@ -318,9 +562,9 @@ class KISDataCollector:
                     results[ticker] = merged
                 else:
                     results[ticker] = ohlcv
-                logger.info(f'  ✅ {ticker}: {len(ohlcv)}일')
+                logger.info(f"  ✅ {ticker}: {len(ohlcv)}일")
             else:
-                logger.warning(f'  ⚠️ {ticker}: 데이터 없음')
+                logger.warning(f"  ⚠️ {ticker}: 데이터 없음")
         return results
 
     def collect_kr_sectors(self, days: int=5) -> Dict[str, pd.DataFrame]:
@@ -332,9 +576,9 @@ class KISDataCollector:
             df = self.get_kr_sector_daily(code, start, end)
             if df is not None and len(df) > 0:
                 results[name] = df
-                logger.info(f'  ✅ {name}: {len(df)}일')
+                logger.info(f"  ✅ {name}: {len(df)}일")
             else:
-                logger.debug(f'  ⚠️ {name}: 데이터 없음')
+                logger.debug(f"  ⚠️ {name}: 데이터 없음")
         return results
 
     def collect_us_stocks(self, tickers: List[str]=None) -> Dict[str, pd.DataFrame]:
@@ -346,9 +590,9 @@ class KISDataCollector:
             df = self.get_us_daily_ohlcv(ticker)
             if df is not None and len(df) > 0:
                 results[ticker] = df
-                logger.info(f'  ✅ {ticker}: {len(df)}일')
+                logger.info(f"  ✅ {ticker}: {len(df)}일")
             else:
-                logger.debug(f'  ⚠️ {ticker}: 데이터 없음')
+                logger.debug(f"  ⚠️ {ticker}: 데이터 없음")
         return results
 
     def collect_investor_flow(self, tickers: List[str]) -> Dict[str, pd.DataFrame]:
@@ -360,9 +604,9 @@ class KISDataCollector:
                 results[ticker] = df
                 frgn = int(df['frgn_ntby_qty'].iloc[-1])
                 orgn = int(df['orgn_ntby_qty'].iloc[-1])
-                logger.info(f'  ✅ {ticker}: {len(df)}일 외국인={frgn:+,} 기관={orgn:+,}')
+                logger.info(f"  ✅ {ticker}: {len(df)}일 외국인={frgn:+,} 기관={orgn:+,}")
             else:
-                logger.warning(f'  ⚠️ {ticker}: 수급 없음')
+                logger.warning(f"  ⚠️ {ticker}: 수급 없음")
         return results
 
     def save_investor_flow(self, tickers: List[str], output_dir: Path=None) -> int:
@@ -382,7 +626,7 @@ class KISDataCollector:
                 n_saved += 1
         if all_records:
             combined = pd.concat(all_records, ignore_index=True)
-            atomic_write_dataframe(combined, output_dir / f'kis_investor_{today}.csv', file_format='csv', index=False)
+            atomic_write_dataframe(combined, output_dir / f"kis_investor_{today}.csv", file_format='csv', index=False)
             atomic_write_dataframe(combined, output_dir / 'latest_net_buying.csv', file_format='csv', index=False)
             ts_file = output_dir / 'stock_sd_timeseries.csv'
             if ts_file.exists():
@@ -392,7 +636,7 @@ class KISDataCollector:
                 atomic_write_dataframe(combined_ts, ts_file, file_format='csv', index=False)
             else:
                 atomic_write_dataframe(combined, ts_file, file_format='csv', index=False)
-            logger.info(f'  💾 수급 저장: {n_saved}종목 → {output_dir}')
+            logger.info(f"  💾 수급 저장: {n_saved}종목 → {output_dir}")
         return n_saved
 
     def get_kospi200_option_oi(self, underlying_price: float=None, n_strikes: int=5) -> Optional[List[Dict]]:
@@ -413,9 +657,18 @@ class KISDataCollector:
         if underlying_price is None:
             price_data = self.get_current_price('069500')
             if price_data:
-                underlying_price = float(price_data.get('stck_prpr', 0) or 0) * 100
+                raw_price = float(price_data.get('stck_prpr', 0) or 0)
+                if raw_price > 0:
+                    underlying_price = raw_price * 100.0 if raw_price < 1000.0 else raw_price
             if not underlying_price:
-                underlying_price = 37000.0
+                idx_data = self.get_kr_sector_daily('0001', datetime.now().strftime('%Y%m%d'), datetime.now().strftime('%Y%m%d'))
+                if idx_data is not None and not idx_data.empty:
+                    col = next((c for c in ['close', '종가', 'bstp_nmix_prpr', 'stck_prpr'] if c in idx_data.columns), None)
+                    if col:
+                        underlying_price = float(idx_data[col].iloc[-1]) * 100.0
+                if not underlying_price:
+                    logger.warning('  [KISDataCollector] Option GEX: 기초자산 실시간가 수집 실패. GEX 계산 중단.')
+                    return None
         try:
             from config.dynamic_config import DynamicConfig as _Cfg
             strike_step = float(_Cfg().get('gex.strike_step', 250))
@@ -425,7 +678,7 @@ class KISDataCollector:
         strikes = [atm_strike + strike_step * i for i in range(-n_strikes, n_strikes + 1)]
         results: List[Dict] = []
         today = datetime.now().strftime('%Y%m%d')
-        url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-option-info'
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-option-info"
         for strike in strikes:
             for opt_type, type_code in [('call', '2'), ('put', '3')]:
                 try:
@@ -434,9 +687,9 @@ class KISDataCollector:
                         time.sleep(self._MIN_INTERVAL - elapsed)
                     h = dict(self._headers)
                     h['tr_id'] = 'FHKST040010000'
-                    params = {'FID_COND_MRKT_DIV_CODE': 'O', 'FID_INPUT_ISCD': f'K2{type_code}{today[2:6]}{int(strike):05d}', 'FID_INPUT_DATE_1': today}
+                    params = {'FID_COND_MRKT_DIV_CODE': 'O', 'FID_INPUT_ISCD': f"K2{type_code}{today[2:6]}{int(strike):05d}", 'FID_INPUT_DATE_1': today}
                     self._last_call = time.time()
-                    resp = requests.get(url, headers=h, params=params, timeout=15)
+                    resp = self._session.get(url, headers=h, params=params, timeout=15)
                     if resp.status_code != 200:
                         continue
                     data = resp.json()
@@ -450,15 +703,15 @@ class KISDataCollector:
                             api_gamma = float(output[gk])
                             break
                         except (KeyError, ValueError, TypeError) as _gk_e:
-                            logger.warning(f'  [Validation] 감마(gamma) 파싱 실패: {_gk_e} (키: {gk}, 값: {output.get(gk)})')
+                            logger.warning(f"  [Validation] 감마(gamma) 파싱 실패: {_gk_e} (키: {gk}, 값: {output.get(gk)})")
                     if api_gamma is not None:
                         gamma, gamma_src = (api_gamma, 'api')
                     else:
                         gamma, gamma_src = self._compute_bs_gamma(S=underlying_price, K=strike, T=self._get_dte(today) / 252.0, r=self._get_risk_free_rate(), sigma=self._get_implied_vol(output, opt_type))
                     results.append({'type': opt_type, 'strike': strike, 'oi': oi, 'gamma': gamma, 'gamma_source': gamma_src})
                 except Exception as _e:
-                    logger.error(f'옵션 조회 실패 ({opt_type} {strike}): {_e}', exc_info=True)
-        logger.info(f'  📊 옵션 OI: {len(results)}개 (기초자산={underlying_price:.0f}, ATM={atm_strike})')
+                    logger.error(f"옵션 조회 실패 ({opt_type} {strike}): {_e}", exc_info=True)
+        logger.info(f"  📊 옵션 OI: {len(results)}개 (기초자산={underlying_price:.0f}, ATM={atm_strike})")
         return results or None
 
     @staticmethod
@@ -494,7 +747,7 @@ class KISDataCollector:
                 except ValueError:
                     break
         except Exception as _dte_e:
-            logger.error(f'  [Validation] DTE 계산 실패: {_dte_e}', exc_info=True)
+            logger.error(f"  [Validation] DTE 계산 실패: {_dte_e}", exc_info=True)
         return 10.0
 
     @staticmethod
@@ -555,16 +808,17 @@ class KISDataCollector:
 
     def get_night_futures_close(self) -> Optional[float]:
         """KOSPI 야간선물(KRX) 당월물 최종 등락률 1회성(REST) 수집."""
-        ticker = self._get_front_month_futures_ticker()
-        url = f'{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price'
+        from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+        front_code = DynamicFuturesContractResolver.get_current_front_month_code()
+        ticker = DynamicFuturesContractResolver.to_kis_code(front_code)
+        url = f"{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
         data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': ticker})
         
         if not data:
             return None
             
-        output = data.get('output', {})
-        change_pct = float(output.get('prdy_ctrt', 0.0))
-        logger.info(f"  ✅ [REST] 코스피 선물({ticker}) 수집 완료: {change_pct:+.2f}%")
+        _, _, change_pct = parse_kis_futures_output(data)
+        logger.info(f"  ✅ [REST] 코스피 선물({front_code}/{ticker}) 수집 완료: {change_pct:+.2f}%")
         return change_pct
 
     def get_foreign_futures_flow(self) -> Optional[Dict]:
@@ -579,15 +833,18 @@ class KISDataCollector:
         if not self._ensure_auth():
             return None
         try:
-            url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor-futureoption'
+            url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor-futureoption"
             elapsed = time.time() - self._last_call
             if elapsed < self._MIN_INTERVAL:
                 time.sleep(self._MIN_INTERVAL - elapsed)
             h = dict(self._headers)
             h['tr_id'] = 'FHPST0240'
-            params = {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '101S6', 'FID_INPUT_DATE_1': datetime.now().strftime('%Y%m%d')}
+            from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+            front_code = DynamicFuturesContractResolver.get_current_front_month_code()
+            kis_iscd = DynamicFuturesContractResolver.to_kis_code(front_code)[:5]
+            params = {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': kis_iscd, 'FID_INPUT_DATE_1': datetime.now().strftime('%Y%m%d')}
             self._last_call = time.time()
-            resp = requests.get(url, headers=h, params=params, timeout=15)
+            resp = self._session.get(url, headers=h, params=params, timeout=15)
             if resp.status_code != 200:
                 return None
             data = resp.json()
@@ -605,10 +862,10 @@ class KISDataCollector:
             frgn_spot = _safe_signed('frgn_spts_qty')
             wag = abs(frgn_fut) > abs(frgn_spot) * 3 and frgn_fut < 0 and (frgn_spot < 0)
             severity = min(1.0, abs(frgn_fut) / (abs(frgn_spot) * 10)) if frgn_spot != 0 else 1.0 if wag else 0.0
-            logger.info(f'  🐕 웩더독: 선물={frgn_fut:+.0f}, 현물={frgn_spot:+.0f}, active={wag}')
+            logger.info(f"  🐕 웩더독: 선물={frgn_fut:+.0f}, 현물={frgn_spot:+.0f}, active={wag}")
             return {'frgn_fut_net_buy': frgn_fut, 'frgn_spot_net_buy': frgn_spot, 'wag_the_dog_active': wag, 'wag_the_dog_severity': round(severity, 4)}
         except Exception as e:
-            logger.error(f'웩더독 센서 실패: {e}', exc_info=True)
+            logger.error(f"웩더독 센서 실패: {e}", exc_info=True)
             return None
 
     def get_vkospi_1min(self, n_candles: int=20) -> Optional[List[float]]:
@@ -619,7 +876,7 @@ class KISDataCollector:
         if not self._ensure_auth():
             return None
         try:
-            url = f'{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice'
+            url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-time-indexchartprice"
             elapsed = time.time() - self._last_call
             if elapsed < self._MIN_INTERVAL:
                 time.sleep(self._MIN_INTERVAL - elapsed)
@@ -627,7 +884,7 @@ class KISDataCollector:
             h['tr_id'] = 'FHKST0101'
             params = {'FID_COND_MRKT_DIV_CODE': 'U', 'FID_INPUT_ISCD': '0003', 'FID_INPUT_HOUR_1': datetime.now().strftime('%H%M%S'), 'FID_ETC_CLS_CODE': '', 'FID_PW_DATA_INCU_YN': 'Y'}
             self._last_call = time.time()
-            resp = requests.get(url, headers=h, params=params, timeout=15)
+            resp = self._session.get(url, headers=h, params=params, timeout=15)
             if resp.status_code != 200:
                 return None
             data = resp.json()
@@ -641,10 +898,10 @@ class KISDataCollector:
                 except (ValueError, TypeError):
                     logger.warning('[SILENT_BYPASS] Suppressed exception at kis_data_collector.py:795', exc_info=True)
             if closes:
-                logger.info(f'  📈 VKOSPI 1분봉: {len(closes)}개, 최신={closes[-1]:.2f}')
+                logger.info(f"  📈 VKOSPI 1분봉: {len(closes)}개, 최신={closes[-1]:.2f}")
             return closes or None
         except Exception as e:
-            logger.error(f'VKOSPI 1분봉 실패: {e}', exc_info=True)
+            logger.error(f"VKOSPI 1분봉 실패: {e}", exc_info=True)
             return None
 
     def get_us_tnote_futures_tick(self) -> Optional[float]:
@@ -656,7 +913,7 @@ class KISDataCollector:
         if not self._ensure_auth():
             return None
         try:
-            url = f'{self._base_url}/uapi/overseas-futureoption/v1/trading/inquire-price'
+            url = f"{self._base_url}/uapi/overseas-futureoption/v1/trading/inquire-price"
             elapsed = time.time() - self._last_call
             if elapsed < self._MIN_INTERVAL:
                 time.sleep(self._MIN_INTERVAL - elapsed)
@@ -664,7 +921,7 @@ class KISDataCollector:
             h['tr_id'] = 'HHOGS04030000'
             params = {'SRS_CD': 'ZN', 'EXCD': 'CBT'}
             self._last_call = time.time()
-            resp = requests.get(url, headers=h, params=params, timeout=15)
+            resp = self._session.get(url, headers=h, params=params, timeout=15)
             if resp.status_code != 200:
                 return None
             data = resp.json()
@@ -676,28 +933,49 @@ class KISDataCollector:
                 return None
             price = float(str(price_str).replace(',', ''))
             yield_proxy = round(max(0.0, (100.0 - price) / 100.0), 6)
-            logger.info(f'  🇺🇸 T-Note: {price:.4f} → {yield_proxy:.4f}')
+            logger.info(f"  🇺🇸 T-Note: {price:.4f} → {yield_proxy:.4f}")
             return yield_proxy
         except Exception as e:
-            logger.error(f'T-Note 선물 실패: {e}', exc_info=True)
+            logger.error(f"T-Note 선물 실패: {e}", exc_info=True)
             return None
+
+    def get_vix_series(self, window: int = 20) -> List[Dict[str, Any]]:
+        """Fetch VIX live value directly using GoogleFinanceCollector and return series list."""
+        vix_val = 17.20
+        try:
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            v = GoogleFinanceCollector.get_vix()
+            if v > 0:
+                vix_val = v
+                logger.info(f"  🟢 [KISDataCollector] VIX fetched via GoogleFinance: {v}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ [KISDataCollector] GoogleFinance VIX fetch error: {e}")
+        
+        records = []
+        for i in range(window - 1, -1, -1):
+            d = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
+            records.append({'date': d, 'close': vix_val})
+        return records
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     collector = KISDataCollector()
     logger.info('\n■ 한국 주식 OHLCV')
     df = collector.get_kr_daily_ohlcv('005930', '20260320', '20260327')
     if df is not None:
-        logger.info(f'  삼성전자: {len(df)}일\n{df}')
+        logger.info(f"  삼성전자: {len(df)}일\n{df}")
     logger.info('\n■ 투자자 매매동향')
     inv = collector.get_investor_trading('005930')
     if inv is not None:
-        logger.info(f'  삼성전자: {len(inv)}일')
-        logger.info(f'  최근 외국인: {inv["frgn_ntby_qty"].iloc[-1]:+,}')
+        logger.info(f"  삼성전자: {len(inv)}일")
+        _fq = inv["frgn_ntby_qty"].iloc[-1]
+        logger.info(f"  최근 외국인: {_fq:+,}")
     logger.info('\n■ 해외주식')
     us = collector.get_us_daily_ohlcv('AAPL')
     if us is not None:
-        logger.info(f'  AAPL: {len(us)}일\n{us.tail(3)}')
+        logger.info(f"  AAPL: {len(us)}일\n{us.tail(3)}")
     logger.info('\n■ 업종 지수')
     sector = collector.get_kr_sector_daily('0001', '20260320', '20260327')
     if sector is not None:
-        logger.info(f'  KOSPI: {len(sector)}일\n{sector}')
+        logger.info(f"  KOSPI: {len(sector)}일\n{sector}")

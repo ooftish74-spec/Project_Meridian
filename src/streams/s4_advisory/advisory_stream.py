@@ -54,7 +54,7 @@ class S4AdvisoryStream(BaseStream):
         if cfg.get('s4.ic_auto_deactivation_enabled', True):
             _ic_deactivated, _ic_reason = self._check_ic_deactivation()
             if _ic_deactivated:
-                logger.warning(f'  ⚠️ S4 IC 자동 비활성화: {_ic_reason} — 신호 생성 중단')
+                logger.warning(f"  ⚠️ S4 IC 자동 비활성화: {_ic_reason} — 신호 생성 중단")
                 self._log_event('IC_DEACTIVATION', {'reason': _ic_reason, 'regime': regime})
                 return []
         signals = []
@@ -65,7 +65,7 @@ class S4AdvisoryStream(BaseStream):
         _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR 금리액티브')
         if defense_ratio > 0:
             for _acct in self.ACCOUNTS.keys():
-                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f'{_kofr_name} (연속 방어)', 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': cfg.get('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f'연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)', 'timestamp': datetime.now().isoformat()})
+                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': cfg.get('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})
         market_data = dict(market_data)
         market_data['s4_defense_ratio'] = defense_ratio
         try:
@@ -73,11 +73,11 @@ class S4AdvisoryStream(BaseStream):
             _macro_cycle = _af_s4.get('macro_cycle', 'Expansion')
             market_data['alpha_macro_cycle'] = _macro_cycle
             if _macro_cycle in ('Recession', 'Downturn'):
-                logger.warning(f'  🧬 [Alpha Factory] S4 Macro Cycle={_macro_cycle} → QV Decay 임계값 엄격화 모드 활성화')
+                logger.warning(f"  🧬 [Alpha Factory] S4 Macro Cycle={_macro_cycle} → QV Decay 임계값 엄격화 모드 활성화")
         except Exception as _s4_af_e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_s4_af_e}", exc_info=True)
-            logger.debug(f'  [Alpha Factory] S4 macro_cycle 파싱 실패 (무시): {_s4_af_e}')
+            logger.debug(f"  [Alpha Factory] S4 macro_cycle 파싱 실패 (무시): {_s4_af_e}")
         for acct_name, acct_cfg in self.ACCOUNTS.items():
             acct_signals = self._generate_account_advisory(acct_name, acct_cfg, regime, market_data)
             filtered_signals = []
@@ -89,7 +89,8 @@ class S4AdvisoryStream(BaseStream):
                 if _tax_alpha > _expected_friction:
                     filtered_signals.append(sig)
                 else:
-                    logger.debug(f'  [Tax-Alpha] {acct_name} {sig.get('ticker')} Tax-Alpha({_tax_alpha:.4f}) <= Friction({_expected_friction:.4f}) → 리밸런싱 스킵')
+                    _tk_str = sig.get('ticker', '')
+                    logger.debug(f"  [Tax-Alpha] {acct_name} {_tk_str} Tax-Alpha({_tax_alpha:.4f}) <= Friction({_expected_friction:.4f}) -> 리밸런싱 스킵")
             signals.extend(filtered_signals)
         self._drip_projections = self._estimate_drip()
         if signals:
@@ -100,7 +101,7 @@ class S4AdvisoryStream(BaseStream):
                 exporter = AdvisoryExporter()
                 exporter.export(signals, regime, confidence)
             except Exception as e:
-                logger.error(f'  AdvisoryExporter 호출 실패: {e}')
+                logger.error(f"  AdvisoryExporter 호출 실패: {e}")
         return signals
 
     def _generate_account_advisory(self, acct_name: str, acct_cfg: Dict, regime: str, market_data: Dict) -> List[Dict]:
@@ -120,7 +121,7 @@ class S4AdvisoryStream(BaseStream):
         total_pct = 1.0 - market_data.get('s4_defense_ratio', 0.0)
         etf_signals = self._generate_etf_signals('ISA', self._isa_dividend_etf_mix(regime, total_pct), regime)
         signals.extend(etf_signals)
-        logger.info(f'  S4 ISA: 고배당 ETF {len(etf_signals)}종목(100%) [conf={confidence:.2f}]')
+        logger.info(f"  S4 ISA: 고배당 ETF {len(etf_signals)}종목(100%) [conf={confidence:.2f}]")
         return signals
 
     def _isa_dividend_etf_mix(self, regime: str, total_pct: float) -> List:
@@ -144,7 +145,7 @@ class S4AdvisoryStream(BaseStream):
         total_pct = 1.0 - market_data.get('s4_defense_ratio', 0.0)
         etf_signals = self._generate_etf_signals('IRP', self._irp_etf_mix(regime, total_pct), regime)
         signals.extend(etf_signals)
-        logger.info(f'  S4 IRP: IRP 동적 스위칭 ETF {len(etf_signals)}종목 [conf={confidence:.2f}] [Phase 67]')
+        logger.info(f"  S4 IRP: IRP 동적 스위칭 ETF {len(etf_signals)}종목 [conf={confidence:.2f}] [Phase 67]")
         return signals
 
     def _generate_pension_growth(self, regime: str, market_data: Dict) -> List[Dict]:
@@ -154,7 +155,7 @@ class S4AdvisoryStream(BaseStream):
         total_pct = 1.0 - market_data.get('s4_defense_ratio', 0.0)
         etf_signals = self._generate_etf_signals('PENSION', self._pension_etf_mix(regime, confidence, total_pct), regime)
         signals.extend(etf_signals)
-        logger.info(f'  S4 PENSION: 연금 특화 ETF {len(etf_signals)}종목 [conf={confidence:.2f}]')
+        logger.info(f"  S4 PENSION: 연금 특화 ETF {len(etf_signals)}종목 [conf={confidence:.2f}]")
         return signals
 
     def _generate_etf_signals(self, account: str, etf_list: List, regime: str) -> List[Dict]:
@@ -179,7 +180,7 @@ class S4AdvisoryStream(BaseStream):
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  Alpha Factory 신호 로드 실패: {e}')
+            logger.debug(f"  Alpha Factory 신호 로드 실패: {e}")
         is_retirement_acct = account in ('IRP', 'PENSION')
         max_bond_ratio = cfg.get('s4.max_bond_ratio', 0.3)
         bond_total = 0.0
@@ -188,14 +189,16 @@ class S4AdvisoryStream(BaseStream):
             if not etf_info:
                 continue
             if is_retirement_acct and (not etf_info.get('retirement_eligible', True)):
-                logger.warning(f'  ❌ {account} 퇴직연금 편입불가: {etf_info.get('name', etf_key)} (파생상품 위험평가액 >40%, 선물형 ETF) → 스킵')
+                _etf_nm = etf_info.get('name', etf_key)
+                logger.warning(f"  ❌ {account} 퇴직연금 편입불가: {_etf_nm} (파생상품 위험평가액 >40%, 선물형 ETF) -> 스킵")
                 continue
             is_risky = etf_info.get('risk') == 'risky'
             if is_risky:
                 if risky_total + sub_weight > risk_limit:
                     remaining_room = max(0.0, risk_limit - risky_total)
                     if remaining_room < 0.01:
-                        logger.info(f'  ⚠️ {account} 위험자산 한도 초과: {etf_info.get('name', etf_key)} 스킵 (누적 {risky_total:.0%}/{risk_limit:.0%})')
+                        _etf_nm2 = etf_info.get('name', etf_key)
+                        logger.info(f"  ⚠️ {account} 위험자산 한도 초과: {_etf_nm2} 스킵 (누적 {risky_total:.0%}/{risk_limit:.0%})")
                         continue
                     sub_weight = remaining_room
                 risky_total += sub_weight
@@ -204,7 +207,8 @@ class S4AdvisoryStream(BaseStream):
                 if bond_total + sub_weight > max_bond_ratio:
                     remaining_bond = max(0.0, max_bond_ratio - bond_total)
                     if remaining_bond < 0.01:
-                        logger.info(f'  ⚠️ {account} 채권 비중 상한 초과: {etf_info.get('name', etf_key)} 스킵 (누적 {bond_total:.0%}/{max_bond_ratio:.0%})')
+                        _etf_nm3 = etf_info.get('name', etf_key)
+                        logger.info(f"  ⚠️ {account} 채권 비중 상한 초과: {_etf_nm3} 스킵 (누적 {bond_total:.0%}/{max_bond_ratio:.0%})")
                         continue
                     sub_weight = remaining_bond
                 bond_total += sub_weight
@@ -217,17 +221,18 @@ class S4AdvisoryStream(BaseStream):
                 _etf_confidence = _base_conf + _regime_adj + _momentum_w * _momentum_score
                 if is_contagion:
                     dynamic_shift = min(0.35, cfg.get('s4.contagion_base_shift', 0.1) * contagion_severity)
+                    _etf_nm4 = etf_info.get('name', etf_key)
                     if etf_info.get('type') in ('BOND', 'SAFE'):
                         _etf_confidence += dynamic_shift
-                        logger.info(f'  🚨 매크로 붕괴 감지: {etf_info.get('name')} (안전자산) Confidence 부스트 (+{dynamic_shift:.3f})')
+                        logger.info(f"  🚨 매크로 붕괴 감지: {_etf_nm4} (안전자산) Confidence 부스트 (+{dynamic_shift:.3f})")
                     else:
                         _etf_confidence -= dynamic_shift
-                        logger.info(f'  🚨 매크로 붕괴 감지: {etf_info.get('name')} (위험자산) Confidence 페널티 (-{dynamic_shift:.3f})')
+                        logger.info(f"  🚨 매크로 붕괴 감지: {_etf_nm4} (위험자산) Confidence 페널티 (-{dynamic_shift:.3f})")
                 _etf_confidence = max(0.2, min(0.9, _etf_confidence))
             else:
                 _etf_confidence = _base_conf
             prefix = '[수동매매/Advisory] ' if account in ('ISA', 'IRP', 'PENSION') else ''
-            signals.append({'stream_id': 'S4', 'ticker': etf_info.get('ticker', etf_key), 'name': etf_info.get('name', etf_key), 'direction': 'long', 'confidence': round(_etf_confidence, 3), 'size_pct': round(sub_weight, 4), 'strategy': 'advisory', 'account': account, 'div_pct': etf_info.get('div_pct', 0), 'etf_type': etf_info.get('type', 'GLOBAL'), 'reason': f'{prefix}{account} 월간 리밸런싱 ({regime})', 'timestamp': datetime.now().isoformat()})
+            signals.append({'stream_id': 'S4', 'ticker': etf_info.get('ticker', etf_key), 'name': etf_info.get('name', etf_key), 'direction': 'long', 'confidence': round(_etf_confidence, 3), 'size_pct': round(sub_weight, 4), 'strategy': 'advisory', 'account': account, 'div_pct': etf_info.get('div_pct', 0), 'etf_type': etf_info.get('type', 'GLOBAL'), 'reason': f"{prefix}{account} 월간 리밸런싱 ({regime})", 'timestamp': datetime.now().isoformat()})
         return signals
 
     def _isa_etf_fallback(self, regime: str) -> List:
@@ -235,7 +240,7 @@ class S4AdvisoryStream(BaseStream):
         _r = 'bear' if regime in ('bear', 'crash') else regime
         if _r not in ('bull', 'caution'):
             _r = 'caution'
-        return [('kodex_us_dividend', cfg.get(f's4.isa_fb.{_r}.kodex_us_dividend', 0.25)), ('tiger_covered_call', cfg.get(f's4.isa_fb.{_r}.tiger_covered_call', 0.2 if _r == 'bear' else 0.25)), ('kodex_dividend', cfg.get(f's4.isa_fb.{_r}.kodex_dividend', 0.15 if _r == 'bear' else 0.2)), ('tiger_us_dividend', cfg.get(f's4.isa_fb.{_r}.tiger_us_dividend', 0.1 if _r == 'bear' else 0.15)), ('kr_bond', cfg.get(f's4.isa_fb.{_r}.kr_bond', 0.2 if _r == 'bear' else 0.1)), ('gold', cfg.get(f's4.isa_fb.{_r}.gold', 0.1 if _r == 'bear' else 0.05))]
+        return [('kodex_us_dividend', cfg.get(f"s4.isa_fb.{_r}.kodex_us_dividend", 0.25)), ('tiger_covered_call', cfg.get(f"s4.isa_fb.{_r}.tiger_covered_call", 0.2 if _r == 'bear' else 0.25)), ('kodex_dividend', cfg.get(f"s4.isa_fb.{_r}.kodex_dividend", 0.15 if _r == 'bear' else 0.2)), ('tiger_us_dividend', cfg.get(f"s4.isa_fb.{_r}.tiger_us_dividend", 0.1 if _r == 'bear' else 0.15)), ('kr_bond', cfg.get(f"s4.isa_fb.{_r}.kr_bond", 0.2 if _r == 'bear' else 0.1)), ('gold', cfg.get(f"s4.isa_fb.{_r}.gold", 0.1 if _r == 'bear' else 0.05))]
 
     def _irp_etf_mix(self, regime: str, total_pct: float) -> List:
         """IRP 계좌 — 안전자산 30% 의무 방어 (TDF/단기채 활용)."""
@@ -278,7 +283,7 @@ class S4AdvisoryStream(BaseStream):
         if _r == 'bear':
             return [('kr_bond', cfg.get('s4.brok_fb.bear.kr_bond', 0.3)), ('gold', cfg.get('s4.brok_fb.bear.gold', 0.2)), ('us_bond_futures', cfg.get('s4.brok_fb.bear.us_bond', 0.15)), ('kodex_dividend', cfg.get('s4.brok_fb.bear.kodex_dividend', 0.15)), ('tiger_us_dividend', cfg.get('s4.brok_fb.bear.tiger_us_dividend', 0.1)), ('tiger_covered_call', cfg.get('s4.brok_fb.bear.tiger_covered_call', 0.1))]
         else:
-            return [('tiger_nasdaq', cfg.get(f's4.brok_fb.{_r}.tiger_nasdaq', 0.2 if _r == 'bull' else 0.15)), ('kodex_sp500', cfg.get(f's4.brok_fb.{_r}.kodex_sp500', 0.15 if _r == 'bull' else 0.1)), ('kodex_dividend', cfg.get(f's4.brok_fb.{_r}.kodex_dividend', 0.1)), ('kr_bond', cfg.get(f's4.brok_fb.{_r}.kr_bond', 0.2 if _r == 'bull' else 0.25)), ('us_bond_futures', cfg.get(f's4.brok_fb.{_r}.us_bond', 0.15)), ('gold', cfg.get(f's4.brok_fb.{_r}.gold', 0.1 if _r == 'bull' else 0.15)), ('tiger_covered_call', cfg.get(f's4.brok_fb.{_r}.tiger_covered_call', 0.1))]
+            return [('tiger_nasdaq', cfg.get(f"s4.brok_fb.{_r}.tiger_nasdaq", 0.2 if _r == 'bull' else 0.15)), ('kodex_sp500', cfg.get(f"s4.brok_fb.{_r}.kodex_sp500", 0.15 if _r == 'bull' else 0.1)), ('kodex_dividend', cfg.get(f"s4.brok_fb.{_r}.kodex_dividend", 0.1)), ('kr_bond', cfg.get(f"s4.brok_fb.{_r}.kr_bond", 0.2 if _r == 'bull' else 0.25)), ('us_bond_futures', cfg.get(f"s4.brok_fb.{_r}.us_bond", 0.15)), ('gold', cfg.get(f"s4.brok_fb.{_r}.gold", 0.1 if _r == 'bull' else 0.15)), ('tiger_covered_call', cfg.get(f"s4.brok_fb.{_r}.tiger_covered_call", 0.1))]
 
     def _estimate_drip(self) -> Dict:
         """DRIP 복리 추정 (10/20/30년) — DynamicConfig 동적 파라미터."""
@@ -333,20 +338,25 @@ class S4AdvisoryStream(BaseStream):
                         evaluator.override_qv_decay_threshold(_strict_qv)
                     else:
                         evaluator.qv_decay_threshold = _strict_qv
-                    logger.info(f'  🧬 [Alpha Factory] QV Decay 임계값: {_base_qv:.2f} → {_strict_qv:.2f} (Recession 엄격화 x{_recession_qv_mult:.2f})')
+                    logger.info(f"  🧬 [Alpha Factory] QV Decay 임계값: {_base_qv:.2f} → {_strict_qv:.2f} (Recession 엄격화 x{_recession_qv_mult:.2f})")
             except Exception as _qv_e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_qv_e}", exc_info=True)
-                logger.debug(f'  [Alpha Factory] QV Decay 조정 실패 (무시): {_qv_e}')
+                logger.debug(f"  [Alpha Factory] QV Decay 조정 실패 (무시): {_qv_e}")
             result = evaluator.evaluate(positions, market_data, regime)
             exit_candidates = result.get('exit_candidates', [])
             if exit_candidates:
-                logger.info(f'  📊 S4 Exit 평가: {len(exit_candidates)} exit / {result.get('hold_count', 0)} hold (regime={regime})')
-                for c in exit_candidates:
-                    reasons = ', '.join((r['rule'] for r in c.get('reasons', [])))
-                    logger.info(f'    [{c.get('urgency', 0)}] {c.get('name', '?')} P&L={c.get('pnl_pct', 0):+.1f}% — {reasons}')
+                _hc_cnt = result.get('hold_count', 0)
+            logger.info(f"  📊 S4 Exit 평가: {len(exit_candidates)} exit / {_hc_cnt} hold (regime={regime})")
+            for c in exit_candidates:
+                _reasons = ', '.join((r.get('rule', '') for r in c.get('reasons', [])))
+                _urg = c.get('urgency', 0)
+                _cnm = c.get('name', '?')
+                _pnl = c.get('pnl_pct', 0)
+                logger.info(f"    [{_urg}] {_cnm} P&L={_pnl:+.1f}% — {_reasons}")
             else:
-                logger.info(f'  ✅ S4 Exit 평가: 교체 대상 없음 ({result.get('hold_count', 0)} hold)')
+                _hc_cnt2 = result.get('hold_count', 0)
+                logger.info(f"  ✅ S4 Exit 평가: 교체 대상 없음 ({_hc_cnt2} hold)")
             sell_orders = []
             for c in exit_candidates:
                 if c.get('urgency', 0) >= 2:
@@ -356,7 +366,7 @@ class S4AdvisoryStream(BaseStream):
             logger.error('  S4 DynamicExitEvaluator import 실패', exc_info=True)
             return []
         except Exception as e:
-            logger.warning(f'  S4 Exit 평가 실패: {e}')
+            logger.warning(f"  S4 Exit 평가 실패: {e}")
             return []
 
     def _check_ic_deactivation(self) -> tuple:
@@ -390,12 +400,12 @@ class S4AdvisoryStream(BaseStream):
                 return (False, 's4_ic_not_available')
             _s4_ic = float(_s4_ic)
             if _s4_ic < _ic_threshold:
-                return (True, f'S4 IC={_s4_ic:.4f} < threshold={_ic_threshold} (반예측력 감지 → 자동 비활성화)')
-            logger.info(f'  ✅ S4 IC 체크 통과: IC={_s4_ic:.4f} >= threshold={_ic_threshold}')
-            return (False, f'ic_ok={_s4_ic:.4f}')
+                return (True, f"S4 IC={_s4_ic:.4f} < threshold={_ic_threshold} (반예측력 감지 → 자동 비활성화)")
+            logger.info(f"  ✅ S4 IC 체크 통과: IC={_s4_ic:.4f} >= threshold={_ic_threshold}")
+            return (False, f"ic_ok={_s4_ic:.4f}")
         except Exception as e:
-            logger.debug(f'  S4 IC 체크 실패 (비활성화 스킵): {e}')
-            return (False, f'ic_check_error: {e}')
+            logger.debug(f"  S4 IC 체크 실패 (비활성화 스킵): {e}")
+            return (False, f"ic_check_error: {e}")
 
     def get_positions(self) -> List[Dict]:
         """S4 현재 포지션 (Advisory 기반)."""

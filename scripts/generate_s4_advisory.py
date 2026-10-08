@@ -110,7 +110,7 @@ def _fetch_prices(tickers: list) -> dict:
                         prices[ticker] = int(val)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         if prices:
             logger.info(f"  📊 pykrx 시세 조회: {len(prices)}/{len(tickers)}건")
@@ -443,7 +443,7 @@ def generate_advisory() -> dict:
                 )
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     if _crowding_active:
         _macro_position_scale = 0.0  # 전체 현금 보유
@@ -656,11 +656,19 @@ def generate_advisory() -> dict:
                             f"최소 ₩{min_trade:,.0f}")
                 continue
 
-            # ★ 현재가로 수량 계산
+            # ★ 현재가로 수량 계산 (해외주식 환율 환산 적용)
             price = current_prices.get(ticker, sig.get('price', 0))
             if price and price > 0:
-                quantity = max(1, int(invest_amount / price))
-                actual_amount = quantity * price
+                is_us = not str(ticker).isdigit()
+                if is_us:
+                    from src.execution.execution_engine import ExecutionEngine
+                    fx_rate = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                    eff_price_krw = price * fx_rate
+                    quantity = int(invest_amount / eff_price_krw)
+                    actual_amount = quantity * eff_price_krw
+                else:
+                    quantity = max(1, int(invest_amount / price))
+                    actual_amount = quantity * price
             else:
                 quantity = 0
                 actual_amount = round(invest_amount)
@@ -699,7 +707,7 @@ def generate_advisory() -> dict:
                 buy_list = _rot.apply_rotation(buy_list, _ef)
                 logger.info('[Phase78] 섹터 로테이션 완료')
         except Exception as _rte:
-            logger.debug(f'[Phase78] Rotator 실패: {_rte}')
+            logger.debug(f"[Phase78] Rotator 실패: {_rte}")
 
         recommendations[acct] = {
             'buy': buy_list,

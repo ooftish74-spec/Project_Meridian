@@ -64,7 +64,7 @@ class DARTDailyCollector:
             names = get_ticker_names()
             result = {t: names.get(t, t) for t in tickers}
             if result:
-                logger.debug(f'  유니버스: {len(result)}종목 (통합 로더)')
+                logger.debug(f"  유니버스: {len(result)}종목 (통합 로더)")
                 return result
         except Exception as _e:
             logger.warning(f'  통합 로더 실패, Last Known Good 캐시 시도: {_e}', exc_info=True)
@@ -84,9 +84,9 @@ class DARTDailyCollector:
                         _GLOBAL_FALLBACK_EVENTS.append({'time': datetime.now().isoformat(), 'type': 'LAST_KNOWN_GOOD', 'target': 'dart_universe', 'message': '유니버스 동적 로드 실패로 캐시(dynamic_universe.json)를 로드했습니다.'})
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                         logger.warning('[SILENT_BYPASS] Suppressed exception at dart_daily_collector.py:104', exc_info=True)
-                    logger.warning(f'  ⚠️ DART 유니버스: Last Known Good 캐시 ({len(result)}종목) 사용')
+                    logger.warning(f"  ⚠️ DART 유니버스: Last Known Good 캐시 ({len(result)}종목) 사용")
                     return result
             except Exception as e:
                 logger.error(f'  Last Known Good 캐시 로드 실패: {e}', exc_info=True)
@@ -161,13 +161,13 @@ class DARTDailyCollector:
                 return '19000101'
             sorted_tickers = sorted(tickers.items(), key=lambda x: _last_collected(x[0]))
             tickers = dict(sorted_tickers[:max_tickers])
-            logger.info(f'  [DART] 배치 제한: {max_tickers}/{len(sorted_tickers)}종목 처리')
+            logger.info(f"  [DART] 배치 제한: {max_tickers}/{len(sorted_tickers)}종목 처리")
         results = {'collected': 0, 'errors': 0, 'details': {}}
         for ticker, name in tickers.items():
             try:
                 corp_code = self._corp_codes.get(ticker)
                 if not corp_code:
-                    logger.debug(f'  {ticker}({name}): corp_code 없음 → 스킵')
+                    logger.debug(f"  {ticker}({name}): corp_code 없음 → 스킵")
                     continue
                 ticker_dir = _DART_DATA_DIR / ticker
                 ticker_dir.mkdir(parents=True, exist_ok=True)
@@ -175,7 +175,7 @@ class DARTDailyCollector:
                 start_date = last_date or (datetime.now() - timedelta(days=lookback_days)).strftime('%Y%m%d')
                 end_date = datetime.now().strftime('%Y%m%d')
                 if start_date >= end_date:
-                    logger.debug(f'  {ticker}({name}): 이미 최신')
+                    logger.debug(f"  {ticker}({name}): 이미 최신")
                     continue
                 n_items = 0
                 n_items += self._collect_insider(ticker, corp_code, start_date, end_date)
@@ -187,7 +187,7 @@ class DARTDailyCollector:
                 atomic_write_json(ticker_dir / 'meta.json', meta, indent=2)
                 results['collected'] += n_items
                 results['details'][ticker] = n_items
-                logger.info(f'  📋 DART {ticker}({name}): {n_items}건 수집')
+                logger.info(f"  📋 DART {ticker}({name}): {n_items}건 수집")
             except Exception as e:
                 results['errors'] += 1
                 logger.warning(f'  ❌ DART {ticker}: {e}', exc_info=True)
@@ -409,7 +409,7 @@ class DARTDailyCollector:
             return {'composite': float(last.get('dart_composite', 0)), 'insider': float(last.get('dart_insider', 0)), 'buyback': float(last.get('dart_buyback', 0)), 'major': float(last.get('dart_major', 0)), 'earnings_surprise': float(last.get('dart_earnings_surprise', 0)), 'last_update': str(df.index[-1]), 'data_available': True}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return {'composite': 0, 'data_available': False}
 
     def _append_csv(self, path: Path, new_df: pd.DataFrame):
@@ -422,7 +422,7 @@ class DARTDailyCollector:
                 atomic_write_dataframe(combined, path, file_format='csv', index=False, encoding='utf-8-sig')
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                 atomic_write_dataframe(new_df, path, file_format='csv', index=False, encoding='utf-8-sig')
         else:
             atomic_write_dataframe(new_df, path, file_format='csv', index=False, encoding='utf-8-sig')

@@ -21,7 +21,7 @@ try:
     cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     cfg = None  # type: ignore[assignment]
 
 
@@ -30,7 +30,7 @@ def _cfg_get(key: str, default):
         return cfg.get(key, default) if cfg else default
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return default
 
 
@@ -71,7 +71,7 @@ class IntradayMicroGuard:
                     return json.loads(candidate.read_text(encoding='utf-8'))
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.critical("[SILENT_BYPASS] Suppressed exception at intraday_micro_guard.py:75", exc_info=True)
         # 2순위: pipeline_state.json
         for candidate in [
@@ -83,7 +83,7 @@ class IntradayMicroGuard:
                     return json.loads(candidate.read_text(encoding='utf-8'))
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.critical("[SILENT_BYPASS] Suppressed exception at intraday_micro_guard.py:87", exc_info=True)
         return {}
 
@@ -149,14 +149,14 @@ class IntradayMicroGuard:
         # VIX 점검
         vix_ok, vix_reason = self._check_vix_spike(vix_curr, vix_prev)
         if not vix_ok:
-            logger.warning(f'  [Phase 76 MicroGuard] HALT: {vix_reason}')
+            logger.warning(f"  [Phase 76 MicroGuard] HALT: {vix_reason}")
             return False, vix_reason
 
         # 거래량 포닉 점검
         vol_ok, vol_reason = self._check_vol_spike(market_data)
         if not vol_ok:
-            logger.warning(f'  [Phase 76 MicroGuard] HALT: {vol_reason}')
+            logger.warning(f"  [Phase 76 MicroGuard] HALT: {vol_reason}")
             return False, vol_reason
 
-        logger.debug(f'  [Phase 76 MicroGuard] OK: vix={vix_curr:.1f}')
+        logger.debug(f"  [Phase 76 MicroGuard] OK: vix={vix_curr:.1f}")
         return True, 'micro_guard_ok'

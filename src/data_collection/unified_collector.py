@@ -26,10 +26,14 @@ import logging
 import sys
 import time
 from datetime import datetime, timedelta, date
-from src.utils.file_ops import atomic_write_json
-
 from pathlib import Path
-from src.infra.safe_io import safe_json_write, safe_parquet_write
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from src.utils.file_ops import atomic_write_json
+from src.infra.safe_io import safe_json_write, safe_parquet_write, safe_json_update
 from typing import Dict, List, Optional
 import pandas as pd
 try:
@@ -69,19 +73,19 @@ _SIGNAL_CACHE = _PROJECT_ROOT / 'results' / 'signal_cache.json'
 _KR_TICKER_RE = re.compile('^\\d{5}[0-9KLM]$')
 _PYKRX_DELAY = 1.0
 
-@retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3), reraise=True)
+@retry(wait=wait_exponential(multiplier=1, min=1, max=3), stop=stop_after_attempt(1), reraise=True)
 def _fetch_kr_ohlcv_with_retry(pykrx_stock, start: str, end: str, ticker: str):
-    """[Step 2: Tenacity] pykrx API 호출 래퍼 — 지수적 백오프 재시도."""
+    """[Step 2: Tenacity] pykrx API 호출 래퍼 — 빈 데이터 시 빠른 스킵."""
     time.sleep(_PYKRX_DELAY)
     try:
         df = pykrx_stock.get_market_ohlcv_by_date(start, end, ticker)
         if df is None or df.empty:
-            raise ValueError(f"{ticker} returned empty pykrx data")
+            return pd.DataFrame()
         return df
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"  [pykrx Retry] API failed for {ticker}: {e}")
-        raise e  # Must raise to trigger Tenacity retry
+        logging.getLogger(__name__).debug(f"  [pykrx Skip] API exception for {ticker}: {e}")
+        return pd.DataFrame()
 
 def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optional[pd.DataFrame]:
     """KIS API를 최우선(Primary)으로 호출하고 실패 시 pykrx로 Fallback.
@@ -372,19 +376,8 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
         if yf_ticker in av_data:
             price = av_data[yf_ticker]['price']
         else:
-            try:
-                import yfinance as yf
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore')
-                    vix_data = yf.download(yf_ticker, period='1d', progress=False, timeout=10)
-                if vix_data is not None and not vix_data.empty and len(vix_data) > 0:
-                    close = vix_data['Close']
-                    if hasattr(close, 'columns'): close = close.iloc[:, 0]
-                    price = float(close.iloc[-1])
-                    av_data[yf_ticker] = {'price': price}
-            except Exception as e:
-                logger.warning(f"Failed to fetch {yf_ticker} via yfinance fallback: {e}")
+            # yfinance 폐기 — KIS / Alpha Vantage 우선 참조
+            pass
 
         if price is not None:
             df = pd.DataFrame([{'date': today_dt, 'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}])
@@ -437,15 +430,14 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     return signals
 
 def _save_signal_cache(signals: Dict):
-    """시그널 캐시 저장."""
+    """시그널 캐시 저장 (safe_json_update로 멀티프로세스 파일락 100% 보장)."""
     try:
-        existing = {}
-        if _SIGNAL_CACHE.exists():
-            existing = json.loads(_SIGNAL_CACHE.read_text())
-        existing.update(signals)
-        existing['last_update'] = datetime.now().isoformat()
-        _SIGNAL_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        atomic_write_json(_SIGNAL_CACHE, existing, indent=2, ensure_ascii=False, default=str)
+        def _update(data):
+            if not isinstance(data, dict):
+                data = {}
+            data.update(signals)
+            return data
+        safe_json_update(_SIGNAL_CACHE, _update)
     except Exception as e:
         logger.error(f'  시그널 캐시 저장 실패: {e}', exc_info=True)
 
@@ -1058,12 +1050,6 @@ def _collect_evening_signals():
       2단: 실패 시 기존 parquet의 마지막 행 ffill 저장
       → 누락 티커는 WARNING으로 명시 (Fail-silent 방지)
     """
-    import time as _t
-    try:
-        import yfinance as yf
-    except ImportError as e:
-        logger.error('  ⚠️ yfinance 미설치 — evening signals 스킵', exc_info=True)
-        return
     from config.universe import Universe
     u = Universe()
     failed_tickers = []
@@ -1071,16 +1057,8 @@ def _collect_evening_signals():
     for name, yf_ticker in u.SIGNAL_EVENING.items():
         out_file = _SIGNAL_DIR / f'signal_{name.lower()}.parquet'
         data = None
-        for attempt in range(2):
-            try:
-                raw = yf.download(yf_ticker, period='3mo', progress=False, auto_adjust=True, timeout=12)
-                if raw is not None and (not raw.empty):
-                    data = raw
-                    break
-            except Exception as _e:
-                if attempt == 0:
-                    logger.error(f'  {name}({yf_ticker}) retry 1/2: {_e}', exc_info=True)
-                    _t.sleep(1.0)
+        # yfinance 폐기 — KIS / Alpha Vantage 우선 참조
+        data = None
         if data is not None:
             try:
                 _SIGNAL_DIR.mkdir(parents=True, exist_ok=True)
@@ -1400,8 +1378,19 @@ def _save_collection_log(results: Dict):
                         existing = []
             except Exception as _e1706:
                 logger.error(f'  [run_initial/run_daily] 수집 진행 로그 실패: {_e1706}', exc_info=True)
-        existing.append(results)
-        existing = existing[-30:]
+        def _sanitize_val(v):
+            import math
+            if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                return None
+            if isinstance(v, dict):
+                return {k: _sanitize_val(x) for k, x in v.items()}
+            if isinstance(v, list):
+                return [_sanitize_val(x) for x in v]
+            return v
+
+        sanitized = _sanitize_val(results)
+        existing.append(sanitized)
+        existing = [_sanitize_val(item) for item in existing[-30:]]
         atomic_write_json(log_file, existing, indent=2, ensure_ascii=False, default=str)
     except Exception as e:
         logger.error(f'  수집 로그 저장 실패: {e}', exc_info=True)

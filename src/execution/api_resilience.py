@@ -285,7 +285,7 @@ class APICircuitBreaker:
     def _notify_circuit_open(self) -> None:
         """Circuit Breaker OPEN 발동 시 텔레그램 알림 (실패해도 무시)."""
         try:
-            from src.utils.telegram_bot import TelegramBot
+            from src.utils.telegram_notifier import TelegramNotifier as TelegramBot
             TelegramBot().send_message(
                 "🚨 [Circuit Breaker 발동] KIS API 장애 감지 → "
                 "시스템 매매 일시 중지. "
@@ -293,7 +293,7 @@ class APICircuitBreaker:
             )
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
     # ------------------------------------------------------------------
@@ -387,7 +387,7 @@ class OrderDLQ:
             return json.loads(self.dlq_file.read_text(encoding='utf-8'))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     def _save(self, items: List[Dict]) -> None:
@@ -397,7 +397,7 @@ class OrderDLQ:
             atomic_write_json(self.dlq_file, items, indent=2)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             # fallback: 직접 write
             atomic_write_json(self.dlq_file, items, indent=2, ensure_ascii=False, default=str)
 
@@ -440,9 +440,13 @@ class OrderDLQ:
         self._notify_dlq(order_dict, reason)
 
     def _notify_dlq(self, order_dict: Dict, reason: str) -> None:
-        """DLQ 추가 시 텔레그램 알림 (실패해도 무시)."""
+        """DLQ 추가 시 텔레그램 알림 (증거금 부족 스킵 사유는 텔레그램 스팸 방지 스킵)."""
         try:
-            from src.utils.telegram_bot import TelegramBot
+            # 🎯 [Anti-Spam Filter] 증거금/주문가능금액 한도 초과 거부 건은 텔레그램 메시지 스팸 차단
+            if any(k in str(reason) for k in ['주문가능금액', 'APBK0013', 'APBK0014', '증거금']):
+                logger.debug(f"  🛡️ [DLQ Anti-Spam] 증거금 한도 스킵 알림 텔레그램 발송 생략: {reason}")
+                return
+            from src.utils.telegram_notifier import TelegramNotifier as TelegramBot
             msg = (
                 f"⚠️ 주문 DLQ 저장\n"
                 f"종목: {order_dict.get('ticker')}\n"
@@ -453,7 +457,7 @@ class OrderDLQ:
             TelegramBot().send_message(msg)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
     def get_pending(self) -> List[Dict]:
@@ -584,7 +588,7 @@ class TokenRefreshGuard:
                     raise
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as auth_exc:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {auth_exc}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {auth_exc}")
                     raise RuntimeError(
                         f"[{label}] authenticate() 예외: {auth_exc}"
                     ) from auth_exc

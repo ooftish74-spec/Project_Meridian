@@ -55,7 +55,7 @@ class QVMScorer:
         """
         if not universe:
             return []
-        logger.info(f'  S3 QVM 스코어링: {len(universe)}종목')
+        logger.info(f"  S3 QVM 스코어링: {len(universe)}종목")
         metrics = self._precompute_metrics(universe)
         scored = []
         for stock in universe:
@@ -104,8 +104,16 @@ class QVMScorer:
         for i, s in enumerate(scored):
             s['rank'] = i + 1
         for s in scored[:5]:
-            ff3 = f'/FF3={s.get('ff3_score', 0):.1f}' if ff3_enabled else ''
-            logger.info(f'    #{s['rank']} {s['name']}: QVM={s['qvm_score']:.1f} (V={s['value_score']:.1f}/Q={s['quality_score']:.1f}/M={s['momentum_score']:.1f}/G={s['governance_score']:.1f}{ff3})')
+            _ff3_sc = s.get('ff3_score', 0)
+            ff3 = f"/FF3={_ff3_sc:.1f}" if ff3_enabled else ''
+            _rk = s.get('rank', 0)
+            _nm = s.get('name', '')
+            _qv = s.get('qvm_score', 0)
+            _v = s.get('value_score', 0)
+            _q = s.get('quality_score', 0)
+            _m = s.get('momentum_score', 0)
+            _g = s.get('governance_score', 0)
+            logger.info(f"    #{_rk} {_nm}: QVM={_qv:.1f} (V={_v:.1f}/Q={_q:.1f}/M={_m:.1f}/G={_g:.1f}{ff3})")
         return scored
 
     def _apply_ff3_factors(self, scored: list) -> list:
@@ -186,7 +194,7 @@ class QVMScorer:
             s['wml_z'] = round(wml_z[i], 4)
             s['ff3_raw'] = round(ff3_raw, 4)
             s['qvm_score'] = round(s.get('qvm_score', 0.0) + ff3_bonus, 2)
-        logger.debug(f'  [FF3] 적용 완료: SMBw={smb_w}, HMLw={hml_w}, WMLw={wml_w}, MaxBonus={max_bonus}, N={len(scored)}')
+        logger.debug(f"  [FF3] 적용 완료: SMBw={smb_w}, HMLw={hml_w}, WMLw={wml_w}, MaxBonus={max_bonus}, N={len(scored)}")
         return scored
 
     def _precompute_metrics(self, universe: List[Dict]) -> Dict[str, Dict]:
@@ -342,7 +350,7 @@ class QVMScorer:
             _em_score = self._score_earnings_momentum(ticker)
             score += _em_score
         except Exception as e:
-            logger.debug(f'  {ticker} 모멘텀 데이터 읽기 실패: {e}')
+            logger.debug(f"  {ticker} 모멘텀 데이터 읽기 실패: {e}")
             return 7.5
         return min(15.0, score)
 
@@ -444,9 +452,11 @@ class QVMScorer:
                 safe.append(result)
             else:
                 trapped.append(result)
-                logger.info(f'    ⚠️ 밸류트랩 감지: {stock.get('name', ticker)} trap_risk={risk:.0%}')
+                _snm = stock.get('name', ticker)
+                logger.info(f"    ⚠️ 밸류트랩 감지: {_snm} trap_risk={risk:.0%}")
         if trapped:
-            logger.info(f'  S3 밸류트랩 필터: {len(trapped)}종목 제외 ({', '.join((t.get('name', t['ticker']) for t in trapped[:5]))})')
+            _tr_names = ', '.join((t.get('name', t.get('ticker', '')) for t in trapped[:5]))
+            logger.info(f"  S3 밸류트랩 필터: {len(trapped)}종목 제외 ({_tr_names})")
         return safe
 
     def _compute_trap_risk(self, ticker: str, stock: Optional[Dict]=None) -> float:
@@ -508,10 +518,10 @@ class QVMScorer:
                     if current > 0 and ma200 > 0 and (current < ma200):
                         ma200_fail = True
             if ret_6m_fail and ma200_fail:
-                return (False, f'6M_return_below_{min_return:.0%}_and_below_MA200')
+                return (False, f"6M_return_below_{min_return:.0%}_and_below_MA200")
             return (True, 'momentum_ok')
         except Exception as e:
-            logger.debug(f'  {ticker} 모멘텀 체크 실패: {e}')
+            logger.debug(f"  {ticker} 모멘텀 체크 실패: {e}")
             return (True, 'error')
 
     def _check_earnings_deterioration(self, ticker: str, stock: Optional[Dict]=None) -> Tuple[bool, str]:
@@ -551,8 +561,8 @@ class QVMScorer:
         sloan = (ni - cfo) / ta
         threshold = cfg.get('s3.trap_sloan_threshold', 0.1)
         if sloan > threshold:
-            return (False, f'sloan_ratio={sloan:.1%}_above_{threshold:.0%}')
-        return (True, f'sloan_ok={sloan:.1%}')
+            return (False, f"sloan_ratio={sloan:.1%}_above_{threshold:.0%}")
+        return (True, f"sloan_ok={sloan:.1%}")
 
     def _check_cash_flow_divergence(self, ticker: str, stock: Optional[Dict]=None) -> Tuple[bool, str]:
         """현금흐름 괴리 체크."""
@@ -567,7 +577,7 @@ class QVMScorer:
                 divergence_years += 1
         min_years = cfg.get('s3.trap_cf_divergence_years', 2)
         if divergence_years >= min_years:
-            return (False, f'ni_positive_cfo_negative_{divergence_years}yr')
+            return (False, f"ni_positive_cfo_negative_{divergence_years}yr")
         return (True, 'cashflow_ok')
 
     def _compute_fscore(self, stock: Dict) -> Optional[int]:
@@ -614,7 +624,7 @@ class QVMScorer:
             return f
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return None
 
     def _get_annual_data(self, ticker: str, stock: Optional[Dict]=None) -> list:
@@ -631,7 +641,7 @@ class QVMScorer:
             return data.get('annual', [])
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     @staticmethod
@@ -680,7 +690,7 @@ class QVMScorer:
             return factor
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return 0.0
 
     @staticmethod
@@ -751,8 +761,10 @@ class QVMScorer:
         output = {'timestamp': datetime.now().isoformat(), 'factors': results, 'weight_adjustment': weight_adj, 'n_universe': len(scored_universe), 'n_returns': len(realized_returns)}
         self._save_icir_result(output)
         for f, r in results.items():
-            if r.get('ic') is not None:
-                logger.info(f'    ICIR {f}: IC={r['ic']:.3f}, ICIR={r['icir']:.3f} → {r['valid']}')
+                _ic = r.get('ic', 0)
+                _icir = r.get('icir', 0)
+                _vld = r.get('valid', False)
+                logger.info(f"    ICIR {f}: IC={_ic:.3f}, ICIR={_icir:.3f} → {_vld}")
         return output
 
     def _spearman_rank_ic(self, scores: List[float], returns: List[float]) -> float:
@@ -817,7 +829,7 @@ class QVMScorer:
                     returns[ticker] = (price_fwd - price_now) / price_now
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
         return returns
 
@@ -830,5 +842,5 @@ class QVMScorer:
             atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass

@@ -88,8 +88,9 @@ def get_target_tickers(include_qvm_top: bool = True) -> List[str]:
     if include_qvm_top:
         qvm_top_n = cfg.get('s4.consensus_qvm_top_n', 50)
         try:
-            from src.streams.s4_advisory.qvm_universe import QVMUniverse
-            universe = QVMUniverse().build_universe(top_n=qvm_top_n)
+            from src.streams.s4_advisory.advisory_stream import AdvisoryStream
+            advisory = AdvisoryStream()
+            universe = advisory.generate_signals({'regime': 'bull', 'vix': 18.0}).get('signals', [])
             before = len(tickers)
             for stock in universe:
                 t = stock.get('ticker', '').zfill(6)

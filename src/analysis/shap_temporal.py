@@ -25,7 +25,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 
@@ -157,7 +157,7 @@ class SHAPAnalyzer:
             return {f: float(v) for f, v in zip(feature_names, result.importances_mean)}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {}
 
     def _builtin_importance(self, model, feature_names):
@@ -167,7 +167,7 @@ class SHAPAnalyzer:
             return {f: float(v) for f, v in zip(feature_names, imp)}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {}
 
     def _load_history(self):
@@ -175,7 +175,7 @@ class SHAPAnalyzer:
             return json.loads(self.history_path.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     def _save_history(self):

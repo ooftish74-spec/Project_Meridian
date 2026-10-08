@@ -99,7 +99,7 @@ class NaverNewsSentiment:
             except Exception as e:
                 results['errors'] += 1
                 logger.warning(f'  ❌ 뉴스 {ticker}: {e}', exc_info=True)
-        logger.info(f'  📰 뉴스 감성: {results['collected']}건 수집, {len(results['tickers'])}종목')
+        logger.info(f"  📰 뉴스 감성: {results['collected']}건 수집, {len(results['tickers'])}종목")
         return results
 
     def _get_universe_tickers(self) -> List[str]:
@@ -139,7 +139,7 @@ class NaverNewsSentiment:
                 existing = pd.read_csv(raw_path, on_bad_lines='skip', engine='python', encoding_errors='replace')
             except Exception as _e:
                 import logging as _lg
-                _lg.getLogger(__name__).warning(f'  ⚠️ news_raw.csv 재입력 실패 음: {raw_path.name} ({_e}) — 계속')
+                _lg.getLogger(__name__).warning(f"  ⚠️ news_raw.csv 재입력 실패 음: {raw_path.name} ({_e}) — 계속")
                 existing = None
             if existing is not None:
                 df = pd.concat([existing, df], ignore_index=True)
@@ -165,7 +165,7 @@ class NaverNewsSentiment:
                     items = data.get('items', [])
                     all_articles.extend(items)
                 else:
-                    logger.debug(f'  네이버 API 오류: {resp.status_code}')
+                    logger.debug(f"  네이버 API 오류: {resp.status_code}")
                     break
                 time.sleep(0.2)
             except Exception as e:
@@ -181,7 +181,7 @@ class NaverNewsSentiment:
                         filtered.append(art)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                     filtered.append(art)
         return filtered
 
@@ -285,10 +285,10 @@ class NaverNewsSentiment:
             return dt.strftime('%Y-%m-%d')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             try:
                 return datetime.fromisoformat(date_str).strftime('%Y-%m-%d')
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                 return datetime.now().strftime('%Y-%m-%d')

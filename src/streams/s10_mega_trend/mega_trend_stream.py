@@ -170,7 +170,7 @@ class S10MegaTrendStream(BaseStream):
                 if _lpi > 1.0:
                     logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 한국형 디커플링 쉴드 가동 -> {name} 오버나이트 거부 및 강제 청산")
                     sig['action'] = 'exit'
-                    sig['reason'] = f'LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})'
+                    sig['reason'] = f"LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})"
 
                 if sig['action'] == 'buy':
                     kelly_frac = self._compute_kelly(sig)
@@ -302,6 +302,33 @@ class S10MegaTrendStream(BaseStream):
             accel   = float(f_data.get(accel_col,   0))
 
         if price <= 0:
+            try:
+                from src.data.market_data_bridge import MarketDataBridge
+                df_hist = MarketDataBridge()._load_price_history(ticker)
+                if df_hist is not None and not df_hist.empty:
+                    c_col = 'close' if 'close' in df_hist.columns else 'Close'
+                    c_series = pd.to_numeric(df_hist[c_col], errors='coerce').dropna()
+                    if len(c_series) > 0:
+                        price = float(c_series.iloc[-1])
+                        ma120 = float(c_series.rolling(ma_window).mean().iloc[-1]) if len(c_series) >= ma_window else float(c_series.mean())
+                        if len(c_series) >= 5:
+                            accel = float(c_series.iloc[-1] / c_series.iloc[-5] - 1.0)
+            except Exception as _e_p:
+                logger.debug(f"  [S10] live price fetch fallback for {ticker}: {_e_p}")
+
+        if streak == 0.0 and net_buy == 0.0 and price > 0:
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                collector = KISDataCollector()
+                trend = collector.get_investor_trading_trend(ticker)
+                if trend:
+                    f_net = trend.get('foreign_net_buy', 0.0)
+                    net_buy = 1.0 if f_net > 0 else (-1.0 if f_net < 0 else 0.0)
+                    streak = 1.0 if f_net > 0 else 0.0
+            except Exception:
+                pass
+
+        if price <= 0:
             return {'action': 'hold', 'confidence': 0.0, 'reason': '가격 없음'}
 
         # 소프트 정규화 (tanh)
@@ -357,9 +384,9 @@ class S10MegaTrendStream(BaseStream):
         if total >= entry_thr:
             return {'action': 'buy',  'confidence': confidence, 'score': round(total, 4), 'reason': reason_str}
         elif total <= exit_thr:
-            return {'action': 'exit', 'confidence': 1.0 - confidence, 'score': round(total, 4), 'reason': f'신호 약화({total:.3f})'}
+            return {'action': 'exit', 'confidence': 1.0 - confidence, 'score': round(total, 4), 'reason': f"신호 약화({total:.3f})"}
         else:
-            return {'action': 'hold', 'confidence': confidence, 'score': round(total, 4), 'reason': f'관망({total:.3f})'}
+            return {'action': 'hold', 'confidence': confidence, 'score': round(total, 4), 'reason': f"관망({total:.3f})"}
 
     # ──────────────────────────────────────────────────────────────────────
 

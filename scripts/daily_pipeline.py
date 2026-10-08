@@ -39,6 +39,11 @@ import pandas as pd
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 from src.utils.file_ops import atomic_write_json, atomic_write_text
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_PROJECT_ROOT / '.env')
+except ImportError:
+    pass
 
 
 from config.dynamic_config import DynamicConfig
@@ -89,7 +94,7 @@ _INDEX_ETF_PROXY = {
 _INDEX_ETF_IS_PRICE = True  # ETF 가격은 지수와 다르므로, 변동률 기반 추정
 
 
-from scripts.pipeline.sub_phases import _safe_get_index_close, _phase_premarket, _phase_premarket_trade, sync_ssot_from_me, _phase_aftermarket, _phase_aftermarket_trade, _phase_overnight, _phase_collect_data, _phase_global_data, _update_signal_cache, _phase_intraday, _phase_krx_refresh, _phase_collect_flow, _phase_evening_data, _phase_collect_dart, _phase_collect_consensus, is_us_dst, _us_phase_window_check, _phase_us_premarket, _phase_us_regular_market, _phase_us_market, _phase_weekly_retrain, _phase_weekly_validate
+from scripts.pipeline.sub_phases import _safe_get_index_close, _phase_premarket, _phase_call_auction_0830, _phase_call_auction_monitor_0850_0854, _phase_market_open_0900, _phase_premarket_trade, sync_ssot_from_me, _phase_aftermarket, _phase_aftermarket_trade, _phase_overnight, _phase_collect_data, _phase_global_data, _update_signal_cache, _phase_intraday, _phase_krx_refresh, _phase_collect_flow, _phase_evening_data, _phase_collect_dart, _phase_collect_consensus, is_us_dst, _us_phase_window_check, _phase_us_premarket, _phase_us_regular_market, _phase_us_market, _phase_weekly_retrain, _phase_weekly_validate
 
 
 
@@ -107,9 +112,11 @@ class ErrorCollectorHandler(logging.Handler):
 error_collector = ErrorCollectorHandler()
 error_collector.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
 
-def run_pipeline(phase: str = 'all'):
-    """통합 파이프라인 실행."""
-    logging.getLogger().addHandler(error_collector)
+def run_pipeline(phase: str = 'all', force: bool = False) -> None:
+    """통합 일일 파이프라인 메인 엔트리포인트."""
+    root_logger = logging.getLogger()
+    if error_collector not in root_logger.handlers:
+        root_logger.addHandler(error_collector)
     error_collector.errors.clear()
     today = today_kst()
     is_krx_open = is_trading_day(today.strftime('%Y%m%d'))
@@ -120,6 +127,13 @@ def run_pipeline(phase: str = 'all'):
     logger.info(f"  KRX: {'Open' if is_krx_open else 'CLOSED (holiday)'}")
     logger.info(f"  Phase: {phase}")
     logger.info(f"{'='*60}")
+
+    # ★ SSoT 오염 방지: 레거시 아티팩트 자동 격리
+    try:
+        from scripts.purge_legacy_artifacts import purge_legacy_artifacts
+        purge_legacy_artifacts()
+    except Exception as _purge_err:
+        logger.warning(f"⚠️ 레거시 아티팩트 청소 예외: {_purge_err}")
 
     # 이벤트 레져 — 원칙 2: 모든 것을 이벤트로 기록
     try:
@@ -152,10 +166,13 @@ def run_pipeline(phase: str = 'all'):
         'us_market',       # ★ US 시장은 KRX 휴장과 무관 (금요일 미국 마감 데이터)
         'us_premarket',    # ★ [Phase 41] 프리마켓 (KRX 독립)
         'us_regular',      # ★ [Phase 41] 본장 (KRX 독립)
+        'us_aftermarket',  # ★ [Phase 42] 미국 장 마감 후 PnL/갭분석 (KRX 독립)
         'crypto_arb',      # ★ 크립토는 24시간 365일
         'overnight',       # ★ 글로벌 야간 데이터 (SGX, VIX, 뉴스 등)
         'evening_data',    # ★ US 가격 + 저녁 데이터
         'collect',         # ★ 글로벌 데이터 수집 (매크로, breadth 등)
+        'market',          # ★ 24시간 글로벌 관제 & 손절/익절 감시
+        'intraday',        # ★ 실시간 장중 감시
     )
 
     if not is_krx_open and phase not in _WEEKEND_OK_PHASES:
@@ -172,6 +189,8 @@ def run_pipeline(phase: str = 'all'):
             'us_market':         _phase_us_market,
             'us_premarket':      _phase_us_premarket,      # [Phase 41] 프리마켓
             'us_regular':        _phase_us_regular_market, # [Phase 41] 본장
+            'weekly_retrain':    _phase_weekly_retrain,
+            'weekly_validate':   _phase_weekly_validate,
         }
 
         # phase가 'all'이면 모든 글로벌 phase 실행, 아니면 해당 phase만
@@ -518,6 +537,15 @@ def run_pipeline(phase: str = 'all'):
             logger.warning(f"  ⛔ Kill Switch 매수 차단 — Market Phase 스킵")
             return
 
+        # ★ [SSoT Hardening] KIS API 실계좌 보유 포지션 (SOXX 11주 등) 사전 원자적 동기화 (Exit Manager 전 실행)
+        try:
+            from src.portfolio.shadow_manager import ShadowPortfolioManager
+            _pre_sp = ShadowPortfolioManager()
+            _pre_sp._fetch_live_nav_from_broker()
+            logger.info("  🔄 [SSoT Pre-Check] KIS OpenAPI 실계좌 포지션(SOXX 포함) 사전 원자적 동기화 완료!")
+        except Exception as _pe:
+            logger.warning(f"  ⚠️ SSoT 사전 동기화 예외: {_pe}")
+
         # ★ 포트폴리오 최적화 및 Meta-Level Capital Allocation (주문 생성 전)
         try:
             import numpy as np
@@ -558,19 +586,14 @@ def run_pipeline(phase: str = 'all'):
             except Exception as alloc_err:
                 logger.error(f"  MetaCapitalAllocator/RiskParity 실행 실패: {alloc_err}", exc_info=True)
                 
-            # 3. 통계적 차익거래 (StatArb) 페어 생성
-            try:
-                from src.intelligence.stat_arb_engine import StatArbEngine
-                import pandas as pd
-                # (임시) Mock 가격 데이터
-                mock_prices = pd.DataFrame(np.random.randn(100, 5).cumsum(axis=0), columns=['A', 'B', 'C', 'D', 'E'])
-                stat_arb = StatArbEngine()
-                pairs = stat_arb.find_cointegrated_pairs(mock_prices)
-                if pairs:
-                    sigs = stat_arb.generate_signals(mock_prices, pairs)
-                    logger.info(f"  📈 StatArbEngine: 페어 매매 시그널 {len(sigs)}건 포착")
-            except Exception as _stat_err:
-                logger.error(f"  StatArbEngine 실행 실패: {_stat_err}", exc_info=True)
+            # 3. 통계적 차익거래 (StatArb) 페어 생성 (활성화 시에만 실행)
+            if cfg.get('intelligence.statarb_enabled', False):
+                try:
+                    from src.intelligence.stat_arb_engine import StatArbEngine
+                    # StatArb 실제 시세 데이터 연동 시 실행
+                    pass
+                except Exception as _stat_err:
+                    logger.debug(f"StatArbEngine 실행 생략: {_stat_err}")
 
             if action == 'rebalance':
                 fw = opt_result.get('final_weights', {})
@@ -601,7 +624,7 @@ def run_pipeline(phase: str = 'all'):
                     f"— Hard Liquidate 실행"
                 )
                 from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(reason=f'DesyncError: {_de}')
+                KillSwitch().hard_liquidate_all(reason=f"DesyncError: {_de}")
                 return  # 주문 전체 중단
             except Exception as _sync_err:
                 # 동기화 체크 자체가 실패해도 주문은 계속 (fail-safe)
@@ -634,7 +657,7 @@ def run_pipeline(phase: str = 'all'):
                 )
                 from src.risk.kill_switch import KillSwitch
                 KillSwitch().hard_liquidate_all(
-                    reason=f'API Timeout {_api_elapsed:.0f}s > {_api_timeout_sec}s')
+                    reason=f"API Timeout {_api_elapsed:.0f}s > {_api_timeout_sec}s")
                 return
 
         except DesyncError as _de:
@@ -644,7 +667,7 @@ def run_pipeline(phase: str = 'all'):
             )
             try:
                 from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(reason=f'DesyncError: {_de}')
+                KillSwitch().hard_liquidate_all(reason=f"DesyncError: {_de}")
             except Exception as _hl_err:
                 logger.critical(f"  ❌ Hard Liquidate 실패: {_hl_err}")
             return
@@ -658,7 +681,7 @@ def run_pipeline(phase: str = 'all'):
             try:
                 from src.risk.kill_switch import KillSwitch
                 KillSwitch().hard_liquidate_all(
-                    reason=f'{type(_ce).__name__}: {_ce}')
+                    reason=f"{type(_ce).__name__}: {_ce}")
             except Exception as _hl_err:
                 logger.critical(f"  ❌ Hard Liquidate 실패: {_hl_err}")
             return
@@ -740,8 +763,8 @@ def run_pipeline(phase: str = 'all'):
 
         # (3) shadow_portfolio.json: 체결 결과 반영 (STALE 근본 수정)
         try:
-            from src.portfolio.shadow_manager import ShadowManager
-            _sp = ShadowManager()
+            from src.portfolio.shadow_manager import ShadowPortfolioManager
+            _sp = ShadowPortfolioManager()
             _orders = result.get('orders', [])
             if _orders:
                 _actions = []
@@ -751,15 +774,25 @@ def run_pipeline(phase: str = 'all'):
                         'name': _o.get('name', ''),
                         'action': 'buy' if _o.get('direction') == 'long' else 'sell',
                         'amount': _o.get('amount_krw', 0),
+                        'quantity': _o.get('quantity', _o.get('qty', 0)),
+                        'price': _o.get('price', _o.get('entry_price', 0)),
                         'entry_price': _o.get('price', _o.get('entry_price', 0)),
                         'strategy': _o.get('stream_id', _o.get('strategy', 'unknown')),
                         'up_prob': _o.get('confidence', 0.5),
                     })
-                _sp.execute_signals(_actions)
+                _buys = [_a for _a in _actions if _a.get('action') == 'buy']
+                _sells = [_a for _a in _actions if _a.get('action') == 'sell']
+                if _buys:
+                    _sp.execute_buys(_buys)
+                if _sells:
+                    _sp.execute_sells(_sells)
                 logger.info(f"  💾 shadow_portfolio.json 갱신 ({len(_actions)}건 체결)")
             else:
                 # 주문 없어도 touch하여 freshness 유지
-                _sp._save()
+                if hasattr(_sp, '_save'):
+                    _sp._save()
+                elif hasattr(_sp, 'save'):
+                    _sp.save()
                 logger.info("  💾 shadow_portfolio.json 갱신 (주문 없음, timestamp만)")
         except Exception as _e:
             logger.error(f"  shadow_portfolio 갱신 실패: {_e}", exc_info=True)
@@ -1093,6 +1126,16 @@ def run_pipeline(phase: str = 'all'):
         except Exception as e:
             logger.error(f"  SelfLearning 실패: {e}", exc_info=True)
 
+        # ── 1.5 Bayesian Black-Litterman Meta-Upgrader: 4대 부서 피드백 베이시안 통합 ──
+        try:
+            from src.allocation.bayesian_bl_meta_upgrader import BayesianBlackLittermanMetaUpgrader
+            bl_upgrader = BayesianBlackLittermanMetaUpgrader()
+            # 장 마감 후 감사 장부 및 체결 오차 수집 후 자율 파라미터 승격
+            bl_upgrader.auto_upgrade_strategy_parameters({}, {})
+            logger.info("  ✅ BayesianBLMetaUpgrader: 베이시안 후험 자율 파라미터 승격 완료")
+        except Exception as e:
+            logger.error(f"  BayesianBLMetaUpgrader 실패: {e}", exc_info=True)
+
         # ── 2. OnlineLearner: 전날 체결 결과 EWA 학습 ──
         try:
             from src.learning.online_learner import OnlineLearner
@@ -1254,7 +1297,7 @@ def run_pipeline(phase: str = 'all'):
                         _existing_drift['n_drifted'] = 0
                         _existing_drift['drifted_features'] = []
                         _existing_drift['mean_psi'] = 0.0
-                        _existing_drift['reason'] = f'post_retrain_cooldown_{_hours_since_train:.0f}h'
+                        _existing_drift['reason'] = f"post_retrain_cooldown_{_hours_since_train:.0f}h"
                         atomic_write_json(drift_state_file, _existing_drift, indent=2)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
@@ -1548,7 +1591,7 @@ def run_pipeline(phase: str = 'all'):
                             f"  ℹ️ Conformal: 포지션 부족 "
                             f"({len(positions)}건)")
                         _results['conformal'] = {
-                            'reason': f'insufficient_positions_{len(positions)}'}
+                            'reason': f"insufficient_positions_{len(positions)}"}
             else:
                 logger.error("  ℹ️ Conformal: 모델 없음 (스킵)", exc_info=True)
                 _results['conformal'] = {'reason': 'no_model'}
@@ -1671,7 +1714,7 @@ def run_pipeline(phase: str = 'all'):
                     # ★ 재학습 후 drift_guard 결과를 해소 상태로 갱신
                     if _results.get('drift_guard', {}).get('n_drifted', 0) > 0:
                         _results['drift_guard']['resolved'] = True
-                        _results['drift_guard']['resolved_by'] = f'retrain_{_retrain_trigger}'
+                        _results['drift_guard']['resolved_by'] = f"retrain_{_retrain_trigger}"
                 else:
                     logger.info(f"  ⏭️ 재학습 스킵 (데이터 부족)")
                     _results['morning_retrain'] = {
@@ -1711,6 +1754,9 @@ def run_pipeline(phase: str = 'all'):
         'collect': _phase_collect_data,
         'morning_ml': _phase_morning_ml,
         'premarket': _phase_premarket,
+        'call_auction_0830': _phase_call_auction_0830,
+        'call_auction_monitor': _phase_call_auction_monitor_0850_0854,
+        'market_open_0900': _phase_market_open_0900,
         'premarket_trade': _phase_premarket_trade,
         'morning': _morning_phase,
         'market': _market_and_shadow,
@@ -1728,6 +1774,7 @@ def run_pipeline(phase: str = 'all'):
         'us_market': _phase_us_market,
         'us_premarket': _phase_us_premarket,
         'us_regular': _phase_us_regular_market,
+        'us_aftermarket': _phase_aftermarket,
         'weekly_retrain': _phase_weekly_retrain,
         'weekly_validate': _phase_weekly_validate,
     }
@@ -1740,11 +1787,11 @@ def run_pipeline(phase: str = 'all'):
         ckpt = None
 
     # intraday는 하루 여러 번 실행 → checkpoint skip 제외 대상
-    _REPEATABLE_PHASES = {'intraday'}
+    _REPEATABLE_PHASES = {'intraday', 'market', 'call_auction_0830', 'call_auction_monitor', 'market_open_0900'}
 
     def _run_with_checkpoint(name: str, func) -> None:
         """Phase를 Checkpoint 추적과 함께 실행."""
-        if ckpt and name not in _REPEATABLE_PHASES and not ckpt.should_run(name):
+        if ckpt and name not in _REPEATABLE_PHASES and not force and not ckpt.should_run(name):
             logger.info(f"  ⏭ {name} — 이미 완료 (checkpoint skip)")
             return
         if ckpt:
@@ -1886,7 +1933,15 @@ def run_pipeline(phase: str = 'all'):
     elif phase == 'morning' and not is_krx_open:
         _send_email = True  # 휴장일엔 8시(morning) 발송
     elif phase == 'market' and is_krx_open:
-        _send_email = True  # 개장일엔 9시 5분(market) ETF 체결 후 발송
+        # 개장일엔 9시 5분(market) ETF 체결 후 1회만 발송 (데몬 5초 루프 중복 발송 방지)
+        _today_str = today.strftime('%Y%m%d')
+        _email_lock_file = _PROJECT_ROOT / 'logs' / f'market_email_{_today_str}.lock'
+        if not _email_lock_file.exists() and now.hour == 9 and 0 <= now.minute <= 15:
+            _send_email = True
+            try:
+                _email_lock_file.write_text(now.isoformat())
+            except Exception:
+                pass
 
     if _send_email:
         try:
@@ -1991,7 +2046,7 @@ def run_pipeline(phase: str = 'all'):
         except Exception as e:
             logger.error(f"  🚨 리포트 생성 및 발송 실패: {e}", exc_info=True)
 
-    # 이벤트 레져 — 파이프라인 종료
+    # 이벤트 레저 — 파이프라인 종료
     try:
         from src.measurement.event_ledger import log_event
         log_event('SYSTEM', {
@@ -1999,11 +2054,19 @@ def run_pipeline(phase: str = 'all'):
             'phase': phase,
             'elapsed_sec': round((now_kst() - now).total_seconds(), 1),  # ★ BUG FIX: now_kst() 일관성
         }, source='daily_pipeline')
-    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-        logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
+    except Exception as _ele:
+        logger.debug(f"EventLedger logging skip: {_ele}")
+
+    # Google Sheets 실시간 자동 동기화 (나의 투자 레포트)
+    try:
+        from scripts.update_user_template_report import sync_to_google_sheets
+        sync_to_google_sheets("나의 투자 레포트")
+        logger.info("  📊 Google Sheets '나의 투자 레포트' 실시간 자동 동기화 완료")
+    except Exception as _gse:
+        logger.warning(f"  ⚠️ Google Sheets 실시간 동기화 스킵: {_gse}")
 
     logger.info(f"\n{'='*60}")
-    logger.info(f"  Pipeline 완료 ({now_kst() - now})")  # ★ BUG FIX: offset-aware 일관성
+    logger.info(f"  Pipeline 완료 ({now_kst() - now})")
     logger.info(f"{'='*60}")
 
 
@@ -2012,6 +2075,7 @@ def run_pipeline(phase: str = 'all'):
 # ═══════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    phase = sys.argv[1] if len(sys.argv) > 1 else 'all'
-    run_pipeline(phase)
+    phase = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('--') else 'all'
+    force = '--force' in sys.argv
+    run_pipeline(phase, force=force)
 

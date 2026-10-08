@@ -62,30 +62,30 @@ class AutoMLFeatureGenerator:
             fast_windows = _cfg.get('ml.fast_ma_windows', [5, 20, 60, 120, 240])
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             fast_windows = [5, 20, 60, 120, 240]
 
         for w in fast_windows:
             ma = close.rolling(window=w, min_periods=1).mean()
-            feat_df[f'ma{w}_dist'] = (close / ma - 1) * 100
+            feat_df[f"ma{w}_dist"] = (close / ma - 1) * 100
             
             vol_ma = vol.rolling(window=w, min_periods=1).mean()
-            feat_df[f'vol{w}_dist'] = (vol / vol_ma - 1).clip(-5, 5)
+            feat_df[f"vol{w}_dist"] = (vol / vol_ma - 1).clip(-5, 5)
 
         # Returns and Volatility
         try:
             ret_windows = _cfg.get('ml.return_windows', [1, 3, 5, 10, 20, 60])
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             ret_windows = [1, 3, 5, 10, 20, 60]
 
         for w in ret_windows:
             # [Maintenance] FutureWarning: fill_method='pad' deprecated → 명시적 fill_method=None 지정
-            feat_df[f'return_{w}d'] = close.pct_change(periods=w, fill_method=None) * 100
+            feat_df[f"return_{w}d"] = close.pct_change(periods=w, fill_method=None) * 100
             if w >= 5:
                 # Annualized Volatility
-                feat_df[f'volatility_{w}d'] = (
+                feat_df[f"volatility_{w}d"] = (
                     close.ffill().pct_change(fill_method=None).rolling(window=w).std()
                     * np.sqrt(252) * 100
                 )
@@ -105,9 +105,9 @@ class AutoMLFeatureGenerator:
             
             # Create derived macro features
             for col in macro_aligned.columns:
-                feat_df[f'macro_{col}'] = macro_aligned[col].astype(np.float32)
+                feat_df[f"macro_{col}"] = macro_aligned[col].astype(np.float32)
                 # [Maintenance] FutureWarning: fill_method='pad' deprecated → fill_method=None
-                feat_df[f'macro_{col}_chg_20d'] = macro_aligned[col].pct_change(periods=20, fill_method=None) * 100
+                feat_df[f"macro_{col}_chg_20d"] = macro_aligned[col].pct_change(periods=20, fill_method=None) * 100
                 
             # Cross-Feature: Macro & Price Momentum (Non-linear combination)
             if 'macro_copper_gold_ratio' in feat_df.columns and 'return_20d' in feat_df.columns:

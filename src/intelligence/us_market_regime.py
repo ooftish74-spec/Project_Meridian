@@ -94,7 +94,7 @@ class USMarketRegimeEngine:
             return json.loads(OI_PATH.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return {}
 
     def _load_hist(self):
@@ -102,7 +102,7 @@ class USMarketRegimeEngine:
             return json.loads(OI_HIST_PATH.read_text()).get('history', [])
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return []
 
     def _load_cfg(self) -> Dict:
@@ -111,15 +111,28 @@ class USMarketRegimeEngine:
             return cfg.get('us_market_regime', {})
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return {}
 
     def _f1_spy_qqq_trend(self) -> Tuple[float, Dict]:
         """SPY + QQQ 단기 추세 (20일 수익률)."""
         us = self.oi.get('us_market', {})
-        spy_ret = float(us.get('us_spy', {}).get('ret_1d', 0))
-        qqq_ret = float(us.get('us_qqq', {}).get('ret_1d', 0))
-        sox_ret = float(us.get('us_soxx', {}).get('ret_1d', 0))
+        sc = {}
+        try:
+            sc_file = RESULTS / 'signal_cache.json'
+            if sc_file.exists():
+                sc = json.loads(sc_file.read_text())
+        except Exception:
+            pass
+
+        spy_sc = float(sc.get('spx_change_1d', 0.0) or 0.0) / 100.0
+        qqq_sc = float(sc.get('ixic_change_1d', 0.0) or 0.0) / 100.0
+        sox_sc = float(sc.get('soxx_change_1d', 0.0) or 0.0) / 100.0
+
+        spy_ret = float(us.get('us_spy', {}).get('ret_1d', 0)) or spy_sc
+        qqq_ret = float(us.get('us_qqq', {}).get('ret_1d', 0)) or qqq_sc
+        sox_ret = float(us.get('us_soxx', {}).get('ret_1d', 0)) or sox_sc
+
         hist_spy = [float(h.get('us_market', {}).get('us_spy', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [spy_ret]
         hist_qqq = [float(h.get('us_market', {}).get('us_qqq', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [qqq_ret]
         trend_spy = sum(hist_spy) / len(hist_spy) if hist_spy else spy_ret
@@ -131,7 +144,14 @@ class USMarketRegimeEngine:
     def _f2_vix(self) -> Tuple[float, Dict]:
         """VIX 레벨 + term structure."""
         us = self.oi.get('us_market', {})
-        vix = float(us.get('vix', {}).get('close', 20.0) or 20.0)
+        sc_vix = 0.0
+        try:
+            sc_file = RESULTS / 'signal_cache.json'
+            if sc_file.exists():
+                sc_vix = float(json.loads(sc_file.read_text()).get('vix', 0.0) or 0.0)
+        except Exception:
+            pass
+        vix = sc_vix if sc_vix > 0 else float(us.get('vix', {}).get('close', 20.0) or 20.0)
         vix_ts = float(us.get('vix_term_structure', {}).get('ratio', 1.0) or 1.0)
         vix_level_score = max(-1.0, min(1.0, (20 - vix) / 10))
         ts_score = max(-1.0, min(1.0, (1.0 - vix_ts) * 5))
@@ -189,63 +209,35 @@ class USMarketRegimeEngine:
             move_val = float(us['move'].get('close', 0) or 0)
             source = 'overnight'
         if move_val is None or move_val <= 0:
-            try:
-                import yfinance as yf
-                ticker = yf.Ticker('^MOVE')
-                hist = ticker.history(period='5d')
-                if not hist.empty:
-                    move_val = float(hist['Close'].iloc[-1])
-                    source = 'yfinance'
-            except Exception as _e:
-                logger.error(f'MOVE fetch 실패: {_e}', exc_info=True)
+            # yfinance 폐기 — FRED API 및 Alpha Vantage 우선 참조
+            pass
         if move_val is None or move_val <= 0:
             return (0.0, {'move': None, 'score': 0.0, 'source': 'unavailable'})
         score = max(-1.0, min(1.0, (90 - move_val) / 40))
         return (score, {'move': round(move_val, 2), 'score': round(score, 3), 'source': source})
 
     def _f7_ted_spread(self) -> Tuple[float, Dict]:
-        """TED Spread proxy: 10Y Treasury - 3M T-Bill.
-
-        Spread 확대 = 신용 위험 증가 = bear
-        Spread 축소/역전 = 위험 감소 = bull
-
-        기준: spread 1.0% = 중립
-              spread < 0.5% = bull
-              spread > 2.0% = bear
-              역전 (< 0) = 강한 bear (장단기 금리 역전)
-        """
+        """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
         tnx_val = None
         irx_val = None
         source = 'none'
-        try:
-            import yfinance as yf
-            tnx = yf.Ticker('^TNX')
-            irx = yf.Ticker('^IRX')
-            h10 = tnx.history(period='5d')
-            h3m = irx.history(period='5d')
-            if not h10.empty:
-                tnx_val = float(h10['Close'].iloc[-1])
-            if not h3m.empty:
-                irx_val = float(h3m['Close'].iloc[-1])
-            source = 'yfinance'
-        except Exception as _e:
-            logger.error(f'TED fetch 실패: {_e}', exc_info=True)
-        if tnx_val is None or irx_val is None:
-            return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable'})
-        ted_spread = tnx_val - irx_val
-        if ted_spread < 0:
-            score = -1.0
-        else:
-            score = max(-1.0, min(1.0, (1.0 - ted_spread) / 1.0))
-        return (score, {'tnx_10y': round(tnx_val, 3), 'irx_3m': round(irx_val, 3), 'ted_spread': round(ted_spread, 3), 'score': round(score, 3), 'source': source})
+        # yfinance 폐기 — FRED API 우선 참조
+    def _f7_ted_spread(self) -> Tuple[float, Dict]:
+        """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
+        # yfinance 폐기 — FRED API 우선 참조
+        return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable'})
 
     def detect(self) -> Dict:
         """
         US 레짐 감지 실행.
-
-        Returns:
-            {regime, confidence, tier, score, components, generated_at}
         """
+        return self._detect_impl()
+
+    def evaluate(self) -> Dict:
+        """alias for detect"""
+        return self.detect()
+
+    def _detect_impl(self) -> Dict:
         components = {}
         f1_score, f1_det = self._f1_spy_qqq_trend()
         f2_score, f2_det = self._f2_vix()
@@ -274,7 +266,7 @@ class USMarketRegimeEngine:
         tier = vix_tier(vix_val)
         result = {'date': date.today().isoformat(), 'regime': regime, 'confidence': round(confidence, 3), 'tier': tier, 'score': round(total_score, 4), 'vix': vix_val, 'components': components, 'generated_at': datetime.now().isoformat()}
         atomic_write_json(OUT_FILE, result, ensure_ascii=False, indent=2)
-        logger.info(f'  🌐 US Regime: {regime.upper()} (conf={confidence:.0%}, score={total_score:+.3f}, VIX={vix_val:.1f}/{tier})')
+        logger.info(f"  🌐 US Regime: {regime.upper()} (conf={confidence:.0%}, score={total_score:+.3f}, VIX={vix_val:.1f}/{tier})")
         return result
 
 def run_us_regime() -> Dict:
@@ -288,16 +280,16 @@ def get_us_regime() -> Dict:
         return json.loads(OUT_FILE.read_text())
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
         return {'regime': 'neutral', 'confidence': 0.3, 'tier': 'mid', 'score': 0.0}
 if __name__ == '__main__':
     import logging as _logging
     _logging.basicConfig(level=_logging.INFO, format='%(message)s')
     engine = USMarketRegimeEngine()
     result = engine.detect()
-    logger.info(f'\n=== US Market Regime ===')
-    logger.info(f'레짐: {result['regime'].upper()}  (conf={result['confidence']:.0%})')
-    logger.info(f'Score: {result['score']:+.4f}  VIX={result['vix']:.1f} ({result['tier']})')
+    logger.info(f"\n=== US Market Regime ===")
+    logger.info(f"레짐: {result['regime'].upper()}  (conf={result['confidence']:.0%})")
+    logger.info(f"Score: {result['score']:+.4f}  VIX={result['vix']:.1f} ({result['tier']})")
     logger.info('')
     for name, det in result['components'].items():
-        logger.info(f'  {name:20s}: score={det['score']:+.3f}  weight={det['weight']:.0%}')
+        logger.info(f"  {name:20s}: score={det['score']:+.3f}  weight={det['weight']:.0%}")

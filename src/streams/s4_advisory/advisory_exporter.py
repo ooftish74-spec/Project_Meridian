@@ -24,27 +24,27 @@ class AdvisoryExporter:
             output = {'timestamp': datetime.now().isoformat(), 'regime': regime, 'regime_confidence': confidence, 'orders': advisory_signals}
             atomic_write_json(json_path, output, indent=2)
         except Exception as e:
-            logger.error(f'  Advisory JSON 저장 실패: {e}')
+            logger.error(f"  Advisory JSON 저장 실패: {e}")
         md_path = self._results_dir / 'advisory_report.md'
         md_content = self._generate_markdown(advisory_signals, regime, confidence)
         try:
             atomic_write_text(md_path, md_content)
-            logger.info(f'  📝 S4 Advisory 리포트 생성 완료: {md_path.name}')
+            logger.info(f"  📝 S4 Advisory 리포트 생성 완료: {md_path.name}")
         except Exception as e:
-            logger.error(f'  Advisory Markdown 저장 실패: {e}')
+            logger.error(f"  Advisory Markdown 저장 실패: {e}")
 
     def _generate_markdown(self, signals: List[Dict], regime: str, confidence: float) -> str:
         """Advisory 리포트를 마크다운 형식으로 생성합니다."""
         lines = []
-        lines.append(f'# 🏛️ Project Meridian - S4 Advisory Report')
-        lines.append(f'**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}')
-        lines.append(f'**Regime**: {regime.upper()} (Confidence: {confidence:.2f})')
+        lines.append(f"# 🏛️ Project Meridian - S4 Advisory Report")
+        lines.append(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        lines.append(f"**Regime**: {regime.upper()} (Confidence: {confidence:.2f})")
         lines.append('')
         lines.append('수동 매매가 필요한 연금/ISA 계좌의 추천 오더입니다.')
         lines.append('')
         for sig in signals:
             acct = sig.get('account', 'UNKNOWN')
-            lines.append(f'## 💼 {acct} 계좌')
+            lines.append(f"## 💼 {acct} 계좌")
             target_list = sig.get('target', [])
             if not target_list:
                 lines.append('- 현재 진입 추천 종목이 없습니다.')
@@ -52,6 +52,6 @@ class AdvisoryExporter:
                 for asset in target_list:
                     ticker = asset.get('ticker', '')
                     weight = asset.get('weight', 0)
-                    lines.append(f'- **{ticker}**: {weight * 100:.1f}%')
+                    lines.append(f"- **{ticker}**: {weight * 100:.1f}%")
             lines.append('')
         return '\n'.join(lines)

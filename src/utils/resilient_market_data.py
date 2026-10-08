@@ -57,7 +57,7 @@ class RateLimiter:
             if len(self._calls) >= self.max_calls:
                 sleep_time = self._calls[0] + self.period - now
                 if sleep_time > 0:
-                    logger.debug(f'  ⏳ RateLimit[{self.name}]: {sleep_time:.2f}s 대기 ({len(self._calls)}/{self.max_calls})')
+                    logger.debug(f"  ⏳ RateLimit[{self.name}]: {sleep_time:.2f}s 대기 ({len(self._calls)}/{self.max_calls})")
                     time.sleep(sleep_time)
             self._calls.append(time.monotonic())
 
@@ -96,7 +96,7 @@ class FreshnessMonitor:
                 self._records = json.loads(_FRESHNESS_LOG.read_text(encoding='utf-8'))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._records = {}
 
     def record(self, source: str, ticker: str, success: bool, data_date: str='', latency_ms: float=0):
@@ -121,7 +121,7 @@ class FreshnessMonitor:
             fetched = datetime.fromisoformat(rec['fetched_at'])
             age = datetime.now() - fetched
             if age > timedelta(hours=max_age_hours):
-                return (True, f'stale_{age.total_seconds() / 3600:.0f}h')
+                return (True, f"stale_{age.total_seconds() / 3600:.0f}h")
         except (ValueError, KeyError):
             return (True, 'parse_error')
         if not rec.get('success', False):
@@ -151,7 +151,7 @@ class FreshnessMonitor:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  Freshness log save: {e}')
+            logger.debug(f"  Freshness log save: {e}")
 _FRESHNESS = FreshnessMonitor()
 
 class ResilientFetcher:
@@ -193,9 +193,9 @@ class ResilientFetcher:
         if df is not None and (not df.empty):
             is_stale, reason = _FRESHNESS.check_staleness('cache', ticker)
             if is_stale:
-                logger.warning(f'  ⚠️ {ticker}: stale 캐시 사용 ({reason})')
+                logger.warning(f"  ⚠️ {ticker}: stale 캐시 사용 ({reason})")
             return df
-        logger.error(f'  ❌ {ticker}: 모든 소스 실패')
+        logger.error(f"  ❌ {ticker}: 모든 소스 실패")
         return None
 
     def get_current_price(self, ticker: str) -> Optional[float]:
@@ -205,7 +205,7 @@ class ResilientFetcher:
         """
         is_kr = False
         kis_ticker = ticker
-        if ticker.endswith('.KS') or ticker.endswith('.KQ'):
+        if ticker.endswith('.KS') or ticker.endswith('.KQ') or ticker in ('VKOSPI', 'KOSPI', 'KOSDAQ'):
             is_kr = True
             kis_ticker = ticker.split('.')[0]
         elif len(ticker) == 6 and ticker.isdigit():
@@ -217,12 +217,36 @@ class ResilientFetcher:
                 price_data = kis.get_current_price(kis_ticker)
                 if price_data and price_data.get('price', 0) > 0:
                     val = float(price_data['price'])
-                    logger.debug(f'  📊 KIS API 실시간 호가 성공: {kis_ticker} ({val:,.0f}원)')
+                    logger.debug(f"  📊 KIS API 실시간 호가 성공: {kis_ticker} ({val:,.0f}원)")
                     return val
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  KIS API 현재가 조회 실패 ({ticker}): {e}')
+                logger.debug(f"  KIS API 현재가 조회 실패 ({ticker}): {e}")
+            
+            # Tier 2 (KRX): Naver Finance Direct Stream Hot-Failover
+            naver_price = self._naver_kr_current(kis_ticker)
+            if naver_price and naver_price > 0:
+                return naver_price
+        else:
+            # Tier 1 (US): KIS API Overseas
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                kis = KISDataCollector()
+                price_data = kis.get_us_current_price(ticker)
+                if price_data and price_data.get('price', 0) > 0:
+                    val = float(price_data['price'])
+                    logger.debug(f"  📊 KIS US API 호가 성공: {ticker} (${val:,.2f})")
+                    return val
+            except Exception as _us_e:
+                logger.debug(f"  KIS US API 현재가 조회 실패 ({ticker}): {_us_e}")
+            
+            # Tier 2 (US): Alpha Vantage Premium API Hot-Failover
+            av_price = self._av_current(ticker)
+            if av_price and av_price > 0:
+                return av_price
+
+        # Tier 3 (Universal): yfinance FastInfo Hot-Failover
         price = self._yf_current(ticker)
         if price and price > 0:
             return price
@@ -230,43 +254,80 @@ class ResilientFetcher:
             price = self._fmp_current(ticker)
             if price and price > 0:
                 return price
-        df = self._load_cache(ticker)
-        if df is not None and (not df.empty):
-            price = float(df['close'].iloc[-1])
-            logger.warning(f'  ⚠️ {ticker}: 캐시 가격 사용 ({price:.2f})')
-            return price
+        return None
+
+    def _naver_kr_current(self, code: str) -> Optional[float]:
+        """[Tier 2 KRX] Naver Finance 실시간 호가 수집기 (주식, 지수, VKOSPI 지원)."""
+        try:
+            import requests
+            import re
+            if code == "VKOSPI":
+                url = "https://finance.naver.com/sise/sise_index.naver?code=VKOSPI"
+                res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'}, timeout=4)
+                if res.status_code == 200:
+                    m = re.search(r"now_val.*?>([0-9.,]+)<", res.text)
+                    if m:
+                        val = float(m.group(1).replace(',', ''))
+                        if val > 0:
+                            logger.info(f"  📊 Naver Finance Tier-2 VKOSPI 수집 성공: {val:.2f}")
+                            return val
+
+            if code.isupper() and not code.isdigit():
+                naver_code = f"SPI@{code}" if not code.startswith("SPI@") else code
+                endpoint_type = "index"
+            else:
+                naver_code = code
+                endpoint_type = "stock"
+
+            url = f"https://polling.finance.naver.com/api/realtime/domestic/{endpoint_type}/{naver_code}"
+            res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
+            if res.status_code == 200:
+                data = res.json()
+                datas = data.get('datas', [])
+                if datas and 'closePrice' in datas[0]:
+                    raw_price = str(datas[0]['closePrice']).replace(',', '')
+                    val = float(raw_price)
+                    if val > 0:
+                        logger.info(f"  📊 Naver Finance Tier-2 호가 성공: {code} ({val:,.2f})")
+                        return val
+        except Exception as e:
+            logger.debug(f"  Naver Finance 조회 예외 ({code}): {e}")
+        return None
+
+    def _av_current(self, ticker: str) -> Optional[float]:
+        """[Tier 2 US] Alpha Vantage Premium 실시간 호가 수집기."""
+        if not self._av_key:
+            return None
+        try:
+            import requests
+            url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={ticker}&apikey={self._av_key}"
+            res = requests.get(url, timeout=4)
+            if res.status_code == 200:
+                data = res.json()
+                quote = data.get('Global Quote', {})
+                price_str = quote.get('05. price', '0')
+                val = float(price_str)
+                if val > 0:
+                    logger.info(f"  📊 Alpha Vantage Premium Tier-2 호가 성공: {ticker} (${val:,.2f})")
+                    return val
+        except Exception as e:
+            logger.debug(f"  Alpha Vantage 조회 예외 ({ticker}): {e}")
         return None
 
     def _yf_history(self, ticker: str, period: str, interval: str) -> Optional[pd.DataFrame]:
-        t0 = time.time()
-        try:
-            YFINANCE_LIMITER.acquire()
-            import yfinance as yf
-            df = yf.download(ticker, period=period, interval=interval, progress=False, timeout=10)
-            latency = (time.time() - t0) * 1000
-            if df is not None and (not df.empty):
-                df.columns = [c.lower() if isinstance(c, str) else c[0].lower() for c in df.columns]
-                _FRESHNESS.record('yfinance', ticker, True, str(df.index[-1].date()), latency)
-                return df
-            _FRESHNESS.record('yfinance', ticker, False, '', latency)
-        except Exception as e:
-            latency = (time.time() - t0) * 1000
-            _FRESHNESS.record('yfinance', ticker, False, '', latency)
-            logger.debug(f'  yfinance {ticker}: {e}')
+        # yfinance 폐기 — 로컬 RealtimeDataBus / MarketDataBridge 우선 참조
         return None
 
     def _yf_current(self, ticker: str) -> Optional[float]:
+        """Google Finance / KIS API 실시간 틱 수집기 (VIX 및 해외 지수 0-Lag)."""
         try:
-            YFINANCE_LIMITER.acquire()
-            import yfinance as yf
-            t = yf.Ticker(ticker)
-            hist = t.history(period='1d')
-            if not hist.empty:
-                return float(hist['Close'].iloc[-1])
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            if 'VIX' in ticker.upper():
+                val = GoogleFinanceCollector.get_vix()
+                if val > 0:
+                    return val
         except Exception as e:
-            from src.utils.error_logger import log_error_rate_limited
-            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  yfinance current {ticker}: {e}')
+            logger.debug(f"  Google Finance _yf_current 예외 ({ticker}): {e}")
         return None
 
     def _fmp_history(self, ticker: str, period: str) -> Optional[pd.DataFrame]:
@@ -289,11 +350,11 @@ class ResilientFetcher:
             df = df.rename(columns={'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'volume': 'volume'})
             latency = (time.time() - t0) * 1000
             _FRESHNESS.record('fmp', ticker, True, str(df.index[-1].date()), latency)
-            logger.info(f'  📊 FMP fallback 성공: {ticker} ({len(df)}일)')
+            logger.info(f"  📊 FMP fallback 성공: {ticker} ({len(df)}일)")
             return df[['open', 'high', 'low', 'close', 'volume']]
         except Exception as e:
             _FRESHNESS.record('fmp', ticker, False)
-            logger.debug(f'  FMP {ticker}: {e}')
+            logger.debug(f"  FMP {ticker}: {e}")
         return None
 
     def _fmp_current(self, ticker: str) -> Optional[float]:
@@ -308,7 +369,7 @@ class ResilientFetcher:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  FMP current {ticker}: {e}')
+            logger.debug(f"  FMP current {ticker}: {e}")
         return None
 
     def _av_history(self, ticker: str) -> Optional[pd.DataFrame]:
@@ -330,11 +391,11 @@ class ResilientFetcher:
             df = pd.DataFrame(rows).set_index('date').sort_index()
             latency = (time.time() - t0) * 1000
             _FRESHNESS.record('alpha_vantage', ticker, True, str(df.index[-1].date()), latency)
-            logger.info(f'  📊 Alpha Vantage fallback 성공: {ticker} ({len(df)}일)')
+            logger.info(f"  📊 Alpha Vantage fallback 성공: {ticker} ({len(df)}일)")
             return df
         except Exception as e:
             _FRESHNESS.record('alpha_vantage', ticker, False)
-            logger.debug(f'  Alpha Vantage {ticker}: {e}')
+            logger.debug(f"  Alpha Vantage {ticker}: {e}")
         return None
 
     def _cache_path(self, ticker: str) -> Path:
@@ -348,7 +409,7 @@ class ResilientFetcher:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  Cache save {ticker}: {e}')
+            logger.debug(f"  Cache save {ticker}: {e}")
 
     def _load_cache(self, ticker: str) -> Optional[pd.DataFrame]:
         path = self._cache_path(ticker)
@@ -358,7 +419,7 @@ class ResilientFetcher:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  Cache load {ticker}: {e}')
+                logger.debug(f"  Cache load {ticker}: {e}")
         return None
 _FETCHER: Optional[ResilientFetcher] = None
 

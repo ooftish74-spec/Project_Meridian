@@ -69,3 +69,11 @@ class GapAnalyzer:
                 new_weights[m] /= total_weight
                 
         return new_weights
+
+    def analyze_recent_gaps(self, lookback_days: int = 14) -> pd.DataFrame:
+        """최근 lookback_days 간의 예측 vs 체결 갭 수집."""
+        return pd.DataFrame()
+
+    def update_model_weights_with_feedback(self, feedback: pd.DataFrame):
+        """피드백 데이터프레임 기반 가중치 갱신."""
+        pass

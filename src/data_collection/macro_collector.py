@@ -62,22 +62,18 @@ class MacroCollector:
 
         콜럼: date, high_yield_spread, copper_gold_ratio, cboe_skew, gscpi
         """
-        logger.info('[Phase 65] 매크로 데이터 수집 시작')
-        try:
-            import yfinance as yf
-        except ImportError as e:
-            raise RuntimeError('[Phase 65] yfinance 미설치 — pip install yfinance')
+        logger.info('[Phase 65] 매크로 데이터 수집 시작 (VendorMultiplexer / FRED / KIS API)')
         end = datetime.today()
         _buf = float(self._cfg.get('data.macro_lookback_buffer', 1.5)) if self._cfg and hasattr(self._cfg, 'get') else 1.5
         start = end - timedelta(days=int(self._lookback * _buf))
         frames = {}
-        frames['high_yield_spread'] = self._fetch_hy_spread(yf, start, end)
-        frames['copper_gold_ratio'] = self._fetch_copper_gold(yf, start, end)
-        frames['cboe_skew'] = self._fetch_cboe_skew(yf, start, end)
+        frames['high_yield_spread'] = self._fetch_hy_spread(start, end)
+        frames['copper_gold_ratio'] = self._fetch_copper_gold(start, end)
+        frames['cboe_skew'] = self._fetch_cboe_skew(start, end)
         frames['gscpi'] = self._fetch_gscpi(start, end)
         df = pd.DataFrame(frames)
         df.index.name = 'date'
-        df = df.ffill(limit=5)  # 근원적 해결: 휴장일 불일치로 인한 단기 결측치 1차 방어
+        df = df.ffill(limit=35)  # [Phase 70] 월간 매크로 데이터(GSCPI, CPI 등) 35일 ffill 반영
         _proxy_for_impute = df.copy()
         try:
             from src.utils.data_imputer import OrthogonalDataImputer, DataNoGoException
@@ -106,12 +102,8 @@ class MacroCollector:
         atomic_write_json(_CACHE_JSON, {'collected_at': datetime.now().isoformat(), 'rows': len(df), 'cols': list(df.columns)}, ensure_ascii=False, indent=2)
         return df
 
-    def _fetch_hy_spread(self, yf, start, end) -> pd.Series:
-        """HY 크레딧 스프레드 프록시.
-
-        우선: FRED BAMLH0A0HYM2 (% 단위)
-        Fallback: (HYG 롤마1 30d 표준편차 * sqrt(252)) 세미-프록시
-        """
+    def _fetch_hy_spread(self, start, end) -> pd.Series:
+        """HY 크레딧 스프레드 프록시."""
         if self.fred_key:
             try:
                 fred_s = self._fred_series('BAMLH0A0HYM2', start, end, label='HY_Spread(FRED)')
@@ -134,11 +126,11 @@ class MacroCollector:
                 spread = spread.iloc[:, 0]
             return spread.rename('high_yield_spread')
         except Exception as _e:
-            logger.warning(f'  HY Spread 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
+            logger.error(f'[Phase 70 PRIMARY_FAIL] high_yield_spread: 1차 소스 수집 실패 ({_e}) — Fail-Fast 진단 및 엔지니어 정밀 수정 필요')
             idx = pd.date_range(start, end, freq='B')
             return pd.Series(float('nan'), index=idx, name='high_yield_spread')
 
-    def _fetch_copper_gold(self, yf, start, end) -> pd.Series:
+    def _fetch_copper_gold(self, start, end) -> pd.Series:
         """[Phase 70-Integration] VendorMultiplexer 경유 Copper/Gold 비율."""
         _ss, _es = (start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
         if self._vmx is None:
@@ -151,11 +143,11 @@ class MacroCollector:
                 ratio = ratio.iloc[:, 0]
             return ratio[ratio > 0].rename('copper_gold_ratio')
         except Exception as _e:
-            logger.warning(f'  Copper/Gold 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
+            logger.error(f'[Phase 70 PRIMARY_FAIL] copper_gold_ratio: 1차 소스 수집 실패 ({_e}) — Fail-Fast 진단 및 엔지니어 정밀 수정 필요')
             idx = pd.date_range(start, end, freq='B')
             return pd.Series(float('nan'), index=idx, name='copper_gold_ratio')
 
-    def _fetch_cboe_skew(self, yf, start, end) -> pd.Series:
+    def _fetch_cboe_skew(self, start, end) -> pd.Series:
         """[Phase 70-Integration] VendorMultiplexer 경유 ^SKEW 수집."""
         _ss, _es = (start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
         if self._vmx is None:
@@ -166,7 +158,7 @@ class MacroCollector:
                 return _df.iloc[:, 0].rename('cboe_skew')
             return _df.rename('cboe_skew')
         except Exception as _e:
-            logger.warning(f'  CBOE SKEW 수집 실패 (VMX 에러): {_e} — PCA 대기', exc_info=True)
+            logger.error(f'[Phase 70 PRIMARY_FAIL] cboe_skew: 1차 소스 수집 실패 ({_e}) — Fail-Fast 진단 및 엔지니어 정밀 수정 필요')
             idx = pd.date_range(start, end, freq='B')
             return pd.Series(float('nan'), index=idx, name='cboe_skew')
 

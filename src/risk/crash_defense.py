@@ -99,20 +99,20 @@ class CrashDefense:
         _lvl3 = cfg.get('crash.crash_threshold', 70)
         if _lvl1 <= stress < _lvl2:
             cash_target = cfg.get('risk.caution_cash_ratio', 0.3)
-            actions.append({'level': 'caution', 'action': 'increase_cash', 'target_cash_ratio': cash_target, 'reason': f'스트레스 경계: score={stress:.0f}'})
+            actions.append({'level': 'caution', 'action': 'increase_cash', 'target_cash_ratio': cash_target, 'reason': f"스트레스 경계: score={stress:.0f}"})
         elif _lvl2 <= stress < _lvl3:
             cash_target = cfg.get('risk.bear_cash_ratio', 0.6)
             inverse_pct = cfg.get('leverage.inverse_max_pct', 0.2) * 0.5
-            actions.append({'level': 'danger', 'action': 'defensive_mode', 'target_cash_ratio': cash_target, 'inverse_allocation': round(inverse_pct, 3), 'reason': f'스트레스 위험: score={stress:.0f}'})
+            actions.append({'level': 'danger', 'action': 'defensive_mode', 'target_cash_ratio': cash_target, 'inverse_allocation': round(inverse_pct, 3), 'reason': f"스트레스 위험: score={stress:.0f}"})
         elif stress >= _lvl3:
             cash_target = cfg.get('risk.crash_cash_ratio', 0.8)
             inverse_pct = cfg.get('leverage.inverse_max_pct', 0.2)
-            actions.append({'level': 'crash', 'action': 'crash_protocol', 'target_cash_ratio': cash_target, 'inverse_allocation': inverse_pct, 'halt_new_positions': True, 'reason': f'🚨 CRASH PROTOCOL: score={stress:.0f}'})
+            actions.append({'level': 'crash', 'action': 'crash_protocol', 'target_cash_ratio': cash_target, 'inverse_allocation': inverse_pct, 'halt_new_positions': True, 'reason': f"🚨 CRASH PROTOCOL: score={stress:.0f}"})
         _fx_alert_pct = cfg.get('crash.fx_alert_pct', 3.0)
         if abs(measurement['fx_change_pct']) > _fx_alert_pct:
             rebalance_threshold = cfg.get('s4.us.rebalance_on_fx_move', 5.0)
             if abs(measurement['fx_change_pct']) >= rebalance_threshold:
-                actions.append({'level': 'fx_alert', 'action': 'fx_hedge_rebalance', 'fx_change': measurement['fx_change_pct'], 'reason': f'환율 급변: {measurement['fx_change_pct']:+.1f}%'})
+                actions.append({'level': 'fx_alert', 'action': 'fx_hedge_rebalance', 'fx_change': measurement['fx_change_pct'], 'reason': f"환율 급변: {measurement['fx_change_pct']:+.1f}%"})
         return {'stress_level': 'crash' if stress >= _lvl3 else 'danger' if stress >= _lvl2 else 'caution' if stress >= _lvl1 else 'normal', 'stress_score': stress, 'actions': actions, 'safe': len(actions) == 0, 'regime': regime}
 
     def assess(self, market_data: Dict, portfolio: Dict, regime: str='caution') -> Dict:

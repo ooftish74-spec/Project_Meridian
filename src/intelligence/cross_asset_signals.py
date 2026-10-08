@@ -79,7 +79,7 @@ class CrossAssetSignalEngine:
                     comp_hist = [h.get('composite_signal', 0) for h in hist_data[-60:]]
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at cross_asset_signals.py:128', exc_info=True)
             if len(comp_hist) >= 20:
                 from src.utils.adaptive_thresholds import VolatilityScaledThreshold
@@ -180,7 +180,7 @@ class CrossAssetSignalEngine:
                 sc = json.loads(sc_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at cross_asset_signals.py:258', exc_info=True)
         usr_file = RESULTS / 'us_market_regime.json'
         usr = {}
@@ -189,7 +189,7 @@ class CrossAssetSignalEngine:
                 usr = json.loads(usr_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at cross_asset_signals.py:269', exc_info=True)
         oi = sc.get('overnight_intel', {})
         if 'SPY' not in result:
@@ -234,7 +234,7 @@ class CrossAssetSignalEngine:
             fxi_chg = -float(sc['dxy_change_1m']) / 21 * 0.5
             result['FXI'] = {'change_pct': fxi_chg, 'dxy': sc.get('dxy', 0)}
         if len(result) > len(existing):
-            logger.info(f'  ★ Cross-Asset fallback: {len(result)}개 자산 (signal_cache + us_market_regime)')
+            logger.info(f"  ★ Cross-Asset fallback: {len(result)}개 자산 (signal_cache + us_market_regime)")
         return result
 
     def _compute_macro_adjustment(self) -> float:
@@ -291,7 +291,7 @@ class CrossAssetSignalEngine:
             return float(np.clip(weighted / total_w, -1.0, 1.0))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return 0.0
 
     def _compute_asset_signal(self, asset: str, data: Dict) -> Optional[float]:

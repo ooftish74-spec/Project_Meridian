@@ -104,7 +104,8 @@ class MotieCollector:
             DataCollectionError: API 키 누락 시 즉시 raise (Fail-Fast)
         """
         if not self.client_id or not self.client_secret:
-            raise DataCollectionError('[Phase 63] NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 누락. .env 파일 확인 후 재실행.')
+            logger.info('  [Phase 63] NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 미설정 ➔ 네이버 뉴스 센티멘트 수집 생략')
+            return {}
         query = f'{year}년 {month}월 수출입동향 수출액 무역수지'
         headers = {'X-Naver-Client-Id': self.client_id, 'X-Naver-Client-Secret': self.client_secret}
         params = {'query': query, 'display': 20, 'sort': 'sim'}

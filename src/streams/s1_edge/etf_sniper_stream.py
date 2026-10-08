@@ -16,6 +16,7 @@ import numpy as np
 from config.dynamic_config import DynamicConfig
 from src.streams.base_stream import BaseStream
 from src.data_collection.ss_etf_feature_engine import SSETFFeatureEngine
+from src.strategy.unconventional_alpha_engine import PureMathematicalUnconventionalEngine
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
@@ -24,11 +25,16 @@ class S1ETFSniperStream(BaseStream):
     def __init__(self):
         super().__init__('S1', 'ETF_SNIPER')
         self.universe = cfg.get('s1.universe', {
-            '069500': {'name': 'KODEX 200', 'type': 'index'},
-            '252670': {'name': 'KODEX 200선물인버스2X', 'type': 'index_inv'},
+            '069500': {'name': 'KODEX 200', 'type': 'index_1x'},
+            '122630': {'name': 'KODEX 레버리지', 'type': 'index_lev_2x'},
+            '252670': {'name': 'KODEX 200선물인버스2X', 'type': 'index_inv_2x'},
+            'TQQQ': {'name': 'ProShares UltraPro QQQ 3X', 'type': 'us_tech_3x'},
+            'SOXL': {'name': 'Direxion Semiconductor 3X', 'type': 'us_semi_3x'},
+            'SGOV': {'name': 'iShares 0-3 Month Treasury', 'type': 'us_treasury_shield'}
         })
         self.vol_history = {}
         self.ss_engine = SSETFFeatureEngine()
+        self.unconventional_engine = PureMathematicalUnconventionalEngine()
 
     def _get_ticker_by_type(self, etf_type: str) -> str:
         """universe dict에서 type 필드로 티커를 동적 조회.
@@ -81,11 +87,14 @@ class S1ETFSniperStream(BaseStream):
         
         # 2. SS-ETF Feature Engine 연동 (Wag-the-Dog 전술 판별)
         intraday_data = market_data.get('ss_etf_intraday', None)
-        ss_features  = self.ss_engine.compute('069500', intraday_data=intraday_data) or {}
+        core_index_ticker = self._get_ticker_by_type('index') or '069500'
+        ss_features  = self.ss_engine.compute(core_index_ticker, intraday_data=intraday_data) or {}
         
-        # [Tactic C] 단일 종목 (삼성전자/하이닉스) SS-ETF Feature 계산
-        sam_features = self.ss_engine.compute('005930') or {}
-        hyn_features = self.ss_engine.compute('000660') or {}
+        # [Tactic C] 단일 주도 종목 SS-ETF Feature 동적 계산
+        sam_ticker = cfg.get('s1.leader_ticker_1', '005930')
+        hyn_ticker = cfg.get('s1.leader_ticker_2', '000660')
+        sam_features = self.ss_engine.compute(sam_ticker) or {}
+        hyn_features = self.ss_engine.compute(hyn_ticker) or {}
 
         
         # 조건 판별
@@ -129,9 +138,16 @@ class S1ETFSniperStream(BaseStream):
         from datetime import datetime
         now = datetime.now()
         noise_filter_minutes = int(cfg.get('s1.noise_filter_minutes', 30))
-        is_early_morning = (now.hour == 9 and now.minute < noise_filter_minutes)
         
-        # [Noise Filter] 장 초반 (9:00~9:30) LP 호가 제출 지연에 따른 가짜 양수 압력(False Positive) 무시
+        # [Dynamic Session Window] 수능일(10시 개장/16:30 마감) 등 장시간 변경 대응 동적 세션 연산
+        # 11월 셋째주 목요일(수능일) 동적 체크
+        is_csat_day = (now.month == 11 and now.weekday() == 3 and 15 <= now.day <= 21)
+        mkt_open_hour = 10 if is_csat_day else 9
+        mkt_close_hour = 16 if is_csat_day else 15
+        
+        is_early_morning = (now.hour == mkt_open_hour and now.minute < noise_filter_minutes)
+
+        # Tactic B: vol_anomaly 기반 climax 감지 (vol_z + anomaly 이중 조건)
         tactic_b_trigger = (vol_z_score > vr_z_threshold) and (lp_pressure > 0) and not is_early_morning
 
         # Tactic C: 단일 종목 WTD — sam/hyn 각각 variance ratio Z-test 적용
@@ -145,7 +161,8 @@ class S1ETFSniperStream(BaseStream):
         tactic_c_sam_trigger = (sam_vol_z > vr_z_threshold) and (sam_anomaly_z > vr_z_threshold)
         tactic_c_hyn_trigger = (hyn_vol_z > vr_z_threshold) and (hyn_anomaly_z > vr_z_threshold)
 
-        is_moc_window = (now.hour == 14 and now.minute >= 50) or (now.hour == 15 and now.minute <= 20)
+        # 동적 MOC(종가 동시호가 전) 30분 윈도우 계산
+        is_moc_window = (now.hour == (mkt_close_hour - 1) and now.minute >= 50) or (now.hour == mkt_close_hour and now.minute <= 20)
         
         tactic_d_trigger = False
         tactic_d_direction = 'long'
@@ -154,26 +171,40 @@ class S1ETFSniperStream(BaseStream):
         # ── [Component 2: Institutional Overhaul] ──
         # MOC(종가) 시계열 종속성 제거. RenTec 스타일의 실시간(Intraday Continuous) 이벤트 드리븐 트리거로 승격.
         
-        # Tactic D: 극단적 LP 호가창 압력(Orderbook Imbalance) + 변동성 팽창 시 즉시 진입
-        if lp_pressure > 200 and vol_z_score > 2.0:
+        # Tactic D: 극단적 LP 호가창 압력(Orderbook Imbalance) + 변동성 팽창 시 즉시 진입 (민감도 100 상향)
+        lp_min_thresh = float(cfg.get('s1.tactic_d.lp_pressure_min', 100.0))
+        if lp_pressure > lp_min_thresh and vol_z_score > 2.0:
             tactic_d_trigger = True
             tactic_d_direction = 'long'
-        elif lp_pressure < -200 and vol_z_score > 2.0:
+        elif lp_pressure < -lp_min_thresh and vol_z_score > 2.0:
             tactic_d_trigger = True
             tactic_d_direction = 'short'
             
-        # Tactic C-Global: 미국 레짐이 정상(Bull/Neutral)이고 VIX가 안정적일 때, 한국 시장의 디커플링 낙폭 과대 시 즉시 줍기
+        # Tactic C-Global: 미국 레짐이 정상(Bull/Neutral)이고 VIX가 안정적이며, 야간선물이 플러스 갭상승(> +0.5%)일 때만 2배수 롱 베팅
         us_regime = market_data.get('us_regime', 'neutral')
-        if us_regime in ['bull', 'neutral'] and vix < 18:
+        overnight_futures = float(market_data.get('overnight_futures_pct', market_data.get('cme_korea_futures', 0.0)) or 0.0)
+        if us_regime in ['bull', 'neutral'] and vix < 18 and overnight_futures > 0.5:
             tactic_c_global_trigger = True
+        else:
+            tactic_c_global_trigger = False
 
+
+        # [Offensive Strategy 3] Intraday VWAP 0.618 Dip Sniper Recapture (Zero Hardcoding via DynamicConfig)
+        vwap_val = float(market_data.get('vwap', 0.0) or 0.0)
+        cur_p = float(market_data.get('current_price', 0.0) or 0.0)
+        atr_val = float(market_data.get('atr', 1.0) or 1.0)
+        fibo_factor = float(cfg.get('s1.fibo_dip_factor', 0.618))
+        tactic_dip_sniper_trigger = False
+        if cur_p > 0 and vwap_val > 0 and cur_p <= (vwap_val - fibo_factor * atr_val) and lp_pressure > 0:
+            tactic_dip_sniper_trigger = True
+            logger.info(f"  ⚡ [Offensive Strategy 3] VWAP {fibo_factor} Dip Sniper Triggered! (Price={cur_p} <= VWAP={vwap_val} - {fibo_factor}*ATR, LP={lp_pressure:.0f})")
 
         logger.debug(
             f"    - Variance Ratio Z-Test (Model 7): "
             f"vol_z={vol_z_score:.2f}, sam_vol_z={sam_vol_z:.2f}, hyn_vol_z={hyn_vol_z:.2f} "
             f"(threshold={vr_z_threshold:.1f})")
         
-        if not is_shock and not any([tactic_a_trigger, tactic_b_trigger, tactic_c_sam_trigger, tactic_c_hyn_trigger, tactic_d_trigger, tactic_c_global_trigger]):
+        if not is_shock and not any([tactic_a_trigger, tactic_b_trigger, tactic_c_sam_trigger, tactic_c_hyn_trigger, tactic_d_trigger, tactic_c_global_trigger, tactic_dip_sniper_trigger]):
             logger.debug("    - 스나이핑 조건 미달 (VIX 충격 및 수급 교란 없음) -> 평시 관망")
             return []
 
@@ -198,9 +229,10 @@ class S1ETFSniperStream(BaseStream):
             f"(min={sl_min_pct:.3f})")
 
         # Tactic C 최우선 판별
-        # Tactic D 최우선 판별
+        # Tactic D 최우선 판별 (Lever 4: LP 호가 불균형 극단값 스케일링)
         if tactic_d_trigger:
-            logger.warning(f"    🎯 [Tactic D] LP MOC 헤징 압박 감지! 선행매매 진입 (방향: {tactic_d_direction})")
+            tactic_d_tp = tp_pct * 1.66 if abs(lp_pressure) > 150.0 else tp_pct  # 극단값 서지 시 TP +2.5% 확여
+            logger.warning(f"    🎯 [Tactic D Lever 4] LP MOC 헤징 압박 감지! 선행매매 진입 (방향: {tactic_d_direction}, Pressure: {lp_pressure:.1f}, Dynamic TP: {tactic_d_tp*100:.2f}%)")
             _t_type = 'index_1x' if tactic_d_direction == 'long' else 'index_inv_1x'
             ticker = self._get_ticker_by_type(_t_type)
             price_data = signal_cache.get(ticker)
@@ -216,32 +248,42 @@ class S1ETFSniperStream(BaseStream):
                     'confidence': 1.0,
                     'strategy': 'tactic_d_moc_lp_frontrun',
                     'reason': f"LP MOC Hedging Arb (Pressure: {lp_pressure:.1f})",
-                    'tp_pct': tp_pct,
+                    'tp_pct': tactic_d_tp,
                     'sl_pct': sl_pct,
                     'holding_time': 'MOC',
                     'execution_algo': 'vwap'
                 })
         elif tactic_c_global_trigger:
             logger.warning("    🎯 [Tactic C-Global] 글로벌 디커플링 감지! 오버나잇 갭상승 베팅 (2배수 롱).")
-            ticker = self._get_ticker_by_type('index_lev') or '122630' # KODEX 레버리지
-            price_data = signal_cache.get(ticker)
+            ticker = cfg.get('s1.global_defense_ticker', self._get_ticker_by_type('index') or '069500')
+            price_data = signal_cache.get(ticker) or signal_cache.get('stock_technicals', {}).get(ticker, {})
             price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0,
-                    'price': price,
-                    'confidence': 1.0,
-                    'strategy': 'tactic_c_global_decoupling',
-                    'reason': f"US Neutral + KOSPI Drop Decoupling",
-                    'tp_pct': tp_pct * tactic_bc_tp_multiplier,
-                    'sl_pct': sl_pct,
-                    'holding_time': 'OVERNIGHT',
-                    'execution_algo': 'vwap'
-                })
+            if price <= 0:
+                try:
+                    from src.data_collection.kis_data_collector import KISDataCollector
+                    live_p = KISDataCollector().get_current_price(ticker)
+                    if live_p and float(live_p.get('stck_prpr', 0)) > 0:
+                        price = float(live_p['stck_prpr'])
+                except Exception as _e:
+                    logger.debug(f"  S1 Tactic C: 실시간 가격 수집 실패: {_e}")
+            if price <= 0:
+                logger.warning(f"  [S1 Tactic C] {ticker} 가격 수집 불가로 시그널 차단")
+                return signals
+            signals.append({
+                'stream_id': self.stream_id,
+                'ticker': ticker,
+                'name': self.universe.get(ticker, {}).get('name', 'TIGER 미국필라델피아반도체나스닥'),
+                'direction': 'long',
+                'size_pct': 1.0,
+                'price': price,
+                'confidence': 1.0,
+                'strategy': 'tactic_c_global_decoupling',
+                'reason': f"US Neutral + KOSPI Drop Decoupling",
+                'tp_pct': tp_pct * tactic_bc_tp_multiplier,
+                'sl_pct': sl_pct,
+                'holding_time': 'OVERNIGHT',
+                'execution_algo': 'vwap'
+            })
         elif tactic_c_sam_trigger:
             logger.warning("    🎯 [Tactic C] 삼성전자 단일종목 웩더독 감지! 삼성전자 인버스 저격.")
             ticker = cfg.get('ss_etf.samsung.inv_ticker')
@@ -380,6 +422,86 @@ class S1ETFSniperStream(BaseStream):
                     sig['max_exposure_pct'] = dynamic_max_exp
                     
                     sig['reason'] += f" | 🚀 RT Boost (Cap {dynamic_max_exp*100:.0f}%)"
+
+        # ── Phase 3: S1 Tactic F (Pre-Market LP Arbitrage Sniping) ──
+        premarket_info = signal_cache.get('premarket_auction', {})
+        expected_disparity = float(premarket_info.get('disparity_pct', 0.0))
+        if expected_disparity <= -3.0:
+            semi_ticker = cfg.get('s1.semi_kr_ticker', '091160')
+            logger.warning(f"🚀 [S1 Tactic F] 장전 LP 괴리율 스나이핑 발화! (괴리율: {expected_disparity:.2f}%)")
+            signals.append({
+                'stream_id': self.stream_id,
+                'ticker': semi_ticker,
+                'name': self.universe.get(semi_ticker, {}).get('name', 'KODEX 반도체'),
+                'direction': 'long',
+                'size_pct': 0.5,
+                'confidence': 0.95,
+                'strategy': 'tactic_f_premarket_lp_arbitrage',
+                'reason': f"Pre-Market LP Arbitrage Sniping ({expected_disparity:.2f}%)",
+                'holding_time': '15s_lp_bounce'
+            })
+
+        # ── Phase 4: S1 Track F (Cross-Sector Pair Trading) ──
+        if regime in ('caution', 'range', 'bear'):
+            pair_semi = cfg.get('s1.pair_long_ticker', '091160')
+            pair_gobus = cfg.get('s1.pair_short_ticker', '252670')
+            logger.info("⚖️ [S1 Track F] 횡보장 0-베타 섹터 페어 트레이딩 신호 생성 (반도체 롱 + 곱버스 숏 헷지)")
+            signals.append({
+                'stream_id': self.stream_id,
+                'ticker': pair_semi,
+                'name': 'KODEX 반도체 (Pair Long)',
+                'direction': 'long',
+                'size_pct': 0.25,
+                'confidence': 0.88,
+                'strategy': 'track_f_cross_sector_pair',
+                'reason': 'Cross-Sector Pair Trading (0-Beta Relative Value)'
+            })
+            signals.append({
+                'stream_id': self.stream_id,
+                'ticker': pair_gobus,
+                'name': 'KODEX 200선물인버스2X (Pair Short Hedge)',
+                'direction': 'long',
+                'size_pct': 0.25,
+                'confidence': 0.88,
+                'strategy': 'track_f_cross_sector_pair',
+                'reason': 'Cross-Sector Pair Trading (0-Beta Relative Value)'
+            })
+
+        # ── [Tier-1 Unconventional Mathematical Alpha Integration] ──
+        try:
+            unconventional_eval = self.unconventional_engine.evaluate_all(market_data)
+            # 1. ETP Volatility Decay Signals
+            for decay_res in unconventional_eval.get('etf_decay_results', []):
+                if decay_res.get('recommended_action') == 'HARVEST_DECAY':
+                    t_code = decay_res['ticker']
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': t_code,
+                        'name': self.universe.get(t_code, {}).get('name', f'ETP_{t_code}'),
+                        'direction': 'long',
+                        'size_pct': 0.2,
+                        'confidence': decay_res['signal_confidence'],
+                        'strategy': 'etf_volatility_decay_harvest',
+                        'reason': decay_res['reason'],
+                        'execution_algo': 'twap'
+                    })
+            # 2. Adversarial Liquidity Trap Squeeze Signals
+            trap_res = unconventional_eval.get('liquidity_trap_eval', {})
+            if trap_res.get('is_trap_detected'):
+                core_inv_ticker = self._get_ticker_by_type('index_inv_2x') or '252670'
+                signals.append({
+                    'stream_id': self.stream_id,
+                    'ticker': core_inv_ticker,
+                    'name': self.universe.get(core_inv_ticker, {}).get('name', 'KODEX 200선물인버스2X'),
+                    'direction': 'long',
+                    'size_pct': 0.3,
+                    'confidence': trap_res['squeeze_prob'],
+                    'strategy': 'adversarial_liquidity_trap_squeeze',
+                    'reason': trap_res['reason'],
+                    'execution_algo': 'lit'
+                })
+        except Exception as _unc_e:
+            logger.debug(f"  [S1 Unconventional Engine] Evaluation bypassed: {_unc_e}")
 
         return signals
 

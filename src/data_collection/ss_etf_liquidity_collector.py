@@ -42,7 +42,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 def _dcfg(key: str, default):
@@ -82,20 +82,18 @@ def _is_before_listing(target_date_str: str) -> bool:
         return req_date < _SS_ETF_LISTING_DATE
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return False
 
-def _pykrx_safe(func, *args, max_retries: int=2, **kwargs) -> Optional[pd.DataFrame]:
-    """pykrx 호출을 retry + rate-limit으로 감싼 wrapper."""
+def _pykrx_safe(func, *args, max_retries: int=1, **kwargs) -> Optional[pd.DataFrame]:
+    """pykrx 호출을 retry + rate-limit으로 감싼 wrapper (Fast-Fail)."""
     for attempt in range(max_retries):
         try:
-            time.sleep(0.3)
             result = func(*args, **kwargs)
             if result is not None and len(result) > 0:
                 return result
         except Exception as e:
-            logger.error(f'  pykrx call attempt {attempt + 1} 실패: {e}', exc_info=True)
-            time.sleep(1.5 * (attempt + 1))
+            logger.debug(f"  pykrx 호출 건너뜀: {e}")
     return None
 
 class SSETFLiquidityCollector:
@@ -134,11 +132,11 @@ class SSETFLiquidityCollector:
         if target_date is None:
             target_date = date.today().strftime('%Y%m%d')
         if _is_before_listing(target_date):
-            logger.info(f'  SS-ETF: {target_date} < 상장일 {_SS_ETF_LISTING_DATE_STR} → 빈 DataFrame 반환 (사전 상장)')
+            logger.info(f"  SS-ETF: {target_date} < 상장일 {_SS_ETF_LISTING_DATE_STR} → 빈 DataFrame 반환 (사전 상장)")
             return self._empty_df(target_date)
         cached = self.get_cached(target_date)
         if cached is not None and len(cached) > 0:
-            logger.info(f'  SS-ETF: {target_date} 캐시 로드 ({len(cached)}행)')
+            logger.info(f"  SS-ETF: {target_date} 캐시 로드 ({len(cached)}행)")
             return cached
         rows = []
         for underlying, info in self._universe.items():
@@ -147,7 +145,7 @@ class SSETFLiquidityCollector:
         df = pd.DataFrame(rows)
         if len(df) > 0:
             self._save_cache(df, target_date)
-            logger.info(f'  SS-ETF: {target_date} 수집 완료 ({len(df)}종목, 총 레버리지 거래량={df['lev_volume'].sum():,.0f})')
+            logger.info(f"  SS-ETF: {target_date} 수집 완료 ({len(df)}종목, 총 레버리지 거래량={df['lev_volume'].sum():,.0f})")
         return df
 
     def collect_ohlcv(self, ticker: str, target_date: str) -> Optional[pd.Series]:
@@ -170,30 +168,37 @@ class SSETFLiquidityCollector:
             return None
 
     def collect_investor(self, ticker: str, target_date: str) -> Optional[pd.Series]:
-        """개별 ETF 당일 투자자별 순매수 조회.
+        """개별 ETF 당일 투자자별 순매수 조회 (KIS OpenAPI 1순위).
 
         Returns:
             Series: [retail_net_buy, foreign_net_buy, inst_net_buy] (금액, 원) or None
         """
-        if self._pykrx is None:
-            return None
+        # 1. KIS OpenAPI 직접 조회 (공식 계좌 API)
         try:
-            df = _pykrx_safe(self._pykrx.get_market_net_purchases_of_equities_by_ticker, target_date, target_date, ticker)
-            if df is None or len(df) == 0:
+            from src.data_collection.kis_data_collector import KISDataCollector
+            collector = KISDataCollector()
+            trend = collector.get_investor_trading_trend(ticker)
+            if trend:
+                return pd.Series(trend)
+        except Exception as _e_kis:
+            logger.debug(f"  [SS-ETF KIS Investor] 실패 ({ticker}): {_e_kis}")
+
+        # 2. pykrx 종목별 일자별 거래실적 fallback
+        if self._pykrx is not None:
+            try:
                 df2 = _pykrx_safe(self._pykrx.get_market_trading_value_by_date, target_date, target_date, ticker)
                 if df2 is not None and len(df2) > 0:
                     row2 = df2.iloc[-1]
                     retail_net = float(row2.get('개인', row2.get('retail', 0)) or 0)
-                    return pd.Series({'retail_net_buy': retail_net, 'foreign_net_buy': float(row2.get('외국인', row2.get('foreign', 0)) or 0), 'inst_net_buy': float(row2.get('기관', row2.get('institution', 0)) or 0)})
-                return None
-            row = df.iloc[-1] if len(df) == 1 else df[df.index.astype(str).str[:6] == ticker[:6]].iloc[-1] if ticker in df.index.astype(str).values else df.iloc[0]
-            retail_net = float(row.get('개인', row.get('retail', 0)) or 0)
-            foreign_net = float(row.get('외국인', row.get('foreign', 0)) or 0)
-            inst_net = float(row.get('기관합계', row.get('institution', 0)) or 0)
-            return pd.Series({'retail_net_buy': retail_net, 'foreign_net_buy': foreign_net, 'inst_net_buy': inst_net})
-        except Exception as e:
-            logger.error(f'  SS-ETF Investor [{ticker}] 실패: {e}', exc_info=True)
-            return None
+                    return pd.Series({
+                        'retail_net_buy': retail_net,
+                        'foreign_net_buy': float(row2.get('외국인', row2.get('foreign', 0)) or 0),
+                        'inst_net_buy': float(row2.get('기관', row2.get('institution', 0)) or 0)
+                    })
+            except Exception as _e_pykrx:
+                logger.debug(f"  [SS-ETF pykrx Investor] 실패 ({ticker}): {_e_pykrx}")
+
+        return None
 
     def get_cached(self, target_date: str) -> Optional[pd.DataFrame]:
         """캐시 파일에서 로드."""

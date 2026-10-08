@@ -45,7 +45,7 @@ class StatArbEngine:
                                 pairs.append({'asset_y': t1, 'asset_x': t2, 'p_value': pvalue, 'correlation': corr_matrix.loc[t1, t2]})
                         except Exception as e:
                             logger.error('[SILENT_BYPASS] Suppressed exception at stat_arb_engine.py:62', exc_info=True)
-        logger.info(f'  [StatArb] 유니버스 {n}개 중 {len(pairs)}개의 유효한 공적분(Cointegrated) 페어 발견.')
+        logger.info(f"  [StatArb] 유니버스 {n}개 중 {len(pairs)}개의 유효한 공적분(Cointegrated) 페어 발견.")
         sorted_pairs = sorted(pairs, key=lambda x: x['p_value'])
         return sorted_pairs[:self.max_pairs]
 
@@ -72,13 +72,13 @@ class StatArbEngine:
                 model = sm.OLS(y, x_with_const).fit()
                 hedge_ratio = model.params.iloc[1] if len(model.params) > 1 else 1.0
             except Exception as e:
-                logger.error(f'  [StatArb] OLS Error for {pair['asset_y']}-{pair['asset_x']}: {e}', exc_info=True)
+                logger.error(f"  [StatArb] OLS Error for {pair['asset_y']}-{pair['asset_x']}: {e}", exc_info=True)
                 continue
             spread = y - hedge_ratio * x
             if len(spread.dropna()) > self.z_score_window:
                 adf_result = ts.adfuller(spread.dropna())
                 if adf_result[1] > 0.05:
-                    logger.debug(f'  [StatArb] ADF 검정 실패(단위근 존재). 가짜 페어로 판명되어 스킵: {pair['asset_y']}-{pair['asset_x']}')
+                    logger.debug(f"  [StatArb] ADF 검정 실패(단위근 존재). 가짜 페어로 판명되어 스킵: {pair['asset_y']}-{pair['asset_x']}")
                     continue
             roll_mean = spread.rolling(window=self.z_score_window).mean()
             roll_std = spread.rolling(window=self.z_score_window).std()
@@ -90,5 +90,5 @@ class StatArbEngine:
                 signals.append({'type': 'pair_trade', 'long': pair['asset_x'], 'short': pair['asset_y'], 'z_score': current_z, 'hedge_ratio': hedge_ratio, 'p_value': pair['p_value'], 'executable': False, 'execution_route': 'PSEUDO_SHORT_OR_SSF', 'order_type': 'LIMIT', 'routing': routing_algo, 'fok_timer_ms': fok_timer})
             elif current_z < -self.z_score_entry:
                 signals.append({'type': 'pair_trade', 'long': pair['asset_y'], 'short': pair['asset_x'], 'z_score': current_z, 'hedge_ratio': hedge_ratio, 'p_value': pair['p_value'], 'executable': False, 'execution_route': 'PSEUDO_SHORT_OR_SSF', 'order_type': 'LIMIT', 'routing': routing_algo, 'fok_timer_ms': fok_timer})
-        logger.info(f'  [StatArb] Z-score 이탈 페어 {len(signals)}개 시그널 포착.')
+        logger.info(f"  [StatArb] Z-score 이탈 페어 {len(signals)}개 시그널 포착.")
         return sorted(signals, key=lambda x: abs(x['z_score']), reverse=True)

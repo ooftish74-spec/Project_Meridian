@@ -1,5 +1,5 @@
 """
-US Stock Data Collector — yfinance 기반 미국 주식 일봉 + 재무 수집
+US Stock Data Collector — KIS API / Alpha Vantage 기반 미국 주식 일봉 + 재무 수집
 =================================================================
 
 수집 대상: S&P500 + 주요 레버리지 ETF
@@ -17,6 +17,7 @@ Author: Project-A
 Date: 2026-05-14
 """
 from src.utils.file_ops import atomic_write_json
+from src.utils.retry_utils import with_retry
 
 import json
 import logging
@@ -56,7 +57,7 @@ class USStockCollector:
         """전체 US 유니버스 수집 (KIS -> Alpha Vantage -> yfinance 3중 Fallback 구조)."""
         universe = universe or US_L2_UNIVERSE
         tickers = list(universe.keys())
-        logger.info(f'📡 US 데이터 수집 (Live/3중 폴백): {len(tickers)}종목')
+        logger.info(f"📡 US 데이터 수집 (Live/3중 폴백): {len(tickers)}종목")
         
         from src.data_collection.kis_data_collector import KISDataCollector
         from src.data_collection.alpha_vantage_collector import (
@@ -65,14 +66,6 @@ class USStockCollector:
             collect_econ_indicator_daily_ohlcv as econ_collect_raw
         )
         from src.utils.file_ops import atomic_write_parquet
-        from src.utils.retry_utils import with_retry
-        import yfinance as yf
-        
-        # 적용: Exponential Backoff 재시도 래퍼
-        av_collect = with_retry(max_retries=3, initial_delay=2.0)(av_collect_raw)
-        collect_fx_daily_ohlcv = with_retry(max_retries=3, initial_delay=2.0)(fx_collect_raw)
-        collect_econ_indicator_daily_ohlcv = with_retry(max_retries=3, initial_delay=2.0)(econ_collect_raw)
-        
         kis = KISDataCollector()
         kis_ready = kis._ensure_auth()
         
@@ -98,7 +91,7 @@ class USStockCollector:
                 
             df = df.dropna(subset=['close'])
             if len(df) < 20:
-                logger.warning(f'  ⚠️ {t}: 데이터 부족 ({len(df)}일)')
+                logger.warning(f"  ⚠️ {t}: 데이터 부족 ({len(df)}일)")
                 return False
                 
             pq_path = self.prices_dir / f'{t}.parquet'
@@ -143,20 +136,9 @@ class USStockCollector:
             df_kis = df_av = df_yf = df_fred = None
             source = ""
             
-            # [Macro & Commodity Branching]
             if ticker == '^VIX':
-                # VIX: yfinance (Primary) -> FRED (Fallback)
-                try:
-                    single_data = yf.download('^VIX', start=start_str, end=end_str, auto_adjust=True, progress=False)
-                    if single_data is not None and not single_data.empty:
-                        df_yf = single_data.copy()
-                        if isinstance(df_yf.columns, pd.MultiIndex):
-                            df_yf.columns = [c[0] for c in df_yf.columns]
-                        df_yf.columns = [str(c).lower() for c in df_yf.columns]
-                        if _process_and_save(df_yf, ticker):
-                            source = "yfinance"
-                except Exception as e:
-                    logger.debug(f"yfinance fetch failed for ^VIX: {e}")
+                # VIX: FRED/KIS/Alpha Vantage 우선 참조
+                df_yf = None
                     
                 if not source:
                     try:
@@ -292,14 +274,14 @@ class USStockCollector:
             
             if source:
                 success += 1
-                logger.debug(f'      ✅ {ticker} 수집 성공 ({source})')
+                logger.debug(f"      ✅ {ticker} 수집 성공 ({source})")
             else:
                 failed += 1
-                logger.error(f'  🚨 {ticker} 수집 완전 실패 (모든 소스 무응답)')
+                logger.error(f"  🚨 {ticker} 수집 완전 실패 (모든 소스 무응답)")
                 
             time.sleep(0.1)
             
-        logger.info(f'  ✅ US 일봉 수집 완료: {success} 성공 / {failed} 실패')
+        logger.info(f"  ✅ US 일봉 수집 완료: {success} 성공 / {failed} 실패")
         return {'success': success, 'failed': failed}
 
     def build_features(self, date_str: str=None) -> Dict[str, Dict]:
@@ -321,7 +303,7 @@ class USStockCollector:
         from src.utils.file_ops import atomic_write_json
 
         atomic_write_json(out_path, {'date': date_str, 'n_stocks': len(features), 'features': features}, indent=2, default=str)
-        logger.info(f'  📊 US 피처 생성: {len(features)}종목 → {out_path.name}')
+        logger.info(f"  📊 US 피처 생성: {len(features)}종목 → {out_path.name}")
         self._update_atr_cache(features)
         return features
 
@@ -381,7 +363,7 @@ class USStockCollector:
             return {'pe_ratio': d.get('pe_ratio', d.get('PE', 0)) or 0, 'pb_ratio': d.get('pb_ratio', d.get('PB', 0)) or 0, 'market_cap': d.get('market_cap', 0) or 0, 'revenue_growth': d.get('revenue_growth', 0) or 0, 'eps': d.get('eps', 0) or 0, 'dividend_yield': d.get('dividend_yield', 0) or 0}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return defaults
 
     def _update_atr_cache(self, features: Dict):
@@ -393,7 +375,7 @@ class USStockCollector:
                 cache = json.load(open(cache_path))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 cache = {}
         updated = 0
         for ticker, feat in features.items():
@@ -403,7 +385,7 @@ class USStockCollector:
                 updated += 1
         atomic_write_json(cache_path, cache, indent=2)
         if updated:
-            logger.info(f'  💾 ATR 캐시 갱신: {updated}종목 (US)')
+            logger.info(f"  💾 ATR 캐시 갱신: {updated}종목 (US)")
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
     collector = USStockCollector()
@@ -411,8 +393,8 @@ if __name__ == '__main__':
     logger.info('📡 US Stock Data Collector')
     logger.info('=' * 60)
     result = collector.collect_all()
-    logger.info(f'일봉: {result['success']}종목 수집, {result['failed']}실패')
+    logger.info(f"일봉: {result['success']}종목 수집, {result['failed']}실패")
     features = collector.build_features()
-    logger.info(f'피처: {len(features)}종목 생성')
+    logger.info(f"피처: {len(features)}종목 생성")
     logger.info('=' * 60)
     logger.info('✅ 완료')

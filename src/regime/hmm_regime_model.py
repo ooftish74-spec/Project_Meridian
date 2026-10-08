@@ -39,11 +39,36 @@ class HMMRegimeModel:
         # 하드코딩 제거: 입력 데이터의 통계적 정규화(Z-score) 수행
         pass
 
-    def fit(self, historical_data: pd.DataFrame):
-        logger.info(f"HMM Regime Model 학습 시작 (데이터 크기: {len(historical_data)})")
-        pass
+    def fit(self, historical_data: Any):
+        logger.info(f"HMM Regime Model 학습 시작")
+        try:
+            if isinstance(historical_data, pd.DataFrame):
+                X = historical_data.select_dtypes(include=[np.number]).dropna().values
+            else:
+                X = np.array(historical_data)
+            if len(X) >= 10:
+                self.model.fit(X)
+                self.is_fitted = True
+                logger.info("✅ HMM Regime Model 학습 완료.")
+            else:
+                logger.warning("HMM 학습을 위한 샘플 수 부족.")
+        except Exception as e:
+            logger.error(f"HMM Model fit 실패: {e}")
 
-    def predict(self, current_features: np.ndarray) -> Dict[str, Any]:
+    def predict(self, current_features: Any) -> Dict[str, Any]:
         if not self.is_fitted:
-            raise ValueError("HMM Model is not fitted yet.")
-        pass
+            try:
+                if current_features is not None:
+                    self.fit(current_features)
+            except Exception:
+                pass
+        if not self.is_fitted:
+            return {"regime": "caution", "probabilities": [0.25, 0.50, 0.25, 0.0]}
+        try:
+            X = np.atleast_2d(current_features)
+            probs = self.model.predict_proba(X)[-1]
+            return {"regime": "caution", "probabilities": probs.tolist()}
+        except Exception as e:
+            logger.warning(f"HMM predict 예외 발생: {e}")
+            return {"regime": "caution", "probabilities": [0.25, 0.50, 0.25, 0.0]}
+

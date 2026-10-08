@@ -59,9 +59,9 @@ class BetaTracker:
         try:
             if _BETA_HISTORY_FILE.exists():
                 self._history = json.loads(_BETA_HISTORY_FILE.read_text(encoding='utf-8'))
-                logger.debug(f'  BetaTracker: {len(self._history)}개 레코드 로드')
+                logger.debug(f"  BetaTracker: {len(self._history)}개 레코드 로드")
         except Exception as e:
-            logger.debug(f'  BetaTracker 로드 실패 (초기화): {e}')
+            logger.debug(f"  BetaTracker 로드 실패 (초기화): {e}")
             self._history = []
 
     def _save(self) -> None:
@@ -73,7 +73,7 @@ class BetaTracker:
                 self._history = self._history[-max_days:]
             atomic_write_json(_BETA_HISTORY_FILE, self._history, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
-            logger.warning(f'  BetaTracker 저장 실패: {e}')
+            logger.warning(f"  BetaTracker 저장 실패: {e}")
 
     def record(self, date_str: str, portfolio_return_pct: float, benchmark_return_pct: float, regime: str='unknown') -> Dict:
         """일별 수익률 기록 및 롤링 베타 계산.
@@ -103,7 +103,7 @@ class BetaTracker:
             rec['beta_contribution_pct'] = None
             rec['pure_alpha_pct'] = None
         self._save()
-        logger.debug(f'  BetaTracker [{date_str}] β60={rec.get('beta_60d')}, α={rec.get('pure_alpha_pct')} ({regime})')
+        logger.debug(f"  BetaTracker [{date_str}] β60={rec.get('beta_60d')}, α={rec.get('pure_alpha_pct')} ({regime})")
         return rec
 
     def _rolling_beta(self, window: int) -> Optional[float]:

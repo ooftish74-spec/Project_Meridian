@@ -69,11 +69,11 @@ class IntradayFlowCollector:
                     row = today_rows.iloc[0]
 
                     def _get_qty(r: pd.Series, prefix: str) -> int:
-                        keys = [f'{prefix}_ntby_qty', f'{prefix}_ntby_quantity', f'{prefix}_ntby_vol']
+                        keys = [f"{prefix}_ntby_qty', f'{prefix}_ntby_quantity', f'{prefix}_ntby_vol"]
                         for k in keys:
                             if k in r and (not pd.isna(r[k])):
                                 return int(r[k] or 0)
-                        logger.warning(f'[Flow Error] 필드값 오류: {prefix} 수급 필드가 없습니다! API 명세 변경 의심. Keys: {list(r.keys())}')
+                        logger.warning(f"[Flow Error] 필드값 오류: {prefix} 수급 필드가 없습니다! API 명세 변경 의심. Keys: {list(r.keys())}")
                         return 0
                     inst_net_qty = _get_qty(row, 'orgn')
                     frgn_net_qty = _get_qty(row, 'frgn')
@@ -174,7 +174,7 @@ if __name__ == '__main__':
         _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         _p = _RESULTS_DIR / 'intraday_flow_cache.json'
         atomic_write_json(_p, mock, ensure_ascii=False, indent=2)
-        logger.info(f'[DryRun] 저장 완료: {_p}')
+        logger.info(f"[DryRun] 저장 완료: {_p}")
         logger.debug(json.dumps(mock, ensure_ascii=False, indent=2))
     else:
         collector = IntradayFlowCollector(config=_cfg_obj)

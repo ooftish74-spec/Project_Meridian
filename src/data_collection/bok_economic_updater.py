@@ -43,18 +43,18 @@ class BOKEconomicUpdater:
     def __init__(self, api_key: Optional[str]=None):
         self.api_key = api_key or BOK_API_KEY
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        logger.info(f'BOK/KOSIS Updater 초기화 (BOK: {self.api_key[:8]}...)')
+        logger.info(f"BOK/KOSIS Updater 초기화 (BOK: {self.api_key[:8]}...)")
 
     def fetch_from_bok(self, stat_code: str, item_code: str, cycle: str, start_date: str, end_date: str) -> pd.DataFrame:
         """BOK ECOS API에서 단일 시리즈 수집 → DataFrame[Date, Value]"""
-        url = f'{BOK_BASE_URL}/{self.api_key}/json/kr/1/100000/{stat_code}/{cycle}/{start_date}/{end_date}/{item_code}'
+        url = f"{BOK_BASE_URL}/{self.api_key}/json/kr/1/100000/{stat_code}/{cycle}/{start_date}/{end_date}/{item_code}"
         try:
             resp = requests.get(url, timeout=15)
             resp.raise_for_status()
             data = resp.json()
             if 'StatisticSearch' not in data or 'row' not in data['StatisticSearch']:
                 msg = data.get('RESULT', {}).get('MESSAGE', 'Unknown error')
-                logger.warning(f'  ⚠️ BOK 응답 없음: {msg}')
+                logger.warning(f"  ⚠️ BOK 응답 없음: {msg}")
                 return pd.DataFrame()
             records = []
             for row in data['StatisticSearch']['row']:
@@ -66,14 +66,14 @@ class BOKEconomicUpdater:
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
                 if cycle == 'M' and len(t) == 6:
-                    date = pd.Timestamp(f'{t[:4]}-{t[4:6]}-01')
+                    date = pd.Timestamp(f"{t[:4]}-{t[4:6]}-01")
                 elif cycle == 'D' and len(t) == 8:
-                    date = pd.Timestamp(f'{t[:4]}-{t[4:6]}-{t[6:8]}')
+                    date = pd.Timestamp(f"{t[:4]}-{t[4:6]}-{t[6:8]}")
                 elif cycle == 'Q' and 'Q' in t:
                     y, q = (int(t[:4]), int(t[-1]))
-                    date = pd.Timestamp(f'{y}-{(q - 1) * 3 + 1:02d}-01')
+                    date = pd.Timestamp(f"{y}-{(q - 1) * 3 + 1:02d}-01")
                 elif cycle == 'A' and len(t) == 4:
-                    date = pd.Timestamp(f'{t}-01-01')
+                    date = pd.Timestamp(f"{t}-01-01")
                 else:
                     continue
                 records.append({'Date': date, 'Value': val})
@@ -81,7 +81,7 @@ class BOKEconomicUpdater:
                 df = pd.DataFrame(records)
                 return df.sort_values('Date').drop_duplicates('Date')
         except requests.RequestException as e:
-            logger.error(f'  ❌ BOK API 요청 실패: {e}', exc_info=True)
+            logger.error(f"  ❌ BOK API 요청 실패: {e}", exc_info=True)
         return pd.DataFrame()
 
     def fetch_from_kosis(self, tbl_id: str, org_id: str, itm_id: str, obj_l1: str, cycle: str, start_date: str, end_date: str) -> pd.DataFrame:
@@ -92,7 +92,7 @@ class BOKEconomicUpdater:
             data = resp.json()
             if not isinstance(data, list) or len(data) == 0:
                 msg = data.get('errMsg', '?') if isinstance(data, dict) else 'empty'
-                logger.warning(f'  ⚠️ KOSIS 응답 없음: {msg}')
+                logger.warning(f"  ⚠️ KOSIS 응답 없음: {msg}")
                 return pd.DataFrame()
             records = []
             for item in data:
@@ -101,7 +101,7 @@ class BOKEconomicUpdater:
                 if not val or val == '-' or len(prd) != 6:
                     continue
                 try:
-                    date = pd.Timestamp(f'{prd[:4]}-{prd[4:]}-01')
+                    date = pd.Timestamp(f"{prd[:4]}-{prd[4:]}-01")
                     records.append({'Date': date, 'Value': float(val.replace(',', ''))})
                 except (ValueError, TypeError):
                     from src.utils.error_logger import log_error_rate_limited
@@ -111,7 +111,7 @@ class BOKEconomicUpdater:
                 df = pd.DataFrame(records)
                 return df.drop_duplicates('Date', keep='last').sort_values('Date')
         except Exception as e:
-            logger.error(f'  ❌ KOSIS API 요청 실패: {e}', exc_info=True)
+            logger.error(f"  ❌ KOSIS API 요청 실패: {e}", exc_info=True)
         return pd.DataFrame()
 
     def _merge_and_save(self, new_data: pd.DataFrame, filename: str, col_name: str) -> bool:
@@ -125,7 +125,7 @@ class BOKEconomicUpdater:
                 existing['Date'] = pd.to_datetime(existing['Date'])
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 existing = pd.DataFrame()
         old_len = len(existing)
         new_data.columns = ['Date', col_name]
@@ -138,7 +138,7 @@ class BOKEconomicUpdater:
         atomic_write_parquet(combined, pq_path, index=False)
         latest = combined['Date'].max().strftime('%Y-%m-%d')
         delta = len(combined) - old_len
-        logger.info(f'  ✅ {filename}: {len(combined)} rows (+{delta}), 최신={latest}')
+        logger.info(f"  ✅ {filename}: {len(combined)} rows (+{delta}), 최신={latest}")
         return True
 
     def _get_last_date(self, filename: str, fmt: str='%Y%m') -> str:
@@ -157,7 +157,7 @@ class BOKEconomicUpdater:
                         return default
                     return last_str
             except Exception as e:
-                logger.error(f'Suppressed error at src/data_collection/bok_economic_updater.py:272: {e}', exc_info=True)
+                logger.error(f"Suppressed error at src/data_collection/bok_economic_updater.py:272: {e}", exc_info=True)
         return default
 
     def update_all(self) -> Dict[str, bool]:
@@ -171,43 +171,45 @@ class BOKEconomicUpdater:
         end_d = now.strftime('%Y%m%d')
         logger.info('\n── BOK 월간 지표 ──')
         for name, cfg in BOK_MONTHLY.items():
-            logger.info(f'\n📌 {name} — {cfg['description']}')
+            _desc_b = cfg.get('description', '')
+            logger.info(f"\n📌 {name} — {_desc_b}")
             try:
-                last = self._get_last_date(f'{name}.parquet', '%Y%m')
+                last = self._get_last_date(f"{name}.parquet", '%Y%m')
                 df = self.fetch_from_bok(cfg['stat_code'], cfg['item_code'], 'M', last, end_m)
                 if not df.empty:
                     # [Point-in-Time] 미래 참조 방지: 기준월을 발표월(익월)로 이연
                     df['Date'] = df['Date'] + pd.DateOffset(months=1)
-                    results[name] = self._merge_and_save(df, f'{name}.parquet', name)
+                    results[name] = self._merge_and_save(df, f"{name}.parquet", name)
                 else:
-                    logger.warning(f'  ⚠️ {name}: 새 데이터 없음')
+                    logger.warning(f"  ⚠️ {name}: 새 데이터 없음")
                     results[name] = False
                 time.sleep(0.3)
             except Exception as e:
-                logger.error(f'  ❌ {name}: {e}', exc_info=True)
+                logger.error(f"  ❌ {name}: {e}", exc_info=True)
                 results[name] = False
         logger.info('\n── BOK 일간 지표 ──')
         daily_dfs = {}
         for name, cfg in BOK_DAILY.items():
-            logger.info(f'\n📌 {name} — {cfg['description']}')
+            _desc_b = cfg.get('description', '')
+            logger.info(f"\n📌 {name} — {_desc_b}")
             try:
-                last = self._get_last_date(f'{name}.parquet', '%Y%m%d')
+                last = self._get_last_date(f"{name}.parquet", '%Y%m%d')
                 df = self.fetch_from_bok(cfg['stat_code'], cfg['item_code'], 'D', last, end_d)
                 if not df.empty:
                     daily_dfs[name] = df.copy()
-                    results[name] = self._merge_and_save(df, f'{name}.parquet', name)
+                    results[name] = self._merge_and_save(df, f"{name}.parquet", name)
                 else:
-                    logger.warning(f'  ⚠️ {name}: 새 데이터 없음')
+                    logger.warning(f"  ⚠️ {name}: 새 데이터 없음")
                     results[name] = False
                 time.sleep(0.3)
             except Exception as e:
-                logger.error(f'  ❌ {name}: {e}', exc_info=True)
+                logger.error(f"  ❌ {name}: {e}", exc_info=True)
                 results[name] = False
         logger.info('\n📌 KOR_Spread — 장단기 스프레드 (10Y-3Y, 계산)')
         try:
             results['KOR_Spread'] = self._update_spread()
         except Exception as e:
-            logger.error(f'  ❌ KOR_Spread: {e}', exc_info=True)
+            logger.error(f"  ❌ KOR_Spread: {e}", exc_info=True)
             results['KOR_Spread'] = False
         logger.info('\n── KOSIS 통계청 지표 ──')
         logger.info('\n📌 KOR_IndustrialProd — 산업생산지수(계절조정, 2020=100)')
@@ -220,7 +222,7 @@ class BOKEconomicUpdater:
             else:
                 results['KOR_IndustrialProd'] = False
         except Exception as e:
-            logger.error(f'  ❌ KOR_IndustrialProd: {e}', exc_info=True)
+            logger.error(f"  ❌ KOR_IndustrialProd: {e}", exc_info=True)
             results['KOR_IndustrialProd'] = False
         time.sleep(0.5)
         logger.info('\n📌 KOR_Lf — 경제활동인구 (취업자수, 천명)')
@@ -233,14 +235,15 @@ class BOKEconomicUpdater:
             else:
                 results['KOR_Lf'] = False
         except Exception as e:
-            logger.error(f'  ❌ KOR_Lf: {e}', exc_info=True)
+            logger.error(f"  ❌ KOR_Lf: {e}", exc_info=True)
             results['KOR_Lf'] = False
         success = sum((1 for v in results.values() if v))
         total = len(results)
         logger.info('\n' + '=' * 70)
-        logger.info(f'✅ 완료: {success}/{total} 시리즈')
+        logger.info(f"✅ 완료: {success}/{total} 시리즈")
         for name, ok in results.items():
-            logger.info(f'  {('✅' if ok else '❌')} {name}')
+            _ok_lbl = "OK" if ok else "FAIL"
+            logger.info(f"  {_ok_lbl} {name}")
         logger.info('=' * 70)
         return results
 

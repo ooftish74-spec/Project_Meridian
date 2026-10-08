@@ -3,15 +3,17 @@ import time
 from src.portfolio.state_backend import RedisStateBackend
 from src.portfolio.shadow_manager import ShadowPortfolioManager
 
+fakeredis = pytest.importorskip("fakeredis")
+
 @pytest.fixture
 def state_backend():
     # Use fakeredis for reliable testing without external daemon
     sb = RedisStateBackend(host='invalid_host_to_force_fake')
     sb.use_fake = True
-    import fakeredis
     sb.r = fakeredis.FakeRedis(decode_responses=True)
     sb.clear_state()
     return sb
+
 
 def test_save_and_load_position(state_backend):
     pos_data = {

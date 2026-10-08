@@ -131,19 +131,12 @@ def _ensure_loaded():
         except Exception as _e:
             logger.error(f'  dynamic_universe 로드 실패: {_e}', exc_info=True)
     try:
-        from src.portfolio.universe_screener import UniverseScreener
-        screener = UniverseScreener()
-        cache_path = screener._cache_path
-        if cache_path.exists():
-            import json as _json
-            u = _json.load(open(cache_path))
-            for item in u.get('universe', []):
-                t = item.get('ticker', '')
-                name = item.get('name', t)
-                if t and _KR_TICKER_RE.match(t):
-                    tickers.append(t)
-                    stocks.append(t)
-                    names[t] = name
+        from config.universe import Universe
+        univ = Universe()
+        for t, item in list(univ.A1_DIRECTIONAL.items()) + list(univ.A2_SECTORS.items()):
+            tickers.append(t)
+            names[t] = getattr(item, 'name', t)
+            stocks.append(t)
             if tickers:
                 logger.debug(f'  유니버스: investable_universe.json ({len(tickers)}종목)')
                 _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)

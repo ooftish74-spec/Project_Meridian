@@ -45,17 +45,12 @@ class CrossMarketCollector:
                 logger.info('  ✅ FRED API 초기화 완료 (key=%s...)', key[:8] if key else '?')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             self.fred = None
 
     def _setup_yf(self):
-        try:
-            import yfinance as yf
-            self.yf = yf
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
-            self.yf = None
+        # yfinance 폐기 — KIS / FRED / Alpha Vantage 전용
+        self.yf = None
 
     def _yf_fetch_with_retry(self, ticker: str, period: str='3y', n_retry: int=3) -> Optional[pd.DataFrame]:
         """yfinance 단건 조회 + 최대 n_retry회 retry (지수 백오프).
@@ -66,21 +61,7 @@ class CrossMarketCollector:
         Returns:
             pd.DataFrame | None
         """
-        if not self.yf:
-            return None
-        import time as _t
-        for attempt in range(n_retry):
-            try:
-                data = self.yf.download(ticker, period=period, progress=False, auto_adjust=True, timeout=15)
-                if data is not None and (not data.empty):
-                    if isinstance(data.columns, pd.MultiIndex):
-                        data.columns = data.columns.get_level_values(0)
-                    return data
-            except Exception as _e:
-                if attempt < n_retry - 1:
-                    _t.sleep(1.5 ** attempt)
-                    logger.error(f'  yfinance {ticker} retry {attempt + 1}/{n_retry}: {_e}', exc_info=True)
-        logger.warning(f'  ⚠️ yfinance {ticker}: 3회 retry 모두 실패')
+        # yfinance 폐기 — 로컬 DataBus 및 Alpha Vantage 참조
         return None
 
     def _load_csv_ffill(self, csv_path: Path, col: str='Close') -> Optional[pd.DataFrame]:
@@ -88,7 +69,7 @@ class CrossMarketCollector:
         try:
             if csv_path.exists():
                 df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
-                logger.warning(f'  폄 {csv_path.name}: 실시간 수집 실패 → 이전 CSV ffill 적용 ({len(df)}행 이전 데이터)')
+                logger.warning(f"  폄 {csv_path.name}: 실시간 수집 실패 → 이전 CSV ffill 적용 ({len(df)}행 이전 데이터)")
                 return df
         except Exception as _e:
             logger.warning(f'  CSV ffill 로드 실패 {csv_path}: {_e}', exc_info=True)
@@ -121,7 +102,7 @@ class CrossMarketCollector:
                 combined['Spread_MA20'] = combined['US_JP_Spread'].rolling(20).mean()
                 combined['Spread_Zscore'] = (combined['US_JP_Spread'] - combined['US_JP_Spread'].rolling(60).mean()) / (combined['US_JP_Spread'].rolling(60).std() + 1e-10)
                 atomic_write_dataframe(combined, DATA_DIR / 'us_jp_spread.csv', file_format='csv')
-                logger.info(f'  ✅ US-JP 스프레드: {len(combined)}일, 현재 {combined['US_JP_Spread'].iloc[-1]:.2f}%p')
+                logger.info(f"  ✅ US-JP 스프레드: {len(combined)}일, 현재 {combined['US_JP_Spread'].iloc[-1]:.2f}%p")
                 return combined
             else:
                 logger.warning('  ⚠️ US/JP 10Y 데이터 부족')
@@ -141,13 +122,15 @@ class CrossMarketCollector:
         logger.info('📊 중국 PMI (Caixin proxy) 수집...')
         results = pd.DataFrame()
         FRED_CHINA_SERIES = [('MANEMP', 'US_Mfg_Emp_proxy')]
+        from datetime import datetime, timedelta
+        fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
         if self.fred:
             for series_id, col_name in FRED_CHINA_SERIES:
                 try:
-                    s = self.fred.get_series(series_id, observation_start='2020-01-01')
+                    s = self.fred.get_series(series_id, observation_start=fred_start_date)
                     if s is not None and (not s.empty):
                         results[col_name] = s
-                        logger.warning(f'  FRED {series_id}: {len(s)}행')
+                        logger.warning(f"  FRED {series_id}: {len(s)}행")
                         break
                 except Exception as _fe:
                     logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
@@ -163,7 +146,7 @@ class CrossMarketCollector:
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_pmi.csv', file_format='csv')
-            logger.info(f'  ✅ 중국 PMI proxy: {len(results)}개월')
+            logger.info(f"  ✅ 중국 PMI proxy: {len(results)}개월")
             return results
         logger.warning('  ⚠️ 중국 PMI 모든 소스 실패 → 스킵')
         return None
@@ -178,13 +161,15 @@ class CrossMarketCollector:
         logger.info('📊 미국 ISM PMI 수집...')
         results = pd.DataFrame()
         FRED_ISM_MAP = [('MANEMP', 'US_Mfg_Employment'), ('INDPRO', 'US_Ind_Production'), ('DGORDER', 'US_Durable_Goods'), ('RSXFS', 'US_Retail_Sales')]
+        from datetime import datetime, timedelta
+        fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
         if self.fred:
             for series_id, col_name in FRED_ISM_MAP:
                 try:
-                    s = self.fred.get_series(series_id, observation_start='2020-01-01')
+                    s = self.fred.get_series(series_id, observation_start=fred_start_date)
                     if s is not None and (not s.empty):
                         results[col_name] = s.resample('ME').last()
-                        logger.warning(f'  FRED {series_id}: {len(s)}행')
+                        logger.warning(f"  FRED {series_id}: {len(s)}행")
                 except Exception as _fe:
                     logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
         if results.empty and self.yf:
@@ -199,7 +184,7 @@ class CrossMarketCollector:
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'us_ism_pmi.csv', file_format='csv')
-            logger.info(f'  ✅ US 경기 지표: {len(results)}개월, 컬럼={list(results.columns)}')
+            logger.info(f"  ✅ US 경기 지표: {len(results)}개월, 컬럼={list(results.columns)}")
             return results
         logger.warning('  ⚠️ US PMI 모든 소스 실패')
         return None
@@ -234,7 +219,7 @@ class CrossMarketCollector:
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_monetary.csv', file_format='csv')
-            logger.info(f'  ✅ 통화/금리 지표: {len(results)}개월')
+            logger.info(f"  ✅ 통화/금리 지표: {len(results)}개월")
             return results
         logger.warning('  ⚠️ PBoC LPR 모든 소스 실패')
         return None
@@ -274,7 +259,7 @@ class CrossMarketCollector:
                     results['Yield_Curve_3M10Y'] = results['US_10Y'] - results['US_3M']
                 atomic_write_dataframe(results, DATA_DIR / 'us_yield_curve.csv', file_format='csv')
                 latest = results['Yield_Curve_2Y10Y'].iloc[-1]
-                logger.info(f'  ✅ 수익률 곡선: {len(results)}일, 2Y-10Y={latest:+.2f}%p ({('역전' if latest < 0 else '정상')})')
+                logger.info(f"  ✅ 수익률 곡선: {len(results)}일, 2Y-10Y={latest:+.2f}%p ({('역전' if latest < 0 else '정상')})")
                 return results
             return None
         except Exception as e:
@@ -313,7 +298,7 @@ class CrossMarketCollector:
                     betas[sector] = round(float(beta), 3)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                     continue
             if betas:
                 beta_path = PROJECT_ROOT / 'data' / 'raw' / 'sector_beta'
@@ -321,7 +306,7 @@ class CrossMarketCollector:
                 from src.utils.file_ops import atomic_write_json
 
                 atomic_write_json(beta_path / 'latest_betas.json', {'date': datetime.now().strftime('%Y-%m-%d'), 'lookback_days': lookback_days, 'betas': betas}, indent=2)
-                logger.info(f'  ✅ 섹터 베타: {betas}')
+                logger.info(f"  ✅ 섹터 베타: {betas}")
             return betas
         except Exception as e:
             logger.error(f'  ❌ 섹터 베타 실패: {e}', exc_info=True)
@@ -346,9 +331,9 @@ class CrossMarketCollector:
         betas = self.compute_sector_betas()
         results['sector_betas'] = len(betas) > 0
         ok = sum((1 for v in results.values() if v))
-        logger.info(f'\n✅ Cross-Market 수집 완료: {ok}/{len(results)}')
+        logger.info(f"\n✅ Cross-Market 수집 완료: {ok}/{len(results)}")
         for k, v in results.items():
-            logger.info(f'  {('✅' if v else '❌')} {k}')
+            logger.info(f"  {('✅' if v else '❌')} {k}")
         summary = {'timestamp': datetime.now().isoformat(), 'results': results, 'sector_betas': betas}
         atomic_write_json(DATA_DIR / 'collection_summary.json', summary, indent=2, default=str)
         return summary

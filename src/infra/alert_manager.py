@@ -27,7 +27,7 @@ class AlertManager:
             return json.loads(self._alert_file.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     def _save_alerts(self, alerts: List[Dict]) -> None:
@@ -36,7 +36,7 @@ class AlertManager:
                 alerts = alerts[-100:]
             atomic_write_json(self._alert_file, alerts, indent=2, ensure_ascii=False)
         except Exception as e:
-            logger.error(f'AlertManager 저장 실패: {e}')
+            logger.error(f"AlertManager 저장 실패: {e}")
 
     def report_error(self, source: str, message: str, severity: str='warning', context: Optional[Dict]=None) -> None:
         """새로운 에러를 보고합니다."""
@@ -44,7 +44,7 @@ class AlertManager:
         new_alert = {'timestamp': datetime.now().isoformat(), 'source': source, 'message': message[:500], 'severity': severity, 'status': 'active', 'context': context or {}}
         alerts.append(new_alert)
         self._save_alerts(alerts)
-        logger.debug(f'🚨 AlertManager 캡처됨: [{severity.upper()}] {source} - {message}')
+        logger.debug(f"🚨 AlertManager 캡처됨: [{severity.upper()}] {source} - {message}")
 
     def resolve_alert(self, source: str, resolution_msg: str) -> None:
         """진행 중인 에러를 '해결됨(자가 복구 성공)'으로 표시합니다."""
@@ -59,4 +59,4 @@ class AlertManager:
                 break
         if resolved_count > 0:
             self._save_alerts(alerts)
-            logger.debug(f'💚 AlertManager 복구 보고됨: {source} - {resolution_msg}')
+            logger.debug(f"💚 AlertManager 복구 보고됨: {source} - {resolution_msg}")

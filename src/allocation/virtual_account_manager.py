@@ -10,6 +10,7 @@ import json
 import logging
 from typing import Dict, Any, List
 from pathlib import Path
+from src.utils.file_ops import atomic_write_json
 logger = logging.getLogger(__name__)
 
 class VirtualAccountManager:
@@ -48,7 +49,7 @@ class VirtualAccountManager:
         if total_requested > self.total_master_capital:
             scale = self.total_master_capital / total_requested
             target_allocations = {k: v * scale for k, v in target_allocations.items()}
-            logger.warning(f'할당 요청액이 총 자본을 초과하여 {scale:.2f} 비율로 스케일 다운됨.')
+            logger.warning(f"할당 요청액이 총 자본을 초과하여 {scale:.2f} 비율로 스케일 다운됨.")
         allocated_sum = 0.0
         for stream_id, amount in target_allocations.items():
             if stream_id in self.ledger['streams']:
@@ -56,14 +57,14 @@ class VirtualAccountManager:
                 allocated_sum += amount
         self.ledger['master_cash'] = self.total_master_capital - allocated_sum
         self._save_ledger()
-        logger.info(f'재배분 완료. Master 유휴 현금: {self.ledger['master_cash']:,.0f} KRW')
+        logger.info(f"재배분 완료. Master 유휴 현금: {self.ledger['master_cash']:,.0f} KRW")
 
     def reserve_capital_for_trade(self, stream_id: str, amount: float) -> bool:
         """
         특정 스트림이 주문을 발생시킬 때, 가상 장부에서 해당 금액을 차감(예약)합니다.
         """
         if stream_id not in self.ledger['streams']:
-            logger.error(f'알 수 없는 스트림 ID: {stream_id}')
+            logger.error(f"알 수 없는 스트림 ID: {stream_id}")
             return False
         available = self.ledger['streams'][stream_id]['allocated'] - self.ledger['streams'][stream_id]['used']
         if available >= amount:
@@ -72,12 +73,12 @@ class VirtualAccountManager:
             return True
         else:
             if self.ledger['master_cash'] >= amount:
-                logger.warning(f'[{stream_id}] 자체 할당량 한도 초과. 마스터 잉여 현금에서 {amount:,.0f} 차입(Borrowing) 실행.')
+                logger.warning(f"[{stream_id}] 자체 할당량 한도 초과. 마스터 잉여 현금에서 {amount:,.0f} 차입(Borrowing) 실행.")
                 self.ledger['master_cash'] -= amount
                 self.ledger['streams'][stream_id]['used'] += amount
                 self._save_ledger()
                 return True
-            logger.error(f'[{stream_id}] 할당량 및 마스터 잉여 현금 모두 부족 (요청: {amount:,.0f})')
+            logger.error(f"[{stream_id}] 할당량 및 마스터 잉여 현금 모두 부족 (요청: {amount:,.0f})")
             return False
 
     def release_capital_from_trade(self, stream_id: str, amount: float):

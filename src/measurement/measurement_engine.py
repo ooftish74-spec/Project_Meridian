@@ -44,7 +44,7 @@ def _get_launch_date():
             return date.fromisoformat(s[:10])
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
     try:
         from config.dynamic_config import DynamicConfig
@@ -53,7 +53,7 @@ def _get_launch_date():
             return date.fromisoformat(s[:10])
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         pass
     return date.today()
 
@@ -65,7 +65,7 @@ def _load(fname: str, default=None) -> Any:
             return json.loads(p.read_text(encoding='utf-8'))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     return default if default is not None else {}
 
@@ -99,11 +99,13 @@ class MeasurementEngine:
             _b_ret = float(portfolio.get('benchmark_return_pct', 0.0))
             _regime = str(sp.get('regime', sp.get('current_regime', 'unknown')))
             _beta_rec = _bt.record(_date_str, _p_ret, _b_ret, _regime)
-            logger.debug(f'  [BetaTracker] β60={_beta_rec.get('beta_60d')}, α={_beta_rec.get('pure_alpha_pct')} ({_regime})')
+            _b60 = _beta_rec.get('beta_60d')
+            _pa = _beta_rec.get('pure_alpha_pct')
+            logger.debug(f"  [BetaTracker] β60={_b60}, α={_pa} ({_regime})")
         except Exception as _bt_e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_bt_e}", exc_info=True)
-            logger.debug(f'  BetaTracker 기록 실패 (비치명적): {_bt_e}')
+            logger.debug(f"  BetaTracker 기록 실패 (비치명적): {_bt_e}")
         sleeves = self._compute_sleeve_views(sp)
         attribution = self._compute_attribution_view(sp)
         signal_quality = self._compute_signal_quality_view(sp, portfolio)
@@ -163,13 +165,13 @@ class MeasurementEngine:
                     ic_5d = round(float(ic_5d_val), 4) if ic_5d_val == ic_5d_val else None
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
             penalty = wr_5d < wr_threshold or (ic_5d is not None and ic_5d < ic_threshold)
-            logger.info(f'  [Phase 40] S2 롤링({lookback}d): WR={wr_5d:.1%}({n}건), IC={ic_5d}, penalty={penalty}')
+            logger.info(f"  [Phase 40] S2 롤링({lookback}d): WR={wr_5d:.1%}({n}건), IC={ic_5d}, penalty={penalty}")
             return {'wr_5d': round(wr_5d, 4), 'ic_5d': ic_5d, 'n_trades_5d': n, 'penalty_triggered': bool(penalty), 'lookback_days': lookback}
         except Exception as e:
-            logger.warning(f'  [Phase 40] S2 rolling metrics 계산 실패: {e}')
+            logger.warning(f"  [Phase 40] S2 rolling metrics 계산 실패: {e}")
             return _default
 
     def _compute_portfolio_view(self, sp: dict) -> dict:
@@ -216,7 +218,7 @@ class MeasurementEngine:
         exits = [t for t in trade_history if _is_valid_sell(t)]
         _ghost_count = sum((1 for t in trade_history if t.get('action', '').upper() == 'SELL' and (not _is_valid_sell(t))))
         if _ghost_count > 0:
-            logger.info(f'  🔧 Ghost trade 필터: {_ghost_count}건 제외 (entry_price=0, PnL 계산 불가)')
+            logger.info(f"  🔧 Ghost trade 필터: {_ghost_count}건 제외 (entry_price=0, PnL 계산 불가)")
         sell_hit = sum((1 for t in exits if t.get('price', 0) > t.get('avg_price', t.get('price', 0))))
         sell_total = len(exits)
         da_realized = round(sell_hit / max(sell_total, 1), 4) if exits else None
@@ -265,7 +267,7 @@ class MeasurementEngine:
                     bench_pct = round((_last_close / _base_close - 1) * 100, 4)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         if bench_pct == 0:
             bench_pct = cum.get('cumulative_bench_pct', 0)
@@ -333,11 +335,11 @@ class MeasurementEngine:
             for _gc, _members in _conf_groups.items():
                 if len(_members) / _total > 0.4:
                     _excluded_count += len(_members)
-                    logger.info(f'  🔧 IC: 고정 confidence={_gc:.3f} {len(_members)}종목 제외 ({len(_members) / _total:.0%} 점유)')
+                    logger.info(f"  🔧 IC: 고정 confidence={_gc:.3f} {len(_members)}종목 제외 ({len(_members) / _total:.0%} 점유)")
                 else:
                     _filtered.extend(_members)
             if _excluded_count > 0:
-                logger.info(f'  🔧 IC: 고정 confidence 필터 적용 ({_total}→{len(_filtered)}종목)')
+                logger.info(f"  🔧 IC: 고정 confidence 필터 적용 ({_total}→{len(_filtered)}종목)")
                 conf_return_pairs = _filtered
         min_ic = cfg.get('measurement.ic_min_positions', 5)
         if len(conf_return_pairs) >= min_ic:
@@ -347,7 +349,7 @@ class MeasurementEngine:
                 rets_arr = [p[1] for p in conf_return_pairs]
                 conf_var = max(confs_arr) - min(confs_arr)
                 if conf_var < 1e-09:
-                    logger.info(f'  ⚠️ IC: confidence 전체 동일 ({confs_arr[0]}) → PENDING')
+                    logger.info(f"  ⚠️ IC: confidence 전체 동일 ({confs_arr[0]}) → PENDING")
                     ic_val = None
                     ic_p = None
                     ic_n = len(conf_return_pairs)
@@ -358,7 +360,7 @@ class MeasurementEngine:
                     ic_n = len(conf_return_pairs)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         if ic_val is None:
             for r in reversed(records):
@@ -558,17 +560,17 @@ class MeasurementEngine:
                     sharpe = round(mean_ret / std * math.sqrt(_annualize_factor), 3)
                 else:
                     sharpe = 0.0
-                sleeve['sharpe_status'] = f'PENDING (D{n_days}/{_sharpe_min})'
+                sleeve['sharpe_status'] = f"PENDING (D{n_days}/{_sharpe_min})"
             sleeve['sharpe'] = sharpe
             sleeve['deflated_sharpe'] = None
             if sharpe is not None and sharpe > 0:
                 try:
                     from src.streams.s1_alpha_factory.purged_cv import deflated_sharpe_ratio
-                    _trials = cfg.get(f'{sid.lower()}.n_trials', 50)
+                    _trials = cfg.get(f"{sid.lower()}.n_trials", 50)
                     sleeve['deflated_sharpe'] = round(deflated_sharpe_ratio(sharpe, _trials), 3)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
             mdd = None
             if n_days >= 1:
@@ -608,7 +610,7 @@ class MeasurementEngine:
                         sortino = 0.0
                 else:
                     sortino = 0.0
-                sleeve['sortino_status'] = f'PENDING (D{n_days}/{_sharpe_min})'
+                sleeve['sortino_status'] = f"PENDING (D{n_days}/{_sharpe_min})"
             sleeve['sortino'] = sortino
             alpha = None
             alpha_status = None
@@ -633,12 +635,12 @@ class MeasurementEngine:
                         alpha = 0.0
                 else:
                     alpha = round((stream_total - bench_total) * 100, 3)
-                alpha_status = f'D{eval_n}/{_alpha_eval_window}'
+                alpha_status = f"D{eval_n}/{_alpha_eval_window}"
             elif n_days >= 1:
                 stream_total = sum(rets)
                 bench_total = sum(bench_daily_returns[:n_days]) if bench_daily_returns else 0.0
                 alpha = round((stream_total - bench_total) * 100, 3)
-                alpha_status = f'PENDING (D{n_days}/{_alpha_min})'
+                alpha_status = f"PENDING (D{n_days}/{_alpha_min})"
             sleeve['alpha'] = alpha
             sleeve['alpha_status'] = alpha_status
             sleeve['alpha_method'] = _alpha_method
@@ -711,7 +713,7 @@ class MeasurementEngine:
                             ic = round(float(_ic), 4)
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                         ic = self._manual_spearman(confs, rets_arr)
             sleeve['ic'] = ic
             beta = None
@@ -771,7 +773,7 @@ class MeasurementEngine:
                             bench_returns.append(closes[i] / closes[i - 1] - 1)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         return bench_returns
 
@@ -801,10 +803,10 @@ class MeasurementEngine:
         + 슬리브별(A1/A2/A3) 기여 분해.
         """
         try:
-            from src.measurement.performance_attribution import compute_attribution_view
+            from src.allocation.pnl_attribution import compute_attribution_view
             return compute_attribution_view(sp)
         except Exception as e:
-            logger.debug(f'  Attribution View 계산 실패: {e}')
+            logger.debug(f"  Attribution View 계산 실패: {e}")
             return {'daily': {}, 'cumulative_30d': {}, 'sleeve_alpha': {}, 'history_days': 0, 'source': 'BHB (error)'}
 
     def _compute_signal_quality_view(self, sp: dict, portfolio: dict=None) -> dict:
@@ -855,7 +857,7 @@ class MeasurementEngine:
                         ic_halflife = None
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     ic_halflife = None
         brier_score = 0.0
         brier_skill = 0.0
@@ -866,7 +868,7 @@ class MeasurementEngine:
                 brier_skill = 1 - brier_score / 0.25 if brier_score > 0 else 0
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         if brier_score == 0:
             positions = sp.get('positions', {})
@@ -1191,7 +1193,7 @@ class MeasurementEngine:
                             bench_returns.append(closes[i] / closes[i - 1] - 1)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         min_len = min(len(daily_returns), len(bench_returns))
         if min_len < 1:
@@ -1259,15 +1261,15 @@ class MeasurementEngine:
             os.replace(tmp_path, target)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             try:
                 os.unlink(tmp_path)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
             raise
-        logger.info(f'  💾 MeasurementEngine → {out_path.name}')
+        logger.info(f"  💾 MeasurementEngine → {out_path.name}")
 
     def _compute_ic_ensemble_view(self, sp: dict) -> dict:
         """★ M12: IC-Weighted Ensemble Rebalancing.
@@ -1304,7 +1306,7 @@ class MeasurementEngine:
                         stream_ic_series[s] = _vals
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         if not stream_icir:
             ic_values = []
@@ -1334,7 +1336,7 @@ class MeasurementEngine:
                 _alert = _slope < _ic_decay_threshold
                 ic_decay_alerts[s] = {'slope': round(_slope, 6), 'alert': _alert, 'window': _ic_decay_window, 'threshold': _ic_decay_threshold}
                 if _alert:
-                    logger.warning(f'  ⚠️ M12 IC 감쇠 경보 [{s}]: slope={_slope:.4f} < {_ic_decay_threshold} (최근 {_ic_decay_window}일)')
+                    logger.warning(f"  ⚠️ M12 IC 감쇠 경보 [{s}]: slope={_slope:.4f} < {_ic_decay_threshold} (최근 {_ic_decay_window}일)")
         _min_icir = cfg.get('measurement.ic_ensemble_min_icir', 0.0)
         _positive_icirs = {s: max(v - _min_icir, 0) for s, v in stream_icir.items()}
         _total = sum(_positive_icirs.values())
@@ -1409,39 +1411,70 @@ class MeasurementEngine:
         """콘솔 요약 출력 (★ 퀀트 펀드 기준)."""
         o = self.result.get('official', {})
         logger.info('  ── 공식 지표 (SSoT v2.0) ──')
-        logger.info(f'  🎯 DA:     {o['da']:.1%} ({o['da_correct']}/{o['da_total']})')
+        _da_val = o.get('da', 0)
+        _dac_val = o.get('da_correct', 0)
+        _dat_val = o.get('da_total', 0)
+        logger.info(f"  🎯 DA:     {_da_val:.1%} ({_dac_val}/{_dat_val})")
         if o.get('da_held') is not None:
-            logger.info(f'     ↳ 보유={o['da_held']:.1%}  실현={o.get('da_realized', 'N/A')}')
-        logger.info(f'  📈 Alpha:  {o['alpha_pct']:+.2f}% (벤치={o['benchmark_return_pct']:+.2f}%)')
-        ic_str = f'{o['ic']:.4f}' if o.get('ic') is not None else 'N/A'
-        ic_p_str = f'p={o['ic_p_value']:.3f}' if o.get('ic_p_value') is not None else ''
-        logger.info(f'  📊 IC:     {ic_str} ({ic_p_str}, n={o.get('ic_n', 0)}, {o.get('ic_method', '?')})')
-        logger.info(f'  💰 NAV:    ₩{o['nav']:,.0f} (ret={o['cumulative_return_pct']:+.2f}%)')
-        sharpe_str = f'{o['sharpe']:.2f}' if o['sharpe'] is not None else 'N/A'
-        logger.info(f'  📐 Sharpe: {sharpe_str}')
-        logger.info(f'  📉 DD:     {o['max_drawdown_pct']:+.2f}%')
-        sortino_str = f'{o['sortino']:.2f}' if o.get('sortino') is not None else 'N/A'
-        calmar_str = f'{o['calmar']:.3f}' if o.get('calmar') is not None else 'N/A'
-        beta_str = f'{o['portfolio_beta']:.4f}' if o.get('portfolio_beta') is not None else 'N/A'
-        logger.info(f'  📊 Sortino: {sortino_str}  Calmar: {calmar_str}  β: {beta_str}')
+            _dah = o.get('da_held', 0)
+            _dar = o.get('da_realized', 'N/A')
+            logger.info(f"     ↳ 보유={_dah:.1%}  실현={_dar}")
+        _apc = o.get('alpha_pct', 0)
+        _brc = o.get('benchmark_return_pct', 0)
+        logger.info(f"  📈 Alpha:  {_apc:+.2f}% (벤치={_brc:+.2f}%)")
+        _ic_v = o.get('ic')
+        _ic_p = o.get('ic_p_value')
+        ic_str = f"{_ic_v:.4f}" if _ic_v is not None else 'N/A'
+        ic_p_str = f"p={_ic_p:.3f}" if _ic_p is not None else ''
+        _ic_n = o.get('ic_n', 0)
+        _ic_m = o.get('ic_method', '?')
+        logger.info(f"  📊 IC:     {ic_str} ({ic_p_str}, n={_ic_n}, {_ic_m})")
+        _nav_v = o.get('nav', 0)
+        _cr_pc = o.get('cumulative_return_pct', 0)
+        logger.info(f"  💰 NAV:    ₩{_nav_v:,.0f} (ret={_cr_pc:+.2f}%)")
+        _shp_v = o.get('sharpe')
+        sharpe_str = f"{_shp_v:.2f}" if _shp_v is not None else 'N/A'
+        logger.info(f"  📐 Sharpe: {sharpe_str}")
+        _mdd_v = o.get('max_drawdown_pct', 0)
+        logger.info(f"  📉 DD:     {_mdd_v:+.2f}%")
+        _srt_v = o.get('sortino')
+        sortino_str = f"{_srt_v:.2f}" if _srt_v is not None else 'N/A'
+        _clm_v = o.get('calmar')
+        calmar_str = f"{_clm_v:.3f}" if _clm_v is not None else 'N/A'
+        _pbeta_v = o.get('portfolio_beta')
+        beta_str = f"{_pbeta_v:.4f}" if _pbeta_v is not None else 'N/A'
+        logger.info(f"  📊 Sortino: {sortino_str}  Calmar: {calmar_str}  β: {beta_str}")
         logger.info('  ── 퀀트 지표 (Medallion) ──')
-        icir_str = f'{o.get('icir', 'N/A')}'
-        calmar_str = f'{o.get('calmar_ratio', 'N/A')}'
-        pf_str = f'{o.get('profit_factor', 'N/A')}'
-        logger.info(f'  📏 ICIR={icir_str}  Calmar={calmar_str}  PF={pf_str}')
+        _icir_v = o.get('icir', 'N/A')
+        _calm_v = o.get('calmar_ratio', 'N/A')
+        _pf_v = o.get('profit_factor', 'N/A')
+        logger.info(f"  📏 ICIR={_icir_v}  Calmar={_calm_v}  PF={_pf_v}")
         wl = o.get('win_loss_ratio')
         kelly = o.get('realized_kelly')
         exp = o.get('expectancy_pct')
-        logger.info(f'  📊 W/L={(wl if wl else 'N/A')}  Kelly={(f'{kelly:.1%}' if kelly is not None else 'N/A')}  E[R]={(f'{exp:+.2f}%' if exp is not None else 'N/A')}')
-        logger.info(f'  🔄 실현:   {o['realized_trades']}건 (승률 {o.get('realized_win_rate', 0):.0%}, PnL=₩{o.get('realized_pnl_krw', 0):+,.0f})')
+        _wl_str = wl if wl else "N/A"
+        _k_str = f"{kelly:.1%}" if kelly is not None else 'N/A'
+        _e_str = f"{exp:+.2f}%" if exp is not None else 'N/A'
+        logger.info(f"  📊 W/L={_wl_str}  Kelly={_k_str}  E[R]={_e_str}")
+        _rt_trades = o.get('realized_trades', 0)
+        _r_win_rate = o.get('realized_win_rate', 0)
+        _r_pnl_krw = o.get('realized_pnl_krw', 0)
+        logger.info(f"  🔄 실현:   {_rt_trades}건 (승률 {_r_win_rate:.0%}, PnL=₩{_r_pnl_krw:+,.0f})")
         attr = self.result.get('views', {}).get('attribution', {})
         daily = attr.get('daily', {})
         if daily:
             logger.info('  ── 수익 분해 (BHB) ──')
-            logger.info(f'  📊 β(시장):  {daily.get('market_effect', 0):+.2%}  섹터: {daily.get('sector_effect', 0):+.2%}  α(종목): {daily.get('stock_selection', 0):+.2%}  타이밍: {daily.get('timing_effect', 0):+.2%}')
+            _me = daily.get("market_effect", 0)
+            _se = daily.get("sector_effect", 0)
+            _ss = daily.get("stock_selection", 0)
+            _te = daily.get("timing_effect", 0)
+            logger.info(f"  📊 β(시장):  {_me:+.2%}  섹터: {_se:+.2%}  α(종목): {_ss:+.2%}  타이밍: {_te:+.2%}")
         cum = attr.get('cumulative_30d', {})
         if cum.get('days', 0) > 0:
-            logger.info(f'  📈 30일 누적: α비율={cum.get('alpha_ratio', 0):.0%} β비율={cum.get('beta_ratio', 0):.0%} ({cum['days']}일)')
+            _ar_v = cum.get('alpha_ratio', 0)
+            _br_v = cum.get('beta_ratio', 0)
+            _cd_v = cum.get('days', 0)
+            logger.info(f"  📈 30일 누적: α비율={_ar_v:.0%} β비율={_br_v:.0%} ({_cd_v}일)")
 
     def _compute_grade(self, risk: dict, portfolio: dict) -> str:
         """Grade 계산 (A~F).
@@ -1530,7 +1563,7 @@ class MeasurementEngine:
             n_trades = len([t for t in portfolio['trade_history'] if t.get('action') == 'SELL'])
         min_days = cfg.get('gonogo.shadow_min_days', 14)
         min_trades = cfg.get('gonogo.min_realized_trades', 10)
-        logger.debug(f'DEBUG: n_days={n_days}, min_days={min_days}, n_trades={n_trades}, min_trades={min_trades}')
+        logger.debug(f"DEBUG: n_days={n_days}, min_days={min_days}, n_trades={n_trades}, min_trades={min_trades}")
         if n_days < min_days or n_trades < min_trades:
             return 'EARLY_STAGE_CONDITIONAL'
         go_sharpe = cfg.get('go.sharpe.ok', 1.0)
@@ -1578,7 +1611,7 @@ class MeasurementEngine:
         target_ic = cfg.get('go.ic.ok', 0.02)
         target_alpha = cfg.get('go.alpha.ok', 0)
         target_pf = cfg.get('go.profit_factor.ok', 1.5)
-        criteria = {'shadow_days': {'value': n_days, 'threshold': min_days, 'pass': n_days >= min_days, 'detail': f'{n_days}일 / {min_days}일'}, 'total_return': {'value': round(cum_ret, 2), 'threshold': 0, 'pass': cum_ret >= 0, 'detail': f'{cum_ret:+.2f}%'}, 'win_rate': {'value': round(wr * 100, 1), 'threshold': target_wr * 100, 'pass': wr >= target_wr, 'detail': f'{wr:.1%} / {target_wr:.0%}'}, 'mdd': {'value': round(mdd, 2), 'threshold': target_mdd, 'pass': mdd > target_mdd, 'detail': f'{mdd:.2f}% / {target_mdd:.1f}%'}, 'da': {'value': round(da * 100, 1) if da else 0, 'threshold': target_da * 100, 'pass': (da or 0) >= target_da, 'detail': f'{da:.1%} / {target_da:.0%}' if da else 'N/A'}, 'ic': {'value': round(ic, 4) if ic is not None else None, 'threshold': target_ic, 'pass': (ic or 0) >= target_ic, 'detail': f'{ic:.4f} / {target_ic}' if ic is not None else 'N/A', 'pending': ic is None}, 'net_alpha': {'value': round(alpha, 2), 'threshold': target_alpha, 'pass': alpha >= target_alpha, 'detail': f'{alpha:+.2f}% / {target_alpha:.1f}%'}, 'sharpe': {'value': round(sharpe, 3), 'threshold': target_sharpe, 'pass': sharpe >= target_sharpe, 'detail': f'{sharpe:.3f} / {target_sharpe:.1f}'}, 'profit_factor': {'value': round(pf, 3), 'threshold': target_pf, 'pass': pf >= target_pf, 'detail': f'{pf:.3f} / {target_pf:.1f}'}}
+        criteria = {'shadow_days': {'value': n_days, 'threshold': min_days, 'pass': n_days >= min_days, 'detail': f"{n_days}일 / {min_days}일"}, 'total_return': {'value': round(cum_ret, 2), 'threshold': 0, 'pass': cum_ret >= 0, 'detail': f"{cum_ret:+.2f}%"}, 'win_rate': {'value': round(wr * 100, 1), 'threshold': target_wr * 100, 'pass': wr >= target_wr, 'detail': f"{wr:.1%} / {target_wr:.0%}"}, 'mdd': {'value': round(mdd, 2), 'threshold': target_mdd, 'pass': mdd > target_mdd, 'detail': f"{mdd:.2f}% / {target_mdd:.1f}%"}, 'da': {'value': round(da * 100, 1) if da else 0, 'threshold': target_da * 100, 'pass': (da or 0) >= target_da, 'detail': f"{da:.1%} / {target_da:.0%}" if da else 'N/A'}, 'ic': {'value': round(ic, 4) if ic is not None else None, 'threshold': target_ic, 'pass': (ic or 0) >= target_ic, 'detail': f"{ic:.4f} / {target_ic}" if ic is not None else 'N/A', 'pending': ic is None}, 'net_alpha': {'value': round(alpha, 2), 'threshold': target_alpha, 'pass': alpha >= target_alpha, 'detail': f"{alpha:+.2f}% / {target_alpha:.1f}%"}, 'sharpe': {'value': round(sharpe, 3), 'threshold': target_sharpe, 'pass': sharpe >= target_sharpe, 'detail': f"{sharpe:.3f} / {target_sharpe:.1f}"}, 'profit_factor': {'value': round(pf, 3), 'threshold': target_pf, 'pass': pf >= target_pf, 'detail': f"{pf:.3f} / {target_pf:.1f}"}}
         daily_returns = []
         try:
             daily_records = sp.get('daily_records', [])
@@ -1588,7 +1621,7 @@ class MeasurementEngine:
                     daily_returns.append(dr / 100)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return {'verdict': verdict, 'sharpe': sharpe, 'win_rate': wr, 'max_dd': mdd, 'profit_factor': pf, 'n_days': n_days, 'grade': grade, 'da': da, 'ic': ic, 'alpha_pct': alpha, 'criteria': criteria, 'daily_returns': daily_returns}
 
@@ -1623,4 +1656,5 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     result = run_measurement()
     o = result.get('official', {})
-    logger.info(f'\n✅ MeasurementEngine 완료: DA={o.get('da', 0):.1%}')
+    _da_f = o.get('da', 0)
+    logger.info(f"\n✅ MeasurementEngine 완료: DA={_da_f:.1%}")

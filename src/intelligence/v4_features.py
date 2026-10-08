@@ -39,7 +39,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 def get_active_features(version: str='v7') -> List[str]:
@@ -67,7 +67,7 @@ def get_active_features(version: str='v7') -> List[str]:
         return list(base)
     active = [f for f in base if f not in excluded]
     if excluded:
-        logger.info(f'  🔧 피처 제외: {len(excluded)}개 → 활성 {len(active)}/{len(base)}개')
+        logger.info(f"  🔧 피처 제외: {len(excluded)}개 → 활성 {len(active)}/{len(base)}개")
     return active
 FEATURE_NAMES_V4 = ['rsi_14', 'bb_position', 'macd_signal', 'volume_ratio_20d', 'atr_pct', 'ma5_dist', 'ma20_dist', 'ma60_dist', 'return_5d', 'return_20d', 'volatility_20d', 'asset_type', 'mean_reversion', 'trend_strength', 'volume_trend', 'return_1d', 'return_3d', 'ma5_ma20_cross', 'high_low_range', 'close_to_high_20d', 'rsi_slope_5d', 'volume_spike', 'adx_proxy', 'overnight_return', 'intraday_return', 'earnings_surprise', 'revenue_yoy', 'earnings_qoq', 'earnings_momentum', 'log_return_skew_20d', 'log_return_kurtosis_20d', 'price_ma_ratio_5_20', 'price_ma_ratio_20_60', 'vol_ratio_5_20', 'obv_slope_20d', 'sp500_overnight_return', 'vix_change_1d', 'usdkrw_change_5d']
 FEATURE_NAMES_V6 = FEATURE_NAMES_V4 + ['news_sentiment_mean', 'news_sentiment_std', 'news_count_norm', 'news_pos_ratio', 'dart_insider_signal', 'dart_buyback_signal', 'dart_composite', 'foreign_net_buy_norm', 'inst_net_buy_norm', 'foreign_ratio_feat', 'short_proxy_score', 'earnings_surprise_latest', 'revenue_yoy_latest', 'roe_2yr_avg', 'debt_ratio_latest', 'automl_alpha_score']
@@ -75,7 +75,7 @@ try:
     from src.data_collection.ss_etf_feature_engine import SS_ETF_FEATURE_NAMES
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     SS_ETF_FEATURE_NAMES = ['ss_etf_vol_ratio', 'lp_delta_pressure', 'intraday_vol_anomaly']
 FEATURE_NAMES_V7 = FEATURE_NAMES_V6 + SS_ETF_FEATURE_NAMES
 SIGNATURE_FEATURE_NAMES: List[str] = ['sig5_level1_p', 'sig5_area', 'sig20_level1_p', 'sig20_area', 'sig20_mom_qual']
@@ -87,7 +87,7 @@ try:
     AUTO_ALPHA_FEATURE_NAMES: List[str] = get_active_alpha_names()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     AUTO_ALPHA_FEATURE_NAMES = []
 ALPHA_FACTORY_NEW_EDGES: List[str] = ['alpha_order_imbalance_10d', 'alpha_smart_money_flow_20d', 'alpha_vol_term_structure', 'alpha_vol_adj_mom_10d', 'alpha_dd_velocity_3d', 'alpha_pca_mr_proxy_20d']
 FEATURE_NAMES_V8 = FEATURE_NAMES_V7 + AUTO_ALPHA_FEATURE_NAMES + ALPHA_FACTORY_NEW_EDGES
@@ -274,7 +274,7 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False):
                 automl_score = float(alpha_model.predict(X_row)[0])
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at v4_features.py:469', exc_info=True)
     return {'rsi_14': rsi, 'bb_position': _safe(bb), 'macd_signal': _safe(macd_signal), 'volume_ratio_20d': _safe(vol_ratio), 'atr_pct': _safe(atr_pct), 'ma5_dist': _safe((c[-1] / ma5 - 1) * 100), 'ma20_dist': _safe((c[-1] / ma20 - 1) * 100), 'ma60_dist': _safe((c[-1] / ma60 - 1) * 100), 'return_5d': _safe(ret_5d), 'return_20d': _safe(ret_20d), 'volatility_20d': _safe(vol_20d), 'asset_type': 1.0 if is_etf else 0.0, 'mean_reversion': _safe(rsi - 50), 'trend_strength': _safe(abs(c[-1] / ma20 - 1) * 100), 'volume_trend': _safe(np.mean(v[-5:]) / vol_ma20 if vol_ma20 > 0 else 1), 'return_1d': _safe(ret_1d), 'return_3d': _safe(ret_3d), 'ma5_ma20_cross': 1.0 if ma5 > ma20 else 0.0, 'high_low_range': _safe((np.max(h[-20:]) - np.min(l[-20:])) / c[-1] * 100), 'close_to_high_20d': _safe(c[-1] / np.max(h[-20:])), 'rsi_slope_5d': _safe(rsi - (100 - 100 / (1 + np.mean(np.maximum(np.diff(c[-20:-15]), 0)) / (np.mean(np.maximum(-np.diff(c[-20:-15]), 0)) + 1e-08))), 0), 'volume_spike': 1.0 if v[-1] > vol_ma20 * (float(_cfg.get('ml.volume_spike_ratio', 2.0)) if _cfg else 2.0) else 0.0, 'adx_proxy': _safe(abs(ret_5d) / (vol_20d / np.sqrt(252) + 1e-08)), 'overnight_return': _safe((o[-1] / c[-2] - 1) * 100 if c[-2] > 0 else 0), 'intraday_return': _safe((c[-1] / o[-1] - 1) * 100 if o[-1] > 0 else 0), 'automl_alpha_score': _safe(automl_score)}
 

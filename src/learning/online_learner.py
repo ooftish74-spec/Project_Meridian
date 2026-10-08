@@ -309,7 +309,7 @@ class OnlineLearner:
             atomic_write_json(_ONLINE_STATE, state, indent=2, ensure_ascii=False)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
     def _load_state(self) -> None:
@@ -320,5 +320,5 @@ class OnlineLearner:
                 self._update_count = state.get('update_count', 0)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass

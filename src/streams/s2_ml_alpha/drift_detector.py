@@ -47,8 +47,10 @@ class ModelDriftDetector:
             predicted: 모델 예측값 (수익률)
             actual: 실현 수익률
         """
-        self._predictions.append(predicted)
-        self._actuals.append(actual)
+        if predicted is None or actual is None or math.isnan(predicted) or math.isnan(actual):
+            return
+        self._predictions.append(float(predicted))
+        self._actuals.append(float(actual))
         # 최근 100개만 유지
         if len(self._predictions) > 100:
             self._predictions = self._predictions[-100:]

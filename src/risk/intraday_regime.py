@@ -79,7 +79,7 @@ class IntradayRegimeDetector:
             old = self._current_regime
             self._current_regime = judgment['regime']
             self._regime_history.append({'timestamp': timestamp or datetime.now().isoformat(), 'from': old, 'to': self._current_regime, 'trigger': judgment.get('trigger', '')})
-            logger.warning(f'  ⚠️ Intraday regime shift: {old} → {self._current_regime} (trigger: {judgment.get('trigger', '')})')
+            logger.warning(f"  ⚠️ Intraday regime shift: {old} → {self._current_regime} (trigger: {judgment.get('trigger', '')})")
         return judgment
 
     def measure(self) -> Dict:
@@ -126,13 +126,17 @@ class IntradayRegimeDetector:
         elif cum_ret < stress_threshold:
             regime = 'stress'
             trigger = f'cum_ret={cum_ret:.3f}'
-        elif recovery['detected']:
-            regime = 'recovery'
-            trigger = f'v_recovery: strength={recovery['strength']:.2f}'
         else:
             regime = 'normal'
         exposure_adj_map = {'normal': 1.0, 'recovery': _cfg.get('regime.intraday_recovery_exposure', 1.15) if _cfg else 1.15, 'stress': _cfg.get('regime.intraday_stress_exposure', 0.7) if _cfg else 0.7, 'high_vol': _cfg.get('regime.intraday_highvol_exposure', 0.5) if _cfg else 0.5, 'crisis': _cfg.get('regime.intraday_crisis_exposure', 0.2) if _cfg else 0.2}
-        result = {'regime': regime, 'exposure_adjustment': exposure_adj_map.get(regime, 1.0), 'trigger': trigger, 'current_regime': self._current_regime, 'n_transitions': len(self._regime_history), 'recovery': recovery, 'timestamp': datetime.now().isoformat()}
+        exposure_adj = exposure_adj_map.get(regime, 1.0)
+        # Continuous Volatility-Normalized De-risking & Program Basket OFI Penalty
+        basket_ofi = measurement.get('basket_ofi', 0.0)
+        if regime == 'normal' and (cum_ret < 0 or basket_ofi < -1.0):
+            drag_adj = max(0.65, min(1.0, 1.0 + (cum_ret / 0.02) + (min(0.0, basket_ofi) * 0.05)))
+            exposure_adj = round(drag_adj, 3)
+            trigger = f'continuous_basket_ofi_drag: cum_ret={cum_ret:.3f}, basket_ofi={basket_ofi:.2f}'
+        result = {'regime': regime, 'exposure_adjustment': exposure_adj, 'trigger': trigger, 'current_regime': self._current_regime, 'n_transitions': len(self._regime_history), 'recovery': recovery, 'timestamp': datetime.now().isoformat()}
         try:
             atomic_write_json((_RESULTS / 'intraday_regime.json'),  result, indent=2, default=str)
         except Exception as _e0:

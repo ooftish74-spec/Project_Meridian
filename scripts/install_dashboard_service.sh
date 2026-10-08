@@ -26,8 +26,9 @@ Group=ubuntu
 WorkingDirectory=${PROJECT_ROOT}
 Environment="PATH=${PROJECT_ROOT}/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="KIS_MODE=live"
-# Run streamlit bound only to localhost (127.0.0.1) for zero hacking risk.
-ExecStart=${STREAMLIT_BIN} run dashboard/app.py --server.port 8501 --server.address 127.0.0.1 --server.headless true
+Environment="PYTHONPATH=/home/ubuntu/Project_Meridian"
+# Run streamlit bound to 0.0.0.0 for remote/mobile dashboard access
+ExecStart=${STREAMLIT_BIN} run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
 Restart=always
 RestartSec=5
 StandardOutput=append:${PROJECT_ROOT}/logs/dashboard_stdout.log

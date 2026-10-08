@@ -60,7 +60,7 @@ class RebalanceEngine:
                 data = json.loads(state_path.read_text())
                 self._last_rebalance = data.get('last_rebalance', {})
         except Exception as _e0:
-            logger.critical(f'  [rebalance_engine] 리밸런스 엔진 초기화 로드: {_e0}', exc_info=True)
+            logger.critical(f"  [rebalance_engine] 리밸런스 엔진 초기화 로드: {_e0}", exc_info=True)
 
     def _save_rebalance_state(self):
         """리밸런싱 상태 저장."""
@@ -70,7 +70,7 @@ class RebalanceEngine:
             data = {'last_rebalance': self._last_rebalance, 'updated_at': datetime.now().isoformat()}
             atomic_write_json(state_path, data, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
-            logger.critical(f'  리밸런싱 상태 저장 실패: {e}', exc_info=True)
+            logger.critical(f"  리밸런싱 상태 저장 실패: {e}", exc_info=True)
 
     def rebalance(self, stream_id: str, current_positions: Dict[str, Dict], new_signals: List[Dict], market_data: Dict=None, budget: float=0.0) -> Dict:
         """스트림 리밸런싱 실행.
@@ -92,11 +92,11 @@ class RebalanceEngine:
         """
         sid = stream_id.lower()
         result = {'sells': [], 'buys': [], 'skipped': None, 'scores': {}, 'replacements': 0}
-        enabled = _cfg_get(f'{sid}.rebalance.enabled', False)
+        enabled = _cfg_get(f"{sid}.rebalance.enabled", False)
         if not enabled:
             result['skipped'] = 'rebalance disabled'
             return result
-        freq_days = _cfg_get(f'{sid}.rebalance.frequency_days', 5)
+        freq_days = _cfg_get(f"{sid}.rebalance.frequency_days", 5)
         today_str = date.today().isoformat()
         last = self._last_rebalance.get(stream_id, '')
         if last:
@@ -104,10 +104,10 @@ class RebalanceEngine:
                 last_date = date.fromisoformat(last)
                 days_since = (date.today() - last_date).days
                 if days_since < freq_days:
-                    result['skipped'] = f'주기 미도래 ({days_since}일/{freq_days}일)'
+                    result['skipped'] = f"주기 미도래 ({days_since}일/{freq_days}일)"
                     return result
             except Exception as _e1:
-                logger.critical(f'  [rebalance_engine] 리밸런스 조건 체크: {_e1}', exc_info=True)
+                logger.critical(f"  [rebalance_engine] 리밸런스 조건 체크: {_e1}", exc_info=True)
         held_tickers = {}
         for pk, pv in current_positions.items():
             ticker = pk.split(':')[1] if ':' in pk else pv.get('ticker', '')
@@ -129,7 +129,7 @@ class RebalanceEngine:
         if not all_candidates:
             result['skipped'] = 'no candidates'
             return result
-        cost_hurdle = _cfg_get(f'{sid}.rebalance.cost_hurdle_pct', 0.015)
+        cost_hurdle = _cfg_get(f"{sid}.rebalance.cost_hurdle_pct", 0.015)
         scores = {}
         top_50_tickers = set()
         tgat_score = 0.0
@@ -144,7 +144,7 @@ class RebalanceEngine:
                 alpha_data = json.loads(alpha_path.read_text())
                 tgat_score = float(alpha_data.get('S2_signal', {}).get('pysr_macro_feature_value', 0.0))
         except Exception as e:
-            logger.critical(f'  Alpha Factory/MCAP 데이터 로드 실패: {e}', exc_info=True)
+            logger.critical(f"  Alpha Factory/MCAP 데이터 로드 실패: {e}", exc_info=True)
         for ticker, info in all_candidates.items():
             score = self._compute_alpha_score(ticker=ticker, stream_id=stream_id, confidence=info.get('confidence', 0.5), is_held=info.get('is_held', False), cost_hurdle=cost_hurdle, is_large_cap=ticker in top_50_tickers, tgat_score=tgat_score)
             scores[ticker] = score
@@ -155,16 +155,16 @@ class RebalanceEngine:
             return result
         score_values = sorted(scores.values())
         n = len(score_values)
-        entry_pctl = _cfg_get(f'{sid}.rebalance.entry_percentile', 80)
-        exit_pctl = _cfg_get(f'{sid}.rebalance.exit_percentile', 40)
+        entry_pctl = _cfg_get(f"{sid}.rebalance.entry_percentile", 80)
+        exit_pctl = _cfg_get(f"{sid}.rebalance.exit_percentile", 40)
         entry_threshold = np.percentile(score_values, entry_pctl) if n >= 3 else 0.5
         exit_threshold = np.percentile(score_values, exit_pctl) if n >= 3 else 0.3
-        logger.info(f'  📊 {stream_id} 리밸런싱: 유니버스 {n}종목, entry>{entry_threshold:.3f} (P{entry_pctl}), exit<{exit_threshold:.3f} (P{exit_pctl})')
-        min_hold = _cfg_get(f'{sid}.rebalance.min_holding_days', 5)
+        logger.info(f"  📊 {stream_id} 리밸런싱: 유니버스 {n}종목, entry>{entry_threshold:.3f} (P{entry_pctl}), exit<{exit_threshold:.3f} (P{exit_pctl})")
+        min_hold = _cfg_get(f"{sid}.rebalance.min_holding_days", 5)
         exit_candidates = []
         for ticker, info in held_tickers.items():
             if stream_id == 'S3' and info.get('strategy', '').startswith('qvm'):
-                logger.debug(f'    {ticker} QVM 장기투자 종목: 리밸런싱 편출 면제')
+                logger.debug(f"    {ticker} QVM 장기투자 종목: 리밸런싱 편출 면제")
                 continue
             score = scores.get(ticker, 0)
             if score >= exit_threshold:
@@ -175,17 +175,17 @@ class RebalanceEngine:
                     entry_dt = date.fromisoformat(entry_date_str[:10])
                     holding_days = (date.today() - entry_dt).days
                     if holding_days < min_hold:
-                        logger.debug(f'    {ticker} 최소 보유 미달 ({holding_days}일 < {min_hold}일)')
+                        logger.debug(f"    {ticker} 최소 보유 미달 ({holding_days}일 < {min_hold}일)")
                         continue
                 except Exception as _e2:
-                    logger.critical(f'  [rebalance_engine] 개별 종목 매핑: {_e2}', exc_info=True)
-            tax_aware = _cfg_get(f'{sid}.rebalance.tax_aware', False)
+                    logger.critical(f"  [rebalance_engine] 개별 종목 매핑: {_e2}", exc_info=True)
+            tax_aware = _cfg_get(f"{sid}.rebalance.tax_aware", False)
             if tax_aware and info.get('market_value', 0) > info.get('amount', 0):
                 stricter_exit = np.percentile(score_values, max(exit_pctl - 15, 5)) if n >= 3 else 0.2
                 if score >= stricter_exit:
-                    logger.debug(f'    {ticker} 절세보호: 수익 중이므로 편출 억제 (score={score:.3f} >= {stricter_exit:.3f})')
+                    logger.debug(f"    {ticker} 절세보호: 수익 중이므로 편출 억제 (score={score:.3f} >= {stricter_exit:.3f})")
                     continue
-            exit_candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'alpha_score': score, 'amount': info.get('amount', 0), 'market_value': info.get('market_value', 0), 'pos_key': info.get('pos_key', f'{stream_id}:{ticker}'), 'account': info.get('account', '')})
+            exit_candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'alpha_score': score, 'amount': info.get('amount', 0), 'market_value': info.get('market_value', 0), 'pos_key': info.get('pos_key', f"{stream_id}:{ticker}"), 'account': info.get('account', '')})
         exit_candidates.sort(key=lambda x: x['alpha_score'])
         entry_candidates = []
         for ticker, info in new_candidates.items():
@@ -194,8 +194,8 @@ class RebalanceEngine:
                 continue
             entry_candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'alpha_score': score, 'confidence': info.get('confidence', 0.5), 'strategy': info.get('strategy', '')})
         entry_candidates.sort(key=lambda x: -x['alpha_score'])
-        max_replace = _cfg_get(f'{sid}.rebalance.max_replacements_per_cycle', 2)
-        max_turnover = _cfg_get(f'{sid}.rebalance.max_turnover_pct', 0.4)
+        max_replace = _cfg_get(f"{sid}.rebalance.max_replacements_per_cycle", 2)
+        max_turnover = _cfg_get(f"{sid}.rebalance.max_turnover_pct", 0.4)
         total_mv = sum((h.get('market_value', h.get('amount', 0)) for h in held_tickers.values()))
         max_turnover_amount = total_mv * max_turnover if total_mv > 0 else 0
         replacements = 0
@@ -206,19 +206,25 @@ class RebalanceEngine:
             buy = entry_candidates[i]
             alpha_gap = buy['alpha_score'] - sell['alpha_score']
             if alpha_gap < cost_hurdle:
-                logger.info(f'    ⏸ 교체 중단: alpha gap {alpha_gap:.3f} < hurdle {cost_hurdle:.3f} ({sell['name']} → {buy['name']})')
+                _snm_r = sell.get('name', '')
+                _bnm_r = buy.get('name', '')
+                logger.info(f"    ⏸ 교체 중단: alpha gap {alpha_gap:.3f} < hurdle {cost_hurdle:.3f} ({_snm_r} -> {_bnm_r})")
                 break
             sell_amount = sell.get('market_value', sell.get('amount', 0))
             if turnover_amount + sell_amount > max_turnover_amount > 0:
-                logger.info(f'    ⏸ 턴오버 한도 도달: ₩{turnover_amount + sell_amount:,.0f} > ₩{max_turnover_amount:,.0f}')
+                logger.info(f"    ⏸ 턴오버 한도 도달: ₩{turnover_amount + sell_amount:,.0f} > ₩{max_turnover_amount:,.0f}")
                 break
-            result['sells'].append({'ticker': sell['ticker'], 'name': sell['name'], 'pos_key': sell['pos_key'], 'stream_id': stream_id, 'alpha_score': round(sell['alpha_score'], 4), 'amount': sell_amount, 'reason': f'리밸런싱: score={sell['alpha_score']:.3f} < exit P{exit_pctl}={exit_threshold:.3f}, 교체→{buy['name']} (gap={alpha_gap:.3f})', 'sell_type': 'rebalance', 'account': sell.get('account', '')})
-            result['buys'].append({'ticker': buy['ticker'], 'name': buy['name'], 'stream_id': stream_id, 'direction': 'long', 'alpha_score': round(buy['alpha_score'], 4), 'amount_krw': int(sell_amount), 'confidence': buy.get('confidence', 0.5), 'strategy': buy.get('strategy', 'rebalance'), 'reason': f'리밸런싱: score={buy['alpha_score']:.3f} > entry P{entry_pctl}={entry_threshold:.3f}, 교체←{sell['name']} (gap={alpha_gap:.3f})'})
+            _s_score = sell.get('alpha_score', 0)
+            _b_score = buy.get('alpha_score', 0)
+            _b_name = buy.get('name', '')
+            _s_name = sell.get('name', '')
+            result['sells'].append({'ticker': sell['ticker'], 'name': sell['name'], 'pos_key': sell['pos_key'], 'stream_id': stream_id, 'alpha_score': round(sell['alpha_score'], 4), 'amount': sell_amount, 'reason': f"리밸런싱: score={_s_score:.3f} < exit P{exit_pctl}={exit_threshold:.3f}, 교체 -> {_b_name} (gap={alpha_gap:.3f})", 'sell_type': 'rebalance', 'account': sell.get('account', '')})
+            result['buys'].append({'ticker': buy['ticker'], 'name': buy['name'], 'stream_id': stream_id, 'direction': 'long', 'alpha_score': round(buy['alpha_score'], 4), 'amount_krw': int(sell_amount), 'confidence': buy.get('confidence', 0.5), 'strategy': buy.get('strategy', 'rebalance'), 'reason': f"리밸런싱: score={_b_score:.3f} > entry P{entry_pctl}={entry_threshold:.3f}, 교체 <- {_s_name} (gap={alpha_gap:.3f})"})
             turnover_amount += sell_amount
             replacements += 1
-            logger.info(f'    🔄 {stream_id} 교체 #{replacements}: {sell['name']} (score={sell['alpha_score']:.3f}) → {buy['name']} (score={buy['alpha_score']:.3f}) gap={alpha_gap:.3f} ₩{sell_amount:,.0f}')
+            logger.info(f"    🔄 {stream_id} 교체 #{replacements}: {_s_name} (score={_s_score:.3f}) -> {_b_name} (score={_b_score:.3f}) gap={alpha_gap:.3f} ₩{sell_amount:,.0f}")
         result['replacements'] = replacements
-        max_positions = _cfg_get(f'{sid}.rebalance.max_positions', 5)
+        max_positions = _cfg_get(f"{sid}.rebalance.max_positions", 5)
         current_count = max(0, len(held_tickers) - replacements)
         if current_count < max_positions and entry_candidates:
             remaining_entry = entry_candidates[replacements:]
@@ -230,13 +236,17 @@ class RebalanceEngine:
                     break
                 if slot_budget <= _cfg_get('execution.min_order_value', 100000):
                     break
-                result['buys'].append({'ticker': candidate['ticker'], 'name': candidate['name'], 'stream_id': stream_id, 'direction': 'long', 'alpha_score': round(candidate['alpha_score'], 4), 'amount_krw': int(slot_budget), 'confidence': candidate.get('confidence', 0.5), 'strategy': candidate.get('strategy', 'rebalance_fill'), 'reason': f'빈 슬롯 편입: score={candidate['alpha_score']:.3f} > entry P{entry_pctl}={entry_threshold:.3f}'})
+                _c_score = candidate.get('alpha_score', 0)
+                _c_name = candidate.get('name', '')
+                result['buys'].append({'ticker': candidate['ticker'], 'name': candidate['name'], 'stream_id': stream_id, 'direction': 'long', 'alpha_score': round(candidate['alpha_score'], 4), 'amount_krw': int(slot_budget), 'confidence': candidate.get('confidence', 0.5), 'strategy': candidate.get('strategy', 'rebalance_fill'), 'reason': f"빈 슬롯 편입: score={_c_score:.3f} > entry P{entry_pctl}={entry_threshold:.3f}"})
                 current_count += 1
-                logger.info(f'    ➕ {stream_id} 빈 슬롯 편입: {candidate['name']} (score={candidate['alpha_score']:.3f})')
+                logger.info(f"    ➕ {stream_id} 빈 슬롯 편입: {_c_name} (score={_c_score:.3f})")
         if replacements > 0 or result['buys']:
             self._last_rebalance[stream_id] = today_str
             self._save_rebalance_state()
-        logger.info(f'  📊 {stream_id} 리밸런싱 결과: 매도 {len(result['sells'])}건, 매수 {len(result['buys'])}건, 교체 {replacements}건')
+        _s_cnt = len(result['sells'])
+        _b_cnt = len(result['buys'])
+        logger.info(f"  📊 {stream_id} 리밸런싱 결과: 매도 {_s_cnt}건, 매수 {_b_cnt}건, 교체 {replacements}건")
         return result
 
     def _compute_alpha_score(self, ticker: str, stream_id: str, confidence: float=0.5, is_held: bool=False, cost_hurdle: float=0.015, is_large_cap: bool=False, tgat_score: float=0.0) -> float:
@@ -377,10 +387,10 @@ class RebalanceEngine:
                         returns.append((closes[i] - closes[i - 1]) / closes[i - 1])
                 return returns
         except Exception as _e3:
-            logger.critical(f'  [rebalance_engine] 상태 저장 1: {_e3}', exc_info=True)
+            logger.critical(f"  [rebalance_engine] 상태 저장 1: {_e3}", exc_info=True)
         try:
             import pandas as pd
-            for pattern in [f'kr_{ticker}.parquet', f'{ticker}.parquet']:
+            for pattern in [f"kr_{ticker}.parquet", f"{ticker}.parquet"]:
                 pq = _PROJECT_ROOT / 'data' / 'historical_10y' / pattern
                 if pq.exists():
                     df = pd.read_parquet(pq)
@@ -392,21 +402,21 @@ class RebalanceEngine:
                                 returns.append((closes[i] - closes[i - 1]) / closes[i - 1])
                         return returns[-120:]
         except Exception as _e4:
-            logger.critical(f'  [rebalance_engine] 상태 저장 2: {_e4}', exc_info=True)
+            logger.critical(f"  [rebalance_engine] 상태 저장 2: {_e4}", exc_info=True)
         return []
 
     def _get_stream_budget(self, stream_id: str) -> float:
         """스트림 가용 예산 계산."""
         sid = stream_id.lower()
-        total_budget = _cfg_get(f'{sid}.budget', _cfg_get(f'allocation.{sid}_budget', 0))
+        total_budget = _cfg_get(f"{sid}.budget", _cfg_get(f"allocation.{sid}_budget", 0))
         try:
             sp_path = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
             if sp_path.exists():
                 sp = json.loads(sp_path.read_text())
-                held = sum((pv.get('amount', 0) for pk, pv in sp.get('positions', {}).items() if pk.startswith(f'{stream_id}:')))
+                held = sum((pv.get('amount', 0) for pk, pv in sp.get('positions', {}).items() if pk.startswith(f"{stream_id}:")))
                 return max(total_budget - held, 0)
         except Exception as _e5:
-            logger.critical(f'  [rebalance_engine] 상태 저장 3: {_e5}', exc_info=True)
+            logger.critical(f"  [rebalance_engine] 상태 저장 3: {_e5}", exc_info=True)
         return total_budget
 
     def _get_current_price(self, ticker: str) -> float:
@@ -424,5 +434,5 @@ class RebalanceEngine:
                     self._price_cache[ticker] = price
                     return price
         except Exception as _e6:
-            logger.critical(f'  [rebalance_engine] 상태 저장 4: {_e6}', exc_info=True)
+            logger.critical(f"  [rebalance_engine] 상태 저장 4: {_e6}", exc_info=True)
         return 0.0

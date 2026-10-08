@@ -6,7 +6,7 @@ import logging
 import pandas as pd
 from typing import Dict, Optional
 from datetime import datetime
-import yfinance as yf
+from src.utils.google_finance_collector import GoogleFinanceCollector
 logger = logging.getLogger(__name__)
 
 class USADataCollector:
@@ -92,7 +92,7 @@ class USADataCollector:
         economic = self.collect_us_economic_indicators(start_date, end_date)
         if economic:
             all_data['economic'] = economic
-        logger.info(f'\n✓ Collected {len(all_data)} US data categories')
+        logger.info(f"\n✓ Collected {len(all_data)} US data categories")
         try:
             total_rows = sum((len(df) if hasattr(df, '__len__') else 0 for df in all_data.values()))
             if all_data:
@@ -119,12 +119,12 @@ class USADataCollector:
                     df = yf.download(ticker, start=start_date, end=end_date, progress=False)
                     if not df.empty:
                         data[name] = df['Close']
-                        logger.info(f'  ✓ {name}: {len(df)} records')
+                        logger.info(f"  ✓ {name}: {len(df)} records")
                 except Exception as e:
                     logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f'✓ Collected {len(result)} records for US indices')
+                logger.info(f"✓ Collected {len(result)} records for US indices")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -147,12 +147,12 @@ class USADataCollector:
                     df = yf.download(ticker, start=start_date, end=end_date, progress=False)
                     if not df.empty:
                         data[name] = df['Close']
-                        logger.info(f'  ✓ {name}: {len(df)} records')
+                        logger.info(f"  ✓ {name}: {len(df)} records")
                 except Exception as e:
                     logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f'✓ Collected {len(result)} records for US treasuries')
+                logger.info(f"✓ Collected {len(result)} records for US treasuries")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -175,7 +175,7 @@ class USADataCollector:
                     df = yf.download(ticker, start=start_date, end=end_date, progress=False)
                     if not df.empty:
                         data[name] = df['Close']
-                        logger.info(f'  ✓ {name}: {len(df)} records')
+                        logger.info(f"  ✓ {name}: {len(df)} records")
                 except Exception as e:
                     logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
             try:
@@ -184,12 +184,12 @@ class USADataCollector:
                     dxy = fred.get_series('DTWEXBGS', observation_start=start_date, observation_end=end_date)
                     if dxy is not None and (not dxy.empty):
                         data['USD_Index'] = dxy
-                        logger.info(f'  ✓ USD_Index (FRED DTWEXBGS): {len(dxy)} records')
+                        logger.info(f"  ✓ USD_Index (FRED DTWEXBGS): {len(dxy)} records")
             except Exception as e:
                 logger.warning(f'  ⚠ USD_Index FRED fallback: {e}', exc_info=True)
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f'✓ Collected {len(result)} records for US currencies')
+                logger.info(f"✓ Collected {len(result)} records for US currencies")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -212,12 +212,12 @@ class USADataCollector:
                     df = yf.download(ticker, start=start_date, end=end_date, progress=False)
                     if not df.empty:
                         data[name] = df['Close']
-                        logger.info(f'  ✓ {name}: {len(df)} records')
+                        logger.info(f"  ✓ {name}: {len(df)} records")
                 except Exception as e:
                     logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f'✓ Collected {len(result)} records for US commodities')
+                logger.info(f"✓ Collected {len(result)} records for US commodities")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -247,10 +247,10 @@ class USADataCollector:
                         if self.validate_data(df):
                             data[name] = df
                             success_count += 1
-                            logger.info(f'  ✓ {name}: {len(df)} records')
+                            logger.info(f"  ✓ {name}: {len(df)} records")
                 except Exception as e:
                     logger.error(f'  ✗ {name}: {e}', exc_info=True)
-            logger.info(f'✓ Collected {success_count}/{len(indicators)} US economic indicators')
+            logger.info(f"✓ Collected {success_count}/{len(indicators)} US economic indicators")
             return data
         except Exception as e:
             logger.error(f'Failed to collect US economic indicators: {e}', exc_info=True)
@@ -266,7 +266,7 @@ class USADataCollector:
             return pd.DataFrame()
         try:
             fred_id = self.FRED_SERIES_MAP.get(series_id, series_id)
-            logger.info(f'Fetching FRED {series_id} ({fred_id})')
+            logger.info(f"Fetching FRED {series_id} ({fred_id})")
             data = fred.get_series(fred_id, observation_start=start_date, observation_end=end_date)
             df = pd.DataFrame(data, columns=[series_id])
             if self.validate_data(df):
@@ -292,7 +292,7 @@ class USADataCollector:
             max_nan = 0.5
         missing_ratio = data.isnull().sum().sum() / max(len(data) * len(data.columns), 1)
         if missing_ratio > max_nan:
-            logger.warning(f'Too many missing values: {missing_ratio:.2%}')
+            logger.warning(f"Too many missing values: {missing_ratio:.2%}")
             return False
         return True
 
@@ -311,17 +311,21 @@ class USADataCollector:
             logger.error(f'Error getting series info: {e}', exc_info=True)
             return {}
 if __name__ == '__main__':
+    from datetime import datetime, timedelta
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     collector = USADataCollector()
-    usa_data = collector.collect_all_usa_data('2024-01-01', '2024-12-31')
+    now = datetime.now()
+    start_date = (now - timedelta(days=365)).strftime('%Y-%m-%d')
+    end_date = now.strftime('%Y-%m-%d')
+    usa_data = collector.collect_all_usa_data(start_date, end_date)
     logger.info('\n' + '=' * 60)
     logger.info('USA DATA COLLECTION SUMMARY')
     logger.info('=' * 60)
     for category, data in usa_data.items():
-        logger.info(f'\n{category.upper()}:')
+        logger.info(f"\n{category.upper()}:")
         if isinstance(data, dict):
             for name, df in data.items():
                 if isinstance(df, pd.DataFrame) and (not df.empty):
-                    logger.info(f'  ✓ {name}: {len(df)} records')
+                    logger.info(f"  ✓ {name}: {len(df)} records")
         elif isinstance(data, pd.DataFrame):
-            logger.info(f'  {len(data)} records, {data.shape[1]} columns')
+            logger.info(f"  {len(data)} records, {data.shape[1]} columns")

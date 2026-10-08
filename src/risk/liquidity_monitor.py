@@ -54,9 +54,10 @@ class LiquidityMonitor:
         total_liquidity_score = 0.0
         n_positions = 0
         for ticker, pos in positions.items():
-            pos_value = pos.get('value', 0)
-            price = pos.get('price', 0) or 1
-            shares = pos.get('shares', pos_value / price if price > 0 else 0)
+            pos_value = float(pos.get('value', 0) or 0)
+            raw_p = pos.get('price', 0)
+            price = float(raw_p) if raw_p and float(raw_p) > 0 else 1.0
+            shares = float(pos.get('shares', pos_value / price))
             adv = pos.get('avg_daily_volume', 0) or self._estimate_adv(ticker, market_data)
             adv_value = adv * price
             adv_ratio = pos_value / adv_value if adv_value > 0 else float('inf')
@@ -72,7 +73,7 @@ class LiquidityMonitor:
         except Exception as _e0:
             logger.critical(f'  [liquidity_monitor] 유동성 모니터 데이터: {_e0}', exc_info=True)
         if summary['illiquid_positions']:
-            logger.warning(f'  ⚠️ 유동성 경고: {len(summary['illiquid_positions'])}개 포지션 유동성 부족 ({summary['illiquid_positions']})')
+            logger.warning(f"  ⚠️ 유동성 경고: {len(summary['illiquid_positions'])}개 포지션 유동성 부족 ({summary['illiquid_positions']})")
         return summary
 
     def judge(self, measurement: Dict) -> Dict:
@@ -89,7 +90,7 @@ class LiquidityMonitor:
             pos_data = measurement.get('positions', {}).get(ticker, {})
             days = pos_data.get('days_to_liquidate', 0)
             if days > 5:
-                actions[ticker] = {'action': 'reduce', 'max_daily_pct': 0.02, 'reason': f'days_to_liquidate={days:.1f}'}
+                actions[ticker] = {'action': 'reduce', 'max_daily_pct': 0.02, 'reason': f"days_to_liquidate={days:.1f}"}
             elif pos_data.get('liquidity_score', 1) < 0.3:
                 actions[ticker] = {'action': 'flag', 'reason': 'low_liquidity'}
         portfolio_liq = measurement.get('portfolio_liquidity_score', 0)

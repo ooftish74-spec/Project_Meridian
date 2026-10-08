@@ -76,7 +76,7 @@ class PnLAttributor:
         brinson = self._brinson_decomposition(stream_metrics, current_weights)
         result['brinson'] = brinson
         self._save_result(result)
-        logger.info(f'  📊 PnL Attribution: total={total_return * 100:.2f}%, best={result['summary']['best_stream']}, worst={result['summary']['worst_stream']}')
+        logger.info(f"  📊 PnL Attribution: total={total_return * 100:.2f}%, best={result['summary']['best_stream']}, worst={result['summary']['worst_stream']}")
         return result
 
     def _attribute_stream(self, sid: str, metrics: Dict, weight: float, portfolio_value: float) -> Dict:

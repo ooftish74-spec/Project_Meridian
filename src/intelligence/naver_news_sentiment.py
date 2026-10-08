@@ -71,7 +71,7 @@ class NaverNewsSentiment:
             label = 'neutral'
         events = self.extract_market_events(articles)
         result = {'sentiment': round(sentiment, 3), 'label': label, 'n_articles': len(articles), 'positive_count': len(pos_headlines), 'negative_count': len(neg_headlines), 'top_positive': pos_headlines[:3], 'top_negative': neg_headlines[:3], 'events': events, 'headlines': articles, 'timestamp': datetime.now().isoformat()}
-        logger.info(f'  📰 뉴스 감성: {label} ({sentiment:+.3f}) 긍정{len(pos_headlines)}/부정{len(neg_headlines)}/전체{len(articles)} 이벤트{len(events)}건')
+        logger.info(f"  📰 뉴스 감성: {label} ({sentiment:+.3f}) 긍정{len(pos_headlines)}/부정{len(neg_headlines)}/전체{len(articles)} 이벤트{len(events)}건")
         return result
 
     def extract_market_events(self, headlines: List[str]) -> List[Dict]:
@@ -96,13 +96,13 @@ class NaverNewsSentiment:
                     if kw.lower() in headline.lower() or kw in headline:
                         if kw == '전쟁':
                             figurative = ['인재', '가격', '특허', '기술', '점유율', '배송', '플랫폼', '가입자', '환율', '치킨']
-                            if any((f'{f}전쟁' in headline.replace(' ', '') for f in figurative)):
+                            if any((f"{f}전쟁" in headline.replace(' ', '') for f in figurative)):
                                 continue
                         matched_keywords.append(kw)
                 if not matched_keywords:
                     continue
-                entities = self._extract_entities(headline, stock_names)
-                event_key = f'{event_type}:{','.join(sorted((e['name'] for e in entities))) or headline[:30]}'
+                _ent_str = ','.join(sorted((e.get('name', '') for e in entities))) or headline[:30]
+                event_key = f"{event_type}:{_ent_str}"
                 if event_key in seen_events:
                     continue
                 seen_events.add(event_key)
@@ -126,7 +126,7 @@ class NaverNewsSentiment:
             if not name or ticker in seen_tickers:
                 continue
             if len(name) <= 2:
-                pattern = f'(?:^|[\\s·,]){re.escape(name)}(?:[\\s·,]|$)'
+                pattern = f"(?:^|[\\s·,]){re.escape(name)}(?:[\\s·,]|$)"
                 if re.search(pattern, headline):
                     entities.append({'ticker': ticker, 'name': name})
                     seen_tickers.add(ticker)
@@ -166,7 +166,7 @@ class NaverNewsSentiment:
                     continue
                 matched = False
                 if len(name) <= 2:
-                    pattern = f'(?:^|[\\s·,]){re.escape(name)}(?:[\\s·,]|$)'
+                    pattern = f"(?:^|[\\s·,]){re.escape(name)}(?:[\\s·,]|$)"
                     matched = bool(re.search(pattern, headline))
                 else:
                     matched = name in headline
@@ -182,7 +182,7 @@ class NaverNewsSentiment:
             avg = sum(scores) / len(scores) if scores else 0
             sentiment = max(-1.0, min(1.0, avg / 3.0))
             result[ticker] = {'name': data['name'], 'sentiment': round(sentiment, 3), 'label': 'positive' if sentiment > 0.1 else 'negative' if sentiment < -0.1 else 'neutral', 'mentions': data['mentions'], 'headlines': data['headlines'][:5]}
-        logger.info(f'  📊 종목별 뉴스 감성: {len(result)}종목 분석')
+        logger.info(f"  📊 종목별 뉴스 감성: {len(result)}종목 분석")
         return result
 
     def save_to_signal_cache(self, result: Dict):
@@ -197,9 +197,9 @@ class NaverNewsSentiment:
             macro['news_events_count'] = len(result.get('events', []))
             cache['macro_features'] = macro
             atomic_write_json(self._cache_file, cache, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'  💾 뉴스 감성 → signal_cache 저장 완료')
+            logger.info(f"  💾 뉴스 감성 → signal_cache 저장 완료")
         except Exception as e:
-            logger.warning(f'  뉴스 감성 저장 실패: {e}', exc_info=True)
+            logger.warning(f"  뉴스 감성 저장 실패: {e}", exc_info=True)
 
     def save_dynamic_events(self, events: List[Dict]):
         """동적 이벤트를 results/dynamic_events.json에 저장.
@@ -217,7 +217,7 @@ class NaverNewsSentiment:
                     existing = []
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 existing = []
         now = datetime.now()
         fresh = []
@@ -228,16 +228,18 @@ class NaverNewsSentiment:
                     fresh.append(ev)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
-        existing_keys = {f'{e['type']}:{e.get('headline', '')[:30]}' for e in fresh}
+        existing_keys = {f"{e.get('type', '')}:{e.get('headline', '')[:30]}" for e in fresh}
         for ev in events:
-            key = f'{ev['type']}:{ev.get('headline', '')[:30]}'
+            _ev_tp_k = ev.get('type', '')
+            _ev_hl_k = ev.get('headline', '')[:30]
+            key = f"{_ev_tp_k}:{_ev_hl_k}"
             if key not in existing_keys:
                 fresh.append(ev)
                 existing_keys.add(key)
         atomic_write_json(out_path, fresh, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  💾 동적 이벤트 {len(events)}건 → dynamic_events.json (총 {len(fresh)}건)')
+        logger.info(f"  💾 동적 이벤트 {len(events)}건 → dynamic_events.json (총 {len(fresh)}건)")
 
     def save_stock_sentiment(self, stock_sentiment: Dict[str, Dict]):
         """종목별 뉴스 감성을 results/stock_news_sentiment.json에 저장."""
@@ -245,13 +247,13 @@ class NaverNewsSentiment:
         out = {'timestamp': datetime.now().isoformat(), 'stocks': stock_sentiment}
         out_path = _RESULTS / 'stock_news_sentiment.json'
         atomic_write_json(out_path, out, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  💾 종목별 뉴스 감성 {len(stock_sentiment)}종목 → stock_news_sentiment.json')
+        logger.info(f"  💾 종목별 뉴스 감성 {len(stock_sentiment)}종목 → stock_news_sentiment.json")
 
     def save_headlines(self, headlines: List[str]):
         """헤드라인을 일별 파일로 저장 (히스토리)."""
         _NEWS_DIR.mkdir(parents=True, exist_ok=True)
         today = datetime.now().strftime('%Y-%m-%d')
-        out_path = _NEWS_DIR / f'{today}.json'
+        out_path = _NEWS_DIR / f"{today}.json"
         existing = []
         if out_path.exists():
             try:
@@ -260,11 +262,11 @@ class NaverNewsSentiment:
                     existing = []
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 existing = []
         all_headlines = list(dict.fromkeys(existing + headlines))
         atomic_write_json(out_path, all_headlines, indent=2, ensure_ascii=False)
-        logger.info(f'  💾 헤드라인 {len(headlines)}건 → {out_path.name} (누적 {len(all_headlines)}건)')
+        logger.info(f"  💾 헤드라인 {len(headlines)}건 → {out_path.name} (누적 {len(all_headlines)}건)")
 
     def _fetch_news(self) -> List[str]:
         """Naver 금융 뉴스 헤드라인 수집 (RSS)."""
@@ -283,7 +285,7 @@ class NaverNewsSentiment:
                     titles = re.findall('<a[^>]*class="nclicks[^"]*"[^>]*>([^<]{10,})</a>', html)
                 headlines.extend([t.strip() for t in titles if len(t.strip()) > 5])
             except Exception as e:
-                logger.error(f'  뉴스 수집 실패 ({url}): {e}', exc_info=True)
+                logger.error(f"  뉴스 수집 실패 ({url}): {e}", exc_info=True)
         return list(dict.fromkeys(headlines))[:50]
 
     def _score_headline(self, title: str) -> float:
@@ -297,7 +299,7 @@ class NaverNewsSentiment:
             if keyword in title:
                 if keyword == '전쟁':
                     figurative = ['인재', '가격', '특허', '기술', '점유율', '배송', '플랫폼', '가입자', '환율', '치킨']
-                    if any((f'{f}전쟁' in title_no_space for f in figurative)):
+                    if any((f"{f}전쟁" in title_no_space for f in figurative)):
                         continue
                 score += weight
         return score
@@ -313,9 +315,9 @@ class NaverNewsSentiment:
                 data = json.loads(names_file.read_text())
                 if isinstance(data, dict):
                     self._stock_names = {k: v if isinstance(v, str) else str(v) for k, v in data.items() if v}
-                logger.debug(f'  종목명 사전: {len(self._stock_names)}종목 로드')
+                logger.debug(f"  종목명 사전: {len(self._stock_names)}종목 로드")
             except Exception as e:
-                logger.error(f'  stock_names.json 로드 실패: {e}', exc_info=True)
+                logger.error(f"  stock_names.json 로드 실패: {e}", exc_info=True)
         return self._stock_names
 
 def collect_news_sentiment() -> Dict:
@@ -337,7 +339,11 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     result = collect_news_sentiment()
     logger.info(json.dumps({k: v for k, v in result.items() if k != 'headlines'}, indent=2, ensure_ascii=False))
-    logger.info(f'\n이벤트: {len(result.get('events', []))}건')
+    _ev_cnt = len(result.get('events', []))
+    logger.info(f"\n이벤트: {_ev_cnt}건")
     for ev in result.get('events', []):
         entities = ', '.join((e['name'] for e in ev.get('entities', [])))
-        logger.info(f'  [{ev['type']}] Tier{ev['tier']} {ev['headline'][:60]} → {entities or 'N/A'}')
+        _ev_tp4 = ev.get('type', '')
+        _ev_tr4 = ev.get('tier', 0)
+        _ev_hl4 = ev.get('headline', '')[:60]
+        logger.info(f"  [{_ev_tp4}] Tier{_ev_tr4} {_ev_hl4} -> {entities or 'N/A'}")

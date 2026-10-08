@@ -287,10 +287,14 @@ if __name__ == "__main__":
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
+    from datetime import datetime, timedelta
     collector = KOSISCollectorEnhanced()
+    now = datetime.now()
+    start_date = (now - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
+    end_date = now.strftime('%Y-%m-%d')
     
     # Collect indicators
-    indicators = collector.collect_all_indicators('2020-01-01', '2024-12-31')
+    indicators = collector.collect_all_indicators(start_date, end_date)
     
     logger.info("\nKOSIS Indicators:")
     for name, df in indicators.items():

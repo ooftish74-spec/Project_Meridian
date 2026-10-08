@@ -31,6 +31,7 @@ except ImportError as e:
         return datetime.now()
 from src.streams.s3_active_macro.qvm_scorer import QVMScorer
 from src.streams.s3_active_macro.qvm_universe import QVMUniverse
+from src.streams.s3_active_macro.qvm_strategic_sleeve import StrategicQVMCompoundingSleeve
 try:
     from src.risk.intraday_regime import IntradayRegimeDetector
     _REGIME_AVAILABLE = True
@@ -51,9 +52,28 @@ class S3FactorStream(BaseStream):
       - ETF: Momentum + Value + Carry + Volatility (4-팩터)
       - QVM: Quality + Value + Moat (강방천 K-PER)
     """
-    SECTOR_ETFS = {'091160': {'name': 'KODEX 반도체', 'sector': 'semiconductor', 'market': 'KR'}, '396500': {'name': 'TIGER 반도체TOP10', 'sector': 'semiconductor', 'market': 'KR'}, '139260': {'name': 'TIGER 200 IT', 'sector': 'it', 'market': 'KR'}, '117700': {'name': 'KODEX 건설', 'sector': 'construction', 'market': 'KR'}, '305720': {'name': 'KODEX 2차전지산업', 'sector': 'battery', 'market': 'KR'}, '305540': {'name': 'TIGER 2차전지테마', 'sector': 'battery', 'market': 'KR'}, '091180': {'name': 'KODEX 자동차', 'sector': 'auto', 'market': 'KR'}, '227550': {'name': 'TIGER 200 산업재', 'sector': 'industrial', 'market': 'KR'}, '091170': {'name': 'KODEX 은행', 'sector': 'finance', 'market': 'KR'}, '143860': {'name': 'TIGER 헬스케어', 'sector': 'healthcare', 'market': 'KR'}, '244580': {'name': 'KODEX 바이오', 'sector': 'bio', 'market': 'KR'}, '463250': {'name': 'TIGER K방산&우주', 'sector': 'defense', 'market': 'KR'}}
-    GLOBAL_ETFS = {'133690': {'name': 'TIGER 미국나스닥100', 'sector': 'us_tech', 'market': 'US'}, '379800': {'name': 'KODEX 미국S&P500', 'sector': 'us_broad', 'market': 'US'}, '381180': {'name': 'TIGER 미국필라델피아반도체나스닥', 'sector': 'us_semiconductor', 'market': 'US'}, '390390': {'name': 'KODEX 미국반도체', 'sector': 'us_semiconductor', 'market': 'US'}, '381170': {'name': 'TIGER 미국테크TOP10 INDXX', 'sector': 'us_tech', 'market': 'US'}, '487230': {'name': 'KODEX 미국AI전력핵심인프라', 'sector': 'ai_infra', 'market': 'GLOBAL'}, '466950': {'name': 'TIGER 글로벌AI액티브', 'sector': 'ai', 'market': 'GLOBAL'}, '453870': {'name': 'TIGER 인도니프티50', 'sector': 'india', 'market': 'INDIA'}, '192090': {'name': 'TIGER 차이나CSI300', 'sector': 'china', 'market': 'CHINA'}}
-    DEFENSIVE_ETFS = {'261250': {'name': 'KODEX 미국달러선물레버리지', 'sector': 'currency', 'market': 'GLOBAL'}, '152380': {'name': 'KODEX 국고채10년', 'sector': 'bond', 'market': 'KR'}, '319640': {'name': 'TIGER 골드선물(H)', 'sector': 'commodity', 'market': 'GLOBAL'}}
+    # 🎯 [S3 Stream Boundary Isolation] 100% 미국 직투 (USD) 자산 전담으로 재정립
+    SECTOR_ETFS = {
+        'SOXX': {'name': 'iShares Semiconductor ETF', 'sector': 'semiconductor', 'market': 'US'},
+        'XLK': {'name': 'Technology Select Sector SPDR', 'sector': 'us_tech', 'market': 'US'},
+        'XLE': {'name': 'Energy Select Sector SPDR', 'sector': 'energy', 'market': 'US'},
+        'XLF': {'name': 'Financial Select Sector SPDR', 'sector': 'finance', 'market': 'US'},
+        'XLI': {'name': 'Industrial Select Sector SPDR', 'sector': 'industrial', 'market': 'US'},
+        'XBI': {'name': 'SPDR S&P Biotech ETF', 'sector': 'bio', 'market': 'US'},
+        'ITA': {'name': 'iShares U.S. Aerospace & Defense', 'sector': 'defense', 'market': 'US'}
+    }
+    GLOBAL_ETFS = {
+        'QQQ': {'name': 'Invesco QQQ Trust', 'sector': 'us_tech', 'market': 'US'},
+        'SPY': {'name': 'SPDR S&P 500 ETF Trust', 'sector': 'us_broad', 'market': 'US'},
+        'NVDA': {'name': 'NVIDIA Corporation', 'sector': 'us_semiconductor', 'market': 'US'},
+        'TSLA': {'name': 'Tesla Inc', 'sector': 'us_auto', 'market': 'US'},
+        'TMUS': {'name': 'T-Mobile US Inc', 'sector': 'us_telecom', 'market': 'US'}
+    }
+    DEFENSIVE_ETFS = {
+        'TLT': {'name': 'iShares 20+ Year Treasury Bond ETF', 'sector': 'bond', 'market': 'US'},
+        'GLD': {'name': 'SPDR Gold Shares', 'sector': 'commodity', 'market': 'US'},
+        'UUP': {'name': 'Invesco DB US Dollar Index Bullish', 'sector': 'currency', 'market': 'US'}
+    }
     DIVIDEND_BLACKLIST = {'279530', '211560', '289480', '458730', '441640', '458760', '211900', '494330'}
 
     def __init__(self):
@@ -61,9 +81,12 @@ class S3FactorStream(BaseStream):
         self._current_holdings: List[Dict] = []
         self._rebalance_history: List[Dict] = []
         self._daily_returns: List[float] = []
-        self._full_universe = {**self.SECTOR_ETFS, **self.GLOBAL_ETFS}
+        sector_overrides = cfg.get('s3.sector_etfs', self.SECTOR_ETFS)
+        global_overrides = cfg.get('s3.global_etfs', self.GLOBAL_ETFS)
+        self._full_universe = {**sector_overrides, **global_overrides}
         self._qvm_scorer = QVMScorer()
         self._qvm_universe = QVMUniverse()
+        self._strategic_qvm_sleeve = StrategicQVMCompoundingSleeve()
         self._regime_detector = IntradayRegimeDetector() if _REGIME_AVAILABLE else None
 
     @staticmethod
@@ -225,7 +248,8 @@ class S3FactorStream(BaseStream):
             if ticker in qvm_dict:
                 stock = qvm_dict[ticker]
                 if stock.get('margin_of_safety_pct', 0) < 0:
-                    logger.info(f'  [Track B] {stock['name']} 매도: 안전마진 소진 (고평가)')
+                    _nm = stock.get('name', ticker)
+                    logger.info(f"  [Track B] {_nm} 매도: 안전마진 소진 (고평가)")
                     continue
                 held_qvm_picks.append(stock)
             else:
@@ -237,7 +261,9 @@ class S3FactorStream(BaseStream):
             candidates.sort(key=lambda x: x['qvm_score'], reverse=True)
             new_qvm_picks = candidates[:new_qvm_needed]
             for pick in new_qvm_picks:
-                logger.info(f'  [Track B] {pick['name']} 신규 편입: QVM={pick.get('qvm_score')}')
+                _nm = pick.get('name', '')
+                _qvm_sc = pick.get('qvm_score', 0)
+                logger.info(f"  [Track B] {_nm} 신규 편입: QVM={_qvm_sc}")
         qvm_selected = held_qvm_picks + new_qvm_picks
         for pick in qvm_selected:
             pick['_type'] = 'QVM'
@@ -276,7 +302,8 @@ class S3FactorStream(BaseStream):
                 _atr_pct = float(pick.get('atr_pct', pick.get('atr', 0.0)))
                 if _atr_pct > 0:
                     _dyn_sl, _dyn_tp = self._compute_dynamic_sl_tp(_atr_pct, vix_ref, regime)
-                    logger.debug(f'  [Phase79 DynSL] {pick.get('ticker', '')} ATR={_atr_pct:.2f}% SL={_dyn_sl:.2f}% TP={_dyn_tp:.2f}%')
+                    _tk_str = pick.get('ticker', '')
+                    logger.debug(f"  [Phase79 DynSL] {_tk_str} ATR={_atr_pct:.2f}% SL={_dyn_sl:.2f}% TP={_dyn_tp:.2f}%")
                     if float(cfg.get('s3.use_dynamic_atr_sl', 1)):
                         sl_signed = _dyn_sl
                         tp_val = _dyn_tp
@@ -284,11 +311,27 @@ class S3FactorStream(BaseStream):
             else:
                 tp_val = cfg.get('s3.exit.qvm_tp_placeholder', 100.0)
                 sl_val = abs(cfg.get('s3.exit.qvm_disaster_sl', -30.0))
-            signals.append({'stream_id': 'S3_B' if pick['_type'] == 'QVM' else 'S3_A', 'ticker': pick['ticker'], 'name': pick['name'], 'direction': 'long', 'confidence': round(max(0, min(1.0, pick['score'])), 3), 'size_pct': round(adj_weight, 4), 'strategy': strategy, 'reason': pick.get('reason', f'{pick['_type']} Score={pick['score']:.3f}'), 'regime': regime, 'sector': pick.get('sector', ''), 'market': pick.get('market', 'KR'), 'timestamp': datetime.now().isoformat(), '_type': pick['_type'], 'tp_pct': round(tp_val, 2), 'sl_pct': round(sl_val, 2)})
+            _type_str = pick['_type']
+            _score_val = pick['score']
+            _reason_str = pick.get('reason', f"{_type_str} Score={_score_val:.3f}")
+            signals.append({'stream_id': 'S3_B' if pick['_type'] == 'QVM' else 'S3_A', 'ticker': pick['ticker'], 'name': pick['name'], 'direction': 'long', 'confidence': round(max(0, min(1.0, pick['score'])), 3), 'size_pct': round(adj_weight, 4), 'strategy': strategy, 'reason': _reason_str, 'regime': regime, 'sector': pick.get('sector', ''), 'market': pick.get('market', 'KR'), 'timestamp': datetime.now().isoformat(), '_type': pick['_type'], 'tp_pct': round(tp_val, 2), 'sl_pct': round(sl_val, 2)})
         if signals:
             self._current_holdings = [{'ticker': s['ticker'], 'score': s['confidence'], '_type': s['_type']} for s in signals]
             self._rebalance_history.append({'date': datetime.now().isoformat(), 'regime': regime, 'selected': [s['ticker'] for s in signals], 'source': 'hybrid_rotation'})
             self._log_event('REBALANCE', {'stream': 'S3', 'sectors': [s['ticker'] for s in signals], 'qvm_weight': target_qvm_weight, 'etf_weight': target_etf_weight, 'regime': regime})
+        # ── [Alpha 4: Track C Cross-Asset Sleeve Integration] ──
+        try:
+            from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+            track_c_engine = S3CrossAssetSleeve()
+            track_c_signals = track_c_engine.generate_track_c_signals(regime, market_data)
+            for c_sig in track_c_signals:
+                c_sig['_type'] = 'TRACK_C'
+                c_sig['tp_pct'] = float(cfg.get('s3.track_c.tp_pct', 5.0))
+                c_sig['sl_pct'] = float(cfg.get('s3.track_c.sl_pct', 2.5))
+                signals.append(c_sig)
+        except Exception as _tc_e:
+            logger.warning(f"  ⚠️ [Alpha 4 Track C] 대체자산 슬리 발화 예외 (무시): {_tc_e}")
+
         if self._regime_detector and signals:
             intraday = self._regime_detector.detect(market_data)
             intraday_regime = intraday.get('regime', 'normal')
@@ -362,7 +405,8 @@ class S3FactorStream(BaseStream):
                         w_val = adjusted['value']
                         w_carry = adjusted['carry']
                         w_vol = adjusted['volatility']
-                        logger.info(f'  ★ 매크로 타이밍 후: mom={w_mom:.3f}/val={w_val:.3f}/carry={w_carry:.3f}/vol={w_vol:.3f} (strength={strength:.1f}, mults={{{', '.join((f'{k}:{v:.2f}' for k, v in timing_multipliers.items()))}}})')
+                        mults_str = ', '.join((f'{k}:{v:.2f}' for k, v in timing_multipliers.items()))
+                        logger.info(f'  ★ 매크로 타이밍 후: mom={w_mom:.3f}/val={w_val:.3f}/carry={w_carry:.3f}/vol={w_vol:.3f} (strength={strength:.1f}, mults={{{mults_str}}})')
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
@@ -759,7 +803,11 @@ class S3FactorStream(BaseStream):
                     mult['value'] += 0.15
             for k in mult:
                 mult[k] = max(0.3, min(2.0, mult[k]))
-            logger.debug(f'  매크로 팩터 타이밍 배수: VIX={signal_cache.get('vix', 'N/A')}, US10Y_chg={signal_cache.get('us10y_change_1m', 'N/A')}, FX_chg={signal_cache.get('usdkrw_change_1m', 'N/A')}, regime={(regime if regime else 'N/A')} → {mult}')
+            _vix_val = signal_cache.get('vix', 'N/A')
+            _u10_val = signal_cache.get('us10y_change_1m', 'N/A')
+            _fx_val = signal_cache.get('usdkrw_change_1m', 'N/A')
+            _reg_val = regime if regime else 'N/A'
+            logger.debug(f"  매크로 팩터 타이밍 배수: VIX={_vix_val}, US10Y_chg={_u10_val}, FX_chg={_fx_val}, regime={_reg_val} → {mult}")
             return mult
         except Exception as e:
             logger.warning(f'  매크로 팩터 타이밍 실패 (중립 반환): {e}')
@@ -829,7 +877,8 @@ class S3FactorStream(BaseStream):
                         w_val *= 1.5
                         w_mom *= 0.5
                     elif hmm_transition.get('bull', 0.0) > 0.6:
-                        logger.info(f'  📈 S3 [Phase 90]: HMM 강세장 예측 (Bull Prob={hmm_transition.get('bull'):.1%}) → Mom 비중 확대')
+                        _b_prob = hmm_transition.get('bull', 0.0)
+                        logger.info(f"  📈 S3 [Phase 90]: HMM 강세장 예측 (Bull Prob={_b_prob:.1%}) → Mom 비중 확대")
                         w_mom *= 1.5
                         w_vol *= 0.7
                 except Exception as he:
@@ -966,7 +1015,8 @@ class S3FactorStream(BaseStream):
                 score_delta = new_score - base_score
                 if abs(score_delta) > 0.001:
                     rank_changes.append({'ticker': ticker, 'name': entry.get('name', ''), 'base': round(base_score, 4), 'adjusted': round(new_score, 4), 'delta': round(score_delta, 4), 'ml_prob': round(ml_prob, 4), 'boost_type': boost_type})
-                boosted['reason'] = f'{entry.get('reason', '')} | ML={ml_prob:.2f}({boost_type[:3]})'
+                _rs_str = entry.get('reason', '')
+                boosted['reason'] = f"{_rs_str} | ML={ml_prob:.2f}({boost_type[:3]})"
             else:
                 boosted['score'] = base_score
             boosted_scores.append(boosted)
@@ -975,6 +1025,12 @@ class S3FactorStream(BaseStream):
             top_changes = rank_changes[:5]
             logger.info(f'  ★ S3 ML 랭크 부스트: {len(rank_changes)}종목 조정 (weight={ml_weight:.2f})')
             for rc in top_changes:
-                arrow = '↑' if rc['delta'] > 0 else '↓'
-                logger.info(f'    {arrow} {rc['ticker']} {rc['name']}: {rc['base']:.4f}→{rc['adjusted']:.4f} (Δ{rc['delta']:+.4f}, ML={rc['ml_prob']:.2f}, {rc['boost_type']})')
+                _tk_r = rc.get('ticker', '')
+                _nm_r = rc.get('name', '')
+                _bs_r = rc.get('base', 0)
+                _ad_r = rc.get('adjusted', 0)
+                _dl_r = rc.get('delta', 0)
+                _ml_r = rc.get('ml_prob', 0)
+                _bt_r = rc.get('boost_type', '')
+                logger.info(f"    {arrow} {_tk_r} {_nm_r}: {_bs_r:.4f}→{_ad_r:.4f} (Δ{_dl_r:+.4f}, ML={_ml_r:.2f}, {_bt_r})")
         return boosted_scores

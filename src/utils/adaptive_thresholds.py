@@ -122,17 +122,21 @@ class DynamicVIXThreshold:
         if vix_values is None:
             vix_values = _load_vix_history(window)
         if not vix_values or len(vix_values) < 20:
-            logger.warning(f'  VIX 이력 부족 ({(len(vix_values) if vix_values else 0)}개) → yfinance 최신 VIX 1년 데이터로 초기화 시도')
-            live_vix = _fetch_vix_from_yfinance(fallback_window=252)
+            logger.warning(f'  VIX 이력 부족 ({(len(vix_values) if vix_values else 0)}개) → VendorMultiplexer / Google Finance VIX 1년 데이터로 초기화 시도')
+            live_vix = _fetch_vix_from_vendor(fallback_window=252)
             if live_vix and len(live_vix) >= 20:
                 vix_values = live_vix
-                logger.info(f'  yfinance VIX 로드 성공: {len(live_vix)}일')
+                logger.info(f'  VendorMultiplexer VIX 로드 성공: {len(live_vix)}일')
             else:
                 logger.warning('  yfinance VIX도 실패 → 구보적 기본값 사용 (2013~2019 저변동 편향 주의)')
                 return cls({'p25': 14.0, 'p50': 18.0, 'p75': 24.0, 'p90': 32.0})
         arr = np.array(vix_values[-window:])
         percentiles = {'p25': float(np.percentile(arr, 25)), 'p50': float(np.percentile(arr, 50)), 'p75': float(np.percentile(arr, 75)), 'p90': float(np.percentile(arr, 90))}
-        logger.debug(f'  DynamicVIX: p25={percentiles['p25']:.1f} p50={percentiles['p50']:.1f} p75={percentiles['p75']:.1f} p90={percentiles['p90']:.1f}')
+        _p25 = percentiles.get('p25', 0)
+        _p50 = percentiles.get('p50', 0)
+        _p75 = percentiles.get('p75', 0)
+        _p90 = percentiles.get('p90', 0)
+        logger.debug(f"  DynamicVIX: p25={_p25:.1f} p50={_p50:.1f} p75={_p75:.1f} p90={_p90:.1f}")
         return cls(percentiles)
 
     def classify(self, vix: float) -> str:
@@ -233,26 +237,25 @@ def _load_vix_history(window: int=252) -> List[float]:
             continue
     return vix_list
 
-def _fetch_vix_from_yfinance(fallback_window: int=252) -> List[float]:
+def _fetch_vix_from_vendor(fallback_window: int=252) -> List[float]:
     """
-    [BIAS-FIX CRITICAL-2] yfinance로 VIX 최신 1년 데이터 직접 로드.
+    [BIAS-FIX CRITICAL-2] VendorMultiplexer / FRED / Google Finance로 VIX 최신 데이터 직접 로드.
     overnight_intelligence_history 없어도 실제 분포 기반 임계값 산출 가능.
     """
     try:
-        import yfinance as yf
-        import pandas as _pd
-        df = yf.download('^VIX', period='1y', interval='1d', progress=False, auto_adjust=False)
-        if df is None or len(df) < 20:
-            return []
-        if isinstance(df.columns, _pd.MultiIndex):
-            df.columns = [c[0] for c in df.columns]
-        close_col = 'Close' if 'Close' in df.columns else df.columns[0]
-        vix_vals = df[close_col].dropna().tolist()
-        logger.info(f'  yfinance ^VIX 로드: {len(vix_vals)}일')
-        return [float(v) for v in vix_vals if v > 0]
+        from src.utils.vendor_multiplexer import VendorMultiplexer
+        vmx = VendorMultiplexer()
+        from datetime import datetime, timedelta
+        end_dt = datetime.now()
+        start_dt = end_dt - timedelta(days=365)
+        h = vmx.fetch('^VIX', start_dt.strftime('%Y-%m-%d'), end_dt.strftime('%Y-%m-%d'))
+        if h is not None and len(h) >= 20:
+            vix_vals = [float(v) for v in h.dropna().tolist() if v > 0]
+            logger.info(f'  VendorMultiplexer ^VIX 로드 성공: {len(vix_vals)}일')
+            return vix_vals
     except Exception as e:
-        logger.debug(f'  yfinance ^VIX 로드 실패: {e}')
-        return []
+        logger.debug(f'  VendorMultiplexer ^VIX 로드 실패: {e}')
+    return []
 _vix_threshold_cache: Optional[DynamicVIXThreshold] = None
 _vix_cache_date: str = ''
 

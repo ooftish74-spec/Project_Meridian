@@ -68,7 +68,7 @@ class SmartWalletAllocator:
             if ema_vix <= 0:
                 ema_vix = ema_fallback
             penalty = max(1.0, current_vix / ema_vix)
-            logger.debug(f'  [SmartWallet] Vol_Penalty={penalty:.4f} ({vol_spot_key}={current_vix:.2f} / ema={ema_vix:.2f})')
+            logger.debug(f"  [SmartWallet] Vol_Penalty={penalty:.4f} ({vol_spot_key}={current_vix:.2f} / ema={ema_vix:.2f})")
             return round(penalty, 6)
         except Exception as e:
             logger.critical(f'  [SmartWallet] Vol_Penalty 계산 실패 → 1.0: {e}', exc_info=True)
@@ -164,7 +164,7 @@ class SmartWalletAllocator:
         target_cash = self.compute_target_cash(p_crash, p_bear, vol_penalty)
         target_long = round(1.0 - target_cash, 6)
         result = {'target_cash_ratio': target_cash, 'target_long_ratio': target_long, 'f_long': f_long, 'vol_penalty': vol_penalty, 'p_crash': round(p_crash, 4), 'p_bear': round(p_bear, 4), 'p_normal': round(p_normal, 4), 'regime_source': regime_source, 'fallback_reason': ''}
-        logger.info(f'  💰 [SmartWallet] cash={target_cash:.1%}, long={target_long:.1%} | P_c={p_crash:.3f}, P_b={p_bear:.3f}, Vol×={vol_penalty:.3f} (src={regime_source})')
+        logger.info(f"  💰 [SmartWallet] cash={target_cash:.1%}, long={target_long:.1%} | P_c={p_crash:.3f}, P_b={p_bear:.3f}, Vol×={vol_penalty:.3f} (src={regime_source})")
         return result
 
 
@@ -175,7 +175,7 @@ class SmartWalletAllocator:
             detector = RegimeDetector()
             return detector.get_regime_probabilities(market_data)
         except Exception as e:
-            logger.warning(f'  [SmartWallet] RegimeDetector 실패 → 보수적 Fallback: {e}')
+            logger.warning(f"  [SmartWallet] RegimeDetector 실패 → 보수적 Fallback: {e}")
             return {'normal': float(self._get('smart_wallet.fallback_normal', 0.3)), 'bear': float(self._get('smart_wallet.fallback_bear', 0.3)), 'crash': float(self._get('smart_wallet.fallback_crash', 0.4))}
 
     def _get_regime_probs_from_cache(self, signal_cache: Optional[Dict]=None) -> Dict[str, float]:
@@ -223,13 +223,24 @@ class MetaCapitalAllocator:
             if _SIGNAL_CACHE.exists():
                 cache = json.loads(_SIGNAL_CACHE.read_text())
                 probs = cache.get('regime_probabilities', {})
+                vix = cache.get('vix', 20.0)
+                vix_avg = cache.get('vix_60d_avg', 20.0)
+                vix_std = cache.get('vix_60d_std', 3.0)
+                
+                # Phase 1: VIX Z-score dynamic regime scaling
+                z_vix = (vix - vix_avg) / max(1e-4, vix_std)
+                
                 bull_prob = probs.get('bull', 0.5)
                 bear_prob = probs.get('bear', 0.2)
                 crash_prob = probs.get('crash', 0.1)
-                bull_mult = self.cfg.get(f'allocation.multiplier.bull.{stream_id}', 1.0)
-                bear_mult = self.cfg.get(f'allocation.multiplier.bear.{stream_id}', 0.5)
-                crash_mult = self.cfg.get(f'allocation.multiplier.crash.{stream_id}', 0.0)
-                return bull_prob * bull_mult + bear_prob * bear_mult + crash_prob * crash_mult
+                
+                base_mult = bull_prob * 1.0 + bear_prob * 0.5 + crash_prob * 0.0
+                
+                # High alpha streams (S1, S5) get dynamic boost when Z_vix < 0 (low vol bull)
+                stream_sensitivity = 0.25 if stream_id in ['S1', 'S5'] else -0.15
+                vix_z_multiplier = float(np.exp(-stream_sensitivity * z_vix))
+                
+                return float(base_mult * vix_z_multiplier)
         except Exception as e:
             logger.critical(f'Failed to read regime state for multiplier: {e}', exc_info=True)
         return self.cfg.get(f'allocation.multiplier.default.{stream_id}', 1.0)
@@ -243,7 +254,7 @@ class MetaCapitalAllocator:
             tax_reserve_buffer: ETF(S0, S5) 배당소득세(15.4%) 원천징수 대비용 현금 락업(Lock-up) 금액.
                                 이 금액은 베팅 사이즈 계산 시 총 예수금에서 차감되어 과배팅(Cash Drag)을 방지함.
         """
-        logger.info(f'Meta-Level Capital Allocator: 엣지 기반 자본 배분 계산 시작 (Tax Reserve: {tax_reserve_buffer:,.0f} KRW)')
+        logger.info(f"Meta-Level Capital Allocator: 엣지 기반 자본 배분 계산 시작 (Tax Reserve: {tax_reserve_buffer:,.0f} KRW)")
         kelly_fractions: Dict[str, float] = {}
         for stream_id, metrics in stream_metrics.items():
             edge = metrics.get('edge', 0.0)

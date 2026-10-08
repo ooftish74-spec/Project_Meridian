@@ -16,6 +16,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+import time
+_SENT_ALERTS_CACHE = {}
+
 class TelegramNotifier:
     def __init__(self):
         self._root_dir = Path(__file__).resolve().parent.parent.parent
@@ -30,6 +33,17 @@ class TelegramNotifier:
         if not self.enabled:
             logger.debug("텔레그램 알림이 비활성화되어 있습니다 (토큰/ChatID 없음).")
             return False
+
+        # 🎯 [SSoT Spam Defense Rule] 타임스탬프를 제외한 핵심 메시지 기준 15분(900초) 이내 동일 메시지 발송 100% 원천 차단
+        import re
+        clean_msg = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '', message)
+        msg_key = clean_msg[:120]
+        now = time.time()
+        last_sent = _SENT_ALERTS_CACHE.get(msg_key, 0.0)
+        if now - last_sent < 900.0:  # 15분 쿨다운
+            logger.debug(f"[TELEGRAM_SPAM_PREVENTED] Duplicate message suppressed: {msg_key[:40]}...")
+            return False
+        _SENT_ALERTS_CACHE[msg_key] = now
 
         try:
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
@@ -47,11 +61,25 @@ class TelegramNotifier:
             return False
 
     def send_alert(self, title: str, details: str):
-        """중요 경고 알림 전송"""
+        """중요 경고 알림 전송 (15분 스팸 방지 쿨다운 적용)"""
+        msg_key = f"{title}_{details[:40]}"
+        now = time.time()
+        last_sent = _SENT_ALERTS_CACHE.get(msg_key, 0.0)
+        if now - last_sent < 900.0:  # 15분 쿨다운
+            logger.debug(f"[TELEGRAM_SPAM_PREVENTED] Duplicate alert suppressed: {title}")
+            return False
+        _SENT_ALERTS_CACHE[msg_key] = now
         msg = f"🚨 *{title}*\n\n{details}"
         return self.send_message(msg)
 
     def send_info(self, title: str, details: str):
-        """일반 정보성 알림 전송"""
+        """일반 정보성 알림 전송 (5분 스팸 방지 쿨다운 적용)"""
+        msg_key = f"INFO_{title}_{details[:40]}"
+        now = time.time()
+        last_sent = _SENT_ALERTS_CACHE.get(msg_key, 0.0)
+        if now - last_sent < 300.0:  # 5분 쿨다운
+            logger.debug(f"[TELEGRAM_SPAM_PREVENTED] Duplicate info suppressed: {title}")
+            return False
+        _SENT_ALERTS_CACHE[msg_key] = now
         msg = f"ℹ️ *{title}*\n\n{details}"
         return self.send_message(msg)

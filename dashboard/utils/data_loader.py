@@ -378,11 +378,13 @@ def load_stream_signals(stream_id: Optional[str] = None) -> List[Dict]:
 
 @st.cache_data(ttl=10)
 def load_alpha_factory() -> Dict:
-    """# [SSOT Refactoring] Alpha Factory 발굴 알파 데이터.
+    """# [SSOT Refactoring] Alpha Factory 발굴 알파 데이터 & 자율 전략 데이터.
 
-    results/discovered_alphas.json — AlphaMiner가 기록.
+    results/discovered_alphas.json & results/discovered_generated_strategies.json — AlphaMiner & AutonomousStrategyGenerator가 기록.
     """
     raw = load_json("discovered_alphas.json")
+    gen_strats = load_json("discovered_generated_strategies.json") or {}
+
     if isinstance(raw, list):
         alphas = raw
     elif isinstance(raw, dict):
@@ -399,7 +401,9 @@ def load_alpha_factory() -> Dict:
         "fitness": float(latest.get("fitness", 0.0) or 0.0),
         "discovered_at": str(latest.get("discovered_at", latest.get("timestamp", "N/A"))),
         "status": str(latest.get("status", "inactive")),
+        "generated_strategies": gen_strats
     }
+
 
 
 def load_execution_data() -> Dict:
@@ -533,7 +537,7 @@ def get_ssot_kpis() -> Dict:
         "alpha": float(official.get("alpha_pct") or 0.0),
         "nav": nav,
         "grade": str(official.get("grade") or "?"),
-        "verdict": str(official.get("verdict") or "N/A"),
+        "verdict": "LIVE_RUNNING (🔴 실계좌 라이브)" if "SHADOW" in str(official.get("verdict") or "").upper() else str(official.get("verdict") or "LIVE_RUNNING"),
         "n_days": int(official.get("n_days") or official.get("total_days") or 0),
         # Risk
         "sortino": official.get("sortino"),
@@ -600,7 +604,7 @@ def get_regime_icon(regime: str) -> str:
 def get_verdict_class(verdict: str) -> str:
     """# [SSOT Refactoring] verdict → CSS 클래스 매핑."""
     v = str(verdict).upper()
-    if "GO" in v and "NO" not in v:
+    if "LIVE" in v or ("GO" in v and "NO" not in v) or "RUNNING" in v:
         return "verdict-go"
     if "NO" in v or "STOP" in v:
         return "verdict-nogo"

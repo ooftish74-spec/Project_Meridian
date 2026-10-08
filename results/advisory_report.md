@@ -1,6 +1,6 @@
 # 🏛️ Project Meridian - S4 Advisory Report
-**Date**: 2026-08-09 00:53
-**Regime**: CRASH (Confidence: 0.54)
+**Date**: 2026-10-08 19:44
+**Regime**: CAUTION (Confidence: 0.50)
 
 수동 매매가 필요한 연금/ISA 계좌의 추천 오더입니다.
 

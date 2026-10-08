@@ -39,7 +39,7 @@ def _load_config():
         return DynamicConfig()
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return None
 
 class MacroRealtimeRefresher:
@@ -102,7 +102,7 @@ class MacroRealtimeRefresher:
         total_updated = result['tier1'].get('n_updated', 0) + result['tier2'].get('n_updated', 0) + result.get('kr_indices', {}).get('n_updated', 0)
         if total_updated > 0:
             self._update_cache({'macro_refresh_ts': now.isoformat()})
-            logger.info(f'  ✅ MacroRefresh: {total_updated}개 갱신 완료 (T1={result['tier1'].get('n_updated', 0)}, T2={result['tier2'].get('n_updated', 0)}, KR={result.get('kr_indices', {}).get('n_updated', 0)})')
+            logger.info(f"  ✅ MacroRefresh: {total_updated}개 갱신 완료 (T1={result['tier1'].get('n_updated', 0)}, T2={result['tier2'].get('n_updated', 0)}, KR={result.get('kr_indices', {}).get('n_updated', 0)})")
         if tier in ('auto', 't1', 'all'):
             try:
                 self._refresh_gex_pipeline()
@@ -140,18 +140,8 @@ class MacroRealtimeRefresher:
                 
                 vix_window = int(self._get_cfg('s1.vix_rolling_window', 20))
                 
-                # 1차 시도: yfinance를 통한 실시간 VIX 조회
-                if 'vix' not in updates:
-                    try:
-                        import yfinance as _yf
-                        vix_df = _yf.download('^VIX', period='1d', progress=False)
-                        if not vix_df.empty and 'Close' in vix_df.columns:
-                            live_vix = float(vix_df['Close'].iloc[-1])
-                            if live_vix > 0:
-                                updates['vix'] = live_vix
-                                logger.info(f"  ✅ [yfinance] VIX 실시간 조회 성공: {live_vix}")
-                    except Exception as yf_e:
-                        logger.warning(f"  ⚠️ [yfinance] VIX 실시간 조회 에러: {yf_e}")
+                # 1차 시도: 로컬 캐시 및 FRED/KIS VIX 참조 (deprecated yfinance 분리)
+                pass
                 
                 # VIX 폴백 1: 기존 캐시값(전일값) Forward Fill
                 fallback_vix = self._cache.get('vix')
@@ -172,6 +162,29 @@ class MacroRealtimeRefresher:
                         
                 if fallback_vix is None or fallback_vix <= 0:
                     fallback_vix = 15.0 # 최후의 수단 (시스템 셧다운 방지)
+
+                # Google Finance 0-Lag 실시간 VIX 1순위 적용 (AlphaVantage 정적 종가 덮어쓰기)
+                try:
+                    from src.utils.google_finance_collector import GoogleFinanceCollector
+                    gf_vix = GoogleFinanceCollector.get_vix()
+                    if gf_vix and gf_vix > 0:
+                        updates['vix'] = gf_vix
+                        logger.info(f"  🟢 Live VIX real-time tick captured via Google Finance: {updates['vix']}")
+                except Exception as _gfe:
+                    logger.warning(f"  ⚠️ Google Finance VIX fetch exception: {_gfe}")
+
+                if 'vix' not in updates:
+                    try:
+                        import urllib.request, re
+                        req = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=1d&interval=1m', headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            body = resp.read().decode('utf-8')
+                        m = re.search(r'"regularMarketPrice":\s*([0-9.]+)', body)
+                        if m:
+                            updates['vix'] = round(float(m.group(1)), 2)
+                            logger.info(f"  🟢 Live VIX real-time tick updated via Yahoo Direct REST: {updates['vix']}")
+                    except Exception as _ve:
+                        logger.warning(f"  ⚠️ Live VIX fetch exception: {_ve}")
 
                 if 'vix' not in updates:
                     logger.warning(f"🚨 VIX 수집 실패! Intelligent Fallback 가동: {fallback_vix}")
@@ -194,7 +207,7 @@ class MacroRealtimeRefresher:
                     sigma = _math.sqrt(var) if var > 0 else 0.0
                     updates['vix_ma_20'] = round(mu, 4)
                     updates['vix_std_20'] = round(sigma, 4)
-                    logger.debug(f'  [S1 Support] VIX Rolling: n={n_w}, ma={mu:.2f}, std={sigma:.2f}')
+                    logger.debug(f"  [S1 Support] VIX Rolling: n={n_w}, ma={mu:.2f}, std={sigma:.2f}")
                 elif vix_now and isinstance(vix_now, (int, float)):
                     updates['vix_ma_20'] = float(vix_now)
                     updates['vix_std_20'] = 2.0
@@ -254,18 +267,18 @@ class MacroRealtimeRefresher:
                             updates['intraday_range_pct'] = intraday_range
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                         import logging
-                        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                         if dhm:
                             dhm.record('kr_intraday_range', e, 'info', context={'ticker': '069500'})
                     if len(closes) >= 20:
                         updates['kospi_ma20'] = round(float(closes.iloc[-20:].mean()), 2)
                     n_updated += 1
-                    logger.debug(f'  KOSPI proxy(069500): close={today_close:.0f}, prev={prev_close:.0f}, chg={updates.get('kospi_change_1d', '?')}%, MA20={updates.get('kospi_ma20', '?')}, intraday_range={updates.get('intraday_range_pct', '?')}%')
+                    logger.debug(f"  KOSPI proxy(069500): close={today_close:.0f}, prev={prev_close:.0f}, chg={updates.get('kospi_change_1d', '?')}%, MA20={updates.get('kospi_ma20', '?')}, intraday_range={updates.get('intraday_range_pct', '?')}%")
             except Exception as e:
                 if dhm:
                     dhm.record('kr_kospi_069500', e, 'critical', context={'ticker': '069500', 'method': 'pykrx'}, fallback_used='yfinance ^KS11')
                 else:
-                    logger.warning(f'  KOSPI(069500) 갱신 실패: {e}')
+                    logger.warning(f"  KOSPI(069500) 갱신 실패: {e}")
             if 'kospi_close' not in updates:
                 try:
                     from src.data_collection.alpha_vantage_collector import collect_global_macro
@@ -281,7 +294,7 @@ class MacroRealtimeRefresher:
                     if dhm:
                         dhm.record('kr_kospi_alphavantage', e, 'critical', context={'ticker': '^KS11'}, fallback_used='없음 — KOSPI 데이터 완전 누락')
                     else:
-                        logger.warning(f'  KOSPI(AlphaVantage) fallback 실패: {e}')
+                        logger.warning(f"  KOSPI(AlphaVantage) fallback 실패: {e}")
             try:
                 df = pykrx_stock.get_market_ohlcv_by_date(hist_start, today_str, '229200')
                 if df is not None and len(df) >= 2:
@@ -300,7 +313,7 @@ class MacroRealtimeRefresher:
                 if dhm:
                     dhm.record('kr_kosdaq_229200', e, 'critical', context={'ticker': '229200'})
                 else:
-                    logger.warning(f'  KOSDAQ(229200) 갱신 실패: {e}')
+                    logger.warning(f"  KOSDAQ(229200) 갱신 실패: {e}")
             if 'kospi_close' in updates:
                 updates['kospi200'] = updates['kospi_close']
                 updates['kospi200_prev_close'] = updates.get('kospi_prev_close', 0)
@@ -311,7 +324,7 @@ class MacroRealtimeRefresher:
                     n_updated += 1
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 if dhm:
                     dhm.record('kr_vkospi', e, 'warning', context={'index': '1004'})
             if updates:
@@ -324,7 +337,7 @@ class MacroRealtimeRefresher:
             if dhm:
                 dhm.record('kr_indices_general', e, 'critical', context={'phase': '_refresh_kr_indices'})
             else:
-                logger.warning(f'  KR 지수 갱신 실패: {e}')
+                logger.warning(f"  KR 지수 갱신 실패: {e}")
         self._refresh_s1_derived_stats()
         return {'n_updated': n_updated}
 
@@ -368,7 +381,7 @@ class MacroRealtimeRefresher:
                 sigma = _math.sqrt(var) if var > 0 else 500.0
                 updates['lp_pressure_ma'] = round(mu, 4)
                 updates['lp_pressure_std'] = round(sigma, 4)
-                logger.debug(f'  [S1 Support] LP Pressure Rolling: n={n_w}, ma={mu:.2f}, std={sigma:.2f}')
+                logger.debug(f"  [S1 Support] LP Pressure Rolling: n={n_w}, ma={mu:.2f}, std={sigma:.2f}")
             else:
                 updates.setdefault('lp_pressure_ma', 0.0)
                 updates.setdefault('lp_pressure_std', 500.0)
@@ -394,16 +407,16 @@ class MacroRealtimeRefresher:
                 recent_c = c[-1] if c[-1] > 0 else 1.0
                 atr_val = float(_np.mean(tr[-atr_5m_window:])) / recent_c
                 updates['atr_5m'] = round(atr_val, 6)
-                logger.debug(f'  [S1 Support] ATR 5m: {atr_val:.5f} (window={atr_5m_window}, n_bars={len(df_5m)})')
+                logger.debug(f"  [S1 Support] ATR 5m: {atr_val:.5f} (window={atr_5m_window}, n_bars={len(df_5m)})")
             else:
-                logger.debug(f'  [S1 Support] ATR 5m: 5분봉 데이터 부족 (bars={(len(df_5m) if df_5m is not None else 0)}) → fallback 0.0')
+                logger.debug(f"  [S1 Support] ATR 5m: 5분봉 데이터 부족 (bars={(len(df_5m) if df_5m is not None else 0)}) → fallback 0.0")
                 updates.setdefault('atr_5m', 0.0)
         except Exception as _e:
             logger.error(f'  [S1 Support] ATR 5m 계산 실패 (fallback 0.0): {_e}', exc_info=True)
             updates.setdefault('atr_5m', 0.0)
         if updates:
             self._update_cache(updates)
-            logger.info(f'  ✅ [S1 Support] 파생 통계 주입 완료: lp_ma={updates.get('lp_pressure_ma', 'N/A')}, lp_std={updates.get('lp_pressure_std', 'N/A')}, atr_5m={updates.get('atr_5m', 'N/A')}')
+            logger.info(f"  ✅ [S1 Support] 파생 통계 주입 완료: lp_ma={updates.get('lp_pressure_ma', 'N/A')}, lp_std={updates.get('lp_pressure_std', 'N/A')}, atr_5m={updates.get('atr_5m', 'N/A')}")
 
     def _fetch_alphavantage_batch(self, ticker_map: Dict[str, str]) -> Tuple[Dict, List[str]]:
         """Alpha Vantage로 여러 종목 최신값 + 전일 대비 변동률 조회.
@@ -429,7 +442,7 @@ class MacroRealtimeRefresher:
                 if prev and prev > 0:
                     chg = round((fx_val / prev - 1) * 100, 4)
                     updates['usdkrw_change_1d'] = chg
-                logger.info(f'  ✅ 환율 BOK ECOS API 성공: {fx_val:.2f}')
+                logger.info(f"  ✅ 환율 BOK ECOS API 성공: {fx_val:.2f}")
             else:
                 logger.warning('  ⚠️ 환율(KRW=X) BOK ECOS API 수집 실패')
                 errors.append('KRW=X')
@@ -437,7 +450,7 @@ class MacroRealtimeRefresher:
         if not symbols_to_fetch:
             return (updates, errors)
 
-        logger.info(f'  🌍 [Alpha Vantage] 배치 조회 시작: {symbols_to_fetch}')
+        logger.info(f"  🌍 [Alpha Vantage] 배치 조회 시작: {symbols_to_fetch}")
         try:
             av_results = collect_global_macro(symbols_to_fetch)
         except Exception as e:
@@ -449,7 +462,7 @@ class MacroRealtimeRefresher:
             if yf_ticker in av_results:
                 res = av_results[yf_ticker]
                 updates[cache_key] = res['price']
-                updates[f'{cache_key}_change_1d'] = res['change_1d']
+                updates[f"{cache_key}_change_1d"] = res['change_1d']
             else:
                 errors.append(yf_ticker)
                 
@@ -457,18 +470,18 @@ class MacroRealtimeRefresher:
 
     @staticmethod
     def _fetch_usdkrw_naver() -> Optional[float]:
-        """Naver 대신 yfinance 단건 직접 호출로 안정적인 우회 제공."""
+        """Yahoo Direct REST 단건 호출로 USDKRW 우회 제공."""
         try:
-            import yfinance as yf
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                df = yf.download('KRW=X', period='1d', progress=False)
-                if not df.empty and 'Close' in df.columns:
-                    return float(df['Close'].iloc[-1].item())
+            import urllib.request, re
+            req = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?range=1d&interval=1m', headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                body = resp.read().decode('utf-8')
+            m = re.search(r'"regularMarketPrice":\s*([0-9.]+)', body)
+            if m:
+                return float(m.group(1))
         except Exception as e:
             import logging
-            logging.getLogger(__name__).debug(f'yfinance KRW=X direct fetch failed: {e}')
+            logging.getLogger(__name__).debug(f"Yahoo Direct KRW=X fetch failed: {e}")
         return None
 
     @staticmethod
@@ -492,137 +505,8 @@ class MacroRealtimeRefresher:
         return None
 
     def _fetch_yf_batch(self, ticker_map: Dict[str, str], period: str='5d') -> Tuple[Dict[str, float], List[str]]:
-        """yfinance bulk download 및 에러/누락 종목 분리 반환."""
-        if not ticker_map:
-            return ({}, [])
-        try:
-            import yfinance as yf
-        except ImportError as e:
-            logger.error('  yfinance 미설치', exc_info=True)
-            return ({}, list(ticker_map.keys()))
-        updates = {}
-        errors = []
-
-        def _safe_float(val) -> float:
-            """numpy/pandas scalar -> Python float 안전 변환."""
-            return float(val.item() if hasattr(val, 'item') else val)
-
-        def _compute_change_1d(closes, cache_key: str) -> None:
-            """2일치 이상 Close 시리즈에서 정확한 _change_1d 계산.
-
-            우선순위:
-              1. 시계열 데이터에 2행 이상 -> iloc[-2] vs iloc[-1]
-              2. 시계열 1행만 + 캐시에 이전값 존재 -> 캐시 대비 계산
-              3. 어느 쪽도 불가 -> 스킵 (0.0 하드코딩 방지)
-            """
-            if closes is not None and len(closes) >= 2:
-                last_val = _safe_float(closes.iloc[-1])
-                prev_val = _safe_float(closes.iloc[-2])
-                if prev_val > 0:
-                    chg = round((last_val / prev_val - 1) * 100, 4)
-                    updates[f'{cache_key}_change_1d'] = chg
-                    logger.debug(f'  {cache_key}_change_1d={chg}% (curr={last_val:.4f}, prev={prev_val:.4f})')
-            elif closes is not None and len(closes) == 1:
-                last_val = _safe_float(closes.iloc[-1])
-                prev = self._cache.get(cache_key)
-                if prev and isinstance(prev, (int, float)) and (prev > 0) and (abs(last_val - prev) > 1e-08):
-                    chg = round((last_val / prev - 1) * 100, 4)
-                    updates[f'{cache_key}_change_1d'] = chg
-                    logger.debug(f'  {cache_key}_change_1d={chg}% (curr={last_val:.4f}, cache_prev={prev:.4f}) [1행 fallback]')
-
-        def _extract_close(data, yf_ticker: str):
-            """DataFrame에서 Close 시리즈 추출 (MultiIndex 대응)."""
-            if data is None or data.empty:
-                return None
-            try:
-                if hasattr(data.columns, 'levels'):
-                    data.columns = [c[0] if isinstance(c, tuple) else c for c in data.columns]
-                col = 'Close' if 'Close' in data.columns else 'close'
-                if col in data.columns:
-                    return data[col].dropna()
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                logger.warning('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:736', exc_info=True)
-            return None
-        yf_symbols = list(ticker_map.keys())
-        batch_ok = False
-        try:
-            batch_data = yf.download(yf_symbols, period='5d', progress=False, auto_adjust=True, threads=True, timeout=20)
-            if batch_data is not None and (not batch_data.empty):
-                batch_ok = True
-                if hasattr(batch_data.columns, 'levels'):
-                    for yf_ticker, cache_key in ticker_map.items():
-                        try:
-                            if ('Close', yf_ticker) in batch_data.columns:
-                                col = ('Close', yf_ticker)
-                            elif 'Close' in batch_data.columns:
-                                col = 'Close'
-                            else:
-                                close_cols = [c for c in batch_data.columns if isinstance(c, tuple) and c[0].lower() == 'close' and (c[1] == yf_ticker)]
-                                if close_cols:
-                                    col = close_cols[0]
-                                else:
-                                    errors.append(yf_ticker)
-                                    continue
-                            val = batch_data[col].dropna()
-                            if len(val) > 0:
-                                last_val = _safe_float(val.iloc[-1])
-                                updates[cache_key] = last_val
-                                _compute_change_1d(val, cache_key)
-                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                            import logging
-                            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                            if dhm:
-                                dhm.record(f'yf_parse_{yf_ticker}', e, 'warning', context={'ticker': yf_ticker, 'cache_key': cache_key})
-                            errors.append(yf_ticker)
-                else:
-                    yf_ticker = yf_symbols[0]
-                    cache_key = ticker_map[yf_ticker]
-                    closes = _extract_close(batch_data, yf_ticker)
-                    if closes is not None and len(closes) > 0:
-                        updates[cache_key] = _safe_float(closes.iloc[-1])
-                        _compute_change_1d(closes, cache_key)
-                    else:
-                        errors.append(yf_ticker)
-        except Exception as e:
-            if dhm:
-                dhm.record('yf_batch_download', e, 'warning', context={'n_tickers': len(yf_symbols)}, fallback_used='단건 retry')
-            else:
-                logger.warning(f'  yfinance 배치 실패 → 단건 retry: {e}')
-        retry_targets = [(t, k) for t, k in ticker_map.items() if t in errors or not batch_ok]
-        for yf_ticker, cache_key in retry_targets:
-            if cache_key in updates:
-                continue
-            import time as _t
-            data = None
-            if yf_ticker in ('KRW=X', 'USDKRW=X'):
-                nav_val = self._fetch_usdkrw_naver()
-                if nav_val is not None:
-                    updates[cache_key] = nav_val
-                    prev = self._cache.get(cache_key)
-                    if prev and isinstance(prev, (int, float)) and (prev > 0):
-                        updates[f'{cache_key}_change_1d'] = round((nav_val / prev - 1) * 100, 4)
-                    logger.warning(f'  환율 yfinance 실패 → Naver 크롤링 성공: {nav_val:.2f}')
-                    continue
-            data = self._fetch_with_retry(yf_ticker, period='5d', n_retry=3, base_delay=1.0)
-            if data is not None:
-                closes = _extract_close(data, yf_ticker)
-                if closes is not None and len(closes) > 0:
-                    updates[cache_key] = _safe_float(closes.iloc[-1])
-                    _compute_change_1d(closes, cache_key)
-                    if yf_ticker in errors:
-                        errors.remove(yf_ticker)
-                    continue
-            cached_val = self._cache.get(cache_key)
-            if cached_val is not None and isinstance(cached_val, (int, float)):
-                updates[cache_key] = cached_val
-                logger.critical(f'  호 실시간 수집 실패 [{yf_ticker} → {cache_key}]: signal_cache 이전값 ffill 적용 ({cached_val}) — 레징 엔진 장애 위험!')
-                if yf_ticker in errors:
-                    errors.remove(yf_ticker)
-            else:
-                logger.critical(f'  위기 {yf_ticker} → {cache_key}: 실시간 + 캐시 모두 없음 — 레징 엔진 입력값 누락!')
-        return (updates, errors)
+        """yfinance 대신 로컬 DataBus 및 캐시 참조 (deprecated yfinance 분리)."""
+        return ({}, list(ticker_map.keys()) if ticker_map else [])
 
     def _is_market_hours(self, now: Optional[datetime]=None) -> bool:
         """KR 장 시간 내인지 판단 (주말 제외)."""
@@ -662,23 +546,26 @@ class MacroRealtimeRefresher:
             return elapsed >= interval
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return True
 
     def _safe_pykrx_index(self, index_code: str, date_str: str) -> Optional[float]:
-        """pykrx 지수 조회 (KeyError 방어)."""
+        """pykrx 지수 조회 (KeyError/IndexError 방어)."""
         try:
             from pykrx import stock as pykrx_stock
             df = pykrx_stock.get_index_ohlcv_by_date(date_str, date_str, index_code)
-            if df is not None and len(df) > 0:
-                close_col = '종가' if '종가' in df.columns else df.columns[-2]
-                val = float(df[close_col].iloc[-1])
-                if val > 0:
-                    return val
+            if df is not None and not df.empty and len(df) > 0:
+                for c in ['종가', 'Close', '종가(pt)', '지수']:
+                    if c in df.columns:
+                        val = float(df[c].iloc[-1])
+                        if val > 0:
+                            return val
+                if len(df.columns) > 0:
+                    val = float(df.iloc[-1, -1] if len(df.columns) == 1 else df.iloc[-1, -2])
+                    if val > 0:
+                        return val
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            logger.warning(f'[SILENT_BYPASS] KRX Blocked or Error in _safe_pykrx_index: {e}')
+            logger.warning(f"  ⚠️ _safe_pykrx_index ({index_code}) 예외: {e}")
         return None
 
     def _load_signal_cache(self) -> Dict:
@@ -688,7 +575,7 @@ class MacroRealtimeRefresher:
                 return json.loads(_SIGNAL_CACHE.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:945', exc_info=True)
         return {}
 
@@ -727,6 +614,19 @@ class MacroRealtimeRefresher:
                                 continue
                     safe_updates[k] = v
                     
+                # Telemetry Key Alias Mapping for US Market Regime & Strategy Compatibility
+                if 'sp500_change_1d' in safe_updates:
+                    safe_updates['spx_change_1d'] = safe_updates['sp500_change_1d']
+                if 'nasdaq_change_1d' in safe_updates:
+                    safe_updates['ixic_change_1d'] = safe_updates['nasdaq_change_1d']
+                if 'sox_change_1d' in safe_updates:
+                    safe_updates['soxx_change_1d'] = safe_updates['sox_change_1d']
+                safe_updates.setdefault('spx_change_1d', safe_updates.get('sp500_change_1d', existing.get('spx_change_1d', 0.0)))
+                safe_updates.setdefault('ixic_change_1d', safe_updates.get('nasdaq_change_1d', existing.get('ixic_change_1d', 0.0)))
+                safe_updates.setdefault('soxx_change_1d', safe_updates.get('sox_change_1d', existing.get('soxx_change_1d', 0.0)))
+                safe_updates.setdefault('ofi_z', existing.get('ofi_z', 0.0))
+                safe_updates.setdefault('lead_lag', existing.get('lead_lag', 0.0))
+
                 existing.update(safe_updates)
                 existing['timestamp'] = datetime.now().isoformat()
                 return existing
@@ -735,7 +635,7 @@ class MacroRealtimeRefresher:
             if success:
                 self._cache.update(updates)
             else:
-                logger.error(f'  ❌ signal_cache 업데이트 실패 (File Lock 획득 실패)')
+                logger.error(f"  ❌ signal_cache 업데이트 실패 (File Lock 획득 실패)")
         except Exception as e:
             logger.warning(f'  signal_cache 업데이트 예외 발생: {e}', exc_info=True)
 
@@ -794,9 +694,9 @@ class MacroRealtimeRefresher:
             updates = {'gex': round(gex, 4), 'gex_call': round(gex_call, 4), 'gex_put': round(gex_put, 4), 'gex_history': gex_history, 'gex_crash_warning': crash_warning, 'gex_crash_severity': round(crash_severity, 4), 'gex_updated_at': datetime.now().isoformat()}
             self._update_cache(updates)
             if crash_warning:
-                logger.warning(f'  ⚠️ [GEX 경보] gex={gex:.2f} | crash_warning=True | severity={crash_severity:.2f}')
+                logger.warning(f"  ⚠️ [GEX 경보] gex={gex:.2f} | crash_warning=True | severity={crash_severity:.2f}")
             else:
-                logger.info(f'  📐 GEX 갱신: {gex:.2f} (경보 없음)')
+                logger.info(f"  📐 GEX 갱신: {gex:.2f} (경보 없음)")
         except Exception as e:
             logger.error(f'GEX 파이프라인 내부 오류: {e}', exc_info=True)
 
@@ -854,28 +754,19 @@ class MacroRealtimeRefresher:
                     if tnote_yield is not None:
                         updates_macro['us10y'] = tnote_yield
                         updates_macro['us10y_source'] = 'kis_tnote_proxy'
-                        logger.info(f'  🇺🇸 US10Y KIS 프록시 사용: {tnote_yield:.4f}')
+                        logger.info(f"  🇺🇸 US10Y KIS 프록시 사용: {tnote_yield:.4f}")
                 except Exception as _tn_err:
                     logger.error(f'T-Note 프록시 실패: {_tn_err}', exc_info=True)
             if not av_success or 'usdkrw' not in updates_macro:
-                try:
-                    from src.data_collection.kis_data_collector import KISDataCollector
-                    kis_fx = KISDataCollector().get_usdkrw_exchange_rate()
-                    if kis_fx:
-                        updates_macro['usdkrw'] = kis_fx
-                        logger.info(f'  🇰🇷 KIS API USDKRW 환율 연동 성공: {kis_fx:.2f}')
-                except Exception:
-                    logger.error('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:1179', exc_info=True)
-                
-                # KIS API 실패 시 yfinance fallback
-                if 'usdkrw' not in updates_macro:
-                    try:
-                        from src.data_collection.macro_realtime_refresher import _fetch_usdkrw_naver
-                        usdkrw_naver = _fetch_usdkrw_naver()
-                        if usdkrw_naver:
-                            updates_macro['usdkrw'] = usdkrw_naver
-                    except Exception:
-                        pass
+                from src.utils.resilient_market_data import ResilientFetcher
+                rf = ResilientFetcher()
+                fx_val = rf.get_current_price("USDKRW=X") or rf.get_current_price("KRW=X")
+                if fx_val and fx_val > 0:
+                    updates_macro['usdkrw'] = fx_val
+                    logger.info(f"  🇰🇷 ResilientFetcher USDKRW 환율 연동 성공: {fx_val:.2f}")
+                else:
+                    logger.warning("  ⚠️ ResilientFetcher USDKRW 환율 수집 실패 — 핫-페일오버 시도 중")
+
             if 'us10y' not in updates_macro:
                 try:
                     from src.utils.credential_manager import CredentialManager
@@ -891,7 +782,7 @@ class MacroRealtimeRefresher:
                                 updates_macro['us10y'] = vals[0] / 100.0
                                 updates_macro['us10y_source'] = 'fred_daily_interp'
                 except Exception as _fred_err:
-                    logger.error(f'FRED fallback 실패: {_fred_err}', exc_info=True)
+                    logger.error(f'FRED US10Y 수집 실패: {_fred_err}', exc_info=True)
             dxy = self._cache.get('dxy')
             if dxy:
                 updates_macro['dxy'] = float(dxy)
@@ -914,21 +805,21 @@ class MacroRealtimeRefresher:
                     std = statistics.stdev(hist) if len(hist) > 1 else 1e-09
                     if std > 0:
                         z = (float(current_val) - mean) / std
-                        updates_macro[f'{metric_key}_z_score'] = round(z, 4)
+                        updates_macro[f"{metric_key}_z_score"] = round(z, 4)
                         if z >= spike_z_threshold:
                             macro_spike = True
                             spike_z_max = max(spike_z_max, z)
-                            spike_sources.append(f'{metric_key}(z={z:.2f})')
+                            spike_sources.append(f"{metric_key}(z={z:.2f})")
             updates_macro['macro_spike_warning'] = macro_spike
             updates_macro['macro_spike_z_max'] = round(spike_z_max, 4)
             updates_macro['macro_spike_sources'] = spike_sources
             updates_macro['macro_spike_updated_at'] = datetime.now().isoformat()
             self._update_cache(updates_macro)
             if macro_spike:
-                logger.warning(f'  ⚠️ [매크로 발작 경보] z_max={spike_z_max:.2f} | sources={spike_sources}')
+                logger.warning(f"  ⚠️ [매크로 발작 경보] z_max={spike_z_max:.2f} | sources={spike_sources}")
             else:
                 n_updated = len([k for k in ('us10y', 'dxy', 'usdkrw') if k in updates_macro])
-                logger.info(f'  📡 매크로 스파이크 갱신: {n_updated}개 지표, 발작 없음')
+                logger.info(f"  📡 매크로 스파이크 갱신: {n_updated}개 지표, 발작 없음")
         except Exception as e:
             logger.error(f'매크로 스파이크 센서 내부 오류: {e}', exc_info=True)
 
@@ -953,7 +844,7 @@ class MacroRealtimeRefresher:
             if wtd_data:
                 updates_vix.update({'wag_the_dog_active': wtd_data['wag_the_dog_active'], 'wag_the_dog_severity': wtd_data['wag_the_dog_severity'], 'frgn_fut_net_buy': wtd_data['frgn_fut_net_buy'], 'frgn_spot_net_buy': wtd_data['frgn_spot_net_buy']})
                 if wtd_data['wag_the_dog_active']:
-                    logger.warning(f'  🐕 웩더독 발동! severity={wtd_data['wag_the_dog_severity']:.3f}')
+                    logger.warning(f"  🐕 웩더독 발동! severity={wtd_data['wag_the_dog_severity']:.3f}")
             ema_period = int(self._get_cfg('vix_trailing.ema_period', 10))
             vkospi_closes = kis.get_vkospi_1min(n_candles=max(ema_period * 3, 30))
             if vkospi_closes and len(vkospi_closes) >= 2:
@@ -966,9 +857,9 @@ class MacroRealtimeRefresher:
                 vix_reversal = prev_momentum > 0 and vix_momentum < 0
                 updates_vix.update({'vkospi': round(vkospi_closes[-1], 4), 'vkospi_ema': round(ema_vals[-1], 4), 'vix_momentum': round(vix_momentum, 6), 'vix_momentum_reversal': vix_reversal, 'vkospi_updated_at': datetime.now().isoformat()})
                 if vix_reversal:
-                    logger.warning(f'  🛑 VIX 모멘텀 반전! EMA기울기: {prev_momentum:.4f} → {vix_momentum:.4f} (공포 둔화)')
+                    logger.warning(f"  🛑 VIX 모멘텀 반전! EMA기울기: {prev_momentum:.4f} → {vix_momentum:.4f} (공포 둔화)")
                 else:
-                    logger.info(f'  📉 VKOSPI EMA={ema_vals[-1]:.2f}, momentum={vix_momentum:+.4f}')
+                    logger.info(f"  📉 VKOSPI EMA={ema_vals[-1]:.2f}, momentum={vix_momentum:+.4f}")
         except Exception as e:
             logger.error(f'VIX 어태커 센서 내부 오류: {e}', exc_info=True)
         if updates_vix:
@@ -983,11 +874,11 @@ if __name__ == '__main__':
     sys.path.insert(0, str(_PROJECT_ROOT))
     tier_arg = sys.argv[1] if len(sys.argv) > 1 else 'auto'
     result = run_macro_refresh(tier=tier_arg)
-    logger.debug(f'\n=== MacroRealtimeRefresher 결과 ===')
-    logger.info(f'  시간: {result['timestamp']}')
-    logger.info(f'  장중: {result['market_open']}')
-    logger.info(f'  Tier1: {result['tier1'].get('n_updated', 0)}개 갱신, {result['tier1'].get('n_errors', 0)}개 실패')
-    logger.info(f'  Tier2: {result['tier2'].get('n_updated', 0)}개 갱신, {result['tier2'].get('n_errors', 0)}개 실패')
-    logger.info(f'  KR:    {result.get('kr_indices', {}).get('n_updated', 0)}개 갱신')
+    logger.debug(f"\n=== MacroRealtimeRefresher 결과 ===")
+    logger.info(f"  시간: {result['timestamp']}")
+    logger.info(f"  장중: {result['market_open']}")
+    logger.info(f"  Tier1: {result['tier1'].get('n_updated', 0)}개 갱신, {result['tier1'].get('n_errors', 0)}개 실패")
+    logger.info(f"  Tier2: {result['tier2'].get('n_updated', 0)}개 갱신, {result['tier2'].get('n_errors', 0)}개 실패")
+    logger.info(f"  KR:    {result.get('kr_indices', {}).get('n_updated', 0)}개 갱신")
     if result.get('skipped'):
-        logger.info(f'  스킵:  {result['skipped']}')
+        logger.info(f"  스킵:  {result['skipped']}")

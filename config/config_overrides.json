@@ -3,7 +3,18 @@
   "sizer.stream_scale.S4": 0.9,
   "s2.min_confidence": 0.57,
   "sizer.stream_scale.S3": 0.9,
-  "portfolio.initial_capital": 16601718,
-  "backtest.initial_capital": 16601718,
-  "monitor.initial_capital": 16601718
+  "portfolio.initial_capital": 19600000,
+  "backtest.initial_capital": 19600000,
+  "monitor.initial_capital": 19600000,
+  "optimizer.exposure.caution": 0.85,
+  "exposure.regime_score.caution": 0.85,
+  "adaptive_risk.max_exposure.caution": 0.85,
+  "optimizer.no_trade_zone": 0.01,
+  "optimizer.profit_cost_override_multiplier": 1.3,
+  "allocator.rebalance_threshold": 0.01,
+  "s3.rebalance.min_holding_days": 1,
+  "s4.rebalance.min_holding_days": 3,
+  "s3.rebalance.entry_percentile": 70,
+  "krx.leveraged_etp_tier": 1,
+  "krx.leveraged_etp_required_deposit": 5000000
 }

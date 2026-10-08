@@ -27,7 +27,7 @@ def _load_json(name: str) -> Dict:
             return json.loads(f.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
     return {}
 
@@ -86,7 +86,7 @@ class ReportGenerator:
         signals_dict = latest_signals_data.get('signals', {})
         
         today_vt_file = f'virtual_trading_{today.replace("-", "")}.json'
-        vt_data = _load_json(f'logs/{today_vt_file}')
+        vt_data = _load_json(f"logs/{today_vt_file}")
         executed_orders = vt_data.get('orders', []) if vt_data else []
         n_orders = vt_data.get('execution', {}).get('n_orders', 0) if vt_data else 0
         n_buys = vt_data.get('portfolio_summary', {}).get('n_buys', 0) if vt_data else 0
@@ -297,7 +297,7 @@ Shadow Trading Phase — Day {n_days} / 14
                         report += "\n"
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
 
         # Global Signals

@@ -66,7 +66,7 @@ class MeridianFundamentalFilter:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'qv_portfolio_auto 로드 실패: {e}')
+                logger.debug(f"qv_portfolio_auto 로드 실패: {e}")
         l4_path = _PA_RESULTS / 'l4_integrated_portfolio.json'
         if l4_path.exists():
             try:
@@ -79,9 +79,9 @@ class MeridianFundamentalFilter:
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'l4_integrated 로드 실패: {e}')
+                logger.debug(f"l4_integrated 로드 실패: {e}")
         if self._qv_cache:
-            logger.info(f'  QV 데이터 로드: {len(self._qv_cache)}종목')
+            logger.info(f"  QV 데이터 로드: {len(self._qv_cache)}종목")
         return self._qv_cache
 
     def _load_financials(self, ticker: str) -> Optional[List[Dict]]:
@@ -97,7 +97,7 @@ class MeridianFundamentalFilter:
                 return data['annual']
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return None
 
@@ -141,7 +141,7 @@ class MeridianFundamentalFilter:
                 result['debt_ratio'] = tl / eq
             if eq <= 0:
                 if cfg.get('fundamental.capital_erosion_block', True):
-                    result['hard_fail'] = f'자본잠식 (자본={eq:,.0f})'
+                    result['hard_fail'] = f"자본잠식 (자본={eq:,.0f})"
             if ta > 0:
                 result['p_default'] = self._compute_oscore(latest, prev)
             if prev:
@@ -218,7 +218,7 @@ class MeridianFundamentalFilter:
             return round(m_score, 4)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return None
 
     def _compute_fscore(self, curr: Dict, prev: Dict) -> Optional[int]:
@@ -260,7 +260,7 @@ class MeridianFundamentalFilter:
             return f
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return None
 
     def passes_hard_filter(self, ticker: str, regime: str='caution') -> bool:
@@ -275,14 +275,15 @@ class MeridianFundamentalFilter:
         min_roe = rc.get('min_roe', cfg.get('fundamental.min_roe', 0))
         min_opm = rc.get('min_opm', cfg.get('fundamental.min_opm', 0))
         if result.get('hard_fail'):
-            logger.info(f'  ❌ {ticker} 하드필터: {result['hard_fail']}')
+            _hfail = result.get('hard_fail')
+            logger.info(f"  ❌ {ticker} 하드필터: {_hfail}")
             return False
         oscore_enabled = cfg.get('fundamental.oscore_enabled', True)
         if oscore_enabled:
             p_default = result.get('p_default')
             oscore_high = cfg.get('fundamental.oscore_threshold_high', 0.8)
             if p_default is not None and p_default > oscore_high:
-                logger.info(f'  ❌ {ticker} O-Score P={p_default:.1%} > {oscore_high:.0%}')
+                logger.info(f"  ❌ {ticker} O-Score P={p_default:.1%} > {oscore_high:.0%}")
                 return False
         beneish_enabled = cfg.get('fundamental.beneish_enabled', True)
         beneish_threshold = cfg.get('fundamental.beneish_threshold', -1.78)
@@ -290,27 +291,27 @@ class MeridianFundamentalFilter:
         if beneish_enabled and beneish_strict.get(regime, True):
             m_score = result.get('m_score')
             if m_score is not None and m_score > beneish_threshold:
-                logger.info(f'  ❌ {ticker} Beneish M={m_score:.2f} > {beneish_threshold}')
+                logger.info(f"  ❌ {ticker} Beneish M={m_score:.2f} > {beneish_threshold}")
                 return False
         m_grade = result.get('m_grade', '')
         if m_grade in ('DANGER', 'CRITICAL'):
-            logger.info(f'  ❌ {ticker} M-Grade={m_grade}')
+            logger.info(f"  ❌ {ticker} M-Grade={m_grade}")
             return False
         roe = result.get('roe')
         opm = result.get('opm')
         if roe is not None and roe < min_roe:
-            logger.info(f'  ❌ {ticker} ROE={roe:.1f}% < {min_roe:.1f}%')
+            logger.info(f"  ❌ {ticker} ROE={roe:.1f}% < {min_roe:.1f}%")
             return False
         if opm is not None and opm < min_opm:
-            logger.info(f'  ❌ {ticker} OPM={opm:.1f}% < {min_opm:.1f}%')
+            logger.info(f"  ❌ {ticker} OPM={opm:.1f}% < {min_opm:.1f}%")
             return False
         f_score = result.get('f_score')
         if f_score is not None and f_score < min_fscore:
-            logger.info(f'  ❌ {ticker} F-Score={f_score} < {min_fscore}')
+            logger.info(f"  ❌ {ticker} F-Score={f_score} < {min_fscore}")
             return False
         qv_score = result.get('qv_score')
         if qv_score is not None and qv_score < min_qv:
-            logger.info(f'  ❌ {ticker} QV={qv_score:.0f} < {min_qv}')
+            logger.info(f"  ❌ {ticker} QV={qv_score:.0f} < {min_qv}")
             return False
         return True
 
@@ -341,7 +342,7 @@ class MeridianFundamentalFilter:
             else:
                 c['fundamental_status'] = 'blocked'
                 n_blocked += 1
-        logger.info(f'  펀더멘탈 필터: {len(candidates)}→{len(filtered)} ({n_blocked}건 차단)')
+        logger.info(f"  펀더멘탈 필터: {len(candidates)}→{len(filtered)} ({n_blocked}건 차단)")
         return filtered
 
     def score_adjustment(self, ticker: str) -> float:

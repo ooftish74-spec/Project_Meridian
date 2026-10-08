@@ -32,7 +32,8 @@ def _mask(key: str, value: str) -> str:
     """민감 키 값을 마스킹하여 반환."""
     if key in SENSITIVE_KEYS and value:
         visible = min(4, len(value))
-        return f'{"*" * (len(value) - visible)}{value[-visible:]}'
+        _stars = "*" * (len(value) - visible)
+        return f"{_stars}{value[-visible:]}"
     return value
 
 class CredentialManager:
@@ -46,12 +47,12 @@ class CredentialManager:
         try:
             import keyring
             keyring.set_password(KEYCHAIN_SERVICE, key, value)
-            logger.info(f'  [Phase 71] Keychain 저장: {key} = {_mask(key, value)}')
+            logger.info(f"  [Phase 71] Keychain 저장: {key} = {_mask(key, value)}")
             return True
         except ImportError as e:
             return self._save_to_keychain_cli(key, value)
         except Exception as exc:
-            logger.error(f'  [Phase 71] Keychain 저장 실패 ({key}): {exc}')
+            logger.error(f"  [Phase 71] Keychain 저장 실패 ({key}): {exc}")
             return False
 
     def read_from_keychain(self, key: str) -> str:
@@ -60,13 +61,12 @@ class CredentialManager:
             import keyring
             value = keyring.get_password(KEYCHAIN_SERVICE, key) or ''
             if value:
-                logger.debug(f'  [Phase 71] Keychain: {key} = {_mask(key, value)}')
-            return value
-        except ImportError as e:
+                logger.debug(f"  [Phase 71] Keychain: {key} = {_mask(key, value)}")
+                return value
             return self._read_from_keychain_cli(key)
         except Exception as exc:
-            logger.debug(f'  [Phase 71] Keychain 조회 실패 ({key}): {exc}')
-            return ''
+            logger.debug(f"  [Phase 71] Keychain 조회 실패 ({key}): {exc}")
+            return self._read_from_keychain_cli(key)
 
     def _save_to_keychain_cli(self, key: str, value: str) -> bool:
         """security CLI로 Keychain 저장."""
@@ -76,12 +76,12 @@ class CredentialManager:
         try:
             result = subprocess.run(['security', 'add-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key, '-w', value, '-U'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
-                logger.info(f'  [Phase 71] Keychain CLI 저장: {key}')
+                logger.info(f"  [Phase 71] Keychain CLI 저장: {key}")
                 return True
-            logger.warning(f'  [Phase 71] CLI 저장 실패 ({key}): {result.stderr.strip()}')
+            logger.warning(f"  [Phase 71] CLI 저장 실패 ({key}): {result.stderr.strip()}")
             return False
         except Exception as exc:
-            logger.error(f'  [Phase 71] CLI 예외 ({key}): {exc}')
+            logger.error(f"  [Phase 71] CLI 예외 ({key}): {exc}")
             return False
 
     def _read_from_keychain_cli(self, key: str) -> str:
@@ -93,7 +93,7 @@ class CredentialManager:
             result = subprocess.run(['security', 'find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', key, '-w'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 value = result.stdout.strip()
-                logger.debug(f'  [Phase 71] Keychain CLI: {key} = {_mask(key, value)}')
+                logger.debug(f"  [Phase 71] Keychain CLI: {key} = {_mask(key, value)}")
                 return value
             return ''
         except Exception as e:
@@ -135,8 +135,8 @@ class CredentialManager:
                         from src.utils.error_logger import log_warning_rate_limited
                         log_warning_rate_limited(__name__, f"⚠️ [Fallback] 파일/모듈 누락 예외 우회: (exception variable 없음)")
                         # 단일 텍스트 값으로 간주 (Tier 3 Ignore)
-                        logger.debug(f'  [Phase 72] AWS Secrets Manager: {key} is a plaintext string (not JSON).')
-                    logger.debug(f'  [Phase 72] AWS Secrets Manager: {key} = {_mask(key, value)}')
+                        logger.debug(f"  [Phase 72] AWS Secrets Manager: {key} is a plaintext string (not JSON).")
+                    logger.debug(f"  [Phase 72] AWS Secrets Manager: {key} = {_mask(key, value)}")
                     return value
             except ClientError as ce:
                 # Secret이 단일 파일이 아니라 Project_Meridian 하나로 뭉쳐있을 경우의 Fallback 로직
@@ -148,17 +148,17 @@ class CredentialManager:
                             secret_dict = json.loads(response['SecretString'])
                             if key in secret_dict:
                                 value = secret_dict[key]
-                                logger.debug(f'  [Phase 72] AWS Secrets Manager (Master JSON): {key} = {_mask(key, value)}')
+                                logger.debug(f"  [Phase 72] AWS Secrets Manager (Master JSON): {key} = {_mask(key, value)}")
                                 return value
                     except Exception as fallback_err:
                         logger.debug(f"  [Phase 72] AWS Master JSON Fallback parsing failed: {fallback_err}")
                 else:
-                    logger.error(f'  [Phase 72] AWS Secrets Manager 오류 ({key}): {ce}')
+                    logger.error(f"  [Phase 72] AWS Secrets Manager 오류 ({key}): {ce}")
                 
         except ImportError:
             logger.error("  [Phase 72] boto3 라이브러리가 설치되어 있지 않습니다.")
         except Exception as exc:
-            logger.error(f'  [Phase 72] AWS Secrets Manager 예외 ({key}): {exc}')
+            logger.debug(f"  [Phase 72] AWS Secrets Manager (No IAM Role / credentials): {exc}")
         
         return ''
 
@@ -184,14 +184,15 @@ class CredentialManager:
         is_production = os.environ.get('ENVIRONMENT', '').lower() == 'production'
         
         if is_production:
-            # AWS 운영 환경: Secrets Manager 우선 조회
+            # AWS 운영 환경: Secrets Manager 우선 -> OS 환경변수 -> .env 순서로 조회
             _aws_val = self._read_from_aws_secrets(key)
             if _aws_val:
                 return _aws_val
-            # Fallback: 로컬 테스트나 특수 주입된 OS 환경변수
-            return os.getenv(key, '')
+            _os_val = os.getenv(key, '')
+            if _os_val:
+                return _os_val
         
-        # 로컬(개발) 환경: 기존 Keychain -> .env 로직 수행
+        # 로컬/FallBack: macOS Keychain -> .env 로직 수행
         _kc = self.read_from_keychain(key)
         if _kc:
             return _kc
@@ -205,22 +206,22 @@ class CredentialManager:
                         _line = _line.strip()
                         if '#' in _line:
                             _line = _line[:_line.index('#')].strip()
-                        if _line.startswith(f'{key}_ENC='):
+                        if _line.startswith(f"{key}_ENC="):
                             _enc = _line[len(key) + 5:]
-                        elif _line.startswith(f'{key}='):
+                        elif _line.startswith(f"{key}="):
                             _plain = _line[len(key) + 1:]
                 if _enc:
                     _dec = self._decrypt_fernet(_enc)
                     if _dec:
-                        logger.debug(f'  [Phase 71] .env Fernet 복호화: {key} (Keychain 이관 권장)')
+                        logger.debug(f"  [Phase 71] .env Fernet 복호화: {key} (Keychain 이관 권장)")
                         return _dec
                 if _plain:
-                    logger.debug(f'  [Phase 71] .env 평문: {key}')
+                    logger.debug(f"  [Phase 71] .env 평문: {key}")
                     return _plain
             except Exception as _exc:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_exc}", exc_info=True)
-                logger.debug(f'  [Phase 71] .env 읽기 실패 ({key}): {_exc}')
+                logger.debug(f"  [Phase 71] .env 읽기 실패 ({key}): {_exc}")
         
         return os.getenv(key, '')
 
@@ -240,7 +241,7 @@ class CredentialManager:
             import platform
             hw_uuid = platform.node() or 'fallback-uuid'
         user = os.getenv('USER', '') or Path(os.getenv('HOME', '~')).name or 'default'
-        salt = f'{hw_uuid}:{user}:Project-A-KIS'
+        salt = f"{hw_uuid}:{user}:Project-A-KIS"
         return base64.urlsafe_b64encode(hashlib.sha256(salt.encode()).digest())
 
     def _decrypt_fernet(self, ciphertext: str) -> str:
@@ -249,7 +250,7 @@ class CredentialManager:
             from cryptography.fernet import Fernet
             return Fernet(self._derive_key()).decrypt(ciphertext.encode()).decode()
         except Exception as exc:
-            logger.debug(f'  [Phase 71] Fernet 복호화 실패: {exc}')
+            logger.debug(f"  [Phase 71] Fernet 복호화 실패: {exc}")
             return ''
 
     def encrypt(self, plaintext: str) -> str:
@@ -263,29 +264,31 @@ class CredentialManager:
 
     def encrypt_to_env(self, key: str, value: str, env_path: Optional[str]=None):
         """[Deprecated] .env 암호화 저장 — save_to_keychain() 사용 권장."""
-        logger.warning(f'  [Phase 71] encrypt_to_env({key}) deprecated — save_to_keychain() 사용')
+        logger.warning(f"  [Phase 71] encrypt_to_env({key}) deprecated — save_to_keychain() 사용")
         env_path = env_path or str(_PROJECT_ROOT / '.env')
         encrypted = self.encrypt(value)
-        enc_key = f'{key}_ENC'
+        enc_key = f"{key}_ENC"
         lines: list = []
         if Path(env_path).exists():
             with open(env_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
         found = False
         for i, line in enumerate(lines):
-            if line.startswith(f'{enc_key}='):
-                lines[i] = f'{enc_key}={encrypted}\n'
+            if line.startswith(f"{enc_key}="):
+                lines[i] = f"{enc_key}={encrypted}\n"
                 found = True
                 break
         if not found:
-            lines.append(f'{enc_key}={encrypted}\n')
+            lines.append(f"{enc_key}={encrypted}\n")
         with open(env_path, 'w', encoding='utf-8') as f:
             f.writelines(lines)
-        logger.info(f'  ✅ {enc_key} .env 저장 (Keychain 이관 권장)')
+        logger.info(f"  ✅ {enc_key} .env 저장 (Keychain 이관 권장)")
 if __name__ == '__main__':
     import sys
     logging.basicConfig(level=logging.DEBUG)
     cm = CredentialManager()
     _key = sys.argv[1] if len(sys.argv) > 1 else 'KIS_APP_KEY'
     _val = cm.read_from_env(_key)
-    print(f'{"OK" if _val else "MISS"}: {_key} = {_mask(_key, _val) if _val else "(없음)"}')
+    _s_lbl = "OK" if _val else "MISS"
+    _v_lbl = _mask(_key, _val) if _val else "(없음)"
+    print(f"{_s_lbl}: {_key} = {_v_lbl}")

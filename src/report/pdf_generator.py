@@ -32,8 +32,8 @@ class PDFReportGenerator:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f'PDFReportGenerator loaded from: {__file__}')
-        logger.info(f'Table header textColor will be: colors.white')
+        logger.info(f"PDFReportGenerator loaded from: {__file__}")
+        logger.info(f"Table header textColor will be: colors.white")
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
 
@@ -53,9 +53,9 @@ class PDFReportGenerator:
                 if bold_font_path.exists():
                     pdfmetrics.registerFont(TTFont('Helvetica-Bold', str(bold_font_path)))
             else:
-                logger.error(f'NanumGothic fonts not found at {font_dir}')
+                logger.error(f"NanumGothic fonts not found at {font_dir}")
         except Exception as e:
-            logger.error(f'Could not load NanumGothic font: {e}')
+            logger.error(f"Could not load NanumGothic font: {e}")
         self.styles.add(ParagraphStyle(name='CustomTitle', parent=self.styles['Heading1'], fontSize=18, textColor=colors.HexColor('#0F2027'), spaceAfter=30, spaceBefore=20, alignment=TA_CENTER, fontName='Helvetica'))
         self.styles.add(ParagraphStyle(name='CustomHeading', parent=self.styles['Heading2'], fontSize=16, textColor=colors.HexColor('#0F2027'), spaceAfter=8, spaceBefore=24, fontName='Helvetica'))
         self.styles.add(ParagraphStyle(name='CustomSubheading', parent=self.styles['Heading3'], fontSize=14, textColor=colors.HexColor('#203A43'), spaceAfter=3, spaceBefore=18, fontName='Helvetica'))
@@ -99,7 +99,7 @@ class PDFReportGenerator:
         elements.append(toc_title)
         elements.append(Spacer(1, 0.2 * inch))
         for i, section in enumerate(sections, 1):
-            toc_entry = Paragraph(f'{i}. {section}', self.styles['CustomBody'])
+            toc_entry = Paragraph(f"{i}. {section}", self.styles['CustomBody'])
             elements.append(toc_entry)
         elements.append(PageBreak())
         return elements
@@ -201,8 +201,8 @@ class PDFReportGenerator:
                 img.drawWidth = max_height / aspect
             chart_elements.append(img)
         except Exception as e:
-            logger.error(f'Error adding chart {chart_path}: {e}')
-            error_para = Paragraph(f'[Chart not available: {chart_path}]', self.styles['CustomBody'])
+            logger.error(f"Error adding chart {chart_path}: {e}")
+            error_para = Paragraph(f"[Chart not available: {chart_path}]", self.styles['CustomBody'])
             chart_elements.append(error_para)
         if chart_elements:
             elements.append(KeepTogether(chart_elements))
@@ -227,7 +227,7 @@ class PDFReportGenerator:
             section_elements.append(Spacer(1, 0.06 * inch))
         bullet_style = ParagraphStyle('BulletItem', parent=self.styles['CustomBody'], fontSize=9.5, leading=13, leftIndent=15, rightIndent=10, spaceBefore=6, spaceAfter=6, firstLineIndent=0, bulletIndent=5)
         for i, item in enumerate(items):
-            bullet_para = Paragraph(f'• {item}', bullet_style)
+            bullet_para = Paragraph(f"• {item}", bullet_style)
             section_elements.append(bullet_para)
             if i < len(items) - 1:
                 section_elements.append(Spacer(1, 0.06 * inch))
@@ -267,7 +267,7 @@ class PDFReportGenerator:
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(colors.HexColor('#A0A0A0'))
         canvas.drawString(doc.leftMargin, 35, 'Meridian Capital Group Confidential & Proprietary')
-        canvas.drawRightString(A4[0] - doc.rightMargin, 35, f'Page {doc.page}')
+        canvas.drawRightString(A4[0] - doc.rightMargin, 35, f"Page {doc.page}")
         canvas.restoreState()
 
     def generate_report(self, filename: str, title: str, subtitle: str, sections: List[Dict]) -> str:
@@ -284,7 +284,7 @@ class PDFReportGenerator:
             Path to generated PDF
         """
         logger.info('=' * 80)
-        logger.info(f'Generating PDF Report: {title}')
+        logger.info(f"Generating PDF Report: {title}")
         logger.info('=' * 80)
         output_path = self.output_dir / filename
         from reportlab.platypus import BaseDocTemplate, PageTemplate, Frame
@@ -371,7 +371,7 @@ class PDFReportGenerator:
                             section_elements.append(Spacer(1, 0.03 * inch))
                         for idx, item in enumerate(bullets_items):
                             if item and item.strip():
-                                bullet_para = Paragraph(f'• {item}', self.styles['CustomBody'])
+                                bullet_para = Paragraph(f"• {item}", self.styles['CustomBody'])
                                 section_elements.append(bullet_para)
                                 if idx < len(bullets_items) - 1:
                                     section_elements.append(Spacer(1, 0.06 * inch))
@@ -436,7 +436,7 @@ class PDFReportGenerator:
                             section_elements.append(Spacer(1, 0.03 * inch))
                         for idx, item in enumerate(bullets_items):
                             if item and item.strip():
-                                bullet_para = Paragraph(f'• {item}', self.styles['CustomBody'])
+                                bullet_para = Paragraph(f"• {item}", self.styles['CustomBody'])
                                 section_elements.append(bullet_para)
                                 if idx < len(bullets_items) - 1:
                                     section_elements.append(Spacer(1, 0.06 * inch))
@@ -560,7 +560,7 @@ class PDFReportGenerator:
                         subheading_elements.append(Spacer(1, 0.03 * inch))
                     for idx, item in enumerate(bullets_items):
                         if item and item.strip():
-                            bullet_para = Paragraph(f'• {item}', self.styles['CustomBody'])
+                            bullet_para = Paragraph(f"• {item}", self.styles['CustomBody'])
                             subheading_elements.append(bullet_para)
                             if idx < len(bullets_items) - 1:
                                 subheading_elements.append(Spacer(1, 0.06 * inch))
@@ -593,19 +593,19 @@ class PDFReportGenerator:
                 title = section.get('title', '')
                 content = section.get('content')
                 if title:
-                    title_para = Paragraph(f'<b>{title}</b>', self.styles['CustomBody'])
+                    title_para = Paragraph(f"<b>{title}</b>", self.styles['CustomBody'])
                     subsection_elements.append(title_para)
                     subsection_elements.append(Spacer(1, 0.05 * inch))
                 if content:
                     if isinstance(content, list):
                         for item in content:
                             if item and item.strip():
-                                bullet_para = Paragraph(f'• {item}', self.styles['CustomBody'])
+                                bullet_para = Paragraph(f"• {item}", self.styles['CustomBody'])
                                 subsection_elements.append(bullet_para)
                                 subsection_elements.append(Spacer(1, 0.04 * inch))
                     elif isinstance(content, dict):
                         for key, value in content.items():
-                            kv_para = Paragraph(f'<b>{key}:</b> {value}', self.styles['CustomBody'])
+                            kv_para = Paragraph(f"<b>{key}:</b> {value}", self.styles['CustomBody'])
                             subsection_elements.append(kv_para)
                             subsection_elements.append(Spacer(1, 0.04 * inch))
                     else:
@@ -622,15 +622,15 @@ class PDFReportGenerator:
                 title = scenario_data.get('title', '')
                 probability = scenario_data.get('probability', 0)
                 if name and title:
-                    header = f'{name}: {title} ({probability}% probability)'
-                    header_para = Paragraph(f'<b>{header}</b>', self.styles['CustomSubheading'])
+                    header = f"{name}: {title} ({probability}% probability)"
+                    header_para = Paragraph(f"<b>{header}</b>", self.styles['CustomSubheading'])
                     scenario_elements.append(header_para)
                     scenario_elements.append(Spacer(1, 0.08 * inch))
                 for key in ['gdp_growth', 'inflation', 'fed_policy', 'sp500_return', 'kospi_return']:
                     if key in scenario_data:
                         label = key.replace('_', ' ').title()
                         value = scenario_data[key]
-                        metric_para = Paragraph(f'<b>{label}:</b> {value}', self.styles['CustomBody'])
+                        metric_para = Paragraph(f"<b>{label}:</b> {value}", self.styles['CustomBody'])
                         scenario_elements.append(metric_para)
                         scenario_elements.append(Spacer(1, 0.03 * inch))
                 if 'drivers' in scenario_data:
@@ -639,7 +639,7 @@ class PDFReportGenerator:
                     scenario_elements.append(drivers_para)
                     scenario_elements.append(Spacer(1, 0.03 * inch))
                     for driver in scenario_data['drivers']:
-                        driver_para = Paragraph(f'• {driver}', self.styles['CustomBody'])
+                        driver_para = Paragraph(f"• {driver}", self.styles['CustomBody'])
                         scenario_elements.append(driver_para)
                         scenario_elements.append(Spacer(1, 0.03 * inch))
                 if scenario_elements:
@@ -647,12 +647,16 @@ class PDFReportGenerator:
                     story.append(Spacer(1, 0.15 * inch))
             elif section_type == 'scenario_summary':
                 summary_data = section.get('data', {})
-                summary_para = Paragraph(f'<b>Base Case Probability:</b> {summary_data.get('base_probability', 0)}% | <b>Expected Return:</b> {summary_data.get('expected_return', 'N/A')} | <b>Recommendation:</b> {summary_data.get('recommendation', 'N/A')}', self.styles['CustomBody'])
+                _bp_val = summary_data.get('base_probability', 0)
+                _er_val = summary_data.get('expected_return', 'N/A')
+                _rc_val = summary_data.get('recommendation', 'N/A')
+                summary_para = Paragraph(f"<b>Base Case Probability:</b> {_bp_val}% | <b>Expected Return:</b> {_er_val} | <b>Recommendation:</b> {_rc_val}", self.styles['CustomBody'])
                 story.append(summary_para)
                 story.append(Spacer(1, 0.1 * inch))
             elif section_type == 'decision_tree':
                 tree_data = section.get('data', {})
-                rec_para = Paragraph(f'<b>Primary Recommendation:</b> {tree_data.get('primary_recommendation', 'N/A')}', self.styles['CustomSubheading'])
+                _pr_rec = tree_data.get('primary_recommendation', 'N/A')
+                rec_para = Paragraph(f"<b>Primary Recommendation:</b> {_pr_rec}", self.styles['CustomSubheading'])
                 story.append(rec_para)
                 story.append(Spacer(1, 0.08 * inch))
                 if 'monitoring_indicators' in tree_data:
@@ -660,7 +664,7 @@ class PDFReportGenerator:
                     story.append(indicators_para)
                     story.append(Spacer(1, 0.05 * inch))
                     for indicator in tree_data['monitoring_indicators']:
-                        ind_para = Paragraph(f'• {indicator}', self.styles['CustomBody'])
+                        ind_para = Paragraph(f"• {indicator}", self.styles['CustomBody'])
                         story.append(ind_para)
                         story.append(Spacer(1, 0.03 * inch))
                 story.append(Spacer(1, 0.1 * inch))
@@ -683,8 +687,8 @@ class PDFReportGenerator:
             i += 1
         try:
             doc.build(story)
-            logger.info(f'✓ PDF report generated: {output_path}')
+            logger.info(f"✓ PDF report generated: {output_path}")
             return str(output_path)
         except Exception as e:
-            logger.error(f'Error generating PDF: {e}')
+            logger.error(f"Error generating PDF: {e}")
             return ''

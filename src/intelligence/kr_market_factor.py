@@ -30,7 +30,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 
@@ -99,7 +99,7 @@ class KRMarketFactorEngine:
             atomic_write_json((_RESULTS / 'kr_market_factor.json'), result, indent=2, ensure_ascii=False, default=str)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning("[SILENT_BYPASS] Suppressed exception at kr_market_factor.py:102", exc_info=True)
 
         logger.info(
@@ -214,5 +214,5 @@ class KRMarketFactorEngine:
             return json.loads((_RESULTS / 'signal_cache.json').read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {}

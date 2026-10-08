@@ -47,7 +47,7 @@ def _load_cb_configs_from_pipeline() -> Dict[str, DataSourceConfig]:
             raw = json.loads(cfg_path.read_text(encoding='utf-8'))
             cfg_cb = raw.get('circuit_breaker', {})
             if cfg_cb:
-                logger.debug(f'  CB 파라미터 로드: {cfg_path} ({len(cfg_cb)}개 소스)')
+                logger.debug(f"  CB 파라미터 로드: {cfg_path} ({len(cfg_cb)}개 소스)")
         except Exception as e:
             logger.warning(f'  CB config 로드 실패 ({e}) → 기본값 사용', exc_info=True)
     configs: Dict[str, DataSourceConfig] = {}
@@ -115,7 +115,7 @@ class CircuitBreaker:
                 if elapsed >= self.config.recovery_timeout_sec:
                     self.counter.state = CBState.HALF_OPEN
                     self.counter.success_count = 0
-                    logger.info(f'  [CB] {self.config.name}: OPEN → HALF_OPEN ({elapsed:.0f}초 경과)')
+                    logger.info(f"  [CB] {self.config.name}: OPEN → HALF_OPEN ({elapsed:.0f}초 경과)")
             return self.counter.state
 
     def is_available(self) -> bool:
@@ -129,7 +129,7 @@ class CircuitBreaker:
             (result, success: bool)
         """
         if not self.is_available():
-            logger.debug(f'  [CB OPEN] {self.config.name}: 차단 중 → fallback 사용')
+            logger.debug(f"  [CB OPEN] {self.config.name}: 차단 중 → fallback 사용")
             result = fallback() if fallback else None
             return (result, False)
         last_error = None
@@ -140,7 +140,7 @@ class CircuitBreaker:
                 return (result, True)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 last_error = e
                 self._on_failure(attempt, e)
                 if attempt < self.config.max_retries - 1:
@@ -149,7 +149,7 @@ class CircuitBreaker:
                     sleep_time = min(cap, base * 2 ** attempt)
                     sleep_time = random.uniform(0, sleep_time)
                     time.sleep(sleep_time)
-        logger.warning(f'  [CB] {self.config.name}: {self.config.max_retries}회 재시도 실패. 최종 오류: {type(last_error).__name__}: {last_error}')
+        logger.warning(f"  [CB] {self.config.name}: {self.config.max_retries}회 재시도 실패. 최종 오류: {type(last_error).__name__}: {last_error}")
         result = fallback() if fallback else None
         return (result, False)
 
@@ -159,19 +159,19 @@ class CircuitBreaker:
             if self.counter.state == CBState.HALF_OPEN:
                 self.counter.state = CBState.CLOSED
                 self.counter.failure_count = 0
-                logger.info(f'  ✅ [CB] {self.config.name}: HALF_OPEN → CLOSED (복구)')
+                logger.info(f"  ✅ [CB] {self.config.name}: HALF_OPEN → CLOSED (복구)")
 
     def _on_failure(self, attempt: int, error: Exception):
         with self.counter._lock:
             self.counter.record_failure()
             if self.counter.state == CBState.CLOSED and self.counter.failure_count >= self.config.failure_threshold:
                 self.counter.state = CBState.OPEN
-                logger.warning(f'  🔴 [CB] {self.config.name}: CLOSED → OPEN ({self.counter.failure_count}회 연속 실패)')
+                logger.warning(f"  🔴 [CB] {self.config.name}: CLOSED → OPEN ({self.counter.failure_count}회 연속 실패)")
             elif self.counter.state == CBState.HALF_OPEN:
                 self.counter.state = CBState.OPEN
-                logger.warning(f'  🔴 [CB] {self.config.name}: HALF_OPEN → OPEN (복구 실패)')
+                logger.warning(f"  🔴 [CB] {self.config.name}: HALF_OPEN → OPEN (복구 실패)")
             if attempt == 0:
-                logger.debug(f'  [CB] {self.config.name} 실패 #{self.counter.failure_count}: {type(error).__name__}')
+                logger.debug(f"  [CB] {self.config.name} 실패 #{self.counter.failure_count}: {type(error).__name__}")
 
 @dataclass
 class DataPoint:
@@ -311,7 +311,7 @@ class StalenessAwareCache:
                 dp.compute_quality(self.config)
                 if not dp.is_critical_stale:
                     self._cache[ticker] = dp
-            logger.debug(f'  디스크 캐시 복구({self.source_name}): {len(self._cache)}종목')
+            logger.debug(f"  디스크 캐시 복구({self.source_name}): {len(self._cache)}종목")
         except Exception as e:
             logger.error(f'  디스크 캐시 로드 실패({self.source_name}): {e}', exc_info=True)
 
@@ -367,12 +367,12 @@ class RealtimeDataBus:
         result, success = cb.call(_fetch, fallback=_fallback)
         if success and result is not None:
             dp = cache.set(ticker, result, source='live')
-            logger.debug(f'  외국인순매수({ticker}): {result.get('foreign_net', 0):+,.0f}원')
+            logger.debug(f"  외국인순매수({ticker}): {result.get('foreign_net', 0):+,.0f}원")
             return dp
         cached = cache.get(ticker)
         if cached:
             if cached.is_stale:
-                logger.debug(f'  ⚠️ 외국인순매수({ticker}): {cached.age_seconds() / 60:.0f}분 전 데이터 (quality={cached.quality:.2f})')
+                logger.debug(f"  ⚠️ 외국인순매수({ticker}): {cached.age_seconds() / 60:.0f}분 전 데이터 (quality={cached.quality:.2f})")
             return cached
         return None
 
@@ -401,7 +401,7 @@ class RealtimeDataBus:
         cached = cache.get(ticker)
         if cached and (not cached.is_critical_stale):
             return cached
-        logger.error(f'  ❌ 현재가({ticker}) 조회 완전 실패 — 거래 HALT 권고')
+        logger.error(f"  ❌ 현재가({ticker}) 조회 완전 실패 — 거래 HALT 권고")
         return None
 
     def get_orderbook(self, ticker: str) -> Optional[DataPoint]:
@@ -492,7 +492,7 @@ class RealtimeDataBus:
                 return {'foreign_net': float(latest.get('foreign_net', 0)), 'institutional_net': float(latest.get('inst_net', 0)), 'foreign_ratio': float(latest.get('foreign_ratio', 0)), 'fetched_method': 'ifc_cache'}
         except Exception as e:
             logger.warning(f'  suppressed: {e}', exc_info=True)
-        raise ConnectionError(f'{ticker} 외국인 순매수 조회 실패 (모든 소스)')
+        raise ConnectionError(f"{ticker} 외국인 순매수 조회 실패 (모든 소스)")
 
     def _fetch_institutional_flow_live(self, ticker: str) -> Optional[Dict]:
         """기관 순매수는 외국인 수집 시 같이 수집됨 — 외국인 캐시에서 추출."""
@@ -503,28 +503,21 @@ class RealtimeDataBus:
                 return {'institutional_net': inst, 'fetched_method': 'from_foreign'}
         except Exception as e:
             logger.warning(f'  suppressed: {e}', exc_info=True)
-        raise ConnectionError(f'{ticker} 기관 순매수 조회 실패')
+        raise ConnectionError(f"{ticker} 기관 순매수 조회 실패")
 
     def _fetch_price_live(self, ticker: str) -> Optional[Dict]:
         """현재가 조회 — KIS API."""
         try:
             from src.data_collection.kis_data_collector import KISDataCollector
             kis = KISDataCollector()
-            price = kis.get_current_price(ticker)
-            if price and price > 0:
-                return {'price': float(price), 'fetched_method': 'kis'}
+            res = kis.get_current_price(ticker)
+            price_val = float(res['price']) if isinstance(res, dict) and 'price' in res else (float(res) if res and not isinstance(res, dict) else 0.0)
+            if price_val > 0:
+                return {'price': price_val, 'fetched_method': 'kis'}
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
-        try:
-            import yfinance as yf
-            t = yf.Ticker(f'{ticker}.KS')
-            fast = t.fast_info
-            price = getattr(fast, 'last_price', None)
-            if price and price > 0:
-                return {'price': float(price), 'fetched_method': 'yfinance'}
-        except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
-        raise ConnectionError(f'{ticker} 현재가 조회 완전 실패')
+            logger.debug(f"  [RealtimeDataBus] KIS API 현재가 예외: {e}")
+        # KIS / KRX / Google Finance API 우선 참조
+        return None
 
     def _fetch_orderbook_live(self, ticker: str) -> Optional[Dict]:
         """호가잔량 조회 — KIS API."""
@@ -539,8 +532,8 @@ class RealtimeDataBus:
                     imbalance = (bid_total - ask_total) / (bid_total + ask_total + 1)
                     return {'bid_total': bid_total, 'ask_total': ask_total, 'imbalance': round(imbalance, 4), 'fetched_method': 'kis'}
         except Exception as e:
-            logger.debug(f'  [Orderbook Fallback] {e}')
-        raise ConnectionError(f'{ticker} 호가잔량 조회 실패')
+            logger.debug(f"  [Orderbook Fallback] {e}")
+        raise ConnectionError(f"{ticker} 호가잔량 조회 실패")
 
     def _fetch_program_trading_live(self) -> Optional[Dict]:
         """프로그램 매매 시장 전체 조회."""
@@ -614,5 +607,5 @@ def build_intraday_factor_weights(ticker: str, bus: Optional['RealtimeDataBus']=
     for k, w in normalized.items():
         base = base_weights.get(k, 0)
         if abs(w - base) > 0.05:
-            logger.info(f'  [팩터 가중치] {ticker} {k}: {base:.2f} → {w:.2f} (quality={qualities.get(k, 0):.2f})')
+            logger.info(f"  [팩터 가중치] {ticker} {k}: {base:.2f} → {w:.2f} (quality={qualities.get(k, 0):.2f})")
     return normalized

@@ -58,19 +58,19 @@ class GoogleTrendsCollector:
         """
         if self.pytrends is None:
             if self._init_error:
-                logger.error(f'Google Trends not available: {self._init_error}')
+                logger.error(f"Google Trends not available: {self._init_error}")
             else:
                 logger.error('Google Trends not available')
             return pd.DataFrame()
         try:
-            logger.info(f'Collecting Google Trends for {keywords}')
+            logger.info(f"Collecting Google Trends for {keywords}")
             timeframe = f'{start_date} {end_date}'
             self.pytrends.build_payload(keywords, cat=0, timeframe=timeframe, geo=geo, gprop='')
             data = self.pytrends.interest_over_time()
             if not data.empty:
                 if 'isPartial' in data.columns:
                     data = data.drop('isPartial', axis=1)
-                logger.info(f'✓ Collected {len(data)} records')
+                logger.info(f"✓ Collected {len(data)} records")
                 return data
             else:
                 logger.warning('No trend data available')
@@ -119,21 +119,23 @@ class AsianIndicesCollector:
         Returns:
             DataFrame with Japanese indices
         """
-        import yfinance as yf
+        from src.data_collection.google_finance_collector import GoogleFinanceCollector
         logger.info('Collecting Japanese indices...')
+        gfc = GoogleFinanceCollector()
         data_list = []
         for name, ticker in self.indices['Japan'].items():
             try:
-                df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                if not df.empty:
-                    df = df[['Close']].rename(columns={'Close': name})
+                q = gfc.fetch_quote(ticker)
+                p = q.get('price', 0) if q else 0
+                if p > 0:
+                    df = pd.DataFrame({name: [p]}, index=[pd.Timestamp.now()])
                     data_list.append(df)
-                    logger.info(f'  ✓ {name}: {len(df)} records')
+                    logger.info(f"  ✓ {name}: 1 record ({p})")
             except Exception as e:
                 logger.error(f'  ✗ {name}: {e}', exc_info=True)
         if data_list:
             combined = pd.concat(data_list, axis=1)
-            logger.info(f'✓ Collected {len(combined)} records for Japan')
+            logger.info(f"✓ Collected {len(combined)} records for Japan")
             return combined
         else:
             return pd.DataFrame()
@@ -149,21 +151,23 @@ class AsianIndicesCollector:
         Returns:
             DataFrame with Chinese indices
         """
-        import yfinance as yf
+        from src.data_collection.google_finance_collector import GoogleFinanceCollector
         logger.info('Collecting Chinese indices...')
+        gfc = GoogleFinanceCollector()
         data_list = []
         for name, ticker in self.indices['China'].items():
             try:
-                df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                if not df.empty:
-                    df = df[['Close']].rename(columns={'Close': name})
+                q = gfc.fetch_quote(ticker)
+                p = q.get('price', 0) if q else 0
+                if p > 0:
+                    df = pd.DataFrame({name: [p]}, index=[pd.Timestamp.now()])
                     data_list.append(df)
-                    logger.info(f'  ✓ {name}: {len(df)} records')
+                    logger.info(f"  ✓ {name}: 1 record ({p})")
             except Exception as e:
                 logger.error(f'  ✗ {name}: {e}', exc_info=True)
         if data_list:
             combined = pd.concat(data_list, axis=1)
-            logger.info(f'✓ Collected {len(combined)} records for China')
+            logger.info(f"✓ Collected {len(combined)} records for China")
             return combined
         else:
             return pd.DataFrame()
@@ -255,19 +259,20 @@ class AlternativeDataCollector:
         logger.info('  - Financial data providers (Bloomberg, Reuters)')
         return pd.DataFrame()
 if __name__ == '__main__':
+    from datetime import datetime, timedelta
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    start_date = '2024-01-01'
-    end_date = '2024-12-31'
+    end_date = datetime.now().strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
     trends_collector = GoogleTrendsCollector()
     if trends_collector.pytrends:
         trends = trends_collector.collect_economic_trends(start_date, end_date)
-        logger.info(f'\nCollected {len(trends)} trend categories')
+        logger.info(f"\nCollected {len(trends)} trend categories")
     asian_collector = AsianIndicesCollector()
     asian_data = asian_collector.collect_all_asian_indices(start_date, end_date)
-    logger.info(f'\nCollected Asian indices:')
+    logger.info(f"\nCollected Asian indices:")
     for country, data in asian_data.items():
         if not data.empty:
-            logger.info(f'  {country}: {len(data)} records')
+            logger.info(f"  {country}: {len(data)} records")
     alt_collector = AlternativeDataCollector()
     alt_collector.collect_port_traffic(start_date, end_date)
     alt_collector.collect_power_consumption(start_date, end_date, 'US')

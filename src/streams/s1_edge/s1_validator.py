@@ -230,12 +230,12 @@ class S1InclusionValidator:
                 recommendation = (
                     f'부트스트랩 진입 ({bootstrap_scale:.0%} 축소) — '
                     f'EV/슬리피지 양호, {self.min_trades}거래 누적 후 본 검증 전환 '
-                    f'(현재 {n_trades}거래 / {n_days}일)')
+                    f"(현재 {n_trades}거래 / {n_days}일)")
             else:
                 verdict = 'INSUFFICIENT_DATA'
                 recommendation = (
                     f'최소 {self.min_trades}거래 / {self.min_days}일 필요 '
-                    f'(현재 {n_trades}거래 / {n_days}일)')
+                    f"(현재 {n_trades}거래 / {n_days}일)")
         elif n_pass == n_total:
             verdict = 'GO'
             recommendation = '모든 기준 충족 — 편입 권장'
@@ -276,7 +276,7 @@ class S1InclusionValidator:
                 return json.loads(f.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return {}
         return {}
 
@@ -300,7 +300,7 @@ class S1InclusionValidator:
                 return raw.get('daily_returns', [])
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return []
         return []
 
@@ -312,7 +312,7 @@ class S1InclusionValidator:
                 return json.loads(f.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return {}
         return {}
 
@@ -325,7 +325,7 @@ class S1InclusionValidator:
             safe_json_write(f, result)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             atomic_write_json(f, result, ensure_ascii=False, indent=2)
 
 

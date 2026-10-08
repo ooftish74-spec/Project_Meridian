@@ -43,7 +43,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
 def _dcfg(key: str, default):
@@ -63,7 +63,7 @@ def _is_before_listing(target_date_str: str) -> bool:
         return req_date < _LISTING_DATE
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return False
 
 class SSETFFeatureEngine:
@@ -103,7 +103,7 @@ class SSETFFeatureEngine:
         if _is_before_listing(target_date):
             return self._zero_features()
         if target_ticker not in self._universe and intraday_data is None:
-            logger.debug(f'  SS-ETF: {target_ticker}는 단일종목 ETF 대상 아님 → 0 반환')
+            logger.debug(f"  SS-ETF: {target_ticker}는 단일종목 ETF 대상 아님 → 0 반환")
             return self._zero_features()
         if intraday_data is not None:
             row = pd.Series(intraday_data)
@@ -180,7 +180,7 @@ class SSETFFeatureEngine:
                 df_out[feat_name] = df_out[feat_name].fillna(0.0)
             else:
                 df_out[feat_name] = 0.0
-        logger.info(f'  SS-ETF merge: {len(df_ml)}행 → {len(df_out)}행, Features: {SS_ETF_FEATURE_NAMES}')
+        logger.info(f"  SS-ETF merge: {len(df_ml)}행 → {len(df_out)}행, Features: {SS_ETF_FEATURE_NAMES}")
         return df_out
 
     def get_historical_features(self, target_ticker: str, start_date: str, end_date: str=None) -> pd.DataFrame:

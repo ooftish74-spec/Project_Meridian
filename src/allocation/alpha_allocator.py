@@ -50,9 +50,14 @@ class AlphaAllocator:
         """레짐별 기본 배분 (DynamicConfig 동적 로드).
         S4(Advisory) 예산을 제외하고 S1, S2, S3, S5로 재분배.
         """
-        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10']
+        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER']
         regimes = ['bull', 'caution', 'bear', 'crash']
-        defaults = {'bull': {'S0': 0.15, 'S3': 0.5, 'S5': 0.15, 'S1': 0.05, 'S2': 0.1, 'S10': 0.05}, 'caution': {'S0': 0.0, 'S3': 0.4, 'S5': 0.35, 'S1': 0.05, 'S2': 0.1, 'S10': 0.1}, 'bear': {'S0': 0.1, 'S3': 0.2, 'S5': 0.4, 'S1': 0.05, 'S2': 0.15, 'S10': 0.1}, 'crash': {'S0': 0.3, 'S3': 0.0, 'S5': 0.4, 'S1': 0.05, 'S2': 0.15, 'S10': 0.1}}
+        defaults = {
+            'bull': {'S0': 0.25, 'S1': 0.30, 'S2': 0.20, 'S3': 0.10, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10},
+            'caution': {'S0': 0.20, 'S1': 0.25, 'S2': 0.20, 'S3': 0.15, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15},
+            'bear': {'S0': 0.25, 'S1': 0.30, 'S2': 0.15, 'S3': 0.05, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15},
+            'crash': {'S0': 0.30, 'S1': 0.30, 'S2': 0.10, 'S3': 0.00, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15}
+        }
         result = {}
         for regime in regimes:
             d = defaults[regime]
@@ -63,7 +68,8 @@ class AlphaAllocator:
         self._last_weights: Dict[str, float] = {}
         self._allocation_history: List[Dict] = []
         _cfg_streams = cfg.get('allocator.active_streams', None)
-        self.STREAMS = _cfg_streams or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10']
+        self.STREAMS = _cfg_streams or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER']
+        self.us_night_cap = cfg.get('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
 
     def compute_entry_score(self, signal: Dict, stream_id: str='unknown') -> Dict:
         """진입 필터 점수 계산 (병렬 가중합 구조).
@@ -102,7 +108,7 @@ class AlphaAllocator:
             if getattr(ks, '_prev_triggered', False):
                 result['hard_stop'] = True
                 result['hard_stop_reason'] = 'KillSwitch 발동 중'
-                logger.debug(f'  [EntryScore:{stream_id}] Hard Stop: KillSwitch')
+                logger.debug(f"  [EntryScore:{stream_id}] Hard Stop: KillSwitch")
                 return result
         except Exception as _ks_e:
             logger.critical(f'  [EntryScore] KillSwitch 로드 실패: {_ks_e}', exc_info=True)
@@ -120,8 +126,8 @@ class AlphaAllocator:
                 hard_stop_stage = int(cfg.get('filter.hard_stop_dd_stage', 5))
                 if dd_stage >= hard_stop_stage:
                     result['hard_stop'] = True
-                    result['hard_stop_reason'] = f'DrawdownGuard Stage {dd_stage}'
-                    logger.warning(f'  [EntryScore:{stream_id}] Hard Stop: DD Stage {dd_stage}')
+                    result['hard_stop_reason'] = f"DrawdownGuard Stage {dd_stage}"
+                    logger.warning(f"  [EntryScore:{stream_id}] Hard Stop: DD Stage {dd_stage}")
                     return result
         except Exception as _dg_e:
             logger.critical(f'  [EntryScore] DrawdownGuard 로드 실패: {_dg_e}', exc_info=True)
@@ -160,7 +166,7 @@ class AlphaAllocator:
             scale_max = float(cfg.get('filter.position_scale_max', 1.0))
             position_scale = min(scale_max, (entry_score - threshold) / max(1.0 - threshold, 1e-09))
             result['position_scale'] = round(position_scale, 4)
-        logger.debug(f'  [EntryScore:{stream_id}] score={entry_score:.3f} ({('✅ 허가' if result['entry_allowed'] else '❌ 거부')}) (IC={ic_score:.3f}, conf={conf_score:.3f}, regime={regime_score:.3f}, exp_ret={exp_ret_score:.3f})')
+        logger.debug(f"  [EntryScore:{stream_id}] score={entry_score:.3f} ({('✅ 허가' if result['entry_allowed'] else '❌ 거부')}) (IC={ic_score:.3f}, conf={conf_score:.3f}, regime={regime_score:.3f}, exp_ret={exp_ret_score:.3f})")
         return result
 
     def allocate(self, stream_metrics: Dict, regime: str='caution', market_data: Dict=None, s0_sigs: List[Dict]=None) -> Dict[str, float]:
@@ -182,13 +188,43 @@ class AlphaAllocator:
         ev_scores = {}
         for sid in self.STREAMS:
             metrics = (stream_metrics or {}).get(sid, {})
-            p_win = float(metrics.get('win_rate', metrics.get('p_win', 0.50)))
-            reward = float(metrics.get('avg_win', metrics.get('expected_return', 0.02)))
-            risk = float(metrics.get('avg_loss', metrics.get('volatility', 0.01)))
-            if risk <= 0:
-                risk = 0.01
+            if not metrics:
+                if sid == 'S10':
+                    metrics = (stream_metrics or {}).get('S10_MEGA_TREND', {})
+                elif sid == 'S10_MEGA_TREND':
+                    metrics = (stream_metrics or {}).get('S10', {})
+            import math
+            p_win = float(metrics.get('win_rate', metrics.get('p_win', 0.50)) or 0.50)
+            reward = float(metrics.get('avg_win', metrics.get('expected_return', 0.02)) or 0.02)
+            risk = float(metrics.get('avg_loss', metrics.get('volatility', 0.01)) or 0.01)
+            if math.isnan(p_win): p_win = 0.50
+            if math.isnan(reward): reward = 0.02
+            if math.isnan(risk) or risk <= 0: risk = 0.01
             # Expected Value: EV = p * Reward - (1 - p) * Risk
             ev = p_win * reward - (1.0 - p_win) * risk
+            if math.isnan(ev): ev = 0.0
+
+            # 🚀 [GapDriftAlphaEngine] Renaissance / Citadel Bayesian Continuous Prior Update
+            if sid == 'S1':
+                signal_cache = (market_data or {}).get('signal_cache', {})
+                ois = float(signal_cache.get('ois', 50.0) or 50.0)
+                if ois > 0:
+                    prior_boost = round(((ois - 50.0) / 100.0) * float(reward), 4)
+                    ev += prior_boost
+                    logger.info(f"  🚀 [GapDriftAlphaEngine] S1 Bayesian Continuous Prior Boost: {prior_boost:+.4f} (OIS={ois:.1f})")
+
+            # 🚀 [CorporateActionProxyEngine] Mega-Cap DART Corporate Action Proxy Boost
+            try:
+                from src.intelligence.corporate_action_proxy_engine import CorporateActionProxyEngine
+                dart_feats = (market_data or {}).get('dart_features', {})
+                proxy_boosts = CorporateActionProxyEngine.evaluate_proxy_boost(dart_feats)
+                if sid in ('S1', 'S11') and proxy_boosts:
+                    max_p_boost = max(proxy_boosts.values())
+                    ev += max_p_boost
+                    logger.info(f"  🚀 [CorporateActionProxy] {sid} Proxy Boost applied: +{max_p_boost:.4f}")
+            except Exception as _p_e:
+                pass
+
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
 
@@ -196,25 +232,43 @@ class AlphaAllocator:
         best_stream = max(ev_scores, key=ev_scores.get) if ev_scores else 'S1'
         best_ev = ev_scores.get(best_stream, 0.0)
 
-        # 100% 몰아주기 또는 Softmax EV 유연 분할 배분
-        use_softmax = cfg.get('allocator.use_softmax_ev', False)
+        # 100% 몰아주기 또는 Softmax EV 유연 분할 배분 (기본값 True로 승자독식 독점 타파)
+        use_softmax = cfg.get('allocator.use_softmax_ev', True)
         final_weights = {sid: 0.0 for sid in self.STREAMS}
+
+        # [Offensive Decision Model 4] Continuous Volatility-Contracted Offense Multiplier
+        vix_val = float((market_data or {}).get('signal_cache', {}).get('vix', 18.0) or 18.0)
+        vix_neutral = float((market_data or {}).get('vix_neutral', 18.0) or 18.0)
+        if regime == 'bull' and vix_val < vix_neutral and vix_val > 0:
+            golden_bull_mult = round(1.0 + min(0.30, max(0.0, (vix_neutral - vix_val) / vix_neutral * 0.5)), 4)
+            logger.info(f"  🚀 [Golden Bull Offense Multiplier] Regime={regime}, VIX={vix_val:.1f} < {vix_neutral:.1f} ➔ {golden_bull_mult}x 동적 자본 승수 적용!")
+        else:
+            golden_bull_mult = 1.0
 
         if use_softmax:
             import math
-            temp = float(cfg.get('allocator.softmax_temperature', 0.005))
-            exp_evs = {k: math.exp(v / temp) for k, v in ev_scores.items()}
-            total_exp = sum(exp_evs.values())
-            final_weights = {k: round(v / total_exp, 4) for k, v in exp_evs.items()}
-            logger.info(f"  📊 [Competitive EV Softmax] 유연 분할 배분 확정: {final_weights}")
+            temp = max(float(cfg.get('allocator.softmax_temperature', 0.005)), 1e-4)
+            max_ev = max(ev_scores.values()) if ev_scores else 0.0
+            exp_evs = {k: math.exp((v - max_ev) / temp) for k, v in ev_scores.items()}
+            total_exp = max(sum(exp_evs.values()), 1e-9)
+            final_weights = {k: round((v / total_exp) * golden_bull_mult, 4) for k, v in exp_evs.items()}
+            logger.info(f"  📊 [Competitive EV Softmax] 유연 분할 배분 확정 (Golden Multiplier={golden_bull_mult}x): {final_weights}")
         elif best_ev > 0:
-            final_weights[best_stream] = 1.0
-            logger.info(f"  🏆 [Competitive EV Winner-Take-All] 우위 전략 {best_stream} 선택 (EV = {best_ev:+.5f}) → 100% 몰아주기 배분 확정")
+            final_weights[best_stream] = round(1.0 * golden_bull_mult, 4)
+            logger.info(f"  🏆 [Competitive EV Winner-Take-All] 우위 전략 {best_stream} 선택 (EV = {best_ev:+.5f}) → 100% 몰아주기 배분 확정 (Golden Mult={golden_bull_mult}x)")
         else:
-            # 모든 전략 EV <= 0 인 경우 안전 자산 S0 (현금/베타 헷지)로 100% 몰아주기
             fallback_stream = 'S0' if 'S0' in self.STREAMS else self.STREAMS[0]
             final_weights[fallback_stream] = 1.0
             logger.warning(f"  ⚠️ [Competitive EV Safety] 모든 전략 EV <= 0 → 안전 자산({fallback_stream}) 100% 현금 파킹 배분")
+
+        # [Pure Dynamic Math Architecture] 고정 15% 하드코딩 오버라이드 전면 폐지
+        # S0~S13 모든 스트림의 비중은 순수 Softmax EV(기대값, 승률, 손익비, 노이즈 온도)의 수학적 계산 결과에만 100% 종속됩니다.
+
+        total_w = sum(final_weights.values())
+        if total_w > 0:
+            target_sum = golden_bull_mult if golden_bull_mult > 1.0 else 1.0
+            final_weights = {k: round((v / total_w) * target_sum, 4) for k, v in final_weights.items()}
+
         min_weight = cfg.get('allocator.min_stream_weight', 0.0)
         stream_signals = stream_metrics.get('_stream_signals')
         if stream_signals:
@@ -232,10 +286,10 @@ class AlphaAllocator:
                 log_event('ALLOCATION', {'weights': final_weights, 'regime': regime, 'trigger': 'rebalance', 'method': 'competitive_ev_winner_take_all'}, source='alpha_allocator')
             except Exception as _e0:
                 logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
-            logger.info(f'  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})')
+            logger.info(f"  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})")
         try:
             _micro_bound = set(cfg.get('allocator.micro_bound_streams', ['S1', 'S2']))
-            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound))
+            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound and sid not in ('S5', 'S_YIELD')))
             _crowding_active = False
             try:
                 import json as _json
@@ -249,7 +303,7 @@ class AlphaAllocator:
                         _crowding_active = True
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.critical('[SILENT_BYPASS] Suppressed exception at alpha_allocator.py:450', exc_info=True)
             _in_macro_defense = _crowding_active or regime in ('bear', 'crash', 'caution')
             if _in_macro_defense:
@@ -270,12 +324,17 @@ class AlphaAllocator:
                     for _sid in _micro_bound:
                         if _sid in final_weights:
                             final_weights[_sid] = round(final_weights[_sid] + _micro_boost / max(1, len(_micro_bound)), 4)
-                    logger.info(f'  [Phase 76 TwoTrack] MICRO 보호: S1/S2 비중 유지 (regime={regime} crowding={_crowding_active})')
+                    _remaining_defense = _freed - _micro_boost
+                    if 'S5' in final_weights:
+                        final_weights['S5'] = round(final_weights['S5'] + _remaining_defense, 4)
+                    logger.info(f"  [Phase 76 TwoTrack] MICRO 보호 및 S5 방어 파킹 증액: regime={regime}, crowding={_crowding_active}")
                 else:
                     for _sid in _micro_bound:
                         if _sid in final_weights:
                             final_weights[_sid] = 0.0
-                    logger.warning(f'  [Phase 76 TwoTrack] MICRO HALT: {_micro_reason}')
+                    if 'S5' in final_weights:
+                        final_weights['S5'] = round(final_weights['S5'] + _freed, 4)
+                    logger.warning(f"  [Phase 76 TwoTrack] MICRO HALT: {_micro_reason} -> 전액 S5 현금 파킹 전환")
                 _total = sum(final_weights.values())
                 if _total > 0:
                     final_weights = {k: round(v / _total, 4) for k, v in final_weights.items()}
@@ -294,7 +353,7 @@ class AlphaAllocator:
                 _mean_dir = sum(_directions) / len(_directions)
                 _avg_corr = abs(_mean_dir)
                 if _avg_corr > _corr_alert:
-                    logger.warning(f'  📊 [CORR_BREAKDOWN] 스트림 포지션 쏠림 발생 (방향성={_avg_corr:.2f} > {_corr_alert:.2f}) — S1/S2/S3 배분 {_corr_scale:.0%} 축소 적용')
+                    logger.warning(f"  📊 [CORR_BREAKDOWN] 스트림 포지션 쏠림 발생 (방향성={_avg_corr:.2f} > {_corr_alert:.2f}) — S1/S2/S3 배분 {_corr_scale:.0%} 축소 적용")
                     for _sid in _monitor_streams:
                         if _sid in final_weights:
                             final_weights[_sid] = round(final_weights[_sid] * _corr_scale, 4)
@@ -314,7 +373,7 @@ class AlphaAllocator:
                 final_weights['S1'] = _s1_reduced
                 if 'S5' in final_weights:
                     final_weights['S5'] = round(final_weights['S5'] + _s1_freed, 4)
-                logger.warning(f'  [Capacity-Aware] AUM ₩{_aum / 1000000000.0:.1f}B > 임계 ₩{_s1_cap_thr / 1000000000.0:.1f}B → S1 {_s1_orig:.1%} → {_s1_reduced:.1%} (해제분 {_s1_freed:.1%} → S5 이관)')
+                logger.warning(f"  [Capacity-Aware] AUM ₩{_aum / 1000000000.0:.1f}B > 임계 ₩{_s1_cap_thr / 1000000000.0:.1f}B → S1 {_s1_orig:.1%} → {_s1_reduced:.1%} (해제분 {_s1_freed:.1%} → S5 이관)")
                 _cap_total = sum(final_weights.values())
                 if _cap_total > 0:
                     final_weights = {k: round(v / _cap_total, 4) for k, v in final_weights.items()}
@@ -358,7 +417,7 @@ class AlphaAllocator:
                 return weights
             penalty_triggered = float(wr_5d) < wr_threshold or (ic_5d is not None and float(ic_5d) < ic_threshold)
             if not penalty_triggered:
-                logger.info(f'  [Phase 40] S2 Auto-Fallback: 정상 (WR={wr_5d:.1%}, IC={ic_5d})')
+                logger.info(f"  [Phase 40] S2 Auto-Fallback: 정상 (WR={wr_5d:.1%}, IC={ic_5d})")
                 return weights
             weights = dict(weights)
             s2_keys = [k for k in weights if k.upper().startswith('S2')]
@@ -387,7 +446,7 @@ class AlphaAllocator:
             total_w = sum(weights.values())
             if total_w > 0:
                 weights = {k: v / total_w for k, v in weights.items()}
-            logger.warning(f'  ⚠️ [Phase 40] S2 Auto-Fallback 발동! WR={wr_5d:.1%}, IC={ic_5d}, 잉여 {total_surplus:.3f} → S3 이관. 조정 weights={weights}')
+            logger.warning(f"  ⚠️ [Phase 40] S2 Auto-Fallback 발동! WR={wr_5d:.1%}, IC={ic_5d}, 잉여 {total_surplus:.3f} → S3 이관. 조정 weights={weights}")
             try:
                 from src.measurement.event_ledger import log_event
                 log_event('S2_FALLBACK', {'wr_5d': wr_5d, 'ic_5d': ic_5d, 'surplus_transferred': total_surplus, 'new_weights': weights}, source='alpha_allocator')
@@ -427,7 +486,7 @@ class AlphaAllocator:
                                 total_w = sum(weights.values())
                                 if total_w > 0:
                                     weights = {k: v / total_w for k, v in weights.items()}
-                                logger.info(f'  [AlphaAllocator] 🚀 Dynamic Kelly Upscaling 발동! (S2 WR={wr_5d:.1%}). 방어 예산 {take_ratio:.3f} 회수하여 S2 집중 (weights={weights})')
+                                logger.info(f"  [AlphaAllocator] 🚀 Dynamic Kelly Upscaling 발동! (S2 WR={wr_5d:.1%}). 방어 예산 {take_ratio:.3f} 회수하여 S2 집중 (weights={weights})")
         except Exception as e:
             logger.critical(f'  [AlphaAllocator] Kelly Upscaling 에러 무시: {e}', exc_info=True)
         if s0_sigs and any((s.get('trigger_cash_sweep', False) for s in s0_sigs)):
@@ -477,7 +536,7 @@ class AlphaAllocator:
                 current_total_sweep += take
                 needed_sweep -= take
                 if take > 0:
-                    logger.info(f'  🌊 [Waterfall Tier 1] 무위험 파킹(S5)에서 {take:.1%} 징발 완료 (S5 잔여={weights['S5']:.1%})')
+                    logger.info(f"  🌊 [Waterfall Tier 1] 무위험 파킹(S5)에서 {take:.1%} 징발 완료 (S5 잔여={weights['S5']:.1%})")
             if needed_sweep > 0:
                 competition_candidates = []
                 for sid in weights:
@@ -501,13 +560,13 @@ class AlphaAllocator:
                         break
                     hurdle = exp_ret + friction_buffer
                     if s0_expected_return <= hurdle:
-                        logger.info(f'  🛡️ [Waterfall Tier 2] {sid} 징발 스킵 — S0 기대수익률({s0_expected_return:.2%}) ≤ {sid} 기대수익률({exp_ret:.2%}) + 마찰비용({friction_buffer:.2%}) = 허들({hurdle:.2%})')
+                        logger.info(f"  🛡️ [Waterfall Tier 2] {sid} 징발 스킵 — S0 기대수익률({s0_expected_return:.2%}) ≤ {sid} 기대수익률({exp_ret:.2%}) + 마찰비용({friction_buffer:.2%}) = 허들({hurdle:.2%})")
                         continue
                     take = min(current_weight, needed_sweep)
                     weights[sid] -= take
                     current_total_sweep += take
                     needed_sweep -= take
-                    logger.warning(f'  🚨 [Waterfall Tier 2] S0 기대수익률({s0_expected_return:.2%})이 {sid} 기대수익률({exp_ret:.2%}) + 마찰비용({friction_buffer:.2%}) = 허들({hurdle:.2%})을 압도하여 {sid}에서 {take:.1%} 자본 징발')
+                    logger.warning(f"  🚨 [Waterfall Tier 2] S0 기대수익률({s0_expected_return:.2%})이 {sid} 기대수익률({exp_ret:.2%}) + 마찰비용({friction_buffer:.2%}) = 허들({hurdle:.2%})을 압도하여 {sid}에서 {take:.1%} 자본 징발")
             if 'S0' in weights:
                 weights['S0'] += current_total_sweep
             else:
@@ -516,7 +575,7 @@ class AlphaAllocator:
             if total_w > 0:
                 weights = {k: round(v / total_w, 4) for k, v in weights.items()}
             shortfall = max(0.0, target_sweep_ratio - current_total_sweep)
-            logger.warning(f'  🏁 [Waterfall 완료] S0 Beta 베팅에 {current_total_sweep:.1%} 투입 (목표={target_sweep_ratio:.1%}, 미달={shortfall:.1%}, 마찰버퍼={friction_buffer:.2%})')
+            logger.warning(f"  🏁 [Waterfall 완료] S0 Beta 베팅에 {current_total_sweep:.1%} 투입 (목표={target_sweep_ratio:.1%}, 미달={shortfall:.1%}, 마찰버퍼={friction_buffer:.2%})")
         except Exception as e:
             logger.critical(f'  [AlphaAllocator] 폭포수 현금화(Waterfall Cash Sweep) 에러: {e}', exc_info=True)
         return weights
@@ -561,7 +620,7 @@ class AlphaAllocator:
             if prob_fc > 0.0 or prob_rec > 0.0 or prob_lr > 0.0 or (prob_recovery > 0.0):
                 if prob_fc > 0.5:
                     fc_alloc = 0.2 * prob_fc
-                    logger.info(f'  [AlphaAllocator] Probabilistic Flash Crash (P={prob_fc:.2f}) 감지! 🔫 Sniper Mode (S1 += {fc_alloc:.2f})')
+                    logger.info(f"  [AlphaAllocator] Probabilistic Flash Crash (P={prob_fc:.2f}) 감지! 🔫 Sniper Mode (S1 += {fc_alloc:.2f})")
                     base['S1'] = base.get('S1', 0.0) + fc_alloc
                     if 'S5' in base:
                         base['S5'] = max(0.0, base['S5'] - fc_alloc / 2)
@@ -569,21 +628,21 @@ class AlphaAllocator:
                         base['S7'] = max(0.0, base['S7'] - fc_alloc / 2)
                 if prob_rec > 0.5:
                     rec_cash_alloc = 0.3 * prob_rec
-                    logger.info(f'  [AlphaAllocator] Probabilistic Recession (P={prob_rec:.2f}) 감지! 🛡️ 구조적 침체 대비 현금화 (S5 += {rec_cash_alloc:.2f})')
+                    logger.info(f"  [AlphaAllocator] Probabilistic Recession (P={prob_rec:.2f}) 감지! 🛡️ 구조적 침체 대비 현금화 (S5 += {rec_cash_alloc:.2f})")
                     base['S1'] = 0.0
                     if 'S3_A' in base:
                         base['S3_A'] = max(0.0, base['S3_A'] - 0.1)
                     base['S5'] = base.get('S5', 0.0) + rec_cash_alloc
                 if prob_lr > 0.5:
                     lr_cash_alloc = 0.15 * prob_lr
-                    logger.info(f'  [AlphaAllocator] Probabilistic Liquidity Rally (P={prob_lr:.2f}) 감지! 🚨 가치주 함정 (S5 += {lr_cash_alloc:.2f})')
+                    logger.info(f"  [AlphaAllocator] Probabilistic Liquidity Rally (P={prob_lr:.2f}) 감지! 🚨 가치주 함정 (S5 += {lr_cash_alloc:.2f})")
                     if 'S2' in base:
                         base['S2'] = max(0.0, base['S2'] - lr_cash_alloc)
                     base['S5'] = base.get('S5', 0.0) + lr_cash_alloc
                 uncertainty = 1.0 - max(prob_fc, prob_rec, prob_lr, prob_recovery, 0.0)
                 if uncertainty > 0.4:
                     _uncertainty_add = float(_cfg.get('allocator.prob_uncertainty_cash_add', 0.1))
-                    logger.info(f'  [AlphaAllocator] High Uncertainty (U={uncertainty:.2f}) 🌫️ 국면 불확실, 현금 비중 {_uncertainty_add * 100:.0f}% 추가 확보')
+                    logger.info(f"  [AlphaAllocator] High Uncertainty (U={uncertainty:.2f}) 🌫️ 국면 불확실, 현금 비중 {_uncertainty_add * 100:.0f}% 추가 확보")
                     base['S5'] = base.get('S5', 0.0) + _uncertainty_add
             else:
                 divergence_state = market_data.get('divergence_state')
@@ -716,10 +775,10 @@ class AlphaAllocator:
                 max_proba = max((float(sig.get('confidence') or sig.get('predict_proba') or 0) for sig in signals), default=0.0)
                 if max_proba >= proba_threshold:
                     cap = cap_extreme
-                    logger.info(f'  [Phase 17] Kelly S2: proba={max_proba:.2f} ≥ {proba_threshold} → 극단 고확신 캡 {cap:.0%}')
+                    logger.info(f"  [Phase 17] Kelly S2: proba={max_proba:.2f} ≥ {proba_threshold} → 극단 고확신 캡 {cap:.0%}")
                 elif max_proba >= proba_threshold - cfg.get('kelly.s2_proba_high_band', 0.05):
                     cap = cap_high_conv
-                    logger.info(f'  [Phase 17] Kelly S2: proba={max_proba:.2f} → 고확신 캡 {cap:.0%}')
+                    logger.info(f"  [Phase 17] Kelly S2: proba={max_proba:.2f} → 고확신 캡 {cap:.0%}")
                 else:
                     cap = cap_normal
                 return cap
@@ -729,7 +788,7 @@ class AlphaAllocator:
                 cap_normal = cfg.get('kelly.s3_cap_normal', 0.05)
                 max_z = max((float(sig.get('momentum_z') or sig.get('z_score') or 0) for sig in signals), default=0.0)
                 if max_z >= z_threshold:
-                    logger.info(f'  [Phase 17] Kelly S3: z={max_z:.2f} ≥ {z_threshold} → 모멘텀 강세 캡 {cap_momentum:.0%}')
+                    logger.info(f"  [Phase 17] Kelly S3: z={max_z:.2f} ≥ {z_threshold} → 모멘텀 강세 캡 {cap_momentum:.0%}")
                     return cap_momentum
                 return cap_normal
             else:
@@ -754,10 +813,10 @@ class AlphaAllocator:
             effective_cap = max((_get_dynamic_cap(exp_sid, stream_signals.get(exp_sid, [])) for exp_sid, _ in exposures))
             if total_exp <= effective_cap:
                 if effective_cap > cfg.get('allocator.max_single_asset_exposure', 0.05):
-                    logger.info(f'  [Phase 17] Kelly 캡 해제: {underlying} = {total_exp:.2%} ≤ 동적캡 {effective_cap:.2%} (허용)')
+                    logger.info(f"  [Phase 17] Kelly 캡 해제: {underlying} = {total_exp:.2%} ≤ 동적캡 {effective_cap:.2%} (허용)")
                 continue
             excess = total_exp - effective_cap
-            logger.warning(f'  ⚠️ 단일자산 초과: {underlying} = {total_exp:.2%} (동적캡 {effective_cap:.2%}, 초과 {excess:.2%})')
+            logger.warning(f"  ⚠️ 단일자산 초과: {underlying} = {total_exp:.2%} (동적캡 {effective_cap:.2%}, 초과 {excess:.2%})")
             _priority = cfg.get('allocator.stream_priority', self._STREAM_PRIORITY_DEFAULT)
             sorted_exp = sorted(exposures, key=lambda x: _priority.get(x[0], 0))
             remaining_excess = excess
@@ -770,7 +829,7 @@ class AlphaAllocator:
                     new_scale = scale_factors[exp_sid] * (1.0 - reduction_ratio)
                     scale_factors[exp_sid] = max(0.0, new_scale)
                     remaining_excess -= reducible
-                    logger.info(f'    → {exp_sid} 축소: {underlying} 기여 {exp_contrib:.2%} → {exp_contrib - reducible:.2%} (스케일 {scale_factors[exp_sid]:.3f})')
+                    logger.info(f"    → {exp_sid} 축소: {underlying} 기여 {exp_contrib:.2%} → {exp_contrib - reducible:.2%} (스케일 {scale_factors[exp_sid]:.3f})")
         any_scaled = any((sf < 1.0 for sf in scale_factors.values()))
         if not any_scaled:
             return weights
@@ -778,7 +837,7 @@ class AlphaAllocator:
         total = sum(adjusted.values())
         if total > 0:
             adjusted = {sid: round(w / total, 4) for sid, w in adjusted.items()}
-        logger.info(f'  📊 [Phase 17] Kelly 동적 단일자산 제한: {weights} → {adjusted} (스케일: {scale_factors})')
+        logger.info(f"  📊 [Phase 17] Kelly 동적 단일자산 제한: {weights} → {adjusted} (스케일: {scale_factors})")
         return adjusted
 
     def _enforce_sector_limits(self, weights: Dict[str, float], stream_signals: Dict[str, List[Dict]]) -> Dict[str, float]:
@@ -809,7 +868,7 @@ class AlphaAllocator:
             if total_exp <= max_cap:
                 continue
             excess = total_exp - max_cap
-            logger.warning(f'  🛡️ 섹터 쏠림 감지: [{sector}] = {total_exp:.2%} (한도 {max_cap:.2%}, 초과 {excess:.2%})')
+            logger.warning(f"  🛡️ 섹터 쏠림 감지: [{sector}] = {total_exp:.2%} (한도 {max_cap:.2%}, 초과 {excess:.2%})")
             _priority = cfg.get('allocator.stream_priority', self._STREAM_PRIORITY_DEFAULT)
             sorted_exp = sorted(exposures, key=lambda x: _priority.get(x[0], 0))
             remaining_excess = excess
@@ -823,7 +882,7 @@ class AlphaAllocator:
                     scale_factors[exp_sid] = max(0.0, new_scale)
                     remaining_excess -= reducible
                     cash_sweep_addition += reducible
-                    logger.info(f'    → {exp_sid} 축소: {sector} 섹터 오버웨이트 방지')
+                    logger.info(f"    → {exp_sid} 축소: {sector} 섹터 오버웨이트 방지")
         any_scaled = any((sf < 1.0 for sf in scale_factors.values()))
         if not any_scaled:
             return weights
@@ -833,7 +892,7 @@ class AlphaAllocator:
         total = sum(adjusted.values())
         if total > 0:
             adjusted = {sid: round(w / total, 4) for sid, w in adjusted.items()}
-        logger.info(f'  📊 섹터 중립화 적용 완료. S5 현금 전환 = +{cash_sweep_addition:.2%}')
+        logger.info(f"  📊 섹터 중립화 적용 완료. S5 현금 전환 = +{cash_sweep_addition:.2%}")
         return adjusted
 
     def _apply_sentiment_penalty(self, stream_signals: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
@@ -856,15 +915,85 @@ class AlphaAllocator:
                     continue
                 sentiment = alt_bridge.fetch_sentiment_score(ticker)
                 if sentiment < 0.2:
-                    logger.warning(f'  🔻 감성 악화 (Sentiment={sentiment:.2f}): {ticker} 편입 제외')
+                    logger.warning(f"  🔻 감성 악화 (Sentiment={sentiment:.2f}): {ticker} 편입 제외")
                     continue
                 elif sentiment < 0.4:
                     penalty_ratio = cfg.get('allocation.penalty_ratio', 0.5)
                     sig['size_pct'] = sig.get('size_pct', 0) * penalty_ratio
                     if sig['size_pct'] > 0:
-                        logger.info(f'  ⚠️ 감성 주의 (Sentiment={sentiment:.2f}): {ticker} 비중 50% 축소')
+                        logger.info(f"  ⚠️ 감성 주의 (Sentiment={sentiment:.2f}): {ticker} 비중 50% 축소")
                         valid_signals.append(sig)
                 else:
                     valid_signals.append(sig)
             modified_signals[sid] = valid_signals
         return modified_signals
+
+    def compute_global_market_weights(self, krx_metrics: Dict, us_metrics: Dict, regime: str = 'caution') -> Dict[str, float]:
+        """[User Directive 2: Global Unified Capital Allocation Engine]
+
+        국장(KRX)과 미장(US) 자금을 50:50 고정하지 않고,
+        전체 NAV(100%) 관점에서 양 시장의 기대값($EV$) 및 Sharpe 비율에 따라
+        자금을 동적으로 배분(Softmax / Risk Parity Hybrid)합니다.
+        """
+        try:
+            ev_krx = float(krx_metrics.get('expected_return', 0.01)) / max(0.001, float(krx_metrics.get('volatility', 0.015)))
+            ev_us = float(us_metrics.get('expected_return', 0.02)) / max(0.001, float(us_metrics.get('volatility', 0.015)))
+
+            tau = cfg.get('allocator.global_softmax_temperature', 0.5)
+            exp_krx = math.exp(min(10.0, max(-10.0, ev_krx / tau)))
+            exp_us  = math.exp(min(10.0, max(-10.0, ev_us / tau)))
+
+            w_krx = exp_krx / (exp_krx + exp_us)
+            w_us = 1.0 - w_krx
+
+            # 레짐별 캡 제약 (DynamicConfig에서 로드)
+            max_single_mkt = cfg.get('allocator.global_max_single_market_weight', 0.85)
+            min_single_mkt = cfg.get('allocator.global_min_single_market_weight', 0.15)
+
+            w_krx = max(min_single_mkt, min(max_single_mkt, w_krx))
+            w_us = 1.0 - w_krx
+
+            logger.info(f"🌐 [Global Capital Allocator] NAV 배분: KRX {w_krx*100:.1f}% | US {w_us*100:.1f}% (EV_KRX={ev_krx:.2f}, EV_US={ev_us:.2f})")
+            return {'w_krx': round(w_krx, 4), 'w_us': round(w_us, 4)}
+        except Exception as e:
+            logger.warning(f"⚠️ Global Capital Allocator 계산 예외: {e}")
+            return {'w_krx': 0.5, 'w_us': 0.5}
+
+    def compute_unified_factor_score(self, signal: Dict[str, Any], market_data: Optional[Dict[str, Any]] = None) -> float:
+        """[Stage 2: Unified Multi-Factor Scoring Engine]
+        
+        대표님 승인 4대 첨단 공격 모델(옵션 스큐, 수급 불균형, 어닝 서프라이즈)을
+        독립적 누더기 신호가 아닌 단일 팩터 점수(Q_unified)로 유기적 융합(Harmonize)합니다.
+        
+        수식:
+          Q_unified = w1*Q_base + w2*Z_skew + w3*Z_flow + w4*Z_earnings
+        """
+        if market_data is None:
+            market_data = signal.get('market_data', {}) or {}
+            
+        w_qvm = cfg.get('allocator.weight_qvm', 0.40) or 0.40
+        w_skew = cfg.get('allocator.weight_option_skew', 0.20) or 0.20
+        w_flow = cfg.get('allocator.weight_flow_imbalance', 0.20) or 0.20
+        w_earn = cfg.get('allocator.weight_earnings_surprise', 0.20) or 0.20
+        
+        # 1. Base Factor Quality Score (QVM / ML score)
+        base_q = float(signal.get('confidence', signal.get('qvm_score', 0.50)))
+        
+        # 2. Option Skew Score (Gaussian Standard Normal CDF)
+        z_skew = float(market_data.get('option_skew_z', market_data.get('skewness', 0.0)))
+        skew_score = 0.5 * (1.0 + math.erf(z_skew / math.sqrt(2.0)))
+        
+        # 3. Institutional Flow Imbalance Score (Gaussian Standard Normal CDF)
+        z_flow = float(market_data.get('flow_zscore', market_data.get('net_flow_z', 0.0)))
+        flow_score = 0.5 * (1.0 + math.erf(z_flow / math.sqrt(2.0)))
+        
+        # 4. Earnings Surprise Score (Gaussian Standard Normal CDF)
+        z_earn = float(market_data.get('earnings_surprise_z', market_data.get('surprise_z', 0.0)))
+        earn_score = 0.5 * (1.0 + math.erf(z_earn / math.sqrt(2.0)))
+        
+        # 5. Dynamic Weighted Combination
+        q_unified = (w_qvm * base_q) + (w_skew * skew_score) + (w_flow * flow_score) + (w_earn * earn_score)
+        q_unified = round(max(0.0, min(1.0, q_unified)), 4)
+        
+        logger.debug(f"  🎯 [Q_unified Score] {signal.get('ticker')}: Q={q_unified:.4f} (Base={base_q:.2f}, Skew={skew_score:.2f}, Flow={flow_score:.2f}, Earn={earn_score:.2f})")
+        return q_unified

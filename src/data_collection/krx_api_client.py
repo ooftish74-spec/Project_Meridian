@@ -30,11 +30,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import pandas as pd
 import requests
-from .krx_parsers import KRXParserMixin
-from .krx_collectors import KRXCollectorMixin
 logger = logging.getLogger(__name__)
 
-class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
+class KRXApiClient:
     """KRX 정보데이터시스템 공식 REST API 클라이언트."""
     BASE_URL = 'http://data-dbg.krx.co.kr/svc/apis'
     SERVICES = {'krx_index': '/idx/krx_dd_trd', 'kospi_index': '/idx/kospi_dd_trd', 'kosdaq_index': '/idx/kosdaq_dd_trd', 'stock_daily': '/sto/stk_bydd_trd', 'kosdaq_daily': '/sto/ksq_bydd_trd', 'stock_info': '/sto/stk_isu_base_info', 'kosdaq_info': '/sto/ksq_isu_base_info', 'futures_daily': '/drv/fut_bydd_trd', 'options_daily': '/drv/opt_bydd_trd', 'etf_daily': '/etp/etf_bydd_trd', 'etn_daily': '/etp/etn_bydd_trd', 'esg_index': '/esg/esg_index_info', 'gold_daily': '/gen/gold_bydd_trd', 'emission_daily': '/gen/ets_bydd_trd', 'kosdaq_futures': '/drv/eqkfu_ksq_bydd_trd'}
@@ -46,7 +44,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         self._rate_limit_delay = 0.5
         self._last_call_time = 0
         if self.api_key:
-            logger.info(f'  🔑 KRX API 초기화 (키: {self.api_key[:8]}...)')
+            logger.info(f"  🔑 KRX API 초기화 (키: {self.api_key[:8]}...)")
         else:
             logger.warning('  ⚠️ KRX API 키 미설정 — .env에 KRX_API_KEY 추가 필요')
 
@@ -54,6 +52,15 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
     def is_available(self) -> bool:
         """API 키가 설정되었는지 확인."""
         return bool(self.api_key)
+
+    def _latest_biz_date(self) -> str:
+        """최근 영업일 YYYYMMDD 반환."""
+        now = datetime.now()
+        if now.weekday() == 5:
+            now -= timedelta(days=1)
+        elif now.weekday() == 6:
+            now -= timedelta(days=2)
+        return now.strftime('%Y%m%d')
 
     def _load_api_key(self) -> str:
         """[Keychain] KRX API 키 로드."""
@@ -82,14 +89,14 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
                     return data
                 return data
             elif resp.status_code == 401:
-                logger.warning(f'  🔑 KRX API 인증 실패: {service_path}')
+                logger.warning(f"  🔑 KRX API 인증 실패: {service_path}")
                 return None
             elif resp.status_code == 429:
                 logger.warning('  ⏳ KRX API Rate Limit — 10초 대기')
                 time.sleep(10)
                 return self._call_api(service_path, params)
             else:
-                logger.warning(f'  KRX API HTTP {resp.status_code}: {service_path}')
+                logger.warning(f"  KRX API HTTP {resp.status_code}: {service_path}")
                 return None
         except requests.exceptions.Timeout:
             logger.warning('  KRX API 타임아웃', exc_info=True)
@@ -113,7 +120,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         result = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
         if 'ticker' in result.columns:
             result = result.set_index('ticker')
-        logger.info(f'  📊 시가총액: {len(result)}종목 ({date})')
+        logger.info(f"  📊 시가총액: {len(result)}종목 ({date})")
         return result
 
     def get_investor_trading(self, date: str, ticker: str) -> Optional[pd.DataFrame]:
@@ -126,7 +133,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             from pykrx import stock as pykrx_stock
             df = pykrx_stock.get_market_trading_value_by_date(date, date, ticker)
             if df is not None and len(df) > 0:
-                logger.info(f'  📊 투자자 매매 (pykrx): {ticker} ({date})')
+                logger.info(f"  📊 투자자 매매 (pykrx): {ticker} ({date})")
                 return df
         except Exception as e:
             logger.error(f'  투자자 매매 pykrx 실패: {e}', exc_info=True)
@@ -138,7 +145,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             from pykrx import stock as pykrx_stock
             df = pykrx_stock.get_market_trading_value_by_date(start, end, ticker)
             if df is not None and len(df) > 0:
-                logger.info(f'  📊 투자자 매매 (pykrx): {ticker} ({start}~{end})')
+                logger.info(f"  📊 투자자 매매 (pykrx): {ticker} ({start}~{end})")
                 return df
         except Exception as e:
             logger.error(f'  투자자 매매 range pykrx 실패: {e}', exc_info=True)
@@ -154,7 +161,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             from pykrx import stock as pykrx_stock
             df = pykrx_stock.get_shorting_balance_by_date(date, date, ticker)
             if df is not None and len(df) > 0:
-                logger.info(f'  📊 공매도 (pykrx): {ticker} ({date})')
+                logger.info(f"  📊 공매도 (pykrx): {ticker} ({date})")
                 return df
         except Exception as e:
             logger.error(f'  공매도 pykrx 실패: {e}', exc_info=True)
@@ -172,7 +179,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
                 sectors = df['SECT_TP_NM'].dropna().unique()
                 sectors = [s for s in sectors if s.strip()]
                 result = pd.DataFrame({'sector': sectors})
-                logger.info(f'  📊 업종 목록: {len(result)}개 (stock_daily 추출)')
+                logger.info(f"  📊 업종 목록: {len(result)}개 (stock_daily 추출)")
                 return result
         except Exception as e:
             logger.error(f'  업종 목록 추출 실패: {e}', exc_info=True)
@@ -184,7 +191,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         """
         df = self.get_stock_daily(date)
         if df is not None and len(df) > 0:
-            logger.info(f'  📊 업종별 시세: {len(df)}행 (stock_daily)')
+            logger.info(f"  📊 업종별 시세: {len(df)}행 (stock_daily)")
             return df
         return None
 
@@ -214,7 +221,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             ticker_col = 'ISU_SRT_CD' if 'ISU_SRT_CD' in top.columns else top.columns[0]
             name_col = 'ISU_ABBRV' if 'ISU_ABBRV' in top.columns else top.columns[1]
             result[sector] = [{'ticker': row[ticker_col], 'name': row[name_col], 'market_cap': row.get('MKT_CAP_NUM', 0)} for _, row in top.iterrows()]
-        logger.info(f'  📊 {len(result)}개 업종별 Top {top_n} 종목')
+        logger.info(f"  📊 {len(result)}개 업종별 Top {top_n} 종목")
         return result
 
     def get_etf_list(self, date: str) -> Optional[pd.DataFrame]:
@@ -223,7 +230,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         if not data or 'output' not in data:
             return None
         df = pd.DataFrame(data['output'])
-        logger.info(f'  📊 ETF: {len(df)}종목')
+        logger.info(f"  📊 ETF: {len(df)}종목")
         return df
 
     def get_index_list(self) -> Optional[pd.DataFrame]:
@@ -233,7 +240,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         """
         indices = [{'code': '1001', 'name': 'KOSPI', 'market': 'KOSPI'}, {'code': '1028', 'name': 'KOSPI 200', 'market': 'KOSPI'}, {'code': '1034', 'name': 'KOSPI 대형주', 'market': 'KOSPI'}, {'code': '1035', 'name': 'KOSPI 중형주', 'market': 'KOSPI'}, {'code': '1037', 'name': 'KOSPI 소형주', 'market': 'KOSPI'}, {'code': '2001', 'name': 'KOSDAQ', 'market': 'KOSDAQ'}, {'code': '2203', 'name': 'KOSDAQ 150', 'market': 'KOSDAQ'}, {'code': '1075', 'name': 'KOSPI 200 IT', 'market': 'KOSPI'}, {'code': '1076', 'name': 'KOSPI 200 금융', 'market': 'KOSPI'}, {'code': '1077', 'name': 'KOSPI 200 산업재', 'market': 'KOSPI'}, {'code': '1082', 'name': 'KOSPI 200 에너지/화학', 'market': 'KOSPI'}, {'code': '1150', 'name': 'KRX 300', 'market': 'KRX'}]
         df = pd.DataFrame(indices)
-        logger.info(f'  📊 지수 목록: {len(df)}개 (하드코딩)')
+        logger.info(f"  📊 지수 목록: {len(df)}개 (하드코딩)")
         return df
 
     def get_ohlcv_with_fallback(self, start: str, end: str, ticker: str) -> Optional[pd.DataFrame]:
@@ -380,7 +387,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         if not items:
             return None
         df = pd.DataFrame(items)
-        logger.info(f'  📊 KOSPI 지수: {len(df)}개 ({date})')
+        logger.info(f"  📊 KOSPI 지수: {len(df)}개 ({date})")
         return df
 
     def get_kosdaq_index(self, date: str) -> Optional[pd.DataFrame]:
@@ -392,7 +399,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         if not items:
             return None
         df = pd.DataFrame(items)
-        logger.info(f'  📊 KOSDAQ 지수: {len(df)}개 ({date})')
+        logger.info(f"  📊 KOSDAQ 지수: {len(df)}개 ({date})")
         return df
 
     def get_futures(self, date: str) -> Optional[pd.DataFrame]:
@@ -404,7 +411,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         if not items:
             return None
         df = pd.DataFrame(items)
-        logger.info(f'  📊 선물: {len(df)}종목 ({date})')
+        logger.info(f"  📊 선물: {len(df)}종목 ({date})")
         return df
 
     def get_stock_daily(self, date: str) -> Optional[pd.DataFrame]:
@@ -420,7 +427,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 유가증권 일별: {len(df)}종목 ({date})')
+        logger.info(f"  📊 유가증권 일별: {len(df)}종목 ({date})")
         return df
 
     def get_kosdaq_daily(self, date: str) -> Optional[pd.DataFrame]:
@@ -436,9 +443,14 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 코스닥 일별: {len(df)}종목 ({date})')
+        logger.info(f"  📊 코스닥 일별: {len(df)}종목 ({date})")
         return df
-        '유가증권 + 코스닥 전종목 일별 데이터 수집 및 저장.\n        \n        KRX API 미게재 시(빈 결과) → yfinance 폴백으로 주요 종목 데이터 확보.\n        '
+
+    def collect_all_stocks_daily(self, date: str = None) -> Dict[str, pd.DataFrame]:
+        """유가증권 + 코스닥 전종목 일별 데이터 수집 및 저장.
+        
+        KRX API 미게재 시(빈 결과) → yfinance 폴백으로 주요 종목 데이터 확보.
+        """
         results = {}
         save_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'raw' / 'krx_stock_daily'
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -447,25 +459,25 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             path = save_dir / f'kospi_{date}.parquet'
             atomic_write_parquet(kospi, path)
             results['kospi'] = kospi
-            logger.info(f'  💾 저장: {path.name}')
+            logger.info(f"  💾 저장: {path.name}")
         else:
             kospi_yf = self._collect_kospi_via_yfinance(date)
             if kospi_yf is not None and len(kospi_yf) > 0:
                 path = save_dir / f'kospi_{date}.parquet'
                 atomic_write_parquet(kospi_yf, path)
                 results['kospi'] = kospi_yf
-                logger.info(f'  💾 [yfinance 폴백] kospi_{date}.csv ({len(kospi_yf)}종목)')
+                logger.info(f"  💾 [yfinance 폴백] kospi_{date}.csv ({len(kospi_yf)}종목)")
             else:
-                logger.warning(f'  ⚠️ KRX {date} 데이터 없음, 다음 날짜 시도')
+                logger.warning(f"  ⚠️ KRX {date} 데이터 없음, 다음 날짜 시도")
         kosdaq = self.get_kosdaq_daily(date)
         if kosdaq is not None and len(kosdaq) > 0:
             path = save_dir / f'kosdaq_{date}.parquet'
             atomic_write_parquet(kosdaq, path)
             results['kosdaq'] = kosdaq
-            logger.info(f'  💾 저장: {path.name}')
+            logger.info(f"  💾 저장: {path.name}")
         if results:
             total = sum((len(df) for df in results.values()))
-            logger.info(f'  ✅ 전종목 일별 수집 완료: {total}종목')
+            logger.info(f"  ✅ 전종목 일별 수집 완료: {total}종목")
         return results
 
     def _collect_kospi_via_yfinance(self, date: str) -> Optional[pd.DataFrame]:
@@ -486,39 +498,34 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         try:
-            import yfinance as yf
-            from datetime import datetime as dt
-            dt_date = dt.strptime(date, '%Y%m%d')
-            start_str = dt_date.strftime('%Y-%m-%d')
-            end_dt = dt_date + timedelta(days=1)
-            end_str = end_dt.strftime('%Y-%m-%d')
-            tickers_ks = [t + '.KS' for t in KOSPI_MAJOR]
-            data = yf.download(tickers_ks, start=start_str, end=end_str, auto_adjust=True, progress=False, timeout=30)
-            if data is None or len(data) == 0:
-                return None
-            if hasattr(data.columns, 'levels'):
-                close = data['Close']
-            else:
-                close = data.get('Close', data)
-            target = dt_date.strftime('%Y-%m-%d')
-            date_idx = close.index.strftime('%Y-%m-%d')
-            if target not in date_idx:
-                logger.warning(f'  yfinance: {date} 날짜 없음 (수집된 날짜: {list(date_idx)[:3]})')
-                return None
-            row = close.loc[close.index.strftime('%Y-%m-%d') == target].iloc[0]
-            records = []
-            for col in row.index:
-                ticker = str(col).replace('.KS', '')
-                price = row[col]
-                import pandas as _pd
-                if _pd.notna(price) and price > 0:
-                    records.append({'ISU_CD': ticker, 'ISU_SRT_CD': ticker, 'ISU_NM': ticker, 'TDD_CLSPRC': int(price), 'TDD_OPNPRC': int(price), 'TDD_HGPRC': int(price), 'TDD_LWPRC': int(price), 'CMPPREVDD_PRC': 0, 'ACC_TRDVOL': 0, 'ACC_TRDVAL': 0, 'MKTCAP': 0, 'LIST_SHRS': 0, '_source': 'yfinance'})
-            if records:
-                df = pd.DataFrame(records)
-                logger.info(f'  📊 [yfinance] KOSPI {len(df)}종목 수집 ({date})')
-                return df
+            from src.data_collection.pykrx_compat import stock as _pykrx_stock
+            df_pykrx = _pykrx_stock.get_market_ohlcv_by_ticker(date)
+            if df_pykrx is not None and not df_pykrx.empty:
+                records = []
+                for ticker, row in df_pykrx.iterrows():
+                    close_p = row.get('종가', 0)
+                    if close_p > 0:
+                        records.append({
+                            'ISU_CD': str(ticker),
+                            'ISU_SRT_CD': str(ticker),
+                            'ISU_NM': str(ticker),
+                            'TDD_CLSPRC': int(close_p),
+                            'TDD_OPNPRC': int(row.get('시가', close_p)),
+                            'TDD_HGPRC': int(row.get('고가', close_p)),
+                            'TDD_LWPRC': int(row.get('저가', close_p)),
+                            'CMPPREVDD_PRC': 0,
+                            'ACC_TRDVOL': int(row.get('거래량', 0)),
+                            'ACC_TRDVAL': 0,
+                            'MKTCAP': 0,
+                            'LIST_SHRS': 0,
+                            '_source': 'pykrx_compat'
+                        })
+                if records:
+                    df = pd.DataFrame(records)
+                    logger.info(f"  📊 [PyKRX Compat] KOSPI {len(df)}종목 수집 ({date})")
+                    return df
         except Exception as e:
-            logger.warning(f'  yfinance 폴백 실패: {e}', exc_info=True)
+            logger.warning(f'  PyKRX 폴백 실패: {e}')
         return None
 
     def get_options(self, date: str) -> Optional[pd.DataFrame]:
@@ -534,7 +541,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 옵션: {len(df)}종목 ({date})')
+        logger.info(f"  📊 옵션: {len(df)}종목 ({date})")
         return df
 
     def collect_options_daily(self, date: str) -> Dict:
@@ -546,7 +553,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             return {}
         path = save_dir / f'options_{date}.parquet'
         atomic_write_parquet(df, path)
-        logger.info(f'  💾 옵션 저장: {path.name} ({len(df)}건)')
+        logger.info(f"  💾 옵션 저장: {path.name} ({len(df)}건)")
         summary = {}
         kospi_opt = df[df['PROD_NM'].str.contains('코스피200', na=False)]
         if len(kospi_opt) > 0:
@@ -566,8 +573,8 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             import json as _json
             summary_path = save_dir / f'options_summary_{date}.json'
             atomic_write_json(summary_path, summary, ensure_ascii=False, indent=2)
-            logger.info(f'  📊 PCR(거래량): {pcr_vol:.3f} | PCR(미결제): {pcr_oi:.3f}')
-            logger.info(f'  📊 IV평균: {avg_iv:.1f}% | 스큐: {summary['iv_skew']:.1f}%')
+            logger.info(f"  📊 PCR(거래량): {pcr_vol:.3f} | PCR(미결제): {pcr_oi:.3f}")
+            logger.info(f"  📊 IV평균: {avg_iv:.1f}% | 스큐: {summary['iv_skew']:.1f}%")
         return summary
 
     def get_etf_daily(self, date: str) -> Optional[pd.DataFrame]:
@@ -583,7 +590,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 ETF 일별: {len(df)}종목 ({date})')
+        logger.info(f"  📊 ETF 일별: {len(df)}종목 ({date})")
         return df
 
     def get_esg_index(self, date: str) -> Optional[pd.DataFrame]:
@@ -599,7 +606,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 ESG 지수: {len(df)}개 ({date})')
+        logger.info(f"  📊 ESG 지수: {len(df)}개 ({date})")
         return df
 
     def get_kosdaq_info(self, date: str) -> Optional[pd.DataFrame]:
@@ -611,7 +618,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         if not items:
             return None
         df = pd.DataFrame(items)
-        logger.info(f'  📊 코스닥 기본정보: {len(df)}종목 ({date})')
+        logger.info(f"  📊 코스닥 기본정보: {len(df)}종목 ({date})")
         return df
 
     def get_gold_daily(self, date: str) -> Optional[pd.DataFrame]:
@@ -627,7 +634,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 금시장: {len(df)}건 ({date})')
+        logger.info(f"  📊 금시장: {len(df)}건 ({date})")
         return df
 
     def get_kosdaq_futures(self, date: str) -> Optional[pd.DataFrame]:
@@ -643,14 +650,14 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-        logger.info(f'  📊 코스닥 주식선물: {len(df)}종목 ({date})')
+        logger.info(f"  📊 코스닥 주식선물: {len(df)}종목 ({date})")
         return df
 
     def collect_all_daily(self, date: str) -> Dict:
         """승인된 모든 KRX 서비스 통합 수집."""
         save_base = Path(__file__).resolve().parent.parent.parent / 'data' / 'raw'
         collected = {}
-        logger.info(f'\n📡 KRX 전체 수집 — {date}')
+        logger.info(f"\n📡 KRX 전체 수집 — {date}")
         logger.info('=' * 50)
         stock_results = self.collect_all_stock_daily(date)
         collected['stock'] = {k: len(v) for k, v in stock_results.items()}
@@ -660,7 +667,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
                 if df is not None:
                     save_dir = save_base / 'krx_index'
                     save_dir.mkdir(parents=True, exist_ok=True)
-                    atomic_write_parquet(df, save_dir / f'{name}_{date}.parquet')
+                    atomic_write_parquet(df, save_dir / f"{name}_{date}.parquet")
                     collected[name] = len(df)
             except Exception as e:
                 logger.warning(f'  ⚠️ {name}: {e}', exc_info=True)
@@ -669,7 +676,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if ft is not None:
                 save_dir = save_base / 'krx_futures'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(ft, save_dir / f'futures_{date}.parquet')
+                atomic_write_parquet(ft, save_dir / f"futures_{date}.parquet")
                 collected['futures'] = len(ft)
         except Exception as e:
             logger.warning(f'  ⚠️ 선물: {e}', exc_info=True)
@@ -684,7 +691,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if etf is not None:
                 save_dir = save_base / 'krx_etf'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(etf, save_dir / f'etf_{date}.parquet')
+                atomic_write_parquet(etf, save_dir / f"etf_{date}.parquet")
                 collected['etf'] = len(etf)
         except Exception as e:
             logger.warning(f'  ⚠️ ETF: {e}', exc_info=True)
@@ -693,7 +700,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if esg is not None:
                 save_dir = save_base / 'krx_esg'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(esg, save_dir / f'esg_index_{date}.parquet')
+                atomic_write_parquet(esg, save_dir / f"esg_index_{date}.parquet")
                 collected['esg_index'] = len(esg)
         except Exception as e:
             logger.warning(f'  ⚠️ ESG: {e}', exc_info=True)
@@ -702,7 +709,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if kinfo is not None:
                 save_dir = save_base / 'krx_stock_daily'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(kinfo, save_dir / f'kosdaq_info_{date}.parquet')
+                atomic_write_parquet(kinfo, save_dir / f"kosdaq_info_{date}.parquet")
                 collected['kosdaq_info'] = len(kinfo)
         except Exception as e:
             logger.warning(f'  ⚠️ 코스닥 기본정보: {e}', exc_info=True)
@@ -711,7 +718,7 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if gold is not None:
                 save_dir = save_base / 'krx_gold'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(gold, save_dir / f'gold_{date}.parquet')
+                atomic_write_parquet(gold, save_dir / f"gold_{date}.parquet")
                 collected['gold'] = len(gold)
         except Exception as e:
             logger.warning(f'  ⚠️ 금시장: {e}', exc_info=True)
@@ -720,16 +727,16 @@ class KRXApiClient(KRXParserMixin, KRXCollectorMixin):
             if ksq_fut is not None:
                 save_dir = save_base / 'krx_futures'
                 save_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write_parquet(ksq_fut, save_dir / f'kosdaq_futures_{date}.parquet')
+                atomic_write_parquet(ksq_fut, save_dir / f"kosdaq_futures_{date}.parquet")
                 collected['kosdaq_futures'] = len(ksq_fut)
         except Exception as e:
             logger.warning(f'  ⚠️ 주식선물 코스닥: {e}', exc_info=True)
-        logger.info(f'\n📊 수집 결과:')
+        logger.info(f"\n📊 수집 결과:")
         for k, v in collected.items():
             if isinstance(v, dict):
-                logger.info(f'  {k}: {v}')
+                logger.info(f"  {k}: {v}")
             else:
-                logger.info(f'  {k}: {v}건')
+                logger.info(f"  {k}: {v}건")
         return collected
 
 def test_connection():
@@ -744,23 +751,23 @@ def test_connection():
         date = (today - timedelta(days=i)).strftime('%Y%m%d')
         df = client.get_kospi_index(date)
         if df is not None and len(df) > 0:
-            logger.info(f'✅ KRX API 연결 성공!')
-            logger.info(f'   날짜: {date}')
-            logger.info(f'   KOSPI 지수: {len(df)}개')
+            logger.info(f"✅ KRX API 연결 성공!")
+            logger.info(f"   날짜: {date}")
+            logger.info(f"   KOSPI 지수: {len(df)}개")
             for _, row in df.head(3).iterrows():
                 nm = row.get('IDX_NM', '?')
                 cl = row.get('CLSPRC_IDX', '?')
                 ch = row.get('CMPPREVDD_IDX', '?')
                 rt = row.get('FLUC_RT', '?')
-                logger.info(f'     {nm}: {cl} ({ch}, {rt}%)')
+                logger.info(f"     {nm}: {cl} ({ch}, {rt}%)")
             df2 = client.get_kosdaq_index(date)
             if df2 is not None:
-                logger.info(f'   KOSDAQ: {len(df2)}개 지수')
+                logger.info(f"   KOSDAQ: {len(df2)}개 지수")
             df3 = client.get_futures(date)
             if df3 is not None:
-                logger.info(f'   선물: {len(df3)}종목')
+                logger.info(f"   선물: {len(df3)}종목")
             else:
-                logger.info(f'   선물: 서비스 미승인')
+                logger.info(f"   선물: 서비스 미승인")
             return True
     logger.error('❌ KRX API 데이터 조회 실패')
     return False

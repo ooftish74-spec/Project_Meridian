@@ -93,7 +93,7 @@ class LeverageJudge:
         max_corr_3x = cfg.get('leverage.3x_max_correlation', 0.3)
         if measurement['sharpe_30d'] >= min_sharpe_3x and measurement['mdd_30d_pct'] > max_mdd_3x and (measurement['max_inter_stream_corr'] < max_corr_3x) and (regime == 'bull'):
             leverage = 3
-            reasons.append(f'3X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_3x}, MDD={measurement['mdd_30d_pct']:.1f}%>{max_mdd_3x}%, ρ={measurement['max_inter_stream_corr']:.2f}<{max_corr_3x}')
+            reasons.append(f"3X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_3x}, MDD={measurement['mdd_30d_pct']:.1f}%>{max_mdd_3x}%, ρ={measurement['max_inter_stream_corr']:.2f}<{max_corr_3x}")
         elif leverage < 2:
             min_sharpe_2x = cfg.get('leverage.2x_min_sharpe', 1.5)
             min_confidence = cfg.get('leverage.2x_min_confidence', 0.7)
@@ -101,7 +101,7 @@ class LeverageJudge:
             max_var = cfg.get('leverage.2x_max_var_pct', 1.5)
             if measurement['sharpe_30d'] >= min_sharpe_2x and measurement['regime_confidence'] >= min_confidence and (measurement['consecutive_wins'] >= min_wins) and (measurement['var_95_pct'] < max_var) and (regime in ('bull', 'caution')):
                 leverage = 2
-                reasons.append(f'2X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_2x}, 승연속={measurement['consecutive_wins']}≥{min_wins}')
+                reasons.append(f"2X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_2x}, 승연속={measurement['consecutive_wins']}≥{min_wins}")
         if leverage == 1:
             reasons.append('1X: 레버리지 조건 미충족')
         inverse_allowed = False
@@ -110,7 +110,7 @@ class LeverageJudge:
         if regime in ('bear', 'crash'):
             if measurement['vix'] > vix_threshold:
                 inverse_allowed = True
-                inverse_reason = f'인버스 허용: VIX={measurement['vix']:.1f}>{vix_threshold}'
+                inverse_reason = f"인버스 허용: VIX={measurement['vix']:.1f}>{vix_threshold}"
             elif regime == 'crash':
                 inverse_allowed = True
                 inverse_reason = f'인버스 허용: CRASH 레짐'
@@ -123,6 +123,21 @@ class LeverageJudge:
         elif leverage >= 2:
             return cfg.get('leverage.etf_2x', '122630')
         return cfg.get('leverage.etf_1x', '069500')
+
+    def calculate_holding_decay_haircut(self, holding_days: int, regime: str) -> float:
+        """Phase 6: 보유 기간별 2X ETP 변동성 누수(Decay) 감쇄 인자 계산.
+
+        - 추세장 (bull/bear): 3~5일 오버나이트 보유 승인 (haircut = 1.0)
+        - 횡보장 (caution/range): 2일 차부터 매일 30~50% 비중 자동 감축 (haircut = max(0.2, 1.0 - 0.35 * (days-1)))
+        """
+        if holding_days <= 1:
+            return 1.0
+        if regime in ('bull', 'bear', 'crash'):
+            return max(0.60, 1.0 - 0.10 * (holding_days - 1))
+        # 횡보장 (caution/range)
+        haircut = max(0.20, 1.0 - 0.35 * (holding_days - 1))
+        logger.warning(f"📉 [LeverageJudge] Phase 6 횡보장 보유 감쇄 발화 (보유일={holding_days}일, 감쇄비율={haircut:.2f})")
+        return haircut
 
     def assess(self, portfolio: Dict, stream_metrics: Dict, regime: str='caution') -> Dict:
         """통합: 측정 + 판정 (2-layer 반환).
@@ -156,8 +171,14 @@ class LeverageJudge:
         macro_vix_threshold = float(cfg.get('leverage_judge.macro_vix_threshold', 22.0))
         atr_sl_mult = float(cfg.get('leverage_judge.atr_sl_mult', 2.0))
         atr_trail_mult = float(cfg.get('leverage_judge.atr_trail_mult', 1.5))
-        current_date = market_data.get('date', datetime.now().strftime('%Y-%m-%d'))
-        vix = float(market_data.get('signal_cache', {}).get('vix', 20.0))
+        current_date = market_data.get('date', datetime.now().strftime('%Y-%m-%d')) if market_data else datetime.now().strftime('%Y-%m-%d')
+        vix_raw = market_data.get('signal_cache', {}).get('vix', 20.0) if market_data else 20.0
+        try:
+            vix = float(vix_raw)
+            if math.isnan(vix) or vix <= 0:
+                vix = 20.0
+        except (ValueError, TypeError):
+            vix = 20.0
         dynamic_max_hold = max(1, int(base_max_hold * (10.0 / max(vix, 10.0))))
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1])
@@ -192,7 +213,8 @@ class LeverageJudge:
                 from src.execution.risk_params import _estimate_atr_pct
                 atr_pct = _estimate_atr_pct(ticker, market_data)
             except Exception:
-                atr_pct = 0.02
+                vix_val = float(market_data.get('signal_cache', {}).get('vix', market_data.get('signal_cache', {}).get('vkospi', 18.0))) if market_data else 18.0
+                atr_pct = max(0.01, vix_val / (100.0 * 15.87))
             dynamic_hard_sl = -abs(atr_pct * 100 * atr_sl_mult)
             dynamic_hard_sl = min(dynamic_hard_sl, -2.0)
             dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)

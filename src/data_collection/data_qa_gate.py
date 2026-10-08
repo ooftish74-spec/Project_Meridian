@@ -107,3 +107,34 @@ class DataQAGate:
         logger.info("[QA Gate] Data passed QA successfully.")
         return df_final
 
+    def evaluate_quality_and_penalty(self, signal_cache: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        [Meridian 3-Stage Data Defense Standard]
+        Signal Cache 내 수집 지표의 무결성을 검증하고 Data Quality Score 및 Risk Exposure Penalty를 산출합니다.
+        """
+        uncollected = []
+        total_tracked = 0
+        
+        for key, val in signal_cache.items():
+            if isinstance(val, dict) and 'status' in val:
+                total_tracked += 1
+                if val.get('status') in ('DATA_UNCOLLECTED', 'ALL_TIERS_FAILED'):
+                    uncollected.append(key)
+            elif val is None:
+                total_tracked += 1
+                uncollected.append(key)
+
+        uncollected_count = len(uncollected)
+        quality_score = max(0.0, 1.0 - (0.10 * uncollected_count)) if total_tracked > 0 else 1.0
+        risk_scale = max(0.70, 1.0 - (0.05 * uncollected_count))
+        
+        status = "FLAWLESS" if uncollected_count == 0 else "PARTIAL_UNCOLLECTED" if quality_score >= 0.70 else "CRITICAL_DATA_DEGRADATION"
+        
+        return {
+            'data_quality_score': round(quality_score, 4),
+            'uncollected_count': uncollected_count,
+            'uncollected_features': uncollected,
+            'risk_scale_modifier': round(risk_scale, 4),
+            'status': status
+        }
+

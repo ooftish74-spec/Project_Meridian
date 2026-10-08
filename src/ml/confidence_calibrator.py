@@ -40,7 +40,7 @@ class ConfidenceCalibrator:
                 return json.loads(self.state_path.read_text(encoding='utf-8'))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         return {'method': 'not_trained', 'platt_a': 0, 'platt_b': 0, 'bucket_wr': {}, 'n_samples': 0, 'n_sources': {}, 'last_updated': None, 'convergence': {}}
 
@@ -87,7 +87,7 @@ class ConfidenceCalibrator:
         cfg = DynamicConfig()
         min_samples = cfg.get('calibrator.min_samples_update', 20)
         if len(all_pairs) < min_samples:
-            logger.info(f'  Calibrator: {len(all_pairs)} samples (min {min_samples}), 스킵')
+            logger.info(f"  Calibrator: {len(all_pairs)} samples (min {min_samples}), 스킵")
             return
         bucket_wr = self._compute_bucket_wr(all_pairs, cfg.get('calibrator.bucket_edges', [0.5, 0.6, 0.7, 0.8]))
         method = 'bucket_only'
@@ -100,17 +100,17 @@ class ConfidenceCalibrator:
                 if platt_a > 0:
                     method = 'platt_sigmoid'
                     convergence = conv_info
-                    logger.info(f'  Calibrator: Platt sigmoid 학습 완료 (A={platt_a:.4f}, B={platt_b:.4f}, epochs={conv_info.get('epochs', 0)})')
+                    logger.info(f"  Calibrator: Platt sigmoid 학습 완료 (A={platt_a:.4f}, B={platt_b:.4f}, epochs={conv_info.get('epochs', 0)})")
                 else:
-                    logger.info(f'  Calibrator: Platt A={platt_a:.4f} (음수) → bucket WR 사용')
+                    logger.info(f"  Calibrator: Platt A={platt_a:.4f} (음수) → bucket WR 사용")
                     platt_a, platt_b = (0, 0)
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                logger.debug(f'  Calibrator: Platt 학습 실패: {e}')
+                logger.debug(f"  Calibrator: Platt 학습 실패: {e}")
         self.state = {'method': method, 'platt_a': platt_a, 'platt_b': platt_b, 'bucket_wr': bucket_wr, 'n_samples': len(all_pairs), 'n_sources': n_sources, 'last_updated': now_kst().isoformat(), 'convergence': convergence}
         atomic_write_json(self.state_path, self.state, indent=2, ensure_ascii=False)
-        logger.info(f'  Calibrator: {len(all_pairs)} samples (pred={n_sources.get('prediction', 0)}, real={n_sources.get('realized', 0)}, unreal={n_sources.get('unrealized', 0)}), method={method}')
+        logger.info(f"  Calibrator: {len(all_pairs)} samples (pred={n_sources.get('prediction', 0)}, real={n_sources.get('realized', 0)}, unreal={n_sources.get('unrealized', 0)}), method={method}")
 
     def _collect_prediction_verification(self) -> List[Tuple[float, int]]:
         """Source 1: Prediction 역검증.
@@ -126,10 +126,10 @@ class ConfidenceCalibrator:
         all_ver_dates = sorted((d.name for d in ver_dir.iterdir() if d.is_dir() and d.name.startswith('2026-')))
         for dt in pred_files:
             try:
-                data = json.loads((pred_dir / f'{dt}.json').read_text())
+                data = json.loads((pred_dir / f"{dt}.json").read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
             signals = data.get('signals', {})
             price_dir_today = ver_dir / dt / 'historical' / 'korea_stocks'
@@ -158,7 +158,7 @@ class ConfidenceCalibrator:
                         pairs.append((up_prob, 1 if ret > 0 else 0))
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     continue
         return pairs
 
@@ -249,7 +249,7 @@ class ConfidenceCalibrator:
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  L-BFGS-B 실패 ({e}), Newton-Raphson fallback')
+            logger.debug(f"  L-BFGS-B 실패 ({e}), Newton-Raphson fallback")
         return self._fit_platt_newton(confs, labels, b0)
 
     def _fit_platt_lbfgsb(self, confs: list, labels: list, b0: float) -> Tuple[float, float, Dict]:

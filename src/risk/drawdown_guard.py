@@ -64,13 +64,13 @@ class DrawdownGuard:
                     sleeve_a_nav = _sp.get('sleeve_a_nav') or _sp.get('alpha_nav')
                     sleeve_a_hwm = _sp.get('sleeve_a_hwm') or _sp.get('alpha_hwm')
                     if sleeve_a_nav:
-                        logger.debug(f'  DrawdownGuard: sleeve_a_nav shadow에서 로드: {sleeve_a_nav:,.0f}')
+                        logger.debug(f"  DrawdownGuard: sleeve_a_nav shadow에서 로드: {sleeve_a_nav:,.0f}")
             except Exception as _dd_e:
                 logger.critical(f'  DrawdownGuard: shadow_portfolio 로드 실패: {_dd_e}', exc_info=True)
         if sleeve_a_nav is None:
             _default_ratio = float(cfg.get('portfolio.sleeve_a_ratio', 0.6))
             sleeve_a_nav = total_nav * _default_ratio
-            logger.debug(f'  DrawdownGuard: sleeve_a_nav fallback 추정 사용 ({_default_ratio * 100:.0f}% of NAV={sleeve_a_nav:,.0f}) — shadow_portfolio 데이터 확인 권장')
+            logger.debug(f"  DrawdownGuard: sleeve_a_nav fallback 추정 사용 ({_default_ratio * 100:.0f}% of NAV={sleeve_a_nav:,.0f}) — shadow_portfolio 데이터 확인 권장")
         if sleeve_a_hwm is None:
             sleeve_a_hwm = sleeve_a_nav
         sleeve_a_dd = (sleeve_a_nav / sleeve_a_hwm - 1) * 100 if sleeve_a_hwm and sleeve_a_hwm > 0 else 0
@@ -84,7 +84,7 @@ class DrawdownGuard:
         if initial_capital and initial_capital > 0:
             from_initial_dd = (total_nav / initial_capital - 1) * 100
         else:
-            logger.warning(f'  DrawdownGuard: initial_capital={initial_capital} 유효하지 않음 — from_initial_dd=0.0 반환')
+            logger.warning(f"  DrawdownGuard: initial_capital={initial_capital} 유효하지 않음 — from_initial_dd=0.0 반환")
             from_initial_dd = 0.0
         return {'total_dd_pct': round(total_dd_pct, 4), 'sleeve_a_dd_pct': round(sleeve_a_dd, 4), 'from_initial_dd_pct': round(from_initial_dd, 4), 'total_nav': total_nav, 'hwm': hwm, 'consecutive_loss_days': consecutive_loss, 'timestamp': datetime.now().isoformat()}
 
@@ -115,22 +115,22 @@ class DrawdownGuard:
         scale_multiplier = target_exposure
         if current_stage >= 6:
             overlay_action = 'liquidate_all'
-            actions.append({'level': 6, 'action': overlay_action, 'target_exposure': 0.0, 'reason': f'DD Stage 6: {dd:.1f}% ≤ {stages[5][1]:.0f}%'})
+            actions.append({'level': 6, 'action': overlay_action, 'target_exposure': 0.0, 'reason': f"DD Stage 6: {dd:.1f}% ≤ {stages[5][1]:.0f}%"})
             scale_multiplier = 0.0
         elif current_stage >= 5:
             overlay_action = 'halt_all'
-            actions.append({'level': current_stage, 'action': overlay_action, 'target_exposure': target_exposure, 'reason': f'DD Stage {current_stage}: {dd:.1f}%'})
+            actions.append({'level': current_stage, 'action': overlay_action, 'target_exposure': target_exposure, 'reason': f"DD Stage {current_stage}: {dd:.1f}%"})
         elif current_stage >= 3:
             overlay_action = 'halt_new_entry'
-            actions.append({'level': current_stage, 'action': overlay_action, 'target_exposure': target_exposure, 'reason': f'DD Stage {current_stage}: {dd:.1f}%'})
+            actions.append({'level': current_stage, 'action': overlay_action, 'target_exposure': target_exposure, 'reason': f"DD Stage {current_stage}: {dd:.1f}%"})
         elif current_stage == 2:
             overlay_action = 'tail_risk_hedge'
             scale_multiplier = cfg.get('dd_guard.stage2_scale', 0.4)
-            actions.append({'level': 2, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f'DD Stage 2: {dd:.1f}%'})
+            actions.append({'level': 2, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f"DD Stage 2: {dd:.1f}%"})
         elif current_stage == 1:
             overlay_action = 'force_sell_bottom_20'
             scale_multiplier = cfg.get('dd_guard.stage1_scale', 0.7)
-            actions.append({'level': 1, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f'DD Stage 1: {dd:.1f}%'})
+            actions.append({'level': 1, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f"DD Stage 1: {dd:.1f}%"})
         if regime == 'crash' and current_stage == 0:
             crash_exposure = cfg.get('risk.crash_cash_ratio', 0.8)
             target_exposure = min(target_exposure, 1.0 - crash_exposure)
@@ -186,5 +186,5 @@ class DrawdownGuard:
         result = self.assess(portfolio, regime)
         measurement = result['measurement']
         judgment = result['judgment']
-        stage_name = f'Stage {judgment['dd_stage']}' if judgment['dd_stage'] > 0 else 'Normal'
+        stage_name = f"Stage {judgment['dd_stage']}' if judgment['dd_stage'] > 0 else 'Normal"
         return {'drawdown_pct': measurement['total_dd_pct'], 'exposure': judgment['target_exposure'], 'scale_multiplier': judgment['scale_multiplier'], 'action_required': judgment['action_required'], 'stage': stage_name, 'dd_stage': judgment['dd_stage'], 'safe': judgment['safe']}

@@ -80,22 +80,23 @@ class KillSwitch:
                 _d = _json.loads(_STATE_FILE.read_text())
                 self._prev_triggered = _d.get('triggered', False)
                 self._prev_trigger_types = set(_d.get('trigger_types', []))
+                self._last_clear_alert_time = _d.get('last_clear_alert_time', 0)
                 for k, v in _d.get('last_alert_times', {}).items():
                     try:
                         self._last_alert_times[k] = datetime.fromisoformat(v)
                     except Exception as _e0:
-                        logger.critical(f'  [kill_switch] 시각 파싱 (비치명적): {_e0}', exc_info=True)
+                        logger.critical(f"  [kill_switch] 시각 파싱 (비치명적): {_e0}", exc_info=True)
         except Exception as e:
-            logger.critical(f'  [KillSwitch] 상태 파일 로드 실패 (초기 상태 사용): {e}', exc_info=True)
+            logger.critical(f"  [KillSwitch] 상태 파일 로드 실패 (초기 상태 사용): {e}", exc_info=True)
 
     def _save_state(self, triggered: bool, trigger_types: set) -> None:
         """현재 상태를 kill_switch_state.json에 저장."""
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            _state = {'triggered': triggered, 'trigger_types': list(trigger_types), 'last_alert_times': {k: v.isoformat() for k, v in self._last_alert_times.items()}, 'updated_at': now_kst().isoformat()}
+            _state = {'triggered': triggered, 'trigger_types': list(trigger_types), 'last_alert_times': {k: v.isoformat() for k, v in self._last_alert_times.items()}, 'last_clear_alert_time': getattr(self, '_last_clear_alert_time', 0), 'updated_at': now_kst().isoformat()}
             atomic_write_json(_STATE_FILE, _state, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.critical(f'  [KillSwitch] 상태 저장 실패: {e}', exc_info=True)
+            logger.critical(f"  [KillSwitch] 상태 저장 실패: {e}", exc_info=True)
 
     def _detect_and_filter_system_gap(self, daily_returns: list, portfolio: Dict) -> list:
         """시스템 재시작 갭 감지 후 일간 손실 필터링.
@@ -125,7 +126,7 @@ class KillSwitch:
                     try:
                         snap_dates.append(datetime.strptime(d, '%Y-%m-%d'))
                     except Exception as _e1:
-                        logger.critical(f'  [kill_switch] 날짜 파싱 (비치명적): {_e1}', exc_info=True)
+                        logger.critical(f"  [kill_switch] 날짜 파싱 (비치명적): {_e1}", exc_info=True)
             if len(snap_dates) >= 2:
                 snap_dates_sorted = sorted(snap_dates)
                 prev_snap_date = snap_dates_sorted[-2]
@@ -141,25 +142,28 @@ class KillSwitch:
                     except (FileNotFoundError, json.JSONDecodeError):
                         return daily_returns
                     except Exception as e:
-                        logger.critical(f'  P&L 기록 파싱 중 예상치 못한 에러: {e}', exc_info=True)
-                        raise
+                        logger.critical(f"  P&L 기록 파싱 중 예상치 못한 에러 (fallback 원본 사용): {e}", exc_info=True)
                         return daily_returns
                 else:
                     return daily_returns
             else:
                 return daily_returns
-            gap_trading_days = int(gap_calendar_days * 5 / 7)
+            try:
+                import numpy as np
+                gap_trading_days = max(0, int(np.busday_count(prev_snap_date.date(), curr_snap_date.date()) - 1))
+            except Exception:
+                gap_trading_days = max(0, int(gap_calendar_days * 5 / 7) - 1 if gap_calendar_days >= 3 else 0)
             if gap_trading_days >= max_gap_days:
-                logger.warning(f'  [KillSwitch] ⚠️ 시스템 갭 감지: {gap_trading_days}거래일 ({gap_calendar_days}일) — daily_loss 기준점 리셋 (갭 기간 수익률 {daily_returns[-1] * 100:.2f}% 제외)')
+                logger.warning(f"  [KillSwitch] ⚠️ 시스템 갭 감지: {gap_trading_days}거래일 ({gap_calendar_days}일) — daily_loss 기준점 리셋 (갭 기간 수익률 {daily_returns[-1] * 100:.2f}% 제외)")
                 filtered = daily_returns[:-1]
                 try:
                     from src.measurement.event_ledger import log_event
                     log_event('SYSTEM', {'action': 'gap_aware_nav_reset', 'gap_trading_days': gap_trading_days, 'excluded_return_pct': round(daily_returns[-1] * 100, 4), 'last_recorded': ''}, source='kill_switch')
                 except Exception as _e2:
-                    logger.critical(f'  [kill_switch] GAP 이벤트 기록: {_e2}', exc_info=True)
+                    logger.critical(f"  [kill_switch] GAP 이벤트 기록: {_e2}", exc_info=True)
                 return filtered
         except Exception as e:
-            logger.critical(f'  [KillSwitch] 갭 감지 실패 (원본 사용): {e}', exc_info=True)
+            logger.critical(f"  [KillSwitch] 갭 감지 실패 (원본 사용): {e}", exc_info=True)
         return daily_returns
 
     def _should_send_alert(self, trigger_type: str, current_triggered: bool, current_types: set) -> tuple:
@@ -184,18 +188,18 @@ class KillSwitch:
         new_trigger_type = trigger_type not in self._prev_trigger_types
         cooldown_expired = last_sent is None or now - last_sent >= cooldown
         if state_transition:
-            return (True, f'상태 전이 (OK→TRIGGERED): {trigger_type}')
+            return (True, f"상태 전이 (OK→TRIGGERED): {trigger_type}")
         elif new_trigger_type and cooldown_expired:
-            return (True, f'신규 트리거 추가: {trigger_type}')
+            return (True, f"신규 트리거 추가: {trigger_type}")
         elif cooldown_expired and last_sent is not None:
             elapsed_h = (now - last_sent).total_seconds() / 3600
-            return (True, f'쿨다운 만료 재알림 ({elapsed_h:.1f}h): {trigger_type}')
+            return (True, f"쿨다운 만료 재알림 ({elapsed_h:.1f}h): {trigger_type}")
         else:
             remaining = ''
             if last_sent:
                 rem_sec = int(cooldown.total_seconds() - (now - last_sent).total_seconds())
-                remaining = f' (재발송까지 {rem_sec // 3600}h {rem_sec % 3600 // 60}m)'
-            return (False, f'쿨다운 중 ({trigger_type}){remaining}')
+                remaining = f" (재발송까지 {rem_sec // 3600}h {rem_sec % 3600 // 60}m)"
+            return (False, f"쿨다운 중 ({trigger_type}){remaining}")
 
     def _send_telegram_alert(self, judgment: Dict, measurement: Dict, regime: str, current_types: set) -> None:
         """Edge-Triggered 텔레그램 발송.
@@ -212,21 +216,22 @@ class KillSwitch:
             if should_send:
                 alerts_to_send.append((trigger_type, t['reason'], reason))
             else:
-                logger.debug(f'  [KillSwitch] 텔레그램 발송 억제: {reason}')
+                logger.debug(f"  [KillSwitch] 텔레그램 발송 억제: {reason}")
         if not alerts_to_send:
-            logger.info(f'  [KillSwitch] 📵 텔레그램 발송 억제 (쿨다운 or 동일 상태 유지): triggers={list(current_types)}')
+            logger.info(f"  [KillSwitch] 📵 텔레그램 발송 억제 (쿨다운 or 동일 상태 유지): triggers={list(current_types)}")
             return
         try:
             from src.utils.telegram_notifier import TelegramNotifier
-            reasons_text = '\n'.join((f'• {r}' for _, r, _ in alerts_to_send))
+            reasons_text = '\n'.join((f"• {r}" for _, r, _ in alerts_to_send))
             dispatch_reasons = ', '.join((d for _, _, d in alerts_to_send))
-            TelegramNotifier().send_alert('🚨 KILL SWITCH 발동', f'⚠️ *긴급 매매 중단 시스템 가동*\n사유:\n{reasons_text}\n레짐: {regime}\n현재 낙폭: {measurement['dd_pct']:.2f}%\n발송 근거: {dispatch_reasons}')
+            _dd_p = measurement.get('dd_pct', 0)
+            TelegramNotifier().send_alert('🚨 KILL SWITCH 발동', f"⚠️ *긴급 매매 중단 시스템 가동*\n사유:\n{reasons_text}\n레짐: {regime}\n현재 낙폭: {_dd_p:.2f}%\n발송 근거: {dispatch_reasons}")
             now = now_kst().replace(tzinfo=None)
             for trigger_type, _, _ in alerts_to_send:
                 self._last_alert_times[trigger_type] = now
-            logger.info(f'  [KillSwitch] 📨 텔레그램 발송: {[tt for tt, _, _ in alerts_to_send]}')
+            logger.info(f"  [KillSwitch] 📨 텔레그램 발송: {[tt for tt, _, _ in alerts_to_send]}")
         except Exception as e:
-            logger.critical(f'  [KillSwitch] Telegram 발송 실패: {e}', exc_info=True)
+            logger.critical(f"  [KillSwitch] Telegram 발송 실패: {e}", exc_info=True)
 
     def measure_metrics(self, portfolio: Dict) -> Dict:
         """순수 측정: 후행 지표 + 전방 지표 통합.
@@ -248,6 +253,9 @@ class KillSwitch:
                 break
         total_nav = portfolio.get('total_nav', initial_capital)
         hwm = portfolio.get('hwm', max(total_nav, initial_capital))
+        if total_nav > 0 and hwm > total_nav * 1.30:
+            logger.warning(f"  ⚠️ [KillSwitch] HWM({hwm:,.0f})과 NAV({total_nav:,.0f}) 괴리 감지 ➔ 동적 HWM 보정 적용")
+            hwm = total_nav
         dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
         week_returns = daily_returns[-5:] if len(daily_returns) >= 5 else daily_returns
         weekly_return = sum(week_returns) if week_returns else 0
@@ -307,7 +315,7 @@ class KillSwitch:
                         _alphas = [r.get('alpha_pct', 0) for r in _records]
                         forward['bench_alpha_5d'] = sum(_alphas) / len(_alphas)
         except Exception as e:
-            logger.critical(f'  [KillSwitch] 전방 지표 수집 실패 (중립값 사용): {e}', exc_info=True)
+            logger.critical(f"  [KillSwitch] 전방 지표 수집 실패 (중립값 사용): {e}", exc_info=True)
         return forward
 
     def _compute_dynamic_volatility(self, daily_returns: list, forward: Dict) -> float:
@@ -351,7 +359,8 @@ class KillSwitch:
         forward = metrics.get('forward', {})
         max_daily = metrics.get('dynamic_daily_limit_pct', -5.0)
         if metrics['today_return_pct'] <= max_daily:
-            triggers.append({'type': 'daily_loss', 'value': metrics['today_return_pct'], 'threshold': max_daily, 'reason': f'일간 손실 {metrics['today_return_pct']:.2f}% ≤ 동적 한도 {max_daily:.2f}% (3-Sigma)', 'overridable': False})
+            _tr_pct = metrics.get('today_return_pct', 0)
+            triggers.append({'type': 'daily_loss', 'value': _tr_pct, 'threshold': max_daily, 'reason': f"일간 손실 {_tr_pct:.2f}% ≤ 동적 한도 {max_daily:.2f}% (3-Sigma)", 'overridable': False})
         base_dd_kill_pct = cfg.get('dd_guard.stage5_pct', -0.25)
         regime_factor = 1.0 if regime in ('crash', 'bull') else 0.0
         max_relaxation = 0.15
@@ -359,20 +368,24 @@ class KillSwitch:
         dd_kill_pct = dynamic_dd_kill_pct * 100
         ABSOLUTE_MDD_KILL = -5.0
         if metrics['dd_pct'] <= ABSOLUTE_MDD_KILL:
-            triggers.append({'type': 'hard_floor_mdd', 'value': metrics['dd_pct'], 'threshold': ABSOLUTE_MDD_KILL, 'reason': f'MDD {metrics['dd_pct']:.1f}% ≤ {ABSOLUTE_MDD_KILL}% (Hard Floor Bypass)', 'overridable': False})
+            _dd_pct_val = metrics.get('dd_pct', 0)
+            triggers.append({'type': 'hard_floor_mdd', 'value': _dd_pct_val, 'threshold': ABSOLUTE_MDD_KILL, 'reason': f"MDD {_dd_pct_val:.1f}% ≤ {ABSOLUTE_MDD_KILL}% (Hard Floor Bypass)", 'overridable': False})
         if metrics['dd_pct'] <= dd_kill_pct:
-            triggers.append({'type': 'dd_critical', 'value': metrics['dd_pct'], 'threshold': dd_kill_pct, 'reason': f'DD {metrics['dd_pct']:.1f}% ≤ {dd_kill_pct:.0f}% (Dynamic Stage 5+)', 'overridable': False})
+            _dd_p2 = metrics.get('dd_pct', 0)
+            triggers.append({'type': 'dd_critical', 'value': _dd_p2, 'threshold': dd_kill_pct, 'reason': f"DD {_dd_p2:.1f}% ≤ {dd_kill_pct:.0f}% (Dynamic Stage 5+)", 'overridable': False})
         if regime == 'crash':
             max_weekly = metrics.get('dynamic_weekly_limit_pct', -10.0)
-            if metrics['weekly_return_pct'] <= max_weekly:
-                triggers.append({'type': 'crash_weekly', 'value': metrics['weekly_return_pct'], 'threshold': max_weekly, 'reason': f'CRASH 주간 손실 {metrics['weekly_return_pct']:.1f}% ≤ 동적 한도 {max_weekly:.2f}%', 'overridable': False})
+            _wr_pct = metrics.get('weekly_return_pct', 0)
+            if _wr_pct <= max_weekly:
+                triggers.append({'type': 'crash_weekly', 'value': _wr_pct, 'threshold': max_weekly, 'reason': f"CRASH 주간 손실 {_wr_pct:.1f}% ≤ 동적 한도 {max_weekly:.2f}%", 'overridable': False})
         max_consec = cfg.get('kill_switch.max_consecutive_loss_days', 7)
         if metrics['consecutive_loss_days'] >= max_consec:
-            triggers.append({'type': 'consecutive_loss', 'value': metrics['consecutive_loss_days'], 'threshold': max_consec, 'reason': f'연속 손실 {metrics['consecutive_loss_days']}일 ≥ {max_consec}일', 'overridable': True})
+            _cld = metrics.get('consecutive_loss_days', 0)
+            triggers.append({'type': 'consecutive_loss', 'value': _cld, 'threshold': max_consec, 'reason': f"연속 손실 {_cld}일 ≥ {max_consec}일", 'overridable': True})
         monthly_ret = metrics.get('monthly_return_pct', 0)
         monthly_limit = metrics.get('monthly_dynamic_limit_pct', -5.0)
         if monthly_ret <= monthly_limit and metrics.get('monthly_trading_days', 0) >= 3:
-            triggers.append({'type': 'monthly_loss', 'value': monthly_ret, 'threshold': monthly_limit, 'reason': f'월 누적 손실 {monthly_ret:.2f}% ≤ 동적 한도 {monthly_limit:.2f}%', 'overridable': True})
+            triggers.append({'type': 'monthly_loss', 'value': monthly_ret, 'threshold': monthly_limit, 'reason': f"월 누적 손실 {monthly_ret:.2f}% ≤ 동적 한도 {monthly_limit:.2f}%", 'overridable': True})
         forward_override = self._evaluate_forward_override(triggers, forward, regime)
         overridden = []
         if forward_override['override']:
@@ -419,11 +432,13 @@ class KillSwitch:
         reason = ''
         if override:
             good = [k for k, v in scores.items() if v >= 0.6]
-            reason = f'전방 지표 양호 ({normalized:.0%}): {', '.join(good)}'
-            logger.info(f'  🟢 Kill Switch Override: {reason}')
+            _g_str = ', '.join(good)
+            reason = f"전방 지표 양호 ({normalized:.0%}): {_g_str}"
+            logger.info(f"  🟢 Kill Switch Override: {reason}")
         else:
             weak = [k for k, v in scores.items() if v < 0.6]
-            logger.info(f'  🔴 Kill Switch Override 불가 ({normalized:.0%}): 약한 지표={', '.join(weak)}')
+            _w_str = ', '.join(weak)
+            logger.info(f"  🔴 Kill Switch Override 불가 ({normalized:.0%}): 약한 지표={_w_str}")
         return {'override': override, 'reason': reason, 'score': round(normalized, 3), 'threshold': threshold, 'details': {k: round(v, 2) for k, v in scores.items()}}
 
     def _compute_monthly_metrics(self, daily_returns: list, portfolio: Dict, daily_vol: float) -> tuple:
@@ -483,16 +498,24 @@ class KillSwitch:
                 from src.measurement.event_ledger import log_event
                 log_event('KILL_SWITCH', {'action': judgment['action'], 'triggers': [t['type'] for t in judgment['triggers']], 'dd_pct': measurement['dd_pct'], 'regime': regime}, source='kill_switch')
             except Exception as e:
-                logger.critical(f'  [KillSwitch] 이벤트 로깅 실패 (감사 추적 손실): {e}', exc_info=True)
-            logger.critical(f'  🚨 KILL SWITCH 발동! {judgment['trigger_count']}개 트리거: {', '.join((t['type'] for t in judgment['triggers'] if not t.get('overridden')))}')
+                logger.critical(f"  [KillSwitch] 이벤트 로깅 실패 (감사 추적 손실): {e}", exc_info=True)
+            _tc_cnt = judgment.get('trigger_count', 0)
+            _tr_names = ', '.join((t.get('type', '') for t in judgment.get('triggers', []) if not t.get('overridden')))
+            logger.critical(f"  🚨 KILL SWITCH 발동! {_tc_cnt}개 트리거: {_tr_names}")
             self._send_telegram_alert(judgment, measurement, regime, current_types)
         elif self._prev_triggered:
             try:
-                from src.utils.telegram_notifier import TelegramNotifier
-                TelegramNotifier().send_alert('✅ KILL SWITCH 해제', f'✅ *긴급 매매 중단 해제*\n레짐: {regime}\n현재 낙폭: {measurement['dd_pct']:.2f}%')
-                logger.info('  [KillSwitch] ✅ Kill Switch 해제 알림 발송')
+                import time
+                _last_cleared = getattr(self, '_last_clear_alert_time', 0)
+                if time.time() - _last_cleared > 86400:  # 24시간 당 최대 1회만 해제 알림 발송 (문자 폭탄 방지)
+                    from src.utils.telegram_notifier import TelegramNotifier
+                    _dd_p3 = measurement.get('dd_pct', 0)
+                    TelegramNotifier().send_alert('✅ KILL SWITCH 해제', f"✅ *긴급 매매 중단 해제*\n레짐: {regime}\n현재 낙폭: {_dd_p3:.2f}%")
+                    logger.info('  [KillSwitch] ✅ Kill Switch 해제 알림 발송')
+                    self._last_clear_alert_time = time.time()
+                    self._prev_triggered = False
             except Exception as e:
-                logger.critical(f'  [KillSwitch] 해제 알림 실패: {e}', exc_info=True)
+                logger.critical(f"  [KillSwitch] 해제 알림 실패: {e}", exc_info=True)
         self._prev_triggered = current_triggered
         self._prev_trigger_types = current_types
         self._save_state(current_triggered, current_types)
@@ -530,7 +553,7 @@ class KillSwitch:
                 _sp_data = _j2.loads(_sp_f.read_text())
                 _sp_initial = _sp_data.get('initial_capital')
         except Exception as _e3:
-            logger.critical(f'  [kill_switch] Kill Switch 상태 저장 1: {_e3}', exc_info=True)
+            logger.critical(f"  [kill_switch] Kill Switch 상태 저장 1: {_e3}", exc_info=True)
         initial_capital = _sp_initial if _sp_initial is not None else cfg.get('portfolio.initial_capital')
         portfolio = {'total_nav': nav, 'initial_capital': initial_capital, 'hwm': max(nav, initial_capital), 'daily_returns': [], 'active_positions': 0}
         try:
@@ -538,7 +561,13 @@ class KillSwitch:
             _sp_file = _RESULTS / 'shadow_portfolio.json'
             if _sp_file.exists():
                 _sp = _json2.loads(_sp_file.read_text())
-                portfolio['hwm'] = _sp.get('hwm', portfolio['hwm'])
+                sp_hwm = _sp.get('hwm', portfolio['hwm'])
+                # Prevent transient MDD trigger due to partial NAV calculation (domestic-only vs global HWM)
+                if nav > 0 and sp_hwm > nav * 1.35:
+                    logger.warning(f"  ⚠️ [KillSwitch] 글로벌 HWM({sp_hwm:,.0f})과 단일 NAV({nav:,.0f}) 괴리 감지 ➔ 동적 HWM 보정 적용")
+                    portfolio['hwm'] = max(nav, initial_capital)
+                else:
+                    portfolio['hwm'] = sp_hwm
                 portfolio['active_positions'] = len(_sp.get('positions', {}))
                 _dr = _sp.get('daily_returns', [])
                 if not _dr:
@@ -549,31 +578,42 @@ class KillSwitch:
                             _dr.append(_ret / 100.0 if abs(_ret) > 1 else _ret)
                 portfolio['daily_returns'] = _dr
         except Exception as _e4:
-            logger.critical(f'  [kill_switch] Kill Switch 상태 저장 2: {_e4}', exc_info=True)
+            logger.critical(f"  [kill_switch] Kill Switch 상태 저장 2: {_e4}", exc_info=True)
         result = self.assess(portfolio, regime)
         judgment = result['judgment']
+        
+        # Manual Flag Override: User manual Kill Switch flags (KILL_SWITCH.flag, SYSTEM_HALT.flag) MUST NEVER BE OVERRIDDEN!
+        has_manual_flag = (_RESULTS / 'KILL_SWITCH.flag').exists() or (_RESULTS.parent / 'KILL_SWITCH.flag').exists() or (_RESULTS / 'SYSTEM_HALT.flag').exists() or (_RESULTS.parent / 'SYSTEM_HALT.flag').exists()
+        if has_manual_flag:
+            judgment['triggered'] = True
+            judgment['action'] = 'halt_all'
+            if 'forward_override' in judgment:
+                judgment['forward_override'] = {'override': False, 'reason': 'Manual User Kill Switch Active'}
+
         forward_override = judgment.get('forward_override', {})
         reason_parts = []
         if judgment['triggered']:
             reason_parts = [t['reason'] for t in judgment.get('triggers', []) if not t.get('overridden')]
-        if forward_override.get('override'):
-            reason_parts.append(f'[Override] {forward_override.get('reason', '')}')
+            if has_manual_flag:
+                reason_parts.append('[USER_MANUAL_KILL_SWITCH]')
+        if forward_override.get('override') and not has_manual_flag:
+            reason_parts.append(f"[Override] {forward_override.get('reason', '')}")
         if not reason_parts:
             reason_parts = ['정상']
         action = judgment.get('action', 'halt_all' if judgment['triggered'] else 'continue')
-        can_buy = action == 'continue'
-        if action == 'halt_all':
+        can_buy = (action == 'continue') and (not has_manual_flag)
+        if action == 'halt_all' or has_manual_flag:
             position_scale = 0.0
         elif action == 'halt_new_entry':
             position_scale = 1.0
         else:
             position_scale = 1.0
-        check_result = {'triggered': judgment['triggered'], 'can_buy': can_buy, 'position_scale': position_scale, 'reason': '; '.join(reason_parts), 'active': judgment['triggered'], 'forward_override': forward_override, 'forward_signals': result['measurement'].get('forward', {}), 'timestamp': now_kst().isoformat()}
+        check_result = {'triggered': judgment['triggered'] or has_manual_flag, 'can_buy': can_buy, 'position_scale': position_scale, 'reason': '; '.join(reason_parts), 'active': judgment['triggered'] or has_manual_flag, 'forward_override': forward_override, 'forward_signals': result['measurement'].get('forward', {}), 'timestamp': now_kst().isoformat()}
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
             atomic_write_json((_RESULTS / 'kill_switch.json'),  check_result, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.critical(f'  kill_switch.json 저장 실패: {e}', exc_info=True)
+            logger.critical(f"  kill_switch.json 저장 실패: {e}", exc_info=True)
         return check_result
 
     def hard_liquidate_all(self, reason: str='UNSPECIFIED', streams: Optional[List[str]]=None) -> Dict:
@@ -607,34 +647,36 @@ class KillSwitch:
             from config.dynamic_config import DynamicConfig as _DC
             streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
         ts = now_kst().isoformat()
-        logger.critical(f'\n{'=' * 60}\n  🚨🚨 HARD LIQUIDATE ALL 발동 🚨🚨\n  사유: {reason}\n  대상: {streams}\n  시각: {ts}\n{'=' * 60}')
+        _dash_str = '=' * 60
+        logger.critical(f"\n{_dash_str}\n  🚨🚨 HARD LIQUIDATE ALL 발동 🚨🚨\n  사유: {reason}\n  대상: {streams}\n  시각: {ts}\n{_dash_str}")
         self._triggered = True
         self._prev_triggered = True
         try:
             self._save_state(True, {'hard_liquidate'})
         except Exception as _se:
-            logger.critical(f'  [HardLiquidate] 상태 저장 실패: {_se}', exc_info=True)
+            logger.critical(f"  [HardLiquidate] 상태 저장 실패: {_se}", exc_info=True)
         result: Dict = {'success': False, 'reason': reason, 'streams': streams, 'orders_executed': 0, 'total_liquidated': 0.0, 'errors': [], 'timestamp': ts}
         try:
             from src.execution._kis_adapter import KISTraderAdapter
             from src.utils.credential_manager import CredentialManager
             try:
                 cm = CredentialManager()
-                _mode = cfg.get('execution.mode', 'mock')
+                _mode = cfg.get('execution.mode', 'live')
                 prefix = 'KIS_PAPER' if _mode == 'paper' else 'KIS'
-                _trader = KISTraderAdapter(mode=_mode, app_key=cm.read_from_env(f'{prefix}_APP_KEY'), app_secret=cm.read_from_env(f'{prefix}_APP_SECRET'), account_no=cm.read_from_env(f'{prefix}_ACCOUNT_NO'))
+                _trader = KISTraderAdapter(mode=_mode, app_key=cm.read_from_env(f"{prefix}_APP_KEY"), app_secret=cm.read_from_env(f"{prefix}_APP_SECRET"), account_no=cm.read_from_env(f"{prefix}_ACCOUNT_NO"))
             except Exception as _init_err:
-                logger.error(f'  [HardLiquidate] KISTrader 초기화 실패 — Mock 폴백: {_init_err}')
-                _trader = KISTraderAdapter(mode='mock')
+                logger.error(f"  [HardLiquidate] KISTrader 초기화 실패 — Live 폴백: {_init_err}")
+                _trader = KISTraderAdapter(mode='live')
             sold_orders = _trader.panic_sell_all()
             result['orders_executed'] = len(sold_orders)
             result['total_liquidated'] = sum((getattr(o, 'filled_price', 0) * getattr(o, 'filled_quantity', 0) for o in sold_orders))
             result['success'] = True
-            logger.critical(f'  ✅ [HardLiquidate] 청산 완료: {len(sold_orders)}건 ₩{result['total_liquidated']:,.0f} 회수')
+            _tl_amt = result.get('total_liquidated', 0)
+            logger.critical(f"  ✅ [HardLiquidate] 청산 완료: {len(sold_orders)}건 ₩{_tl_amt:,.0f} 회수")
         except Exception as e:
-            err_msg = f'전량 청산 실패: {e}'
+            err_msg = f"전량 청산 실패: {e}"
             result['errors'].append(err_msg)
-            logger.critical(f'  ❌ [HardLiquidate] {err_msg}')
+            logger.critical(f"  ❌ [HardLiquidate] {err_msg}")
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
             record_file = _RESULTS / 'hard_liquidation.json'
@@ -645,22 +687,25 @@ class KillSwitch:
                 except (FileNotFoundError, json.JSONDecodeError):
                     history = []
                 except Exception as e:
-                    logger.critical(f'  KillSwitch 기록 저장 중 에러: {e}', exc_info=True)
-                    raise
+                    logger.critical(f"  KillSwitch 기록 저장 중 에러 (빈 히스토리로 재초기화): {e}", exc_info=True)
                     history = []
             history.append(result)
+            history = history[-100:]
             atomic_write_json(record_file, history, ensure_ascii=False, indent=2, default=str)
         except Exception as _save_err:
-            logger.critical(f'  [HardLiquidate] 기록 저장 실패: {_save_err}', exc_info=True)
+            logger.critical(f"  [HardLiquidate] 기록 저장 실패: {_save_err}", exc_info=True)
         try:
             from src.utils.telegram_notifier import TelegramNotifier
-            TelegramNotifier().send_alert('🔴🔴 HARD LIQUIDATE 실행 완료', f'⚠️ *전량 강제 청산 완료*\n사유: {reason}\n청산 주문: {result['orders_executed']}건\n회수 금액: ₩{result['total_liquidated']:,.0f}\n오류: {len(result['errors'])}건\n시각: {ts}\n→ 시스템 셧다운 플래그 생성 완료')
+            _oe_cnt = result.get('orders_executed', 0)
+            _tl_val = result.get('total_liquidated', 0)
+            _err_cnt = len(result.get('errors', []))
+            TelegramNotifier().send_alert('🔴🔴 HARD LIQUIDATE 실행 완료', f"⚠️ *전량 강제 청산 완료*\n사유: {reason}\n청산 주문: {_oe_cnt}건\n회수 금액: ₩{_tl_val:,.0f}\n오류: {_err_cnt}건\n시각: {ts}\n→ 시스템 셧다운 플래그 생성 완료")
         except Exception as _tg_err:
-            logger.critical(f'  [HardLiquidate] 텔레그램 알림 실패: {_tg_err}', exc_info=True)
+            logger.critical(f"  [HardLiquidate] 텔레그램 알림 실패: {_tg_err}", exc_info=True)
         try:
             halt_flag = _RESULTS / 'SYSTEM_HALT.flag'
             atomic_write_json(halt_flag, {'halt': True, 'reason': reason, 'timestamp': ts, 'orders_liquidated': result['orders_executed']}, ensure_ascii=False, indent=2)
-            logger.critical(f'  🛑 [HardLiquidate] 셧다운 플래그 생성: {halt_flag}')
+            logger.critical(f"  🛑 [HardLiquidate] 셧다운 플래그 생성: {halt_flag}")
         except Exception as _flag_err:
-            logger.critical(f'  [HardLiquidate] 셧다운 플래그 생성 실패: {_flag_err}', exc_info=True)
+            logger.critical(f"  [HardLiquidate] 셧다운 플래그 생성 실패: {_flag_err}", exc_info=True)
         return result

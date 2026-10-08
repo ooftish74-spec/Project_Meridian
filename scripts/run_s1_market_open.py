@@ -179,7 +179,7 @@ def main():
             position_scale = var_data.get('position_scale', 0.7)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             position_scale = 0.7
 
         effective_remaining = remaining * position_scale
@@ -210,12 +210,20 @@ def main():
                 logger.info(f"  ⏭ {ticker}: 금액 부족 ₩{amount:,}")
                 continue
 
-            quantity = max(1, int(amount / price))
-            order_amount = quantity * price
+            is_us = not str(ticker).isdigit()
+            if is_us:
+                from src.execution.execution_engine import ExecutionEngine
+                fx_rate = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                eff_price_krw = price * fx_rate
+            else:
+                eff_price_krw = price
+
+            quantity = max(1, int(amount / eff_price_krw))
+            order_amount = quantity * eff_price_krw
 
             if order_amount > effective_remaining:
-                quantity = max(1, int(effective_remaining / price))
-                order_amount = quantity * price
+                quantity = max(1, int(effective_remaining / eff_price_krw))
+                order_amount = quantity * eff_price_krw
 
             orders.append({
                 'stream': 'S1',

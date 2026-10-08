@@ -118,7 +118,7 @@ class MacroProxyCollector:
                 return data
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return None
 
@@ -138,7 +138,7 @@ class MacroProxyCollector:
             hist = fdr.DataReader(fdr_symbol, start=start_dt)
 
             if hist is None or hist.empty:
-                logger.debug(f'  [MacroProxy] {symbol}: 빈 데이터')
+                logger.debug(f"  [MacroProxy] {symbol}: 빈 데이터")
                 return None
 
             # 최신 2일치 → 당일 등락률 계산
@@ -169,7 +169,7 @@ class MacroProxyCollector:
                 'date': hist.index[-1].strftime('%Y-%m-%d'),
             }
         except Exception as e:
-            logger.debug(f'  [MacroProxy] {symbol} 수집 실패: {e}')
+            logger.debug(f"  [MacroProxy] {symbol} 수집 실패: {e}")
             return None
 
     def _compute_sector_scores(self, raw_data: Dict) -> Dict[str, float]:
@@ -248,13 +248,15 @@ class MacroProxyCollector:
             data = self._fetch_symbol(key, config)
             if data:
                 result[key] = data
-                logger.info(
-                    f'  ✅ {config["name"]}({config["symbol"]}): '
-                    f'${data["close"]} ({data["chg_1d_pct"]:+.2f}% 1일, '
-                    f'{data["chg_5d_pct"]:+.2f}% 5일)'
-                )
+                _cn = config.get("name", "")
+                _cs = config.get("symbol", "")
+                _cls = data.get("close", 0)
+                _c1d = data.get("chg_1d_pct", 0)
+                _c5d = data.get("chg_5d_pct", 0)
+                logger.info(f"  ✅ {_cn}({_cs}): ${_cls} ({_c1d:+.2f}% 1일, {_c5d:+.2f}% 5일)")
             else:
-                logger.debug(f'  ⚠️ {config["name"]} 수집 실패 — 스킵')
+                _cn_fail = config.get("name", "")
+                logger.debug(f"  ⚠️ {_cn_fail} 수집 실패 - 스킵")
             # [Phase 10: Alpha Breakthrough] Rate Limit 방어: 심볼 간 1초 sleep
             time.sleep(1.0)
 
@@ -272,12 +274,13 @@ class MacroProxyCollector:
             _CACHE_FILE.write_text(
                 json.dumps(result, ensure_ascii=False, indent=2, default=str)
             )
+            _ss_len = len(result.get("sector_scores", {}))
             logger.info(
-                f'  💾 [MacroProxy] 저장 완료: {_CACHE_FILE} '
-                f'({len(result.get("sector_scores", {}))}개 섹터 스코어)'
+                f"  💾 [MacroProxy] 저장 완료: {_CACHE_FILE} "
+                f"({_ss_len}개 섹터 스코어)"
             )
         except Exception as e:
-            logger.warning(f'  [MacroProxy] 저장 실패: {e}')
+            logger.warning(f"  [MacroProxy] 저장 실패: {e}")
 
         # 캐시 갱신
         self._cache = result
@@ -296,7 +299,7 @@ class MacroProxyCollector:
             return float(data.get('nq_chg_1d_pct', 0.0))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return 0.0
 
     def get_sector_scores(self) -> Dict[str, float]:
@@ -311,7 +314,7 @@ class MacroProxyCollector:
             return dict(data.get('sector_scores', {}))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {}
 
 
@@ -343,7 +346,7 @@ def get_nq_futures_change(force: bool = False) -> float:
         return get_collector().get_nq_change()
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return 0.0
 
 
@@ -360,7 +363,7 @@ def get_macro_sector_scores() -> Dict[str, float]:
         return get_collector().get_sector_scores()
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
         import logging
-        logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return {}
 
 

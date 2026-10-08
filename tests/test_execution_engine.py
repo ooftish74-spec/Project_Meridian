@@ -159,3 +159,22 @@ class TestExecutionEngineEdgeCases:
         ]
         result = self.engine.execute(orders)
         assert hasattr(result, 'n_orders')
+
+
+class TestExecutionEngineLiveMethod:
+    """ExecutionEngine _execute_live 및 환율 추정 검증."""
+
+    def test_get_dynamic_usdkrw_rate(self):
+        from src.execution.execution_engine import ExecutionEngine
+        engine = ExecutionEngine(mode='shadow')
+        rate = engine._get_dynamic_usdkrw_rate()
+        assert isinstance(rate, float)
+        assert 1000.0 <= rate <= 2500.0
+
+    def test_execute_live_empty_orders(self):
+        from src.execution.execution_engine import ExecutionEngine, ExecutionResult
+        engine = ExecutionEngine(mode='shadow')
+        result = ExecutionResult(mode='paper')
+        res = engine._execute_live([], result)
+        assert res.n_orders == 0
+

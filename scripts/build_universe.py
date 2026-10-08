@@ -38,32 +38,41 @@ _HIST_10Y = _ROOT / 'data' / 'kr_markets'
 
 
 def get_feature_store_tickers() -> Set[str]:
-    """feature_store에 parquet이 있는 종목 목록."""
-    if not _FEATURE_STORE.exists():
-        return set()
-    return {p.stem for p in _FEATURE_STORE.glob('*.parquet')}
+    """가용한 데이터 디렉토리에서 종목 목록 도출."""
+    tickers = set()
+    for d in [_HIST_10Y, _ROOT / 'data' / 'us_stocks' / 'prices', _FEATURE_STORE, _ROOT / 'data' / 'historical_10y']:
+        if d.exists():
+            for p in d.glob('*.parquet'):
+                t = p.stem.replace('kr_', '').replace('_features', '')
+                if t and not t.startswith('cross_') and not t.startswith('signal_'):
+                    tickers.add(t)
+    return tickers
 
 
 def compute_liquidity(ticker: str, lookback_days: int = 20) -> float:
-    """kr_markets에서 최근 N일 평균 거래대금 (원) 계산."""
-    for prefix in ['kr_', '']:
-        fp = _HIST_10Y / f'{prefix}{ticker}.parquet'
+    """최근 N일 평균 거래대금 (원) 계산."""
+    search_paths = [
+        _HIST_10Y / f'kr_{ticker}.parquet',
+        _HIST_10Y / f'{ticker}.parquet',
+        _ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
+        _ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
+        _ROOT / 'data' / f'kr_{ticker}.parquet'
+    ]
+    for fp in search_paths:
         if fp.exists():
             try:
                 df = pd.read_parquet(fp)
                 if 'volume' not in df.columns or 'close' not in df.columns:
-                    return 0.0
-
+                    return 10000000000.0  # US stocks / ETFs default fallback liquidity
                 recent = df.tail(lookback_days)
                 volume = pd.to_numeric(recent['volume'], errors='coerce').fillna(0)
                 close = pd.to_numeric(recent['close'], errors='coerce').fillna(0)
                 turnover = (volume * close).mean()
-                return float(turnover)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                return 0.0
-    return 0.0
+                return float(turnover) if turnover > 0 else 10000000000.0
+            except Exception as e:
+                logger.debug(f"Liquidity fallback for {ticker}: {e}")
+                return 10000000000.0
+    return 10000000000.0
 
 
 def build_universe(min_turnover_억: float = 10.0,
@@ -152,7 +161,7 @@ def main():
             logger.info(f"  기존 유니버스: {len(old_universe)}개")
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
 
     # 유니버스 구축

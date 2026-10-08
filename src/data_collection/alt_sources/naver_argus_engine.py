@@ -48,9 +48,9 @@ class ArgusEngine:
                 articles = self._collect_articles(theme_cfg['query'])
                 score, tier = self.analyze_theme(theme_name, theme_cfg, articles)
                 results[feature_key] = round(score, 4)
-                logger.info(f'  [Phase 64] {theme_name}: {score:.4f} (Tier{tier}) | {theme_cfg['description']}')
+                logger.info(f"  [Phase 64] {theme_name}: {score:.4f} (Tier{tier}) | {theme_cfg['description']}")
             except Exception as _e:
-                logger.warning(f'  [Phase 64] {theme_name} 스코어 실패 — Graceful Degradation(0.5): {_e}')
+                logger.warning(f"  [Phase 64] {theme_name} 스코어 실패 — Graceful Degradation(0.5): {_e}")
                 results[feature_key] = 0.5
         logger.info(f'  [Phase 64] Argus 스코어 {len(results)}/5 산출 완료: ' + ', '.join((f'{k}={v:.2f}' for k, v in results.items())))
         results.update(self._load_macro_context())
@@ -63,7 +63,7 @@ class ArgusEngine:
             (score 0.0~1.0, tier_used 1/2/3)
         """
         if not articles:
-            raise ValueError(f'{theme_name}: 기사 없음')
+            raise ValueError(f"{theme_name}: 기사 없음")
         combined = ' '.join(articles)
         tier1_score = self._tier1_regex(theme_name, combined)
         if tier1_score is not None:
@@ -116,7 +116,7 @@ class ArgusEngine:
         snippet = text[:2000]
         prompt = f'[TASK] 다음 테마에 대한 한국 언론 기사를 분석하라.\n테마: {theme_name} — {description}\n\n기사 샘플 (상위 2,000자):\n---\n{snippet}\n---\n\n위 기사들을 분석하여 테마 모멘텀을 0.0(최악/하락/부정)에서 1.0(최상/상승/긍정) 사이 실수로 정량화하라.\n오직 JSON만 출력: {{"score": 0.xx, "confidence": 0.xx}}'
         try:
-            headers = {'Authorization': f'Bearer {self.llm_api_key}', 'Content-Type': 'application/json'}
+            headers = {'Authorization': f"Bearer {self.llm_api_key}', 'Content-Type': 'application/json"}
             payload = {'model': self.llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 64, 'temperature': 0.1}
             resp = requests.post(f'{self.llm_base_url}/chat/completions', headers=headers, json=payload, timeout=20)
             resp.raise_for_status()
@@ -127,7 +127,7 @@ class ArgusEngine:
                 score = float(parsed.get('score', -1))
                 conf = float(parsed.get('confidence', 0))
                 if 0.0 <= score <= 1.0:
-                    logger.info(f'  [Phase 64] Tier2 LLM {theme_name}: score={score:.3f} confidence={conf:.3f}')
+                    logger.info(f"  [Phase 64] Tier2 LLM {theme_name}: score={score:.3f} confidence={conf:.3f}")
                     return score
         except Exception as _e:
             logger.error(f'  [Phase 64] LLM Tier2 {theme_name} 실패: {_e}', exc_info=True)
@@ -171,4 +171,4 @@ if __name__ == '__main__':
     print('\n▶ 대시보드 피처 키:')
     for k, v in scores.items():
         bar = '█' * int(v * 20)
-        print(f'  {k:25s} {v:.4f} [{bar:<20}]')
+        print(f"  {k:25s} {v:.4f} [{bar:<20}]")

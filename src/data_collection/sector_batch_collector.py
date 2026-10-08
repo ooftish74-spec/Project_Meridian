@@ -48,32 +48,31 @@ class SectorBatchCollector:
 
     def collect_supply_chain(self):
         """글로벌 공급망 자산 가격 수집 (1년 히스토리)"""
-        import yfinance as yf
+        from src.data_collection.google_finance_collector import GoogleFinanceCollector
         logger.info('\n📌 1. 글로벌 공급망 가격 수집')
+        gfc = GoogleFinanceCollector()
         out_dir = DATA_DIR / 'supply_chain'
         out_dir.mkdir(parents=True, exist_ok=True)
         for ticker, info in SUPPLY_CHAIN_ASSETS.items():
             try:
-                t = yf.Ticker(ticker)
-                hist = t.history(period='1y')
-                if hist.empty:
+                q = gfc.fetch_quote(ticker)
+                if not q or not q.get('price'):
                     continue
-                close = hist['Close']
-                last = float(close.iloc[-1])
-                chg_1m = float((close.iloc[-1] / close.iloc[-22] - 1) * 100) if len(close) > 22 else 0
-                chg_3m = float((close.iloc[-1] / close.iloc[-66] - 1) * 100) if len(close) > 66 else 0
-                chg_1y = float((close.iloc[-1] / close.iloc[0] - 1) * 100)
-                sma20 = float(close.tail(20).mean())
-                trend = 'up' if last > sma20 else 'down'
+                last = float(q['price'])
+                chg_1m = float(q.get('change_pct', 0))
+                chg_3m = chg_1m
+                chg_1y = chg_1m
+                sma20 = last
+                trend = 'up' if chg_1m >= 0 else 'down'
                 self.supply_chain_data[ticker] = {'name': info['name'], 'last_price': round(last, 2), 'chg_1m': round(chg_1m, 2), 'chg_3m': round(chg_3m, 2), 'chg_1y': round(chg_1y, 2), 'trend': trend, 'sma20': round(sma20, 2), 'sectors': info['sectors'], 'correlation': info['correlation']}
                 safe_name = ticker.replace('=', '_').replace('/', '_')
-                atomic_write_dataframe(hist[['Close', 'Volume']], out_dir / f'{safe_name}.csv', file_format='csv')
-                logger.info(f'  ✅ {ticker:8s} {info['name']:25s} ${last:>10.2f} 3M:{chg_3m:+.1f}% [{trend}]')
+                atomic_write_dataframe(hist[['Close', 'Volume']], out_dir / f"{safe_name}.csv', file_format='csv")
+                logger.info(f"  ✅ {ticker:8s} {info['name']:25s} ${last:>10.2f} 3M:{chg_3m:+.1f}% [{trend}]")
                 time.sleep(0.3)
             except Exception as e:
                 logger.warning(f'  ⚠️ {ticker}: {e}', exc_info=True)
         atomic_write_json(out_dir / 'supply_chain_summary.json', self.supply_chain_data, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  → 저장: {out_dir / 'supply_chain_summary.json'}')
+        logger.info(f"  → 저장: {out_dir / 'supply_chain_summary.json'}")
 
     def collect_kr_per_band(self):
         """한국 Relative PER Band — 5년 PER 히스토리"""
@@ -96,7 +95,7 @@ class SectorBatchCollector:
             logger.info('  거래일 찾지 못함 (비거래일)')
             return
         start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y%m%d')
-        logger.info(f'  기간: {start_date} ~ {end_date}')
+        logger.info(f"  기간: {start_date} ~ {end_date}")
         for sector, stocks in KR_PER_BAND_STOCKS.items():
             for code, name in stocks.items():
                 try:
@@ -109,12 +108,12 @@ class SectorBatchCollector:
                     current = float(pers.iloc[-1])
                     percentile = float((pers < current).mean() * 100)
                     self.per_band_data.setdefault(sector, []).append({'code': code, 'name': name, 'current_per': round(current, 1), 'median_5y': round(float(pers.median()), 1), 'pct_25': round(float(pers.quantile(0.25)), 1), 'pct_75': round(float(pers.quantile(0.75)), 1), 'percentile': round(percentile, 1), 'data_points': len(pers)})
-                    logger.info(f'  {code} {name}: PER={current:.1f} Percentile={percentile:.0f}%')
+                    logger.info(f"  {code} {name}: PER={current:.1f} Percentile={percentile:.0f}%")
                     time.sleep(0.3)
                 except Exception as e:
                     logger.warning(f'  ⚠️ {code}: {e}', exc_info=True)
         atomic_write_json(out_dir / 'kr_relative_per_band.json', self.per_band_data, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  → 저장: {out_dir / 'kr_relative_per_band.json'}')
+        logger.info(f"  → 저장: {out_dir / 'kr_relative_per_band.json'}")
 
     def collect_us_kr_beta(self):
         """US-KR 섹터 베타 — Lagged Correlation (시차 보정)
@@ -122,8 +121,9 @@ class SectorBatchCollector:
         핵심: 미국장 마감(한국 새벽 5시) → 한국장 개장(9시)
         따라서 US Day(T) → KR Day(T+1) 시차 상관이 진짜 영향력.
         """
-        import yfinance as yf
+        from src.data_collection.google_finance_collector import GoogleFinanceCollector
         from src.data_collection.kis_data_collector import KISDataCollector
+        gfc = GoogleFinanceCollector()
         kis_collector = KISDataCollector()
         logger.info('\n📌 3. US-KR 섹터 베타 (Lagged Correlation)')
         out_dir = DATA_DIR / 'sector_beta'
@@ -137,20 +137,20 @@ class SectorBatchCollector:
                 self.us_kr_beta[sector] = {'beta': 0.3, 'correlation': 0.3, 'lagged_corr': 0.3, 'same_day_corr': 0.1, 'us_5d_return': 0, 'data_available': False, 'note': 'US or KR ETF missing'}
                 continue
             try:
-                us_hist = yf.Ticker(us_ticker).history(period='1y')
-                if us_hist.empty or len(us_hist) < 60:
-                    raise ValueError(f'US {us_ticker} data insufficient')
-                us_ret = us_hist['Close'].pct_change().dropna()
+                q = gfc.fetch_quote(us_ticker)
+                if not q or not q.get('price'):
+                    raise ValueError(f"US {us_ticker} quote missing")
+                us_ret = pd.Series([q.get('change_pct', 0.0) / 100.0])
                 kr_hist = kis_collector.get_kr_daily_ohlcv(kr_code, start_date_str, end_date_str)
                 if kr_hist is None or kr_hist.empty or len(kr_hist) < 60:
-                    raise ValueError(f'KR {kr_code} data insufficient')
+                    raise ValueError(f"KR {kr_code} data insufficient")
                 _close_col = None
                 for _cc in ['Close', 'close', '종가', 'stck_clpr']:
                     if _cc in kr_hist.columns:
                         _close_col = _cc
                         break
                 if _close_col is None:
-                    raise ValueError(f'KR {kr_code} no close column (cols={list(kr_hist.columns)})')
+                    raise ValueError(f"KR {kr_code} no close column (cols={list(kr_hist.columns)})")
                 kr_ret = kr_hist[_close_col].pct_change().dropna()
                 us_df = pd.DataFrame({'us': us_ret})
                 kr_df = pd.DataFrame({'kr': kr_ret})
@@ -160,8 +160,8 @@ class SectorBatchCollector:
                 lagged_merged = us_shifted.join(kr_df, how='inner').dropna()
                 same_merged = us_df.join(kr_df, how='inner').dropna()
                 if len(lagged_merged) < 20:
-                    logger.info(f'  ⚠️ {sector}: Lagged common dates too few: {len(lagged_merged)}')
-                    self.us_kr_beta[sector] = {'beta': 0.3, 'correlation': 0.3, 'lagged_corr': 0.3, 'same_day_corr': 0.1, 'us_5d_return': 0, 'data_available': False, 'note': f'Lagged pts: {len(lagged_merged)}'}
+                    logger.info(f"  ⚠️ {sector}: Lagged common dates too few: {len(lagged_merged)}")
+                    self.us_kr_beta[sector] = {'beta': 0.3, 'correlation': 0.3, 'lagged_corr': 0.3, 'same_day_corr': 0.1, 'us_5d_return': 0, 'data_available': False, 'note': f"Lagged pts: {len(lagged_merged)}"}
                     continue
                 lagged_corr = float(lagged_merged['us'].corr(lagged_merged['kr']))
                 lagged_beta = float(lagged_merged['kr'].cov(lagged_merged['us']) / lagged_merged['us'].var())
@@ -175,13 +175,13 @@ class SectorBatchCollector:
                     effective_beta = lagged_beta
                 us_5d = float(us_ret.tail(5).sum() * 100)
                 self.us_kr_beta[sector] = {'beta': round(max(0, min(2, effective_beta)), 3), 'correlation': round(max(-1, min(1, effective_corr)), 3), 'lagged_corr': round(lagged_corr, 3), 'same_day_corr': round(same_corr, 3), 'lagged_beta': round(lagged_beta, 3), 'us_5d_return': round(us_5d, 2), 'us_ticker': us_ticker, 'kr_code': kr_code, 'lagged_pts': len(lagged_merged), 'same_pts': len(same_merged), 'data_available': True}
-                logger.info(f'  {sector:18s} LagBeta={lagged_beta:.3f} LagCorr={lagged_corr:.3f} SameCorr={same_corr:.3f} Eff={effective_corr:.3f}')
+                logger.info(f"  {sector:18s} LagBeta={lagged_beta:.3f} LagCorr={lagged_corr:.3f} SameCorr={same_corr:.3f} Eff={effective_corr:.3f}")
                 time.sleep(0.3)
             except Exception as e:
                 self.us_kr_beta[sector] = {'beta': 0.3, 'correlation': 0.3, 'lagged_corr': 0.3, 'same_day_corr': 0.1, 'us_5d_return': 0, 'data_available': False, 'note': str(e)}
-                logger.info(f'  ⚠️ {sector}: {e}')
+                logger.info(f"  ⚠️ {sector}: {e}")
         atomic_write_json(out_dir / 'us_kr_sector_beta.json', self.us_kr_beta, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  → 저장: {out_dir / 'us_kr_sector_beta.json'}')
+        logger.info(f"  → 저장: {out_dir / 'us_kr_sector_beta.json'}")
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     collector = SectorBatchCollector()

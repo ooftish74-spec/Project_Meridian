@@ -64,7 +64,7 @@ class AuxDataLoader:
         self._load_earnings()
         self._load_financials()
         self._loaded = True
-        logger.info(f'  ✅ AuxDataLoader: sentiment={len(self._sentiment)}, dart={len(self._dart)}, flow={len(self._flow)}, earnings={len(self._earnings)}, financials={len(self._financials)}')
+        logger.info(f"  ✅ AuxDataLoader: sentiment={len(self._sentiment)}, dart={len(self._dart)}, flow={len(self._flow)}, earnings={len(self._earnings)}, financials={len(self._financials)}")
 
     def get_features(self, ticker: str, date_str: str) -> Dict[str, float]:
         """ticker+date에 해당하는 15개 보조 피처 반환.
@@ -135,7 +135,7 @@ class AuxDataLoader:
                 self._sentiment[ticker_dir.name] = df
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:208', exc_info=True)
 
     def _fill_sentiment(self, feat: Dict, ticker: str, date_str: str):
@@ -163,7 +163,7 @@ class AuxDataLoader:
                     return
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return
         if isinstance(row, pd.DataFrame):
             row = row.iloc[-1]
@@ -209,7 +209,7 @@ class AuxDataLoader:
                 self._dart[ticker_dir.name] = df
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:304', exc_info=True)
 
     def _fill_dart(self, feat: Dict, ticker: str, date_str: str):
@@ -252,7 +252,7 @@ class AuxDataLoader:
                         self._flow[ticker_dir.name] = df
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:364', exc_info=True)
             short_file = ticker_dir / 'short_proxy.csv'
             if short_file.exists():
@@ -267,7 +267,7 @@ class AuxDataLoader:
                         self._short[ticker_dir.name] = df
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:384', exc_info=True)
 
     def _fill_flow(self, feat: Dict, ticker: str, date_str: str):
@@ -324,7 +324,7 @@ class AuxDataLoader:
                     self._earnings[ticker_dir.name] = df
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:454', exc_info=True)
 
     def _load_financials(self):
@@ -339,7 +339,7 @@ class AuxDataLoader:
                 self._financials[ticker] = data
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:470', exc_info=True)
 
     def _fill_fundamentals(self, feat: Dict, ticker: str, date_str: str):
@@ -380,7 +380,7 @@ class AuxDataLoader:
                             es = 0.0
                     else:
                         es = float(latest.get('earnings_surprise', 0) or 0)
-                        logger.debug(f'earnings_surprise: insufficient quarters for {ticker}, using pre-computed={es:.4f}')
+                        logger.debug(f"earnings_surprise: insufficient quarters for {ticker}, using pre-computed={es:.4f}")
                     if not (isinstance(es, float) and np.isnan(es)):
                         feat['earnings_surprise_latest'] = float(np.clip(es, -3.0, 3.0))
                     rev_col = 'single_q_revenue' if 'single_q_revenue' in latest.index else 'revenue'
@@ -402,7 +402,7 @@ class AuxDataLoader:
                         ry = float(latest.get('revenue_yoy', latest.get('earnings_yoy', 0)) or 0)
                         if abs(ry) > 2.0:
                             ry = ry / 100.0
-                        logger.debug(f'revenue_yoy: no same-quarter prev year for {ticker}, using fallback={ry:.4f}')
+                        logger.debug(f"revenue_yoy: no same-quarter prev year for {ticker}, using fallback={ry:.4f}")
                     if not (isinstance(ry, float) and np.isnan(ry)):
                         feat['revenue_yoy_latest'] = float(np.clip(ry, -2.0, 2.0))
             except Exception as e:
@@ -462,6 +462,6 @@ class AuxDataLoader:
                     return row.iloc[-1] if isinstance(row, pd.DataFrame) else row
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:685', exc_info=True)
         return None

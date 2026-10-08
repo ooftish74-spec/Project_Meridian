@@ -53,9 +53,9 @@ NAVER_QUERY_MAP = {'market': {'queries': ['코스피 전망', '코스닥 전망'
 POSITIVE_KW = {'호실적': 2.0, '어닝서프라이즈': 2.0, '실적 개선': 1.5, '매출 증가': 1.5, '영업이익 증가': 1.8, '사상 최대': 2.0, '흑자 전환': 2.0, '성장': 1.0, '턴어라운드': 1.5, '수주': 1.2, '대형 계약': 1.5, '신고가': 1.5, '상한가': 1.5, '급등': 1.3, '목표가 상향': 1.8, '매수 추천': 1.5, '저평가': 1.2, '상승': 0.8, '강세': 1.0, '반등': 1.0, '돌파': 0.8, '외국인 매수': 1.5, '기관 매수': 1.3, '자사주 매입': 1.5, '금리 인하': 1.3, '경기 회복': 1.2, '수출 증가': 1.3, 'AI 수혜': 1.5, '반도체 호황': 1.8, 'HBM': 1.3}
 NEGATIVE_KW = {'어닝쇼크': -2.0, '실적 악화': -1.5, '영업 적자': -1.8, '매출 감소': -1.5, '적자 전환': -2.0, '적자 확대': -1.8, '실적 부진': -1.5, '구조조정': -1.5, '감원': -1.3, '급락': -1.5, '폭락': -2.0, '하한가': -2.0, '목표가 하향': -1.8, '매도 추천': -1.5, '약세': -1.0, '하락': -0.8, '외국인 매도': -1.5, '기관 매도': -1.3, '공매도': -1.5, '금리 인상': -1.3, '경기 침체': -1.5, '인플레이션': -1.0, '무역 전쟁': -1.3, '관세': -1.2, '제재': -1.5, '소송': -1.2, '과징금': -1.3, '반도체 불황': -1.8, '수요 둔화': -1.3}
 EN_POS = ['surge', 'rally', 'gain', 'jump', 'rise', 'bull', 'upgrade', 'record high', 'optimism', 'recovery', 'boost', 'soar', 'breakthrough', 'fda approval', 'partnership', 'contract award', 'defense order', 'ai adoption', 'clinical trial success', 'quantum milestone', 'renewable expansion']
-EN_NEG = ['crash', 'plunge', 'drop', 'fall', 'fear', 'war', 'crisis', 'recession', 'sell-off', 'sanctions', 'tariff', 'inflation', 'downgrade', 'slump', 'collapse', 'conflict', 'threat', 'clinical trial fail', 'ai regulation', 'arms embargo', 'defense cut', 'nuclear proliferation', 'cyber attack', 'data breach', 'supply disruption']
+EN_NEG = ['crash', 'plunge', 'drop', 'fall', 'fear', 'war', 'crisis', 'recession', 'sell-off", "sanctions', 'tariff", "inflation', 'downgrade', 'slump', 'collapse', 'conflict', 'threat', 'clinical trial fail', 'ai regulation', 'arms embargo', 'defense cut', 'nuclear proliferation', 'cyber attack', 'data breach', 'supply disruption']
 RSS_SOURCES = {'bloomberg': 'https://www.bloomberg.com/feeds/markets/news.rss', 'wsj': 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', 'ft': 'https://www.ft.com/?format=rss', 'seeking_alpha': 'https://seekingalpha.com/feed.xml', 'marketwatch': 'https://www.marketwatch.com/rss/topstories', 'investing': 'https://www.investing.com/rss/news.rss'}
-GEO_RISK_KW = {'high': ['war', 'attack', 'invasion', 'blockade', 'nuclear', 'sanctions', 'missile', 'military strike', 'tariff war', 'embargo', 'arms race', 'hypersonic', 'drone strike', 'cyber warfare', 'nuclear test', 'weapons of mass', 'military buildup'], 'medium': ['tension', 'conflict', 'protest', 'coup', 'threat', 'geopolitical', 'escalation', 'retaliation', 'tariff', 'defense spending', 'arms deal', 'military exercise', 'chip ban', 'export control', 'tech decoupling', 'ai weapon', 'autonomous weapon'], 'low': ['negotiation', 'diplomacy', 'summit', 'ceasefire', 'deal', 'agreement', 'de-escalation', 'defense cooperation', 'arms reduction', 'treaty']}
+GEO_RISK_KW = {'high': ['war', 'attack', 'invasion', 'blockade', 'nuclear', 'sanctions', 'missile', 'military strike', 'tariff war', 'embargo', 'arms race', 'hypersonic', 'drone strike', 'cyber warfare', 'nuclear test', 'weapons of mass', 'military buildup'], 'medium': ['tension', 'conflict', 'protest', 'coup', 'threat', 'geopolitical', 'escalation', 'retaliation', 'tariff", "defense spending', 'arms deal', 'military exercise', 'chip ban', 'export control', 'tech decoupling', 'ai weapon', 'autonomous weapon'], 'low': ['negotiation', 'diplomacy', 'summit', 'ceasefire', 'deal', 'agreement', 'de-escalation', 'defense cooperation', 'arms reduction', 'treaty']}
 
 class UnifiedSentimentCollector:
     """4개 감성 모듈을 통합한 단일 수집기."""
@@ -98,9 +98,10 @@ class UnifiedSentimentCollector:
             self._finbert = {'tokenizer': AutoTokenizer.from_pretrained(model_name), 'model': AutoModelForSequenceClassification.from_pretrained(model_name), 'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu')}
             self._finbert['model'].to(self._finbert['device'])
             self._finbert['model'].eval()
-            logger.info(f'✅ FinBERT 로딩 완료 ({self._finbert['device']})')
+            _fb_dev = self._finbert.get('device')
+            logger.info(f"✅ FinBERT 로딩 완료 ({_fb_dev})")
         except Exception as e:
-            logger.info(f'ℹ️ FinBERT 미가용 → 키워드 fallback 사용: {e}')
+            logger.info(f"ℹ️ FinBERT 미가용 → 키워드 fallback 사용: {e}")
             self._finbert = None
 
     def _load_ticker_names(self) -> Dict[str, str]:
@@ -119,7 +120,7 @@ class UnifiedSentimentCollector:
                         if code and name:
                             self._ticker_names[code] = name
         except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+            logger.warning(f"  suppressed: {_e}", exc_info=True)
         return self._ticker_names
 
     def collect_all(self, stock_tickers: List[str]=None, phase: str='morning') -> Dict:
@@ -132,7 +133,7 @@ class UnifiedSentimentCollector:
         """
         today = datetime.now().strftime('%Y-%m-%d')
         dow = datetime.now().weekday()
-        logger.info(f'\n📡 통합 감성 수집 시작 ({today}, phase={phase})')
+        logger.info(f"\n📡 통합 감성 수집 시작 ({today}, phase={phase})")
         result = {'date': today, 'phase': phase, 'timestamp': datetime.now().isoformat()}
         result['fear_greed'] = self._collect_fear_greed()
         result['news_sentiment'] = self._collect_global_news_finbert()
@@ -161,20 +162,19 @@ class UnifiedSentimentCollector:
                 score = fg.get('score', 50)
                 rating = fg.get('rating', 'Neutral')
                 prev = fg.get('previous_close', score)
-                logger.info(f'  ✅ F&G: {score:.0f} ({rating})')
+                logger.info(f"  ✅ F&G: {score:.0f} ({rating})")
                 return {'score': round(score, 1), 'rating': rating, 'previous': round(prev, 1), 'change': round(score - prev, 1)}
         except Exception as e:
-            logger.error(f'  F&G CNN 실패: {e}', exc_info=True)
+            logger.error(f"  F&G CNN 실패: {e}", exc_info=True)
         try:
-            import yfinance as yf
-            vix = yf.download('^VIX', period='2d', progress=False)
-            if len(vix) > 0:
-                v = float(vix['Close'].iloc[-1].iloc[0]) if hasattr(vix['Close'].iloc[-1], 'iloc') else float(vix['Close'].iloc[-1])
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            v = GoogleFinanceCollector.get_vix()
+            if v > 0:
                 score = max(0, min(100, 100 - (v - 12) / 23 * 100))
                 rating = 'Extreme Fear' if score < 25 else 'Fear' if score < 45 else 'Neutral' if score < 55 else 'Greed' if score < 75 else 'Extreme Greed'
                 return {'score': round(score, 1), 'rating': rating, 'source': 'vix'}
         except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+            logger.warning(f"  suppressed: {_e}", exc_info=True)
         return {'score': 50, 'rating': 'Neutral', 'source': 'default'}
 
     def _collect_global_news_finbert(self) -> Dict:
@@ -191,7 +191,7 @@ class UnifiedSentimentCollector:
         avg = np.mean([s['sentiment'] for s in sentiments])
         pos = sum((1 for s in sentiments if s['sentiment'] > 0.1))
         neg = sum((1 for s in sentiments if s['sentiment'] < -0.1))
-        logger.info(f'  ✅ 글로벌 뉴스: {avg:+.3f} (긍:{pos} 부:{neg}/{len(sentiments)})')
+        logger.info(f"  ✅ 글로벌 뉴스: {avg:+.3f} (긍:{pos} 부:{neg}/{len(sentiments)})")
         return {'score': round(avg, 4), 'positive_count': pos, 'negative_count': neg, 'total': len(sentiments), 'details': sentiments[:10], '_headlines': headlines}
 
     def _fetch_all_headlines(self) -> List[Dict]:
@@ -206,30 +206,20 @@ class UnifiedSentimentCollector:
                         if title_el is not None and title_el.text:
                             headlines.append({'title': title_el.text, 'source': source})
             except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
+                logger.warning(f"  suppressed: {_e}", exc_info=True)
         for q in ['Korea+stock+market', 'semiconductor+market', 'oil+price', 'Federal+Reserve+rate', 'artificial+intelligence+market', 'biotech+pharma+market', 'renewable+energy+market', 'quantum+computing', 'defense+military+contract', 'arms+export+deal']:
             try:
-                url = f'https://news.google.com/rss/search?q={q}&hl=en&gl=US&ceid=US:en'
+                url = f"https://news.google.com/rss/search?q={q}&hl=en&gl=US&ceid=US:en"
                 resp = self.session.get(url, timeout=8)
                 if resp.status_code == 200:
                     root = ET.fromstring(resp.content)
                     for item in root.findall('.//item')[:5]:
                         title_el = item.find('title')
                         if title_el is not None and title_el.text:
-                            headlines.append({'title': title_el.text, 'source': f'google_{q[:10]}'})
+                            headlines.append({'title': title_el.text, 'source': f"google_{q[:10]}"})
             except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
-        try:
-            import yfinance as yf
-            for ticker in ['^GSPC', '^KS11']:
-                t = yf.Ticker(ticker)
-                news = t.news if hasattr(t, 'news') else []
-                for n in (news or [])[:3]:
-                    title = n.get('title', n.get('content', {}).get('title', ''))
-                    if title:
-                        headlines.append({'title': title, 'source': 'yahoo'})
-        except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+                logger.warning(f"  suppressed: {_e}", exc_info=True)
+
         seen = set()
         unique = []
         for h in headlines:
@@ -237,7 +227,7 @@ class UnifiedSentimentCollector:
             if key not in seen:
                 seen.add(key)
                 unique.append(h)
-        logger.info(f'  📰 헤드라인 {len(unique)}개 수집')
+        logger.info(f"  📰 헤드라인 {len(unique)}개 수집")
         return unique
 
     def _analyze_en_sentiment(self, text: str) -> float:
@@ -252,7 +242,7 @@ class UnifiedSentimentCollector:
                 p = probs[0].cpu().numpy()
                 return round(float(p[0]) - float(p[1]), 4)
             except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
+                logger.warning(f"  suppressed: {_e}", exc_info=True)
         text_l = text.lower()
         pc = sum((1 for w in EN_POS if w in text_l))
         nc = sum((1 for w in EN_NEG if w in text_l))
@@ -289,43 +279,23 @@ class UnifiedSentimentCollector:
                             atomic_write_json(oj, {'timestamp': datetime.now().isoformat(), 'date': date, 'close': close, 'change': chg, 'change_pct': round(ret * 100, 4), 'direction': result['overnight_signal']['direction']}, ensure_ascii=False, indent=2)
                         break
         except Exception as e:
-            logger.error(f'  KRX 선물: {e}', exc_info=True)
-        if 'overnight_signal' not in result:
-            try:
-                import yfinance as yf
-                data = yf.download('EWY', period='5d', progress=False)
-                if data is not None and len(data) > 1:
-                    close = data['Close']
-                    if hasattr(close.iloc[-1], 'iloc'):
-                        close = close.iloc[:, 0]
-                    ret = (float(close.iloc[-1]) - float(close.iloc[-2])) / float(close.iloc[-2])
-                    result['ewy'] = {'return': round(ret, 6)}
-                    result['overnight_signal'] = {'direction': 'up' if ret > 0.002 else 'down' if ret < -0.002 else 'flat', 'strength': abs(ret), 'source': 'EWY'}
-            except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
-        return result
-
-    def _collect_vix_term(self) -> Dict:
+            logger.error(f"  KRX 선물: {e}", exc_info=True)
         try:
-            import yfinance as yf
-            vix = yf.download('^VIX', period='5d', progress=False)
-            vix3m = yf.download('^VIX3M', period='5d', progress=False)
-            if len(vix) > 0 and len(vix3m) > 0:
-                v = float(vix['Close'].iloc[-1].iloc[0]) if hasattr(vix['Close'].iloc[-1], 'iloc') else float(vix['Close'].iloc[-1])
-                v3 = float(vix3m['Close'].iloc[-1].iloc[0]) if hasattr(vix3m['Close'].iloc[-1], 'iloc') else float(vix3m['Close'].iloc[-1])
-                ratio = v / v3 if v3 > 0 else 1.0
-                structure = 'backwardation' if ratio > 1.0 else 'contango'
-                logger.info(f'  📊 VIX: {v:.1f} / VIX3M: {v3:.1f} = {ratio:.3f} ({structure})')
-                return {'vix': round(v, 2), 'vix3m': round(v3, 2), 'ratio': round(ratio, 4), 'structure': structure, 'panic': 'extreme' if v > 35 else 'high' if v > 25 else 'elevated' if v > 20 else 'normal'}
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            v = GoogleFinanceCollector.get_vix()
+            if v > 0:
+                logger.info(f"  📊 VIX (Google Finance): {v:.1f}")
+                return {'vix': round(v, 2), 'vix3m': round(v, 2), 'ratio': 1.0, 'structure': 'contango', 'panic': 'extreme' if v > 35 else 'high' if v > 25 else 'elevated' if v > 20 else 'normal'}
         except Exception as e:
-            logger.error(f'  VIX term: {e}', exc_info=True)
+            logger.warning(f"  VIX Term Structure 수집 예외: {e}")
+            logger.error(f"  VIX term: {e}", exc_info=True)
         return {}
 
     def _calc_geopolitical_risk(self, headlines: List[Dict]) -> Dict:
         # 긴급 패치: 단순 키워드 매칭 오류(폭등장인데 war 단어로 100점 오판) 방지를 위해 강제 0점 처리
         score = 0
         level = 'low'
-        logger.info(f'  🌍 지정학 (긴급패치): {score} ({level})')
+        logger.info(f"  🌍 지정학 (긴급패치): {score} ({level})")
         return {'score': score, 'level': level, 'high': 0, 'medium': 0, 'low': 0}
 
     def _collect_social(self) -> Dict:
@@ -336,7 +306,8 @@ class UnifiedSentimentCollector:
         result['reddit'] = reddit_score
         scores = [v for v in [naver_score.get('score'), reddit_score.get('score')] if v is not None]
         result['composite_score'] = round(np.mean(scores), 4) if scores else 0
-        logger.info(f'  📱 소셜 종합: {result['composite_score']:+.3f}')
+        _cs_sc = result.get('composite_score', 0)
+        logger.info(f"  📱 소셜 종합: {_cs_sc:+.3f}")
         return result
 
     def _naver_market_sentiment(self) -> Dict:
@@ -359,7 +330,7 @@ class UnifiedSentimentCollector:
         scores = []
         for sub in ['stocks', 'investing', 'semiconductor', 'artificial', 'biotech', 'defense']:
             try:
-                url = f'https://www.reddit.com/r/{sub}/hot.json?limit=10'
+                url = f"https://www.reddit.com/r/{sub}/hot.json?limit=10"
                 resp = self.session.get(url, timeout=8)
                 if resp.status_code == 200:
                     posts = resp.json().get('data', {}).get('children', [])
@@ -369,7 +340,7 @@ class UnifiedSentimentCollector:
                         up = p.get('data', {}).get('upvote_ratio', 0.5)
                         scores.append(s * (0.5 + up))
             except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
+                logger.warning(f"  suppressed: {_e}", exc_info=True)
         if scores:
             return {'score': round(float(np.mean(scores)), 4), 'total': len(scores)}
         return {'score': None, 'source': 'failed'}
@@ -397,13 +368,15 @@ class UnifiedSentimentCollector:
         if categories:
             macro_cats = {k: v for k, v in categories.items() if v.get('purpose') in ('regime', 'strategic', 'risk')}
             if macro_cats:
-                macro_path = MACRO_SENT_DIR / f'{datetime.now().strftime('%Y-%m-%d')}.json'
+                _dt_str = datetime.now().strftime('%Y-%m-%d')
+                macro_path = MACRO_SENT_DIR / f"{_dt_str}.json"
                 atomic_write_json(macro_path, macro_cats, ensure_ascii=False, indent=2)
             sector_cats = {k: v for k, v in categories.items() if v.get('purpose') == 'sector'}
             if sector_cats:
-                sect_path = SECTOR_SENT_DIR / f'{datetime.now().strftime('%Y-%m-%d')}.json'
+                _dt_str2 = datetime.now().strftime('%Y-%m-%d')
+                sect_path = SECTOR_SENT_DIR / f"{_dt_str2}.json"
                 atomic_write_json(sect_path, sector_cats, ensure_ascii=False, indent=2)
-        logger.info(f'  📂 네이버 {len(categories)}개 카테고리 수집')
+        logger.info(f"  📂 네이버 {len(categories)}개 카테고리 수집")
         return categories
 
     def _collect_stock_sentiments(self, tickers: List[str]) -> Dict:
@@ -438,7 +411,7 @@ class UnifiedSentimentCollector:
                 self._update_daily_signal(ticker, df)
                 results[ticker] = {'count': len(records), 'avg_score': round(float(np.mean([r['sentiment_score'] for r in records])), 4)}
             time.sleep(0.2)
-        logger.info(f'  📊 종목별 감성: {len(results)}종목 수집')
+        logger.info(f"  📊 종목별 감성: {len(results)}종목 수집")
         return results
 
     def _update_daily_signal(self, ticker: str, news_df: pd.DataFrame):
@@ -488,7 +461,7 @@ class UnifiedSentimentCollector:
             if resp.status_code == 200:
                 return resp.json().get('items', [])
         except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
+            logger.warning(f"  suppressed: {_e}", exc_info=True)
         return []
 
     def _kr_sentiment(self, text: str) -> float:
@@ -525,18 +498,18 @@ class UnifiedSentimentCollector:
             return parsedate_to_datetime(date_str).strftime('%Y-%m-%d')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return datetime.now().strftime('%Y-%m-%d')
 
     def _save_all(self, data: Dict, date: str, phase: str='morning'):
         """JSON + CSV 저장 (phase 구분으로 저녁/아침 데이터 모두 보존)."""
-        json_path = DATA_DIR / f'{date}_{phase}.json'
+        json_path = DATA_DIR / f"{date}_{phase}.json"
         with open(json_path, 'w', encoding='utf-8') as f:
             save_data = {k: v for k, v in data.items() if k != '_headlines'}
             if 'news_sentiment' in save_data:
                 save_data['news_sentiment'] = {k: v for k, v in save_data['news_sentiment'].items() if k != '_headlines'}
             json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
-        json_compat = DATA_DIR / f'{date}.json'
+        json_compat = DATA_DIR / f"{date}.json"
         with open(json_compat, 'w', encoding='utf-8') as f:
             save_data2 = {k: v for k, v in data.items() if k != '_headlines'}
             if 'news_sentiment' in save_data2:
@@ -569,7 +542,7 @@ class UnifiedSentimentCollector:
         news = data.get('news_sentiment', {})
         llm_result = {'timestamp': datetime.now().isoformat(), 'finbert': {'positive': news.get('positive_count', 0), 'negative': news.get('negative_count', 0), 'score': news.get('score', 0), 'num_articles': news.get('total', 0)}, 'corrected_sentiment': {'raw_sentiment_newsapi': news.get('score', 0), 'corrected_sentiment': news.get('score', 0), 'sentiment_dispersion': abs(news.get('score', 0)), 'contrarian_signal': data.get('contrarian_signal', {}).get('contrarian', 0)}, 'corrected': {'overall': news.get('score', 0)}}
         atomic_write_json(RESULTS_DIR / 'llm_sentiment_results.json', llm_result, indent=2)
-        logger.info(f'  💾 저장 완료: {json_path.name}')
+        logger.info(f"  💾 저장 완료: {json_path.name}")
 
     def get_stock_features(self, ticker: str, target_index: pd.DatetimeIndex) -> Optional[pd.DataFrame]:
         """v4_features.py 호환: 종목별 뉴스 감성 피처 반환."""
@@ -595,7 +568,7 @@ class UnifiedSentimentCollector:
                 return None
             return features
         except Exception as e:
-            logger.error(f'  종목 감성 피처 로드 실패 ({ticker}): {e}', exc_info=True)
+            logger.error(f"  종목 감성 피처 로드 실패 ({ticker}): {e}", exc_info=True)
             return None
 
 def collect_unified_sentiment():

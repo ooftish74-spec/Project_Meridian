@@ -44,7 +44,7 @@ try:
     _cfg = DynamicConfig()
 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
     import logging
-    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     _cfg = None
 
     def now_kst():
@@ -75,9 +75,9 @@ class KISWebSocketClient:
             mode: 'live', 'paper', 'mock' (None → DynamicConfig)
         """
         if mode is None:
-            mode = _get('execution.current_mode', 'mock')
+            mode = _get('execution.current_mode', 'live')
             if mode == 'shadow':
-                mode = 'mock'
+                mode = 'live'
         self.mode = mode
         self._ws_url = WS_URL.get(mode)
         self._ws = None
@@ -109,8 +109,8 @@ class KISWebSocketClient:
         from src.utils.credential_manager import CredentialManager
         cm = CredentialManager()
         prefix = 'KIS_PAPER' if self.mode == 'paper' else 'KIS'
-        self._app_key = cm.read_from_env(f'{prefix}_APP_KEY') or ''
-        self._app_secret = cm.read_from_env(f'{prefix}_APP_SECRET') or ''
+        self._app_key = cm.read_from_env(f"{prefix}_APP_KEY") or ''
+        self._app_secret = cm.read_from_env(f"{prefix}_APP_SECRET") or ''
 
     def _get_approval_key(self) -> Optional[str]:
         """WebSocket 접속용 Approval Key 발급.
@@ -125,7 +125,7 @@ class KISWebSocketClient:
         try:
             import requests
             base = 'https://openapi.koreainvestment.com:9443' if self.mode == 'live' else 'https://openapivts.koreainvestment.com:29443'
-            url = f'{base}/oauth2/Approval'
+            url = f"{base}/oauth2/Approval"
             body = {'grant_type': 'client_credentials', 'appkey': self._app_key, 'secretkey': self._app_secret}
             resp = requests.post(url, json=body, timeout=10)
             data = resp.json()
@@ -134,17 +134,17 @@ class KISWebSocketClient:
                 logger.info('  ✅ WebSocket Approval Key 발급 완료')
                 return self._approval_key
             else:
-                logger.error(f'  ❌ Approval Key 발급 실패: {data}')
+                logger.error(f"  ❌ Approval Key 발급 실패: {data}")
                 return None
         except Exception as e:
-            logger.error(f'  ❌ Approval Key 요청 오류: {e}', exc_info=True)
+            logger.error(f"  ❌ Approval Key 요청 오류: {e}", exc_info=True)
             return None
 
     def subscribe_price(self, tickers: List[str]):
         """실시간 체결가 구독 등록."""
         for ticker in tickers:
             if len(self._subscribed_price) >= self.MAX_SUBSCRIPTIONS:
-                logger.warning(f'  WebSocket 구독 한도({self.MAX_SUBSCRIPTIONS}) 도달')
+                logger.warning(f"  WebSocket 구독 한도({self.MAX_SUBSCRIPTIONS}) 도달")
                 break
             self._subscribed_price.add(ticker)
         if self._connected and self._ws:
@@ -205,7 +205,7 @@ class KISWebSocketClient:
         self._flush_thread = threading.Thread(target=self._flush_worker, daemon=True, name='kis-tick-harvester')
         self._flush_thread.start()
         self._stats['started_at'] = now_kst().isoformat()
-        logger.info(f'  🟢 WebSocket 수신 및 Tick Harvester 시작 ({self.mode})')
+        logger.info(f"  🟢 WebSocket 수신 및 Tick Harvester 시작 ({self.mode})")
         return True
 
     def _flush_worker(self):
@@ -225,7 +225,7 @@ class KISWebSocketClient:
             try:
                 self._ws.close()
             except Exception as _e:
-                logger.error(f'  WebSocket ws.close() 실패 (무시): {_e}', exc_info=True)
+                logger.error(f"  WebSocket ws.close() 실패 (무시): {_e}", exc_info=True)
         self._connected = False
         logger.info('  🔴 WebSocket 수신 종료')
 
@@ -265,12 +265,12 @@ class KISWebSocketClient:
                 return
             except Exception as e:
                 self._stats['errors'] += 1
-                logger.warning(f'  WebSocket 연결 오류: {e}', exc_info=True)
+                logger.warning(f"  WebSocket 연결 오류: {e}", exc_info=True)
             if self._running:
                 self._reconnect_attempt += 1
                 self._stats['reconnects'] += 1
                 delay = min(self._reconnect_max, self._reconnect_base * 2 ** self._reconnect_attempt)
-                logger.info(f'  🔄 WebSocket 재연결 대기: {delay:.1f}초 (시도 #{self._reconnect_attempt})')
+                logger.info(f"  🔄 WebSocket 재연결 대기: {delay:.1f}초 (시도 #{self._reconnect_attempt})")
                 time.sleep(delay)
 
     def _on_ws_open(self, ws):
@@ -298,9 +298,10 @@ class KISWebSocketClient:
                 body = data.get('body', {})
                 rt_cd = body.get('rt_cd', '')
                 if rt_cd == '0':
-                    logger.debug(f'  WS 구독 확인: {tr_id}')
+                    logger.debug(f"  WS 구독 확인: {tr_id}")
                 elif rt_cd:
-                    logger.warning(f'  WS 구독 오류: {body.get('msg1', '')}')
+                    _msg_m1 = body.get('msg1', '')
+                    logger.warning(f"  WS 구독 오류: {_msg_m1}")
             else:
                 parts = message.split('|')
                 if len(parts) < 4:
@@ -315,17 +316,17 @@ class KISWebSocketClient:
                     self._handle_notice_data(data_str)
         except Exception as e:
             self._stats['errors'] += 1
-            logger.error(f'  WS 메시지 처리 오류: {e}', exc_info=True)
+            logger.error(f"  WS 메시지 처리 오류: {e}", exc_info=True)
 
     def _on_ws_error(self, ws, error):
         """WebSocket 에러."""
         self._stats['errors'] += 1
-        logger.warning(f'  WebSocket 에러: {error}')
+        logger.warning(f"  WebSocket 에러: {error}")
 
     def _on_ws_close(self, ws, close_status_code, close_msg):
         """WebSocket 연결 종료."""
         self._connected = False
-        logger.info(f'  WebSocket 연결 종료 (code={close_status_code})')
+        logger.info(f"  WebSocket 연결 종료 (code={close_status_code})")
 
     def _send_subscribe(self, tr_id: str, tr_key: str):
         """종목 구독 요청."""
@@ -334,9 +335,9 @@ class KISWebSocketClient:
         msg = json.dumps({'header': {'approval_key': self._approval_key, 'custtype': 'P', 'tr_type': '1', 'content-type': 'utf-8'}, 'body': {'input': {'tr_id': tr_id, 'tr_key': tr_key}}})
         try:
             self._ws.send(msg)
-            logger.debug(f'  WS 구독 요청: {tr_id} / {tr_key}')
+            logger.debug(f"  WS 구독 요청: {tr_id} / {tr_key}")
         except Exception as e:
-            logger.warning(f'  WS 구독 전송 실패: {e}', exc_info=True)
+            logger.warning(f"  WS 구독 전송 실패: {e}", exc_info=True)
 
     def _send_unsubscribe(self, tr_id: str, tr_key: str):
         """종목 구독 해제."""
@@ -346,7 +347,7 @@ class KISWebSocketClient:
         try:
             self._ws.send(msg)
         except Exception as _e:
-            logger.warning(f'  [WebSocket] 구독 메시지 전송 실패: {_e} → 세션 초기화', exc_info=True)
+            logger.warning(f"  [WebSocket] 구독 메시지 전송 실패: {_e} → 세션 초기화", exc_info=True)
             self._connected = False
             self._stats['errors'] += 1
 
@@ -375,7 +376,7 @@ class KISWebSocketClient:
             if self._on_price:
                 self._on_price(ticker, price_data)
         except (ValueError, IndexError) as e:
-            logger.warning(f'  체결가 파싱 실패: {e}', exc_info=True)
+            logger.warning(f"  체결가 파싱 실패: {e}", exc_info=True)
 
     def _handle_orderbook_data(self, data_str: str):
         """실시간 호가 파싱 (H0STASP0).
@@ -407,16 +408,16 @@ class KISWebSocketClient:
             flat_ob = {'ticker': ticker, 'total_ask_volume': total_ask, 'total_bid_volume': total_bid, 'imbalance': orderbook_data['imbalance'], 'spread_pct': orderbook_data['spread_pct'], 'timestamp': now.isoformat()}
             for i in range(3):
                 if i < len(asks):
-                    flat_ob[f'ask{i + 1}_price'] = asks[i]['price']
-                    flat_ob[f'ask{i + 1}_vol'] = asks[i]['volume']
+                    flat_ob[f"ask{i + 1}_price"] = asks[i]['price']
+                    flat_ob[f"ask{i + 1}_vol"] = asks[i]['volume']
                 if i < len(bids):
-                    flat_ob[f'bid{i + 1}_price'] = bids[i]['price']
-                    flat_ob[f'bid{i + 1}_vol'] = bids[i]['volume']
+                    flat_ob[f"bid{i + 1}_price"] = bids[i]['price']
+                    flat_ob[f"bid{i + 1}_vol"] = bids[i]['volume']
             self._ob_buffer.append(flat_ob)
             if self._on_orderbook:
                 self._on_orderbook(ticker, orderbook_data)
         except (ValueError, IndexError) as e:
-            logger.warning(f'  호가 파싱 실패: {e}', exc_info=True)
+            logger.warning(f"  호가 파싱 실패: {e}", exc_info=True)
 
     def _handle_notice_data(self, data_str: str):
         """체결 통보 파싱 (H0STCNR0).
@@ -433,9 +434,13 @@ class KISWebSocketClient:
             self._latest_notices = self._latest_notices[-100:]
             if self._on_notice:
                 self._on_notice(notice)
-            logger.info(f'  📋 체결통보: {notice['ticker']} {notice['side']} x{notice['quantity']} @ {notice['price']:,.0f}')
+            _tk_ws = notice.get('ticker', '')
+            _sd_ws = notice.get('side', '')
+            _qty_ws = notice.get('quantity', 0)
+            _prc_ws = notice.get('price', 0)
+            logger.info(f"  📋 체결통보: {_tk_ws} {_sd_ws} x{_qty_ws} @ {_prc_ws:,.0f}")
         except (ValueError, IndexError) as e:
-            logger.warning(f'  체결통보 파싱 실패: {e}', exc_info=True)
+            logger.warning(f"  체결통보 파싱 실패: {e}", exc_info=True)
 
     def _mock_loop(self):
         """Mock 모드 시뮬레이션 — 가격 데이터 생성."""
@@ -465,12 +470,12 @@ class KISWebSocketClient:
         """parquet에서 최근 종가 로드."""
         try:
             import pandas as pd
-            path = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
+            path = _PROJECT_ROOT / 'data' / 'historical_10y' / f"kr_{ticker}.parquet"
             if path.exists():
                 df = pd.read_parquet(path)
                 return float(df['close'].iloc[-1])
         except Exception as _e:
-            logger.error(f'  WebSocket fallback 가격 조회 실패: {_e}', exc_info=True)
+            logger.error(f"  WebSocket fallback 가격 조회 실패: {_e}", exc_info=True)
         return 50000.0
 
     def integrate_with_data_bus(self):

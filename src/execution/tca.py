@@ -139,7 +139,7 @@ class TCAAnalyzer:
             from src.utils.file_ops import atomic_write_json
 
             atomic_write_json(feedback_path, feedback, indent=2)
-            logger.info(f'  [TCA] 피드백 루프 파일 저장: ratio={ratio:.3f}, avg_is={avg_actual_bps}bps')
+            logger.info(f"  [TCA] 피드백 루프 파일 저장: ratio={ratio:.3f}, avg_is={avg_actual_bps}bps")
         except Exception as e:
             logger.critical(f'  [TCA] 피드백 저장 실패: {e}', exc_info=True)
             send_emergency_page('🚨 [FATAL] {exc} at tca.py:227', exc_info=e)
@@ -180,7 +180,7 @@ class TCAAnalyzer:
                         close_map[ticker] = close_p
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     continue
         except ImportError as e:
             logger.critical('pykrx 미설치 — post-market 보강 스킵', exc_info=True)
@@ -205,7 +205,7 @@ class TCAAnalyzer:
             ef['arrival_price'] = signal_p + (fill_p - signal_p) * timing_ratio
             ef['enriched'] = True
             enriched.append(ef)
-        logger.info(f'TCA post-market 보강: {len(enriched)}건 (VWAP {len(vwap_map)}/{len(tickers)} 종목)')
+        logger.info(f"TCA post-market 보강: {len(enriched)}건 (VWAP {len(vwap_map)}/{len(tickers)} 종목)")
         return enriched
 
     def compute_and_save_summary(self, date_str: str=None) -> Dict:
@@ -231,7 +231,7 @@ class TCAAnalyzer:
             raw = json.loads(trades_file.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {'n_trades': 0, 'error': 'parse_error'}
         items = raw if isinstance(raw, list) else [raw]
         all_fills = []
@@ -257,7 +257,7 @@ class TCAAnalyzer:
         summary['timestamp'] = datetime.now().isoformat()
         summary_path = results_dir / 'tca_summary.json'
         atomic_write_json(summary_path, summary, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'TCA 요약 저장: {summary_path} ({summary['n_trades']}건, avg_is={summary.get('avg_is_bps', 0):.1f}bps)')
+        logger.info(f"TCA 요약 저장: {summary_path} ({summary['n_trades']}건, avg_is={summary.get('avg_is_bps', 0):.1f}bps)")
         self._update_ticker_history(tca_inputs, date_str)
         return summary
 
@@ -341,7 +341,7 @@ class TCAAnalyzer:
                 history = json.loads(history_path.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 history = {}
         ewma_days = cfg.get('execution.tca_ewma_days', 10)
         alpha = 2.0 / (ewma_days + 1)
@@ -370,4 +370,4 @@ class TCAAnalyzer:
             history[ticker] = {'ewma_impact_bps': round(new_ewma, 2), 'n_trades': entry.get('n_trades', 0) + len(impacts), 'last_date': date_str, 'history': hist_list}
         if history:
             atomic_write_json(history_path, history, indent=2, ensure_ascii=False, default=str)
-            logger.info(f'TCA 종목별 이력 업데이트: {len(ticker_impact)}개 종목 ({date_str})')
+            logger.info(f"TCA 종목별 이력 업데이트: {len(ticker_impact)}개 종목 ({date_str})")

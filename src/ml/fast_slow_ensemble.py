@@ -27,7 +27,7 @@ class FastCorrector:
         self.is_fitted = True
         pred_res = self.model.predict(X)
         mse = np.mean((residuals - pred_res) ** 2)
-        logger.info(f'  [FastCorrector] 훈련 완료: 잔차 피팅 MSE={mse:.5f}')
+        logger.info(f"  [FastCorrector] 훈련 완료: 잔차 피팅 MSE={mse:.5f}")
 
     def predict_correction(self, X: np.ndarray) -> np.ndarray:
         """
@@ -40,15 +40,15 @@ class FastCorrector:
     def save(self, path: Path):
         if self.is_fitted:
             joblib.dump(self, path)
-            logger.info(f'  [FastCorrector] 모델 저장 완료: {path.name}')
+            logger.info(f"  [FastCorrector] 모델 저장 완료: {path.name}")
 
     @classmethod
     def load(cls, path: Path):
         if path.exists():
             try:
                 model = joblib.load(path)
-                logger.info(f'  [FastCorrector] 로드 완료: {path.name}')
+                logger.info(f"  [FastCorrector] 로드 완료: {path.name}")
                 return model
             except Exception as e:
-                logger.warning(f'  ⚠️ [FastCorrector] 로드 실패: {e}')
+                logger.warning(f"  ⚠️ [FastCorrector] 로드 실패: {e}")
         return cls()

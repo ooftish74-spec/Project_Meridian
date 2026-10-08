@@ -81,7 +81,7 @@ def ic_decay(factor: pd.DataFrame, price_data: pd.DataFrame,
         fwd_ret = price_data.pct_change(h).shift(-h)
         ic_s = rank_ic_series(factor, fwd_ret)
         summary = ic_summary(ic_s)
-        results[f'horizon_{h}d'] = summary
+        results[f"horizon_{h}d"] = summary
 
     return results
 

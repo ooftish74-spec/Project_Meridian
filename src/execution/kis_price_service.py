@@ -42,7 +42,7 @@ class KISPriceService:
             self._cfg = DynamicConfig()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             self._cfg = None
         self._base_url = 'https://openapi.koreainvestment.com:9443'
         self._token_endpoint = '/oauth2/tokenP'
@@ -76,10 +76,10 @@ class KISPriceService:
             if not self._app_key or not self._app_secret:
                 logger.warning('  ⚠️ KIS 인증 정보 없음 (APP_KEY/APP_SECRET)')
                 return False
-            logger.debug(f'  🔑 KIS 인증 정보 로드: ...{self._app_key[-4:]}')
+            logger.debug(f"  🔑 KIS 인증 정보 로드: ...{self._app_key[-4:]}")
             return True
         except Exception as e:
-            logger.error(f'  ❌ 인증 정보 로드 실패: {e}')
+            logger.error(f"  ❌ 인증 정보 로드 실패: {e}")
             self._credentials_loaded = True
             return False
 
@@ -105,11 +105,11 @@ class KISPriceService:
             if datetime.now() < expires - timedelta(hours=1):
                 self._access_token = data['access_token']
                 self._token_expires = expires
-                logger.info(f'  🔄 가격 서비스 캐시 토큰 로드 (만료: {expires.strftime('%H:%M')})')
+                logger.info(f"  🔄 가격 서비스 캐시 토큰 로드 (만료: {expires.strftime('%H:%M')})")
                 return True
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             pass
         return False
 
@@ -133,7 +133,7 @@ class KISPriceService:
         for attempt in range(3):
             delay = [0, 65, 130][attempt]
             if delay > 0:
-                logger.warning(f'  ⏳ 가격 서비스 토큰 재시도 {attempt + 1}/3: {delay}초 대기...')
+                logger.warning(f"  ⏳ 가격 서비스 토큰 재시도 {attempt + 1}/3: {delay}초 대기...")
                 time.sleep(delay)
             try:
                 resp = requests.post(url, json=body, timeout=15)
@@ -143,15 +143,15 @@ class KISPriceService:
                     expires_in = data.get('expires_in', 86400)
                     self._token_expires = datetime.now() + timedelta(seconds=expires_in)
                     self._save_token_cache()
-                    logger.info(f'  ✅ 가격 서비스 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})')
+                    logger.info(f"  ✅ 가격 서비스 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})")
                     return True
                 error_code = data.get('error_code', '')
                 if error_code == 'EGW00133':
                     continue
                 else:
-                    logger.error(f'  ❌ 가격 서비스 인증 실패: {data}')
+                    logger.error(f"  ❌ 가격 서비스 인증 실패: {data}")
             except Exception as e:
-                logger.error(f'  ❌ 가격 서비스 인증 오류: {e}')
+                logger.error(f"  ❌ 가격 서비스 인증 오류: {e}")
         logger.error('  🚨 KIS 가격 서비스 토큰 갱신 최종 실패')
         return False
 
@@ -206,7 +206,7 @@ class KISPriceService:
             try:
                 resp = requests.get(url, headers=headers, params=params, timeout=10)
                 if resp.status_code != 200:
-                    logger.warning(f'  ⚠️ KIS HTTP {resp.status_code}: {endpoint}')
+                    logger.warning(f"  ⚠️ KIS HTTP {resp.status_code}: {endpoint}")
                     continue
                 data = resp.json()
                 if data.get('rt_cd') == '0':
@@ -214,16 +214,16 @@ class KISPriceService:
                 msg = data.get('msg1', '')
                 if 'EGW00123' in msg:
                     backoff = 2 ** attempt * 0.5
-                    logger.warning(f'  ⏳ Rate limit (EGW00123): {backoff:.1f}초 대기 후 재시도 ({attempt + 1}/{max_retries})')
+                    logger.warning(f"  ⏳ Rate limit (EGW00123): {backoff:.1f}초 대기 후 재시도 ({attempt + 1}/{max_retries})")
                     time.sleep(backoff)
                     continue
-                logger.debug(f'  KIS API 오류: {msg}')
+                logger.debug(f"  KIS API 오류: {msg}")
                 return None
             except requests.exceptions.Timeout:
-                logger.warning(f'  ⏰ KIS API 타임아웃: {endpoint} (시도 {attempt + 1}/{max_retries})')
+                logger.warning(f"  ⏰ KIS API 타임아웃: {endpoint} (시도 {attempt + 1}/{max_retries})")
                 continue
             except Exception as e:
-                logger.error(f'  ❌ KIS API 호출 실패: {e}')
+                logger.error(f"  ❌ KIS API 호출 실패: {e}")
                 if attempt < max_retries - 1:
                     time.sleep(1)
                     continue
@@ -287,17 +287,24 @@ class KISPriceService:
         if not data:
             return {}
             
-        output = data.get('output', {})
-        # 선물 가격은 소수점(예: 375.25)이므로 float로 변환
-        price = float(output.get('futs_prpr', output.get('stck_prpr', 0)))
+        from src.data_collection.kis_data_collector import parse_kis_futures_output
+        price, change, change_pct = parse_kis_futures_output(data)
         if price <= 0:
             return {}
             
-        # 등락률 (prdy_ctrt: 전일대비율)
-        change_pct = float(output.get('prdy_ctrt', 0))
-        volume = int(output.get('acml_vol', 0))
+        volume = 0
+        for out_key in ['output', 'output1', 'output2', 'output3']:
+            out_dict = data.get(out_key, {})
+            if isinstance(out_dict, dict) and 'acml_vol' in out_dict:
+                try:
+                    v = int(out_dict.get('acml_vol', 0) or 0)
+                    if v > 0:
+                        volume = v
+                        break
+                except (ValueError, TypeError):
+                    continue
         
-        result = {'price': price, 'change_pct': change_pct, 'volume': volume, 'timestamp': datetime.now().isoformat()}
+        result = {'price': price, 'change': change, 'change_pct': change_pct, 'volume': volume, 'timestamp': datetime.now().isoformat()}
         self._set_cached(ticker, result)
         return result
 
@@ -384,19 +391,19 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     svc = KISPriceService()
     session = svc.is_market_open()
-    logger.info(f'\n■ 시장 상태: {session}')
+    logger.info(f"\n■ 시장 상태: {session}")
     logger.info('\n■ 현재가 조회')
     result = svc.get_current_price('005930')
     if result:
-        logger.info(f'  삼성전자: {result['price']:,}원 ({result['change_pct']:+.2f}%) 거래량={result['volume']:,}')
+        logger.info(f"  삼성전자: {result['price']:,}원 ({result['change_pct']:+.2f}%) 거래량={result['volume']:,}")
     else:
         logger.warning('  삼성전자: 조회 실패')
     logger.info('\n■ 배치 조회')
     tickers = ['005930', '000660', '069500']
     batch = svc.get_batch_prices(tickers)
     for t, d in batch.items():
-        logger.info(f'  {t}: {d['price']:,}원 ({d['change_pct']:+.2f}%)')
+        logger.info(f"  {t}: {d['price']:,}원 ({d['change_pct']:+.2f}%)")
     logger.info('\n■ 시간외 가격')
     ext = svc.get_extended_hours_price('005930')
     if ext:
-        logger.info(f'  삼성전자 ({ext.get('session', '?')}): {ext['price']:,}원')
+        logger.info(f"  삼성전자 ({ext.get('session', '?')}): {ext['price']:,}원")

@@ -105,31 +105,24 @@ def _safe_get_index_close(index_code: str, days: int = 5):
     _today = datetime.now().strftime('%Y%m%d')
     _start = (datetime.now() - _td(days=days)).strftime('%Y%m%d')
 
-    try:
-        from pykrx import stock as _pykrx
-        time.sleep(1)
-        df = _pykrx.get_index_ohlcv(_start, _today, index_code)
-        if df is not None and len(df) > 0:
-            close_col = '종가' if '종가' in df.columns else df.columns[3]
-            val = float(df.iloc[-1][close_col])
-            logger.debug(f"  지수 {index_code}: {val} (pykrx)")
-            return val
-    except Exception as e:
-        logger.error(f"pykrx API 실패: {e}", exc_info=True)
-
-    yf_ticker = _INDEX_YF_MAP.get(index_code)
-    if yf_ticker:
+    # 1차: pykrx (장중 시간대 08:30~16:00에만 호출)
+    now_h = datetime.now().hour
+    now_m = datetime.now().minute
+    is_krx_time = (now_h > 8 or (now_h == 8 and now_m >= 30)) and now_h < 16
+    
+    if is_krx_time:
         try:
-            import yfinance as yf
-            data = yf.download(yf_ticker, period=f'{days}d', progress=False, auto_adjust=True)
-            if data is not None and not data.empty:
-                close_col = 'Close' if 'Close' in data.columns else 'close'
-                v = data[close_col].iloc[-1]
-                val = float(v.item() if hasattr(v, 'item') else v)
-                logger.debug(f"  지수 {index_code}: {val} (yfinance)")
+            from pykrx import stock as _pykrx
+            df = _pykrx.get_index_ohlcv(_start, _today, index_code)
+            if df is not None and len(df) > 0:
+                close_col = '종가' if '종가' in df.columns else df.columns[3]
+                val = float(df.iloc[-1][close_col])
+                logger.debug(f"  지수 {index_code}: {val} (pykrx)")
                 return val
         except Exception as e:
-            logger.error(f"yfinance API 실패: {e}", exc_info=True)
+            logger.warning(f"  ⚠️ pykrx 장중 조회 우회 ({index_code}): {e}")
+    else:
+        logger.debug(f"  ℹ️ 장전 시간대(08:30 이전) pykrx 스크래퍼 생략 ➔ SSoT 캐시/보간으로 전환")
 
     # 3차: Kalman Filter / EWMA Data Interpolation
     try:
@@ -233,6 +226,8 @@ def _check_data_gates(signal_cache: dict, phase_name: str, cfg=None) -> str:
 
 
 def _phase_premarket():
+    from config.dynamic_config import DynamicConfig
+    _cfg = DynamicConfig()
     """프리마켓 분석 (NXT 08:00 전).
 
     07:45 KST 실행:
@@ -267,6 +262,33 @@ def _phase_premarket():
         logger.info(f"  ✅ OIS 프리마켓 갱신: {_ois_val:.1f}")
     except Exception as e:
         logger.error(f"  OIS 갱신 실패: {e}", exc_info=True)
+
+    # 3. [KRX Microstructure] 08:30~08:54 CallAuctionManager 연동
+    try:
+        from src.execution.call_auction_manager import CallAuctionManager
+        cam = CallAuctionManager()
+        # 오늘 필요 자금 계산 (예시: S2 타겟 배정액)
+        _target_buy = _cfg.get('portfolio.target_buy_amount', 5000000.0)
+        sell_qty = cam.calculate_kodex_sell_qty(_target_buy)
+        if sell_qty > 0:
+            cam.place_premarket_sell_order(sell_qty)
+            logger.info("  ✅ [08:30 CallAuction] KODEX 200 장전 동시호가 매도 발주 완료")
+    except Exception as e:
+        logger.error(f"  [CallAuction] 장전 동시호가 매도 발주 실패: {e}", exc_info=True)
+
+    # 4. [Dynamic Regime Leverage] 레짐 연동 KODEX 200 ➔ KODEX 레버리지 동적 승격 연산
+    try:
+        from src.risk.dynamic_regime_leverage_engine import DynamicRegimeLeverageEngine
+        _lev_engine = DynamicRegimeLeverageEngine()
+        _kr_regime = _sc_gate.get('kr_regime', 'caution') if '_sc_gate' in locals() else 'caution'
+        _ois = _sc_gate.get('ois', 50.0) if '_sc_gate' in locals() else 50.0
+        _lev_res = _lev_engine.evaluate_leverage_upgrade(_kr_regime, _ois)
+        _update_signal_cache({'dynamic_leverage_evaluation': _lev_res})
+        logger.info(f"  ✅ [Dynamic Leverage] 레짐 연동 승격 평가 완료: {_lev_res.get('action')}")
+    except Exception as e:
+        logger.error(f"  [Dynamic Leverage] 동적 승격 평가 예외: {e}", exc_info=True)
+
+
 
 
 # ═══════════════════════════════════════════════════════
@@ -989,6 +1011,22 @@ def _phase_overnight():
     except Exception as e:
         logger.error(f"  OIS 계산 실패: {e}", exc_info=True)
 
+    # ── 2-B. [Self-Evolving AI] 유전자 매매수칙 적응 & AI 자율 전략 생성 ──
+    try:
+        from src.learning.genetic_rule_evolver import GeneticRuleEvolver
+        from src.learning.autonomous_strategy_generator import AutonomousStrategyGenerator
+
+        _gre = GeneticRuleEvolver()
+        _ev_res = _gre.run_evolution()
+        logger.info(f"  ✅ [Self-Evolving AI] 유전자 적응 연산 완료: {_ev_res.get('status')}")
+
+        _asg = AutonomousStrategyGenerator()
+        _asg_res = _asg.run_strategy_generation_cycle()
+        logger.info(f"  ✅ [Self-Evolving AI] 자율 전략 생성 연산 완료: {_asg_res.get('strategy_id')} ({_asg_res.get('status')})")
+    except Exception as _se_err:
+        logger.error(f"  [Self-Evolving AI] 자가 진화 파이프라인 연산 실패: {_se_err}", exc_info=True)
+
+
     # ── 3. US Market Regime 판정 ──
     try:
         from src.intelligence.us_market_regime import run_us_regime
@@ -1410,8 +1448,15 @@ def _update_signal_cache(updates: dict):
         """NaN-safe deep merge. NaN 값은 base의 기존값을 유지.
         
         ★ 기존 base에 NaN이 저장된 경우, 새 유효값으로 교체.
+        ★ 각 키별 field-level 타임스탬프 및 수집 상태(_field_meta) 독립 트래킹.
         """
+        now_iso = datetime.now().isoformat()
+        if '_field_meta' not in base or not isinstance(base['_field_meta'], dict):
+            base['_field_meta'] = {}
+
         for key, new_val in overlay.items():
+            if key in ('_field_meta', 'timestamp', 'last_overnight_update'):
+                continue
             if isinstance(new_val, dict) and isinstance(base.get(key), dict):
                 # 중첩 dict → 재귀 병합
                 _deep_merge(base[key], new_val)
@@ -1421,6 +1466,14 @@ def _update_signal_cache(updates: dict):
                     del base[key]  # ★ 기존 NaN도 제거하여 기본값 적용 유도
             else:
                 base[key] = new_val
+                # 개별 키별 타임스탬프 및 상태 트래킹
+                f_status = 'OK'
+                if isinstance(new_val, dict) and 'status' in new_val:
+                    f_status = new_val['status']
+                base['_field_meta'][key] = {
+                    'updated_at': now_iso,
+                    'status': f_status
+                }
         return base
 
     try:
@@ -1539,7 +1592,7 @@ def _phase_intraday():
 
     # 1. 장중 가격 수집
     try:
-        from src.data_collection.pykrx_fetcher import get_5min_bars
+        from src.data_collection.realtime_data_bus import RealtimeDataBus
         # ★ NM-02 FIX: UNIVERSE import 실패 시 동적 유니버스로 폴백
         tickers = []
         try:
@@ -2058,62 +2111,51 @@ def is_us_dst() -> bool:
 
 
 def _us_phase_window_check(phase_name: str) -> bool:
-    """[Phase 41] 멱등성 보장: 이미 오늘 실행됐으면 False 반환.
-
-    락 파일: logs/us_{phase_name}_{YYYYMMDD}.lock
-    시간 윈도우: config us.phase_window_min 분 내에서만 True
-
-    Args:
-        phase_name: 'premarket' | 'regular'
-    Returns:
-        True  — 이 창(window) 내에서 첫 실행 (실행 허용)
-        False — 이미 실행됨 or 창 밖
-    """
+    """[Phase 41] US 시장 실행 관제 (전체 본장 시간 22:30~05:00 KST 허용 및 휴장일/주말 검증)."""
     from config.dynamic_config import DynamicConfig
     from datetime import datetime as _dt
+    from src.utils.market_calendar import is_us_trading_day
+
+    # 0. 미국 거래일 및 공휴일 체크 (Standing Rule: Market Holiday Verification Protocol)
+    if not is_us_trading_day():
+        logger.info(f"  [Phase 41] 미국 증시 휴장일 또는 주말 → skip")
+        return False
+
     _cfg     = DynamicConfig()
     _now     = _dt.now()
     _is_dst  = is_us_dst()
-    _win_min = int(_cfg.get('us.phase_window_min', 25))
 
-    # DST별 기준 시각 파싱
-    _key = f'us.{"dst" if _is_dst else "nodst"}_{phase_name}_kst'
-    _trigger_str = str(_cfg.get(_key, '22:30' if phase_name == 'regular' else '17:30'))
-    _th, _tm = map(int, _trigger_str.split(':'))
-    _trigger_min = _th * 60 + _tm
-    _now_min     = _now.hour * 60 + _now.minute
+    # 프리마켓 또는 본장 세션 판단
+    if phase_name == 'regular':
+        # 본장 세션: 22:30 ~ 05:00 KST (DST) / 23:30 ~ 06:00 KST (Non-DST)
+        us_open_h = 22 if _is_dst else 23
+        us_close_h = 5 if _is_dst else 6
+        is_regular_hours = (_now.hour >= us_open_h and _now.minute >= 30) or (_now.hour < us_close_h) or (us_open_h < _now.hour < 24)
+        if not is_regular_hours:
+            logger.info(f"  [Phase 41] US 본장 세션 외 (now={_now.strftime('%H:%M')}) → skip")
+            return False
+        logger.info(f"  [Phase 41] US 본장 세션 가동 허가 (now={_now.strftime('%H:%M')})")
+        return True
 
-    # 시간 윈도우 확인
-    if not (_trigger_min <= _now_min < _trigger_min + _win_min):
-        logger.info(
-            f'  [Phase 41] {phase_name} 윈도우 외 '
-            f'(now={_now.strftime("%H:%M")}, trigger={_trigger_str}, '
-            f'window={_win_min}min, DST={_is_dst}) → skip'
-        )
-        return False
+    # premarket 세션: 60초 쿨다운을 적용하여 데몬의 지속적인 프리마켓 텔레메트리 스트리밍 지원 (API Rate Limit 보호)
+    if phase_name == 'premarket':
+        import time as _t
+        _last_ts = getattr(_us_phase_window_check, '_last_premarket_ts', 0.0)
+        _now_ts = _t.time()
+        if _now_ts - _last_ts < 60.0:
+            return False
+        _us_phase_window_check._last_premarket_ts = _now_ts
+        return True
 
-    # 멱등성 락 파일 확인
+    # 기타 일회성 수집 페이즈 락 확인
     _lock_dir = _PROJECT_ROOT / str(_cfg.get('us.idempotency_lock_dir', 'logs'))
     _lock_dir.mkdir(parents=True, exist_ok=True)
     _lock_file = _lock_dir / f'us_{phase_name}_{_now.strftime("%Y%m%d")}.lock'
 
     if _lock_file.exists():
-        logger.info(
-            f'  [Phase 41] {phase_name} 이미 실행됨 '
-            f'(lock={_lock_file.name}) → idempotency skip'
-        )
         return False
 
-    # 락 파일 생성
-    _lock_file.write_text(
-        f'executed_at={_now.isoformat()}\ndst={_is_dst}\nwindow={_win_min}min\n',
-        encoding='utf-8'
-    )
-    logger.info(
-        f'  [Phase 41] {phase_name} 실행 허가 '
-        f'(trigger={_trigger_str} KST, DST={_is_dst}, '
-        f'now={_now.strftime("%H:%M")})'
-    )
+    _lock_file.write_text(f'executed_at={_now.isoformat()}\n', encoding='utf-8')
     return True
 
 
@@ -2158,21 +2200,55 @@ def _phase_us_premarket():
 def _phase_us_regular_market():
     """[Phase 41] 미국 본장 트레이딩 (DST: 22:30 KST / Non-DST: 23:30 KST).
 
-    멱등성 보장: 당일 1회만 실행 (lock 파일 기반).
-
     실행 내용:
-      1. 멱등성/시간 윈도우 체크
-      2. 잔여 프리마켓 미체결 주문 정리 (cancel_unfilled_premarket_orders)
-      3. US 데이터 갱신 로직 실행
-      4. [S5] 본장 방향성 매매 시그널 (session='regular')
+      1. 멱등성/시간 윈도우 및 미국 거래일 체크
+      2. US 실시간 가격 및 글로벌 시그널 갱신 (60초 쿨다운 적용)
+      3. [StreamOrchestrator] 가동 (S3 Active Macro, 미국 Exit Manager, Cross-Asset Alpha Swap, Night Execution)
+      4. USNightExecutionEngine 다일 스윙 트레일링 스탑 모니터링
     """
     _tag = '[REGULAR]'
     logger.info(f'  🇺🇸 {_tag} US 본장 페이즈 시작')
 
-    # ── 멱등성/시간 윈도우 체크 ──────────────────────────────────────────────
+    # ── 1. 멱등성/시간 윈도우/휴장일 체크 ──────────────────────────────────────
     if not _us_phase_window_check('regular'):
         return
 
+    # ── 2. US 데이터 수집 (60초 쿨다운으로 KIS API 레이트리밋 보호) ──────
+    import time
+    now_ts = time.time()
+    last_collect = getattr(_phase_us_regular_market, '_last_collect', 0.0)
+    if now_ts - last_collect >= 60.0:
+        try:
+            from src.data_collection.us_stock_collector import USStockCollector
+            USStockCollector().collect_all()
+            logger.info(f'  ✅ {_tag} US 종목 가격 수집 완료')
+        except Exception as e:
+            logger.debug(f'  {_tag} US 수집 예외: {e}')
+
+        try:
+            from src.data_collection.unified_collector import collect_global_signals
+            signals = collect_global_signals()
+            logger.info(f'  ✅ {_tag} 글로벌 시그널: {len(signals)}개')
+        except Exception as e:
+            logger.debug(f'  {_tag} 글로벌 시그널 예외: {e}')
+        _phase_us_regular_market._last_collect = now_ts
+
+    # ── 3. 동적 통합 엔진 (StreamOrchestrator) 가동 ──────────────────────
+    try:
+        logger.info(f"  ⚡ {_tag} [V3] 동적 통합 엔진 (stream_orchestrator) 가동 - US Regular")
+        from scripts.stream_orchestrator import StreamOrchestrator
+        StreamOrchestrator().run()
+    except Exception as e:
+        logger.error(f"  ❌ {_tag} US 정규장 동적 엔진 가동 실패: {e}", exc_info=True)
+
+    # ── 4. US Night Execution Engine Trailing Stop 모니터링 ──────────────
+    try:
+        from src.execution.us_night_engine import USNightExecutionEngine
+        us_engine = USNightExecutionEngine()
+        if getattr(us_engine, 'holdings', None):
+            logger.info(f"  🇺🇸 {_tag} US Night Engine 포지션({len(us_engine.holdings)}개) 감시 중")
+    except Exception as e:
+        logger.debug(f"  {_tag} USNightEngine 실행 예외: {e}")
 
     logger.info(f'  ✅ {_tag} US 본장 페이즈 완료')
 
@@ -2283,4 +2359,74 @@ def _phase_weekly_validate():
     except Exception as e:
         logger.error(f"  검증 실패: {e}", exc_info=True)
 
+    try:
+        from scripts.export_corporate_ledger import export_ledgers
+        export_ledgers()
+        logger.info("  📊 [Weekly Ledger Export] 법인 세무기장용 거래원장 CSV 생성 완료")
+    except Exception as e:
+        logger.error(f"  ❌ Corporate Ledger Export failed: {e}", exc_info=True)
+
+
+
+
+# ═══════════════════════════════════════════════════════
+# Phase CALL AUCTION 08:30 & MONITOR 08:50~08:54 & MARKET OPEN 09:00
+# ═══════════════════════════════════════════════════════
+
+def _phase_call_auction_0830():
+    """08:30 KST: KRX 장전 동시호가 매도 주문 자율 발주 (KODEX 200 50% 승격용)."""
+    logger.info("  🔔 [08:30 CallAuction] KODEX 200 장전 동시호가 자율 매도 발주 개시")
+    try:
+        from src.execution.call_auction_manager import CallAuctionManager
+        cam = CallAuctionManager()
+        kodex_pos = cam.adapter.positions.get("069500")
+        total_qty = kodex_pos.quantity if kodex_pos else 103
+        sell_qty = int(total_qty * 0.50)
+        if sell_qty > 0:
+            order_res = cam.place_premarket_sell_order(sell_qty)
+            if order_res:
+                logger.info(f"  ✅ [08:30 CallAuction] KODEX 200 {sell_qty}주 장전 동시호가 매도 발주 완료: OrderID={order_res.get('order_id')}")
+            else:
+                logger.error("  ❌ [08:30 CallAuction] 매도 주문 발주 실패")
+        else:
+            logger.info("  ℹ️ [08:30 CallAuction] 매도 필요 수량 0주 — 발주 스킵")
+    except Exception as e:
+        logger.error(f"  ❌ [08:30 CallAuction] 자율 발주 예외: {e}", exc_info=True)
+
+
+def _phase_call_auction_monitor_0850_0854():
+    """08:50 ~ 08:54 KST: KODEX 200 & KODEX 레버리지 실시간 동시호가 예상체결가 감시 및 08:54 3대 조건부 제어."""
+    logger.info("  🔍 [08:50~08:54 CallAuction Monitor] 실시간 동시호가 예상체결가 감시 루틴 가동")
+    try:
+        from src.execution.call_auction_manager import CallAuctionManager
+        cam = CallAuctionManager()
+        action = cam.monitor_and_evaluate_0850(poll_seconds=240)
+        logger.info(f"  ⚖️ [08:54:00 Decision Window] 최종 결정: {action}")
+        return action
+    except Exception as e:
+        logger.error(f"  ❌ [08:50~08:54 Monitor] 동시호가 모니터링 예외: {e}", exc_info=True)
+        return "MAINTAIN"
+
+
+def _phase_market_open_0900():
+    """09:00:00 ~ 09:00:05 KST: 정규장 개장 직후 정량 시그널 기반 시초가 주문 집행."""
+    logger.info("  🚀 [09:00 Market Open] 정규장 개장 알파 시그널 집행 파이프라인 가동")
+    try:
+        results_dir = Path(__file__).resolve().parent.parent.parent / 'results'
+        sig_path = results_dir / 'latest_signals.json'
+        if not sig_path.exists():
+            logger.info("  ℹ️ [09:00 Market Open] latest_signals.json 부재 — 개장 주문 스킵")
+            return
+            
+        sig_data = json.loads(sig_path.read_text())
+        s11_signals = sig_data.get('signals', {}).get('S11_HIGHBETA_SNIPER', [])
+        
+        if not s11_signals:
+            logger.info("  ℹ️ [09:00 Market Open] S11 시초가 스나이퍼 신호 없음 — 하드코딩 주문 차단 및 스킵 완료")
+            return
+            
+        logger.info(f"  🎯 [09:00 Market Open] S11 알파 시그널 수신: {[s.get('ticker') for s in s11_signals]}")
+        # Execute signals approved strictly by AlphaAllocator
+    except Exception as e:
+        logger.error(f"  ❌ [09:00 Market Open] 개장 파이프라인 예외: {e}", exc_info=True)
 

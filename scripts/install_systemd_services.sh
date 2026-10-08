@@ -20,7 +20,7 @@ Type=oneshot
 User=$USER
 WorkingDirectory=$MERIDIAN_ROOT
 EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=/usr/bin/python3 scripts/fetch_night_futures.py
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/fetch_night_futures.py
 SERVICE_EOF
 
 cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_night_futures.timer
@@ -28,7 +28,31 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_night_futures.timer
 Description=Timer for Meridian Night Futures Fetcher
 
 [Timer]
-OnCalendar=*-*-* 06:05:00
+OnCalendar=*-*-* 06:05:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+# 1.4 KIS API Token Refresh Timer (Runs at 08:15 AM KST - Single Point Refresh)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_token_refresh.service
+[Unit]
+Description=Meridian KIS Token Refresh (08:15 AM KST Single-Point Refresh)
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 -c "from src.execution._kis_adapter import KISTraderAdapter; KISTraderAdapter(mode='live')._request_new_token()"
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_token_refresh.timer
+[Unit]
+Description=Timer for Meridian KIS Token Refresh (08:15 AM KST)
+
+[Timer]
+OnCalendar=*-*-* 08:15:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -54,7 +78,7 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_collect.timer
 Description=Timer for Meridian Collect Pipeline
 
 [Timer]
-OnCalendar=*-*-* 06:00:00
+OnCalendar=*-*-* 06:00:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -80,7 +104,7 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_morning.timer
 Description=Timer for Meridian Morning Pipeline
 
 [Timer]
-OnCalendar=*-*-* 07:50:00
+OnCalendar=*-*-* 08:45:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -98,7 +122,7 @@ Type=oneshot
 User=$USER
 WorkingDirectory=$MERIDIAN_ROOT
 EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=/usr/bin/python3 scripts/premarket_calibration.py
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/premarket_calibration.py
 SERVICE_EOF
 
 cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_premarket_calibration.timer
@@ -106,7 +130,7 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_premarket_calibration.timer
 Description=Timer for Meridian Premarket Calibration
 
 [Timer]
-OnCalendar=*-*-* 08:50:00
+OnCalendar=*-*-* 08:50:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -124,7 +148,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$MERIDIAN_ROOT
 EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=/usr/bin/python3 scripts/intraday_daemon.py
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/intraday_daemon.py
 Restart=always
 RestartSec=10
 SERVICE_EOF
@@ -149,7 +173,7 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_closing.timer
 Description=Timer for Meridian Closing Pipeline
 
 [Timer]
-OnCalendar=*-*-* 15:10:00
+OnCalendar=*-*-* 15:10:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -175,7 +199,7 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_aftermarket.timer
 Description=Timer for Meridian Aftermarket Pipeline
 
 [Timer]
-OnCalendar=*-*-* 15:35:00
+OnCalendar=*-*-* 15:35:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -201,7 +225,59 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_evening.timer
 Description=Timer for Meridian Evening Pipeline
 
 [Timer]
-OnCalendar=*-*-* 20:30:00
+OnCalendar=*-*-* 20:30:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
+# 4.1 US Premarket Pipeline Timer (Runs at 17:30 PM KST)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_us_premarket.service
+[Unit]
+Description=Meridian US Premarket Pipeline
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=/bin/bash scripts/run_pipeline.sh us_premarket
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_us_premarket.timer
+[Unit]
+Description=Timer for Meridian US Premarket Pipeline
+
+[Timer]
+OnCalendar=*-*-* 17:30:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
+# 4.2 US Regular Market Pipeline Timer (Runs at 22:25 PM KST - Right before US Market Open)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_us_regular.service
+[Unit]
+Description=Meridian US Regular Market Pipeline
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=/bin/bash scripts/run_pipeline.sh us_regular
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_us_regular.timer
+[Unit]
+Description=Timer for Meridian US Regular Market Pipeline
+
+[Timer]
+OnCalendar=*-*-* 22:25:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -227,7 +303,33 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_weekly_retrain.timer
 Description=Timer for Meridian Weekly Retrain
 
 [Timer]
-OnCalendar=Sat *-*-* 02:00:00
+OnCalendar=Sat *-*-* 02:00:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
+# 4.5.5 Automated Audit Pipeline (Runs daily at 15:45 KST)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_automated_audit.service
+[Unit]
+Description=Meridian Automated Operational Audit Pipeline
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/run_automated_audit_pipeline.py
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_automated_audit.timer
+[Unit]
+Description=Timer for Meridian Automated Audit Pipeline
+
+[Timer]
+OnCalendar=*-*-* 15:45:00 Asia/Seoul
 Persistent=true
 
 [Install]
@@ -250,33 +352,15 @@ SERVICE_EOF
 
 cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_weekly_validate.timer
 [Unit]
-Description=Timer for Meridian Weekly Validation
+Description=Timer for Meridian Weekly Validation & Corporate Ledger CSV
 
 [Timer]
-OnCalendar=Sat *-*-* 03:00:00
+OnCalendar=Sun *-*-* 23:00:00 Asia/Seoul
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 TIMER_EOF
-
-cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_night_monitor.service
-[Unit]
-Description=Meridian KIS Night Futures Websocket Monitor
-After=network.target
-
-[Service]
-Type=simple
-User=$USER
-WorkingDirectory=$MERIDIAN_ROOT
-EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=/home/ubuntu/Project_Meridian/venv/bin/python3 src/data/night_futures_monitor.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-SERVICE_EOF
 
 cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_telegram.service
 [Unit]
@@ -288,7 +372,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$MERIDIAN_ROOT
 EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=/usr/bin/python3 scripts/run_telegram_bot.py
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/run_telegram_bot.py
 Restart=always
 RestartSec=5
 
@@ -296,8 +380,42 @@ RestartSec=5
 WantedBy=multi-user.target
 SERVICE_EOF
 
-# Enable all services (including the bot and monitor)
-for service in meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_intraday meridian_closing meridian_aftermarket meridian_evening meridian_telegram meridian_night_monitor; do
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_live_trader_daemon.service
+[Unit]
+Description=Meridian 24/7 Live Trader Daemon (1-Sec Continuous Monitoring)
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=/home/ubuntu/Project_Meridian/venv/bin/python3 scripts/run_live_trader_daemon.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+# 5. Logrotate & Disk Protection (Caps log size at 1GB over 5 years)
+if [ -d "/etc/logrotate.d" ]; then
+cat << LOGROTATE_EOF | sudo tee /etc/logrotate.d/meridian
+/home/ubuntu/Project_Meridian/logs/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+    maxsize 50M
+}
+LOGROTATE_EOF
+fi
+
+# Enable all services (including live trader daemon and bot)
+for service in meridian_token_refresh meridian_live_trader_daemon meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_intraday meridian_closing meridian_aftermarket meridian_evening meridian_us_premarket meridian_us_regular meridian_weekly_retrain meridian_weekly_validate meridian_telegram; do
     if [ -f "$SERVICE_DIR/$service.service" ]; then
         sudo systemctl enable $service.service
     fi
@@ -309,7 +427,6 @@ done
 
 sudo systemctl daemon-reload
 sudo systemctl start meridian_telegram.service
-sudo systemctl start meridian_night_monitor.service
-sudo systemctl start meridian_intraday.service
+sudo systemctl start meridian_live_trader_daemon.service
 
-echo "✅ systemd setup complete. All daily pipelines are scheduled and Telegram Bot is running."
+echo "✅ systemd setup complete. 24/7 Live Trader Daemon, Logrotate, Weekly ML Retrain, and all daily pipelines are active."

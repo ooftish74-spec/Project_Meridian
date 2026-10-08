@@ -67,7 +67,7 @@ class MorningIntelligenceFusion:
         base_conf = 0.7
         result['fusion_confidence'] = max(0.2, base_conf - n_flags * 0.1 - n_conflicts * 0.05)
         self._save(result)
-        logger.info(f'  ✅ MorningFusion: regime_adj={regime_adj:+.2f}, conflicts={n_conflicts}, risk_flags={n_flags}, conf={result['fusion_confidence']:.2f}')
+        logger.info(f"  ✅ MorningFusion: regime_adj={regime_adj:+.2f}, conflicts={n_conflicts}, risk_flags={n_flags}, conf={result['fusion_confidence']:.2f}")
         return result
 
     def _build_overnight_context(self) -> Dict:
@@ -116,13 +116,13 @@ class MorningIntelligenceFusion:
             if 'semiconductor' in param.lower() or 'semi' in param.lower():
                 sox = overnight.get('sox_change', 0)
                 if direction == 'down' and sox > 1.5:
-                    conflicts.append({'type': 'sector_reversal', 'detail': f'SelfLearning이 반도체 비중↓ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_reduction'})
+                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↓ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_reduction"})
                 elif direction == 'up' and sox < -1.5:
-                    conflicts.append({'type': 'sector_reversal', 'detail': f'SelfLearning이 반도체 비중↑ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_increase'})
+                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↑ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_increase"})
             if 'exposure' in param.lower() or 'confidence' in param.lower():
                 ois = overnight.get('ois', 50)
                 if direction == 'down' and ois > 70:
-                    conflicts.append({'type': 'regime_conflict', 'detail': f'SelfLearning이 노출↓ but OIS={ois:.0f} (강세)', 'param': param, 'severity': 'low', 'recommendation': 'maintain_moderate'})
+                    conflicts.append({'type': 'regime_conflict', 'detail': f"SelfLearning이 노출↓ but OIS={ois:.0f} (강세)', 'param': param, 'severity': 'low', 'recommendation': 'maintain_moderate"})
         return conflicts
 
     def _compute_regime_adjustment(self, overnight: Dict) -> float:
@@ -187,30 +187,30 @@ class MorningIntelligenceFusion:
         flags = []
         vix = overnight.get('vix', 20)
         if vix > 35:
-            flags.append({'flag': 'VIX_SPIKE', 'detail': f'VIX={vix:.1f} (>35)', 'severity': 'high'})
+            flags.append({'flag': 'VIX_SPIKE', 'detail': f"VIX={vix:.1f} (>35)', 'severity': 'high"})
         elif vix > 25:
-            flags.append({'flag': 'VIX_ELEVATED', 'detail': f'VIX={vix:.1f} (>25)', 'severity': 'medium'})
+            flags.append({'flag': 'VIX_ELEVATED', 'detail': f"VIX={vix:.1f} (>25)', 'severity': 'medium"})
         sp_chg = overnight.get('sp500_change', 0)
         if sp_chg < -2.0:
-            flags.append({'flag': 'US_CRASH', 'detail': f'S&P500 {sp_chg:+.1f}%', 'severity': 'high'})
+            flags.append({'flag': 'US_CRASH', 'detail': f"S&P500 {sp_chg:+.1f}%', 'severity': 'high"})
         usdjpy = overnight.get('usdjpy_change', 0)
         if usdjpy < -1.5:
-            flags.append({'flag': 'YEN_CARRY_UNWIND', 'detail': f'USD/JPY {usdjpy:+.1f}%', 'severity': 'high'})
+            flags.append({'flag': 'YEN_CARRY_UNWIND', 'detail': f"USD/JPY {usdjpy:+.1f}%', 'severity': 'high"})
         dxy = overnight.get('dxy_change', 0)
         if dxy > 1.0:
-            flags.append({'flag': 'DOLLAR_SURGE', 'detail': f'DXY {dxy:+.1f}%', 'severity': 'medium'})
+            flags.append({'flag': 'DOLLAR_SURGE', 'detail': f"DXY {dxy:+.1f}%', 'severity': 'medium"})
         hsi = overnight.get('hangseng_change', 0)
         if hsi < -2.0:
-            flags.append({'flag': 'CHINA_RISK', 'detail': f'HangSeng {hsi:+.1f}%', 'severity': 'medium'})
+            flags.append({'flag': 'CHINA_RISK', 'detail': f"HangSeng {hsi:+.1f}%', 'severity': 'medium"})
         macro = self._signal_cache.get('macro_features', {})
         if macro:
             if macro.get('credit_stress', 0):
-                flags.append({'flag': 'CREDIT_STRESS', 'detail': f'HY Spread 확대 (fred_hy={macro.get('fred_hy_spread', '?')})', 'severity': 'high'})
+                flags.append({'flag': 'CREDIT_STRESS', 'detail': f"HY Spread 확대 (fred_hy={macro.get('fred_hy_spread', '?')})', 'severity': 'high"})
             if macro.get('yield_curve_inverted', 0):
-                flags.append({'flag': 'YIELD_CURVE_INVERTED', 'detail': f'10Y-2Y={macro.get('cross_yield_curve', '?')}%', 'severity': 'medium'})
+                flags.append({'flag': 'YIELD_CURVE_INVERTED', 'detail': f"10Y-2Y={macro.get('cross_yield_curve', '?')}%', 'severity': 'medium"})
             news = macro.get('news_llm_sentiment', macro.get('news_naver_sentiment', 0))
             if news < -0.6:
-                flags.append({'flag': 'NEWS_VERY_NEGATIVE', 'detail': f'감성={news:.2f}', 'severity': 'medium'})
+                flags.append({'flag': 'NEWS_VERY_NEGATIVE', 'detail': f"감성={news:.2f}', 'severity': 'medium"})
         return flags
 
     def _get_ewy_change(self) -> float:
@@ -234,7 +234,7 @@ class MorningIntelligenceFusion:
                     return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:389', exc_info=True)
         return 0.0
 
@@ -246,7 +246,7 @@ class MorningIntelligenceFusion:
                 return json.loads(path.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:401', exc_info=True)
         return {}
 
@@ -260,7 +260,7 @@ class MorningIntelligenceFusion:
                     return json.loads(files[0].read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:415', exc_info=True)
         return {}
 

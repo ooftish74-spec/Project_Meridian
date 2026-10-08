@@ -85,13 +85,13 @@ class InvestorFlowCollector:
                     atomic_write_dataframe(result, cache_path, file_format='csv')
                     return result
         except Exception as e:
-            logger.debug(f'pykrx 수급 수집 실패 ({ticker}), 프록시로 우회: {e}')
+            logger.debug(f"pykrx 수급 수집 실패 ({ticker}), 프록시로 우회: {e}")
         
         proxy_result = self._generate_proxy(ticker, lookback_days)
         if proxy_result is not None and len(proxy_result) > 0:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             atomic_write_dataframe(proxy_result, cache_path, file_format='csv')
-            logger.info(f'  ✅ 프록시 수급 수집 완료 및 저장: {ticker}')
+            logger.info(f"  ✅ 프록시 수급 수집 완료 및 저장: {ticker}")
         return proxy_result
 
     def _parse_investor_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
@@ -137,7 +137,7 @@ class InvestorFlowCollector:
                         df = pd.DataFrame({'foreign_net': ts[frgn_col], 'inst_net': ts[orgn_col], 'retail_net': -(ts[frgn_col] + ts[orgn_col])}).tail(lookback_days + 30)
                         df = df.dropna()
                         if len(df) >= 20:
-                            logger.debug(f'  ✅ KIS timeseries 수급 로드: {ticker} {len(df)}일')
+                            logger.debug(f"  ✅ KIS timeseries 수급 로드: {ticker} {len(df)}일")
                             return df
             except Exception as _e:
                 logger.error(f'  timeseries 로드 실패: {_e}', exc_info=True)
@@ -163,7 +163,7 @@ class InvestorFlowCollector:
                 rows.append({'date': idx, 'foreign_net': float(row.get('frgn_ntby_qty', 0)), 'inst_net': float(row.get('orgn_ntby_qty', 0)), 'retail_net': float(row.get('prsn_ntby_qty', 0))})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
                 continue
         if not rows:
             return None
@@ -171,7 +171,7 @@ class InvestorFlowCollector:
         result = result.tail(lookback_days + 30)
         if len(result) < 5:
             return None
-        logger.debug(f'  ✅ KIS CSV 수급 로드: {ticker} {len(result)}일 (실제 데이터)')
+        logger.debug(f"  ✅ KIS CSV 수급 로드: {ticker} {len(result)}일 (실제 데이터)")
         return result
 
     def _generate_proxy(self, ticker: str, lookback_days: int) -> Optional[pd.DataFrame]:
@@ -191,9 +191,9 @@ class InvestorFlowCollector:
                         _df = _df.rename(columns={'close': 'Close', 'volume': 'Volume', 'open': 'Open', 'high': 'High', 'low': 'Low'})
                         df = _df
             if df is None:
-                csv_paths = sorted((_PROJECT_ROOT / 'data' / 'versions').glob(f'*/historical/korea_stocks/{ticker}.csv'), reverse=True)
+                csv_paths = sorted((_PROJECT_ROOT / 'data' / 'versions').glob(f"*/historical/korea_stocks/{ticker}.csv"), reverse=True)
                 if not csv_paths:
-                    csv_paths = [_PROJECT_ROOT / 'data' / 'raw' / 'korea_stocks' / f'{ticker}.csv']
+                    csv_paths = [_PROJECT_ROOT / 'data' / 'raw' / 'korea_stocks' / f"{ticker}.csv"]
                 for p in csv_paths:
                     if p.exists():
                         df = pd.read_csv(p, index_col=0, parse_dates=True)
@@ -214,7 +214,7 @@ class InvestorFlowCollector:
             return result.dropna()
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             return None
 
     def generate_features(self, ticker: str, lookback_days: int=60) -> Optional[pd.DataFrame]:

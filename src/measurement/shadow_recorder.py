@@ -57,7 +57,7 @@ class ShadowRecorder:
                 existing = json.loads(record_file.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 existing = []
         entry = {'timestamp': now_kst().isoformat(), 'regime': orch_result.get('regime', 'unknown'), 'streams': {}, 'orders': orch_result.get('orders', []), 'n_orders': len(orch_result.get('orders', [])), 'risk': orch_result.get('risk', {}), 'nav_estimate': orch_result.get('nav_estimate', 0)}
         from config.dynamic_config import DynamicConfig as _DC
@@ -70,7 +70,7 @@ class ShadowRecorder:
             entry['execution'] = {'mode': exec_result.get('mode', 'shadow'), 'n_filled': exec_result.get('n_filled', 0), 'n_rejected': exec_result.get('n_rejected', 0), 'total_buy': exec_result.get('total_buy_amount', 0), 'total_sell': exec_result.get('total_sell_amount', 0), 'slippage': exec_result.get('estimated_slippage', 0), 'commission': exec_result.get('estimated_commission', 0)}
         existing.append(entry)
         atomic_write_json(record_file, existing, indent=2, ensure_ascii=False, default=str)
-        logger.info(f'  📝 Shadow 기록: {today} (regime={entry['regime']}, orders={entry['n_orders']})')
+        logger.info(f"  📝 Shadow 기록: {today} (regime={entry['regime']}, orders={entry['n_orders']})")
         self._update_summary()
         return entry
 
@@ -95,7 +95,7 @@ class ShadowRecorder:
         daily = self._compute_daily_returns()
         result = {'verdict': 'INSUFFICIENT_DATA', 'n_days': len(daily), 'sharpe': 0.0, 'win_rate': 0.0, 'max_dd': 0.0, 'criteria': {'sharpe_pass': False, 'winrate_pass': False, 'dd_pass': False}, 'daily_returns': daily}
         if len(daily) < 2:
-            logger.info(f'  ⚠️ Go/No-Go: 데이터 부족 ({len(daily)}일)')
+            logger.info(f"  ⚠️ Go/No-Go: 데이터 부족 ({len(daily)}일)")
             return result
         returns = np.array(daily)
         mean_ret = np.mean(returns)
@@ -127,7 +127,7 @@ class ShadowRecorder:
         else:
             result['verdict'] = 'NO_GO'
         verdict_emoji = {'GO': '🟢', 'CONDITIONAL_GO': '🟡', 'NO_GO': '🔴', 'INSUFFICIENT_DATA': '⚪'}
-        logger.info(f'  {verdict_emoji.get(result['verdict'], '?')} Go/No-Go: {result['verdict']} (days={len(daily)}, sharpe={result['sharpe']:.2f}, win={result['win_rate']:.1%}, dd={result['max_dd']:.1%})')
+        logger.info(f"  {verdict_emoji.get(result['verdict'], '?')} Go/No-Go: {result['verdict']} (days={len(daily)}, sharpe={result['sharpe']:.2f}, win={result['win_rate']:.1%}, dd={result['max_dd']:.1%})")
         return result
 
     def get_daily_stats(self) -> List[Dict]:
@@ -163,7 +163,7 @@ class ShadowRecorder:
                         nav_by_date[snap_date] = snap.get('nav', 0)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         stats = []
         all_dates = set()
@@ -181,7 +181,7 @@ class ShadowRecorder:
                 stats.append({'date': day, 'n_runs': len(records), 'n_orders': n_orders, 'n_filled': n_filled, 'total_buy': total_buy, 'total_sell': total_sell, 'net_flow': total_sell - total_buy, 'regime': regimes[-1] if regimes else 'unknown', 'nav': nav_by_date.get(day, 0)})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
         for d in sorted(trade_by_date.keys()):
             if d not in all_dates:
@@ -219,7 +219,7 @@ class ShadowRecorder:
             return returns
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return []
 
     def _update_summary(self):
@@ -238,7 +238,7 @@ class ShadowRecorder:
                         portfolio_snapshot['total_return_pct'] = round((portfolio_snapshot['nav'] / initial - 1) * 100, 4)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
             regime = 'unknown'
             try:
@@ -253,14 +253,14 @@ class ShadowRecorder:
                         regime = cr_data.get('regime', 'unknown')
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                 import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
             summary = {'updated': now_kst().isoformat(), 'n_days': len(stats), 'regime': regime, 'go_nogo': go_nogo, 'daily_stats': stats[-30:], **portfolio_snapshot}
             atomic_write_json(self._summary_file, summary, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f'  서머리 업데이트 실패: {e}')
+            logger.debug(f"  서머리 업데이트 실패: {e}")
 
     def __repr__(self) -> str:
         n_days = len(list(self._shadow_dir.glob('*.json')))

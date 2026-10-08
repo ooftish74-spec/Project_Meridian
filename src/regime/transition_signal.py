@@ -71,7 +71,7 @@ class TransitionSignalDetector:
         result['timestamp'] = datetime.now().isoformat()
         if result['signal_type'] != 'none':
             self._signal_history.append({'timestamp': result['timestamp'], 'signal_type': result['signal_type'], 'strength': result['strength']})
-            logger.info(f'  ⚡ TransitionSignal: {result['signal_type']} (strength={result['strength']:.2f}, exposure_adj={result['exposure_adjustment']:.2f})')
+            logger.info(f"  ⚡ TransitionSignal: {result['signal_type']} (strength={result['strength']:.2f}, exposure_adj={result['exposure_adjustment']:.2f})")
         self._save_result(result)
         return result
 
@@ -110,7 +110,7 @@ class TransitionSignalDetector:
                         strength = min(1.0, breakdown_prob)
             return {'signal_type': signal_type, 'strength': round(strength, 3), 'regime': result.get('regime', 'caution'), 'method': result.get('method', 'unknown')}
         except Exception as e:
-            logger.debug(f'  HMM signal 실패: {e}')
+            logger.debug(f"  HMM signal 실패: {e}")
             return {'signal_type': 'none', 'strength': 0}
 
     def _get_intraday_signal(self) -> Dict:
@@ -131,7 +131,7 @@ class TransitionSignalDetector:
             return {'signal_type': 'none', 'strength': 0, 'regime': regime}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {'signal_type': 'none', 'strength': 0}
 
     def _get_momentum_signal(self, market_data: Dict=None) -> Dict:
@@ -170,7 +170,7 @@ class TransitionSignalDetector:
             return {'signal_type': 'none', 'strength': 0}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return {'signal_type': 'none', 'strength': 0}
 
     def _get_current_vix(self) -> float:
@@ -229,7 +229,7 @@ class TransitionSignalDetector:
         except Exception as _e_ts:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e_ts}", exc_info=True)
-            logger.debug(f'  [transition_signal] 전환 시그널 실패: {_e_ts}')
+            logger.debug(f"  [transition_signal] 전환 시그널 실패: {_e_ts}")
         return data
 
     def _save_result(self, result: Dict) -> None:
@@ -240,7 +240,7 @@ class TransitionSignalDetector:
         except Exception as _e_ts2:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e_ts2}", exc_info=True)
-            logger.debug(f'  [transition_signal] 시그널 저장 실패: {_e_ts2}')
+            logger.debug(f"  [transition_signal] 시그널 저장 실패: {_e_ts2}")
 
     def get_signal_history(self, n: int=20) -> List[Dict]:
         """최근 시그널 이력."""

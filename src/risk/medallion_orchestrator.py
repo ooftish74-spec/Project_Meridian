@@ -76,14 +76,14 @@ class MedallionOrchestrator:
         result = {'timestamp': datetime.now().isoformat(), 'overall': overall, 'total_issues': total_issues, 'critical': critical, 'sentiment': sentiment, 'validations': {'edge': v1, 'risk': v2, 'diversification': v3, 'no_override': v4}}
         for name, v in [('①엣지', v1), ('②리스크', v2), ('③분산', v3), ('④비개입', v4)]:
             icon = '✅' if v['status'] == 'PASS' else '🟡' if v['status'] == 'WARN' else '🔴'
-            logger.info(f'  {icon} {name}: {v['status']} ({v['n_issues']}건)')
-        logger.info(f'  ═══ 종합: {overall} (이슈 {total_issues}, Critical {critical}) ═══')
+            logger.info(f"  {icon} {name}: {v['status']} ({v['n_issues']}건)")
+        logger.info(f"  ═══ 종합: {overall} (이슈 {total_issues}, Critical {critical}) ═══")
         corr_check = None
         if self._corr_monitor:
             try:
                 corr_check = self._corr_monitor.measure()
                 if corr_check.get('max_correlation', 0) > 0.8:
-                    logger.warning(f'  ⚠️ 스트림 간 상관관계 높음: {corr_check.get('max_pair', '?')} = {corr_check['max_correlation']:.2f}')
+                    logger.warning(f"  ⚠️ 스트림 간 상관관계 높음: {corr_check.get('max_pair', '?')} = {corr_check['max_correlation']:.2f}")
             except Exception as e:
                 logger.critical(f'  Correlation check skipped: {e}', exc_info=True)
         pnl_summary = None
@@ -109,18 +109,18 @@ class MedallionOrchestrator:
         reasons = []
         if fg >= self.fg_extreme_greed:
             exposure *= 0.4
-            reasons.append(f'F&G={fg} (Extreme Greed)')
+            reasons.append(f"F&G={fg} (Extreme Greed)")
         elif fg >= self.fg_greed_threshold:
             exposure *= 0.6
-            reasons.append(f'F&G={fg} (Greed)')
+            reasons.append(f"F&G={fg} (Greed)")
         vix_ext = _cfg.get('medallion.vix_extreme', 50) if _cfg else 50
         vix_high = _cfg.get('medallion.vix_high', 35) if _cfg else 35
         if vix >= vix_ext:
             exposure = 0.0
-            reasons.append(f'VIX={vix} (Extreme >= {vix_ext})')
+            reasons.append(f"VIX={vix} (Extreme >= {vix_ext})")
         elif vix >= vix_high:
             exposure *= 0.5
-            reasons.append(f'VIX={vix} (High >= {vix_high})')
+            reasons.append(f"VIX={vix} (High >= {vix_high})")
         if regime == 'crash':
             exposure = 0.0
             reasons.append('Regime=CRASH')
@@ -137,9 +137,9 @@ class MedallionOrchestrator:
                 prob = pos.get('up_probability', 0.5)
                 ev = pos.get('kelly_ev', None)
                 if ev is not None and ev < 0.003:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f'EV={ev:.4f} < 0.30% (음의 엣지)', 'severity': 'WARNING'})
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"EV={ev:.4f} < 0.30% (음의 엣지)', 'severity': 'WARNING"})
                 elif prob < 0.5:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f'P(UP)={prob:.3f} < 0.50', 'severity': 'CRITICAL'})
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"P(UP)={prob:.3f} < 0.50', 'severity': 'CRITICAL"})
         return {'principle': '① Edge', 'status': 'PASS' if not issues else 'WARN', 'issues': issues, 'n_issues': len(issues)}
 
     def _validate_risk(self, positions: Dict, sentiment: Dict) -> Dict:
@@ -147,7 +147,7 @@ class MedallionOrchestrator:
         issues = []
         fg = sentiment.get('fear_greed', 50)
         if fg >= self.fg_extreme_greed:
-            issues.append({'layer': 'portfolio', 'issue': f'F&G={fg} ≥ {self.fg_extreme_greed}', 'severity': 'CRITICAL'})
+            issues.append({'layer': 'portfolio', 'issue': f"F&G={fg} ≥ {self.fg_extreme_greed}', 'severity': 'CRITICAL"})
         for layer, pos_dict in positions.items():
             for ticker, pos in pos_dict.items():
                 pnl = pos.get('unrealized_pnl_pct', 0)
@@ -160,7 +160,7 @@ class MedallionOrchestrator:
                 else:
                     stop_loss = base_sl
                 if isinstance(pnl, (int, float)) and pnl < stop_loss:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f'PnL={pnl:.1f}% < {stop_loss:.1f}% (Dynamic SL 위반)', 'severity': 'CRITICAL'})
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"PnL={pnl:.1f}% < {stop_loss:.1f}% (Dynamic SL 위반)', 'severity': 'CRITICAL"})
         has_critical = any((i['severity'] == 'CRITICAL' for i in issues))
         return {'principle': '② Risk', 'status': 'FAIL' if has_critical else 'PASS', 'issues': issues, 'n_issues': len(issues)}
 
@@ -203,14 +203,14 @@ class MedallionOrchestrator:
             limit = stream_sector_limits.get(sid, self.max_sector_per_stream)
             for sec, cnt in sc.items():
                 if sec != 'Unknown' and cnt > limit:
-                    issues.append({'layer': 'stream', 'issue': f'[{sid}] 섹터 [{sec}] {cnt}종목 > {limit}', 'severity': 'WARNING'})
+                    issues.append({'layer': 'stream', 'issue': f"[{sid}] 섹터 [{sec}] {cnt}종목 > {limit}', 'severity': 'WARNING"})
         for sec, cnt in global_sector_counts.items():
             if sec != 'Unknown' and cnt > self.max_sector_global:
-                issues.append({'layer': 'aggregate', 'issue': f'섹터 [{sec}] 전체 {cnt}종목 > {self.max_sector_global}', 'severity': 'WARNING'})
+                issues.append({'layer': 'aggregate', 'issue': f"섹터 [{sec}] 전체 {cnt}종목 > {self.max_sector_global}', 'severity': 'WARNING"})
         n_sectors = len(set(global_sector_counts.keys()) - {'Unknown'})
         n_individual = sum(global_sector_counts.values())
         if 0 < n_sectors < self.min_sectors and n_individual >= self.min_sectors:
-            issues.append({'layer': 'portfolio', 'issue': f'{n_sectors}섹터 < {self.min_sectors} (분산 부족)', 'severity': 'WARNING'})
+            issues.append({'layer': 'portfolio', 'issue': f"{n_sectors}섹터 < {self.min_sectors} (분산 부족)', 'severity': 'WARNING"})
         has_warn = any((i['severity'] in ('CRITICAL', 'WARNING') for i in issues))
         return {'principle': '③ Diversification', 'status': 'WARN' if has_warn else 'PASS', 'sectors': global_sector_counts, 'stream_sectors': stream_sector_counts, 'total_sectors': n_sectors, 'issues': issues, 'n_issues': len(issues)}
 
@@ -235,7 +235,7 @@ class MedallionOrchestrator:
                 elif ks_triggered and ks_can_buy:
                     fo = ks.get('forward_override', {})
                     fo_reason = fo.get('reason', '')
-                    issues.append({'layer': 'system', 'issue': f'Kill Switch 트리거 but Override 적용: {fo_reason}', 'severity': 'INFO'})
+                    issues.append({'layer': 'system', 'issue': f"Kill Switch 트리거 but Override 적용: {fo_reason}', 'severity': 'INFO"})
             except Exception as _e_mo1:
                 logger.critical(f'  [medallion_orchestrator] 메달리온 계산 실패: {_e_mo1}', exc_info=True)
         meaningful_issues = [i for i in issues if i.get('severity') != 'INFO']
@@ -252,8 +252,7 @@ class MedallionOrchestrator:
         except (FileNotFoundError, json.JSONDecodeError):
             positions['a3_shadow'] = {}
         except Exception as e:
-            logger.critical(f'A3 shadow 포지션 로드 중 예상치 못한 에러: {e}', exc_info=True)
-            raise
+            logger.critical(f'A3 shadow 포지션 로드 중 예상치 못한 에러 (fallback 빈 딕셔너리 사용): {e}', exc_info=True)
             positions['a3_shadow'] = {}
         try:
             adv = json.loads((_RESULTS / 'sleeve_b_advisory.json').read_text())
@@ -261,8 +260,7 @@ class MedallionOrchestrator:
         except (FileNotFoundError, json.JSONDecodeError):
             positions['sleeve_b'] = {}
         except Exception as e:
-            logger.critical(f'Sleeve B 포지션 로드 중 예상치 못한 에러: {e}', exc_info=True)
-            raise
+            logger.critical(f'Sleeve B 포지션 로드 중 예상치 못한 에러 (fallback 빈 딕셔너리 사용): {e}', exc_info=True)
             positions['sleeve_b'] = {}
         return positions
 

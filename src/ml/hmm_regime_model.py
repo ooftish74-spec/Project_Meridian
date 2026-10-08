@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
-import yfinance as yf
+# yfinance 폐기 — KIS / KRX / Alpha Vantage 참조
 
 # hmmlearn이 없을 경우를 대비한 방어적 import
 try:

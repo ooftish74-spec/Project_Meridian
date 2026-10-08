@@ -62,7 +62,7 @@ def _news_yoy(query: str) -> Optional[float]:
                 if -80 < v < 300: vals.append(v)
         return round(sum(vals)/len(vals), 2) if vals else None
     except Exception as e:
-        logger.error(f'  [Phase78] news_yoy 실패: {e}', exc_info=True)
+        logger.error(f"  [Phase78] news_yoy 실패: {e}", exc_info=True)
         return None
 
 class ExportMacroCollector:
@@ -81,7 +81,7 @@ class ExportMacroCollector:
             return d if age < self._cache_h else None
         except Exception as e:
             import logging
-            logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+            logging.getLogger(__name__).warning(f"Silent exception caught in fallback: {e}", exc_info=True)
             return None
 
     def collect(self, force: bool = False) -> Dict:
@@ -97,11 +97,11 @@ class ExportMacroCollector:
             # 총수출
             try:
                 from src.data_collection.motie_collector import MotieCollector
-                d = MotieCollector().collect()
-                out['export_total_yoy'] = float(d.get('export_yoy', d.get('export_growth', 0.0)))
+                d = MotieCollector().fetch_monthly_trend()
+                out['export_total_yoy'] = float(d.get('export_yoy_pct', 0.0))
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning(f'Silent exception caught in fallback: {e}', exc_info=True)
+                logging.getLogger(__name__).warning(f"Silent exception caught in fallback: {e}", exc_info=True)
 
             # 10/20일 속보
             out['export_10d_yoy'] = _news_yoy('관세청 10일 수출 전년대비')
@@ -110,14 +110,14 @@ class ExportMacroCollector:
             # 섹터
             _surp_thr = float(cfg.get('export.surprise_threshold', 20.0))
             for sec, kws in _SECTOR_KW.items():
-                v = _news_yoy(f'{kws[0]} 수출 전년 대비 증감')
+                v = _news_yoy(f"{kws[0]} 수출 전년 대비 증감")
                 out['sector'][sec] = v if v is not None else 0.0
                 out['surprise'][sec] = bool((v or 0) >= _surp_thr)
 
             # 지역
             for reg, kws in _REGION_KW.items():
-                v = _news_yoy(f'{kws[0]} 수출 전년 대비')
-                out['region'][f'{reg}_export_yoy'] = v if v is not None else 0.0
+                v = _news_yoy(f"{kws[0]} 수출 전년 대비")
+                out['region'][f"{reg}_export_yoy"] = v if v is not None else 0.0
 
             # 신뢰도
             vals = [out['export_10d_yoy'], out['export_20d_yoy'],
@@ -125,10 +125,11 @@ class ExportMacroCollector:
             out['confidence'] = round(sum(1 for v in vals if v and v!=0) / max(1, len(vals)), 3)
 
             atomic_write_json(_OUTPUT_FILE, out, ensure_ascii=False, indent=2)
-            logger.info(f'  [Phase78] 수집완료 surprise={[k for k,v in out["surprise"].items() if v]}')
+            _surp_l = [k for k, v in out.get("surprise", {}).items() if v]
+            logger.info(f"  [Phase78] 수집완료 surprise={_surp_l}")
             return out
         except Exception as e:
-            logger.error(f'  [Phase78] 오류: {e}', exc_info=True)
+            logger.error(f"  [Phase78] 오류: {e}", exc_info=True)
             return {}
 
     def get_sector_features(self) -> Dict[str, float]:
@@ -138,7 +139,7 @@ class ExportMacroCollector:
                'export_10d_yoy':   float(d.get('export_10d_yoy')   or 0),
                'export_20d_yoy':   float(d.get('export_20d_yoy')   or 0)}
         for k, v in d.get('sector', {}).items():
-            out[f'export_yoy_{k}'] = float(v or 0)
+            out[f"export_yoy_{k}"] = float(v or 0)
         for k, v in d.get('region', {}).items():
             out[k] = float(v or 0)
         return out

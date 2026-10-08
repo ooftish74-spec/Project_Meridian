@@ -61,9 +61,9 @@ def run_audit():
             if fi:
                 logger.info(
                     f'  [Phase 59] Registry active_version={_active_version!r} '
-                    f'에서 {len(fi)}개 피체 가중치 로드 완료')
+                    f"에서 {len(fi)}개 피체 가중치 로드 완료")
     except Exception as _reg_e:
-        logger.warning(f'  [Phase 59] Registry 로드 실패 (Fallback 시도): {_reg_e}')
+        logger.warning(f"  [Phase 59] Registry 로드 실패 (Fallback 시도): {_reg_e}")
 
     # Fallback: 과거의 ensemble_meta.json 직접 로드
     if not fi:
@@ -76,10 +76,10 @@ def run_audit():
                 if fi:
                     logger.info(
                         f'  [Phase 59] ensemble_meta.json Fallback에서 '
-                        f'{len(fi)}개 피체 가중치 로드')
+                        f"{len(fi)}개 피체 가중치 로드")
             except Exception as _meta_e:
                 logger.warning(
-                    f'  [Phase 59] ensemble_meta.json Fallback 로드 실패: {_meta_e}')
+                    f"  [Phase 59] ensemble_meta.json Fallback 로드 실패: {_meta_e}")
 
     if not isinstance(fi, dict) or not fi:
         logger.warning('  [Phase 59] feature_importance 데이터 없음 — Audit 미실행')
