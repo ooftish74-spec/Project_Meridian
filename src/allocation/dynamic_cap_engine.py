@@ -26,28 +26,33 @@ class DynamicCapEngine:
 
     def __init__(self):
         self.w_base = float(cfg.get('allocation.anchor_base_weight', 0.50))     # 기저 비중 50%
-        self.w_min = float(cfg.get('allocation.anchor_min_weight', 0.15))      # 하한 비중 15%
         self.gamma = float(cfg.get('allocation.alpha_scaling_gamma', 2.5))     # 알파 반응 감도
         self.friction_bps = float(cfg.get('allocation.friction_bps', 28.0))    # 0.28% 마찰비용
 
-    def compute_dynamic_anchor_cap(self, active_ev_pct: float) -> float:
-        """액티브 알파 기대값(EV%)에 따른 069500 허용 비중 상한선(W_cap) 동적 산출.
+    def compute_dynamic_anchor_cap(self, active_ev_pct: float, market_trend_positive: bool = True) -> float:
+        """액티브 알파 기대값(EV%) 및 시장 추세에 따른 069500 허용 비중 상한선(W_cap) 100% 동적 산출.
+        
+        고정된 15% 하한 상수를 영구 제거:
+        - 액티브 알파가 강력하거나 지수 추세가 약화될 때 앵커 비중은 0.0%까지 수학적으로 완전 감쇄.
+        - W_cap(t) = max(0.0, W_base * (1.0 - tanh(gamma * (EV_active / Friction) * trend_factor)))
 
         Args:
             active_ev_pct: 액티브 스트림 기대 알파 (% decimal, e.g. 0.015 = 1.5%)
+            market_trend_positive: 시장 추세 정배열 여부 (False 시 감쇄 가속)
 
         Returns:
-            dynamic_anchor_cap (% decimal, e.g. 0.15 ~ 0.50)
+            dynamic_anchor_cap (% decimal, e.g. 0.0 ~ W_base)
         """
         friction_pct = self.friction_bps / 10000.0  # 0.0028
         ev_ratio = max(0.0, active_ev_pct) / friction_pct if friction_pct > 0 else 0.0
         
-        # tanh 스케일링으로 0.0 ~ 1.0 범위 완 부드러운 전이
-        reduction_factor = math.tanh(self.gamma * ev_ratio)
+        # 하향 추세(KOSPI 역배열/약세)일 때는 앵커 유지 가치가 없으므로 감쇄 승수 증폭
+        trend_factor = 1.0 if market_trend_positive else 2.5
+        reduction_factor = math.tanh(self.gamma * ev_ratio * trend_factor)
         
-        # W_cap = W_base - (W_base - W_min) * reduction_factor
-        dynamic_cap = self.w_base - (self.w_base - self.w_min) * reduction_factor
-        return round(dynamic_cap, 4)
+        # 100% 순수 수학적 동적 비중 (0.0% 완전 청산 허용)
+        dynamic_cap = self.w_base * (1.0 - reduction_factor)
+        return round(max(0.0, dynamic_cap), 4)
 
     def evaluate_kodex200_release(
         self,
@@ -55,7 +60,8 @@ class DynamicCapEngine:
         kodex200_price: float,
         kodex200_qty: int,
         active_ev_pct: float,
-        krx_leverage_demanded_krw: float = 0.0
+        krx_leverage_demanded_krw: float = 0.0,
+        market_trend_positive: bool = True
     ) -> Tuple[int, float, str, Dict[str, float]]:
         """내일 아침 KODEX 200 (069500) 매도 수량 및 자본 해제액 동적 산출.
 
@@ -65,6 +71,7 @@ class DynamicCapEngine:
             kodex200_qty: 현재 보유 수량 (e.g. 103주)
             active_ev_pct: 액티브 스트림 알파 기대값
             krx_leverage_demanded_krw: 내일 아침 2배 레버리지 자금 수요액
+            market_trend_positive: 시장 정배열 여부
 
         Returns:
             (sell_qty, release_krw, reason_msg, metrics)
@@ -75,14 +82,14 @@ class DynamicCapEngine:
         cur_val = kodex200_price * kodex200_qty
         cur_weight = cur_val / total_nav
         
-        # 1. 동적 앵커 상한선 계측
-        dynamic_cap = self.compute_dynamic_anchor_cap(active_ev_pct)
+        # 1. 동적 앵커 상한선 계측 (100% 동적 연속 감쇄)
+        dynamic_cap = self.compute_dynamic_anchor_cap(active_ev_pct, market_trend_positive=market_trend_positive)
 
-        # 2. 레버리지 시그널 동적 확장 (Scale-Up Escalation)
+        # 2. 레버리지 시그널 동적 확장 (Scale-Up Escalation, 0.0% 완전 감쇄 허용)
         target_cap = dynamic_cap
         if krx_leverage_demanded_krw > 0:
             additional_cap_reduction = krx_leverage_demanded_krw / total_nav
-            target_cap = max(self.w_min, dynamic_cap - additional_cap_reduction)
+            target_cap = max(0.0, dynamic_cap - additional_cap_reduction)
 
         metrics = {
             'cur_weight': round(cur_weight, 4),
