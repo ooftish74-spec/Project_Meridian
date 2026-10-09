@@ -5,6 +5,8 @@ KOSPI 200 전체 유니버스의 가격 시계열을 바탕으로
 공적분(Cointegration) 검정을 수행하고, 
 스프레드가 임계치를 이탈한 Long-Short 페어 시그널을 추출합니다.
 """
+import logging
+from typing import List, Dict, Tuple
 import numpy as np
 import pandas as pd
 logger = logging.getLogger(__name__)
