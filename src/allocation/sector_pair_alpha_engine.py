@@ -96,61 +96,111 @@ class SectorPairAlphaEngine:
 
         # Z-Score 내림차순 정렬
         sorted_sectors = sorted(z_scores.items(), key=lambda x: x[1], reverse=True)
-        max_n = min(3, len(sorted_sectors) // 2)
-        pair_orders = []
-        active_pairs = []
-
-        for i in range(max_n):
-            strong_sec, strong_z = sorted_sectors[i]
-            weak_sec, weak_z = sorted_sectors[-(i+1)]
-            spread_z = strong_z - weak_z
-
-            if spread_z >= self.min_spread_z:
-                weight_pair = self.max_pair_allocation / max_n
-                weight_strong = weight_pair * 0.50
-                weight_weak = weight_pair * 0.50
-
-                long_ticker = etf_map.get(strong_sec, strong_sec)
-                short_ticker = etf_map.get(weak_sec, weak_sec)
-
-                pair_orders.append({
-                    'ticker': long_ticker,
-                    'sector': strong_sec,
-                    'direction': 'long',
-                    'action': 'buy',
-                    'target_weight': round(weight_strong, 4),
-                    'z_score': round(strong_z, 2),
-                    'reason': f'Market-Neutral Multi-Pair Long #{i+1} (Sector {strong_sec}, Z={strong_z:+.2f}σ)'
-                })
-                pair_orders.append({
-                    'ticker': short_ticker,
-                    'sector': weak_sec,
-                    'direction': 'short',
-                    'action': 'sell' if market.upper() == 'US' else 'buy_inverse',
-                    'target_weight': round(weight_weak, 4),
-                    'z_score': round(weak_z, 2),
-                    'reason': f'Market-Neutral Multi-Pair Short #{i+1} (Sector {weak_sec}, Z={weak_z:+.2f}σ)'
-                })
-                active_pairs.append({'strong': strong_sec, 'weak': weak_sec, 'spread_z': round(spread_z, 2)})
-
-        if not pair_orders:
-            strong_sec, strong_z = sorted_sectors[0]
-            weak_sec, weak_z = sorted_sectors[-1]
+        half_len = len(sorted_sectors) // 2
+        if half_len < 1:
             return {
                 'pair_active': False,
-                'reason': f'섹터 상대강도 임계치 미달 (Spread Z={strong_z-weak_z:.2f}σ < {self.min_spread_z:.2f}σ)',
-                'spread_z': round(strong_z - weak_z, 2),
+                'reason': '유효한 페어를 형성하기 위한 섹터 수 부족',
+                'spread_z': 0.0,
+                'pair_orders': []
+            }
+
+        # 100% 수학적 동적 페어 추출: spread_z >= min_spread_z 인 모든 유효 페어 탐색
+        candidate_pairs = []
+        for i in range(half_len):
+            strong_sec, strong_z = sorted_sectors[i]
+            weak_sec, weak_z = sorted_sectors[-(i+1)]
+            spread_z = float(strong_z - weak_z)
+            if spread_z >= self.min_spread_z:
+                candidate_pairs.append({
+                    'strong_sec': strong_sec,
+                    'strong_z': strong_z,
+                    'weak_sec': weak_sec,
+                    'weak_z': weak_z,
+                    'spread_z': spread_z
+                })
+
+        if not candidate_pairs:
+            strong_sec, strong_z = sorted_sectors[0]
+            weak_sec, weak_z = sorted_sectors[-1]
+            spread_z = float(strong_z - weak_z)
+            return {
+                'pair_active': False,
+                'reason': f'섹터 상대강도 임계치 미달 (Spread Z={spread_z:.2f}σ < {self.min_spread_z:.2f}σ)',
+                'spread_z': round(spread_z, 2),
                 'strong_sector': strong_sec,
                 'weak_sector': weak_sec,
                 'pair_orders': []
             }
 
+        # 100% 수학적 연속 자본 배분: 스프레드 크기(신호 강도)에 비례한 Softmax / Proportional 가중치
+        total_spread = sum(p['spread_z'] for p in candidate_pairs)
+        pair_orders = []
+        active_pairs = []
+
+        vol_map = volatility_map or {}
+
+        for idx, cp in enumerate(candidate_pairs):
+            strong_sec = cp['strong_sec']
+            strong_z = cp['strong_z']
+            weak_sec = cp['weak_sec']
+            weak_z = cp['weak_z']
+            spread_z = cp['spread_z']
+
+            # 페어별 자본 할당: 스프레드 강도 비례
+            pair_budget = float(self.max_pair_allocation * (spread_z / total_spread)) if total_spread > 0 else 0.0
+
+            # 롱/숏 간 리스크 패리티 (변동성 역가중 Dynamic Volatility Parity):
+            # σ_strong * w_strong = σ_weak * w_weak (True Zero-Beta Market Neutrality)
+            vol_s = float(vol_map.get(strong_sec, 0.20))
+            vol_w = float(vol_map.get(weak_sec, 0.20))
+            inv_vol_s = 1.0 / max(vol_s, 1e-4)
+            inv_vol_w = 1.0 / max(vol_w, 1e-4)
+            total_inv_vol = inv_vol_s + inv_vol_w
+
+            weight_strong = pair_budget * (inv_vol_s / total_inv_vol)
+            weight_weak = pair_budget * (inv_vol_w / total_inv_vol)
+
+            long_ticker = etf_map.get(strong_sec, strong_sec)
+            short_ticker = etf_map.get(weak_sec, weak_sec)
+
+            # 수학적 Gaussian CDF 기반 신뢰도 (Error Function erf)
+            conf_strong = float(0.5 * (1.0 + math.erf(abs(strong_z) / math.sqrt(2))))
+            conf_weak = float(0.5 * (1.0 + math.erf(abs(weak_z) / math.sqrt(2))))
+
+            pair_orders.append({
+                'ticker': long_ticker,
+                'sector': strong_sec,
+                'direction': 'long',
+                'action': 'buy',
+                'target_weight': round(weight_strong, 4),
+                'z_score': round(strong_z, 2),
+                'confidence': round(min(0.99, max(0.50, conf_strong)), 3),
+                'reason': f'Market-Neutral Pair Long #{idx+1} (Sector {strong_sec}, Z={strong_z:+.2f}σ, RiskParity={inv_vol_s/total_inv_vol:.1%})'
+            })
+            pair_orders.append({
+                'ticker': short_ticker,
+                'sector': weak_sec,
+                'direction': 'short',
+                'action': 'sell' if market.upper() == 'US' else 'buy_inverse',
+                'target_weight': round(weight_weak, 4),
+                'z_score': round(weak_z, 2),
+                'confidence': round(min(0.99, max(0.50, conf_weak)), 3),
+                'reason': f'Market-Neutral Pair Short #{idx+1} (Sector {weak_sec}, Z={weak_z:+.2f}σ, RiskParity={inv_vol_w/total_inv_vol:.1%})'
+            })
+            active_pairs.append({
+                'strong': strong_sec,
+                'weak': weak_sec,
+                'spread_z': round(spread_z, 2),
+                'pair_weight': round(pair_budget, 4)
+            })
+
         top_strong_sec, top_strong_z = sorted_sectors[0]
         top_weak_sec, top_weak_z = sorted_sectors[-1]
-        top_spread_z = round(top_strong_z - top_weak_z, 2)
+        top_spread_z = round(float(top_strong_z - top_weak_z), 2)
 
         logger.info(
-            f"  ⚖️ [Sector Pair Alpha] {market} {len(active_pairs)}쌍 페어 발화! "
+            f"  ⚖️ [Sector Pair Alpha] {market} {len(active_pairs)}쌍 수학적 동적 페어 구축! "
             f"Top Spread Z={top_spread_z:+.2f}σ ({top_strong_sec} vs {top_weak_sec})"
         )
 

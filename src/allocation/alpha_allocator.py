@@ -225,6 +225,15 @@ class AlphaAllocator:
             except Exception as _p_e:
                 pass
 
+            # 🚀 [S14 Market-Neutral Pair Alpha] Continuous Kaufman Noise Bayesian Prior
+            if sid == 'S14_PAIR_ALPHA':
+                sc_data = (market_data or {}).get('signal_cache', {})
+                ker_val = float(sc_data.get('qqq_ker', sc_data.get('ker', (market_data or {}).get('qqq_ker', 0.25))) or 0.25)
+                noise_intensity = max(0.0, min(1.0, 1.0 - ker_val))
+                prior_boost = round((noise_intensity - 0.50) * float(reward), 4)
+                ev += prior_boost
+                logger.info(f"  🚀 [S14 Continuous Noise Prior] KER={ker_val:.3f}, Noise={noise_intensity:.1%} ➔ EV boost: {prior_boost:+.4f}")
+
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
 
