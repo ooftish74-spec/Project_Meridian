@@ -50,13 +50,13 @@ class AlphaAllocator:
         """레짐별 기본 배분 (DynamicConfig 동적 로드).
         S4(Advisory) 예산을 제외하고 S1, S2, S3, S5로 재분배.
         """
-        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER']
+        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
         regimes = ['bull', 'caution', 'bear', 'crash']
         defaults = {
-            'bull': {'S0': 0.25, 'S1': 0.30, 'S2': 0.20, 'S3': 0.10, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10},
-            'caution': {'S0': 0.20, 'S1': 0.25, 'S2': 0.20, 'S3': 0.15, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15},
-            'bear': {'S0': 0.25, 'S1': 0.30, 'S2': 0.15, 'S3': 0.05, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15},
-            'crash': {'S0': 0.30, 'S1': 0.30, 'S2': 0.10, 'S3': 0.00, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.15}
+            'bull': {'S0': 0.20, 'S1': 0.25, 'S2': 0.20, 'S3': 0.10, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.00, 'S14_PAIR_ALPHA': 0.05},
+            'caution': {'S0': 0.15, 'S1': 0.15, 'S2': 0.15, 'S3': 0.15, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.05, 'S14_PAIR_ALPHA': 0.15},
+            'bear': {'S0': 0.20, 'S1': 0.15, 'S2': 0.10, 'S3': 0.05, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.05, 'S14_PAIR_ALPHA': 0.15},
+            'crash': {'S0': 0.30, 'S1': 0.20, 'S2': 0.10, 'S3': 0.00, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.00, 'S14_PAIR_ALPHA': 0.10}
         }
         result = {}
         for regime in regimes:
@@ -68,7 +68,7 @@ class AlphaAllocator:
         self._last_weights: Dict[str, float] = {}
         self._allocation_history: List[Dict] = []
         _cfg_streams = cfg.get('allocator.active_streams', None)
-        self.STREAMS = _cfg_streams or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER']
+        self.STREAMS = _cfg_streams or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
         self.us_night_cap = cfg.get('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
 
     def compute_entry_score(self, signal: Dict, stream_id: str='unknown') -> Dict:

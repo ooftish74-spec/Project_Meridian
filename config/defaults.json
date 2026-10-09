@@ -797,7 +797,10 @@
     "S3",
     "S5",
     "S10",
-    "S11_HIGHBETA_SNIPER"
+    "S11_HIGHBETA_SNIPER",
+    "S12_DERIVATIVE_SQUEEZE",
+    "S13_JAPAN_ALPHA",
+    "S14_PAIR_ALPHA"
   ],
   "allocator.sharpe_exponent": 2.0,
   "allocator.correlation_penalty": 0.1,
@@ -1850,7 +1853,10 @@
     "S4",
     "S5",
     "S10",
-    "S11_HIGHBETA_SNIPER"
+    "S11_HIGHBETA_SNIPER",
+    "S12_DERIVATIVE_SQUEEZE",
+    "S13_JAPAN_ALPHA",
+    "S14_PAIR_ALPHA"
   ],
   "streams.active": [
     "S0",
@@ -1860,8 +1866,16 @@
     "S4",
     "S5",
     "S10",
-    "S11_HIGHBETA_SNIPER"
+    "S11_HIGHBETA_SNIPER",
+    "S12_DERIVATIVE_SQUEEZE",
+    "S13_JAPAN_ALPHA",
+    "S14_PAIR_ALPHA"
   ],
+  "pair.ker_chop_threshold": 0.40,
+  "pair.min_spread_z": 1.20,
+  "pair.max_allocation_pct": 0.20,
+  "pair.stop_loss_spread_z": 2.50,
+  "intelligence.statarb_enabled": true,
   "measurement.ic_ensemble_streams": [
     "S1",
     "S2",

@@ -53,6 +53,7 @@ from src.streams.s3_active_macro.active_macro_stream import S3FactorStream as S3
 from src.streams.s4_advisory.advisory_stream import S4AdvisoryStream
 from src.streams.s5_overnight.overnight_stream import S5OvernightStream
 from src.streams.s13_japan_alpha.japan_stream import S13JapanAlphaStream
+from src.streams.s14_pair_alpha.sector_pair_stream import S14SectorPairStream
 
 
 from src.streams.s4_advisory.dynamic_exit import DynamicExitEvaluator
@@ -173,8 +174,9 @@ class StreamOrchestrator:
         self.s11 = S11HighBetaSniperStream()
         self.s12 = S12DerivativeSqueezeStream()
         self.s13 = S13JapanAlphaStream()
-        # S0 BetaStream, S10 MegaTrend, S11 HighBeta Sniper, S12 Derivative Squeeze, S13 Japan Alpha 파이프라인 정규 편입
-        self.streams = [self.s0, self.s1, self.s2, self.s3, self.s4, self.s5, self.s10, self.s11, self.s12, self.s13]
+        self.s14 = S14SectorPairStream()
+        # S0 BetaStream, S10 MegaTrend, S11 HighBeta Sniper, S12 Derivative Squeeze, S13 Japan Alpha, S14 Sector Pair 파이프라인 정규 편입
+        self.streams = [self.s0, self.s1, self.s2, self.s3, self.s4, self.s5, self.s10, self.s11, self.s12, self.s13, self.s14]
         self.stream_cache = {} # Kelly Criterion (DD-07: 파이프라인 연동)
         self.kelly = KellyCriterion() if _KELLY_AVAILABLE else None
 

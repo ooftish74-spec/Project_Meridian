@@ -625,14 +625,30 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             except Exception as alloc_err:
                 logger.error(f"  MetaCapitalAllocator/FuturesOverlay 실행 실패: {alloc_err}", exc_info=True)
                 
-            # 3. 통계적 차익거래 (StatArb) 페어 생성 (활성화 시에만 실행)
-            if cfg.get('intelligence.statarb_enabled', False):
+            # 3. 통계적 차익거래 (StatArb) 및 섹터 페어 알파 (S14) 생성 (횡보장/박스권 알파 수확)
+            if cfg.get('intelligence.statarb_enabled', True):
                 try:
-                    from src.intelligence.stat_arb_engine import StatArbEngine
-                    # StatArb 실제 시세 데이터 연동 시 실행
-                    pass
+                    from src.streams.s14_pair_alpha.sector_pair_stream import S14SectorPairStream
+                    s14_stream = S14SectorPairStream()
+                    _sc_file = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                    _sc_data = {}
+                    if _sc_file.exists():
+                        try:
+                            _sc_data = json.loads(_sc_file.read_text(encoding='utf-8'))
+                        except Exception:
+                            pass
+                    regime_val = _sc_data.get('regime', 'neutral')
+                    s14_signals = s14_stream.generate_signals(
+                        regime=regime_val,
+                        market_data=_sc_data
+                    )
+                    logger.info(f"  ⚡ [S14 Pair Alpha & StatArb] Generated {len(s14_signals)} market-neutral pair signals (Regime: {regime_val})")
+                    _update_signal_cache({
+                        's14_pair_alpha_signals': s14_signals,
+                        'pair_trading_active': len(s14_signals) > 0
+                    })
                 except Exception as _stat_err:
-                    logger.debug(f"StatArbEngine 실행 생략: {_stat_err}")
+                    logger.error(f"S14 Pair Alpha 실행 오류: {_stat_err}", exc_info=True)
 
             if action == 'rebalance':
                 fw = opt_result.get('final_weights', {})
