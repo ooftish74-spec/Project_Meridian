@@ -7,11 +7,18 @@ KOSPI 200 전체 유니버스의 가격 시계열을 바탕으로
 """
 import numpy as np
 import pandas as pd
-import logging
-from typing import List, Dict, Tuple
-import statsmodels.tsa.stattools as ts
-import statsmodels.api as sm
 logger = logging.getLogger(__name__)
+
+try:
+    import statsmodels.tsa.stattools as ts
+    import statsmodels.api as sm
+    _STATSMODELS_AVAILABLE = True
+except ImportError:
+    ts = None
+    sm = None
+    _STATSMODELS_AVAILABLE = False
+    logger.debug("[StatArbEngine] statsmodels 미설치 — numpy OLS 대체 모드로 동작합니다.")
+
 
 class StatArbEngine:
 
@@ -68,14 +75,20 @@ class StatArbEngine:
             if np.var(x) < 1e-08 or np.var(y) < 1e-08:
                 continue
             try:
-                x_with_const = sm.add_constant(x)
-                model = sm.OLS(y, x_with_const).fit()
-                hedge_ratio = model.params.iloc[1] if len(model.params) > 1 else 1.0
+                if _STATSMODELS_AVAILABLE and sm is not None:
+                    x_with_const = sm.add_constant(x)
+                    model = sm.OLS(y, x_with_const).fit()
+                    hedge_ratio = model.params.iloc[1] if len(model.params) > 1 else 1.0
+                else:
+                    # Pure numpy dynamic OLS
+                    cov_xy = np.cov(x, y)[0, 1]
+                    var_x = np.var(x)
+                    hedge_ratio = float(cov_xy / var_x) if var_x > 1e-8 else 1.0
             except Exception as e:
                 logger.error(f"  [StatArb] OLS Error for {pair['asset_y']}-{pair['asset_x']}: {e}", exc_info=True)
                 continue
             spread = y - hedge_ratio * x
-            if len(spread.dropna()) > self.z_score_window:
+            if len(spread.dropna()) > self.z_score_window and _STATSMODELS_AVAILABLE and ts is not None:
                 adf_result = ts.adfuller(spread.dropna())
                 if adf_result[1] > 0.05:
                     logger.debug(f"  [StatArb] ADF 검정 실패(단위근 존재). 가짜 페어로 판명되어 스킵: {pair['asset_y']}-{pair['asset_x']}")
