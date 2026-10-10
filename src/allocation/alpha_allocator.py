@@ -285,6 +285,72 @@ class AlphaAllocator:
             final_weights = self._enforce_single_asset_limit(final_weights, stream_signals)
             final_weights = self._enforce_sector_limits(final_weights, stream_signals)
         final_weights = self._apply_s2_performance_fallback(final_weights, stream_metrics, regime, market_data, s0_sigs)
+
+        # ── [Frontier Wiring 1] Dynamic Orthogonal Portfolio Engine (Factor Risk Parity) ──
+        try:
+            from src.allocation.dynamic_orthogonal_portfolio_engine import FactorRiskParityDampener
+            _active_sids = [sid for sid in self.STREAMS if final_weights.get(sid, 0.0) > 0.0]
+            if len(_active_sids) >= 2:
+                _w_arr = np.array([final_weights[sid] for sid in _active_sids], dtype=float)
+                _cov_s = np.eye(len(_active_sids)) * 0.04
+                for _i, _s1 in enumerate(_active_sids):
+                    for _j, _s2 in enumerate(_active_sids):
+                        if _i != _j:
+                            _r1 = (stream_metrics.get(_s1, {}) or {}).get('daily_returns', [])
+                            _r2 = (stream_metrics.get(_s2, {}) or {}).get('daily_returns', [])
+                            if len(_r1) >= 5 and len(_r2) >= 5:
+                                _min_l = min(len(_r1), len(_r2))
+                                _cov_s[_i, _j] = float(np.cov(_r1[:_min_l], _r2[:_min_l])[0, 1])
+
+                _fl = np.zeros((len(_active_sids), 2))
+                _fl[:, 0] = 1.0  # Market factor
+                for _i, _sid in enumerate(_active_sids):
+                    _sigs = (stream_signals or {}).get(_sid, [])
+                    if any(market_ctx.get_sector(s.get('ticker', '')) == 'Semiconductor' for s in _sigs):
+                        _fl[_i, 1] = 1.0
+
+                if np.any(_fl[:, 1] > 0):
+                    _frp = FactorRiskParityDampener()
+                    _damped_w, _ = _frp.decompose_and_dampen(_w_arr, _cov_s, _fl)
+                    for _i, _sid in enumerate(_active_sids):
+                        final_weights[_sid] = float(round(_damped_w[_i], 4))
+                    logger.info(f"  🏛️ [DynamicOrthogonalEngine] 팩터 리스크 패리티 감쇄 반영 완료: {final_weights}")
+        except Exception as _ortho_err:
+            logger.debug(f"  [DynamicOrthogonalEngine] 연동 예외 (fallback 보존): {_ortho_err}")
+
+        # ── [Frontier Wiring 2] Soliton Causal Diversity Engine (Zero-Bias Self-Evolution) ──
+        try:
+            from src.evolution.soliton_causal_diversity_engine import SolitonCausalDiversityEngine
+            _scde = SolitonCausalDiversityEngine()
+            _stream_sigs_map = {}
+            _stream_resids_map = {}
+            for _sid in self.STREAMS:
+                _sm = (stream_metrics or {}).get(_sid, {})
+                _hist_rets = _sm.get('daily_returns', _sm.get('returns', []))
+                if _hist_rets and len(_hist_rets) >= 5:
+                    _stream_sigs_map[_sid] = np.asarray(_hist_rets, dtype=float)
+                    _stream_resids_map[_sid] = _stream_sigs_map[_sid] - np.mean(_stream_sigs_map[_sid])
+
+            if len(_stream_sigs_map) >= 2:
+                _mkt_ret = np.mean(list(_stream_sigs_map.values()), axis=0)
+                _evo_res = _scde.process_frontier_evolution(
+                    current_allocations=final_weights,
+                    stream_signals=_stream_sigs_map,
+                    stream_residuals=_stream_resids_map,
+                    market_returns=_mkt_ret
+                )
+                if _evo_res.get('zero_bias_verified'):
+                    final_weights = _evo_res['modulated_weights']
+                    logger.info(f"  🧬 [SolitonCausalDiversityEngine] 무편향 솔리톤 인과 변조 완료: {final_weights}")
+        except Exception as _evo_err:
+            logger.debug(f"  [SolitonCausalDiversityEngine] 연동 예외 (fallback 보존): {_evo_err}")
+
+        # Final Normalization to preserve exact target exposure
+        _tot_w = sum(final_weights.values())
+        if _tot_w > 0:
+            target_sum = golden_bull_mult if golden_bull_mult > 1.0 else 1.0
+            final_weights = {k: round((v / _tot_w) * target_sum, 4) for k, v in final_weights.items()}
+
         threshold = cfg.get('allocator.rebalance_threshold', 0.05)
         needs_rebalance = self._needs_rebalance(final_weights, threshold)
         if needs_rebalance:

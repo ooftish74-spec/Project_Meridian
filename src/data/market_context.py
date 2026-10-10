@@ -37,18 +37,30 @@ class MarketContextManager:
         '010140': 'Materials',# 삼성중공업
         
         '015760': 'Utility',  # 한국전력
+
+        # Sector / Index ETFs & US Equities
+        '091160': 'Semiconductor',  # KODEX 반도체
+        'SOXX':   'Semiconductor',  # iShares Semiconductor ETF
+        'NVDA':   'Semiconductor',  # NVIDIA Corporation
+        '069500': 'Market_Index',   # KODEX 200
+        'QQQ':    'Market_Index',   # Invesco QQQ Trust
+        'XLK':    'IT',             # Technology Select Sector SPDR
+        '459580': 'Cash_Equivalent',# KODEX CD금리액티브
     }
 
     # 기본 섹터 캡 (이 비중 이상으로 포트폴리오를 채울 수 없음)
     DEFAULT_SECTOR_CAPS = {
+        'Semiconductor': 0.35,
         'IT': 0.35,
+        'Market_Index': 0.50,
+        'Cash_Equivalent': 1.00,
         'Energy/Chem': 0.15,
         'Auto': 0.15,
         'Finance': 0.15,
         'Health': 0.10,
         'Materials': 0.10,
         'Utility': 0.05,
-        'Unknown': 0.10  # 섹터를 모르는 종목들의 총합 캡
+        'Unknown': 0.15  # 섹터를 모르는 종목들의 총합 캡
     }
 
     def __init__(self):

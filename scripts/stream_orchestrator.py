@@ -765,6 +765,9 @@ class StreamOrchestrator:
         # [Phase 50] Check for S0 Cash Sweep
         s0_sigs = all_signals.get('S0', [])
 
+        # ★ [SSOT Wiring Fix] all_signals를 _stream_signals로 주입하여 섹터 한도(_enforce_sector_limits) 및 직교화 활성화
+        stream_metrics['_stream_signals'] = all_signals
+
         weights = self.allocator.allocate(stream_metrics, regime, market_data, s0_sigs=s0_sigs)
         result['allocation'] = weights
         logger.info(f"    📊 배분: {weights}")
