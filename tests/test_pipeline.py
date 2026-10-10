@@ -81,14 +81,21 @@ class TestStreamOrchestratorRun:
     def setup(self):
         from scripts.stream_orchestrator import StreamOrchestrator
         import unittest.mock as mock
+        import pandas as pd
         self.patcher = mock.patch('pykrx.stock.get_market_ohlcv_by_date', return_value=['dummy'])
+        self.patcher_compat = mock.patch(
+            'src.data_collection.pykrx_compat.stock.get_market_ohlcv_by_date',
+            return_value=pd.DataFrame({'종가': [50000.0]})
+        )
         self.patcher_date = mock.patch('scripts.stream_orchestrator.date')
         self.mock_date = self.patcher_date.start()
         self.mock_date.today.return_value.weekday.return_value = 0 # Monday
         self.patcher.start()
+        self.patcher_compat.start()
         self.orch = StreamOrchestrator(exec_mode='shadow')
         yield
         self.patcher.stop()
+        self.patcher_compat.stop()
         self.patcher_date.stop()
 
     def test_run_returns_dict(self):

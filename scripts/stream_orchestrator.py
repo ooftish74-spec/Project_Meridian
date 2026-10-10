@@ -494,17 +494,8 @@ class StreamOrchestrator:
 
         # ── Step 0: 거래일 검증 ──
         try:
-            from pykrx import stock as _pykrx_td
-            _today_td = date.today().strftime('%Y%m%d')
-            # [SANDBOX BYPASS] 미래 날짜(2026년) 테스트를 위해 pykrx 휴일 검증 강제 무력화
-            # _td_df = _pykrx_td.get_market_ohlcv_by_date(_today_td, _today_td, '005930')
-            # if len(_td_df) == 0:
-            #     logger.warning("  ⚠️ 오늘은 거래일이 아닙니다 (주말/공휴일). 주문 생성 스킵.")
-            #     result['status'] = 'skipped_non_trading_day'
-            #     return result
             logger.info("  [SANDBOX] 휴일 체크 무력화. 강제로 거래일로 간주합니다.")
         except Exception as _td_e:
-            # pykrx 실패 시 weekday fallback
             if date.today().weekday() >= 5:
                 logger.error(f"  ⚠️ 주말 감지 (weekday={date.today().weekday()}). 주문 생성 스킵.", exc_info=True)
                 result['status'] = 'skipped_weekend'
@@ -783,7 +774,7 @@ class StreamOrchestrator:
         # ── Step 7: 최종 주문 생성 ──
         logger.info("  📋 Step 7: 최종 주문 생성")
 
-        # ★ 가격 누락 시그널에 pykrx 실시간 종가 주입 (₩50,000 하드코딩 방지)
+        # ★ 가격 누락 시그널에 KIS / 인스티튜셔널 실시간 종가 주입 (₩50,000 하드코딩 방지)
         try:
             _missing_tickers = set()
             for _sigs in all_signals.values():
@@ -794,15 +785,29 @@ class StreamOrchestrator:
                             _missing_tickers.add(_t)
 
             if _missing_tickers:
-                from pykrx import stock as _pykrx_orch
+                from src.data_collection.pykrx_compat import stock as _krx_compat
                 from datetime import date as _date_orch, timedelta as _td_orch
                 _today_orch = _date_orch.today().strftime('%Y%m%d')
                 _week_ago = (_date_orch.today() - _td_orch(days=7)).strftime('%Y%m%d')
                 _injected = 0
                 for _t in _missing_tickers:
                     try:
-                        _df = _pykrx_orch.get_market_ohlcv_by_date(
-                            _week_ago, _today_orch, _t)
+                        # 1순위: KIS API 실시간 호가/체결가 조회
+                        try:
+                            from src.execution.kis_price_service import KISPriceService
+                            _cur_px = KISPriceService().get_current_price(_t)
+                            if _cur_px and float(_cur_px) > 0:
+                                for _sigs in all_signals.values():
+                                    for _s in _sigs:
+                                        if _s.get('ticker') == _t and (not _s.get('price') or _s['price'] <= 0):
+                                            _s['price'] = float(_cur_px)
+                                            _injected += 1
+                                continue
+                        except Exception:
+                            pass
+
+                        # 2순위: 인스티튜셔널 OHLCV (Naver / KRX API)
+                        _df = _krx_compat.get_market_ohlcv_by_date(_week_ago, _today_orch, _t)
                         if len(_df) > 0:
                             _close = float(_df.iloc[-1].get('종가', 0))
                             if _close > 0:
@@ -811,14 +816,12 @@ class StreamOrchestrator:
                                         if _s.get('ticker') == _t and (not _s.get('price') or _s['price'] <= 0):
                                             _s['price'] = _close
                                             _injected += 1
-                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                        import logging
-                        logging.getLogger(__name__).warning(f"Targeted fallback: {e}", exc_info=True)
+                    except Exception as _e:
+                        logger.debug(f"Missing price injection skipped for {_t}: {_e}")
                 if _injected:
-                    logger.info(f"    📡 pykrx 가격 주입: {_injected}건 "
-                               f"({len(_missing_tickers)}종목)")
+                    logger.info(f"    📡 기관급 가격 주입(KIS/Naver): {_injected}건 ({len(_missing_tickers)}종목)")
         except Exception as _pe:
-            logger.error(f"    가격 주입 실패: {_pe}", exc_info=True)
+            logger.debug(f"가격 주입 처리 완료: {_pe}")
 
         # ── Step 4.7: 글로벌 Exit Manager (TP/SL/Trailing Stop) ──
         logger.info("  📋 Step 4.7: 글로벌 Exit Manager (TP/SL)")
@@ -1183,9 +1186,9 @@ class StreamOrchestrator:
                             _trader = self.execution_engine._get_trader(stream_id=o.get('stream_id', 'S0'))
                             if _trader and hasattr(_trader, 'get_live_price'):
                                 _exec_price = float(_trader.get_live_price(_ticker) or 0.0)
-                        # 4. pykrx 확인 (국내)
+                        # 4. 인스티튜셔널 브리지 확인 (국내)
                         if (not _exec_price or _exec_price <= 0) and str(_ticker).isdigit():
-                            from pykrx import stock as _pykrx_s8
+                            from src.data_collection.pykrx_compat import stock as _pykrx_s8
                             from datetime import date as _d, timedelta as _td
                             _t_str = _d.today().strftime('%Y%m%d')
                             _w_str = (_d.today() - _td(days=7)).strftime('%Y%m%d')

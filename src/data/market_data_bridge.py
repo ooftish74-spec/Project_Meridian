@@ -560,7 +560,7 @@ class MarketDataBridge:
                 
         if not fetched:
             try:
-                from pykrx import stock
+                from src.data_collection.pykrx_compat import stock
                 from datetime import timedelta
                 end_str = datetime.now().strftime('%Y%m%d')
                 start_str = (datetime.now() - timedelta(days=days*2)).strftime('%Y%m%d')
@@ -570,7 +570,7 @@ class MarketDataBridge:
                     result['kospi_returns'] = rets.tolist()
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).debug(f"pykrx KOSPI regime fallback failed: {e}")
+                logging.getLogger(__name__).debug(f"KOSPI regime fallback failed: {e}")
         return result
 
     def _get_vix(self) -> float:
@@ -675,7 +675,7 @@ class MarketDataBridge:
 
         @with_retry(max_retries=2, initial_delay=1.0, fallback_value=None)
         def fetch_pykrx_index():
-            from pykrx import stock as _pykrx
+            from src.data_collection.pykrx_compat import stock as _pykrx
             df = _pykrx.get_index_ohlcv(_start, _today, index_code)
             if df is not None and (not df.empty):
                 close_col = '종가' if '종가' in df.columns else df.columns[3]
@@ -683,12 +683,12 @@ class MarketDataBridge:
             raise ValueError('pykrx index empty')
         val = fetch_pykrx_index()
         if val is not None:
-            logger.debug(f"  지수 {index_code}: {val} (pykrx 직접)")
+            logger.debug(f"  지수 {index_code}: {val} (인스티튜셔널 브리지 직접)")
             return val
         # yfinance fallback removed
         if etf_ticker:
             try:
-                from pykrx import stock
+                from src.data_collection.pykrx_compat import stock
                 df = stock.get_market_ohlcv_by_date(_start, _today, etf_ticker)
                 if df is not None and (not df.empty):
                     val = float(df['종가'].iloc[-1])
@@ -707,15 +707,15 @@ class MarketDataBridge:
 
                 raise
         if index_code != '1004':
-            AlertManager().report_error(f"INDEX_{index_code}', '모든 소스 실패 (KIS/pykrx/fdr/ETF)', severity='error")
-            logger.warning(f"  지수 {index_code}: 모든 소스 실패 (KIS/pykrx/fdr/ETF)")
+            AlertManager().report_error(f"INDEX_{index_code}', '모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)', severity='error")
+            logger.warning(f"  지수 {index_code}: 모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)")
         return None
 
     def _get_vkospi(self) -> float:
         """[Phase 84] VKOSPI (Strict Staleness + CB 보호).
 
-        데이터 소스: KIS API -> Realized Volatility (Intraday) -> pykrx (EOD Fallback).
-        ★ 장중 pykrx는 시차가 있으므로 사용을 최대한 배제합니다.
+        데이터 소스: KIS API -> Realized Volatility (Intraday) -> 인스티튜셔널 EOD Fallback.
+        ★ 웹 스크래핑 pykrx는 전면 축출하고 KIS/인스티튜셔널 피드를 최우선 채택합니다.
         """
         # 1. KIS API 실시간 (Tier 1)
         try:
@@ -733,9 +733,9 @@ class MarketDataBridge:
             import logging
             logging.getLogger(__name__).debug(f"KIS API VKOSPI 실패: {e}")
 
-        # 2. Realized Volatility Estimation (Tier 2)
+        # 2. Realized Volatility Estimation (Tier 2 - KOSPI 실현 변동성)
         try:
-            from pykrx import stock
+            from src.data_collection.pykrx_compat import stock
             from datetime import timedelta
             end_str = datetime.now().strftime('%Y%m%d')
             start_str = (datetime.now() - timedelta(days=45)).strftime('%Y%m%d')
@@ -754,29 +754,17 @@ class MarketDataBridge:
             import logging
             logging.getLogger(__name__).debug(f"Realized Volatility Estimation 실패: {e}")
 
-        # 3. EOD pykrx fallback (Tier 3 - mainly for evening runs or absolute fallback)
-        @with_retry(max_retries=2, initial_delay=1.0, fallback_value=None)
-        def fetch_pykrx_vkospi():
-            from pykrx import stock
-            from datetime import timedelta
-            end = datetime.now().strftime('%Y%m%d')
-            start = (datetime.now() - timedelta(days=5)).strftime('%Y%m%d')
-            df = stock.get_index_ohlcv(start, end, '1004')
-            if df is not None and (not df.empty):
-                curr = float(df['종가'].iloc[-1])
-                if not (5.0 <= curr <= 150.0):
-                    raise ValueError(f"pykrx VKOSPI Out of bounds (Glitch): {curr}")
-                prev = float(df['종가'].iloc[-2]) if len(df) > 1 else curr
-                DataSanityGate.validate('VKOSPI(pykrx)', curr, prev, max_pct_change=0.5)
-                return curr
-            raise ValueError('pykrx VKOSPI empty response')
-            
-        val = self._cb_vkospi.call(fetch_pykrx_vkospi)
-        if val is not None:
-            self._field_quality['vkospi'] = 0.5 # Low quality due to EOD lag
-            import logging
-            logging.getLogger(__name__).info(f"  [VKOSPI] pykrx 수집 성공 (EOD 지연 가능성): {val:.2f}")
-            return val
+        # 3. VIX Global Proxy Fallback (Tier 3)
+        try:
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            vix_val = GoogleFinanceCollector.get_vix()
+            if vix_val and 5.0 <= vix_val <= 100.0:
+                proxy_vkospi = round(vix_val * 1.05, 2)
+                self._field_quality['vkospi'] = 0.7
+                logger.info(f"  [VKOSPI] Global VIX Proxy 연동 성공: {proxy_vkospi:.2f}")
+                return proxy_vkospi
+        except Exception as _e:
+            logger.debug(f"VKOSPI Global VIX Proxy 실패: {_e}")
             
         AlertManager().report_error('VKOSPI', '모든 우회 수단 실패. VIX 기반 프록시를 시도합니다.', severity='warning')
         try:
@@ -1108,14 +1096,14 @@ class MarketDataBridge:
         if elapsed_b_days >= 5:
             raise RuntimeError(f"DataStaleException: {path_name} is {elapsed_b_days} business days stale (last date: {last_date.date()}).")
     def _read_us_index(self, symbol: str, etf_alt: str) -> Optional[float]:
-        """미국 지수 전일 변동률."""
+        """미국 지수 전일 변동률 (Parquet -> Google Finance Live -> Fallback)."""
         paths_to_check = [
-            _DATA_DIR / 'us_stocks' / 'prices' / f'{symbol}.csv',
-            _DATA_DIR / 'us_stocks' / 'prices' / f'{etf_alt}.csv',
             _DATA_DIR / 'us_stocks' / 'prices' / f'{symbol}.parquet',
             _DATA_DIR / 'us_stocks' / 'prices' / f'{etf_alt}.parquet',
             _DATA_DIR / 'global_markets' / 'us_stocks' / f'{symbol}.parquet', 
-            _DATA_DIR / 'global_markets' / 'us_stocks' / f'{etf_alt}.parquet'
+            _DATA_DIR / 'global_markets' / 'us_stocks' / f'{etf_alt}.parquet',
+            _DATA_DIR / 'us_stocks' / 'prices' / f'{symbol}.csv',
+            _DATA_DIR / 'us_stocks' / 'prices' / f'{etf_alt}.csv',
         ]
         for path in paths_to_check:
             if path.exists():
@@ -1126,16 +1114,33 @@ class MarketDataBridge:
                         df = pd.read_parquet(path)
                     
                     if len(df) >= 2:
-                        from datetime import datetime
                         last_date = pd.to_datetime(df['date'].iloc[-1] if 'date' in df.columns else df.index[-1])
                         try:
                             self._check_staleness(last_date, 'US', path.name)
+                            return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
                         except RuntimeError as e:
+                            # Stale file detected -> Attempt live institutional fetch before graceful degradation
+                            try:
+                                from src.utils.google_finance_collector import GoogleFinanceCollector
+                                quote = GoogleFinanceCollector.get_quote_details(symbol)
+                                if quote and 'change_pct' in quote and abs(quote['change_pct']) < 30.0:
+                                    logger.info(f"  [US Index Live Feed] Google Finance 실시간 변동률 채택 ({symbol}: {quote['change_pct']:+.2f}%)")
+                                    return float(quote['change_pct'])
+                            except Exception:
+                                pass
                             logger.warning(f"[Graceful Degradation] US Data Stale: {e}. Using stale values.")
-                        return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
+                            return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
                 except Exception as e:
                     logger.error(f'Critical error encountered (fallback return False): {e}', exc_info=True)
                     return False
+        # Direct Live Fallback
+        try:
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            quote = GoogleFinanceCollector.get_quote_details(symbol)
+            if quote and 'change_pct' in quote and abs(quote['change_pct']) < 30.0:
+                return float(quote['change_pct'])
+        except Exception:
+            pass
         return None
 
     def _load_price_history(self, ticker: str) -> Optional[pd.DataFrame]:
