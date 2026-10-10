@@ -36,7 +36,7 @@ class S5OvernightStream(BaseStream):
     lev_ticker = cfg.get('s0_beta.leverage_ticker', '122630')
     inv_ticker = cfg.get('s0_beta.inverse2x_ticker', '252670')
     ETF_UNIVERSE = {lev_ticker: {'name': 'KODEX 레버리지', 'type': 'KOSPI_2X'}, inv_ticker: {'name': 'KODEX 200선물인버스2X', 'type': 'KOSPI_INV_2X'}}
-    DEFAULT_PARKING_ETFS = [{'ticker': '430740', 'name': 'KODEX KOFR금리액티브(합성)'}, {'ticker': '357870', 'name': 'TIGER CD금리투자KIS(합성)'}, {'ticker': '459580', 'name': 'KODEX CD금리액티브(합성)'}]
+    DEFAULT_PARKING_ETFS = [{'ticker': '423160', 'name': 'KODEX KOFR금리액티브(합성)'}, {'ticker': '357870', 'name': 'TIGER CD금리투자KIS(합성)'}, {'ticker': '459580', 'name': 'KODEX CD금리액티브(합성)'}]
 
     @staticmethod
     def _compute_overnight_kelly_scale(vix: float, nq_vol_pct: float=0.0, max_alloc: float=1.0) -> float:

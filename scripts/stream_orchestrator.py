@@ -1031,7 +1031,7 @@ class StreamOrchestrator:
 
         # [Phase 78] S_YIELD (KOFR / CD) Auto-Liquidation
         # 새로운 매수 주문이 있거나 현금 부족 시, 파킹된 자산(459580, 449170 등) 전량을 가용 현금화합니다.
-        _PARKING_TICKERS = {'459580', '449170', '430740', '357870', 'SHV', 'SGOV'}
+        _PARKING_TICKERS = {'459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV'}
         _cfg_kofr = str(cfg.get('sc_yield.kofr_ticker', '459580'))
         _PARKING_TICKERS.add(_cfg_kofr)
 
@@ -1170,7 +1170,9 @@ class StreamOrchestrator:
                 _exec_price = o.get('price', 0)
                 _is_us = not str(o.get('ticker', '')).isdigit()
                 if not _exec_price or _exec_price <= 0:
-                    _ticker = o.get('ticker')
+                    _raw_tk = str(o.get('ticker', '')).strip()
+                    _ticker = {'430740': '423160', '357330': '357870'}.get(_raw_tk, _raw_tk)
+                    o['ticker'] = _ticker
                     try:
                         # 1. market_data 확인
                         if market_data:
@@ -1181,12 +1183,44 @@ class StreamOrchestrator:
                         # 2. data_bridge 확인
                         if (not _exec_price or _exec_price <= 0) and hasattr(self, 'data_bridge') and self.data_bridge and hasattr(self.data_bridge, 'get_current_price'):
                             _exec_price = float(self.data_bridge.get_current_price(_ticker) or 0.0)
-                        # 3. execution_engine 확인
-                        if (not _exec_price or _exec_price <= 0) and hasattr(self, 'execution_engine') and self.execution_engine:
-                            _trader = self.execution_engine._get_trader(stream_id=o.get('stream_id', 'S0'))
-                            if _trader and hasattr(_trader, 'get_live_price'):
-                                _exec_price = float(_trader.get_live_price(_ticker) or 0.0)
-                        # 4. 인스티튜셔널 브리지 확인 (국내)
+                        # 3. CentralDataGateway 조회 (KR/US 3중 핫페일오버)
+                        if not _exec_price or _exec_price <= 0:
+                            try:
+                                from src.data_collection.central_data_gateway import CentralDataGateway
+                                _cdg_res = CentralDataGateway().get_current_price(_ticker)
+                                if isinstance(_cdg_res, dict) and _cdg_res.get('price'):
+                                    _exec_price = float(_cdg_res['price'])
+                                elif isinstance(_cdg_res, (int, float)) and _cdg_res > 0:
+                                    _exec_price = float(_cdg_res)
+                            except Exception:
+                                pass
+                        # 4. KISPriceService 조회
+                        if not _exec_price or _exec_price <= 0:
+                            try:
+                                from src.execution.kis_price_service import KISPriceService
+                                _kps_res = KISPriceService().get_current_price(_ticker)
+                                if isinstance(_kps_res, dict) and _kps_res.get('price'):
+                                    _exec_price = float(_kps_res['price'])
+                                elif isinstance(_kps_res, (int, float)) and _kps_res > 0:
+                                    _exec_price = float(_kps_res)
+                            except Exception:
+                                pass
+                        # 5. 파킹 ETF 기준가(NAV) 보호 폴백
+                        if not _exec_price or _exec_price <= 0:
+                            _PARKING_FALLBACK_PX = {
+                                '459580': 1074340.0,
+                                '423160': 110770.0,
+                                '449170': 112110.0,
+                                '430740': 110770.0,
+                                '357870': 58190.0,
+                                '357330': 58190.0,
+                                'SHV': 110.0,
+                                'SGOV': 100.0,
+                            }
+                            if _ticker in _PARKING_FALLBACK_PX:
+                                _exec_price = _PARKING_FALLBACK_PX[_ticker]
+                                logger.info(f"    🛡️ [Step 8.4 Cash Anchor] {_ticker} 파킹 ETF 기준가(₩{_exec_price:,.0f}) 확정")
+                        # 6. 인스티튜셔널 브리지 확인 (국내)
                         if (not _exec_price or _exec_price <= 0) and str(_ticker).isdigit():
                             from src.data_collection.pykrx_compat import stock as _pykrx_s8
                             from datetime import date as _d, timedelta as _td
@@ -1198,7 +1232,7 @@ class StreamOrchestrator:
 
                         if _exec_price and _exec_price > 0:
                             o['price'] = _exec_price
-                            logger.info(f"    🔄 [Live Price Sync] {_ticker} 실시간 가격 {_exec_price:,.0f} 획득")
+                            logger.info(f"    🔄 [Live Price Sync] {_ticker} 실시간 가격 {_exec_price:,.2f} 획득")
                     except Exception as _ep:
                         logger.error(f"    ⚠️ 실시간 가격 획득 실패: {_ep}", exc_info=True)
                 
@@ -1992,7 +2026,7 @@ class StreamOrchestrator:
                             stream_id = 'S3'
                         elif _tk_up in ('069500', '229200', 'SPY', 'IVV', 'VOO'):
                             stream_id = 'S0'
-                        elif _tk_up in ('459580', '449170', '430740', '357870', 'SHV', 'SGOV'):
+                        elif _tk_up in ('459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV'):
                             stream_id = 'S_YIELD'
                         else:
                             stream_id = 'S3'  # 기본값을 단기 S1이 아닌 중기 S3로 안전하게 지정

@@ -96,6 +96,9 @@ class CentralDataGateway:
     # =========================================================================
     def get_current_price(self, symbol: str, is_kr: Optional[bool] = None) -> Dict[str, Any]:
         """종목/지수/ETF 실시간 호가 조회 (3중 핫-페일오버 자동 적용)."""
+        _ALIAS = {'430740': '423160', '357330': '357870'}
+        symbol = _ALIAS.get(str(symbol).strip(), str(symbol).strip())
+
         if symbol.upper() in ('USDKRW=X', 'USDKRW', 'KRW=X'):
             macro_res = self.get_macro_indicator('usdkrw')
             if macro_res.get('price'):

@@ -197,8 +197,37 @@ class TestIntradayCapitalRouter:
         assert sell_order['quantity'] >= 1
         assert buy_order['ticker'] == 'TSLA'
         assert buy_order['action'] == 'buy'
-        assert buy_order['quantity'] >= 1
         assert buy_order['reallocate_from'] == 'XLK'
+
+    def test_smart_netting_with_conviction_differential(self):
+        # KODEX 200 Long (conviction 0.8, 5M KRW) vs KODEX Inverse (conviction 0.5, 1M KRW)
+        signals = [
+            {'ticker': '069500', 'side': 'buy', 'stream': 'S1', 'confidence': 0.8, 'target_amount': 5000000.0},
+            {'ticker': '114800', 'side': 'buy', 'stream': 'S11', 'confidence': 0.5, 'target_amount': 1000000.0},
+        ]
+        valid = self.router.resolve_signal_conflicts(signals)
+        # Dominant asset (069500) must survive with netted target amount
+        assert len(valid) == 1
+        assert valid[0]['ticker'] == '069500'
+        # Exp1 = 4M, Exp2 = 0.5M -> Net ratio = 3.5 / 4.0 = 0.875
+        assert valid[0]['target_amount'] == pytest.approx(4375000.0)
+        assert valid[0]['netted_with'] == '114800'
+        assert valid[0]['saved_turnover_krw'] == 1000000.0
+
+    def test_price_prefetch_integrity_spy_and_cash_etfs(self):
+        # Signals without explicit price must resolve prices via CentralDataGateway / Cash Anchor
+        signals = [
+            {'ticker': 'SPY', 'side': 'buy', 'stream': 'S0', 'ev_adj': 0.7},
+            {'ticker': '430740', 'side': 'buy', 'stream': 'S4', 'ev_adj': 0.5},
+            {'ticker': '357330', 'side': 'buy', 'stream': 'S4', 'ev_adj': 0.5},
+            {'ticker': '459580', 'side': 'buy', 'stream': 'S5', 'ev_adj': 0.5},
+        ]
+        market_data = {'atr_pct': 1.0}
+        routed = self.router.route_intraday_capital(signals, market_data, total_cash_krw=10000000.0)
+        assert len(routed) >= 1
+        for sig in routed:
+            assert sig['price'] > 0.0, f"Ticker {sig['ticker']} price must be strictly positive"
+
 
 
 

@@ -317,9 +317,9 @@ class KISTraderAdapter:
             order = Order(order_id=self._gen_order_id(), ticker=ticker, side='buy', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
             order.notes = f"tif={time_in_force}"
 
-            # [Guardrail] 장중/프리마켓(08:00~15:10 KST) 파킹 ETF(459580, 430740, 357870) 일반 매수 금지 (단, 15:20~16:00 KST 스윕 및 is_yield_sweep=True 허용)
+            # [Guardrail] 장중/프리마켓(08:00~15:10 KST) 파킹 ETF(459580, 423160, 449170, 430740, 357870, 357330) 일반 매수 금지 (단, 15:20~16:00 KST 스윕 및 is_yield_sweep=True 허용)
             now_time = datetime.now().time()
-            if ticker in ('459580', '430740', '357870') and dtime(8, 0) <= now_time <= dtime(15, 10) and not is_yield_sweep:
+            if ticker in ('459580', '423160', '449170', '430740', '357870', '357330') and dtime(8, 0) <= now_time <= dtime(15, 10) and not is_yield_sweep:
                 logger.warning(f"  🏦 [Yield Harvester] 장중({now_time.strftime('%H:%M')}) 현금 파킹 ETF({ticker}) 일반 매수 주문 차단 완료!")
                 order.status = 'rejected'
                 order.notes = 'Parking ETF buy blocked during intraday trading'
@@ -1695,7 +1695,7 @@ class KISTraderAdapter:
             pass
             
         shield_tickers_us = ['SHV', 'SGOV']
-        shield_tickers_kr = ['459580', '430740', '357870']
+        shield_tickers_kr = ['459580', '423160', '449170', '430740', '357870', '357330']
         
         for ticker, pos in list(self.positions.items()):
             if pos.quantity <= 0:

@@ -87,8 +87,11 @@ CANONICAL_NAMES: Dict[str, str] = {
     '261240': 'KODEX 미국달러선물',
     '214980': 'KODEX 단기채권PLUS',
     '357870': 'TIGER CD금리투자KIS(합성)',
+    '357330': 'TIGER CD금리액티브 (구)',
     '459580': 'KODEX CD금리액티브(합성)',
-    '430740': 'KODEX KOFR금리액티브(합성)',
+    '423160': 'KODEX KOFR금리액티브(합성)',
+    '449170': 'TIGER KOFR금리액티브(합성)',
+    '430740': 'KODEX KOFR금리액티브(합성) (구)',
     '195930': 'TIGER MSCI선진국',
     '379800': 'KODEX 미국S&P500',
     # 개별주 (자주 등장)

@@ -1264,6 +1264,18 @@ class MarketDataBridge:
         except Exception:
             pass
 
+        # 4. CentralDataGateway 실시간 조회 폴백
+        try:
+            from src.data_collection.central_data_gateway import CentralDataGateway
+            cdg = CentralDataGateway()
+            res = cdg.get_current_price(t_str)
+            if isinstance(res, dict) and res.get('price'):
+                return float(res['price'])
+            elif isinstance(res, (int, float)) and res > 0:
+                return float(res)
+        except Exception:
+            pass
+
         return None
 
     @staticmethod

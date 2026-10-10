@@ -59,10 +59,9 @@ class S4AdvisoryStream(BaseStream):
                 return []
         signals = []
         _conf = market_data.get('regime_confidence', 0.5)
-        base_defense = {'crash': float(cfg.get('s4.defense.crash', 0.8)), 'bear': float(cfg.get('s4.defense.bear', 0.5)), 'caution': float(cfg.get('s4.defense.caution', 0.2)), 'bull': float(cfg.get('s4.defense.bull', 0.0))}.get(regime, 0.0)
         defense_ratio = min(1.0, max(0.0, base_defense * _conf * 2.0))
-        _kofr_ticker = cfg.get('s4.kofr_ticker', '357330')
-        _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR 금리액티브')
+        _kofr_ticker = cfg.get('s4.kofr_ticker', '423160')
+        _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR금리액티브(합성)')
         if defense_ratio > 0:
             for _acct in self.ACCOUNTS.keys():
                 signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': cfg.get('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})

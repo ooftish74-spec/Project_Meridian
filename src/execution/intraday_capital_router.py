@@ -93,23 +93,40 @@ class IntradayCapitalRouter:
         return capped_qty
 
     def resolve_signal_conflicts(self, signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """[Step 4] 상충 신호 무효화 (Conflict Cancel & Wash-Trade Defense).
+        """[Step 4] 스마트 상충 신호 상쇄 (Smart Conflict Netting & Wash-Trade Defense).
         
-        S1 롱 vs S11 숏 또는 동일 자산/역방향 ETF 대립 신호 발생 시 두 신호 모두 강제 취소.
+        동일 종목 반대 매매(롱 vs 숏) 또는 상관계수 -1.0 역방향 ETF 페어(예: KODEX 200 vs KODEX 인버스)
+        신호 충돌 발생 시:
+        1. 확신도/요청자본 기반 순노출(Net Exposure) 연산
+        2. 양측 노출도가 균등(차이 5% 미만 또는 미지정 기본값)할 경우: 100% 상호 상쇄 취소 (Wash-Trade 원천 방지)
+        3. 한쪽 확신도가 우세할 경우: 열세 신호 소멸 및 우위 신호 순노출 차액 주문으로 축소 집행 (수수료/슬리피지 대폭 절감)
         """
         if not signals:
             return []
 
+        # 작업용 복사본 생성
+        working_signals = [dict(s) for s in signals]
         cancelled_indices = set()
-        n = len(signals)
+        n = len(working_signals)
 
         for i in range(n):
+            if i in cancelled_indices:
+                continue
             for j in range(i + 1, n):
-                s1 = signals[i]
-                s2 = signals[j]
+                if j in cancelled_indices:
+                    continue
 
-                t1 = str(s1.get('ticker', '')).strip()
-                t2 = str(s2.get('ticker', '')).strip()
+                s1 = working_signals[i]
+                s2 = working_signals[j]
+
+                _raw_t1 = str(s1.get('ticker', '')).strip()
+                _raw_t2 = str(s2.get('ticker', '')).strip()
+                _ALIAS = {'430740': '423160', '357330': '357870'}
+                t1 = _ALIAS.get(_raw_t1, _raw_t1)
+                t2 = _ALIAS.get(_raw_t2, _raw_t2)
+                s1['ticker'] = t1
+                s2['ticker'] = t2
+
                 side1 = str(s1.get('side', s1.get('action', 'buy'))).lower()
                 side2 = str(s2.get('side', s2.get('action', 'buy'))).lower()
 
@@ -120,14 +137,61 @@ class IntradayCapitalRouter:
                 inverse_conflict = (self.INVERSE_PAIR_MAP.get(t1) == t2) and (side1 == 'buy' and side2 == 'buy')
 
                 if same_ticker_conflict or inverse_conflict:
-                    logger.warning(
-                        f"  🚨 [Conflict Cancel] 상충 신호 감지: ({t1}:{side1}) vs ({t2}:{side2}) "
-                        f"-> Wash Trade 방지를 위해 두 신호 모두 100% 강제 취소 (S0 KOFR 현금 보존)"
-                    )
-                    cancelled_indices.add(i)
-                    cancelled_indices.add(j)
+                    # 확신도 및 요청 자본에 기반한 유효 노출(Exposure) 연산
+                    has_amt1 = 'amount_krw' in s1 or 'target_amount' in s1
+                    has_amt2 = 'amount_krw' in s2 or 'target_amount' in s2
+                    amt1 = float(s1.get('amount_krw', s1.get('target_amount', 1.0)) or 1.0)
+                    amt2 = float(s2.get('amount_krw', s2.get('target_amount', 1.0)) or 1.0)
+                    conf1 = float(s1.get('confidence', s1.get('win_rate', s1.get('ev_adj', 0.5))) or 0.5)
+                    conf2 = float(s2.get('confidence', s2.get('win_rate', s2.get('ev_adj', 0.5))) or 0.5)
 
-        valid_signals = [sig for idx, sig in enumerate(signals) if idx not in cancelled_indices]
+                    exp1 = amt1 * conf1
+                    exp2 = amt2 * conf2
+                    max_exp = max(exp1, exp2, 1e-9)
+                    rel_diff = abs(exp1 - exp2) / max_exp
+
+                    # 금액이 지정되지 않았고 확신도가 동일하거나, 노출 차이가 5% 이내인 경우 -> 100% 완전 상쇄
+                    if (not has_amt1 and not has_amt2 and abs(conf1 - conf2) < 0.01) or rel_diff < 0.05:
+                        logger.warning(
+                            f"  🚨 [Conflict Cancel] 상충 신호 균등 상쇄: ({t1}:{side1}, E={exp1:.2f}) vs ({t2}:{side2}, E={exp2:.2f}) "
+                            f"-> Wash Trade 방지 및 무의미한 양방향 비용 회피를 위해 두 신호 모두 100% 상쇄 소멸"
+                        )
+                        cancelled_indices.add(i)
+                        cancelled_indices.add(j)
+                        break
+                    elif exp1 > exp2:
+                        # s1 우세 -> s2 소멸, s1은 순노출(net exposure)로 축소 집행
+                        net_ratio = max(0.01, min(1.0, (exp1 - exp2) / exp1))
+                        saved_vol = 2.0 * exp2
+                        if 'target_amount' in s1:
+                            s1['target_amount'] = float(s1['target_amount']) * net_ratio
+                        if 'amount_krw' in s1:
+                            s1['amount_krw'] = float(s1['amount_krw']) * net_ratio
+                        s1['netted_with'] = t2
+                        s1['saved_turnover_krw'] = saved_vol
+                        logger.info(
+                            f"  🔄 [Smart Netting] 상충 신호 순노출 상쇄: ({t1}:{side1}, E={exp1:,.0f}) vs ({t2}:{side2}, E={exp2:,.0f}) "
+                            f"-> 우위 종목 {t1} 순노출({exp1 - exp2:,.0f}, 비율 {net_ratio*100:.1f}%) 채택 집행, {t2} 상쇄 소멸 (절감 거래대금: ₩{saved_vol:,.0f})"
+                        )
+                        cancelled_indices.add(j)
+                    else:
+                        # s2 우세 -> s1 소멸, s2는 순노출(net exposure)로 축소 집행
+                        net_ratio = max(0.01, min(1.0, (exp2 - exp1) / exp2))
+                        saved_vol = 2.0 * exp1
+                        if 'target_amount' in s2:
+                            s2['target_amount'] = float(s2['target_amount']) * net_ratio
+                        if 'amount_krw' in s2:
+                            s2['amount_krw'] = float(s2['amount_krw']) * net_ratio
+                        s2['netted_with'] = t1
+                        s2['saved_turnover_krw'] = saved_vol
+                        logger.info(
+                            f"  🔄 [Smart Netting] 상충 신호 순노출 상쇄: ({t2}:{side2}, E={exp2:,.0f}) vs ({t1}:{side1}, E={exp1:,.0f}) "
+                            f"-> 우위 종목 {t2} 순노출({exp2 - exp1:,.0f}, 비율 {net_ratio*100:.1f}%) 채택 집행, {t1} 상쇄 소멸 (절감 거래대금: ₩{saved_vol:,.0f})"
+                        )
+                        cancelled_indices.add(i)
+                        break
+
+        valid_signals = [sig for idx, sig in enumerate(working_signals) if idx not in cancelled_indices]
         return valid_signals
 
     def cascading_cash_swap(self, freed_cash_krw: float, pending_s11_signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -190,7 +254,7 @@ class IntradayCapitalRouter:
                 continue
             
             # 현금성 자산(KOFR, CD금리, 단기채)은 스왑 편출 우선순위 최하위 또는 별도 안전자산으로 보호
-            if ticker in ('357330', '430740', 'SGOV'):
+            if ticker in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
                 holdings_ev[ticker] = 0.50 # 안전자산 기본 중립값
                 continue
 
@@ -297,7 +361,10 @@ class IntradayCapitalRouter:
         for sig in ranked_signals:
             stream = str(sig.get('stream', sig.get('stream_id', ''))).upper()
             tactic = str(sig.get('tactic', sig.get('strategy', ''))).upper()
-            ticker = sig.get('ticker', '')
+            _raw_tk = str(sig.get('ticker', '')).strip()
+            _ALIAS = {'430740': '423160', '357330': '357870'}
+            ticker = _ALIAS.get(_raw_tk, _raw_tk)
+            sig['ticker'] = ticker
 
             # [Pure Dynamic Math] 연속 로지스틱 시그모이드 자본 할당 비율
             sig_ev_score = float(sig.get('ev_adj', 0.5))
@@ -326,15 +393,52 @@ class IntradayCapitalRouter:
                     p_dict = portfolio.get('positions') or portfolio.get('holdings') or {}
                     if isinstance(p_dict, dict) and ticker in p_dict:
                         p_info = p_dict[ticker]
-                        price = float(p_info.get('current_price', p_info.get('price', 0.0)))
-                # 3. pykrx 폴백
+                        price = float(p_info.get('current_price', p_info.get('price', 0.0)) or 0.0)
+                # 3. CentralDataGateway 조회 (KR/US 3중 핫페일오버)
+                if price <= 1.0:
+                    try:
+                        from src.data_collection.central_data_gateway import CentralDataGateway
+                        _cdg_res = CentralDataGateway().get_current_price(ticker)
+                        if isinstance(_cdg_res, dict) and _cdg_res.get('price'):
+                            price = float(_cdg_res['price'])
+                        elif isinstance(_cdg_res, (int, float)) and _cdg_res > 0:
+                            price = float(_cdg_res)
+                    except Exception:
+                        pass
+                # 4. KISPriceService 조회
+                if price <= 1.0:
+                    try:
+                        from src.execution.kis_price_service import KISPriceService
+                        _kps_res = KISPriceService().get_current_price(ticker)
+                        if isinstance(_kps_res, dict) and _kps_res.get('price'):
+                            price = float(_kps_res['price'])
+                        elif isinstance(_kps_res, (int, float)) and _kps_res > 0:
+                            price = float(_kps_res)
+                    except Exception:
+                        pass
+                # 5. 파킹 ETF 기준가(NAV) 보호 폴백
+                if price <= 1.0:
+                    _PARKING_FALLBACK_PX = {
+                        '459580': 1074340.0,
+                        '423160': 110770.0,
+                        '449170': 112110.0,
+                        '430740': 110770.0,
+                        '357870': 58190.0,
+                        '357330': 58190.0,
+                        'SHV': 110.0,
+                        'SGOV': 100.0,
+                    }
+                    if ticker in _PARKING_FALLBACK_PX:
+                        price = _PARKING_FALLBACK_PX[ticker]
+                        logger.info(f"  🛡️ [Router Cash Anchor] {ticker} 파킹 ETF 기준가(₩{price:,.0f}) 확정")
+                # 6. 인스티튜셔널 브리지 확인 (국내)
                 if price <= 1.0 and str(ticker).isdigit():
                     try:
-                        from pykrx import stock as _pykrx
+                        from src.data_collection.pykrx_compat import stock as _pykrx_s8
                         from datetime import date as _d, timedelta as _td
                         _t_str = _d.today().strftime('%Y%m%d')
                         _w_str = (_d.today() - _td(days=7)).strftime('%Y%m%d')
-                        _df_p = _pykrx.get_market_ohlcv_by_date(_w_str, _t_str, str(ticker))
+                        _df_p = _pykrx_s8.get_market_ohlcv_by_date(_w_str, _t_str, str(ticker))
                         if len(_df_p) > 0:
                             price = float(_df_p.iloc[-1].get('종가', 0.0))
                     except Exception:
@@ -369,7 +473,7 @@ class IntradayCapitalRouter:
 
                     for h_ticker, h_ev in holdings_ev.items():
                         h_is_us = not str(h_ticker).isdigit()
-                        if h_is_us == is_us_candidate and h_ticker not in ('357330', '430740', '459580', '449170', 'SHV', 'SGOV'):
+                        if h_is_us == is_us_candidate and h_ticker not in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
                             eligible_holdings[h_ticker] = h_ev
 
                     if eligible_holdings:
