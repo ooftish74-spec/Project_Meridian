@@ -48,32 +48,44 @@ class MarketContextManager:
         '459580': 'Cash_Equivalent',# KODEX CD금리액티브
     }
 
-    # 기본 섹터 캡 (이 비중 이상으로 포트폴리오를 채울 수 없음)
-    DEFAULT_SECTOR_CAPS = {
-        'Semiconductor': 0.35,
-        'IT': 0.35,
-        'Market_Index': 0.50,
-        'Cash_Equivalent': 1.00,
-        'Energy/Chem': 0.15,
-        'Auto': 0.15,
-        'Finance': 0.15,
-        'Health': 0.10,
-        'Materials': 0.10,
-        'Utility': 0.05,
-        'Unknown': 0.15  # 섹터를 모르는 종목들의 총합 캡
-    }
-
     def __init__(self):
         self.sector_map = self.STATIC_SECTOR_MAP.copy()
-        self.sector_caps = self.DEFAULT_SECTOR_CAPS.copy()
+        self._cached_dynamic_caps = None
 
     def get_sector(self, ticker: str) -> str:
         """종목의 섹터를 반환"""
         return self.sector_map.get(ticker, 'Unknown')
 
     def get_sector_cap(self, sector: str) -> float:
-        """해당 섹터에 허용된 최대 포트폴리오 비중 (0.0 ~ 1.0) 반환"""
-        return self.sector_caps.get(sector, 0.10)
-    
+        """해당 섹터에 허용된 최대 포트폴리오 비중 (100% 동적 섀넌 엔트로피 다양성 모델 산출).
+        
+        Zero Hardcoded Constants:
+        - Cash_Equivalent: 안전자산 대피용으로 1.0 (100%) 허용.
+        - Equity / Sector / Asset: 유니버스 섹터 분포의 섀넌 엔트로피 다양성에 비례하여 동적 도출.
+        """
+        if sector == 'Cash_Equivalent':
+            return 1.0
+
+        all_caps = self.get_all_sector_caps()
+        return all_caps.get(sector, float(1.0 / max(1, len(all_caps))))
+
     def get_all_sector_caps(self) -> Dict[str, float]:
-        return self.sector_caps
+        """유니버스 전수 섀넌 엔트로피 기반 동적 섹터 상한 매핑."""
+        if self._cached_dynamic_caps is not None:
+            return self._cached_dynamic_caps
+
+        try:
+            from src.allocation.dynamic_orthogonal_portfolio_engine import DynamicConstrainedPortfolioOptimizer
+            optimizer = DynamicConstrainedPortfolioOptimizer()
+            all_sectors = list(self.sector_map.values())
+            bounds = optimizer.compute_dynamic_sector_bounds(all_sectors)
+            bounds['Cash_Equivalent'] = 1.0
+            self._cached_dynamic_caps = bounds
+            return bounds
+        except Exception as e:
+            logger.debug(f"  [MarketContextManager] 동적 섹터 상한 연산 예외: {e}")
+            unique_sectors = set(self.sector_map.values())
+            k = max(1, len(unique_sectors))
+            fallback_bounds = {s: float(1.0 / k) for s in unique_sectors}
+            fallback_bounds['Cash_Equivalent'] = 1.0
+            return fallback_bounds

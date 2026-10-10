@@ -292,29 +292,72 @@ class AlphaAllocator:
             _active_sids = [sid for sid in self.STREAMS if final_weights.get(sid, 0.0) > 0.0]
             if len(_active_sids) >= 2:
                 _w_arr = np.array([final_weights[sid] for sid in _active_sids], dtype=float)
-                _cov_s = np.eye(len(_active_sids)) * 0.04
+
+                # 100% 수학적 동적 표본 분산 기반 공분산 행렬 (Zero Hardcoding)
+                _emp_vars = []
+                for _sid in _active_sids:
+                    _r = (stream_metrics.get(_sid, {}) or {}).get('daily_returns', [])
+                    if len(_r) >= 2:
+                        _emp_vars.append(float(np.var(_r, ddof=1)))
+
+                _base_var = float(np.mean(_emp_vars)) if _emp_vars and np.mean(_emp_vars) > 1e-8 else (1.0 / (len(_active_sids) ** 2))
+                _cov_s = np.eye(len(_active_sids)) * _base_var
+
                 for _i, _s1 in enumerate(_active_sids):
+                    _r1 = (stream_metrics.get(_s1, {}) or {}).get('daily_returns', [])
+                    if len(_r1) >= 2:
+                        _cov_s[_i, _i] = max(float(np.var(_r1, ddof=1)), 1e-8)
                     for _j, _s2 in enumerate(_active_sids):
-                        if _i != _j:
-                            _r1 = (stream_metrics.get(_s1, {}) or {}).get('daily_returns', [])
+                        if _i < _j:
                             _r2 = (stream_metrics.get(_s2, {}) or {}).get('daily_returns', [])
                             if len(_r1) >= 5 and len(_r2) >= 5:
                                 _min_l = min(len(_r1), len(_r2))
-                                _cov_s[_i, _j] = float(np.cov(_r1[:_min_l], _r2[:_min_l])[0, 1])
+                                _c = float(np.cov(_r1[:_min_l], _r2[:_min_l])[0, 1])
+                                _cov_s[_i, _j] = _c
+                                _cov_s[_j, _i] = _c
 
-                _fl = np.zeros((len(_active_sids), 2))
-                _fl[:, 0] = 1.0  # Market factor
-                for _i, _sid in enumerate(_active_sids):
+                # 동적 섹터 노출도 분석 및 섀넌 엔트로피 기반 쏠림 팩터 자동 추출
+                _stream_sec_exposure = {}  # (_sid, sec) -> fraction of signals
+                _all_active_sectors = set()
+                for _sid in _active_sids:
                     _sigs = (stream_signals or {}).get(_sid, [])
-                    if any(market_ctx.get_sector(s.get('ticker', '')) == 'Semiconductor' for s in _sigs):
-                        _fl[_i, 1] = 1.0
+                    if _sigs:
+                        _sec_counts = {}
+                        for _s in _sigs:
+                            _sec = market_ctx.get_sector(_s.get('ticker', ''))
+                            _sec_counts[_sec] = _sec_counts.get(_sec, 0) + 1
+                        _tot = sum(_sec_counts.values())
+                        if _tot > 0:
+                            for _sec, _cnt in _sec_counts.items():
+                                _stream_sec_exposure[(_sid, _sec)] = _cnt / _tot
+                                _all_active_sectors.add(_sec)
 
-                if np.any(_fl[:, 1] > 0):
+                # 포트폴리오 가중합산 노출도가 섀넌 엔트로피 상한을 초과하는 집중 팩터 전수 감지
+                _concentrated_sectors = []
+                for _sec in sorted(list(_all_active_sectors)):
+                    if _sec in ('Cash_Equivalent', 'Unknown'):
+                        continue
+                    _sec_total_exp = sum(
+                        final_weights[_sid] * _stream_sec_exposure.get((_sid, _sec), 0.0)
+                        for _sid in _active_sids
+                    )
+                    _cap = market_ctx.get_sector_cap(_sec)
+                    if _sec_total_exp > _cap:
+                        _concentrated_sectors.append(_sec)
+
+                # 동적 팩터 로딩 행렬 B: (N, 1 + len(concentrated_sectors)) 생성
+                if _concentrated_sectors:
+                    _fl = np.zeros((len(_active_sids), 1 + len(_concentrated_sectors)))
+                    _fl[:, 0] = 1.0  # Dynamic Market Baseline Factor
+                    for _k, _sec in enumerate(_concentrated_sectors, start=1):
+                        for _i, _sid in enumerate(_active_sids):
+                            _fl[_i, _k] = _stream_sec_exposure.get((_sid, _sec), 0.0)
+
                     _frp = FactorRiskParityDampener()
-                    _damped_w, _ = _frp.decompose_and_dampen(_w_arr, _cov_s, _fl)
+                    _damped_w, _fcr = _frp.decompose_and_dampen(_w_arr, _cov_s, _fl)
                     for _i, _sid in enumerate(_active_sids):
                         final_weights[_sid] = float(round(_damped_w[_i], 4))
-                    logger.info(f"  🏛️ [DynamicOrthogonalEngine] 팩터 리스크 패리티 감쇄 반영 완료: {final_weights}")
+                    logger.info(f"  🏛️ [DynamicOrthogonalEngine] 팩터 리스크 패리티 감쇄 반영 완료: {final_weights} (집중 섹터: {_concentrated_sectors})")
         except Exception as _ortho_err:
             logger.debug(f"  [DynamicOrthogonalEngine] 연동 예외 (fallback 보존): {_ortho_err}")
 
