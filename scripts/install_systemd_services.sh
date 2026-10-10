@@ -362,6 +362,35 @@ Persistent=true
 WantedBy=timers.target
 TIMER_EOF
 
+# 4.7 Frontier Laboratory Timer (Track 2 Asynchronous Scientific Research & Genetic Evolution)
+# Runs twice daily off-market: 06:15 KST (US post-market) and 16:30 KST (KRX post-market)
+cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_frontier_lab.service
+[Unit]
+Description=Meridian Track 2 Frontier Laboratory Runner
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/run_frontier_laboratory.py --mode daily
+SERVICE_EOF
+
+cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_frontier_lab.timer
+[Unit]
+Description=Timer for Meridian Track 2 Frontier Laboratory
+
+[Timer]
+OnCalendar=*-*-* 06:15:00 Asia/Seoul
+OnCalendar=*-*-* 16:30:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
+
 cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_telegram.service
 [Unit]
 Description=Meridian Telegram 24/7 Bot
@@ -415,7 +444,7 @@ LOGROTATE_EOF
 fi
 
 # Enable all services (including live trader daemon and bot)
-for service in meridian_token_refresh meridian_live_trader_daemon meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_intraday meridian_closing meridian_aftermarket meridian_evening meridian_us_premarket meridian_us_regular meridian_weekly_retrain meridian_weekly_validate meridian_telegram; do
+for service in meridian_token_refresh meridian_live_trader_daemon meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_intraday meridian_closing meridian_aftermarket meridian_evening meridian_us_premarket meridian_us_regular meridian_weekly_retrain meridian_weekly_validate meridian_frontier_lab meridian_telegram; do
     if [ -f "$SERVICE_DIR/$service.service" ]; then
         sudo systemctl enable $service.service
     fi

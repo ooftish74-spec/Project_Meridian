@@ -132,6 +132,22 @@ class CentralDataGateway:
             'timestamp': now_str
         }
 
+    def get_usdkrw_rate(self) -> float:
+        """KIS 고시환율 및 매크로 지표 기반 실시간 USD/KRW 환율 반환 (메모리 60초 캐시 적용)."""
+        cached = getattr(self, '_cached_usdkrw', None)
+        cached_ts = getattr(self, '_cached_usdkrw_ts', 0)
+        now = time.time()
+        if cached and (now - cached_ts) < 60.0:
+            return cached
+
+        res = self.get_macro_indicator('usdkrw')
+        if res and res.get('price') and float(res['price']) > 0:
+            rate = float(res['price'])
+            self._cached_usdkrw = rate
+            self._cached_usdkrw_ts = now
+            return rate
+        return 1350.0
+
     def get_overnight_futures(self) -> Dict[str, Any]:
         """야간 선물 및 오버나이트 시그널 수집 (KIS OpenAPI 1순위 Direct)."""
         today_compact = datetime.now().strftime('%Y%m%d')

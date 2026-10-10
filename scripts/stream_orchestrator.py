@@ -303,6 +303,9 @@ class StreamOrchestrator:
         logger.info(f"  🚀 StreamOrchestrator 실행 시작: {start.isoformat()}")
         logger.info("=" * 60)
 
+        # ── [Track 1 Lean Core] 최신 DynamicConfig 오버라이드 핫 리로드 (<=1ms) ──
+        cfg.reload()
+
         # ── Phase 2: 시장 데이터 자동 로드 ──
         if market_data is None:
             logger.info("  📋 Step 0: MarketDataBridge 데이터 로드")
@@ -784,42 +787,85 @@ class StreamOrchestrator:
                         if _t:
                             _missing_tickers.add(_t)
 
-            if _missing_tickers:
-                from src.data_collection.pykrx_compat import stock as _krx_compat
-                from datetime import date as _date_orch, timedelta as _td_orch
-                _today_orch = _date_orch.today().strftime('%Y%m%d')
-                _week_ago = (_date_orch.today() - _td_orch(days=7)).strftime('%Y%m%d')
+                _ALIAS = {'430740': '423160', '357330': '357870'}
+                _PARKING_FALLBACK_PX = {
+                    '459580': 1074340.0,
+                    '423160': 110770.0,
+                    '449170': 112110.0,
+                    '430740': 110770.0,
+                    '357870': 58190.0,
+                    '357330': 58190.0,
+                    'SHV': 110.0,
+                    'SGOV': 100.0,
+                }
                 _injected = 0
                 for _t in _missing_tickers:
+                    _norm_t = _ALIAS.get(_t, _t)
                     try:
-                        # 1순위: KIS API 실시간 호가/체결가 조회
+                        # 1순위: CentralDataGateway (3-tier hot failover)
                         try:
-                            from src.execution.kis_price_service import KISPriceService
-                            _cur_px = KISPriceService().get_current_price(_t)
-                            if _cur_px and float(_cur_px) > 0:
-                                for _sigs in all_signals.values():
-                                    for _s in _sigs:
-                                        if _s.get('ticker') == _t and (not _s.get('price') or _s['price'] <= 0):
-                                            _s['price'] = float(_cur_px)
-                                            _injected += 1
-                                continue
+                            from src.data_collection.central_data_gateway import CentralDataGateway
+                            _cdg_res = CentralDataGateway().get_current_price(_norm_t)
+                            if isinstance(_cdg_res, dict) and _cdg_res.get('price'):
+                                _px = float(_cdg_res['price'])
+                                if _px > 0:
+                                    for _sigs in all_signals.values():
+                                        for _s in _sigs:
+                                            if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                                _s['ticker'] = _norm_t
+                                                _s['price'] = _px
+                                                _injected += 1
+                                    continue
                         except Exception:
                             pass
 
-                        # 2순위: 인스티튜셔널 OHLCV (Naver / KRX API)
-                        _df = _krx_compat.get_market_ohlcv_by_date(_week_ago, _today_orch, _t)
+                        # 2순위: KIS Price Service
+                        try:
+                            from src.execution.kis_price_service import KISPriceService
+                            _kps_res = KISPriceService().get_current_price(_norm_t)
+                            if isinstance(_kps_res, dict) and _kps_res.get('price'):
+                                _px = float(_kps_res['price'])
+                                if _px > 0:
+                                    for _sigs in all_signals.values():
+                                        for _s in _sigs:
+                                            if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                                _s['ticker'] = _norm_t
+                                                _s['price'] = _px
+                                                _injected += 1
+                                    continue
+                        except Exception:
+                            pass
+
+                        # 3순위: 파킹 ETF 기준가(NAV Anchor)
+                        if _norm_t in _PARKING_FALLBACK_PX:
+                            _px = _PARKING_FALLBACK_PX[_norm_t]
+                            for _sigs in all_signals.values():
+                                for _s in _sigs:
+                                    if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                        _s['ticker'] = _norm_t
+                                        _s['price'] = _px
+                                        _injected += 1
+                            continue
+
+                        # 4순위: 인스티튜셔널 OHLCV (Naver / KRX API)
+                        from src.data_collection.pykrx_compat import stock as _krx_compat
+                        from datetime import date as _date_orch, timedelta as _td_orch
+                        _today_orch = _date_orch.today().strftime('%Y%m%d')
+                        _week_ago = (_date_orch.today() - _td_orch(days=7)).strftime('%Y%m%d')
+                        _df = _krx_compat.get_market_ohlcv_by_date(_week_ago, _today_orch, _norm_t)
                         if len(_df) > 0:
                             _close = float(_df.iloc[-1].get('종가', 0))
                             if _close > 0:
                                 for _sigs in all_signals.values():
                                     for _s in _sigs:
-                                        if _s.get('ticker') == _t and (not _s.get('price') or _s['price'] <= 0):
+                                        if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                            _s['ticker'] = _norm_t
                                             _s['price'] = _close
                                             _injected += 1
                     except Exception as _e:
                         logger.debug(f"Missing price injection skipped for {_t}: {_e}")
                 if _injected:
-                    logger.info(f"    📡 기관급 가격 주입(KIS/Naver): {_injected}건 ({len(_missing_tickers)}종목)")
+                    logger.info(f"    📡 기관급 가격 주입(KIS/Gateway/Anchor): {_injected}건 ({len(_missing_tickers)}종목)")
         except Exception as _pe:
             logger.debug(f"가격 주입 처리 완료: {_pe}")
 
@@ -1152,9 +1198,8 @@ class StreamOrchestrator:
             logger.info("  📋 Step 8.4: 가격/수량 및 증거금 확정")
             valid_orders = []
             actual_total_margin = 0.0
-            from src.execution.execution_engine import ExecutionEngine
-            _ee_inst = ExecutionEngine()
-            _dyn_fx = _ee_inst._get_dynamic_usdkrw_rate()
+            from src.data_collection.central_data_gateway import CentralDataGateway
+            _dyn_fx = CentralDataGateway().get_usdkrw_rate()
             
             for o in orders:
                 if o.get('action') == 'sell' or o.get('direction') == 'short':
@@ -1467,8 +1512,8 @@ class StreamOrchestrator:
             if not qty and price > 0:
                 is_us_stock = not str(ticker).isdigit()
                 if is_us_stock:
-                    from src.execution.execution_engine import ExecutionEngine
-                    fx_rate = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                    from src.data_collection.central_data_gateway import CentralDataGateway
+                    fx_rate = CentralDataGateway().get_usdkrw_rate()
                     eff_price_krw = price * fx_rate
                     qty = int(amount_krw / eff_price_krw) if eff_price_krw > 0 else 0
                 else:
@@ -1522,8 +1567,8 @@ class StreamOrchestrator:
             # 소액 잔챙이 상계 주문 차단 (50만 원 미만)
             is_us_net = not str(ticker).isdigit()
             if is_us_net:
-                from src.execution.execution_engine import ExecutionEngine
-                _net_fx = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                from src.data_collection.central_data_gateway import CentralDataGateway
+                _net_fx = CentralDataGateway().get_usdkrw_rate()
                 netted_val_krw = final_price * _net_fx * abs(net_qty)
             else:
                 netted_val_krw = final_price * abs(net_qty)
@@ -2154,8 +2199,8 @@ class StreamOrchestrator:
                     _p_exit = float(pos.get('current_price', 0.0))
                     _tk_exit = str(pos.get('ticker', pos_key.split(':')[-1]))
                     _is_us_exit = not _tk_exit.isdigit()
-                    from src.execution.execution_engine import ExecutionEngine
-                    _dyn_fx_exit = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                    from src.data_collection.central_data_gateway import CentralDataGateway
+                    _dyn_fx_exit = CentralDataGateway().get_usdkrw_rate()
                     if _is_us_exit:
                         if _qty_exit > 0 and _p_exit > 0:
                             _amt_exit = _qty_exit * _p_exit * _dyn_fx_exit

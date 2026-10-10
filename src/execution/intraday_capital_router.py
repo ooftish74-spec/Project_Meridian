@@ -206,8 +206,8 @@ class IntradayCapitalRouter:
         allocated_signals = []
         rem_cash = freed_cash_krw
 
-        from src.execution.execution_engine import ExecutionEngine
-        ee = ExecutionEngine()
+        from src.data_collection.central_data_gateway import CentralDataGateway
+        dyn_fx = CentralDataGateway().get_usdkrw_rate()
 
         for sig in pending_s11_signals:
             price = float(sig.get('price', 0.0))
@@ -216,7 +216,7 @@ class IntradayCapitalRouter:
                 continue
             target_amount = min(rem_cash, float(sig.get('target_amount', rem_cash)))
             is_us = not str(ticker).isdigit()
-            eff_price_krw = price * ee._get_dynamic_usdkrw_rate() if is_us else price
+            eff_price_krw = price * dyn_fx if is_us else price
             qty = math.floor(target_amount / eff_price_krw)
             alloc_val = qty * eff_price_krw
             if qty >= 1:
@@ -356,8 +356,8 @@ class IntradayCapitalRouter:
             market_data['holdings_ev'] = holdings_ev
 
         routed_signals = []
-        from src.execution.execution_engine import ExecutionEngine
-        ee = ExecutionEngine()
+        from src.data_collection.central_data_gateway import CentralDataGateway
+        dyn_fx = CentralDataGateway().get_usdkrw_rate()
         for sig in ranked_signals:
             stream = str(sig.get('stream', sig.get('stream_id', ''))).upper()
             tactic = str(sig.get('tactic', sig.get('strategy', ''))).upper()
@@ -450,7 +450,7 @@ class IntradayCapitalRouter:
 
             sig['price'] = price
             is_us = not str(ticker).isdigit()
-            eff_price_krw = price * ee._get_dynamic_usdkrw_rate() if is_us else price
+            eff_price_krw = price * dyn_fx if is_us else price
             raw_qty = math.floor(alloc_cash / eff_price_krw) if eff_price_krw > 0 else 0
 
             # 4. Step 3: Market Depth Capacity 15% 동적 제한
@@ -491,7 +491,7 @@ class IntradayCapitalRouter:
                             lowest_price = float(lowest_pos.get('current_price', lowest_pos.get('price', 0.0)))
                             lowest_name = lowest_pos.get('name', lowest_ticker)
                             lowest_is_us = not str(lowest_ticker).isdigit()
-                            lowest_price_krw = lowest_price * ee._get_dynamic_usdkrw_rate() if lowest_is_us else lowest_price
+                            lowest_price_krw = lowest_price * dyn_fx if lowest_is_us else lowest_price
 
                             if lowest_qty > 0 and lowest_price_krw > 0 and eff_price_krw > 0:
                                 # [Pure Dynamic Math] 신규 매수에 필요한 정확한 수량만큼만 정밀 매도 (임의 35% 강제 청산 폐지)
