@@ -1173,7 +1173,7 @@ class StreamOrchestrator:
                                                 (market_data.get('kr_close') or {}).get(_ticker, 0.0) or
                                                 (market_data.get('us_close') or {}).get(_ticker, 0.0))
                         # 2. data_bridge 확인
-                        if (not _exec_price or _exec_price <= 0) and hasattr(self, 'data_bridge') and self.data_bridge:
+                        if (not _exec_price or _exec_price <= 0) and hasattr(self, 'data_bridge') and self.data_bridge and hasattr(self.data_bridge, 'get_current_price'):
                             _exec_price = float(self.data_bridge.get_current_price(_ticker) or 0.0)
                         # 3. execution_engine 확인
                         if (not _exec_price or _exec_price <= 0) and hasattr(self, 'execution_engine') and self.execution_engine:

@@ -23,18 +23,38 @@ echo "✅ Local python dependencies (boto3) verified for AWS Deployment."
 echo ""
 
 echo "[1.8/4] Creating Backup on AWS EC2..."
-echo "  Executing: ssh -i $KEY_PATH $EC2_USER@$EC2_IP 'mkdir -p $REMOTE_DIR/backups && cp -r $REMOTE_DIR/src $REMOTE_DIR/scripts $REMOTE_DIR/backups/deploy_bak_\$(date +%s) || true'"
+echo "  Executing: ssh -i $KEY_PATH $EC2_USER@$EC2_IP 'mkdir -p $REMOTE_DIR/backups && rm -rf $REMOTE_DIR/backups/* && cp -r $REMOTE_DIR/src $REMOTE_DIR/scripts $REMOTE_DIR/backups/deploy_bak_\$(date +%s) || true'"
 sleep 1
 echo "✅ Remote backup completed."
 echo ""
 
 echo "[2/4] Uploading to AWS EC2 ($EC2_IP)..."
-rsync -avz --exclude '.env' --exclude 'logs/*' --exclude '/venv' --exclude '.git/*' --exclude '*.lock' --exclude '*.parquet' --exclude '/data/*' --exclude 'results/*' -e "ssh -i $KEY_PATH" "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/"
+rsync -avz \
+  --exclude '.env' \
+  --exclude 'logs/*' \
+  --exclude '/venv' \
+  --exclude '.git' \
+  --exclude '.git/*' \
+  --exclude '.pytest_cache' \
+  --exclude 'catboost_info' \
+  --exclude '__pycache__' \
+  --exclude '*.pyc' \
+  --exclude 'reports' \
+  --exclude 'scratch' \
+  --exclude 'backups' \
+  --exclude '.archive' \
+  --exclude '.DS_Store' \
+  --exclude '*.pdf' \
+  --exclude '*.lock' \
+  --exclude '*.parquet' \
+  --exclude '/data/*' \
+  --exclude 'results/*' \
+  -e "ssh -i $KEY_PATH" "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/position_entry_ledger.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/position_entry_ledger.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/immune_antigen_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/immune_antigen_bank.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/surge_agonist_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/surge_agonist_bank.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/dashboard/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/dashboard/"
-ssh -i "$KEY_PATH" "$EC2_USER@$EC2_IP" "find $REMOTE_DIR/dashboard -name '__pycache__' -type d -exec rm -rf {} + || true"
+ssh -i "$KEY_PATH" "$EC2_USER@$EC2_IP" "find $REMOTE_DIR -name '__pycache__' -type d -exec rm -rf {} + || true"
 sleep 1
 echo "✅ Upload & pycache flush complete (100%)."
 echo ""

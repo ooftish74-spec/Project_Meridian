@@ -1482,6 +1482,38 @@ def _update_signal_cache(updates: dict):
         if cache_file.exists():
             existing = json.loads(cache_file.read_text())
         _deep_merge(existing, updates)
+
+        # SSOT Root Meta Fields (Regime, Exposure, QQQ KER) Fallback
+        if 'regime' not in existing:
+            _regime_path = _PROJECT_ROOT / 'results' / 'current_regime.json'
+            if _regime_path.exists():
+                try:
+                    _rd = json.loads(_regime_path.read_text(encoding='utf-8'))
+                    existing['regime'] = _rd.get('regime', 'caution')
+                except Exception:
+                    existing['regime'] = 'caution'
+            else:
+                existing['regime'] = 'caution'
+        if 'current_regime' not in existing:
+            existing['current_regime'] = existing['regime']
+
+        if 'exposure' not in existing:
+            _exp_path = _PROJECT_ROOT / 'results' / 'exposure_history.json'
+            if _exp_path.exists():
+                try:
+                    _ed = json.loads(_exp_path.read_text(encoding='utf-8'))
+                    if isinstance(_ed, list) and _ed:
+                        existing['exposure'] = float(_ed[-1].get('exposure', 0.72))
+                    elif isinstance(_ed, dict):
+                        existing['exposure'] = float(_ed.get('current_exposure', _ed.get('exposure', 0.72)))
+                except Exception:
+                    existing['exposure'] = 0.72
+            else:
+                existing['exposure'] = 0.72
+
+        if 'qqq_ker' not in existing:
+            existing['qqq_ker'] = 0.25
+
         existing['last_overnight_update'] = datetime.now().isoformat()
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(cache_file, existing, indent=2)

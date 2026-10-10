@@ -117,11 +117,28 @@ class USStockCollector:
                 
             latest_ret = float(rets.iloc[-1])
             hist_std = float(rets.iloc[-20:-1].std())
-            
-            # 동적 변동성 임계치: 5-Sigma 초과 및 절대수익률 7% 초과시 이상치로 간주
-            if hist_std > 0:
-                z_score = abs(latest_ret) / hist_std
-                if z_score > 5.0 and abs(latest_ret) > 0.07:
+
+            # 날짜 간격(Delta t) 계산: 마지막 두 행 간의 일수 차이 반영 (브라운 운동 시간 스케일링)
+            delta_days = 1.0
+            try:
+                idx = df.index
+                if len(idx) >= 2:
+                    d_last = pd.to_datetime(idx[-1])
+                    d_prev = pd.to_datetime(idx[-2])
+                    diff_days = (d_last - d_prev).days
+                    if diff_days > 1:
+                        delta_days = float(diff_days)
+            except Exception:
+                pass
+
+            # 브라운 운동 변동성 스케일링: sigma_delta = hist_std * sqrt(delta_days)
+            scaled_std = hist_std * math.sqrt(max(1.0, delta_days)) if hist_std > 0 else 0.02
+            dynamic_ret_thresh = max(0.07, 0.07 * math.sqrt(max(1.0, delta_days / 2.0)))
+
+            # 동적 변동성 임계치: 5-Sigma 초과 및 누적 임계치 초과 시 이상치로 간주
+            if scaled_std > 0:
+                z_score = abs(latest_ret) / scaled_std
+                if z_score > 5.0 and abs(latest_ret) > dynamic_ret_thresh:
                     # [NEW] 액면분할 방어 로직 (Corporate Action Check)
                     # Alpha Vantage 데이터의 경우 split_coefficient가 제공되므로 이를 확인
                     if 'split_coefficient' in df.columns:

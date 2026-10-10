@@ -39,8 +39,9 @@ results/logs/
 results/archive_*/
 
 # 데이터 (대용량, 별도 관리)
-data/
-!data/.gitkeep
+/data/
+!/data/.gitkeep
+/scripts/data/
 
 # CatBoost 학습 캐시
 catboost_info/
