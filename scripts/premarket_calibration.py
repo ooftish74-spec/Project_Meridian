@@ -181,9 +181,18 @@ def run_calibration():
     try:
         HIGH_LIQUIDITY_INDEX_ETFS = {'069500', '122630', '252670', '114800', '252710'}
         dual_exit_plan = []
-        for sig in data.get('signals', []):
+        raw_signals = data.get('signals', {})
+        sigs_list = []
+        if isinstance(raw_signals, dict):
+            for s_id, s_list in raw_signals.items():
+                if isinstance(s_list, list):
+                    sigs_list.extend(s_list)
+        elif isinstance(raw_signals, list):
+            sigs_list = raw_signals
+
+        for sig in sigs_list:
             t = sig.get('ticker')
-            if not t:
+            if not t or t.startswith('_'):
                 continue
             is_high_liq = t in HIGH_LIQUIDITY_INDEX_ETFS
             if is_high_liq:
@@ -194,6 +203,7 @@ def run_calibration():
             dual_exit_plan.append({
                 'ticker': t,
                 'name': sig.get('name', t),
+                'direction': sig.get('direction', 'long'),
                 'is_high_liquidity': is_high_liq,
                 'action_plan': action,
                 'kospi_gap_forecast': expected_gap
