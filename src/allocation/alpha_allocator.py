@@ -868,51 +868,63 @@ class AlphaAllocator:
     _STREAM_PRIORITY_DEFAULT: Dict[str, int] = {'S3': 3, 'S2': 2, 'S1': 1}
 
     def _enforce_single_asset_limit(self, weights: Dict[str, float], stream_signals: Dict[str, List[Dict]]) -> Dict[str, float]:
-        """[Phase 17: Ultimate Boosters] Kelly Sizing — 동적 단일 자산 한도.
+        """100% 동적 수학적 단일 자산 상한 (Zero Hardcoded Constants).
 
-        [원본] 모든 자산에 동일한 max_single_asset_exposure 적용 (기본 5%)
-
-        [Phase 17 신규] 고확신 시그널에 한해 한도를 동적으로 해제:
-          ┌─ S2 (ML Alpha):
-          │   predict_proba > kelly.s2_cap_extreme(0.90) → 최대 20% 허용
-          │   predict_proba > kelly.s2_cap_high_conviction(0.85) → 최대 15%
-          │   그 외 → 기본 5% 유지
-          └─ S3 (Factor/섹터):
-              momentum_z > kelly.s3_zscore_threshold(2.5) → 최대 12% 허용
-              그 외 → 기본 5% 유지
-
-        모든 임계값은 DynamicConfig에서 로드 (매직 넘버 절대 금지).
+        수학적 모델 구조:
+        1. 코시-슈바르츠 차원 분할 상한 (Cauchy-Schwarz Dimension Bound):
+           N_univ = 유니버스 유효 자산 수 (len(market_ctx.sector_map))
+           Base Cap = 1.0 / sqrt(N_univ)  (예: N=25 -> 20.0%, N=100 -> 10.0%)
+           Floor Cap = 1.0 / N_univ       (균등 배분 벤치마크 바닥선)
+        2. 하위 자산 제약 일관성 (Sector Bound Subsumption):
+           단일 종목 한도는 해당 종목이 속한 섹터의 섀넌 엔트로피 동적 상한(Sector Cap)을 결코 초과할 수 없음.
+           Sec Cap = market_ctx.get_sector_cap(sector)
+           Max Feasible Cap = min(Sec Cap, Base Cap)
+        3. 신호 확신도 기반 동적 켈리 오즈(Kelly Odds) 연속 사상:
+           신호의 통계적 신뢰도(Confidence / Predict Proba / Z-Score)에 비례하여
+           [Floor Cap, Max Feasible Cap] 범위 내에서 100% 수학적으로 가변 확장.
         """
+        n_univ = max(2, len(market_ctx.sector_map))
+        base_cap = float(1.0 / math.sqrt(n_univ))
+        floor_cap = float(1.0 / n_univ)
 
-        def _get_dynamic_cap(sid: str, signals: List[Dict]) -> float:
-            """[Phase 17: Ultimate Boosters] 스트림별 Kelly 동적 한도 결정."""
-            base_cap = cfg.get('allocator.max_single_asset_exposure', 0.05)
-            if sid == 'S2':
-                proba_threshold = cfg.get('kelly.s2_proba_threshold', 0.9)
-                cap_high_conv = cfg.get('kelly.s2_cap_high_conviction', 0.15)
-                cap_extreme = cfg.get('kelly.s2_cap_extreme', 0.2)
-                cap_normal = cfg.get('kelly.s2_cap_normal', 0.05)
-                max_proba = max((float(sig.get('confidence') or sig.get('predict_proba') or 0) for sig in signals), default=0.0)
-                if max_proba >= proba_threshold:
-                    cap = cap_extreme
-                    logger.info(f"  [Phase 17] Kelly S2: proba={max_proba:.2f} ≥ {proba_threshold} → 극단 고확신 캡 {cap:.0%}")
-                elif max_proba >= proba_threshold - cfg.get('kelly.s2_proba_high_band', 0.05):
-                    cap = cap_high_conv
-                    logger.info(f"  [Phase 17] Kelly S2: proba={max_proba:.2f} → 고확신 캡 {cap:.0%}")
-                else:
-                    cap = cap_normal
-                return cap
-            elif sid == 'S3':
-                z_threshold = cfg.get('kelly.s3_zscore_threshold', 2.5)
-                cap_momentum = cfg.get('kelly.s3_cap_momentum', 0.12)
-                cap_normal = cfg.get('kelly.s3_cap_normal', 0.05)
-                max_z = max((float(sig.get('momentum_z') or sig.get('z_score') or 0) for sig in signals), default=0.0)
-                if max_z >= z_threshold:
-                    logger.info(f"  [Phase 17] Kelly S3: z={max_z:.2f} ≥ {z_threshold} → 모멘텀 강세 캡 {cap_momentum:.0%}")
-                    return cap_momentum
-                return cap_normal
+        def _get_dynamic_cap(underlying: str, sid: str, signals: List[Dict]) -> float:
+            sector = market_ctx.get_sector(underlying)
+            if sector == 'Cash_Equivalent':
+                return 1.0  # 안전자산 파킹은 100% 허용
+
+            sec_cap = market_ctx.get_sector_cap(sector)
+            max_feasible = min(sec_cap, base_cap)
+
+            # 종목 관련 신호들의 확신도(confidence, predict_proba, z-score) 수집
+            convictions = []
+            for sig in signals:
+                sig_ticker = sig.get('ticker', '')
+                if sig_ticker == underlying or market_ctx.STATIC_SECTOR_MAP.get(sig_ticker) == underlying:
+                    conf = sig.get('confidence') or sig.get('predict_proba')
+                    if conf is not None:
+                        try:
+                            convictions.append(float(conf))
+                        except (ValueError, TypeError):
+                            pass
+                    z = sig.get('momentum_z') or sig.get('z_score')
+                    if z is not None:
+                        try:
+                            # Standard normal CDF approx for z-score to probability [0, 1]
+                            z_val = float(z)
+                            prob_z = 0.5 * (1.0 + math.erf(z_val / math.sqrt(2.0)))
+                            convictions.append(prob_z)
+                        except (ValueError, TypeError):
+                            pass
+
+            if convictions:
+                p = max(convictions)
+                p_norm = float(np.clip(p, 0.0, 1.0))
+                cap = floor_cap + (max_feasible - floor_cap) * p_norm
             else:
-                return base_cap
+                cap = floor_cap + (max_feasible - floor_cap) * 0.5
+
+            return float(round(min(sec_cap, max(floor_cap, cap)), 4))
+
         asset_exposure: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
         for sid in self.STREAMS:
             stream_w = weights.get(sid, 0)
@@ -927,16 +939,15 @@ class AlphaAllocator:
                 contribution = stream_w * size_pct
                 if contribution > 0:
                     asset_exposure[underlying].append((sid, contribution))
+
         scale_factors: Dict[str, float] = {sid: 1.0 for sid in self.STREAMS}
         for underlying, exposures in asset_exposure.items():
             total_exp = sum((c for _, c in exposures))
-            effective_cap = max((_get_dynamic_cap(exp_sid, stream_signals.get(exp_sid, [])) for exp_sid, _ in exposures))
+            effective_cap = max((_get_dynamic_cap(underlying, exp_sid, stream_signals.get(exp_sid, [])) for exp_sid, _ in exposures))
             if total_exp <= effective_cap:
-                if effective_cap > cfg.get('allocator.max_single_asset_exposure', 0.05):
-                    logger.info(f"  [Phase 17] Kelly 캡 해제: {underlying} = {total_exp:.2%} ≤ 동적캡 {effective_cap:.2%} (허용)")
                 continue
             excess = total_exp - effective_cap
-            logger.warning(f"  ⚠️ 단일자산 초과: {underlying} = {total_exp:.2%} (동적캡 {effective_cap:.2%}, 초과 {excess:.2%})")
+            logger.warning(f"  ⚠️ 단일자산 초과: {underlying} = {total_exp:.2%} (수학적 동적캡 {effective_cap:.2%}, 초과 {excess:.2%})")
             _priority = cfg.get('allocator.stream_priority', self._STREAM_PRIORITY_DEFAULT)
             sorted_exp = sorted(exposures, key=lambda x: _priority.get(x[0], 0))
             remaining_excess = excess
@@ -950,6 +961,7 @@ class AlphaAllocator:
                     scale_factors[exp_sid] = max(0.0, new_scale)
                     remaining_excess -= reducible
                     logger.info(f"    → {exp_sid} 축소: {underlying} 기여 {exp_contrib:.2%} → {exp_contrib - reducible:.2%} (스케일 {scale_factors[exp_sid]:.3f})")
+
         any_scaled = any((sf < 1.0 for sf in scale_factors.values()))
         if not any_scaled:
             return weights
@@ -957,7 +969,7 @@ class AlphaAllocator:
         total = sum(adjusted.values())
         if total > 0:
             adjusted = {sid: round(w / total, 4) for sid, w in adjusted.items()}
-        logger.info(f"  📊 [Phase 17] Kelly 동적 단일자산 제한: {weights} → {adjusted} (스케일: {scale_factors})")
+        logger.info(f"  📊 [Dynamic single-asset limit] 수학적 동적 단일자산 제한: {weights} → {adjusted} (스케일: {scale_factors})")
         return adjusted
 
     def _enforce_sector_limits(self, weights: Dict[str, float], stream_signals: Dict[str, List[Dict]]) -> Dict[str, float]:
