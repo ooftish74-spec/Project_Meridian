@@ -32,7 +32,13 @@ try:
     _CVXPY_AVAILABLE = True
 except ImportError:
     _CVXPY_AVAILABLE = False
+
+try:
     from scipy.optimize import minimize
+    _SCIPY_AVAILABLE = True
+except ImportError:
+    _SCIPY_AVAILABLE = False
+
 
 
 class DynamicAlphaOrthogonalizer:
@@ -284,13 +290,31 @@ class DynamicConstrainedPortfolioOptimizer:
             mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
             cons.append({'type': 'ineq', 'fun': lambda weights, m=mask, c=cap: c - float(m @ weights)})
 
-        init_w = np.ones(N) / N
-        res = minimize(neg_utility, init_w, method='SLSQP', bounds=bounds, constraints=cons)
-        if res.success:
-            opt_w = np.clip(res.x, 0.0, 1.0)
-            total_w = np.sum(opt_w)
-            return opt_w / total_w if total_w > 0 else np.ones(N) / N
-        return np.ones(N) / N
+        if _SCIPY_AVAILABLE:
+            init_w = np.ones(N) / N
+            res = minimize(neg_utility, init_w, method='SLSQP', bounds=bounds, constraints=cons)
+            if res.success:
+                opt_w = np.clip(res.x, 0.0, 1.0)
+                total_w = np.sum(opt_w)
+                return opt_w / total_w if total_w > 0 else np.ones(N) / N
+
+        # ── 100% Pure NumPy Projected Gradient Descent Fallback (Zero Dependencies) ──
+        w_vec = np.ones(N) / N
+        lr = 0.01 / (float(np.trace(Sigma)) / N + 1e-6)
+        for _ in range(50):
+            grad = pure_alphas - lambda_risk * (Sigma @ w_vec)
+            if has_cost:
+                grad -= c_friction * np.sign(w_vec - w_curr)
+            w_vec = np.clip(w_vec + lr * grad, 0.0, single_asset_cap)
+            for sec, cap in sector_bounds.items():
+                mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
+                sec_sum = float(mask @ w_vec)
+                if sec_sum > cap:
+                    w_vec[mask > 0] *= (cap / sec_sum)
+            if np.sum(w_vec) > 1.0:
+                w_vec /= np.sum(w_vec)
+        tot = np.sum(w_vec)
+        return w_vec / tot if tot > 0 else np.ones(N) / N
 
     def compute_discrete_shares(
         self,
