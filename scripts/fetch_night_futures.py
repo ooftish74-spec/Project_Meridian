@@ -22,21 +22,29 @@ from src.utils.file_ops import atomic_write_json
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-def fetch_and_save_night_futures(override_close: Optional[float] = None, override_change_pct: Optional[float] = None):
-    """야간 선물 (Eurex/KRX Night Session) 수집 후 저장."""
-    logger.info("  🌙 [Night Futures] KRX 야간선물 (Eurex Night Session) 수집 시작")
+def fetch_and_save_night_futures(
+    override_close: Optional[float] = None, 
+    override_change_pct: Optional[float] = None,
+    override_change: Optional[float] = None
+):
+    """야간 선물 (KRX Night Session) 수집 후 저장."""
+    logger.info("  🌙 [Night Futures] KRX 야간선물 수집 시작")
     
     # KRX Night Session is strictly CLOSED only on Saturday and Sunday
     now = datetime.now()
     is_weekend = now.weekday() in (5, 6)
     
+    from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+    front_code = DynamicFuturesContractResolver.get_current_front_month_code()
+    symbol = DynamicFuturesContractResolver.to_kis_code(front_code)
+
     status = "CLOSED" if is_weekend else "OK"
     chg_val = 0.0 if is_weekend else (0.0 if override_change_pct is None else override_change_pct)
     c_val = 1000.0 if override_close is None else override_close
 
     night_data = {
-        "symbol": "10100000",
-        "front_code": "F202612",
+        "symbol": symbol,
+        "front_code": front_code,
         "close": c_val,
         "change_pct": chg_val,
         "status": status,
@@ -56,11 +64,26 @@ def fetch_and_save_night_futures(override_close: Optional[float] = None, overrid
     except Exception as e:
         logger.warning(f"  ⚠️ CentralDataGateway 수집 우회: {e}")
 
+    # Fallback to existing valid quote if no override provided and current close is invalid/placeholder
+    if override_close is None and night_data.get("close", 0) <= 0:
+        existing_file = PROJECT_ROOT / "results" / "krx_futures_overnight.json"
+        if existing_file.exists():
+            try:
+                with open(existing_file, "r", encoding="utf-8") as f:
+                    prev = json.load(f)
+                if prev.get("close", 0) > 0:
+                    night_data.update(prev)
+            except Exception:
+                pass
+
     if override_close is not None:
         night_data["close"] = override_close
     if override_change_pct is not None:
         night_data["change_pct"] = override_change_pct
-        night_data["change"] = round(override_close * (override_change_pct / 100.0), 2)
+        if override_change is not None:
+            night_data["change"] = override_change
+        else:
+            night_data["change"] = round(override_close * (override_change_pct / 100.0), 2)
         night_data["direction"] = "up" if override_change_pct > 0 else "down"
 
     # Write to target paths
@@ -82,13 +105,18 @@ def fetch_and_save_night_futures(override_close: Optional[float] = None, overrid
         except Exception as e:
             logger.warning(f"  ⚠️ signal_cache 갱신 예외: {e}")
 
-    logger.info(f"  ✅ [Night Futures] KRX 야간선물 ({night_data['close']}, {night_data['change_pct']:+.2f}%) 저장 완료 -> data/macro/night_futures.json")
+    logger.info(f"  ✅ [Night Futures] KRX 야간선물 ({night_data.get('front_code', 'F')}, {night_data['close']}, {night_data['change_pct']:+.2f}%) 저장 완료 -> data/macro/night_futures.json")
     return night_data
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--close", type=float, default=1094.80)
-    parser.add_argument("--change-pct", type=float, default=0.22)
+    parser = argparse.ArgumentParser(description="KRX 야간선물 시세 수집기")
+    parser.add_argument("--close", type=float, default=None, help="야간선물 종가 직접 지정 (예: 1028.95)")
+    parser.add_argument("--change-pct", type=float, default=None, help="야간선물 등락률 직접 지정 (예: -1.84)")
+    parser.add_argument("--change", type=float, default=None, help="야간선물 등락폭 직접 지정 (예: -19.30)")
     args = parser.parse_args()
-    fetch_and_save_night_futures(override_close=args.close, override_change_pct=args.change_pct)
+    fetch_and_save_night_futures(
+        override_close=args.close, 
+        override_change_pct=args.change_pct,
+        override_change=args.change
+    )
