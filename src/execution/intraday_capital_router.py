@@ -10,8 +10,10 @@ Implements 4-step intraday signal routing & capital mediation:
 import math
 import logging
 from typing import Dict, List, Any, Optional
+from config.dynamic_config import DynamicConfig
 
 logger = logging.getLogger(__name__)
+cfg = DynamicConfig()
 
 
 class IntradayCapitalRouter:
@@ -306,8 +308,12 @@ class IntradayCapitalRouter:
 
             # (4) 변동성(ATR%) 및 목표/손절비율
             atr_pct = float(market_data.get('ticker_atr_pct', {}).get(ticker, 1.8))
-            tp_pct = max(3.0, atr_pct * 2.5)
-            sl_pct = max(1.5, atr_pct * 1.5)
+            tp_atr_mult = float(cfg.get('exit.tp_atr_multiplier', 2.5))
+            sl_atr_mult = float(cfg.get('exit.sl_atr_multiplier', 1.5))
+            tp_min_pct = float(cfg.get('exit.tp_min_pct', 3.0))
+            sl_min_pct = float(cfg.get('exit.sl_min_pct', 1.5))
+            tp_pct = max(tp_min_pct, atr_pct * tp_atr_mult)
+            sl_pct = max(sl_min_pct, atr_pct * sl_atr_mult)
 
             ev_adj = self.compute_ev_adj(win_rate, tp_pct, sl_pct, atr_pct)
             holdings_ev[ticker] = round(ev_adj, 4)
@@ -482,7 +488,9 @@ class IntradayCapitalRouter:
                         
                         # [Pure Dynamic Math] 실제 마찰비용 및 변동성에 기반한 스왑 허들
                         atr_val = float(market_data.get('ticker_atr_pct', {}).get(ticker, market_data.get('atr_pct', 1.5)))
-                        friction_pct = 0.23 if not is_us_candidate else 0.08
+                        friction_kr = float(cfg.get('cost.friction_kr_pct', 0.23))
+                        friction_us = float(cfg.get('cost.friction_us_pct', 0.08))
+                        friction_pct = friction_kr if not is_us_candidate else friction_us
                         swap_premium = round(friction_pct / max(0.5, atr_val), 4)
 
                         if sig_ev > (lowest_ev + swap_premium):

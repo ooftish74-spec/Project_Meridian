@@ -37,9 +37,10 @@ class USLeveragedETFScalper:
         atr_pct: float,
         is_bull_target: bool
     ) -> Tuple[float, float]:
-        """14일 ATR% 기반 동적 손절가 및 샹들리에 트레일링 초기 지지선 산출."""
-        dynamic_sl_pct = max(0.015, self.atr_sl_mult * atr_pct)
-        chandelier_gap_pct = max(0.020, self.chandelier_atr_mult * atr_pct)
+        sl_floor = float(cfg.get('execution.us_3x_sl_floor', 0.015))
+        chandelier_floor = float(cfg.get('execution.us_3x_chandelier_floor', 0.020))
+        dynamic_sl_pct = max(sl_floor, self.atr_sl_mult * atr_pct)
+        chandelier_gap_pct = max(chandelier_floor, self.chandelier_atr_mult * atr_pct)
         if is_bull_target:
             stop_loss_price = entry_price * (1.0 - dynamic_sl_pct)
             chandelier_trail_price = entry_price * (1.0 - chandelier_gap_pct)
@@ -56,8 +57,8 @@ class USLeveragedETFScalper:
         atr_pct: float,
         is_bull_target: bool
     ) -> Tuple[bool, float, str]:
-        """상방 100% 오픈 샹들리에 트레일링 익절 추적 (시간 제한 없음)."""
-        chandelier_gap_pct = max(0.020, self.chandelier_atr_mult * atr_pct)
+        chandelier_floor = float(cfg.get('execution.us_3x_chandelier_floor', 0.020))
+        chandelier_gap_pct = max(chandelier_floor, self.chandelier_atr_mult * atr_pct)
 
         if is_bull_target:
             new_trail_price = max(prev_trail_price, current_peak_price * (1.0 - chandelier_gap_pct))

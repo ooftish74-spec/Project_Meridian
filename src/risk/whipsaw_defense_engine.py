@@ -74,8 +74,10 @@ class AntiWhipsawDefenseEngine:
             self._loss_history_timestamps.append(now)
 
             # 2시간 이내 2회 이상 연속 휩소 손절 시 쿨다운 발동
-            recent_losses = [t for t in self._loss_history_timestamps if now - t <= 7200.0]
-            if len(recent_losses) >= 2:
+            whipsaw_window = float(cfg.get('whipsaw.window_seconds', 7200.0))
+            max_consec = int(cfg.get('whipsaw.max_consecutive_losses', 2))
+            recent_losses = [t for t in self._loss_history_timestamps if now - t <= whipsaw_window]
+            if len(recent_losses) >= max_consec:
                 self._cooldown_until_timestamp = now + cooldown_seconds
                 logger.warning(
                     f"  ⛔ [Anti-Whipsaw Cooldown Activated] {len(recent_losses)}회 연속 휩소 손절 발생 ➔ "
@@ -103,13 +105,14 @@ class AntiWhipsawDefenseEngine:
             승상된 Z-Score 임계치
         """
         ker_floor = float(cfg.get('whipsaw.ker_floor', 0.30))
+        ker_mid = float(cfg.get('whipsaw.ker_mid_threshold', 0.50))
         max_boost_z = float(cfg.get('whipsaw.max_boost_z', 2.5))
 
-        if ker_value >= 0.50:
+        if ker_value >= ker_mid:
             return base_z
 
-        # KER이 0.30~0.50 구간으로 낮아지면 Z-Score 임계치 승상
-        scaling_factor = (0.50 - ker_value) / (0.50 - ker_floor + 1e-6)
+        # KER이 ker_floor~ker_mid 구간으로 낮아지면 Z-Score 임계치 승상
+        scaling_factor = (ker_mid - ker_value) / (ker_mid - ker_floor + 1e-6)
         scaled_z = base_z + (scaling_factor * (max_boost_z - base_z))
         return round(float(np.clip(scaled_z, base_z, max_boost_z)), 4)
 

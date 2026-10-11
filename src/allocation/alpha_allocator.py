@@ -249,7 +249,9 @@ class AlphaAllocator:
         vix_val = float((market_data or {}).get('signal_cache', {}).get('vix', 18.0) or 18.0)
         vix_neutral = float((market_data or {}).get('vix_neutral', 18.0) or 18.0)
         if regime == 'bull' and vix_val < vix_neutral and vix_val > 0:
-            golden_bull_mult = round(1.0 + min(0.30, max(0.0, (vix_neutral - vix_val) / vix_neutral * 0.5)), 4)
+            max_boost = float(cfg.get('allocator.golden_bull.max_boost', 0.30))
+            scale_factor = float(cfg.get('allocator.golden_bull.scale_factor', 0.5))
+            golden_bull_mult = round(1.0 + min(max_boost, max(0.0, (vix_neutral - vix_val) / vix_neutral * scale_factor)), 4)
             logger.info(f"  🚀 [Golden Bull Offense Multiplier] Regime={regime}, VIX={vix_val:.1f} < {vix_neutral:.1f} ➔ {golden_bull_mult}x 동적 자본 승수 적용!")
         else:
             golden_bull_mult = 1.0

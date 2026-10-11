@@ -102,7 +102,9 @@ class UniversalExitEngine:
             atr_pct = self.compute_ticker_atr(ticker)
 
             # ── 0. [Profit-Lock Break-Even Escalation] (수익 종목 손실 전환 100% 방지) ──
-            profit_lock_trigger = max(6.0, atr_pct * 3.0 * 100.0)
+            profit_lock_min_pct = float(cfg.get('exit.profit_lock_min_pct', 6.0))
+            profit_lock_atr_mult = float(cfg.get('exit.profit_lock_atr_mult', 3.0))
+            profit_lock_trigger = max(profit_lock_min_pct, atr_pct * profit_lock_atr_mult * 100.0)
             if peak_pnl >= profit_lock_trigger:
                 break_even_floor = float(cfg.get('exit.profit_lock_floor_pct', 0.50))
                 if pnl_pct < break_even_floor:
@@ -119,7 +121,8 @@ class UniversalExitEngine:
             # ── 1. [1차 손절] Hard Entry Stop-Loss (진입가 대비 변동성 적응형 하방 손절) ──
             # 고베타 종목 노이즈 털림 방지: ATR 2.0배 또는 최소 3.0% 적용 (음수 max 수치 버그 정밀 수정)
             hard_sl_pct = abs(float(cfg.get('exit.hard_stop_loss_pct', 3.0)))
-            hard_sl_limit = -max(hard_sl_pct, atr_pct * 2.0 * 100.0)
+            sl_atr_mult = float(cfg.get('exit.sl_atr_multiplier', 2.0))
+            hard_sl_limit = -max(hard_sl_pct, atr_pct * sl_atr_mult * 100.0)
             if pnl_pct <= hard_sl_limit:
                 detail = f"🛑 [1차 진입 손절 발화] {ticker} ({stream_id}): P&L {pnl_pct:+.2f}% <= 하방 손절한도 {hard_sl_limit:+.2f}% 도달"
                 logger.warning(f"  {detail}")
@@ -174,14 +177,17 @@ class UniversalExitEngine:
 
             # ── 4. 50% Scale-Out Runner (분할 차익실현) ──
             scaled_out = pos.get('scaled_out', False)
-            scale_out_target = max(atr_pct * float(cfg.get('exit.scale_out_atr_mult', 8.0)) * 100.0, 15.0)
+            scale_out_min_pct = float(cfg.get('exit.scale_out_min_pct', 15.0))
+            scale_out_atr_mult = float(cfg.get('exit.scale_out_atr_mult', 8.0))
+            scale_out_ratio = float(cfg.get('exit.scale_out_ratio', 0.50))
+            scale_out_target = max(atr_pct * scale_out_atr_mult * 100.0, scale_out_min_pct)
             
             if not scaled_out and pnl_pct >= scale_out_target:
                 # 1주 이하 포지션은 50% 분할 매도 시 전량 100% 청산되므로 스킵하고 러너(Runner)로 지속 보유
                 if qty <= 1:
                     logger.info(f"  🎯 [Scale-Out Skip] {ticker} ({stream_id}): 잔고 1주 이하 ({qty}주)로 50% 분할 매도 스킵 ➔ 100% 러너 포지션으로 유지")
                     continue
-                so_qty = max(1.0, math.floor(qty * 0.50))
+                so_qty = max(1.0, math.floor(qty * scale_out_ratio))
                 detail = f"🎯 [Scale-Out 50%] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% >= 목표 {scale_out_target:.1f}% (50% 차익실현)"
                 logger.info(f"  {detail}")
                 exit_orders.append({
