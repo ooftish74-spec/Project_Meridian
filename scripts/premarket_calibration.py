@@ -76,7 +76,8 @@ def run_calibration():
         return
 
     from src.utils.file_ops import atomic_write_json
-
+    from config.dynamic_config import DynamicConfig
+    cfg = DynamicConfig()
 
     with open(signals_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -109,7 +110,7 @@ def run_calibration():
     if cache_file.exists():
         with open(cache_file, 'r') as f:
             cache = json.load(f)
-            night_futures_ret = float(cache.get('final_pct', 0.0))
+            night_futures_ret = float(cache.get('change_pct', cache.get('final_pct', 0.0)))
     
     expected_gap = _get_expected_kospi_gap()
     
