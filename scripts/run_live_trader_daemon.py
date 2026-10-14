@@ -261,7 +261,26 @@ def main():
                                     'market': _h.get('market', 'KR' if _t.isdigit() else 'US')
                                 }
                             _exit_res = UniversalExitEngine().evaluate_all_positions(_exit_positions, regime='caution')
-                            _exit_orders = _exit_res.get('exit_orders', [])
+                            _raw_exit_orders = _exit_res.get('exit_orders', [])
+                            _exit_orders = []
+                            if not hasattr(main, '_exit_orders_in_flight'):
+                                main._exit_orders_in_flight = {}
+
+                            # Clean up completed or timed-out orders (> 300 sec)
+                            _now_ts = time.time()
+                            main._exit_orders_in_flight = {
+                                _k: _ts for _k, _ts in main._exit_orders_in_flight.items()
+                                if (_now_ts - _ts) < 300.0 and _k in _kp_data.get('holdings', {})
+                            }
+
+                            for _eo in _raw_exit_orders:
+                                _tk = _eo.get('ticker')
+                                if _tk in main._exit_orders_in_flight:
+                                    logger.info(f"  ⏳ [Exit In-Flight Cooldown] {_tk} 매도 주문 이미 접수 진행 중 ({_now_ts - main._exit_orders_in_flight[_tk]:.0f}s 전) ➔ 중복 발주 차단")
+                                    continue
+                                _exit_orders.append(_eo)
+                                main._exit_orders_in_flight[_tk] = _now_ts
+
                             if _exit_orders:
                                 logger.warning(f"  🚨 [Intraday Exit Triggered] {len(_exit_orders)}건 손절/청산 신호 발화 ➔ 즉시 실계좌 시장가 매도 집행!")
                                 _exec = ExecutionEngine(mode='live')

@@ -1697,9 +1697,54 @@ class KISTraderAdapter:
                             else:
                                 ask_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=True) or (submitted_px + 0.01)
                                 repeg_price = round(ask_p, 2)
-                                logger.warning(f"  ⚡ [Auto Re-Peg Loop] {ticker} {qty}주 매수 미체결({order_no}) ➔ 실시간 최유리 매도호가(${repeg_price:.2f})로 즉시 매수 정정!")
                                 repeg_res = self.buy(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg)
                                 repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
+
+            # ── 2. KRX 국내 미체결 주문 실시간 자동 재페깅/시장가 전환 ──
+            try:
+                krx_headers = self._get_headers()
+                krx_headers['tr_id'] = 'VTTC8036R' if self.mode == 'paper' else 'TTTC8036R'
+                krx_params = {
+                    'CANO': acnt[0],
+                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                    'INQR_DVSN_1': '0',
+                    'INQR_DVSN_2': '0',
+                    'CTX_AREA_FK100': '',
+                    'CTX_AREA_NK100': ''
+                }
+                krx_url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
+                krx_resp = requests.get(krx_url, headers=krx_headers, params=krx_params, timeout=5)
+                krx_data = krx_resp.json()
+                if krx_data.get('rt_cd') == '0':
+                    for item in krx_data.get('output', krx_data.get('output1', [])):
+                        order_no = item.get('odno', item.get('ODNO', ''))
+                        if not order_no or order_no in seen_order_nos:
+                            continue
+                        seen_order_nos.add(order_no)
+                        ticker = item.get('pdno', item.get('PDNO', ''))
+                        qty = int(float(item.get('ord_qty', item.get('ORD_QTY', 1))))
+                        side_cd = str(item.get('sll_buy_dvsn_cd', item.get('SLL_BUY_DVSN_CD', ''))).strip()
+                        is_sell = side_cd in ('01', 'SELL', 'sell', '매도')
+                        now_ts = time.time()
+                        if not hasattr(self, '_unexec_first_seen_ts'):
+                            self._unexec_first_seen_ts = {}
+                        first_seen = self._unexec_first_seen_ts.setdefault(order_no, now_ts)
+                        if max_wait_sec > 0 and (now_ts - first_seen) < max_wait_sec:
+                            continue
+
+                        if ticker and qty > 0:
+                            self.cancel_order(order_no, ticker=ticker)
+                            if is_sell:
+                                logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매도 미체결({order_no}) ➔ 즉시 최유리 시장가 매도 정정!")
+                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX')
+                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
+                            else:
+                                logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
+                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX')
+                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
+            except Exception as _krx_e:
+                logger.debug(f"  [KRX Auto Re-Peg] 국내 미체결 스캔 예외: {_krx_e}")
+
             return repeg_results
         except Exception as e:
             logger.debug(f"  [Auto Re-Peg Loop] 미체결 스캔 예외: {e}")

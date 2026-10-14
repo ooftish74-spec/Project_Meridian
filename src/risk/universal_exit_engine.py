@@ -28,11 +28,45 @@ class UniversalExitEngine:
         self._atr_cache: Dict[str, float] = {}
 
     def compute_ticker_atr(self, ticker: str, default_atr_pct: float = 0.025) -> float:
-        """종목별 14일 ATR (% decimal, e.g. 0.025 = 2.5%)."""
+        """종목별 14일 실시간 적응형 ATR (% decimal, e.g. 0.025 = 2.5%)."""
         if ticker in self._atr_cache:
             return self._atr_cache[ticker]
         
-        atr_pct = float(cfg.get('exit.default_atr_pct', default_atr_pct))
+        # 1. 역사적 일봉 데이터(data/historical_10y/)에서 14일 실시간 ATR 산출
+        try:
+            from pathlib import Path
+            data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+            p_file = data_dir / f"kr_{ticker}.parquet" if ticker.isdigit() else data_dir / f"us_{ticker}.parquet"
+            if p_file.exists():
+                import pandas as pd
+                df = pd.read_parquet(p_file)
+                if len(df) >= 15 and 'high' in df.columns and 'low' in df.columns and 'close' in df.columns:
+                    high = df['high'].values[-15:]
+                    low = df['low'].values[-15:]
+                    close = df['close'].values[-15:]
+                    prev_close = np.roll(close, 1)
+                    prev_close[0] = close[0]
+                    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
+                    atr14 = float(np.mean(tr[-14:]) / close[-1])
+                    if not math.isnan(atr14) and atr14 > 0:
+                        clipped_atr = float(np.clip(atr14, 0.015, 0.080))
+                        self._atr_cache[ticker] = clipped_atr
+                        return clipped_atr
+        except Exception:
+            pass
+
+        # 2. 자산군(Asset Class) 프로파일 기반 동적 변동성 추정
+        if ticker in ('252670', '233740', '122630', 'TQQQ', 'SQQQ', 'SOXL'):
+            atr_pct = 0.045
+        elif ticker in ('NVDA', '091160', 'SOXX', 'XLK', 'TSLA'):
+            atr_pct = 0.028
+        elif ticker in ('069500', 'SPY', 'QQQ', 'VOO', 'IVV'):
+            atr_pct = 0.018
+        elif ticker in ('SHV', '459580', 'BIL'):
+            atr_pct = 0.003
+        else:
+            atr_pct = float(cfg.get('exit.default_atr_pct', default_atr_pct))
+
         self._atr_cache[ticker] = atr_pct
         return atr_pct
 
@@ -161,7 +195,7 @@ class UniversalExitEngine:
             trailing_trigger = float(cfg.get('exit.trailing_tp_trigger', 2.5))
             is_trail_activated = bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger)
             is_trailing_exit = (
-                holding_minutes >= min_holding_required and 
+                (holding_minutes >= min_holding_required or is_trail_activated) and 
                 is_trail_activated and 
                 pnl_pct < (peak_pnl - chandelier_drop)
             )

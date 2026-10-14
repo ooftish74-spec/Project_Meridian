@@ -2543,8 +2543,14 @@ def _phase_call_auction_0830():
                 for exit_order in exit_eval.get('exit_orders', []):
                     exit_tk = exit_order['ticker']
                     exit_q = int(exit_order['quantity'])
-                    logger.warning(f"  🚨 [08:30 CallAuction Exit] {exit_tk} {exit_q}주 긴급 손절/청산 발주 ({exit_order.get('reason')})")
-                    cam.place_premarket_sell_order(sell_qty=exit_q, ticker=exit_tk)
+                    exit_reason = exit_order.get('reason', 'UniversalExit')
+                    logger.warning(f"  🚨 [08:30 CallAuction Exit] {exit_tk} {exit_q}주 긴급 손절/청산 발주 ({exit_reason})")
+                    cam.place_premarket_sell_order(
+                        sell_qty=exit_q,
+                        ticker=exit_tk,
+                        is_risk_exit=True,
+                        reason=exit_reason
+                    )
         except Exception as _uee_err:
             logger.error(f"  ❌ [08:30 CallAuction] UniversalExitEngine 평가 실패: {_uee_err}", exc_info=True)
 

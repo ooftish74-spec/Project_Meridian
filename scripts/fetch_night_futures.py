@@ -62,8 +62,21 @@ def fetch_and_save_night_futures(
         ov_data = gateway.get_overnight_futures()
         # Accept valid non-zero quote
         if isinstance(ov_data, dict) and ov_data.get("close", 0) > 0:
-            # If gateway returns pure daytime quote, record daytime_close and do NOT overwrite true night close
-            if ov_data.get("source") == "KIS_OpenAPI_Direct_Daytime":
+            existing_file = PROJECT_ROOT / "results" / "krx_futures_overnight.json"
+            is_prev_verified = False
+            if existing_file.exists():
+                try:
+                    with open(existing_file, "r", encoding="utf-8") as f:
+                        prev = json.load(f)
+                    if prev.get("source") == "KRX_Night_Session_Verified" and prev.get("close", 0) > 0:
+                        is_prev_verified = True
+                        night_data.update(prev)
+                except Exception:
+                    pass
+
+            if is_prev_verified and ov_data.get("source") != "KRX_Night_Session_Verified":
+                logger.info(f"  🛡️ [Verified Protection] 기검증된 야간 체결가({night_data['close']} / {night_data['source']})를 KIS 미갱신 시세로부터 보호합니다.")
+            elif ov_data.get("source") == "KIS_OpenAPI_Direct_Daytime":
                 night_data["daytime_close"] = ov_data["close"]
                 logger.info(f"  ℹ️ [CentralDataGateway] 주간 선물 종가 확인 ({ov_data['close']}) — 야간 선물({night_data['close']}) 격리 유지")
             else:
