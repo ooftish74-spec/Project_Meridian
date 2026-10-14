@@ -51,6 +51,7 @@ rsync -avz \
   --exclude 'results/*' \
   -e "ssh -i $KEY_PATH" "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/position_entry_ledger.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/position_entry_ledger.json"
+rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/krx_futures_overnight.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/krx_futures_overnight.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/immune_antigen_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/immune_antigen_bank.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/results/surge_agonist_bank.json" "$EC2_USER@$EC2_IP:$REMOTE_DIR/results/surge_agonist_bank.json"
 rsync -avz -e "ssh -i $KEY_PATH" "$PROJECT_DIR/dashboard/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/dashboard/"

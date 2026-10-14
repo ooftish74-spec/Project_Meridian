@@ -8,6 +8,7 @@ from src.streams.s1_edge.us_leveraged_etf_scalper import USLeveragedETFScalper
 
 def test_tqqq_entry_approved_bull_regime():
     scalper = USLeveragedETFScalper()
+    scalper.min_volume_power = 1.30
     approved, reason, signal = scalper.evaluate_entry(
         ticker="TQQQ",
         regime="bull_strong",

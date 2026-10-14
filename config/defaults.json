@@ -603,10 +603,10 @@
   "exposure.instrument.leverage.name": "KODEX 레버리지",
   "exposure.instrument.leverage.beta": 2.0,
   "exposure.instrument.leverage.cost_bps": 10,
-  "exposure.instrument.inverse.ticker": "252670",
-  "exposure.instrument.inverse.name": "KODEX 200선물인버스2X",
-  "exposure.instrument.inverse.beta": -2.0,
-  "exposure.instrument.inverse.cost_bps": 10,
+  "exposure.instrument.inverse.ticker": "114800",
+  "exposure.instrument.inverse.name": "KODEX 인버스",
+  "exposure.instrument.inverse.beta": -1.0,
+  "exposure.instrument.inverse.cost_bps": 5,
   "exposure.instrument.vix.ticker": "500030",
   "exposure.instrument.vix.name": "신한 S&P500 VIX S/T ETN",
   "exposure.instrument.vix.beta": -1.0,
@@ -1205,9 +1205,13 @@
       "name": "KODEX 코스닥150레버리지",
       "type": "index_lev"
     },
+    "114800": {
+      "name": "KODEX 인버스",
+      "type": "index_inv"
+    },
     "252670": {
       "name": "KODEX 200선물인버스2X",
-      "type": "index_inv"
+      "type": "index_inv_2x"
     },
     "470450": {
       "name": "KODEX 삼성전자 레버리지",
@@ -2306,6 +2310,7 @@
   "execution.emergency_page_on": true,
   "execution.anti_spam_retry_max": 1,
   "execution.max_retries": 3,
+  "cash_shield.us_sweep_enabled": false,
   "sc_yield.kofr_ticker": "459580",
   "cost.credit_interest_rate": 0.085,
   "cost.credit_free_ratio": 1.0,

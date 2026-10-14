@@ -1842,7 +1842,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         ckpt = None
 
     # intraday는 하루 여러 번 실행 → checkpoint skip 제외 대상
-    _REPEATABLE_PHASES = {'intraday', 'market', 'call_auction_0830', 'call_auction_monitor', 'market_open_0900'}
+    _REPEATABLE_PHASES = {'intraday', 'market', 'call_auction_0830', 'call_auction_monitor', 'market_open_0900', 'us_regular', 'us_premarket'}
 
     def _run_with_checkpoint(name: str, func) -> None:
         """Phase를 Checkpoint 추적과 함께 실행."""

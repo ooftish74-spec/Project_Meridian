@@ -26,6 +26,7 @@ class S1ETFSniperStream(BaseStream):
         super().__init__('S1', 'ETF_SNIPER')
         self.universe = cfg.get('s1.universe', {
             '069500': {'name': 'KODEX 200', 'type': 'index_1x'},
+            '114800': {'name': 'KODEX 인버스', 'type': 'index_inv'},
             '122630': {'name': 'KODEX 레버리지', 'type': 'index_lev_2x'},
             '252670': {'name': 'KODEX 200선물인버스2X', 'type': 'index_inv_2x'},
             'TQQQ': {'name': 'ProShares UltraPro QQQ 3X', 'type': 'us_tech_3x'},
@@ -374,10 +375,9 @@ class S1ETFSniperStream(BaseStream):
                 })
         elif is_shock:
             vix_z = (vix - vix_ma20) / max(vix_std20, 1e-9)
-            _is_extreme = vix_z > 2.5
-            _t_type = 'index_inv_2x' if _is_extreme else 'index_inv_1x'
-            ticker = self._get_ticker_by_type(_t_type) or ('252670' if _is_extreme else self._get_ticker_by_type('index_inv'))
-            logger.info(f"    🎯 [VIX Shock] 순수 변동성 스파이크 감지. VIX Z: {vix_z:.2f}. {'2배 곱버스' if _is_extreme else '1배 인버스'} 진입.")
+            _t_type = 'index_inv'
+            ticker = self._get_ticker_by_type(_t_type) or cfg.get('leverage.inverse_ticker', '114800')
+            logger.info(f"    🎯 [VIX Shock] 순수 변동성 스파이크 감지. VIX Z: {vix_z:.2f}. 1배 인버스({ticker}) 진입.")
             price_data = signal_cache.get(ticker)
             price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
             if price > 0:
@@ -444,8 +444,8 @@ class S1ETFSniperStream(BaseStream):
         # ── Phase 4: S1 Track F (Cross-Sector Pair Trading) ──
         if regime in ('caution', 'range', 'bear'):
             pair_semi = cfg.get('s1.pair_long_ticker', '091160')
-            pair_gobus = cfg.get('s1.pair_short_ticker', '252670')
-            logger.info("⚖️ [S1 Track F] 횡보장 0-베타 섹터 페어 트레이딩 신호 생성 (반도체 롱 + 곱버스 숏 헷지)")
+            pair_inv = cfg.get('s1.pair_short_ticker', '114800')
+            logger.info("⚖️ [S1 Track F] 횡보장 0-베타 섹터 페어 트레이딩 신호 생성 (반도체 롱 + 인버스 숏 헷지)")
             signals.append({
                 'stream_id': self.stream_id,
                 'ticker': pair_semi,
@@ -458,8 +458,8 @@ class S1ETFSniperStream(BaseStream):
             })
             signals.append({
                 'stream_id': self.stream_id,
-                'ticker': pair_gobus,
-                'name': 'KODEX 200선물인버스2X (Pair Short Hedge)',
+                'ticker': pair_inv,
+                'name': 'KODEX 인버스 (Pair Short Hedge)',
                 'direction': 'long',
                 'size_pct': 0.25,
                 'confidence': 0.88,
@@ -488,11 +488,11 @@ class S1ETFSniperStream(BaseStream):
             # 2. Adversarial Liquidity Trap Squeeze Signals
             trap_res = unconventional_eval.get('liquidity_trap_eval', {})
             if trap_res.get('is_trap_detected'):
-                core_inv_ticker = self._get_ticker_by_type('index_inv_2x') or '252670'
+                core_inv_ticker = self._get_ticker_by_type('index_inv') or '114800'
                 signals.append({
                     'stream_id': self.stream_id,
                     'ticker': core_inv_ticker,
-                    'name': self.universe.get(core_inv_ticker, {}).get('name', 'KODEX 200선물인버스2X'),
+                    'name': self.universe.get(core_inv_ticker, {}).get('name', 'KODEX 인버스'),
                     'direction': 'long',
                     'size_pct': 0.3,
                     'confidence': trap_res['squeeze_prob'],

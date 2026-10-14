@@ -51,3 +51,29 @@ def test_parse_kis_futures_output_empty():
     assert price == 0.0
     assert change == 0.0
     assert change_pct == 0.0
+
+def test_parse_kis_futures_output_night_session_baseline():
+    # Real KRX Night Futures scenario:
+    # output3 has night traded price 936.82, but 0.00 change
+    # output1 has daytime price 944.20 or daytime baseline 944.80
+    data = {
+        "output1": {
+            "hts_kor_isnm": "F 202612",
+            "futs_prpr": "944.20",
+            "futs_sdpr": "944.20",
+            "futs_prdy_vrss": "0.00",
+            "futs_prdy_ctrt": "0.00"
+        },
+        "output3": {
+            "bstp_cls_code": "2001",
+            "hts_kor_isnm": "KOSPI200",
+            "bstp_nmix_prpr": "936.82",
+            "bstp_nmix_prdy_vrss": "0.00",
+            "bstp_nmix_prdy_ctrt": "0.00",
+            "prdy_vrss_sign": "3"
+        }
+    }
+    price, change, change_pct = parse_kis_futures_output(data, daytime_baseline=944.80)
+    assert price == 936.82
+    assert change == -7.98
+    assert change_pct == pytest.approx(-0.8446, abs=0.01)

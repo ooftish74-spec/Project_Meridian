@@ -176,6 +176,19 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         logger.error("Empty portfolio data.")
         return False
 
+    # [Quota 429 Cooldown Guard] 구글 시트 분당 60회 쓰기 한도 보호 (3분 쿨다운)
+    import time
+    last_sync_file = PROJECT_ROOT / "results" / ".last_gsheet_sync_time"
+    now_ts = time.time()
+    if last_sync_file.exists():
+        try:
+            last_ts = float(last_sync_file.read_text().strip())
+            if now_ts - last_ts < 180:
+                logger.info("  ⏳ [GSheet Cooldown] 최근 3분 내 동기화 완료 → Google Sheets Quota 429 방어를 위해 이번 호출 스킵")
+                return True
+        except Exception:
+            pass
+
     try:
         gc = gspread.service_account(filename=str(SERVICE_ACCOUNT_PATH))
         if spreadsheet_id_or_name.startswith("http") or len(spreadsheet_id_or_name) > 25:
@@ -1361,6 +1374,10 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
 
         sh.batch_update({'requests': format_requests})
         logger.info("Successfully formatted numbers & professional table styles across ALL 4 Worksheets!")
+        try:
+            last_sync_file.write_text(str(time.time()))
+        except Exception:
+            pass
         return True
 
     except Exception as e:

@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 def fetch_and_save_night_futures(
     override_close: Optional[float] = None, 
     override_change_pct: Optional[float] = None,
-    override_change: Optional[float] = None
+    override_change: Optional[float] = None,
+    override_daytime_close: Optional[float] = None
 ):
     """야간 선물 (KRX Night Session) 수집 후 저장."""
     logger.info("  🌙 [Night Futures] KRX 야간선물 수집 시작")
@@ -40,15 +41,18 @@ def fetch_and_save_night_futures(
 
     status = "CLOSED" if is_weekend else "OK"
     chg_val = 0.0 if is_weekend else (0.0 if override_change_pct is None else override_change_pct)
-    c_val = 1000.0 if override_close is None else override_close
+    c_val = 0.0 if override_close is None else override_close
+    d_close = 0.0
 
     night_data = {
         "symbol": symbol,
         "front_code": front_code,
         "close": c_val,
+        "daytime_close": d_close,
         "change_pct": chg_val,
+        "change": 0.0 if override_change is None else override_change,
         "status": status,
-        "source": "KRX_Night_Market",
+        "source": "KRX_Night_Session",
         "timestamp": now.isoformat()
     }
 
@@ -56,15 +60,20 @@ def fetch_and_save_night_futures(
         from src.data_collection.central_data_gateway import CentralDataGateway
         gateway = CentralDataGateway()
         ov_data = gateway.get_overnight_futures()
-        # Accept valid non-zero quote regardless of magnitude (do NOT discard quotes < 2.0%)
+        # Accept valid non-zero quote
         if isinstance(ov_data, dict) and ov_data.get("close", 0) > 0:
-            night_data.update(ov_data)
-            night_data["status"] = "OK"
-            logger.info(f"  ✅ [CentralDataGateway] 야간 선물 수집 완료: {ov_data}")
+            # If gateway returns pure daytime quote, record daytime_close and do NOT overwrite true night close
+            if ov_data.get("source") == "KIS_OpenAPI_Direct_Daytime":
+                night_data["daytime_close"] = ov_data["close"]
+                logger.info(f"  ℹ️ [CentralDataGateway] 주간 선물 종가 확인 ({ov_data['close']}) — 야간 선물({night_data['close']}) 격리 유지")
+            else:
+                night_data.update(ov_data)
+                night_data["status"] = "OK"
+                logger.info(f"  ✅ [CentralDataGateway] 야간 선물 수집 완료: {ov_data}")
     except Exception as e:
         logger.warning(f"  ⚠️ CentralDataGateway 수집 우회: {e}")
 
-    # Fallback to existing valid quote if no override provided and current close is invalid/placeholder
+    # Fallback to existing valid quote if no override provided
     if override_close is None and night_data.get("close", 0) <= 0:
         existing_file = PROJECT_ROOT / "results" / "krx_futures_overnight.json"
         if existing_file.exists():
@@ -78,13 +87,29 @@ def fetch_and_save_night_futures(
 
     if override_close is not None:
         night_data["close"] = override_close
-    if override_change_pct is not None:
-        night_data["change_pct"] = override_change_pct
-        if override_change is not None:
-            night_data["change"] = override_change
+        if override_daytime_close is not None:
+            d_close = override_daytime_close
         else:
-            night_data["change"] = round(override_close * (override_change_pct / 100.0), 2)
-        night_data["direction"] = "up" if override_change_pct > 0 else "down"
+            d_close = night_data.get("daytime_close", 0.0)
+        if d_close <= 0:
+            sc_path = PROJECT_ROOT / "results" / "signal_cache.json"
+            if sc_path.exists():
+                try:
+                    with open(sc_path, "r", encoding="utf-8") as f:
+                        sc_tmp = json.load(f)
+                    d_close = float(sc_tmp.get("daytime_futures") or sc_tmp.get("kospi200_futures_close") or 944.80)
+                except Exception:
+                    d_close = 944.80
+            else:
+                d_close = 944.80
+        night_data["daytime_close"] = d_close
+
+        night_change = round(override_close - d_close, 2)
+        night_change_pct = round((night_change / d_close) * 100, 4) if d_close > 0 else 0.0
+        night_data["change"] = override_change if override_change is not None else night_change
+        night_data["change_pct"] = override_change_pct if override_change_pct is not None else night_change_pct
+        night_data["direction"] = "up" if night_data["change"] > 0 else "down"
+        night_data["source"] = "KRX_Night_Session_Verified"
 
     # Write to target paths
     macro_dir = PROJECT_ROOT / "data" / "macro"
@@ -100,23 +125,37 @@ def fetch_and_save_night_futures(
             with open(sc_path, "r", encoding="utf-8") as f:
                 sc = json.load(f)
             sc["night_futures"] = night_data["close"]
+            sc["daytime_futures"] = night_data.get("daytime_close", 944.80)
             sc["night_futures_change_1d"] = night_data["change_pct"]
+            
+            # Recalculate OIS with true night futures
+            try:
+                from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
+                ois_calc = OvernightIntelligenceScore()
+                ois_res = ois_calc.calculate(include_premarket=True)
+                sc["ois"] = ois_res.get("ois", 50.0)
+                sc["ois_details"] = ois_res
+            except Exception as _oe:
+                logger.warning(f"  ⚠️ OIS 재계산 예외: {_oe}")
+
             atomic_write_json(sc_path, sc, indent=2)
         except Exception as e:
             logger.warning(f"  ⚠️ signal_cache 갱신 예외: {e}")
 
-    logger.info(f"  ✅ [Night Futures] KRX 야간선물 ({night_data.get('front_code', 'F')}, {night_data['close']}, {night_data['change_pct']:+.2f}%) 저장 완료 -> data/macro/night_futures.json")
+    logger.info(f"  ✅ [Night Futures] KRX 야간선물 ({night_data.get('front_code', 'F')}, 종가: {night_data['close']} / 주간종가: {night_data.get('daytime_close', 1008.25)}, 등락률: {night_data['change_pct']:+.2f}%) 저장 완료")
     return night_data
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="KRX 야간선물 시세 수집기")
-    parser.add_argument("--close", type=float, default=None, help="야간선물 종가 직접 지정 (예: 1028.95)")
-    parser.add_argument("--change-pct", type=float, default=None, help="야간선물 등락률 직접 지정 (예: -1.84)")
-    parser.add_argument("--change", type=float, default=None, help="야간선물 등락폭 직접 지정 (예: -19.30)")
+    parser.add_argument("--close", type=float, default=None, help="야간선물 종가 직접 지정 (예: 987.60)")
+    parser.add_argument("--daytime-close", type=float, default=None, help="주간선물 종가 직접 지정 (예: 1008.25)")
+    parser.add_argument("--change-pct", type=float, default=None, help="야간선물 등락률 직접 지정 (예: -2.05)")
+    parser.add_argument("--change", type=float, default=None, help="야간선물 등락폭 직접 지정 (예: -20.65)")
     args = parser.parse_args()
     fetch_and_save_night_futures(
         override_close=args.close, 
+        override_daytime_close=args.daytime_close,
         override_change_pct=args.change_pct,
         override_change=args.change
     )

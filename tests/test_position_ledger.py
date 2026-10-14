@@ -72,3 +72,34 @@ def test_multiday_immutability():
         res5 = mgr.sync_live_positions(active, current_date_str="2026-09-20")
         assert res5["TSLA"] == "2026-09-16"  # STILL remains 2026-09-16
 
+def test_hwm_tracking_and_trail_activation():
+    """Verify that peak_price and peak_pnl_pct are preserved and updated across sessions."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ledger_path = Path(tmpdir) / "position_entry_ledger.json"
+        mgr = PositionLedgerManager(ledger_path=str(ledger_path))
+
+        # Check backfilled 091160
+        hwm_091160 = mgr.get_hwm("091160")
+        assert hwm_091160["peak_price"] == 152310.0
+        assert hwm_091160["peak_pnl_pct"] == 19.93
+        assert hwm_091160["trail_activated"] is True
+
+        # When current price drops to 127520 (+0.41%), HWM must NOT drop!
+        updated = mgr.update_hwm("091160", current_price=127520.0, current_pnl_pct=0.41, date_str="2026-10-14")
+        assert updated["peak_price"] == 152310.0
+        assert updated["peak_pnl_pct"] == 19.93
+        assert updated["trail_activated"] is True
+
+        # When a new stock reaches high and falls
+        mgr.record_entry("TEST", entry_date="2026-10-01", entry_price=100.0)
+        mgr.update_hwm("TEST", current_price=120.0, current_pnl_pct=20.0, date_str="2026-10-05")
+        assert mgr.get_hwm("TEST")["peak_price"] == 120.0
+        assert mgr.get_hwm("TEST")["peak_pnl_pct"] == 20.0
+        assert mgr.get_hwm("TEST")["trail_activated"] is True
+
+        # Price drops to 105 (+5%) -> Peak must remain 120 / 20%
+        mgr.update_hwm("TEST", current_price=105.0, current_pnl_pct=5.0, date_str="2026-10-10")
+        assert mgr.get_hwm("TEST")["peak_price"] == 120.0
+        assert mgr.get_hwm("TEST")["peak_pnl_pct"] == 20.0
+
+

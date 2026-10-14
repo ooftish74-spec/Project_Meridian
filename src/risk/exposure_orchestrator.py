@@ -157,29 +157,31 @@ class ExposureOrchestrator:
         elif regime == 'bear':
             reasons.append(f"Regime={regime}")
         components['regime'] = {'score': regime_score, 'value': regime}
-        vix = sentiment.get('vix', 20)
-        options_skew = sentiment.get('options_skew', 0.0)
-        ois = sentiment.get('ois', 0.5)
+        vix = float(sentiment.get('vix', 20) or 20)
+        options_skew = float(sentiment.get('options_skew', 0.0) or 0.0)
+        raw_ois = float(sentiment.get('ois', 50.0) or 50.0)
         
-        if ois > 20.0:
-            ois = ois / 100.0  # Convert bps to percent
-            
-        if vix > 45.0 or options_skew > 3.5 or ois > 2.0:
-            target = 0.0
-            reasons.append(f"Boundary Box Exceeded (VIX={vix:.1f}, Skew={options_skew:.1f}, OIS={ois:.1f}) -> 0% Hard Stop")
-            components['vol_surface'] = {'score': 0.0, 'vix': vix, 'skew': options_skew, 'ois': ois}
-        else:
-            k_vix, x0_vix = (0.2, 30.0)
-            vix_score = 1.0 / (1.0 + np.exp(k_vix * (vix - x0_vix)))
-            k_skew, x0_skew = (1.5, 1.5)
-            skew_score = 1.0 / (1.0 + np.exp(k_skew * (options_skew - x0_skew)))
-            k_ois, x0_ois = (4.0, 1.2)
-            ois_score = 1.0 / (1.0 + np.exp(k_ois * (ois - x0_ois)))
-            raw_multiplier = min(vix_score, skew_score, ois_score)
-            target = max(0.1, min(1.0, raw_multiplier))
-            reasons.append(f"Vol-Surface Melting (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> {target:.2f}")
-            components['vol_surface'] = {'score': target, 'vix': vix, 'skew': options_skew, 'ois': ois}
-        target = round(max(0, min(1, target * regime_score)), 3)
+        # [Pure Dynamic Math] OIS (0~100 스케일) 연속 [0.0, 1.0] 정규화
+        ois_norm = raw_ois / 100.0 if raw_ois > 1.0 else max(0.0, min(1.0, raw_ois))
+        
+        # [Pure Dynamic Math] 불연속 하드스탑(Hard Stop) 제거 및 다차원 연속 로지스틱 시그모이드 감쇄
+        k_vix, x0_vix = (0.18, 30.0)
+        vix_score = 1.0 / (1.0 + np.exp(k_vix * (vix - x0_vix)))
+        
+        k_skew, x0_skew = (1.5, 1.5)
+        skew_score = 1.0 / (1.0 + np.exp(k_skew * (options_skew - x0_skew)))
+        
+        # OIS: 0~100 야간 센티먼트 연속 시그모이드 (x0=0.35, k=8.0)
+        # OIS=50일 때 ~0.77, OIS=30일 때 ~0.40, OIS=18.8일 때 ~0.21로 스무스 감쇄 (절대 0% 절벽 중단 없음)
+        k_ois, x0_ois = (8.0, 0.35)
+        ois_score = 1.0 / (1.0 + np.exp(-k_ois * (ois_norm - x0_ois)))
+        
+        raw_multiplier = min(vix_score, skew_score, ois_score)
+        vol_surface_score = round(float(np.clip(raw_multiplier, 0.05, 1.0)), 4)
+        target = round(float(np.clip(vol_surface_score * regime_score, 0.0, 1.0)), 3)
+        
+        reasons.append(f"Vol-Surface Dynamic (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> raw={vol_surface_score:.2f}, target={target:.2f}")
+        components['vol_surface'] = {'score': vol_surface_score, 'vix': vix, 'skew': options_skew, 'ois': raw_ois, 'ois_norm': ois_norm}
         intraday_adj = 1.0
         if self._intraday:
             try:
@@ -367,7 +369,7 @@ class ExposureOrchestrator:
         return sentiment
     _HEDGE_INSTRUMENTS_DEFAULT = {'1x': {'ticker': '114800', 'name': 'KODEX 인버스', 'beta': -1.0, 'leverage': -1, 'cost_bps': 5}, '2x': {'ticker': '252670', 'name': 'KODEX 200선물인버스2X', 'beta': -2.0, 'leverage': -2, 'cost_bps': 10}}
     HEDGE_INSTRUMENTS = _HEDGE_INSTRUMENTS_DEFAULT
-    _ATTACKER_INSTRUMENTS_DEFAULT = {'leverage': {'ticker': '122630', 'name': 'KODEX 레버리지', 'beta': 2.0, 'cost_bps': 10}, 'inverse': {'ticker': '252670', 'name': 'KODEX 200선물인버스2X', 'beta': -2.0, 'cost_bps': 10}, 'vix': {'ticker': '500030', 'name': '신한 S&P500 VIX S/T ETN', 'beta': -1.0, 'cost_bps': 15}}
+    _ATTACKER_INSTRUMENTS_DEFAULT = {'leverage': {'ticker': '122630', 'name': 'KODEX 레버리지', 'beta': 2.0, 'cost_bps': 10}, 'inverse': {'ticker': '114800', 'name': 'KODEX 인버스', 'beta': -1.0, 'cost_bps': 5}, 'vix': {'ticker': '500030', 'name': '신한 S&P500 VIX S/T ETN', 'beta': -1.0, 'cost_bps': 15}}
     ATTACKER_INSTRUMENTS = _ATTACKER_INSTRUMENTS_DEFAULT
 
     def calculate_hedge_position(self, regime: str=None) -> Dict:

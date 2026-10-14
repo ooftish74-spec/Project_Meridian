@@ -71,6 +71,8 @@ def inspect_live_truth(as_json: bool = False):
                     account_info['nav'] = round(adapter.account.total_equity, 2)
                 if hasattr(adapter, 'account') and getattr(adapter.account, 'cash', 0) >= 0:
                     account_info['cash'] = round(adapter.account.cash, 2)
+                account_info['cash_usd'] = round(getattr(adapter, 'direct_usd_cash', 0.0), 2)
+                account_info['integrated_margin_usd'] = round(getattr(adapter, 'us_cash_usd', 0.0), 2)
                 
                 kis_data['date'] = live_date
                 kis_data['account'] = account_info
@@ -112,6 +114,7 @@ def inspect_live_truth(as_json: bool = False):
     us_stock_val_usd = sum(v.get('qty', 0) * v.get('current_price', 0) for v in us_holdings.values())
     cash_krw = account_info.get("cash", 0.0)
     cash_usd = account_info.get("cash_usd", 0.0)
+    integrated_margin_usd = account_info.get("integrated_margin_usd", 0.0)
     fx_rate = account_info.get("fx_rate", 1353.63)
 
     kr_total_equity = cash_krw + kr_stock_val
@@ -132,6 +135,7 @@ def inspect_live_truth(as_json: bool = False):
         },
         "us_account": {
             "cash_usd": cash_usd,
+            "integrated_margin_usd": integrated_margin_usd,
             "stock_val_usd": us_stock_val_usd,
             "total_equity_usd": us_total_equity,
             "holdings": us_holdings
@@ -163,6 +167,7 @@ def inspect_live_truth(as_json: bool = False):
     print(f"   - 원화 자산 소계          : ₩{kr_total_equity:,.0f} KRW")
     print("🇺🇸 해외 외화 계좌 (USD Wallet):")
     print(f"   - 외화 예수금 (Cash USD)  : ${cash_usd:,.2f} USD")
+    print(f"   - 통합증거금 주문가능 달러: ${integrated_margin_usd:,.2f} USD")
     print(f"   - 외화 주식 평가액        : ${us_stock_val_usd:,.2f} USD")
     print(f"   - 외화 자산 소계          : ${us_total_equity:,.2f} USD")
     print("----------------------------------------------------------")

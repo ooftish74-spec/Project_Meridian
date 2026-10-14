@@ -55,7 +55,19 @@ class DynamicFuturesContractResolver:
 
     @classmethod
     def to_kis_code(cls, code: str) -> str:
-        """F202612 형식의 코드를 KIS OpenAPI 선물 종목코드(10100000)로 변환."""
-        # KIS OpenAPI inquire-price(FHMIF10000000)에는 10100000가 최근월물 전용 대표 종목코드입니다.
+        """F202612 / f202612 형식의 코드를 KIS OpenAPI 선물 종목코드(101V12 또는 10100000)로 변환."""
+        if not code:
+            return '10100000'
+        code_upper = str(code).strip().upper()
+        if code_upper.startswith('101'):
+            return code_upper
+        if code_upper.startswith('F') and len(code_upper) >= 7:
+            try:
+                year = int(code_upper[1:5])
+                month = code_upper[5:7]
+                letter = cls.YEAR_LETTER_MAP.get(year, 'V')
+                return f"101{letter}{month}"
+            except Exception:
+                pass
         return '10100000'
 

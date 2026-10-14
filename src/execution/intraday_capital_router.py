@@ -74,24 +74,29 @@ class IntradayCapitalRouter:
         ranked.sort(key=lambda x: x.get('ev_adj', 0.0), reverse=True)
         return ranked
 
-    def check_market_depth_capacity(self, ticker: str, target_qty: int, orderbook_depth_1_3_qty: int) -> int:
+    def check_market_depth_capacity(self, ticker: str, target_qty: int, orderbook_depth_1_3_qty: int, spread_bps: float = None) -> int:
         """[Step 3] 호가창 깊이(Market Depth Capacity) 기반 체결 수량 동적 제한.
         
-        Max Order Capacity: 실시간 호가창 1~3단 매수/매도 잔량의 최대 15% 이하로 제한.
+        [Mathematical Dynamic Model]
+        Dynamic Depth Cap Pct = clip(0.20 - 0.005 * spread_bps, 0.05, 0.25)
+        호가 스프레드가 좁고 유동성이 깊을수록 20~25% 허용, 스프레드가 넓고 호가가 얇을수록 5~10%로 동적 보수화.
         """
         if target_qty <= 0:
             return 0
         if orderbook_depth_1_3_qty <= 0:
-            # 호가 정보 누락 시 안전 기본값 적용 (target_qty 보존)
             return target_qty
 
-        max_allowed_qty = math.floor(orderbook_depth_1_3_qty * self.max_depth_pct)
+        dynamic_cap_pct = self.max_depth_pct
+        if spread_bps is not None and spread_bps > 0:
+            dynamic_cap_pct = max(0.05, min(0.25, 0.20 - (spread_bps * 0.005)))
+
+        max_allowed_qty = math.floor(orderbook_depth_1_3_qty * dynamic_cap_pct)
         if max_allowed_qty <= 0:
             max_allowed_qty = 1
 
         capped_qty = min(target_qty, max_allowed_qty)
         if capped_qty < target_qty:
-            logger.info(f"  🛡️ [Market Depth Cap] {ticker}: 목표 {target_qty}주 -> 호가창 1~3단({orderbook_depth_1_3_qty}주) 15% 제약({capped_qty}주) 체결 분산")
+            logger.info(f"  🛡️ [Market Depth Cap] {ticker}: 목표 {target_qty}주 -> 호가창 1~3단({orderbook_depth_1_3_qty}주) 동적 제약({dynamic_cap_pct*100:.1f}%, {capped_qty}주) 체결 분산")
         return capped_qty
 
     def resolve_signal_conflicts(self, signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -169,6 +174,10 @@ class IntradayCapitalRouter:
                             s1['target_amount'] = float(s1['target_amount']) * net_ratio
                         if 'amount_krw' in s1:
                             s1['amount_krw'] = float(s1['amount_krw']) * net_ratio
+                        if 'amount_usd' in s1:
+                            s1['amount_usd'] = float(s1['amount_usd']) * net_ratio
+                        if 'quantity' in s1:
+                            s1['quantity'] = max(1, int(round(float(s1['quantity']) * net_ratio)))
                         s1['netted_with'] = t2
                         s1['saved_turnover_krw'] = saved_vol
                         logger.info(
@@ -184,6 +193,10 @@ class IntradayCapitalRouter:
                             s2['target_amount'] = float(s2['target_amount']) * net_ratio
                         if 'amount_krw' in s2:
                             s2['amount_krw'] = float(s2['amount_krw']) * net_ratio
+                        if 'amount_usd' in s2:
+                            s2['amount_usd'] = float(s2['amount_usd']) * net_ratio
+                        if 'quantity' in s2:
+                            s2['quantity'] = max(1, int(round(float(s2['quantity']) * net_ratio)))
                         s2['netted_with'] = t1
                         s2['saved_turnover_krw'] = saved_vol
                         logger.info(
@@ -325,7 +338,8 @@ class IntradayCapitalRouter:
         signals: List[Dict[str, Any]],
         market_data: Dict[str, Any],
         total_cash_krw: float,
-        portfolio: Optional[Dict[str, Any]] = None
+        portfolio: Optional[Dict[str, Any]] = None,
+        enforce_session_gate: bool = False
     ) -> List[Dict[str, Any]]:
         """Intraday Capital Router 통합 제어 및 교체 매매(Swap) 집행.
         
@@ -454,6 +468,14 @@ class IntradayCapitalRouter:
                 logger.warning(f"  ⚠️ [Router] {ticker} 유효 가격 미확인으로 스킵")
                 continue
 
+            # [Session Gatekeeper] 해당 종목의 거래소가 현재 거래 가능한 상태인지 사전 필터링 (라이브 오케스트레이터 호출 시)
+            if enforce_session_gate or market_data.get('enforce_session_gate', False):
+                from src.utils.market_calendar import is_ticker_tradable_now
+                is_tradable, session_type = is_ticker_tradable_now(ticker)
+                if not is_tradable:
+                    logger.info(f"  ⏸️ [Router Session Gate] {ticker} 거래소 휴장 중(session={session_type}) ➔ 주문 생성 스킵")
+                    continue
+
             sig['price'] = price
             is_us = not str(ticker).isdigit()
             eff_price_krw = price * dyn_fx if is_us else price
@@ -480,6 +502,10 @@ class IntradayCapitalRouter:
                     for h_ticker, h_ev in holdings_ev.items():
                         h_is_us = not str(h_ticker).isdigit()
                         if h_is_us == is_us_candidate and h_ticker not in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
+                            if enforce_session_gate or market_data.get('enforce_session_gate', False):
+                                h_tradable, _ = is_ticker_tradable_now(h_ticker)
+                                if not h_tradable:
+                                    continue
                             eligible_holdings[h_ticker] = h_ev
 
                     if eligible_holdings:

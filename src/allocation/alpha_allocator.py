@@ -533,7 +533,7 @@ class AlphaAllocator:
             ic_5d = s2_rolling.get('ic_5d')
             n_trades = int(s2_rolling.get('n_trades_5d', 0) or 0)
             if wr_5d is None or n_trades < 3:
-                logger.info('  [Phase 40] S2 Auto-Fallback: 데이터 부족 (n=%d) → skip', n_trades)
+                logger.info('  [Phase 40] S2 성과 패널티 가드: 최근 5일 실현 거래 표본 부족 (n=%d < 3) ➔ 예산 삭감 패널티 미발동 (정상 가중치 유지)', n_trades)
                 return weights
             penalty_triggered = float(wr_5d) < wr_threshold or (ic_5d is not None and float(ic_5d) < ic_threshold)
             if not penalty_triggered:

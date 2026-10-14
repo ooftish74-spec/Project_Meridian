@@ -56,13 +56,84 @@ class USNightExecutionEngine:
     """미국 장 전용 24시간 자본 회전 라이브 집행 엔진."""
 
     def __init__(self):
-        self.max_exposure_pct = cfg.get('us_night.max_exposure_pct', 0.50)  # 최대 50% 현금 캡
-        self.trailing_stop_pct = cfg.get('us_night.trailing_stop_pct', 0.025)  # -2.5% 트레일링 스탑
+        self.max_exposure_pct = self._compute_dynamic_exposure_cap()
+        self.trailing_stop_pct = self._compute_dynamic_trailing_stop()
         self._load_holdings()
 
+    def _compute_dynamic_exposure_cap(self) -> float:
+        """[Mathematical Dynamic Model] 시장 레짐 및 포트폴리오 거시 리스크 기반 동적 노출 캡 산출."""
+        try:
+            regime = str(cfg.get('market.current_regime', 'caution')).lower()
+            regime_multipliers = {
+                'bull': 0.50,
+                'caution': 0.30,
+                'bear': 0.20,
+                'crash': 0.10,
+                'panic': 0.05
+            }
+            return float(regime_multipliers.get(regime, 0.30))
+        except Exception:
+            return 0.30
+
+    def _compute_dynamic_trailing_stop(self, ticker: str = '', atr: float = 0.0) -> float:
+        """[Mathematical Dynamic Model] 종목별 실현 변동성/ATR 기반 동적 트레일링 스탑 비율."""
+        if atr > 0:
+            return max(0.015, min(0.060, atr * 2.0))
+        default_pct = cfg.get('us_night.trailing_stop_pct', 0.025)
+        return float(default_pct)
+
+    def _get_live_fx_rate(self) -> float:
+        """실시간 동적 원/달러 환율 획득 (KIS -> Central Gateway -> Default)."""
+        try:
+            from src.data_collection.kis_data_collector import KISDataCollector
+            fx = KISDataCollector().get_usdkrw_exchange_rate()
+            if fx and fx > 1000:
+                return float(fx)
+        except Exception:
+            pass
+        try:
+            from src.data_collection.central_data_gateway import get_central_data_gateway
+            fx_res = get_central_data_gateway().get_macro_indicator('usdkrw')
+            px = float(fx_res.get('price', 0) or 0)
+            if px > 1000:
+                return px
+        except Exception:
+            pass
+        return float(cfg.get('macro.usdkrw_rate', 1353.63))
+
     def _load_holdings(self):
-        """미국 장 야간 보유 포지션 로드."""
+        """미국 장 야간 보유 포지션 로드 (KIS 실계좌 SSOT 및 HWM 연동)."""
         self.holdings: List[Dict[str, Any]] = []
+        kp_path = _RESULTS_DIR / 'kis_portfolio.json'
+        if kp_path.exists():
+            try:
+                from src.execution.position_ledger import PositionLedgerManager
+                ledger_mgr = PositionLedgerManager()
+                kp = json.loads(kp_path.read_text(encoding='utf-8'))
+                today_str = datetime.now().strftime('%Y-%m-%d')
+                for t, h in kp.get('holdings', {}).items():
+                    if not t.isdigit():  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
+                        curr_p = float(h.get('current_price', 0.0))
+                        curr_ret = float(h.get('return_pct', 0.0))
+                        hwm = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                        self.holdings.append({
+                            'ticker': t,
+                            'name': h.get('name', t),
+                            'entry_price': float(h.get('avg_price', 0.0)),
+                            'current_price': curr_p,
+                            'peak_price': float(hwm.get('peak_price', curr_p) or curr_p),
+                            'peak_pnl_pct': float(hwm.get('peak_pnl_pct', curr_ret) or curr_ret),
+                            'trail_activated': bool(hwm.get('trail_activated', False)),
+                            'quantity': int(h.get('qty', 0)),
+                            'amount': float(h.get('qty', 0)) * curr_p,
+                            'entry_date': ledger_mgr.get_entry_date(t) or today_str
+                        })
+                if self.holdings:
+                    return
+            except Exception as e:
+                logger.warning(f"  [USNightEngine] KIS 실계좌 로드 예외: {e}")
+
+        # 폴백: us_night_holdings.json 파일
         if _US_HOLDINGS_FILE.exists():
             try:
                 self.holdings = json.loads(_US_HOLDINGS_FILE.read_text(encoding='utf-8'))
@@ -76,31 +147,16 @@ class USNightExecutionEngine:
 
     def is_us_session_active(self, now: Optional[datetime] = None) -> bool:
         """미국 장 운영 시간대 (서머타임 22:30 / 표준시 23:30 ~ 05:00/06:00 KST) 판별."""
-        if now is None:
-            from src.utils.time_utils import now_kst
-            now = now_kst()
-        # 주말 제외
-        if now.weekday() in (5, 6):
-            return False
-        from src.utils.market_calendar import get_us_market_open_time
-        open_h, open_m = get_us_market_open_time()
-        close_h = 5 if open_h == 22 else 6
-        
-        now_mins = now.hour * 60 + now.minute
-        open_mins = open_h * 60 + open_m
-        close_mins = close_h * 60
-        
-        # 22:30/23:30 ~ 익일 05:00/06:00
-        if now_mins >= open_mins or now_mins < close_mins:
-            return True
-        return False
+        from src.utils.market_calendar import get_us_session_state
+        is_active, _ = get_us_session_state(now)
+        return is_active
 
     def process_us_night_signals(self, s3_signals: List[Dict], account_nav: float) -> List[Dict]:
-        """미국 장 S3 신호 수신 및 주문 집행 생성.
-
+        """미국 장 S3 신호 수신 및 주문 집행 생성 (환율 단위 정합성 및 동적 캡 적용).
+        
         Args:
             s3_signals: S3ActiveMacroStream 신호 리스트
-            account_nav: 전체 계좌 순자산 가치 (NAV)
+            account_nav: 전체 계좌 순자산 가치 (NAV, 원화 기준)
 
         Returns:
             집행된 미국 장 주문 리스트
@@ -109,11 +165,12 @@ class USNightExecutionEngine:
         if not self.is_us_session_active():
             return orders
 
+        fx_rate = self._get_live_fx_rate()
         us_budget = account_nav * self.max_exposure_pct
-        current_invested = sum(h.get('amount', 0) for h in self.holdings)
-        available_us_cash = max(0.0, us_budget - current_invested)
+        current_invested_krw = sum(h.get('amount', 0) * fx_rate for h in self.holdings)
+        available_us_cash_krw = max(0.0, us_budget - current_invested_krw)
 
-        logger.info(f"🇺🇸 [USNightEngine] 야간 운용 가동 (예산 캡 50%: ₩{us_budget:,.0f}, 사용 가능: ₩{available_us_cash:,.0f})")
+        logger.info(f"🇺🇸 [USNightEngine] 야간 운용 가동 (동적 예산 캡 {self.max_exposure_pct*100:.0f}%: ₩{us_budget:,.0f}, 사용 가능: ₩{available_us_cash_krw:,.0f}, 환율: ₩{fx_rate:,.2f})")
 
         seen_us_tickers = set()
         for sig in s3_signals:
@@ -126,20 +183,30 @@ class USNightExecutionEngine:
             us_name = _US_NAME_MAP.get(us_ticker, sig.get('name', us_ticker))
             direction = sig.get('direction', 'long')
             weight = sig.get('size_pct', sig.get('weight', 0.05))
-            target_amount = min(available_us_cash, account_nav * float(weight))
+            target_amount_krw = min(available_us_cash_krw, account_nav * float(weight))
 
-            if target_amount < 100000:
+            px = float(sig.get('price', 0.0) or 0.0)
+            if px <= 0:
                 continue
 
-            px = sig.get('price', 0.0)
-            qty = max(1, int(target_amount / (px if px > 0 else 100000.0)))
+            px_krw = px * fx_rate
+            # 1주 최소 매매 금액 보장 (동적 최소 주문 금액)
+            if target_amount_krw < px_krw:
+                continue
+
+            # [Dimensional Consistency Fix] 원화 목표금액을 환율로 나누어 순수 달러 주문금액 환산 후 정밀 정수 수량 산출
+            target_amount_usd = target_amount_krw / fx_rate
+            qty = max(1, int(target_amount_usd / px))
+            actual_order_amount_krw = qty * px_krw
+
             order = {
                 'ticker': us_ticker,
                 'name': us_name,
                 'direction': direction,
                 'price': px,
                 'quantity': qty,
-                'amount': target_amount,
+                'amount': actual_order_amount_krw,
+                'amount_usd': qty * px,
                 'order_type': 'LIMIT_BEST',
                 'session': 'US_NIGHT',
                 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
@@ -150,9 +217,10 @@ class USNightExecutionEngine:
             # 포지션에 트레일링 스탑 피크 가격 등록
             self.holdings.append({
                 'ticker': us_ticker,
-                'entry_price': sig.get('price', 0.0),
-                'peak_price': sig.get('price', 0.0),
-                'amount': target_amount,
+                'entry_price': px,
+                'peak_price': px,
+                'quantity': qty,
+                'amount': qty * px,
                 'entry_date': datetime.now().strftime('%Y-%m-%d')
             })
 
@@ -160,9 +228,11 @@ class USNightExecutionEngine:
         return orders
 
     def update_trailing_stop(self, current_prices: Dict[str, float], atr_map: Optional[Dict[str, float]] = None) -> List[Dict]:
-        """미국 장 트레일링 스탑 감시 및 청산 주문 생성 (ATR 변동성 동적 연동)."""
+        """미국 장 트레일링 스탑 감시 및 청산 주문 생성 (ATR 변동성 동적 연동 및 HWM 원장 동기화)."""
         exit_orders = []
         remaining = []
+        from src.execution.position_ledger import PositionLedgerManager
+        ledger_mgr = PositionLedgerManager()
         for h in self.holdings:
             ticker = h['ticker']
             price = current_prices.get(ticker, 0.0)
@@ -170,10 +240,12 @@ class USNightExecutionEngine:
                 remaining.append(h)
                 continue
 
-            if price > h.get('peak_price', 0.0):
-                h['peak_price'] = price
+            entry_p = float(h.get('entry_price', price) or price)
+            curr_pnl_pct = (price - entry_p) / entry_p * 100.0 if entry_p > 0 else 0.0
+            hwm = ledger_mgr.update_hwm(ticker, current_price=price, current_pnl_pct=curr_pnl_pct)
+            peak = float(hwm.get('peak_price', price) or price)
+            h['peak_price'] = peak
 
-            peak = h['peak_price']
             drop_pct = (price - peak) / peak if peak > 0 else 0.0
 
             # Dynamic Volatility ATR Trailing Stop
@@ -186,7 +258,9 @@ class USNightExecutionEngine:
                 exit_orders.append({
                     'ticker': ticker,
                     'direction': 'sell',
+                    'quantity': h.get('quantity', 0),
                     'amount': h.get('amount', 0),
+                    'price': price,
                     'reason': f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)",
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 })

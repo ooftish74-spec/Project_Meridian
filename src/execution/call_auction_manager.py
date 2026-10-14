@@ -56,14 +56,14 @@ class CallAuctionManager:
         logger.info(f"  [CallAuction] 자금 조달 계산: 타겟={target_buy_amount_krw:,.0f}원, 현금={cash:,.0f}원, 부족액={deficit:,.0f}원 -> KODEX 200 {final_qty}주 매도 산정 (KODEX가={price:,.0f}원)")
         return final_qty
 
-    def place_premarket_sell_order(self, sell_qty: int) -> Optional[Dict[str, Any]]:
+    def place_premarket_sell_order(self, sell_qty: int, ticker: str = "069500") -> Optional[Dict[str, Any]]:
         """08:30~08:40 KST 장전 동시호가 매도 주문 제출."""
         if sell_qty <= 0:
             return None
 
-        logger.info(f"  [CallAuction] 08:30~08:40 장전 동시호가 매도 주문 제출: KODEX 200 (069500) {sell_qty}주")
+        logger.info(f"  [CallAuction] 08:30~08:40 장전 동시호가 매도 주문 제출: {ticker} {sell_qty}주")
         order = self.adapter.sell(
-            ticker="069500",
+            ticker=ticker,
             quantity=sell_qty,
             price=0,
             order_type="06",
@@ -72,14 +72,14 @@ class CallAuctionManager:
         if order and getattr(order, "order_id", None):
             self.active_premarket_order = {
                 "order_id": order.order_id,
-                "ticker": "069500",
+                "ticker": ticker,
                 "quantity": sell_qty,
                 "placed_at": datetime.now().isoformat()
             }
-            logger.info(f"  ✅ [CallAuction] 장전 동시호가 매도 주문 제출 성공: OrderID={order.order_id}")
+            logger.info(f"  ✅ [CallAuction] 장전 동시호가 매도 주문 제출 성공: {ticker} OrderID={order.order_id}")
             return self.active_premarket_order
         else:
-            logger.error("  ❌ [CallAuction] 장전 동시호가 매도 주문 제출 실패")
+            logger.error(f"  ❌ [CallAuction] 장전 동시호가 매도 주문 제출 실패: {ticker}")
             return None
 
     def monitor_and_evaluate_0850(self, poll_seconds: int = 240) -> str:

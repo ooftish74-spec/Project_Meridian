@@ -113,7 +113,6 @@ def generate():
         _hold_days = pos.get('hold_days', 0)
         if not _hold_days and _entry_date:
             try:
-                from datetime import datetime
                 _entry_dt = datetime.strptime(_entry_date[:10], '%Y-%m-%d')
                 _hold_days = max(0, (datetime.now() - _entry_dt).days)
             except Exception:

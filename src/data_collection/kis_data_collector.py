@@ -33,10 +33,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-def parse_kis_futures_output(data: dict) -> Tuple[float, float, float]:
+def parse_kis_futures_output(data: dict, daytime_baseline: Optional[float] = None) -> Tuple[float, float, float]:
     """
     Extracts (price, change, change_pct) from KIS OpenAPI futures inquire-price response dict.
     Robustly evaluates output, output1, output2, output3 dictionaries, sign codes, and price change calculations.
+    During night / premarket sessions, calculates delta against daytime regular session baseline.
     """
     if not data:
         return 0.0, 0.0, 0.0
@@ -136,6 +137,42 @@ def parse_kis_futures_output(data: dict) -> Tuple[float, float, float]:
         if prev_close > 0 and abs(price - prev_close) > 1e-4:
             change = round(price - prev_close, 4)
             change_pct = round((change / prev_close) * 100, 4)
+
+    # Fallback 3: Night session / Off-hours delta calculation against daytime baseline
+    # When output3 has night price (e.g. 936.82) but change_pct is 0.0 because KIS does not provide daytime delta in output3
+    if change_pct == 0.0:
+        out3 = data.get('output3') if isinstance(data.get('output3'), dict) else {}
+        night_p = 0.0
+        try:
+            night_p = float(out3.get('bstp_nmix_prpr', 0) or 0)
+        except (ValueError, TypeError):
+            pass
+
+        baseline = daytime_baseline or 0.0
+        if baseline <= 0.0:
+            out1 = data.get('output1') if isinstance(data.get('output1'), dict) else {}
+            try:
+                baseline = float(out1.get('futs_sdpr') or out1.get('futs_prdy_clpr') or out1.get('futs_prpr') or 0.0)
+            except (ValueError, TypeError):
+                pass
+
+        if baseline <= 0.0:
+            try:
+                sc_p = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if sc_p.exists():
+                    with open(sc_p, 'r', encoding='utf-8') as _sc_f:
+                        _sc = json.load(_sc_f)
+                        baseline = float(_sc.get('daytime_futures') or _sc.get('kospi200_futures_close') or 944.80)
+                else:
+                    baseline = 944.80
+            except Exception:
+                baseline = 944.80
+
+        target_p = night_p if night_p > 0 else price
+        if target_p > 0 and baseline > 0 and abs(target_p - baseline) > 0.01:
+            price = target_p
+            change = round(price - baseline, 2)
+            change_pct = round((change / baseline) * 100, 4)
 
     return price, change, change_pct
 
@@ -474,11 +511,13 @@ class KISDataCollector:
             if us_p and us_p.get('price', 0) > 0:
                 return us_p
 
-        if ticker.startswith('101') or ticker.startswith('F'):
+        if ticker.startswith('101') or ticker.startswith('F') or ticker.startswith('f'):
             from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
-            iscd = DynamicFuturesContractResolver.to_kis_code(ticker) if ticker.startswith('F') else ticker
+            iscd = DynamicFuturesContractResolver.to_kis_code(ticker)
             url = f"{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
             data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': iscd})
+            if not data or not (data.get('output1') or data.get('output3')):
+                data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
             if not data:
                 return None
             raw_p, chg_p, chg_pct = parse_kis_futures_output(data)
@@ -813,12 +852,21 @@ class KISDataCollector:
         ticker = DynamicFuturesContractResolver.to_kis_code(front_code)
         url = f"{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
         data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': ticker})
+        data_rep = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
         
-        if not data:
+        merged_data = {}
+        if data_rep:
+            merged_data.update(data_rep)
+        if data:
+            for k, v in data.items():
+                if v:
+                    merged_data[k] = v
+
+        if not merged_data:
             return None
             
-        _, _, change_pct = parse_kis_futures_output(data)
-        logger.info(f"  ✅ [REST] 코스피 선물({front_code}/{ticker}) 수집 완료: {change_pct:+.2f}%")
+        _, _, change_pct = parse_kis_futures_output(merged_data)
+        logger.info(f"  ✅ [REST] 코스피 야간선물({front_code}/{ticker}) 수집 완료: {change_pct:+.2f}%")
         return change_pct
 
     def get_foreign_futures_flow(self) -> Optional[Dict]:

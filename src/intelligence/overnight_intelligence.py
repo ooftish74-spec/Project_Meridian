@@ -29,14 +29,20 @@ class OvernightIntelligenceScore:
     _DEFAULT_WEIGHTS = {
         'nxt_premarket': 0.15,
         'kospi_intraday': 0.15,
-        'sgx_futures': 0.35,
+        'krx_night_futures': 0.35,
         'us_market': 0.25,
         'vix_fear': 0.10
     }
 
     @property
     def WEIGHTS(self):
-        return {k: _cfg.get(f"ois.weight.{k}", v) for k, v in self._DEFAULT_WEIGHTS.items()}
+        w = {}
+        for k, v in self._DEFAULT_WEIGHTS.items():
+            cfg_v = _cfg.get(f"ois.weight.{k}")
+            if cfg_v is None and k == 'krx_night_futures':
+                cfg_v = _cfg.get("ois.weight.sgx_futures")
+            w[k] = cfg_v if cfg_v is not None else v
+        return w
 
     def __init__(self):
         self.data_dir = _PROJECT_ROOT / 'data' / 'raw'
@@ -50,7 +56,7 @@ class OvernightIntelligenceScore:
         if include_premarket:
             components['nxt_premarket'] = self._score_nxt_premarket()
         components['kospi_intraday'] = self._score_kospi_intraday()
-        components['sgx_futures'] = self._score_sgx_futures()
+        components['krx_night_futures'] = self._score_krx_night_futures()
         components['us_market'] = self._score_us_market()
         components['vix_fear'] = self._score_vix_fear()
 
@@ -95,6 +101,9 @@ class OvernightIntelligenceScore:
         # Sentiment Threshold
         sentiment = 'strong_bullish' if ois >= 70 else 'bullish' if ois >= 55 else 'neutral' if ois >= 45 else 'bearish' if ois >= 30 else 'strong_bearish'
         threshold_adj = -5 if ois >= 70 else -3 if ois >= 60 else 0 if ois >= 45 else +3 if ois >= 35 else +5
+
+        # Backward-compatibility alias
+        components['sgx_futures'] = components.get('krx_night_futures', {})
 
         result = {
             'ois': round(ois, 1),
@@ -144,8 +153,8 @@ class OvernightIntelligenceScore:
             return {'score': None, 'detail': 'premarket auction pending (08:30-09:00 KST)'}
         return {'score': None, 'detail': 'outside premarket window (08:30-09:00 KST)'}
 
-    def _score_sgx_futures(self) -> Dict:
-        """야간선물 & EWY 프록시 → 점수."""
+    def _score_krx_night_futures(self) -> Dict:
+        """KRX 야간선물 (KOSPI 200 야간선물 F202612) → 점수."""
         try:
             # 1. krx_futures_overnight.json 또는 night_futures.json
             macro_dir = _PROJECT_ROOT / 'data' / 'macro'
@@ -170,7 +179,8 @@ class OvernightIntelligenceScore:
                         # 세션 종가 마감 후 status가 CLOSED이더라도 valid numeric change_pct가 존재하면 최종 마감 등락률로 사용
                         if chg is not None and isinstance(chg, (int, float)) and not math.isnan(chg):
                             score = 50.0 + float(chg) * (50.0 / 2.0)
-                            return {'score': round(float(np.clip(score, 5.0, 95.0)), 1), 'detail': f"NightFut {chg:+.2f}%", 'raw': data, 'status': 'OK'}
+                            front_code = data.get('front_code', 'F202612')
+                            return {'score': round(float(np.clip(score, 5.0, 95.0)), 1), 'detail': f"KRX NightFut({front_code}) {chg:+.2f}%", 'raw': data, 'status': 'OK'}
                         if data.get('status') == 'CLOSED':
                             return {'score': None, 'detail': 'Market Closed (Weekend/Holiday)'}
                     except Exception as _fe:
@@ -183,11 +193,15 @@ class OvernightIntelligenceScore:
                 nf_chg = sc.get('night_futures_change_1d', sc.get('ewy_change_1d', 0.0))
                 if isinstance(nf_chg, (int, float)) and nf_chg != 0.0:
                     score = 50.0 + nf_chg * (50.0 / 2.0)
-                    return {'score': float(np.clip(score, 5.0, 95.0)), 'detail': f"NightFut(Cache) {nf_chg:+.2f}%", 'status': 'OK'}
+                    return {'score': float(np.clip(score, 5.0, 95.0)), 'detail': f"KRX NightFut(Cache) {nf_chg:+.2f}%", 'status': 'OK'}
 
         except Exception as _e:
-            logger.error(f"Error evaluating SGX / EWY futures: {_e}")
+            logger.error(f"Error evaluating KRX night futures: {_e}")
         return {'score': None, 'detail': 'no data'}
+
+    def _score_sgx_futures(self) -> Dict:
+        """하위 호환성 별칭 메서드 (KRX 야간선물 위임)."""
+        return self._score_krx_night_futures()
 
     def _score_us_market(self) -> Dict:
         """미국 시장 (S&P500, NASDAQ, SOX) → 점수 (signal_cache.json 1순위 최우선)."""

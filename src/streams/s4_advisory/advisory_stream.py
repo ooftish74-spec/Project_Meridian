@@ -59,6 +59,7 @@ class S4AdvisoryStream(BaseStream):
                 return []
         signals = []
         _conf = market_data.get('regime_confidence', 0.5)
+        base_defense = float(cfg.get('s4.base_defense', 0.5))
         defense_ratio = min(1.0, max(0.0, base_defense * _conf * 2.0))
         _kofr_ticker = cfg.get('s4.kofr_ticker', '423160')
         _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR금리액티브(합성)')

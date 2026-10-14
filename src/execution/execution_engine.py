@@ -184,14 +184,19 @@ class ExecutionEngine:
             return _cfg.get(f"execution.slippage_rate.{exchange.lower()}", {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}.get(exchange, 0.0008))
         return {'KRX': 0.001, 'NXT': 0.0006, 'SOR': 0.0008}.get(exchange, 0.0008)
 
-    def __init__(self, mode: str='live', account_type: str='main'):
+    def __init__(self, mode: str = None, account_type: str = 'main'):
         """
         초기화.
 
         Args:
-            mode: 'paper', 'live'
+            mode: 'paper', 'live', 'shadow', 'mock'
             account_type: 'main' (S1~S6) 또는 's8' (초단타 스트림 전용)
         """
+        if mode is None:
+            if _cfg:
+                mode = _cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live'))
+            else:
+                mode = 'live'
         self.mode = mode
         self.account_type = account_type
         self._trader_main = None

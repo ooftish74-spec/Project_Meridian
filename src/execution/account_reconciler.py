@@ -101,15 +101,29 @@ class AccountReconciler:
                     f"(오차: ₩{diff:,.0f} / {discrepancy_bps:.1f}bps) ➔ MTS 기준으로 완전 교정 집행!"
                 )
 
+            # [In-Flight Settlement Guard]
+            # 주문 체결 직후 증권사 API가 예수금은 즉시 차감하였으나 신규 보유 종목(output1) 반영까지
+            # 5~15초 지연(Latency)이 발생할 때, 바텀업 NAV가 일시적으로 급감하여 KillSwitch가 오작동하는 현상을 방지.
+            # 증권사 공식 평가액(raw_api_tot_evlu) 대비 3% 이상 바텀업 NAV가 낮다면 체결 지연 상태로 판정.
+            if raw_api_tot_evlu > 0 and exact_total_equity < raw_api_tot_evlu * 0.97:
+                in_flight_gap = raw_api_tot_evlu - exact_total_equity
+                logger.warning(
+                    f"⏳ [AccountReconciler] 체결 지연/미반영 자산 감지(In-Flight): ₩{in_flight_gap:,.0f} "
+                    f"(바텀업 ₩{exact_total_equity:,.0f} vs 증권사 원장 ₩{raw_api_tot_evlu:,.0f}) ➔ 증권사 공식 평가액 보호 적용"
+                )
+                final_total_equity = raw_api_tot_evlu
+            else:
+                final_total_equity = exact_total_equity
+
             # 어댑터 원장 강제 동기화 (SSoT)
             adapter.account.positions_value = total_positions_krw
-            adapter.account.total_equity = exact_total_equity
+            adapter.account.total_equity = final_total_equity
 
             return ReconciledAccountState(
                 cash_krw=cash_krw,
                 cash_usd=cash_usd,
                 positions_value_krw=total_positions_krw,
-                total_equity_krw=exact_total_equity,
+                total_equity_krw=final_total_equity,
                 fx_rate=fx_rate,
                 positions=reconciled_pos,
                 discrepancy_detected=discrepancy_detected,

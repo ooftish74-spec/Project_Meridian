@@ -106,6 +106,58 @@ class QPortfolioOptimizer:
 
         return np.array(adj_alphas, dtype=float)
 
+    @staticmethod
+    def compute_effective_bets_entropy(weights: np.ndarray, cov_matrix: np.ndarray) -> Tuple[float, np.ndarray, float]:
+        """
+        [Layer 2: 관제단] 대안 B — Shannon Diversity Entropy & Effective Number of Bets (N_eff).
+        
+        N_eff = exp( - sum( p_i * ln(p_i) ) )
+        where p_i = (w_i * (Sigma @ w)_i) / (w^T @ Sigma @ w)
+        """
+        port_var = float(weights @ cov_matrix @ weights)
+        n = len(weights)
+        if port_var <= 1e-12 or n == 0:
+            return float(n), np.full(n, 1.0 / max(1, n)), 0.0
+            
+        marginal_risk = cov_matrix @ weights
+        risk_contributions = weights * marginal_risk / port_var
+        
+        # Shannon 엔트로피 확률 분포 p_i 정규화 (수치적 안정성)
+        p = np.maximum(1e-9, np.abs(risk_contributions))
+        p_sum = np.sum(p)
+        p = p / p_sum if p_sum > 0 else np.full(n, 1.0 / n)
+            
+        shannon_entropy = -float(np.sum(p * np.log(p)))
+        neff = float(np.exp(shannon_entropy))
+        return round(neff, 4), risk_contributions, round(shannon_entropy, 4)
+
+    @staticmethod
+    def compute_cross_asset_coupling(asset_names: List[str], cov_matrix: np.ndarray) -> Dict[str, Any]:
+        """
+        [Layer 1: 실행단] 대안 A — 실시간 지수 감쇠 공분산 기반 상관계수 및 디커플링 진단.
+        rho_ij = Cov(i, j) / (sigma_i * sigma_j)
+        """
+        n = len(asset_names)
+        vols = np.sqrt(np.maximum(1e-9, np.diag(cov_matrix)))
+        corr_matrix = np.eye(n)
+        for i in range(n):
+            for j in range(n):
+                if i != j and vols[i] > 0 and vols[j] > 0:
+                    corr_matrix[i, j] = np.clip(cov_matrix[i, j] / (vols[i] * vols[j]), -1.0, 1.0)
+                    
+        coupling_pairs = {}
+        for i in range(n):
+            for j in range(i + 1, n):
+                pair_name = f"{asset_names[i]}_vs_{asset_names[j]}"
+                rho = round(float(corr_matrix[i, j]), 4)
+                state = "coupled" if rho >= 0.65 else ("decoupled" if rho <= 0.25 else "neutral")
+                coupling_pairs[pair_name] = {'correlation': rho, 'regime': state}
+                
+        return {
+            'correlation_matrix': corr_matrix.tolist(),
+            'pairs': coupling_pairs
+        }
+
     def optimize_allocation(
         self,
         alphas: Dict[str, float],
@@ -198,7 +250,17 @@ class QPortfolioOptimizer:
         port_vol = float(np.sqrt(max(1e-9, opt_w @ cov_matrix @ opt_w)))
         turnover = float(np.sum(np.abs(opt_w - w0_vec)))
 
-        logger.info(f"[QPOptimizer] 최적화 완료 ({status}): Alpha={port_alpha*100:.2f}%, Vol={port_vol*100:.2f}%, Turnover={turnover:.3f}, Lambda={lambda_risk:.2f}")
+        # [Layer 2: 관제단] 대안 B — 유효 독립 베팅 수 (N_eff) & Shannon 엔트로피 산출
+        neff, risk_contribs, entropy = self.compute_effective_bets_entropy(opt_w, cov_matrix)
+        diversity_ratio = round(neff / max(1, n_assets), 4)
+
+        # [Layer 1: 실행단] 대안 A — 실시간 공분산 기반 커플링/디커플링 진단
+        coupling_info = self.compute_cross_asset_coupling(asset_names, cov_matrix)
+
+        logger.info(
+            f"[QPOptimizer] 최적화 완료 ({status}): Alpha={port_alpha*100:.2f}%, Vol={port_vol*100:.2f}%, "
+            f"N_eff={neff:.2f}/{n_assets} (DivRatio={diversity_ratio:.1%}), Lambda={lambda_risk:.2f}"
+        )
 
         return {
             'weights': optimized_weights,
@@ -206,5 +268,10 @@ class QPortfolioOptimizer:
             'expected_portfolio_alpha': round(port_alpha, 6),
             'portfolio_volatility': round(port_vol, 6),
             'turnover': round(turnover, 4),
-            'status': status
+            'status': status,
+            'effective_bets_neff': neff,
+            'diversity_ratio': diversity_ratio,
+            'shannon_entropy': entropy,
+            'risk_contributions': {asset_names[i]: round(float(risk_contribs[i]), 4) for i in range(n_assets)},
+            'coupling_diagnostics': coupling_info
         }

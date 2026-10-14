@@ -440,15 +440,107 @@ def is_us_half_day(date_str: Optional[str] = None) -> bool:
     return date_str.replace('-', '') in US_HALF_DAYS_2026
 
 
+def get_us_session_state(now: Optional[datetime] = None) -> Tuple[bool, str]:
+    """
+    미국 증시 확장 세션 (프리마켓, 정규장, 애프터마켓) 실시간 상태 판별 (KST 기준).
+
+    - 프리마켓 (Pre-Market): 18:00 ~ 22:30 (서머타임) / 23:30 (표준시) -> (True, 'premarket')
+    - 정규장 (Regular Market): 22:30 / 23:30 ~ 익일 05:00 / 06:00 -> (True, 'regular')
+    - 애프터마켓 (After-Market): 05:00 / 06:00 ~ 07:00 / 08:00 -> (True, 'aftermarket')
+    - 완전 휴장 (Closed): 07:00 / 08:00 ~ 18:00 KST 또는 휴장일/주말 -> (False, 'closed')
+    """
+    if now is None:
+        try:
+            from src.utils.time_utils import now_kst
+            now = now_kst()
+        except Exception:
+            now = datetime.now()
+
+    # 요일별 기본 검증 (0=월, 1=화, 2=수, 3=목, 4=금, 5=토, 6=일)
+    weekday = now.weekday()
+    open_h, open_m = get_us_market_open_time()
+    close_h = 5 if open_h == 22 else 6
+    after_close_h = 7 if open_h == 22 else 8
+
+    # 일요일: 전일 완전 휴장
+    if weekday == 6:
+        return (False, 'closed')
+
+    # 토요일: 금요일 야간 세션 종료(07:00/08:00)까지만 허용, 이후 휴장
+    if weekday == 5:
+        if now.hour < close_h:
+            return (True, 'regular')
+        elif now.hour < after_close_h:
+            return (True, 'aftermarket')
+        return (False, 'closed')
+
+    # 월요일: 18:00 이전은 주말 직후 휴장 상태
+    if weekday == 0 and now.hour < 18:
+        return (False, 'closed')
+
+    # 해당 세션의 미국 거래일 일자 산출 및 휴장일 체크
+    us_dt = _kst_to_us_trading_date(now)
+    us_date_str = us_dt.strftime('%Y%m%d')
+    if not is_us_trading_day(us_date_str):
+        return (False, 'closed')
+
+    # 시간대별 판별 (KST)
+    if now.hour >= 18:
+        if now.hour < open_h or (now.hour == open_h and now.minute < open_m):
+            return (True, 'premarket')
+        else:
+            return (True, 'regular')
+    elif now.hour < close_h:
+        return (True, 'regular')
+    elif now.hour < after_close_h:
+        return (True, 'aftermarket')
+
+    return (False, 'closed')
+
+
+def is_kr_trading_now(now: Optional[datetime] = None) -> Tuple[bool, str]:
+    """한국 거래소(KRX) 장중 실시간 여부 판별 (08:30~15:30 KST)."""
+    if now is None:
+        try:
+            from src.utils.time_utils import now_kst
+            now = now_kst()
+        except Exception:
+            now = datetime.now()
+
+    if now.weekday() in (5, 6):
+        return (False, 'closed')
+
+    date_str = now.strftime('%Y-%m-%d')
+    cal = get_calendar()
+    if not cal.is_trading_day(date_str):
+        return (False, 'closed')
+
+    # 08:30 ~ 15:30 (장전 동시호가 포함 정규 세션)
+    if (now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30):
+        return (True, 'regular')
+
+    return (False, 'closed')
+
+
+def is_ticker_tradable_now(ticker: str, now: Optional[datetime] = None) -> Tuple[bool, str]:
+    """
+    종목의 해당 거래소가 현재 거래 가능한 상태인지 판별.
+
+    Returns:
+        (is_tradable: bool, session_type: str)
+    """
+    is_us = not str(ticker).isdigit()
+    if is_us:
+        return get_us_session_state(now)
+    return is_kr_trading_now(now)
+
+
 def is_us_open_now() -> bool:
     """
-    지금 미국 증시가 개장인가? (KST 기준)
-
-    - KST 22:35에 호출 → 오늘 날짜의 미국 개장 여부
-    - KST 02:00에 호출 → 어제 날짜의 미국 개장 여부 (장중이므로)
-    - KST 05:15에 호출 → 어제 날짜의 미국 개장 여부 (마감 직전)
+    지금 미국 증시가 개장(프리/정규/애프터 포함 거래 가능)인가? (KST 기준)
     """
-    return is_us_trading_day()
+    is_active, _ = get_us_session_state()
+    return is_active
 
 
 def is_kr_open_today() -> bool:

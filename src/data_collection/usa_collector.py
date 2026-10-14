@@ -105,26 +105,29 @@ class USADataCollector:
 
     def collect_us_indices(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        Collect US market indices
+        Collect US market indices via FRED
         
         Returns:
-            DataFrame with columns: [S&P 500, Dow Jones, NASDAQ, Russell 2000]
+            DataFrame with columns: [S&P 500, Dow Jones, NASDAQ]
         """
-        logger.info('Collecting US indices...')
+        logger.info('Collecting US indices via FRED...')
         try:
-            indices = {'S&P_500': '^GSPC', 'Dow_Jones': '^DJI', 'NASDAQ': '^IXIC', 'Russell_2000': '^RUT'}
+            fred = self._get_fred()
+            if fred is None:
+                return pd.DataFrame()
+            indices_map = {'S&P_500': 'SP500', 'Dow_Jones': 'DJIA', 'NASDAQ': 'NASDAQCOM'}
             data = {}
-            for name, ticker in indices.items():
+            for name, series_id in indices_map.items():
                 try:
-                    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                    if not df.empty:
-                        data[name] = df['Close']
-                        logger.info(f"  ✓ {name}: {len(df)} records")
+                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
+                    if s is not None and not s.empty:
+                        data[name] = s
+                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
                 except Exception as e:
-                    logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
+                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US indices")
+                logger.info(f"✓ Collected {len(result)} records for US indices via FRED")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -133,26 +136,29 @@ class USADataCollector:
 
     def collect_us_treasuries(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        Collect US Treasury yields
+        Collect US Treasury yields via FRED
         
         Returns:
-            DataFrame with columns: [2Y, 5Y, 10Y, 30Y]
+            DataFrame with columns: [US_2Y, US_5Y, US_10Y, US_30Y]
         """
-        logger.info('Collecting US Treasury yields...')
+        logger.info('Collecting US Treasury yields via FRED...')
         try:
-            treasuries = {'US_2Y': '^IRX', 'US_5Y': '^FVX', 'US_10Y': '^TNX', 'US_30Y': '^TYX'}
+            fred = self._get_fred()
+            if fred is None:
+                return pd.DataFrame()
+            treasuries_map = {'US_2Y': 'DGS2', 'US_5Y': 'DGS5', 'US_10Y': 'DGS10', 'US_30Y': 'DGS30'}
             data = {}
-            for name, ticker in treasuries.items():
+            for name, series_id in treasuries_map.items():
                 try:
-                    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                    if not df.empty:
-                        data[name] = df['Close']
-                        logger.info(f"  ✓ {name}: {len(df)} records")
+                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
+                    if s is not None and not s.empty:
+                        data[name] = s
+                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
                 except Exception as e:
-                    logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
+                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US treasuries")
+                logger.info(f"✓ Collected {len(result)} records for US treasuries via FRED")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -161,35 +167,34 @@ class USADataCollector:
 
     def collect_us_currencies(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        Collect US Dollar currency pairs
+        Collect US Dollar currency pairs via FRED
         
         Returns:
             DataFrame with USD currency pairs
         """
-        logger.info('Collecting US currencies...')
+        logger.info('Collecting US currencies via FRED...')
         try:
-            currencies = {'EUR_USD': 'EURUSD=X', 'USD_JPY': 'JPY=X', 'GBP_USD': 'GBPUSD=X'}
+            fred = self._get_fred()
+            if fred is None:
+                return pd.DataFrame()
+            currencies_map = {
+                'USD_Index': 'DTWEXBGS',
+                'EUR_USD': 'DEXUSEU',
+                'USD_JPY': 'DEXJPUS',
+                'GBP_USD': 'DEXUSUK'
+            }
             data = {}
-            for name, ticker in currencies.items():
+            for name, series_id in currencies_map.items():
                 try:
-                    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                    if not df.empty:
-                        data[name] = df['Close']
-                        logger.info(f"  ✓ {name}: {len(df)} records")
+                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
+                    if s is not None and not s.empty:
+                        data[name] = s
+                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
                 except Exception as e:
-                    logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
-            try:
-                fred = self._get_fred()
-                if fred:
-                    dxy = fred.get_series('DTWEXBGS', observation_start=start_date, observation_end=end_date)
-                    if dxy is not None and (not dxy.empty):
-                        data['USD_Index'] = dxy
-                        logger.info(f"  ✓ USD_Index (FRED DTWEXBGS): {len(dxy)} records")
-            except Exception as e:
-                logger.warning(f'  ⚠ USD_Index FRED fallback: {e}', exc_info=True)
+                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US currencies")
+                logger.info(f"✓ Collected {len(result)} records for US currencies via FRED")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -198,26 +203,34 @@ class USADataCollector:
 
     def collect_us_commodities(self, start_date: str, end_date: str) -> pd.DataFrame:
         """
-        Collect US commodity prices
+        Collect US commodity prices via FRED
         
         Returns:
             DataFrame with commodity prices
         """
-        logger.info('Collecting US commodities...')
+        logger.info('Collecting US commodities via FRED...')
         try:
-            commodities = {'Gold': 'GC=F', 'Silver': 'SI=F', 'Copper': 'HG=F', 'WTI_Oil': 'CL=F', 'Natural_Gas': 'NG=F'}
+            fred = self._get_fred()
+            if fred is None:
+                return pd.DataFrame()
+            commodities_map = {
+                'WTI_Oil': 'DCOILWTICO',
+                'Brent_Oil': 'DCOILBRENTEU',
+                'Natural_Gas': 'DHHNGSP',
+                'Gold': 'GOLDAMGBD228NLBM'
+            }
             data = {}
-            for name, ticker in commodities.items():
+            for name, series_id in commodities_map.items():
                 try:
-                    df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                    if not df.empty:
-                        data[name] = df['Close']
-                        logger.info(f"  ✓ {name}: {len(df)} records")
+                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
+                    if s is not None and not s.empty:
+                        data[name] = s
+                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
                 except Exception as e:
-                    logger.warning(f'  ⚠ {name}: {e}', exc_info=True)
+                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US commodities")
+                logger.info(f"✓ Collected {len(result)} records for US commodities via FRED")
                 return result
             return pd.DataFrame()
         except Exception as e:

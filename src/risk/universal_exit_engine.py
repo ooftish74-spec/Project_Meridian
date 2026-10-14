@@ -159,9 +159,10 @@ class UniversalExitEngine:
             chandelier_drop = max(min_drop, chandelier_drop)
 
             trailing_trigger = float(cfg.get('exit.trailing_tp_trigger', 2.5))
+            is_trail_activated = bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger)
             is_trailing_exit = (
                 holding_minutes >= min_holding_required and 
-                peak_pnl >= trailing_trigger and 
+                is_trail_activated and 
                 pnl_pct < (peak_pnl - chandelier_drop)
             )
 

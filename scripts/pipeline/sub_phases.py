@@ -950,6 +950,13 @@ def _phase_overnight():
     except Exception as e:
         logger.error(f"  Overnight Macro 실패: {e}", exc_info=True)
 
+    # ── 1.5. KRX 야간선물 실시간 수집 및 캐시 동기화 ──
+    try:
+        from scripts.fetch_night_futures import fetch_and_save_night_futures
+        fetch_and_save_night_futures()
+    except Exception as _fe:
+        logger.warning(f"  KRX 야간선물 수집 건너뜀: {_fe}")
+
     # ── 2. OIS (Overnight Intelligence Score) 계산 ──
     try:
         from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
@@ -2160,12 +2167,22 @@ def _us_phase_window_check(phase_name: str) -> bool:
     # 프리마켓 또는 본장 세션 판단
     if phase_name == 'regular':
         # 본장 세션: 22:30 ~ 05:00 KST (DST) / 23:30 ~ 06:00 KST (Non-DST)
+        # 22:25 스케줄러 발화 버퍼(개장 10분 전부터 본장 준비 허용)
         us_open_h = 22 if _is_dst else 23
         us_close_h = 5 if _is_dst else 6
-        is_regular_hours = (_now.hour >= us_open_h and _now.minute >= 30) or (_now.hour < us_close_h) or (us_open_h < _now.hour < 24)
+        is_regular_hours = (_now.hour == us_open_h and _now.minute >= 20) or (_now.hour > us_open_h) or (_now.hour < us_close_h)
         if not is_regular_hours:
             logger.info(f"  [Phase 41] US 본장 세션 외 (now={_now.strftime('%H:%M')}) → skip")
             return False
+        
+        # [Rate Limit & Cadence Guard] 60초 쿨다운을 적용하여 데몬의 무한 5초 루프 API 낭비 방지
+        import time as _t
+        _last_reg_ts = getattr(_us_phase_window_check, '_last_regular_ts', 0.0)
+        _now_ts = _t.time()
+        if _now_ts - _last_reg_ts < 60.0:
+            return False
+        _us_phase_window_check._last_regular_ts = _now_ts
+        
         logger.info(f"  [Phase 41] US 본장 세션 가동 허가 (now={_now.strftime('%H:%M')})")
         return True
 
@@ -2273,12 +2290,34 @@ def _phase_us_regular_market():
     except Exception as e:
         logger.error(f"  ❌ {_tag} US 정규장 동적 엔진 가동 실패: {e}", exc_info=True)
 
-    # ── 4. US Night Execution Engine Trailing Stop 모니터링 ──────────────
+    # ── 4. US Night Execution Engine Trailing Stop 모니터링 & 청산 집행 ──
     try:
         from src.execution.us_night_engine import USNightExecutionEngine
         us_engine = USNightExecutionEngine()
         if getattr(us_engine, 'holdings', None):
-            logger.info(f"  🇺🇸 {_tag} US Night Engine 포지션({len(us_engine.holdings)}개) 감시 중")
+            logger.info(f"  🇺🇸 {_tag} US Night Engine 포지션({len(us_engine.holdings)}개) 트레일링 스탑 감시 및 평가 개시")
+            from src.execution._kis_adapter import KISTraderAdapter
+            _adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+            current_prices = {}
+            for h in us_engine.holdings:
+                tk = h['ticker']
+                p = _adapter.get_live_overseas_price(tk, 'NASD') or _adapter.get_live_overseas_price(tk, 'NYSE') or float(h.get('current_price', 0.0))
+                if p > 0:
+                    current_prices[tk] = p
+            exit_orders = us_engine.update_trailing_stop(current_prices)
+            if exit_orders:
+                logger.info(f"  🚨 {_tag} US Night Engine 트레일링 스탑 발화: {len(exit_orders)}건 청산 집행!")
+                for eo in exit_orders:
+                    try:
+                        _adapter.sell(
+                            ticker=eo['ticker'],
+                            quantity=eo['quantity'],
+                            price=eo['price'],
+                            order_type='limit',
+                            notes=eo.get('reason', 'US Night Trailing Stop')
+                        )
+                    except Exception as _ex_err:
+                        logger.error(f"  ❌ {_tag} 트레일링 스탑 매도 주문 전송 실패 ({eo['ticker']}): {_ex_err}")
     except Exception as e:
         logger.debug(f"  {_tag} USNightEngine 실행 예외: {e}")
 
@@ -2420,7 +2459,7 @@ def _phase_call_auction_0830():
             logger.info("  ℹ️ [08:30 CallAuction] KODEX 200 미보유 — 매도 발주 스킵")
             return
 
-        total_nav = float(cam.adapter.account.total_asset) if cam.adapter.account and cam.adapter.account.total_asset > 0 else 20911598.0
+        total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 20911598.0)))
         kodex_price = float(kodex_pos.current_price) if kodex_pos.current_price > 0 else 105650.0
 
         # 오늘 프리마켓 시그널에서 액티브 알파 기대값(EV%) 추출
@@ -2431,7 +2470,16 @@ def _phase_call_auction_0830():
             try:
                 sig_data = json.loads(sig_path.read_text())
                 sigs = sig_data.get('signals', {})
-                active_ev = max([float(s.get('expected_return', 0.015)) for s in sigs.values()] or [0.015])
+                ev_candidates = []
+                for s_val in sigs.values():
+                    if isinstance(s_val, list):
+                        for item in s_val:
+                            if isinstance(item, dict) and 'expected_return' in item:
+                                ev_candidates.append(float(item['expected_return']))
+                    elif isinstance(s_val, dict) and 'expected_return' in s_val:
+                        ev_candidates.append(float(s_val['expected_return']))
+                if ev_candidates:
+                    active_ev = max(ev_candidates)
             except Exception:
                 pass
 
@@ -2463,6 +2511,43 @@ def _phase_call_auction_0830():
                 logger.error("  ❌ [08:30 CallAuction] 매도 주문 발주 실패")
         else:
             logger.info("  ℹ️ [08:30 CallAuction] 동적 캡 목표 비중 충족 — 매도 발주 스킵")
+
+        # ── 전사 보유 포지션 대상 UniversalExitEngine 3대 손절/익절 동시호가 평가 ──
+        logger.info("  🛡️ [08:30 CallAuction] 전사 실계좌 포지션 대상 UniversalExitEngine 긴급 손절/청산 평가")
+        try:
+            from src.risk.universal_exit_engine import UniversalExitEngine
+            from src.execution.position_ledger import PositionLedgerManager
+            ledger_mgr = PositionLedgerManager()
+            kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            if kp_path.exists():
+                kp = json.loads(kp_path.read_text(encoding='utf-8'))
+                positions_to_eval = {}
+                for t, h in kp.get('holdings', {}).items():
+                    curr_p = float(h.get('current_price', 0.0))
+                    curr_ret = float(h.get('return_pct', 0.0))
+                    hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                    positions_to_eval[f"LIVE_SSOT:{t}"] = {
+                        'ticker': t,
+                        'stream_id': 'LIVE_SSOT',
+                        'quantity': h.get('qty', 0),
+                        'entry_price': h.get('avg_price', 0.0),
+                        'current_price': curr_p,
+                        'unrealized_pnl_pct': curr_ret,
+                        'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
+                        'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
+                        'trail_activated': bool(hwm_data.get('trail_activated', False)),
+                        'holding_minutes': 999.0,
+                        'market': h.get('market', 'KR' if t.isdigit() else 'US')
+                    }
+                exit_eval = UniversalExitEngine().evaluate_all_positions(positions_to_eval, regime='caution')
+                for exit_order in exit_eval.get('exit_orders', []):
+                    exit_tk = exit_order['ticker']
+                    exit_q = int(exit_order['quantity'])
+                    logger.warning(f"  🚨 [08:30 CallAuction Exit] {exit_tk} {exit_q}주 긴급 손절/청산 발주 ({exit_order.get('reason')})")
+                    cam.place_premarket_sell_order(sell_qty=exit_q, ticker=exit_tk)
+        except Exception as _uee_err:
+            logger.error(f"  ❌ [08:30 CallAuction] UniversalExitEngine 평가 실패: {_uee_err}", exc_info=True)
+
     except Exception as e:
         logger.error(f"  ❌ [08:30 CallAuction] 자율 발주 예외: {e}", exc_info=True)
 

@@ -342,13 +342,7 @@ class RealtimeExitMonitor:
                                 send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
                         if auto_orders:
                             ee_result = ee.execute(auto_orders, portfolio=mgr.get_summary())
-                            logger.info(f"  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료")
-                            # 🚀 [Post-Exit Auto-Sweep] 장중 손절/익절 체결 후 회수된 현금 SHV 자동 파킹 스윕
-                            try:
-                                from src.execution._kis_adapter import KISTraderAdapter
-                                KISTraderAdapter(mode='live', fetch_balance_on_init=True).sweep_uninvested_cash_to_shield()
-                            except Exception as _swe:
-                                logger.error(f"  ❌ Post-Exit 자동 파킹 스윕 실패: {_swe}")
+                            logger.info(f"  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료 (회수된 현금은 리스크 관리 및 자본 보존을 위해 100% 현금 동결 보존)")
                     except Exception as ee_err:
                         logger.critical(f"  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}", exc_info=True)
                         send_emergency_page(f"🚨 [FATAL] {ee_err} at realtime_exit_monitor.py", exc_info=ee_err)
