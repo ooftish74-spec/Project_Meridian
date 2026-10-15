@@ -66,7 +66,8 @@ class SectorBatchCollector:
                 trend = 'up' if chg_1m >= 0 else 'down'
                 self.supply_chain_data[ticker] = {'name': info['name'], 'last_price': round(last, 2), 'chg_1m': round(chg_1m, 2), 'chg_3m': round(chg_3m, 2), 'chg_1y': round(chg_1y, 2), 'trend': trend, 'sma20': round(sma20, 2), 'sectors': info['sectors'], 'correlation': info['correlation']}
                 safe_name = ticker.replace('=', '_').replace('/', '_')
-                atomic_write_dataframe(hist[['Close', 'Volume']], out_dir / f"{safe_name}.csv', file_format='csv")
+                df_quote = pd.DataFrame([{'Close': last, 'Volume': 0}], index=[pd.Timestamp.now()])
+                atomic_write_dataframe(df_quote, out_dir / f"{safe_name}.csv", file_format='csv')
                 logger.info(f"  ✅ {ticker:8s} {info['name']:25s} ${last:>10.2f} 3M:{chg_3m:+.1f}% [{trend}]")
                 time.sleep(0.3)
             except Exception as e:

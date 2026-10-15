@@ -150,8 +150,7 @@ class MacroAttacker:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    bn = BetaNeutralizer()
-    # Mock Test
-    mock_weights = {'005930': 0.4, '000660': 0.6}
-    res = bn.neutralize_portfolio(mock_weights)
-    print("Neutralized:", res)
+    attacker = MacroAttacker()
+    mock_orders = [{'ticker': '005930', 'action': 'buy', 'quantity': 10}]
+    res = attacker.apply_macro_overlay(mock_orders, portfolio={})
+    print("Overlay result:", res)

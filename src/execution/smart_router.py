@@ -282,7 +282,7 @@ class SmartOrderRouter:
             results.append(result)
         return results
 
-    def get_dynamic_limit(self, action: str, base_price: float, oim: float, spread_pct: float) -> float:
+    def get_dynamic_limit(self, action: str, base_price: float, oim: float, spread_pct: float, ticker: str = '') -> float:
         """OIM 수치를 기반으로 최적 지정가(Dynamic Limit) 산출.
         
         OIM > 1.5 : 매수 압력 강함 (매수벽 두꺼움)
@@ -346,7 +346,7 @@ class SmartOrderRouter:
             else:
                 raw_price = base_price + tick
         from src.execution._kis_adapter import _snap_to_exchange_tick
-        return _snap_to_exchange_tick(raw_price, ticker)
+        return _snap_to_exchange_tick(raw_price, ticker) if ticker else float(round(raw_price / max(1, tick)) * max(1, tick))
 
     def route_with_algo(self, order: Dict, market_data: Optional[Dict]=None) -> Dict:
         """주문 라우팅 + TWAP 자동 연결 (Phase 2 통합 인터페이스).

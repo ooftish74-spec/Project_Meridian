@@ -801,9 +801,18 @@ class ExecutionEngine:
             try:
                 from src.execution.capital_velocity_recycler import CapitalVelocityRecycler
                 recycler = CapitalVelocityRecycler()
+                sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                cand_sigs = []
+                if sc_path.exists():
+                    try:
+                        with open(sc_path, 'r', encoding='utf-8') as f:
+                            sc_obj = json.load(f)
+                            cand_sigs = sc_obj.get('candidate_signals', [])
+                    except Exception:
+                        pass
                 recycled_allocs = recycler.recycle_freed_capital(
                     freed_cash_krw=result.total_sell_amount,
-                    active_signals=market_data.get('candidate_signals', []) if market_data else []
+                    active_signals=cand_sigs
                 )
                 if recycled_allocs:
                     logger.info(f"  ⚡ [CapitalVelocityRecycler] 해제 현금 ₩{result.total_sell_amount:,.0f} 자율 재투입 배분: {len(recycled_allocs)}건")

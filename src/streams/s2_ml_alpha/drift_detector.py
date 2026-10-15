@@ -12,6 +12,7 @@ Usage:
     result = detector.detect_drift()
 """
 
+import math
 import logging
 from typing import Dict, List
 

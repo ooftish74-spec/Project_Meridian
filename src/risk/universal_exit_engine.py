@@ -16,10 +16,12 @@ import numpy as np
 import pandas as pd
 import logging
 from typing import Dict, List, Optional, Tuple
+from pathlib import Path
 from config.dynamic_config import DynamicConfig
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class UniversalExitEngine:
     """전사 포지션(S0~S11) 공통 3중 손절 & 샹들리에 익절 단일 SSOT 엔진."""

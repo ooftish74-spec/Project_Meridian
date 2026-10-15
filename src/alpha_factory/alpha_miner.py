@@ -737,10 +737,10 @@ class AlphaMiner:
             try:
                 alpha_signal = program.execute(X).astype(float)
                 alpha_signal = np.where(np.isfinite(alpha_signal), alpha_signal, 0.0)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+            except Exception as e:
+                logger.debug(f"Targeted fallback: {e}")
                 alpha_signal = np.zeros(len(X))
+            is_ortho, ortho_info = self.orthogonalizer.is_orthogonal(alpha_signal, X, feature_names=features)
             if not is_ortho:
                 _r_reason = ortho_info.get('reason', '')
                 logger.info(f"     ❌ 직교화 기각: {_r_reason}")
@@ -1123,6 +1123,9 @@ def get_active_alpha_names(alpha_file: Optional[Path]=None, max_alphas: Optional
         import logging
         logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return []
+
+AlphaGarbageCollector = FactorPruner
+
 if __name__ == '__main__':
     import argparse, sys
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')

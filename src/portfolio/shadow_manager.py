@@ -1718,11 +1718,11 @@ class ShadowPortfolioManager:
             if stream_id == 'S1':
                 try:
                     _now = datetime.now()
-                    _close_dt = _now.replace(hour=int(cfg.get('s1.exit.close_time_hour',15)), minute=int(cfg.get('s1.exit.close_time_minute',30)), second=0, microsecond=0)
+                    _close_dt = _now.replace(hour=int(_cfg.get('s1.exit.close_time_hour',15)), minute=int(_cfg.get('s1.exit.close_time_minute',30)), second=0, microsecond=0)
                     _mins_rem = max(0.0, (_close_dt - _now).total_seconds() / 60.0)
-                    _t_ratio = min(1.0, _mins_rem / max(float(cfg.get('s1.exit.session_minutes',360.0)), 1.0))
-                    _decay_base  = cfg.get('portfolio.time_decay_base', 0.5)
-                    _decay_scale = cfg.get('portfolio.time_decay_scale', 0.5)
+                    _t_ratio = min(1.0, _mins_rem / max(float(_cfg.get('s1.exit.session_minutes',360.0)), 1.0))
+                    _decay_base  = _cfg.get('portfolio.time_decay_base', 0.5)
+                    _decay_scale = _cfg.get('portfolio.time_decay_scale', 0.5)
                     _time_decay_factor = _decay_base + _decay_scale * _t_ratio
                     sl_pct = sl_pct * _time_decay_factor
                     logger.debug(f"  [Phase80 S1-TimeSL] {ticker} rem={_mins_rem:.0f}min decay={_time_decay_factor:.3f} sl={sl_pct:.2f}%")
@@ -1842,8 +1842,8 @@ class ShadowPortfolioManager:
                 _s3_hysteresis_hold = False
                 if stream_id.upper().startswith('S3') and not still_in_signals:
                     try:
-                        _pos_score  = float(position.get('qvm_score', position.get('score', 0.0)))
-                        _score_cut  = float(cfg.get('s3.hysteresis_score_cutoff', 55.0))
+                        _pos_score  = float(pos.get('qvm_score', pos.get('score', 0.0)))
+                        _score_cut  = float(_cfg.get('s3.hysteresis_score_cutoff', 55.0))
                         if _pos_score >= _score_cut:
                             _s3_hysteresis_hold = True
                             logger.info(
@@ -1955,6 +1955,7 @@ class ShadowPortfolioManager:
         S4는 세금 최적화/장기 QV 전략으로 단기 낙폭에 의한 강제 청산이
         오히려 기회비용 손실 및 세금 불이익을 초래합니다.
         """
+        _cfg = getattr(self, 'cfg', DynamicConfig())
         # ★ S4 패닉셀 면제 스트림 목록 (DynamicConfig 동적 관리)
         exempt_streams = _cfg.get(
             'kill_switch.panic_sell_exempt_streams', ['S4']

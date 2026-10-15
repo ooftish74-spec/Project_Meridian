@@ -133,6 +133,10 @@ class MarketBreadthCollector:
     def collect_global_correlations(self) -> Dict:
         """글로벌 자산 간 Rolling Correlation (20일)"""
         try:
+            from datetime import datetime, timedelta
+            import yfinance as yf
+            end = datetime.now()
+            start = end - timedelta(days=60)
             from src.data_collection.google_finance_collector import GoogleFinanceCollector
             gfc = GoogleFinanceCollector()
             tickers = {'KOSPI': '^KS11', 'SP500': '^GSPC', 'WTI': 'CL=F', 'GOLD': 'GC=F', 'US10Y': '^TNX'}

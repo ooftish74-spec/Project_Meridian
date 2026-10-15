@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DATA_DIR = _PROJECT_ROOT / 'data'
 def parse_kis_futures_output(data: dict, daytime_baseline: Optional[float] = None) -> Tuple[float, float, float]:
     """
     Extracts (price, change, change_pct) from KIS OpenAPI futures inquire-price response dict.

@@ -532,10 +532,10 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
     def _market_and_shadow():
         """Market Phase: 포트폴리오 최적화 + StreamOrchestrator 실행."""
-        # Kill Switch가 매수를 차단하면 스킵
-        if not _kill_switch_result.get('can_buy', True):
-            logger.warning(f"  ⛔ Kill Switch 매수 차단 — Market Phase 스킵")
-            return
+        # Kill Switch가 매수를 차단해도 포지션 청산/동기화/상태 저장을 위해 중단하지 않음
+        _can_buy = _kill_switch_result.get('can_buy', True)
+        if not _can_buy:
+            logger.warning("  ⛔ Kill Switch 매수 차단 활성화 (신규 진입 차단, 포지션 청산 및 상태 갱신만 수행)")
 
         # ★ [SSoT Hardening] KIS API 실계좌 보유 포지션 (SOXX 11주 등) 사전 원자적 동기화 (Exit Manager 전 실행)
         try:
@@ -577,9 +577,17 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 except Exception as _sm_e:
                     logger.debug(f"Dynamic metrics load fallback: {_sm_e}")
 
+            _signal_cache_data = {}
+            _sc_file = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+            if _sc_file.exists():
+                try:
+                    _signal_cache_data = json.loads(_sc_file.read_text(encoding='utf-8'))
+                except Exception as _sc_e:
+                    logger.debug(f"Signal cache load fallback: {_sc_e}")
+
             if not dynamic_metrics:
                 # 텔레메트리 연동 동적 산출
-                vix_sc = float(_signal_cache_data.get('vix', 20.0)) if '_signal_cache_data' in locals() else 20.0
+                vix_sc = float(_signal_cache_data.get('vix', 20.0))
                 v_scale = max(0.5, min(2.0, 20.0 / max(10.0, vix_sc)))
                 dynamic_metrics = {
                     "S1": {"win_rate": round(0.52 * v_scale, 3), "edge": round(0.03 * v_scale, 3)},
@@ -611,7 +619,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 from src.portfolio.shadow_manager import ShadowPortfolioManager
                 sp_mgr = ShadowPortfolioManager()
                 equity = float(sp_mgr.get_total_equity()) if sp_mgr.get_total_equity() > 0 else 20911598.0
-                vix_z = float(_signal_cache_data.get('vix_z_score', 0.0)) if '_signal_cache_data' in locals() else 0.0
+                vix_z = float(_signal_cache_data.get('vix_z_score', 0.0))
                 
                 overlay_alloc = {k: float(v) * equity for k, v in allocs.items()} if isinstance(allocs, dict) else {'S1': equity * 0.3, 'S2': equity * 0.4}
                 overlay_engine = SyntheticFuturesOverlay()

@@ -230,7 +230,23 @@ def main():
                 except Exception as _entry_err:
                     logger.debug(f"Intraday entry scanner skip: {_entry_err}")
 
-                # 🛡️ [Intraday Universal Exit Scanner] 장중 포지션 전수 3대 손절/트레일링 익절 상시 실시간 감시 (30초 주기)
+                # 🛡️ [Intraday Universal Exit Scanner & Live Pricing] 장중 포지션 전수 실시간 시세 조회 및 3대 손절/트레일링 익절 상시 감시 (30초 주기)
+                if not hasattr(main, '_kis_adapter'):
+                    from src.execution._kis_adapter import KISTraderAdapter
+                    main._kis_adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+                _adapter = main._kis_adapter
+
+                # 1. 주기적(60초) 잔고 갱신으로 실제 주문 가능 현금 및 보유 현황 최신화
+                _now_ts = time.time()
+                if not hasattr(main, '_last_kr_bal_ts'):
+                    main._last_kr_bal_ts = 0.0
+                if _now_ts - main._last_kr_bal_ts >= 60.0:
+                    try:
+                        _adapter.fetch_live_balance()
+                        main._last_kr_bal_ts = _now_ts
+                    except Exception as _bal_err:
+                        logger.debug(f"  [KRX Balance Refresh] 예외: {_bal_err}")
+
                 if not hasattr(main, '_last_exit_scan_ts'):
                     main._last_exit_scan_ts = 0.0
                 if time.time() - main._last_exit_scan_ts >= 30.0:
@@ -246,13 +262,28 @@ def main():
                             _exit_positions = {}
                             for _t, _h in _kp_data.get('holdings', {}).items():
                                 _cp = float(_h.get('current_price', 0.0))
+                                _avg = float(_h.get('avg_price', 0.0))
                                 _ret = float(_h.get('return_pct', 0.0))
+
+                                # ★ [CRITICAL FIX] 디스크 캐시의 정적 가격이 아닌 KIS 브로커 실시간 현재가 직송 조회
+                                try:
+                                    if _t.isdigit():
+                                        _live_p = _adapter._get_current_price(_t)
+                                    else:
+                                        _live_p = _adapter.get_live_overseas_price(_t, 'NASD') or _adapter.get_live_overseas_price(_t, 'NYSE')
+                                    if _live_p and float(_live_p) > 0:
+                                        _cp = float(_live_p)
+                                        if _avg > 0:
+                                            _ret = (_cp - _avg) / _avg
+                                except Exception as _p_err:
+                                    logger.debug(f"  {_t} 실시간 시세 조회 폴백: {_p_err}")
+
                                 _hwm = ledger_mgr.update_hwm(_t, current_price=_cp, current_pnl_pct=_ret)
                                 _exit_positions[f"LIVE_SSOT:{_t}"] = {
                                     'ticker': _t,
                                     'stream_id': 'LIVE_SSOT',
                                     'quantity': _h.get('qty', 0),
-                                    'entry_price': _h.get('avg_price', 0.0),
+                                    'entry_price': _avg,
                                     'current_price': _cp,
                                     'unrealized_pnl_pct': _ret,
                                     'peak_pnl_pct': float(_hwm.get('peak_pnl_pct', _ret) or _ret),
@@ -288,6 +319,16 @@ def main():
                                 _exec.execute(_exit_orders)
                     except Exception as _exit_err:
                         logger.error(f"  ❌ [Intraday Exit Scanner] 예외 발생: {_exit_err}", exc_info=True)
+
+                # 2. [KRX Auto Re-Peg] 국내 미체결 주문 포착 시 즉시 최유리 시장가 매도 정정 감시 (5초 쿨다운)
+                if not hasattr(main, '_last_kr_repeg_time'):
+                    main._last_kr_repeg_time = 0.0
+                if time.time() - main._last_kr_repeg_time >= 5.0:
+                    try:
+                        _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0)
+                        main._last_kr_repeg_time = time.time()
+                    except Exception as _kr_rp_err:
+                        logger.debug(f"  [KRX RePeg] 미체결 스캔 예외: {_kr_rp_err}")
 
                 time.sleep(5)
             elif is_us_session:

@@ -29,7 +29,7 @@ import logging
 import requests
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 
 logger = logging.getLogger(__name__)
 

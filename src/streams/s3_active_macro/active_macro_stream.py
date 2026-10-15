@@ -1032,5 +1032,6 @@ class S3FactorStream(BaseStream):
                 _dl_r = rc.get('delta', 0)
                 _ml_r = rc.get('ml_prob', 0)
                 _bt_r = rc.get('boost_type', '')
+                arrow = '▲' if _dl_r > 0 else ('▼' if _dl_r < 0 else '▶')
                 logger.info(f"    {arrow} {_tk_r} {_nm_r}: {_bs_r:.4f}→{_ad_r:.4f} (Δ{_dl_r:+.4f}, ML={_ml_r:.2f}, {_bt_r})")
         return boosted_scores

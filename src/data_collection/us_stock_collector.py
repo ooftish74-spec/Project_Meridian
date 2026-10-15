@@ -22,6 +22,7 @@ from src.utils.retry_utils import with_retry
 import json
 import logging
 import sys
+import math
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -65,6 +66,9 @@ class USStockCollector:
             collect_fx_daily_ohlcv as fx_collect_raw,
             collect_econ_indicator_daily_ohlcv as econ_collect_raw
         )
+        av_collect = with_retry(max_retries=2, initial_delay=2.0)(av_collect_raw)
+        fx_collect = with_retry(max_retries=2, initial_delay=2.0)(fx_collect_raw)
+        collect_econ_indicator_daily_ohlcv = with_retry(max_retries=2, initial_delay=2.0)(econ_collect_raw)
         from src.utils.file_ops import atomic_write_parquet
         kis = KISDataCollector()
         kis_ready = kis._ensure_auth()

@@ -698,13 +698,7 @@ class MarketDataBridge:
                         val /= 20.0
                     return val
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-
-                import logging
-
-                logger = logging.getLogger(__name__)
-
                 logger.error(f'Critical error encountered (removed targeted fallback): {e}', exc_info=True)
-
                 raise
         if index_code != '1004':
             AlertManager().report_error(f"INDEX_{index_code}', '모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)', severity='error")
@@ -1037,13 +1031,7 @@ class MarketDataBridge:
                                 result[str(name)] = float(change)
                         break
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-
                     logger.error(f'Critical error encountered (removed targeted fallback): {e}', exc_info=True)
-
                     raise
         return result
 

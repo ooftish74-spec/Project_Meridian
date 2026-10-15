@@ -280,8 +280,15 @@ def _phase_premarket():
     try:
         from src.risk.dynamic_regime_leverage_engine import DynamicRegimeLeverageEngine
         _lev_engine = DynamicRegimeLeverageEngine()
-        _kr_regime = _sc_gate.get('kr_regime', 'caution') if '_sc_gate' in locals() else 'caution'
-        _ois = _sc_gate.get('ois', 50.0) if '_sc_gate' in locals() else 50.0
+        _sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+        _sc_gate = {}
+        if _sc_path.exists():
+            try:
+                _sc_gate = json.loads(_sc_path.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        _kr_regime = _sc_gate.get('kr_regime', 'caution')
+        _ois = float(_sc_gate.get('ois', 50.0))
         _lev_res = _lev_engine.evaluate_leverage_upgrade(_kr_regime, _ois)
         _update_signal_cache({'dynamic_leverage_evaluation': _lev_res})
         logger.info(f"  ✅ [Dynamic Leverage] 레짐 연동 승격 평가 완료: {_lev_res.get('action')}")
@@ -1646,23 +1653,21 @@ def _phase_intraday():
             logger.error(f"  유니버스 로드 실패: {_ue}", exc_info=True)
 
         if tickers:
-            for ticker in tickers:
-                try:
-                    bars = get_5min_bars(ticker)
-                    if bars is not None and len(bars) > 0:
-                        out_dir = _PROJECT_ROOT / 'data' / 'minute_bars' / ticker
-                        out_dir.mkdir(parents=True, exist_ok=True)
-                        out_file = out_dir / f'{date.today().isoformat()}.csv'
-                        bars.to_csv(out_file, index=False)
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1476", exc_info=True)
-            logger.info(f"  ✅ 장중 5분봉 수집: {len(tickers)}종목")
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                _kis_col = KISDataCollector()
+                for ticker in tickers:
+                    try:
+                        _p = _kis_col.get_kr_current_price(ticker)
+                        if _p:
+                            logger.debug(f"  장중 시세 갱신 {ticker}: {_p}")
+                    except Exception as _pe:
+                        logger.debug(f"  장중 시세 수집 폴백 {ticker}: {_pe}")
+                logger.info(f"  ✅ 장중 실시간 시세 갱신: {len(tickers)}종목")
+            except Exception as _kc_e:
+                logger.debug(f"  장중 시세 수집기 로드 예외: {_kc_e}")
         else:
-            logger.warning("  장중 5분봉: 유니버스 없음 → 스킵")
-    except ImportError as e:
-        logger.error("  pykrx_fetcher import 실패", exc_info=True)
+            logger.warning("  장중 시세: 유니버스 없음 → 스킵")
     except Exception as e:
         logger.error(f"  장중 수집 실패: {e}", exc_info=True)
 
