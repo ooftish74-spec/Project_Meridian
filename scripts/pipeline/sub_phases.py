@@ -2455,62 +2455,61 @@ def _phase_call_auction_0830():
 
         kodex_pos = cam.adapter.positions.get("069500")
         total_qty = kodex_pos.quantity if kodex_pos else 0
-        if total_qty <= 0:
-            logger.info("  ℹ️ [08:30 CallAuction] KODEX 200 미보유 — 매도 발주 스킵")
-            return
+        if total_qty > 0:
+            total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 20911598.0)))
+            kodex_price = float(kodex_pos.current_price) if kodex_pos.current_price > 0 else 105650.0
 
-        total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 20911598.0)))
-        kodex_price = float(kodex_pos.current_price) if kodex_pos.current_price > 0 else 105650.0
+            # 오늘 프리마켓 시그널에서 액티브 알파 기대값(EV%) 추출
+            active_ev = 0.015  # 기본 보수적 1.5%
+            results_dir = _PROJECT_ROOT / 'results'
+            sig_path = results_dir / 'latest_signals.json'
+            if sig_path.exists():
+                try:
+                    sig_data = json.loads(sig_path.read_text())
+                    sigs = sig_data.get('signals', {})
+                    ev_candidates = []
+                    for s_val in sigs.values():
+                        if isinstance(s_val, list):
+                            for item in s_val:
+                                if isinstance(item, dict) and 'expected_return' in item:
+                                    ev_candidates.append(float(item['expected_return']))
+                        elif isinstance(s_val, dict) and 'expected_return' in s_val:
+                            ev_candidates.append(float(s_val['expected_return']))
+                    if ev_candidates:
+                        active_ev = max(ev_candidates)
+                except Exception:
+                    pass
 
-        # 오늘 프리마켓 시그널에서 액티브 알파 기대값(EV%) 추출
-        active_ev = 0.015  # 기본 보수적 1.5%
-        results_dir = _PROJECT_ROOT / 'results'
-        sig_path = results_dir / 'latest_signals.json'
-        if sig_path.exists():
-            try:
-                sig_data = json.loads(sig_path.read_text())
-                sigs = sig_data.get('signals', {})
-                ev_candidates = []
-                for s_val in sigs.values():
-                    if isinstance(s_val, list):
-                        for item in s_val:
-                            if isinstance(item, dict) and 'expected_return' in item:
-                                ev_candidates.append(float(item['expected_return']))
-                    elif isinstance(s_val, dict) and 'expected_return' in s_val:
-                        ev_candidates.append(float(s_val['expected_return']))
-                if ev_candidates:
-                    active_ev = max(ev_candidates)
-            except Exception:
-                pass
+            # 시장 추세 판별 (KOSPI 정배열 여부)
+            is_trend_pos = True
+            sc_path = results_dir / 'signal_cache.json'
+            if sc_path.exists():
+                try:
+                    sc_data = json.loads(sc_path.read_text())
+                    is_trend_pos = bool(sc_data.get('is_trend_up', True))
+                except Exception:
+                    pass
 
-        # 시장 추세 판별 (KOSPI 정배열 여부)
-        is_trend_pos = True
-        sc_path = results_dir / 'signal_cache.json'
-        if sc_path.exists():
-            try:
-                sc_data = json.loads(sc_path.read_text())
-                is_trend_pos = bool(sc_data.get('is_trend_up', True))
-            except Exception:
-                pass
+            # 100% 수학적 동적 자본 해제 평가
+            sell_qty, release_krw, reason, metrics = cap_engine.evaluate_kodex200_release(
+                total_nav=total_nav,
+                kodex200_price=kodex_price,
+                kodex200_qty=total_qty,
+                active_ev_pct=active_ev,
+                market_trend_positive=is_trend_pos
+            )
+            logger.info(f"  📊 [08:30 DynamicCapEngine] {reason}")
 
-        # 100% 수학적 동적 자본 해제 평가
-        sell_qty, release_krw, reason, metrics = cap_engine.evaluate_kodex200_release(
-            total_nav=total_nav,
-            kodex200_price=kodex_price,
-            kodex200_qty=total_qty,
-            active_ev_pct=active_ev,
-            market_trend_positive=is_trend_pos
-        )
-        logger.info(f"  📊 [08:30 DynamicCapEngine] {reason}")
-
-        if sell_qty > 0:
-            order_res = cam.place_premarket_sell_order(sell_qty)
-            if order_res:
-                logger.info(f"  ✅ [08:30 CallAuction] KODEX 200 {sell_qty}주 장전 동시호가 매도 발주 완료: OrderID={order_res.get('order_id')}")
+            if sell_qty > 0:
+                order_res = cam.place_premarket_sell_order(sell_qty)
+                if order_res:
+                    logger.info(f"  ✅ [08:30 CallAuction] KODEX 200 {sell_qty}주 장전 동시호가 매도 발주 완료: OrderID={order_res.get('order_id')}")
+                else:
+                    logger.error("  ❌ [08:30 CallAuction] 매도 주문 발주 실패")
             else:
-                logger.error("  ❌ [08:30 CallAuction] 매도 주문 발주 실패")
+                logger.info("  ℹ️ [08:30 CallAuction] 동적 캡 목표 비중 충족 — 매도 발주 스킵")
         else:
-            logger.info("  ℹ️ [08:30 CallAuction] 동적 캡 목표 비중 충족 — 매도 발주 스킵")
+            logger.info("  ℹ️ [08:30 CallAuction] KODEX 200 미보유 — 앵커 리밸런싱 스킵")
 
         # ── 전사 보유 포지션 대상 UniversalExitEngine 3대 손절/익절 동시호가 평가 ──
         logger.info("  🛡️ [08:30 CallAuction] 전사 실계좌 포지션 대상 UniversalExitEngine 긴급 손절/청산 평가")

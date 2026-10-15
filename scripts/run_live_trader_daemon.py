@@ -10,6 +10,7 @@ KRX 개장(08:30~15:30 KST) 및 US 개장(22:00~05:00 KST) 시간 동안
 import os
 import sys
 import time
+import json
 import logging
 from datetime import datetime
 from pathlib import Path

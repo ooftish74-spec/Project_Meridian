@@ -55,17 +55,16 @@ def _classify_ticker(ticker: str) -> str:
 
 def _get_tradeable_sessions(stream_id: str) -> list:
     """스트림별 거래 가능 세션."""
-    import yaml
     kis_cfg_path = _PROJECT_ROOT / 'config' / 'kis_config.yaml'
     if kis_cfg_path.exists():
         try:
+            import yaml
             kis_cfg = yaml.safe_load(kis_cfg_path.read_text())
             streams = kis_cfg.get('streams', {})
             s_cfg = streams.get(stream_id, {})
             return s_cfg.get('tradeable_sessions', ['regular'])
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+        except Exception as e:
+            logger.debug(f"kis_config.yaml load fallback: {e}")
             pass
     # defaults
     if stream_id in ('S1', 'S3'):
