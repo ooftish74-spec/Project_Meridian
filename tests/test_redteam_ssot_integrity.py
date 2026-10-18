@@ -67,14 +67,24 @@ def test_stale_date_rejection_trigger(ssot_manager):
         assert verified.status == "VALIDATED_LIVE"
 
 def test_corrupt_json_self_healing(ssot_manager):
-    """Red Team Test 2: Verify self-healing when SSoT file is corrupted or truncated."""
+    """Red Team Test 2: corrupted SSoT → gatekeeper recovers without crashing and WITHOUT fabricating data.
+
+    ★ Wave 0 D1: 이전 버전은 모든 소스 불가 상황에서도 양수 값(VIX 16.04, 야간선물 1106.55 등 상수)을
+      요구했다 — 즉 날조를 테스트로 강제했다. 새 계약: 결측은 None, status는 DEGRADED.
+    """
     with open(ssot_manager.SSOT_FILE, "w", encoding="utf-8") as f:
         f.write("{ corrupt json truncated ...")
 
-    # Gatekeeper must recover seamlessly without crashing
-    verified = ssot_manager.get_verified_overnight_data(force_refresh=False)
-    assert verified.night_futures_close > 0
-    assert verified.vix > 0
+    with patch('scripts.fetch_night_futures.fetch_and_save_night_futures', return_value=None), \
+         patch('src.utils.vendor_multiplexer.VendorMultiplexer.fetch', side_effect=RuntimeError("offline")):
+        verified = ssot_manager.get_verified_overnight_data(force_refresh=False)
+    assert verified.night_futures_close is None
+    assert verified.vix is None
+    assert verified.status.startswith("DEGRADED_MISSING")
+    assert "night_futures_close" in verified.status
+    # 날조 상수가 어디에도 없어야 한다
+    assert 1106.55 not in verified.to_dict().values()
+    assert 16.04 not in verified.to_dict().values()
 
 def test_ois_calculation_from_verified_ssot():
     """Red Team Test 3: Verify OvernightIntelligenceScore reads accurate values."""

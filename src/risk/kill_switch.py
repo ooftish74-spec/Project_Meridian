@@ -253,10 +253,11 @@ class KillSwitch:
                 break
         total_nav = portfolio.get('total_nav', initial_capital)
         hwm = portfolio.get('hwm', max(total_nav, initial_capital))
-        if total_nav > 0 and hwm > total_nav * 1.30:
-            logger.warning(f"  ⚠️ [KillSwitch] HWM({hwm:,.0f})과 NAV({total_nav:,.0f}) 괴리 감지 ➔ 동적 HWM 보정 적용")
-            hwm = total_nav
+        # ★ Wave 0 E8: HWM 자동 리셋(hwm > NAV×1.30 → hwm=NAV) 제거.
+        #   기존 리셋은 약 -23%보다 깊은 DD에서 킬스위치를 영구 무력화했다.
+        #   본래 목적(부분 NAV로 인한 오발동 방지)은 아래 NAV 교차검증으로 명시적으로 처리한다.
         dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
+        nav_check = self._crosscheck_nav(total_nav)
         week_returns = daily_returns[-5:] if len(daily_returns) >= 5 else daily_returns
         weekly_return = sum(week_returns) if week_returns else 0
         forward = self._collect_forward_signals()
@@ -267,7 +268,58 @@ class KillSwitch:
         monthly_return, monthly_days, monthly_limit = self._compute_monthly_metrics(daily_returns, portfolio, daily_vol)
         result = {'today_return_pct': round(today_return * 100, 4), 'consecutive_loss_days': consecutive_loss, 'dd_pct': round(dd_pct, 2), 'weekly_return_pct': round(weekly_return * 100, 4), 'monthly_return_pct': round(monthly_return * 100, 4), 'monthly_trading_days': monthly_days, 'monthly_dynamic_limit_pct': round(monthly_limit * 100, 2), 'dynamic_daily_limit_pct': round(dynamic_daily_limit, 2), 'dynamic_weekly_limit_pct': round(dynamic_weekly_limit, 2), 'daily_volatility': daily_vol, 'total_nav': total_nav, 'active_positions': portfolio.get('active_positions', 0), 'n_trading_days': len(daily_returns), 'timestamp': now_kst().isoformat()}
         result['forward'] = forward
+        result['nav_check'] = nav_check
+        result['nav_consistent'] = nav_check.get('consistent')
         return result
+
+    def _crosscheck_nav(self, total_nav: float) -> Dict:
+        """★ Wave 0 E8: 평가 NAV vs 브로커 구성요소 합(현금 + Σ포지션 평가액 + USD현금×FX) 교차검증.
+
+        - 구성요소 데이터가 신선(max_age 이내)할 때만 판정. 오래되었거나 없으면 consistent=None(판정 불가)
+          → DD 트리거를 억제하지 않는다 (실제 급락을 놓치지 않기 위함).
+        - NAV가 구성요소 합보다 tol 이상 낮으면 '부분 NAV'(예: 해외 잔고 누락)로 간주 → consistent=False.
+        """
+        out = {'consistent': None, 'components_nav': None, 'rel_gap': None, 'reason': ''}
+        try:
+            tol = float(cfg.get('kill_switch.nav_crosscheck_tol', 0.10))
+            max_age_min = float(cfg.get('kill_switch.nav_crosscheck_max_age_min', 30))
+            kp = _RESULTS / 'kis_portfolio.json'
+            if not kp.exists() or not total_nav or total_nav <= 0:
+                out['reason'] = 'no_component_data'
+                return out
+            import json as _jk
+            d = _jk.loads(kp.read_text(encoding='utf-8'))
+            ts_raw = d.get('timestamp') or d.get('updated_at')
+            ts = datetime.fromisoformat(str(ts_raw)) if ts_raw else None
+            if ts is None:
+                out['reason'] = 'no_timestamp'
+                return out
+            age_min = (now_kst().replace(tzinfo=None) - ts.replace(tzinfo=None)).total_seconds() / 60.0
+            if age_min > max_age_min or age_min < -5:
+                out['reason'] = f'stale_components({age_min:.0f}min)'
+                return out
+            acct = d.get('account') or {}
+            fx = float(acct.get('fx_rate') or 0)
+            usd_cash = float(acct.get('us_cash_usd') or acct.get('cash_usd') or 0)
+            if usd_cash > 0 and fx <= 0:
+                out['reason'] = 'no_fx_for_usd_cash'
+                return out
+            comp = float(acct.get('cash') or 0) + usd_cash * fx
+            for p in (acct.get('positions') or {}).values():
+                comp += float(p.get('eval_krw') or 0)
+            if comp <= 0:
+                out['reason'] = 'zero_components'
+                return out
+            rel_gap = (comp - float(total_nav)) / comp
+            out.update({'components_nav': round(comp, 0), 'rel_gap': round(rel_gap, 4), 'consistent': rel_gap <= tol,
+                        'reason': f'age={age_min:.0f}min tol={tol:.0%}'})
+            if rel_gap > tol:
+                logger.critical(f"  🚨 [KillSwitch NAV-Check] 평가 NAV ₩{total_nav:,.0f} < 구성요소 합 ₩{comp:,.0f} "
+                                f"(gap {rel_gap:.1%} > {tol:.0%}) — 부분 NAV 의심")
+        except Exception as e:
+            out['reason'] = f'error:{e}'
+            logger.error(f"  ⚠️ [KillSwitch NAV-Check] 교차검증 실패(판정 불가): {e}")
+        return out
 
     def _collect_forward_signals(self) -> Dict:
         """전방 지표 동적 수집 — 파일 기반, 실패 시 중립값 반환."""
@@ -362,15 +414,22 @@ class KillSwitch:
             _tr_pct = metrics.get('today_return_pct', 0)
             triggers.append({'type': 'daily_loss', 'value': _tr_pct, 'threshold': max_daily, 'reason': f"일간 손실 {_tr_pct:.2f}% ≤ 동적 한도 {max_daily:.2f}% (3-Sigma)", 'overridable': False})
         base_dd_kill_pct = cfg.get('dd_guard.stage5_pct', -0.25)
-        regime_factor = 1.0 if regime in ('crash', 'bull') else 0.0
+        # ★ Wave 0 E8: crash 레짐에서 한도를 -40%로 '완화'하던 방향 오류 수정 → 완화는 bull에서만
+        regime_factor = 1.0 if regime == 'bull' else 0.0
         max_relaxation = 0.15
         dynamic_dd_kill_pct = base_dd_kill_pct - max_relaxation * regime_factor
         dd_kill_pct = dynamic_dd_kill_pct * 100
         ABSOLUTE_MDD_KILL = -5.0
-        if metrics['dd_pct'] <= ABSOLUTE_MDD_KILL:
+        _nav_unverified = metrics.get('nav_consistent') is False
+        if _nav_unverified and (metrics['dd_pct'] <= ABSOLUTE_MDD_KILL or metrics['dd_pct'] <= dd_kill_pct):
+            _nc = metrics.get('nav_check', {})
+            triggers.append({'type': 'nav_unverified', 'value': metrics.get('dd_pct', 0), 'threshold': None,
+                             'reason': f"DD {metrics.get('dd_pct', 0):.1f}% 이나 NAV 교차검증 실패(gap {(_nc.get('rel_gap') or 0):.1%}) — "
+                                       f"부분 NAV 의심: 신규 진입 차단, 청산 보류", 'overridable': False})
+        elif metrics['dd_pct'] <= ABSOLUTE_MDD_KILL:
             _dd_pct_val = metrics.get('dd_pct', 0)
             triggers.append({'type': 'hard_floor_mdd', 'value': _dd_pct_val, 'threshold': ABSOLUTE_MDD_KILL, 'reason': f"MDD {_dd_pct_val:.1f}% ≤ {ABSOLUTE_MDD_KILL}% (Hard Floor Bypass)", 'overridable': False})
-        if metrics['dd_pct'] <= dd_kill_pct:
+        if not _nav_unverified and metrics['dd_pct'] <= dd_kill_pct:
             _dd_p2 = metrics.get('dd_pct', 0)
             triggers.append({'type': 'dd_critical', 'value': _dd_p2, 'threshold': dd_kill_pct, 'reason': f"DD {_dd_p2:.1f}% ≤ {dd_kill_pct:.0f}% (Dynamic Stage 5+)", 'overridable': False})
         if regime == 'crash':
@@ -398,7 +457,7 @@ class KillSwitch:
         triggered = len(triggers) > 0
         trigger_types = {t['type'] for t in triggers}
         if triggered:
-            if trigger_types == {'monthly_loss'}:
+            if trigger_types <= {'monthly_loss', 'nav_unverified'}:
                 action = 'halt_new_entry'
             else:
                 action = 'halt_all'
@@ -562,12 +621,8 @@ class KillSwitch:
             if _sp_file.exists():
                 _sp = _json2.loads(_sp_file.read_text())
                 sp_hwm = _sp.get('hwm', portfolio['hwm'])
-                # Prevent transient MDD trigger due to partial NAV calculation (domestic-only vs global HWM)
-                if nav > 0 and sp_hwm > nav * 1.35:
-                    logger.warning(f"  ⚠️ [KillSwitch] 글로벌 HWM({sp_hwm:,.0f})과 단일 NAV({nav:,.0f}) 괴리 감지 ➔ 동적 HWM 보정 적용")
-                    portfolio['hwm'] = max(nav, initial_capital)
-                else:
-                    portfolio['hwm'] = sp_hwm
+                # ★ Wave 0 E8: HWM 자동 리셋(1.35×) 제거 — 부분 NAV 방어는 measure_metrics의 NAV 교차검증이 담당
+                portfolio['hwm'] = sp_hwm
                 portfolio['active_positions'] = len(_sp.get('positions', {}))
                 _dr = _sp.get('daily_returns', [])
                 if not _dr:

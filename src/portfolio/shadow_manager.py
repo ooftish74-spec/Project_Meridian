@@ -46,6 +46,14 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 _STOCK_NAMES_PATH = _PROJECT_ROOT / 'data' / 'stock_names.json'
 
+
+class ShadowPortfolioCorruptError(RuntimeError):
+    """포트폴리오 상태 파일을 복구할 수 없음 — 빈 포트폴리오로 대체하지 않고 중단(fail-closed)."""
+
+
+class ShadowPortfolioWriteRejected(RuntimeError):
+    """저장 불변식 위반(append-only trade_history 축소, positions 누락 등) — 덮어쓰기 거부."""
+
 def _today():
     """현재 날짜 (매 호출 시 재계산 — 자정 넘김 안전)."""
     return datetime.now().strftime('%Y-%m-%d')
@@ -279,113 +287,107 @@ class ShadowPortfolioManager:
 
 
     def _fetch_live_nav_from_broker(self):
-        """실제 계좌 잔고(국내 + 해외 통합 SSoT)를 KIS API를 통해 실시간으로 조회합니다."""
+        """실제 계좌 잔고(국내 + 해외 통합 SSoT)를 조회하고 섀도우 포트폴리오를 브로커와 동기화(명시적 호출 전용).
+
+        ★ Wave 0 E1: 로더에서 호출 금지. self.data가 정상 로드된 이후에만 동기화/저장한다.
+        """
+        if not isinstance(getattr(self, 'data', None), dict) or 'positions' not in self.data:
+            logger.error("  [SSoT Sync] 포트폴리오가 로드되지 않은 상태에서 브로커 동기화 요청 — 거부")
+            return None
         try:
-            from config.dynamic_config import DynamicConfig
-            _cfg = DynamicConfig()
-            mode = _cfg.get('execution.current_mode', 'live')
-            if mode not in ('live', 'paper'):
+            trader = self._build_live_trader()
+            if trader is None:
                 return None
-                
-            from src.utils.credential_manager import CredentialManager
-            cm = CredentialManager()
-            prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
-            app_key = cm.read_from_env(f"{prefix}_APP_KEY")
-            app_secret = cm.read_from_env(f"{prefix}_APP_SECRET")
-            account_no = cm.read_from_env(f"{prefix}_ACCOUNT_NO")
-            
-            if not all([app_key, app_secret, account_no]):
-                return None
-                
-            from src.execution._kis_adapter import KISTraderAdapter
-            trader = KISTraderAdapter(mode=mode, app_key=app_key, app_secret=app_secret, account_no=account_no, fetch_balance_on_init=True)
-            
+
             # [SSoT Hardening] KIS API 해외 주식 잔고 (TTTS3012R) 및 국내 잔고 동적 병합 SSoT 갱신
             live_positions = trader.fetch_live_positions()
             details = getattr(trader, 'live_position_details', {})
-            if live_positions:
+            if live_positions and getattr(trader, '_last_positions_complete', False):
                 self.force_reconcile(live_positions, trader.account.cash, position_details=details)
-                if hasattr(self, 'data') and isinstance(self.data, dict):
-                    self.data['live_synced_at'] = datetime.now().isoformat()
-                    self.data['real_account_synced'] = True
+                self.data['live_synced_at'] = datetime.now().isoformat()
+                self.data['real_account_synced'] = True
                 self.save()
-            
+            elif not getattr(trader, '_last_positions_complete', False):
+                logger.critical("  🚨 [SSoT Sync] 브로커 스냅샷 불완전 — 섀도우 대사 보류")
+
             if trader.account.total_equity > 0:
                 return trader.account.total_equity
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"  [Self-Healing SSoT] KIS 실잔고 조회 실패: {e}")
+            logger.warning(f"  [Self-Healing SSoT] KIS 실잔고 조회 실패: {e}")
         return None
 
+    def _fetch_live_equity_readonly(self):
+        """브로커 총자산만 조회 (동기화·저장 부작용 없음). 신규 파일 생성 시에만 사용."""
+        if os.environ.get('MERIDIAN_TEST_MODE') == '1':
+            return None
+        try:
+            trader = self._build_live_trader()
+            if trader is not None and trader.account.total_equity > 0:
+                return trader.account.total_equity
+        except Exception as e:
+            logger.warning(f"  [SSoT] KIS 총자산 조회 실패(읽기 전용): {e}")
+        return None
+
+    @staticmethod
+    def _build_live_trader():
+        from config.dynamic_config import DynamicConfig
+        _cfg = DynamicConfig()
+        mode = _cfg.get('execution.current_mode', 'live')
+        if mode not in ('live', 'paper'):
+            return None
+
+        from src.utils.credential_manager import CredentialManager
+        cm = CredentialManager()
+        prefix = 'KIS_PAPER' if mode == 'paper' else 'KIS'
+        app_key = cm.read_from_env(f"{prefix}_APP_KEY")
+        app_secret = cm.read_from_env(f"{prefix}_APP_SECRET")
+        account_no = cm.read_from_env(f"{prefix}_ACCOUNT_NO")
+        if not all([app_key, app_secret, account_no]):
+            return None
+
+        from src.execution._kis_adapter import KISTraderAdapter
+        return KISTraderAdapter(mode=mode, app_key=app_key, app_secret=app_secret, account_no=account_no, fetch_balance_on_init=True)
+
     def _load_or_create(self) -> Dict:
-        """기존 데이터 로드 또는 신규 생성 (손상 시 .bak 자동 복구)."""
+        """기존 데이터 로드 또는 신규 생성 (손상 시 .bak 자동 복구).
+
+        ★ Wave 0 E1 FIX (2026-10-19):
+          - 기존 구현은 정상 로드 시에도 후처리/`return data`가 `except` 블록 내부에 있어
+            아래로 흘러 빈 포트폴리오를 생성했고, 로더 내부의 브로커 호출(force_reconcile→save)이
+            빈 상태로 실제 파일을 덮어썼다 (프로덕션 shadow_portfolio.json 소실 원인).
+          - 수정: 정상 로드 → (실패 시) .bak 복구 → (그것도 실패 시) 예외(fail-closed).
+            로더는 브로커 I/O를 하지 않는다. 신규 생성은 파일이 '존재하지 않을 때'만.
+        """
         if self.file_path.exists():
             try:
-                from src.utils.file_ops import atomic_write_json
-
                 with open(self.file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError(f"portfolio root is {type(data).__name__}, expected dict")
             except Exception as e_corrupt:
                 bak_path = self.file_path.with_suffix('.json.bak')
-                if bak_path.exists():
-                    logger.critical(f"  🚨 [Self-Healing Recovery] {self.file_path.name} 손상 감지 ({e_corrupt}) — 백업 파일({bak_path.name})로 자동 복구!")
+                if not bak_path.exists():
+                    logger.critical(f"  🚨 {self.file_path.name} 손상 ({e_corrupt}) — 백업 없음. 신규 생성 대신 중단(fail-closed).")
+                    raise ShadowPortfolioCorruptError(
+                        f"{self.file_path} is unreadable and no backup exists: {e_corrupt}") from e_corrupt
+                try:
                     with open(bak_path, 'r', encoding='utf-8') as f_bak:
                         data = json.load(f_bak)
-                    atomic_write_json(self.file_path, data)
-                else:
-                    raise e_corrupt
-                logger.info(f"  포트폴리오 로드: NAV=₩{data.get('virtual_nav', data.get('total_nav', data.get('nav', 0))):,.0f}, "
-                            f"포지션={len(data.get('positions', {}))}개")
-                
-                # ★ 하드코딩 제거 및 실계좌 조회 연동 (SSoT)
-                if 'virtual_nav' not in data and 'nav' not in data and 'total_nav' not in data:
-                    live_nav = self._fetch_live_nav_from_broker()
-                    if live_nav is not None and live_nav > 0:
-                        import logging
-                        logging.getLogger(__name__).critical(f"  [Self-Healing] 누락된 NAV를 KIS 실계좌 잔고로 복구: ₩{live_nav:,.0f}")
-                        data['virtual_nav'] = live_nav
-                    elif self.initial_capital:
-                        import logging
-                        logging.getLogger(__name__).warning(f"  [Self-Healing] 실계좌 조회 실패. DynamicConfig 초기 자본으로 임시 복구: ₩{self.initial_capital:,.0f}")
-                        data['virtual_nav'] = self.initial_capital
-                    else:
-                        raise ValueError("virtual_nav가 누락되었고 실계좌 조회 및 초기 자본(DynamicConfig) 로드에도 실패했습니다. 포트폴리오 파일이 손상되었습니다.")
-                else:
-                    data['virtual_nav'] = data.get('virtual_nav', data.get('total_nav', data.get('nav')))
+                    if not isinstance(data, dict):
+                        raise ValueError("backup root is not a dict")
+                except Exception as e_bak:
+                    logger.critical(f"  🚨 {self.file_path.name} 및 백업 모두 손상 ({e_corrupt} / {e_bak}) — 중단(fail-closed).")
+                    raise ShadowPortfolioCorruptError(
+                        f"{self.file_path} and its backup are unreadable: {e_corrupt} / {e_bak}") from e_bak
+                logger.critical(f"  🚨 [Self-Healing Recovery] {self.file_path.name} 손상 감지 ({e_corrupt}) — 백업 파일({bak_path.name})로 복구")
+                atomic_write_json(self.file_path, data, indent=2, default=str)
 
-                data.setdefault('trade_history', [])
-                data.setdefault('daily_snapshots', [])
-                data.setdefault('realized_pnl', 0)
-                data.setdefault('total_commission', 0)
-                # ★ 근원적 수정: 파이프라인이 직접 접근하는 모든 필드
-                data.setdefault('hwm', data.get('virtual_nav', data.get('initial_capital', self.initial_capital)))
-                data.setdefault('cumulative_return_pct', 0.0)
-                data.setdefault('daily_pnl', 0)
-                data.setdefault('consecutive_loss_days', 0)
-                data.setdefault('max_drawdown_pct', 0.0)
-                data.setdefault('drawdown_pct', 0.0)
-                data.setdefault('unrealized_pnl', 0)
-                data.setdefault('strategy_pnl', {})
-                data.setdefault('daily_records', [])
-                data.setdefault('daily_returns', [])
-                data.setdefault('total_return_pct', 0.0)
-                data.setdefault('sub_accounts', {})
+            return self._normalize_loaded(data)
 
-                # ★ 자가 치유: trade_history로부터 realized_pnl/total_commission 재계산
-                # 누적값이 일부 세션에서 유실될 수 있으므로, 항상 trade_history를 SSoT로 사용
-                self._reconcile_accumulated_fields(data)
-
-                # ★ 포지션 필수 필드 자가 치유 (avg_price, quantity, current_price 등)
-                self._heal_positions(data)
-
-                return data
-            except Exception as e:
-                logger.warning(f"  포트폴리오 로드 실패: {e}")
-
-        # 신규 파일 생성 시 실계좌 잔고 우선 적용
-        live_nav = self._fetch_live_nav_from_broker()
+        # 파일이 존재하지 않을 때만 신규 생성 (브로커 조회는 순수 조회만 — 저장/동기화 부작용 없음)
+        live_nav = self._fetch_live_equity_readonly()
         base_nav = live_nav if (live_nav is not None and live_nav > 0) else self.initial_capital
-        
+
         if base_nav is None:
             raise ValueError("초기 자본을 결정할 수 없습니다. KIS 조회에 실패했고 DynamicConfig.portfolio.initial_capital이 설정되지 않았습니다.")
 
@@ -405,6 +407,59 @@ class ShadowPortfolioManager:
             'total_commission': 0,   # 누적 수수료
             'strategy_pnl': {},      # ★ 스트림별 실현 PnL 누적
         }
+
+    def _normalize_loaded(self, data: Dict) -> Dict:
+        """로드된 포트폴리오 dict의 필수 필드 보정 (브로커 I/O 없음)."""
+        logger.info(f"  포트폴리오 로드: NAV=₩{float(data.get('virtual_nav', data.get('total_nav', data.get('nav', 0))) or 0):,.0f}, "
+                    f"포지션={len(data.get('positions', {}) or {})}개")
+
+        if 'virtual_nav' not in data and 'nav' not in data and 'total_nav' not in data:
+            # NAV 누락: 장부(cash + 포지션 시가)로 재구성 → 초기자본 → 실패 시 예외
+            positions = data.get('positions') or {}
+            if 'cash' in data:
+                mv = 0.0
+                for p in positions.values():
+                    try:
+                        mv += float(p.get('market_value') or (float(p.get('current_price') or 0) * float(p.get('quantity') or 0)))
+                    except (TypeError, ValueError):
+                        continue
+                data['virtual_nav'] = float(data.get('cash') or 0) + mv
+                logger.warning(f"  [Self-Healing] 누락된 NAV를 장부(cash+MV)로 재구성: ₩{data['virtual_nav']:,.0f}")
+            elif self.initial_capital:
+                data['virtual_nav'] = self.initial_capital
+                logger.warning(f"  [Self-Healing] NAV/cash 누락 — DynamicConfig 초기 자본으로 임시 설정: ₩{self.initial_capital:,.0f}")
+            else:
+                raise ShadowPortfolioCorruptError("virtual_nav와 cash가 모두 누락되었고 초기 자본도 없습니다.")
+        else:
+            data['virtual_nav'] = data.get('virtual_nav', data.get('total_nav', data.get('nav')))
+
+        data.setdefault('positions', {})
+        data.setdefault('trade_history', [])
+        data.setdefault('daily_snapshots', [])
+        data.setdefault('realized_pnl', 0)
+        data.setdefault('total_commission', 0)
+        # ★ 근원적 수정: 파이프라인이 직접 접근하는 모든 필드
+        data.setdefault('hwm', data.get('virtual_nav', data.get('initial_capital', self.initial_capital)))
+        data.setdefault('cumulative_return_pct', 0.0)
+        data.setdefault('daily_pnl', 0)
+        data.setdefault('consecutive_loss_days', 0)
+        data.setdefault('max_drawdown_pct', 0.0)
+        data.setdefault('drawdown_pct', 0.0)
+        data.setdefault('unrealized_pnl', 0)
+        data.setdefault('strategy_pnl', {})
+        data.setdefault('daily_records', [])
+        data.setdefault('daily_returns', [])
+        data.setdefault('total_return_pct', 0.0)
+        data.setdefault('sub_accounts', {})
+
+        # ★ 자가 치유: trade_history로부터 realized_pnl/total_commission 재계산
+        # 누적값이 일부 세션에서 유실될 수 있으므로, 항상 trade_history를 SSoT로 사용
+        self._reconcile_accumulated_fields(data)
+
+        # ★ 포지션 필수 필드 자가 치유 (avg_price, quantity, current_price 등)
+        self._heal_positions(data)
+
+        return data
 
     @staticmethod
     def _reconcile_accumulated_fields(data: Dict):
@@ -648,22 +703,33 @@ class ShadowPortfolioManager:
         - 현금 불일치: KIS 현금으로 강제 덮어쓰기.
         """
         changed = False
-        if not hasattr(self, 'data') or not isinstance(getattr(self, 'data', None), dict):
-            self.data = {}
-        local_pos = self.data.get('positions', {})
+        if not isinstance(getattr(self, 'data', None), dict) or 'positions' not in self.data:
+            # ★ Wave 0 E1: 미로드 상태에서 {}를 만들어 저장하면 실제 파일이 stub으로 덮어써진다 → 거부
+            logger.error("  🚨 [RECON] 포트폴리오 미로드 상태 — 동기화 거부")
+            return
+        local_pos = self.data['positions']
         local_aggregated = {}
         for pos_key, pos in local_pos.items():
             t = pos.get('ticker')
             q = pos.get('quantity', 0)
             if t and q > 0:
                 local_aggregated[t] = local_aggregated.get(t, 0) + q
-                
+
         keys_to_delete = []
         for pos_key, pos in local_pos.items():
             t = pos.get('ticker')
             if not t or t not in live_positions:
                 keys_to_delete.append(pos_key)
-                
+
+        # ★ Wave 0 E5: 브로커 스냅샷이 불완전(빈 응답·해외 조회 실패 등)할 때의 대량 Ghost 삭제 차단
+        _ghost_tickers = {local_pos[k].get('ticker') for k in keys_to_delete if local_pos[k].get('ticker')}
+        _tracked_tickers = set(local_aggregated.keys())
+        if keys_to_delete and (not live_positions or
+                               (len(_tracked_tickers) >= 2 and len(_ghost_tickers) / len(_tracked_tickers) > 0.5)):
+            logger.critical(f"  🚨 [RECON] 브로커 스냅샷 불완전 의심 — Ghost 삭제 보류 "
+                            f"(live={len(live_positions)}, 삭제후보={sorted(_ghost_tickers)}, 추적={len(_tracked_tickers)})")
+            keys_to_delete = []
+
         for k in keys_to_delete:
             logger.critical(f"  🚨 [RECON] KIS에 없는 Ghost 포지션 삭제: {k}")
             del local_pos[k]
@@ -735,17 +801,58 @@ class ShadowPortfolioManager:
             self.save()
             logger.critical("  ✅ [RECON] 섀도우 포트폴리오 좀비 포지션 치유 및 상태 동기화 완료!")
 
-    def save(self):
-        """Atomic write & Backup guard: atomic_write_json 패턴."""
+    def save(self) -> bool:
+        """Atomic write + 불변식 가드 + 직전 버전 백업.
+
+        ★ Wave 0 E1:
+          - positions 키가 없는 stub은 저장 거부.
+          - trade_history는 append-only: 디스크보다 짧아지는 저장은 거부(전체 소실 방지).
+          - 거부 시 예외 대신 디스크 진실 보존 + 거부된 메모리 상태를 포렌식 파일로 남기고 False 반환
+            (동시 writer 경합이 실매매 장부 처리 중 예외로 번지지 않도록). 다음 reload에서 메모리 치유.
+          - .bak은 '직전 디스크 버전'을 보존(기존: 동일 내용을 두 파일에 써서 복구 불가).
+        """
+        def _reject(reason: str) -> bool:
+            logger.critical(f"  🚨 [SaveGuard] 포트폴리오 저장 거부: {reason} — 디스크 상태 보존")
+            try:
+                side = _RESULTS / f"shadow_portfolio.rejected_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
+                atomic_write_json(side, self.data if isinstance(self.data, dict) else {'raw': str(self.data)},
+                                  indent=2, default=str)
+            except Exception as _se:
+                logger.error(f"  [SaveGuard] 포렌식 파일 기록 실패: {_se}")
+            self.last_save_rejected = reason
+            return False
+
+        if not isinstance(self.data, dict) or 'positions' not in self.data:
+            return _reject("positions 키 없음 (stub 덮어쓰기 차단)")
         self.data['updated'] = datetime.now().isoformat()
         _RESULTS.mkdir(exist_ok=True)
+
+        on_disk = None
+        if self.file_path.exists():
+            try:
+                on_disk = json.loads(self.file_path.read_text(encoding='utf-8'))
+            except Exception:
+                on_disk = None  # 손상된 디스크 파일은 비교 불가 → 덮어쓰기 허용(백업은 아래에서 원본 바이트 보존)
+        if isinstance(on_disk, dict):
+            n_disk = len(on_disk.get('trade_history') or [])
+            n_mem = len(self.data.get('trade_history') or [])
+            if n_mem < n_disk and not getattr(self, '_allow_history_rewrite', False):
+                return _reject(f"append-only trade_history 축소 ({n_disk} → {n_mem})")
+
         try:
+            if self.file_path.exists():
+                bak = self.file_path.with_suffix('.json.bak')
+                tmp_fd, tmp_name = tempfile.mkstemp(dir=str(_RESULTS), prefix='.shadow_bak_', suffix='.tmp')
+                with os.fdopen(tmp_fd, 'wb') as fh:
+                    fh.write(self.file_path.read_bytes())
+                os.replace(tmp_name, bak)
             atomic_write_json(self.file_path, self.data, indent=2, default=str)
-            atomic_write_json(self.file_path.with_suffix('.json.bak'), self.data, indent=2, default=str)
         except Exception as e:
             logger.error(f"  ❌ 포트폴리오 저장 실패: {e}", exc_info=True)
             raise
-        logger.info(f"  💾 포트폴리오 저장: NAV=₩{self.data.get('virtual_nav', 0):,.0f}")
+        self.last_save_rejected = None
+        logger.info(f"  💾 포트폴리오 저장: NAV=₩{float(self.data.get('virtual_nav', 0) or 0):,.0f}")
+        return True
 
     @property
     def positions(self) -> Dict:

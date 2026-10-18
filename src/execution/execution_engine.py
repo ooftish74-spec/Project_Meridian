@@ -16,6 +16,7 @@ Usage:
 """
 import pandas as pd
 import json
+import math
 import logging
 import os
 from dataclasses import dataclass, field, asdict
@@ -30,6 +31,114 @@ _KRX_TICKER_COLUMNS = ['ISU_CD', '종목코드', 'Code', 'ticker']
 _KRX_TRDVAL_COLUMNS = ['ACC_TRDVAL', '거래대금']
 _KRX_MKTCAP_COLUMNS = ['MKTCAP', '시가총액', 'market_cap']
 _KRX_CLOSE_COLUMNS = ['TDD_CLSPRC', '종가', 'close']
+
+# ★ Wave 0 E3/E4: 주문 dict → 어댑터 urgency. 손절·킬·패닉·강제청산 매도는 'stop'/'panic'으로 승격.
+_EXIT_URGENCY_MARKERS = ('stop', 'sl_', 'stop_loss', '손절', 'kill', 'panic', 'hard_floor', 'liquidat', 'trailing', 'emergency', '긴급')
+
+
+def _derive_order_urgency(order: Dict, is_buy: bool) -> str:
+    explicit = str(order.get('urgency', '') or '').strip().lower()
+    if explicit:
+        return explicit
+    if is_buy:
+        return 'normal'
+    blob = ' '.join(str(order.get(k, '') or '') for k in
+                    ('exit_type', 'sell_type', 'reason', 'exit_reason', 'strategy', 'sell_reason')).lower()
+    if 'panic' in blob or 'kill' in blob:
+        return 'panic'
+    if any(m in blob for m in _EXIT_URGENCY_MARKERS):
+        return 'stop'
+    return 'normal'
+
+
+def _extract_spread_pct(ob) -> Optional[float]:
+    """★ Wave 0 D5: 호가 스냅샷 → 상대 스프레드 (ask-bid)/mid. 산출 불가 시 None (0.0으로 위장 금지).
+
+    지원 스키마: bus(spread_pct / best_ask·best_bid), 레거시(ask1·bid1 / asks·bids[0].price), KIS 원시(askp1·bidp1).
+    """
+    if ob is None:
+        return None
+    if hasattr(ob, 'value'):
+        ob = ob.value
+    if not isinstance(ob, dict):
+        return None
+
+    def _f(v):
+        try:
+            x = float(v)
+            return x if math.isfinite(x) else None
+        except (TypeError, ValueError):
+            return None
+
+    sp = _f(ob.get('spread_pct'))
+    if sp is not None and sp >= 0:
+        return sp
+
+    def _first_px(side):
+        lv = ob.get(side)
+        if isinstance(lv, (list, tuple)) and lv:
+            top = lv[0]
+            if isinstance(top, dict):
+                return _f(top.get('price'))
+            if isinstance(top, (list, tuple)) and top:
+                return _f(top[0])
+        return None
+
+    ask = next((x for x in (_f(ob.get('best_ask')), _f(ob.get('ask1')), _f(ob.get('askp1')), _first_px('asks')) if x and x > 0), None)
+    bid = next((x for x in (_f(ob.get('best_bid')), _f(ob.get('bid1')), _f(ob.get('bidp1')), _first_px('bids')) if x and x > 0), None)
+    if ask is None or bid is None or ask < bid:
+        return None
+    mid = (ask + bid) / 2.0
+    return (ask - bid) / mid if mid > 0 else None
+
+
+_NON_TRADE_ACTIONS = frozenset({'', 'hold', 'none', 'wait', 'skip', 'monitor', 'maintain', 'unknown', 'watch', 'normal'})
+
+
+def _normalize_order_actions(orders: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    """★ Wave 0: action 소문자 정규화 + 비거래/방향 미상 주문 분리. 반환 (거래 주문, 거부 주문).
+
+    action 키가 없으면 side 키를 사용. 둘 다 없으면 방향을 추측하지 않고 거부한다
+    (과거 기본값 'buy'는 방향 누락된 청산 주문을 매수로 뒤집을 수 있었음).
+    dict 동일성 유지를 위해 제자리(in-place)로 정규화한다.
+    """
+    trade, non_trade = [], []
+    for o in orders:
+        if not isinstance(o, dict):
+            continue
+        raw = o.get('action')
+        if raw is None or str(raw).strip() == '':
+            raw = o.get('side')
+        a = str(raw if raw is not None else '').strip().lower()
+        o['action'] = a
+        (non_trade if a in _NON_TRADE_ACTIONS else trade).append(o)
+    return trade, non_trade
+
+
+def _s1_spread_guard(order: Dict, ticker: str, action: str) -> Tuple[bool, float, float]:
+    """★ Wave 0 D5: S1 진입 SpreadGuard. 반환 (차단여부, spread, 한계=TP/3).
+
+    - 청산(매도)은 절대 차단하지 않는다 (손절 증발 방지 — E2/E3와 동일 원칙).
+    - 스프레드 산출 불가 시 통과 + 로그 (데이터 부재를 0 스프레드로 위장하지 않음, 차단 근거도 없음).
+    """
+    _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
+    tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
+    max_spread = abs(tp_pct) / 3.0
+    if str(action or '').lower() not in ('buy', 'add_on'):
+        return False, 0.0, max_spread
+    spread = None
+    try:
+        from src.data_collection.realtime_data_bus import RealtimeDataBus
+        spread = _extract_spread_pct(RealtimeDataBus.get_instance().get_orderbook(ticker))
+    except Exception as e:
+        logger.warning(f"  [SpreadGuard] {ticker} 호가 조회 실패 → 스프레드 미상, 통과: {e}")
+        return False, 0.0, max_spread
+    if spread is None:
+        logger.info(f"  [SpreadGuard] {ticker} 스프레드 산출 불가(호가 미수신) → 통과")
+        return False, 0.0, max_spread
+    return (spread > max_spread), spread, max_spread
+
+
 try:
     from src.execution.algo_executor import AlgoExecutor
     _ALGO_AVAILABLE = True
@@ -294,6 +403,10 @@ class ExecutionEngine:
         Returns:
             ExecutionResult
         """
+        # ★ Wave 0: action 정규화 — 'BUY'(대문자)가 is_buy 판정(대소문자 구분)에서 매도로 분류되던 결함 차단.
+        #   HOLD/none 등 비거래 action은 매도로 흘러가지 않도록 거부.
+        orders, _non_trade = _normalize_order_actions(orders or [])
+
         # 🎯 [Intraday Capital Router SSOT] Step 4: Wash-Trade & Conflict Cancel 검증
         try:
             from src.execution.intraday_capital_router import IntradayCapitalRouter
@@ -301,7 +414,10 @@ class ExecutionEngine:
         except Exception as e_icr:
             logger.debug(f"  Intraday Capital Router conflict check bypass: {e_icr}")
 
-        result = ExecutionResult(mode=self.mode, n_orders=len(orders))
+        result = ExecutionResult(mode=self.mode, n_orders=len(orders) + len(_non_trade))
+        for _nt in _non_trade:
+            result.n_rejected += 1
+            result.errors.append(f"{_nt.get('ticker', '?')}: non-trade action '{_nt.get('action')}' rejected")
         if not orders:
             return result
         if self.mode == 'shadow':
@@ -472,20 +588,8 @@ class ExecutionEngine:
                             continue
                 stream_id = str(order.get('stream', order.get('stream_id', ''))).upper()
                 if stream_id == 'S1':
-                    _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
-                    tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
-                    max_spread = tp_pct / 3.0
-                    spread_pct = 0.0
-                    try:
-                        from src.data_collection.realtime_data_bus import RealtimeDataBus
-                        bus = RealtimeDataBus.get_instance()
-                        ob_dp = bus.get_orderbook(ticker)
-                        if ob_dp and isinstance(ob_dp.value, dict) and ('spread_pct' in ob_dp.value):
-                            spread_pct = float(ob_dp.value['spread_pct'])
-                    except Exception:
-                        from src.utils.error_logger import log_error_rate_limited
-                        logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-                    if spread_pct > max_spread:
+                    _blocked, spread_pct, max_spread = _s1_spread_guard(order, ticker, action)
+                    if _blocked:
                         logger.warning(f"  🚨 [SpreadGuard Shadow] {ticker} 스프레드({spread_pct:.2%})가 허용치({max_spread:.2%}) 초과 → 주문 강제 취소(Abort)")
                         result.n_rejected += 1
                         result.errors.append(f"{ticker}: Spread too high ({spread_pct:.4f} > {max_spread:.4f})")
@@ -539,7 +643,7 @@ class ExecutionEngine:
                     fill_sim_result = self._fill_simulator.estimate_fill_probability(order={'action': action, 'price': price}, hist_candles=[])
                     fill_probability = fill_sim_result.get('fill_probability', 1.0)
                     fill_simulated = True
-                if action == 'buy':
+                if action in ('buy', 'add_on'):
                     fill_price = price * (1 + slip_rate)
                     amount = fill_price * quantity
                     commission = amount * comm_rate
@@ -669,22 +773,8 @@ class ExecutionEngine:
             if stream_id == 'S1':
                 tif = 'IOC'
                 logger.debug(f"  ⚡ [Live Transition Task 1] S1 IOC 적용: {ticker} {action}")
-                _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
-                tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
-                max_spread = tp_pct / 3.0
-                spread_pct = 0.0
-                try:
-                    from src.data_collection.realtime_data_bus import RealtimeDataBus
-                    bus = RealtimeDataBus.get_instance()
-                    ob_dp = bus.get_orderbook(ticker)
-                    ob = ob_dp.value if hasattr(ob_dp, 'value') and isinstance(ob_dp.value, dict) else (ob_dp if isinstance(ob_dp, dict) else {})
-                    ask1 = float(ob.get('ask1') or (ob.get('asks', [{}])[0].get('price', 0) if ob.get('asks') else 0) or 0)
-                    bid1 = float(ob.get('bid1') or (ob.get('bids', [{}])[0].get('price', 0) if ob.get('bids') else 0) or 0)
-                    if ask1 > 0 and bid1 > 0:
-                        spread_pct = (ask1 - bid1) / bid1
-                except Exception as e:
-                    logger.debug(f"RealtimeDataBus orderbook fetch fail: {e}")
-                if spread_pct > max_spread and spread_pct > 0:
+                _blocked, spread_pct, max_spread = _s1_spread_guard(order, ticker, action)
+                if _blocked:
                     logger.warning(f"  ⚠️ [Live Transition Task 1] S1 호가 갭 스프레드({spread_pct:.2%}) > 1/3 TP 한계({max_spread:.2%}) → 주문 스킵 ({ticker})")
                     return {'order': order, 'status': 'skipped_spread_gap'}
             else:
@@ -737,10 +827,11 @@ class ExecutionEngine:
                             f"→ Mid-Point Pegged 지정가 강등 체결 ({ticker})")
 
                     is_buy = action in ('buy', 'add_on')
+                    _urgency = _derive_order_urgency(order, is_buy)
                     if is_buy:
-                        fill = await loop.run_in_executor(None, _trader.buy, ticker, remaining_qty, order_price, execution_algo, 'SOR', str(stream_id), 'normal', tif)
+                        fill = await loop.run_in_executor(None, _trader.buy, ticker, remaining_qty, order_price, execution_algo, 'SOR', str(stream_id), _urgency, tif)
                     else:
-                        fill = await loop.run_in_executor(None, _trader.sell, ticker, remaining_qty, order_price, execution_algo, 'SOR', str(stream_id), 'normal', tif)
+                        fill = await loop.run_in_executor(None, _trader.sell, ticker, remaining_qty, order_price, execution_algo, 'SOR', str(stream_id), _urgency, tif)
                     if fill.status == 'submitted':
                         _wait_timeout = 5 if tif == 'IOC' else None
                         fill = await loop.run_in_executor(None, _trader.wait_for_fill, fill, _wait_timeout)
@@ -765,8 +856,21 @@ class ExecutionEngine:
             return {'order': order, 'status': last_status, 'fills': final_fills, 'error': last_error, 'tif': tif}
 
         async def _execute_all(orders):
-            tasks = [_async_execute_order(o) for o in orders]
-            return await asyncio.gather(*tasks, return_exceptions=True)
+            # ★ Wave 0: 매도(청산) 우선 집행 → 완료 후 매수. 매도 내에서는 urgency 높은 순.
+            _rank = {'panic': 0, 'stop': 1, 'high': 1, 'urgent': 1}
+            idx_sells = [i for i, o in enumerate(orders) if str(o.get('action', 'buy')).lower() not in ('buy', 'add_on')]
+            idx_buys = [i for i, o in enumerate(orders) if str(o.get('action', 'buy')).lower() in ('buy', 'add_on')]
+            idx_sells.sort(key=lambda i: _rank.get(_derive_order_urgency(orders[i], False), 9))
+            results = [None] * len(orders)
+            if idx_sells:
+                sell_res = await asyncio.gather(*[_async_execute_order(orders[i]) for i in idx_sells], return_exceptions=True)
+                for i, r in zip(idx_sells, sell_res):
+                    results[i] = r
+            if idx_buys:
+                buy_res = await asyncio.gather(*[_async_execute_order(orders[i]) for i in idx_buys], return_exceptions=True)
+                for i, r in zip(idx_buys, buy_res):
+                    results[i] = r
+            return results
         coro_results = asyncio.run(_execute_all(orders))
         for res in coro_results:
             if isinstance(res, Exception):
@@ -783,15 +887,21 @@ class ExecutionEngine:
                 _err_r = res.get('error', 'Failed')
                 result.errors.append(f"{ticker}: {_err_r}")
                 if '초기화 실패' in res.get('error', ''):
-                    self._execute_shadow([order], result)
+                    # ★ Wave 0: live/paper에서 가상(shadow) 체결로 대체 금지 — 실제로 체결되지 않은 주문이 체결로 기록됨
+                    logger.critical(f"  🚨 [Execution] {ticker}: KISTrader 초기화 실패 — 가상 체결 대체 없이 거부 처리")
                 continue
+            if res['status'] in ('unknown', 'submitted_market_fallback'):
+                # ★ Wave 0 E6/E7: 체결 여부 미확정 — 재주문 금지, 잔고 대사로 확정해야 함
+                _msg_u = f"{ticker}: UNRESOLVED order status '{res['status']}' — no resend; broker reconcile required"
+                result.errors.append(_msg_u)
+                logger.critical(f"  🚨 [Execution] {_msg_u}")
             fills = res.get('fills', [])
             if fills:
                 for fill in fills:
                     if fill.status in ('filled', 'filled_market_fallback', 'partially_filled'):
                         result.n_filled += 1
                         amount = fill.filled_price * fill.filled_quantity
-                        if action == 'buy':
+                        if action in ('buy', 'add_on'):
                             result.total_buy_amount += amount
                         else:
                             result.total_sell_amount += amount
@@ -940,6 +1050,9 @@ class ExecutionEngine:
                 try:
                     if hasattr(trader, 'fetch_live_positions'):
                         live_pos = trader.fetch_live_positions()
+                        if live_pos is not None and not getattr(trader, '_last_positions_complete', False):
+                            logger.critical("  🚨 [Quarantine Mode] 브로커 스냅샷 불완전 — 강제 동기화 보류 (Halt 유지)")
+                            live_pos = None
                         if live_pos is not None:
                             from src.portfolio.shadow_manager import ShadowPortfolioManager
                             with ShadowPortfolioManager().transaction() as sm:

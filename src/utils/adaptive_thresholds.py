@@ -525,21 +525,38 @@ class VolatilityScaledThreshold:
     """
 
     @staticmethod
-    def is_extreme(current_val: float, history: List[float], z_score_limit: float=1.5, percentile_limit: float=90.0) -> bool:
+    def is_extreme(current_val: float, history: List[float], z_score_limit: float=1.5, percentile_limit: float=90.0,
+                   tail: str='upper') -> bool:
         """
         현재 값이 과거 분포 대비 '극단적(Extreme)'인지 판단합니다.
-        조건: Z-score가 z_score_limit 이상이거나, 상위 percentile_limit % 이상일 때.
+
+        ★ Wave 0 A3: 꼬리 방향을 명시한다. 과거 구현은 z 조건만 양측(|z|)이고 백분위 조건은 상측이라
+          하측 꼬리 값(예: VKOSPI 급락, HY 스프레드 축소)도 '상측 극단(위기)'으로 판정되었다.
+          - tail='upper' (기본): z > limit  또는  x > P_{p}
+          - tail='lower'       : z < -limit 또는  x < P_{100-p}
+          - tail='both'        : |z| > limit 또는 x ∉ [P_{100-p}, P_{p}]
+          하측 판정이 필요한 기존 호출부는 부호 반전(-x, -hist)으로 upper를 사용하므로 기본값과 정합.
         """
         if not history or len(history) < 10:
             return False
-        arr = np.array(history)
-        mean = np.mean(arr)
-        std = np.std(arr)
-        z_score = (current_val - mean) / std if std > 0 else 0
-        z_condition = abs(z_score) > z_score_limit
-        pct_val = np.percentile(arr, percentile_limit)
-        pct_condition = current_val > pct_val
-        return z_condition or pct_condition
+        try:
+            arr = np.asarray(history, dtype=float)
+            cv = float(current_val)
+        except (TypeError, ValueError):
+            return False
+        arr = arr[np.isfinite(arr)]
+        if len(arr) < 10 or not np.isfinite(cv):
+            return False
+        mean = float(np.mean(arr))
+        std = float(np.std(arr))
+        z_score = (cv - mean) / std if std > 0 else 0.0
+        hi = float(np.percentile(arr, percentile_limit))
+        lo = float(np.percentile(arr, 100.0 - percentile_limit))
+        if tail == 'lower':
+            return (z_score < -z_score_limit) or (cv < lo)
+        if tail == 'both':
+            return (abs(z_score) > z_score_limit) or (cv > hi) or (cv < lo)
+        return (z_score > z_score_limit) or (cv > hi)
 
     @staticmethod
     def get_dynamic_threshold(history: List[float], baseline_multiplier: float=1.5) -> float:

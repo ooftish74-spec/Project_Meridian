@@ -509,6 +509,32 @@ class KISDataCollector:
         return None
 
 
+    def get_orderbook(self, ticker: str, levels: int = 5) -> Optional[Dict]:
+        """★ Wave 0 D5: 국내 호가 (FHKST01010200 inquire-asking-price-exp-ccn).
+
+        필드명은 2026-10-19 실 API 읽기 전용 조회로 검증: askp1..10, bidp1..10, askp_rsqn1..10, bidp_rsqn1..10.
+        반환: best_ask/best_bid/mid/spread_pct(분수)/ask_volumes/bid_volumes. 해외·무효 응답은 None.
+        """
+        t = str(ticker or '').strip()
+        if not (len(t) == 6 and t[:5].isalnum()) or not t[0].isdigit():
+            return None
+        url = f"{self._base_url}/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
+        data = self._call(url, 'FHKST01010200', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': t})
+        o1 = (data or {}).get('output1') or {}
+        try:
+            ask = float(o1.get('askp1') or 0)
+            bid = float(o1.get('bidp1') or 0)
+        except (TypeError, ValueError):
+            return None
+        if ask <= 0 or bid <= 0 or ask < bid:
+            return None
+        n = max(1, min(10, int(levels)))
+        ask_v = [int(float(o1.get(f'askp_rsqn{i}') or 0)) for i in range(1, n + 1)]
+        bid_v = [int(float(o1.get(f'bidp_rsqn{i}') or 0)) for i in range(1, n + 1)]
+        mid = (ask + bid) / 2.0
+        return {'ticker': t, 'best_ask': ask, 'best_bid': bid, 'mid': mid, 'price': mid,
+                'spread_pct': (ask - bid) / mid, 'ask_volumes': ask_v, 'bid_volumes': bid_v}
+
     def get_current_price(self, ticker: str) -> Optional[Dict]:
         """종목/선물 현재가 + 시세 정보."""
         if not ticker or '^' in ticker or '=' in ticker or '.' in ticker:

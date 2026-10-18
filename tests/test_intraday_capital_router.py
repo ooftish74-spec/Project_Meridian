@@ -5,6 +5,14 @@ from src.execution.intraday_capital_router import IntradayCapitalRouter
 from src.risk.time_decay_exit import TimeDecayExitEvaluator
 
 
+@pytest.fixture(autouse=True)
+def _deterministic_usdkrw(monkeypatch):
+    """★ Wave 0 D2: 운영 코드는 더 이상 환율 상수(1350)로 대체하지 않으므로, 오프라인 테스트는 환율을 명시적으로 주입한다."""
+    from src.data_collection.central_data_gateway import CentralDataGateway
+    monkeypatch.setattr(CentralDataGateway, 'get_usdkrw_rate', lambda self: 1350.0)
+
+
+
 class TestIntradayCapitalRouter:
     """Test suite for IntradayCapitalRouter."""
 
@@ -48,8 +56,10 @@ class TestIntradayCapitalRouter:
             {'ticker': '069500', 'side': 'sell', 'stream': 'S11'},
         ]
         valid = self.router.resolve_signal_conflicts(signals)
-        # Both opposing signals should be cancelled
-        assert len(valid) == 0
+        # ★ Wave 0 E2: 이전 기대값(양쪽 모두 취소)은 손절 매도 증발 버그를 고정하고 있었다.
+        #   매도(보유 축소)는 원형 보존, 충돌하는 매수만 취소되어야 한다.
+        assert len(valid) == 1
+        assert valid[0]['side'] == 'sell' and valid[0]['ticker'] == '069500'
 
     def test_resolve_signal_conflicts_inverse_pair(self):
         signals = [

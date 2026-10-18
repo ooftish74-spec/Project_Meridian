@@ -7,6 +7,7 @@ import logging
 import os
 import sys
 from datetime import datetime
+from typing import Optional
 from pathlib import Path
 import requests
 import pandas as pd

@@ -32,6 +32,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger('LiveTraderDaemon')
 
+
+def _latch_try_acquire(results_dir: Path, today_str: str, key: str) -> bool:
+    """★ Wave 0 O3: 날짜 키 1회성 래치 (results/daemon_daily_latch.json 영속, 원자적 기록).
+
+    Returns True 이면 이번 호출이 오늘 최초 실행 권한을 획득한 것.
+    """
+    from src.utils.file_ops import atomic_write_json
+    latch_file = results_dir / 'daemon_daily_latch.json'
+    try:
+        state = json.loads(latch_file.read_text(encoding='utf-8')) if latch_file.exists() else {}
+    except Exception:
+        state = {}
+    if state.get('date') != today_str:
+        state = {'date': today_str, 'executed': []}
+    if key in state.get('executed', []):
+        return False
+    state.setdefault('executed', []).append(key)
+    state[f'{key}_at'] = datetime.now().isoformat()
+    try:
+        atomic_write_json(latch_file, state, indent=2)
+    except Exception as e:
+        logger.error(f"  ⚠️ [Latch] 래치 영속화 실패({key}) — 메모리 래치로만 진행: {e}")
+        if not hasattr(_latch_try_acquire, '_mem'):
+            _latch_try_acquire._mem = set()
+        if (today_str, key) in _latch_try_acquire._mem:
+            return False
+        _latch_try_acquire._mem.add((today_str, key))
+    return True
+
+
 def main():
     logger.info("🚀 [LiveTraderDaemon] 프로젝트 메리디안 실계좌 자동매매 데몬 가동 시작...")
     
@@ -66,15 +96,9 @@ def main():
             for flag_name in ['SYSTEM_HALT.flag', 'KILL_SWITCH.flag']:
                 flag_path = results_dir / flag_name
                 if flag_path.exists():
-                    try:
-                        if flag_name == 'KILL_SWITCH.flag' and (time.time() - flag_path.stat().st_mtime > 12 * 3600):
-                            logger.info(f"🧹 [5-Year Auto-Recovery] 12시간 경과 유령 플래그 {flag_name} 자동 소멸 해제")
-                            flag_path.unlink(missing_ok=True)
-                        else:
-                            logger.warning(f"⛔ [Halt Active] {flag_name} 플래그 활성화 중. 수동 해제 전까지 데몬 일시 정지 (30초 대기).")
-                            should_halt = True
-                    except Exception as _fe:
-                        logger.debug(f"  플래그 삭제 중 예외: {_fe}")
+                    # ★ Wave 0: 12시간 경과 KILL_SWITCH.flag 자동 삭제(무인 매매 재개) 제거 — 해제는 사람만
+                    logger.warning(f"⛔ [Halt Active] {flag_name} 플래그 활성화 중. 수동 해제 전까지 데몬 일시 정지 (30초 대기).")
+                    should_halt = True
             if should_halt:
                 time.sleep(30)
                 continue
@@ -83,7 +107,6 @@ def main():
             time_str = now.strftime('%H:%M:%S')
 
             # 주말(토=5, 일=6) 및 KRX/US 영업일 판별
-            is_weekend = (now.weekday() in (5, 6))
             is_kr_trading = cal.is_trading_day(today_str)
             is_kr_session = is_kr_trading and ((now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30))
 
@@ -110,16 +133,16 @@ def main():
 
             # Record heartbeat and check connection mode
             main._health_guard.record_heartbeat()
-            conn_mode = main._health_guard.get_connection_mode()
 
             if not hasattr(main, '_daily_executed'):
                 main._daily_executed = set()
 
-            # ── KRX Call Auction & Market Open Time Triggers (1회성 Latch 적용) ──
+            # ── KRX Call Auction & Market Open Time Triggers (1회성 Latch: 5분 창 + 디스크 영속) ──
+            # ★ Wave 0 O3: 기존 '분==30 AND 초<20'(20초 창) + 최대 30초 sleep → 약 1/3 확률 미발동, 재시작 시 래치 소실
             if is_kr_trading:
-                if now.hour == 8 and now.minute == 30 and now.second < 20:
-                    if ('call_auction_0830', today_str) not in main._daily_executed:
-                        main._daily_executed.add(('call_auction_0830', today_str))
+                _hm = now.hour * 60 + now.minute
+                if 8 * 60 + 30 <= _hm < 8 * 60 + 35:
+                    if _latch_try_acquire(results_dir, today_str, 'call_auction_0830'):
                         logger.info(f"  🔔 [{time_str}] [08:30 CallAuction Trigger] KRX 장전 동시호가 매도 파이프라인 1회 자율 집행!")
                         run_pipeline(phase="call_auction_0830")
                 elif now.hour == 8 and 50 <= now.minute <= 54:
@@ -127,10 +150,9 @@ def main():
                         main._daily_executed.add(('call_auction_monitor', today_str, now.minute))
                         logger.info(f"  🔍 [{time_str}] [08:50~08:54 Monitor Trigger] 동시호가 예상체결가 모니터링 (분당 1회)!")
                         run_pipeline(phase="call_auction_monitor")
-                elif now.hour == 9 and now.minute == 0 and now.second < 20:
-                    if ('market_open_0900', today_str) not in main._daily_executed:
-                        main._daily_executed.add(('market_open_0900', today_str))
-                        logger.info(f"  🚀 [{time_str}] [09:00 MarketOpen Trigger] 정규장 개장 직후 KODEX 레버리지 슬리피지 락 지정가 스왑 1회 집행!")
+                elif 9 * 60 <= _hm < 9 * 60 + 5:
+                    if _latch_try_acquire(results_dir, today_str, 'market_open_0900'):
+                        logger.info(f"  🚀 [{time_str}] [09:00 MarketOpen Trigger] 정규장 개장 직후 1회 집행")
                         run_pipeline(phase="market_open_0900")
 
             if is_kr_session:

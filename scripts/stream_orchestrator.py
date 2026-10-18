@@ -39,7 +39,7 @@ import logging
 import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 # 프로젝트 루트를 path에 추가
 _ROOT = Path(__file__).resolve().parent.parent
@@ -402,11 +402,23 @@ class StreamOrchestrator:
                     positions = raw_pos
                     holdings = raw_pos
 
-            _live_hwm = max(total_nav, initial)
-            if getattr(self, 'exec_mode', 'live') == 'live' and total_nav > 0:
-                # 통합증거금 이중계상 제거 후 실계좌 실제 순자산(True NAV) 기준 HWM 정렬
-                if initial > total_nav * 1.04:
-                    _live_hwm = total_nav
+            # ★ Wave 0 E8: HWM = 추적된 자산 고점(shadow hwm)과 현재 NAV의 최대값.
+            #   (기존: 설정 초기자본이 NAV보다 4% 크면 hwm=nav로 리셋 → live에서 DD가 항상 0)
+            _tracked_hwm = 0.0
+            try:
+                if shadow_path.exists():
+                    _tracked_hwm = float(json.loads(shadow_path.read_text(encoding='utf-8')).get('hwm') or 0.0)
+            except Exception as _hwm_err:
+                logger.error(f"  [HWM] shadow hwm 로드 실패: {_hwm_err}")
+            _live_hwm = max(_tracked_hwm, total_nav)
+
+            _cash_usd = 0.0
+            try:
+                if kis_path.exists():
+                    _acct_u = json.loads(kis_path.read_text(encoding='utf-8')).get('account', {}) or {}
+                    _cash_usd = float(_acct_u.get('us_cash_usd') or _acct_u.get('cash_usd') or 0.0)
+            except Exception as _cu_err:
+                logger.error(f"  [Cash] USD 현금 로드 실패: {_cu_err}")
 
             portfolio = {
                 'total_nav': total_nav,
@@ -415,6 +427,7 @@ class StreamOrchestrator:
                 'daily_returns': [],
                 'active_positions': len(positions),
                 'cash': cash,
+                'cash_usd': _cash_usd,
                 'positions': positions,
                 'holdings': holdings
             }
@@ -547,34 +560,85 @@ class StreamOrchestrator:
 
         # ── Step 1: Kill Switch 확인 ──
         logger.info("  📋 Step 1: Kill Switch 확인")
+        self._exit_only_reason = None
+        _exit_only_flag = _ROOT / 'results' / 'EXIT_ONLY.flag'
+        if _exit_only_flag.exists():
+            try:
+                _eo_reason = json.loads(_exit_only_flag.read_text(encoding='utf-8')).get('reason', 'EXIT_ONLY.flag')
+            except Exception:
+                _eo_reason = 'EXIT_ONLY.flag (unparseable)'
+            self._exit_only_reason = f"flag:{_eo_reason}"
+            if market_data is None:
+                market_data = {}
+            market_data['exit_only'] = True
+            logger.critical(f"  🛑 [Exit-Only] 수동 해제 전까지 신규 매수 차단 — {_eo_reason}")
         ks_result = self.kill_switch.assess(portfolio, regime)
         result['risk']['kill_switch'] = ks_result
 
-        if not ks_result['judgment']['safe']:
-            logger.critical("  🚨 KILL SWITCH 발동 — 파이프라인 중단 (전량 청산 주문 생성)")
-            result['status'] = 'halted_kill_switch'
-            
-            # [Phase 50] Kill Switch 발동 시 포트폴리오 전량 시장가 청산
-            # 기존에는 그대로 리턴하여 포지션이 묶이는(Freeze) 버그가 있었음
-            for ticker, pos in portfolio.get('positions', {}).items():
-                qty = pos.get('qty', 0)
-                if qty > 0:
-                    result['orders'].append({
-                        'stream_id': 'SYS_KILL',
-                        'ticker': pos.get('ticker', ticker.split(':')[-1]),
-                        'name': pos.get('name', ''),
-                        'direction': 'sell',
-                        'qty': qty,
-                        'amount_krw': pos.get('amount', 1.0),
-                        'price': market_data.get('signal_cache', {}).get(ticker, pos.get('avg_price', 0)),
-                        'confidence': 1.0,
-                        'strategy': 'Kill Switch Liquidation',
-                        'reason': f"Kill Switch Triggered: {ks_result.get('triggers', [])}",
-                        'urgency': 1
-                    })
-            
-            self._log_run_event(result)
-            return result
+        _ks_judgment = ks_result.get('judgment', {})
+        if not _ks_judgment.get('safe', True):
+            # ★ Wave 0 S2: 킬스위치 발동 처리 재설계
+            #   - 기존: SYS_KILL 주문을 'direction'/'qty' 키로 생성만 하고 집행 없이 return
+            #     (엔진은 'action'/'quantity'를 읽으므로 설령 집행돼도 action='buy', quantity=0).
+            #   - 신규: (1) 파이프라인은 exit-only로 계속(손절/익절 유지, 신규 매수는 최종 실행 게이트에서 전량 제거)
+            #           (2) 전량 청산은 사람 승인 플래그가 있을 때만 엔진 표준 스키마 + urgency='panic'으로 집행
+            _ks_action = _ks_judgment.get('action', 'halt_all')
+            _ks_reasons = [t.get('reason', '') for t in _ks_judgment.get('triggers', []) if not t.get('overridden')]
+            if market_data is None:
+                market_data = {}
+            market_data['exit_only'] = True
+            self._exit_only_reason = f"kill_switch:{_ks_action}"
+            result['status'] = 'kill_switch_exit_only'
+            logger.critical(f"  🚨 KILL SWITCH 발동 (action={_ks_action}) → Exit-Only 모드: 신규 매수 전면 차단, 청산 로직 유지 | {_ks_reasons}")
+
+            if _ks_action == 'halt_all':
+                _ack_required = bool(cfg.get('kill_switch.require_human_ack', True))
+                _ack_flag = _ROOT / 'results' / 'KILL_LIQUIDATION_APPROVED.flag'
+                if _ack_required and not _ack_flag.exists():
+                    _msg = (f"⛔ 킬스위치 발동 — 전량 청산은 승인 대기 중 (Exit-Only 운용 중)\n사유: {_ks_reasons}\n"
+                            f"승인 시: results/KILL_LIQUIDATION_APPROVED.flag 생성")
+                    logger.critical(f"  🛑 [Kill Liquidation] 사람 승인 대기 — {_msg}")
+                    result['kill_liquidation'] = {'status': 'awaiting_human_ack', 'reasons': _ks_reasons}
+                    _ack_alert_f = _ROOT / 'results' / 'kill_ack_alert_sent.json'
+                    _today_s = datetime.now().strftime('%Y-%m-%d')
+                    try:
+                        _last = json.loads(_ack_alert_f.read_text(encoding='utf-8')).get('date') if _ack_alert_f.exists() else None
+                    except Exception:
+                        _last = None
+                    if _last != _today_s:
+                        try:
+                            from src.utils.telegram_notifier import TelegramNotifier
+                            TelegramNotifier().send_alert('🛑 KILL SWITCH — 청산 승인 필요', _msg)
+                            from src.utils.file_ops import atomic_write_json as _awj
+                            _awj(_ack_alert_f, {'date': _today_s, 'reasons': _ks_reasons}, indent=2, ensure_ascii=False)
+                        except Exception as _tg_e:
+                            logger.error(f"  [Kill Liquidation] 텔레그램 알림 실패: {_tg_e}")
+                else:
+                    _liq_orders = []
+                    _pos = portfolio.get('positions', {}) or {}
+                    _pos_iter = _pos.items() if isinstance(_pos, dict) else [(p.get('ticker', ''), p) for p in _pos]
+                    for _key, _p in _pos_iter:
+                        _qty = int(float(_p.get('quantity', _p.get('qty', 0)) or 0))
+                        _tk = str(_p.get('ticker') or str(_key).split(':')[-1])
+                        if _qty > 0 and _tk:
+                            _liq_orders.append({
+                                'stream_id': 'SYS_KILL', 'stream': 'SYS_KILL', 'ticker': _tk, 'name': _p.get('name', ''),
+                                'action': 'sell', 'side': 'sell', 'quantity': _qty, 'price': 0, 'order_type': 'market',
+                                'execution_algo': 'market', 'urgency': 'panic', 'confidence': 1.0,
+                                'strategy': 'Kill Switch Liquidation', 'reason': f"Kill Switch Liquidation (approved): {_ks_reasons}",
+                            })
+                    logger.critical(f"  🚨 [Kill Liquidation] 승인 확인 → 전량 청산 {len(_liq_orders)}건 집행")
+                    _liq_res = self.execution_engine.execute(_liq_orders, portfolio) if _liq_orders else None
+                    result['orders'].extend(_liq_orders)
+                    result['kill_liquidation'] = {'status': 'executed', 'n_orders': len(_liq_orders),
+                                                  'execution': _liq_res.to_dict() if _liq_res is not None else None}
+                    try:
+                        if _ack_flag.exists():
+                            _ack_flag.unlink()  # 1회성 승인
+                    except Exception as _uf_e:
+                        logger.error(f"  [Kill Liquidation] 승인 플래그 제거 실패: {_uf_e}")
+                    self._log_run_event(result)
+                    return result
 
         # ── Step 2: Crash Defense 확인 ──
         logger.info("  📋 Step 2: Crash Defense 확인")
@@ -827,7 +891,7 @@ class StreamOrchestrator:
                     if not _s.get('price') or _s['price'] <= 0:
                         _missing_tickers.add(_t)
 
-            _ALIAS = {'430740': '423160', '357330': '357870'}
+            from src.utils.ticker_canonical import LEGACY_CODE_MAP as _ALIAS  # 단일 SSOT (로그는 canonical_ticker에서)
             _PARKING_FALLBACK_PX = {
                 '459580': 1074340.0,
                 '423160': 110770.0,
@@ -1300,6 +1364,9 @@ class StreamOrchestrator:
                         _tk_str = str(o.get('ticker', '')).strip()
                         _is_jp = _tk_str.upper().endswith('.T')
                         _is_us = (not _tk_str.isdigit()) and (not _is_jp)
+                        if _is_us and not _dyn_fx:
+                            logger.error(f"    🛑 [FX Guard] {_tk_str}: USD/KRW 미확보 → 금액 기반 매도수량 산출 불가, 스킵")
+                            continue
                         _p_krw = (_p * _jpy_fx) if _is_jp else ((_p * _dyn_fx) if _is_us else _p)
                         o['quantity'] = max(1, int(float(o.get('amount_krw', 0.0)) / _p_krw))
                     valid_orders.append(o)
@@ -1311,7 +1378,8 @@ class StreamOrchestrator:
                 _is_us = (not _tk_str_b.isdigit()) and (not _is_jp)
                 if not _exec_price or _exec_price <= 0:
                     _raw_tk = str(o.get('ticker', '')).strip()
-                    _ticker = {'430740': '423160', '357330': '357870'}.get(_raw_tk, _raw_tk)
+                    from src.utils.ticker_canonical import canonical_ticker
+                    _ticker = canonical_ticker(_raw_tk, context='stream_orchestrator.price_resolve')
                     o['ticker'] = _ticker
                     try:
                         # 1. market_data 확인
@@ -1389,6 +1457,9 @@ class StreamOrchestrator:
                 if _is_jp:
                     _cost_per_share_krw = _exec_price * _jpy_fx * margin_rate
                 elif _is_us:
+                    if not _dyn_fx:
+                        logger.error(f"    🛑 [FX Guard] {o.get('ticker')}: USD/KRW 미확보 → 해외 신규 매수 스킵 (fail-closed)")
+                        continue
                     _cost_per_share_krw = _exec_price * _dyn_fx * margin_rate
                 else:
                     _cost_per_share_krw = _exec_price * margin_rate
@@ -1409,7 +1480,9 @@ class StreamOrchestrator:
                                 if _pt_s == _tk_check and float(_pv_s.get('quantity', _pv_s.get('qty', 0)) or 0) > 0:
                                     _already_held_s84 = True
                                     break
-                if qty <= 0 and not _already_held_s84 and (o.get('amount_krw', 0.0) > 0 or float(o.get('confidence', 0.0)) >= 0.5):
+                _amt_budget = float(o.get('amount_krw', 0.0) or 0.0)
+                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상일 때만 1주 배정 (amount=0 또는 confidence만으로 강제 매수 금지)
+                if qty <= 0 and not _already_held_s84 and _cost_per_share_krw > 0 and _amt_budget >= 0.5 * _cost_per_share_krw:
                     qty = 1
                     o['_min_lot_sweep'] = True
                     logger.info(f"    💡 [Step 8.4 Min-Lot Sweep] {o.get('ticker')} (단가: {_exec_price:.2f}) 신규 진입 예산 미달 절삭 방지 ➔ 최소 1주 배정")
@@ -1736,13 +1809,24 @@ class StreamOrchestrator:
             
             raw_action = str(o.get('action', '')).lower()
             raw_direction = str(o.get('direction', '')).lower()
-            if raw_action in ('buy', 'long') or raw_direction in ('long', 'buy'):
+            # ★ Wave 0: 미지 action을 'buy'로 강제하던 결함 수정 ('exit'/'reduce' 청산이 매수로 뒤집힘).
+            _SELL_WORDS = ('sell', 'short', 'exit', 'reduce', 'close', 'liquidate', 'trim', 'stop', 'stop_loss')
+            _BUY_WORDS = ('buy', 'long', 'add_on')
+            _has_exit_marker = bool(o.get('exit_type') or o.get('sell_type'))
+            if raw_action in _BUY_WORDS:
                 action = 'buy'
-            elif raw_action in ('sell', 'short') or raw_direction in ('short', 'sell'):
+            elif raw_action in _SELL_WORDS:
+                action = 'sell'
+            elif raw_action in ('', 'enter', 'entry', 'open') and (raw_direction in ('short', 'sell') or _has_exit_marker):
+                action = 'sell'
+            elif raw_action in ('', 'enter', 'entry', 'open') and raw_direction in ('long', 'buy'):
+                action = 'buy'
+            elif _has_exit_marker:
                 action = 'sell'
             else:
-                action = 'buy'
-                
+                logger.warning(f"  ⚠️ [Order Normalize] {ticker}: 방향 미상 action='{raw_action}' direction='{raw_direction}' → 주문 제외 (추측 금지)")
+                continue
+
             price = float(o.get('price', 0.0))
             qty = int(o.get('quantity', 0))
             amount_krw = float(o.get('amount_krw', 0.0))
@@ -1756,13 +1840,19 @@ class StreamOrchestrator:
                 elif is_us_stock:
                     from src.data_collection.central_data_gateway import CentralDataGateway
                     fx_rate = CentralDataGateway().get_usdkrw_rate()
+                    if not fx_rate or fx_rate <= 0:
+                        logger.error(f"    🛑 [FX Guard] {ticker}: USD/KRW 환율 미확보 → 해외 주문 수량 산출 불가, 스킵")
+                        continue
                     eff_price_krw = price * fx_rate
                     qty = int(amount_krw / eff_price_krw) if eff_price_krw > 0 else 0
                 else:
+                    eff_price_krw = price
                     qty = int(amount_krw / price)
-                
-                # 💡 [Min-Lot Liquidity Sweep] 미보유(0주) 신규 진입 시그널 0주 절삭 시 단기 파킹 자산 부족분 스윕 1주 보장
-                if qty == 0 and action == 'buy' and _held_qty_by_ticker.get(str(ticker), 0) == 0 and (amount_krw > 0 or o.get('entry_score', 0) >= 0.5):
+
+                # 💡 [Min-Lot Liquidity Sweep] 미보유(0주) 신규 진입 시그널 0주 절삭 시 1주 보장
+                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상일 때만 (amount=0/entry_score만으로 강제 매수 금지)
+                if (qty == 0 and action == 'buy' and _held_qty_by_ticker.get(str(ticker), 0) == 0
+                        and eff_price_krw > 0 and amount_krw >= 0.5 * eff_price_krw):
                     qty = 1
                     o['_min_lot_sweep'] = True
                     logger.info(f"💡 [Min-Lot Sweep] {ticker} (단가: {price:.2f}) 배정 예산({amount_krw:,.0f} KRW) < 1주 단가 → 단기 파킹 자산(SHV/KOFR) 부족분 스윕 후 최소 1주 매수 집행 보장")
@@ -1796,7 +1886,20 @@ class StreamOrchestrator:
                 netted_orders_map[ticker]['sell_orders'].append(o)
 
         exec_orders = []
+        from src.execution.execution_engine import _derive_order_urgency
+        _URG_RANK = {'panic': 3, 'stop': 2, 'high': 2, 'urgent': 2}
         for ticker, ndata in netted_orders_map.items():
+            _sell_urg = 'normal'
+            for _so in ndata['sell_orders']:
+                _u = _derive_order_urgency(_so, False)
+                if _URG_RANK.get(_u, 0) > _URG_RANK.get(_sell_urg, 0):
+                    _sell_urg = _u
+            if _URG_RANK.get(_sell_urg, 0) >= 2 and ndata['buy_qty'] > 0 and ndata['sell_qty'] > 0:
+                # ★ Wave 0 E2: 손절/패닉 청산은 신규 매수와 수량 상계하지 않는다 → 매수 제거, 매도 전량 집행
+                logger.warning(f"    🛡️ [Exit Protection] {ticker}: {_sell_urg} 청산({ndata['sell_qty']}주)과 신규 매수({ndata['buy_qty']}주) 충돌 → 매수 제거")
+                ndata['buy_qty'] = 0
+                ndata['buy_orders'] = []
+                ndata['buy_prices'] = []
             net_qty = ndata['buy_qty'] - ndata['sell_qty']
             if net_qty == 0:
                 logger.info(f"    ⚖️ [Order Netting] {ticker}: 매수({ndata['buy_qty']}주)/매도({ndata['sell_qty']}주) 동일 수량 완벽 상계 (주문 스킵)")
@@ -1835,6 +1938,11 @@ class StreamOrchestrator:
             elif is_us_net:
                 from src.data_collection.central_data_gateway import CentralDataGateway
                 _net_fx = CentralDataGateway().get_usdkrw_rate()
+                if not _net_fx or _net_fx <= 0:
+                    if final_action == 'buy':
+                        logger.error(f"    🛑 [FX Guard] {ticker}: USD/KRW 환율 미확보 → 해외 신규 매수 스킵")
+                        continue
+                    _net_fx = 0.0  # 매도(청산)는 환율과 무관하게 집행
                 netted_val_krw = final_price * _net_fx * abs(net_qty)
             else:
                 _net_fx = 1.0
@@ -1862,8 +1970,14 @@ class StreamOrchestrator:
                 'execution_start_time': sample_order.get('execution_start_time', ''),
                 'strategy': sample_order.get('strategy', 'netted_order'),
                 'reason': f"OrderNetting (Buy:{ndata['buy_qty']}, Sell:{ndata['sell_qty']} -> Net:{net_qty}, Streams:{','.join(contributing_streams)})",
+                'urgency': _sell_urg if final_action == 'sell' else 'normal',
+                'exit_reason': ' | '.join(str(_so.get('reason', '') or _so.get('exit_type', '')) for _so in ndata['sell_orders'])[:300] if final_action == 'sell' else '',
                 '_min_lot_sweep': _is_min_lot,
+                '_fx': _net_fx,
             })
+
+        # ── ★ Wave 0 Final Gate (S2 Exit-Only + S5 Global Cash Constraint) ──
+        exec_orders = self._apply_final_execution_gate(exec_orders, portfolio, market_data)
 
         # ── Step 9.1: Global Cross-Venue Netting & Dark Pool RPI Routing ──
         try:
@@ -2624,7 +2738,7 @@ class StreamOrchestrator:
                         if _qty_exit > 0 and _p_exit > 0:
                             _amt_exit = _qty_exit * _p_exit * _jpy_fx_exit
                     elif _is_us_exit:
-                        if _qty_exit > 0 and _p_exit > 0:
+                        if _qty_exit > 0 and _p_exit > 0 and _dyn_fx_exit:
                             _amt_exit = _qty_exit * _p_exit * _dyn_fx_exit
                     elif not _amt_exit and _qty_exit > 0 and _p_exit > 0:
                         _amt_exit = _qty_exit * _p_exit
@@ -2752,6 +2866,86 @@ class StreamOrchestrator:
             logger.error(f"DD Overlay 적용 실패: {e}", exc_info=True)
 
         return orders
+
+    def _apply_final_execution_gate(self, exec_orders: List[Dict], portfolio: Optional[Dict], market_data: Optional[Dict]) -> List[Dict]:
+        """★ Wave 0 최종 실행 게이트.
+
+        S2: exit-only(킬스위치/데이터 이상) → 모든 매수 제거, 매도(청산)만 통과.
+        S5: 통화별 전역 현금 제약 — Σ매수명목 ≤ 가용현금 (+ 동일통화 매도대금 × w, 기본 w=0:
+            현재 엔진은 매도/매수를 동시 집행하므로 매도대금 선사용은 미수 위험).
+            초과 시 해당 통화 매수 수량을 비례 축소 s = avail / need (정수 절삭, 0주는 제거).
+        """
+        orders = [dict(o) for o in (exec_orders or [])]
+        is_buy = lambda o: str(o.get('action', '')).lower() in ('buy', 'add_on')
+        exit_only = bool((market_data or {}).get('exit_only')) or bool(getattr(self, '_exit_only_reason', None))
+        if exit_only:
+            kept = [o for o in orders if not is_buy(o)]
+            if len(kept) != len(orders):
+                logger.critical(f"  🛑 [Final Gate] Exit-Only({getattr(self, '_exit_only_reason', None) or 'market_data'}) — "
+                                f"매수 {len(orders) - len(kept)}건 제거, 매도 {len(kept)}건 통과")
+            return kept
+
+        def _ccy(o):
+            t = str(o.get('ticker', '')).strip()
+            if t.upper().endswith('.T'):
+                return 'JPY'
+            return 'KRW' if t.isdigit() else 'USD'
+
+        def _px(o):
+            p = float(o.get('price', 0) or 0)
+            if p <= 0:
+                try:
+                    p = float(self.execution_engine._estimate_price(o.get('ticker', '')) or 0)
+                except Exception:
+                    p = 0.0
+            return p
+
+        w_sell = float(cfg.get('execution.cash_cap_sell_proceeds_weight', 0.0) or 0.0)
+        fee_buf = float(cfg.get('execution.cash_cap_fee_buffer', 0.003) or 0.003)
+        _pf = portfolio or {}
+        cash = {'KRW': (float(_pf.get('cash') or 0) if 'cash' in _pf else None),
+                'USD': (float(_pf.get('cash_usd') or 0) if 'cash_usd' in _pf else None)}
+
+        out = []
+        for ccy in ('KRW', 'USD'):
+            sells = [o for o in orders if not is_buy(o) and _ccy(o) == ccy]
+            buys = [o for o in orders if is_buy(o) and _ccy(o) == ccy]
+            out.extend(sells)
+            if not buys:
+                continue
+            if cash[ccy] is None:
+                logger.warning(f"  ⚠️ [Final Gate S5] {ccy} 가용현금 정보 없음(portfolio 키 부재) — 현금 제약 미적용")
+                out.extend(buys)
+                continue
+            priced, unpriced = [], []
+            for o in buys:
+                (priced if _px(o) > 0 else unpriced).append(o)
+            for o in unpriced:
+                logger.error(f"  🛑 [Final Gate] {o.get('ticker')}: 가격 미확보로 현금 제약 검증 불가 → 매수 제거")
+            need = sum(_px(o) * int(o.get('quantity', 0) or 0) for o in priced) * (1.0 + fee_buf)
+            avail = max(0.0, cash[ccy] + w_sell * sum(_px(o) * int(o.get('quantity', 0) or 0) for o in sells))
+            if need <= avail or need <= 0:
+                out.extend(priced)
+                continue
+            s = avail / need
+            logger.critical(f"  🛡️ [Final Gate S5] {ccy} 매수 필요 {need:,.2f} > 가용 {avail:,.2f} → 비례 축소 s={s:.3f}")
+            for o in priced:
+                q0 = int(o.get('quantity', 0) or 0)
+                q1 = int(q0 * s)
+                if q1 <= 0:
+                    logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → 0주 (제거)")
+                    continue
+                o['quantity'] = q1
+                o['cash_cap_scale'] = round(s, 4)
+                logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → {q1}주")
+                out.append(o)
+        # 현금 정보가 없는 통화(JPY)는 기존 로직 유지(경고)
+        for o in orders:
+            if _ccy(o) == 'JPY':
+                if is_buy(o):
+                    logger.warning(f"  ⚠️ [Final Gate] {o.get('ticker')}: JPY 현금 정보 없음 — 현금 제약 미적용")
+                out.append(o)
+        return out
 
     def _log_run_event(self, result: Dict):
         """실행 결과 EventLedger 기록."""

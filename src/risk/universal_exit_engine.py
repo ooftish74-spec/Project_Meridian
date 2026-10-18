@@ -11,6 +11,7 @@ Universal Exit Engine (V3 단일 SSOT 전사 공통 Exit & 3중 손절 뼈대 �
 5. 50% Scale-Out Runner: ATR×8 달성 시 50% 차익실현 후 잔여 50% 무한 트레일링
 """
 
+import json
 import math
 import numpy as np
 import pandas as pd

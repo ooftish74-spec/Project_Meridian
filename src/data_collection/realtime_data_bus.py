@@ -138,7 +138,7 @@ class CircuitBreaker:
                 result = func(*args, **kwargs)
                 self._on_success()
                 return (result, True)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+            except (OSError, FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 last_error = e
@@ -253,28 +253,33 @@ class StalenessAwareCache:
         return dp
 
     def get(self, ticker: str) -> Optional[DataPoint]:
-        """캐시 조회 + 최신 quality 계산 (Redis 조회 우선)."""
+        """캐시 조회 + 최신 quality 계산 (Redis 조회 우선).
+
+        ★ Wave 0 D4: (1) DataPoint에는 is_usable()이 없어 캐시 hit 시마다 AttributeError 발생 → quality 임계 비교로 교정
+                     (2) Redis 미연결(_redis=None) 시 miss마다 RuntimeError → Redis는 연결된 경우에만 조회
+                     (3) Redis 장애는 예외 대신 로컬 캐시로 강등(품질 점수는 그대로 노출)
+        """
         with self._lock:
             dp = self._cache.get(ticker)
-            
-        # 로컬 메모리에 없거나 Stale 한 경우 Redis를 우선 조회 (크로스 프로세스 통신)
-        if (dp is None or dp.compute_quality(self.config).is_usable() is False):
+
+        _min_q = float(getattr(self.config, 'min_quality', 0.01) or 0.01)
+        needs_remote = dp is None or dp.compute_quality(self.config).quality < _min_q
+        if needs_remote and self._redis is not None:
             try:
                 raw = self._redis.get(f"meridian:cache:{self.source_name}:{ticker}")
                 if raw:
                     parsed = json.loads(raw)
                     dp = DataPoint(
-                        value=parsed['value'], 
-                        fetched_at=datetime.fromisoformat(parsed['fetched_at']), 
-                        source=parsed['source'], 
+                        value=parsed['value'],
+                        fetched_at=datetime.fromisoformat(parsed['fetched_at']),
+                        source=parsed['source'],
                         quality=1.0
                     )
                     with self._lock:
-                        self._cache[ticker] = dp # 로컬 동기화
+                        self._cache[ticker] = dp  # 로컬 동기화
             except Exception as e:
-                logger.critical(f"🚨 [Redis SPOF] Redis Get 실패. Fail-Fast 강제 종료: {e}")
-                raise RuntimeError(f"Redis Get failed: {e}")
-                
+                logger.error(f"  ⚠️ [Redis Get Fallback] Redis 조회 실패 → 로컬 캐시로 강등 ({ticker}): {e}")
+
         if dp is None:
             return None
         return dp.compute_quality(self.config)
@@ -520,17 +525,17 @@ class RealtimeDataBus:
         return None
 
     def _fetch_orderbook_live(self, ticker: str) -> Optional[Dict]:
-        """호가잔량 조회 — KIS API."""
+        """호가잔량 조회 — KIS API (★ Wave 0 D5: spread_pct 포함, SpreadGuard가 읽는 키)."""
         try:
             from src.data_collection.kis_data_collector import KISDataCollector
-            kis = KISDataCollector()
-            if hasattr(kis, 'get_orderbook'):
-                ob = kis.get_orderbook(ticker)
-                if ob:
-                    bid_total = sum(ob.get('bid_volumes', [0]))
-                    ask_total = sum(ob.get('ask_volumes', [0]))
-                    imbalance = (bid_total - ask_total) / (bid_total + ask_total + 1)
-                    return {'bid_total': bid_total, 'ask_total': ask_total, 'imbalance': round(imbalance, 4), 'fetched_method': 'kis'}
+            ob = KISDataCollector().get_orderbook(ticker)
+            if ob:
+                bid_total = sum(ob.get('bid_volumes', [0]))
+                ask_total = sum(ob.get('ask_volumes', [0]))
+                imbalance = (bid_total - ask_total) / (bid_total + ask_total + 1)
+                return {'bid_total': bid_total, 'ask_total': ask_total, 'imbalance': round(imbalance, 4),
+                        'best_bid': ob['best_bid'], 'best_ask': ob['best_ask'], 'price': ob['mid'],
+                        'spread_pct': round(float(ob['spread_pct']), 6), 'fetched_method': 'kis'}
         except Exception as e:
             logger.debug(f"  [Orderbook Fallback] {e}")
         raise ConnectionError(f"{ticker} 호가잔량 조회 실패")

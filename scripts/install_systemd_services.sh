@@ -281,6 +281,7 @@ Description=Timer for Meridian US Regular Market Pipeline
 
 [Timer]
 OnCalendar=*-*-* 22:25:00 Asia/Seoul
+OnCalendar=*-*-* 23:25:00 Asia/Seoul
 Persistent=true
 
 [Install]

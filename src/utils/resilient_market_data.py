@@ -203,8 +203,8 @@ class ResilientFetcher:
 
         Fallback: KIS API(국내) → yfinance → FMP → 캐시 최신 close
         """
-        _ALIAS = {'430740': '423160', '357330': '357870'}
-        ticker = _ALIAS.get(str(ticker).strip(), str(ticker).strip())
+        from src.utils.ticker_canonical import canonical_ticker
+        ticker = canonical_ticker(ticker, context='resilient_market_data')
 
         is_kr = False
         kis_ticker = ticker

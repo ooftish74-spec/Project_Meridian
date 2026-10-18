@@ -2155,6 +2155,16 @@ def is_us_dst() -> bool:
         return 3 <= m <= 11
 
 
+def _us_regular_window_open(ny_dt, half_day: bool = False) -> bool:
+    """★ Wave 0 O2: 뉴욕 현지 시각 기준 본장 실행 창. 09:20(개장 10분 전 준비) ≤ t < 16:00 (반일장 13:00).
+
+    ny_dt는 America/New_York tz-aware datetime이어야 한다 (EDT/EST 자동 반영).
+    """
+    m = ny_dt.hour * 60 + ny_dt.minute
+    close_m = (13 * 60) if half_day else (16 * 60)
+    return (9 * 60 + 20) <= m < close_m
+
+
 def _us_phase_window_check(phase_name: str) -> bool:
     """[Phase 41] US 시장 실행 관제 (전체 본장 시간 22:30~05:00 KST 허용 및 휴장일/주말 검증)."""
     from config.dynamic_config import DynamicConfig
@@ -2172,13 +2182,18 @@ def _us_phase_window_check(phase_name: str) -> bool:
 
     # 프리마켓 또는 본장 세션 판단
     if phase_name == 'regular':
-        # 본장 세션: 22:30 ~ 05:00 KST (DST) / 23:30 ~ 06:00 KST (Non-DST)
-        # 22:25 스케줄러 발화 버퍼(개장 10분 전부터 본장 준비 허용)
-        us_open_h = 22 if _is_dst else 23
-        us_close_h = 5 if _is_dst else 6
-        is_regular_hours = (_now.hour == us_open_h and _now.minute >= 20) or (_now.hour > us_open_h) or (_now.hour < us_close_h)
+        # ★ Wave 0 O2: KST 시각(22/23시) 대신 뉴욕 현지 시각으로 직접 판정 → 서머타임 전환과 무관
+        #   본장 09:30~16:00 ET, 개장 10분 전(09:20)부터 준비 허용
+        from zoneinfo import ZoneInfo
+        from src.utils.market_calendar import is_us_half_day
+        _ny = _dt.now(ZoneInfo('America/New_York'))
+        try:
+            _half = bool(is_us_half_day(_ny.strftime('%Y%m%d')))
+        except Exception:
+            _half = False
+        is_regular_hours = _us_regular_window_open(_ny, half_day=_half)
         if not is_regular_hours:
-            logger.info(f"  [Phase 41] US 본장 세션 외 (now={_now.strftime('%H:%M')}) → skip")
+            logger.info(f"  [Phase 41] US 본장 세션 외 (KST {_now.strftime('%H:%M')} / ET {_ny.strftime('%H:%M')}, DST={_is_dst}, half={_half}) → skip")
             return False
         
         # [Rate Limit & Cadence Guard] 60초 쿨다운을 적용하여 데몬의 무한 5초 루프 API 낭비 방지

@@ -1,6 +1,14 @@
 import pytest
 from src.execution._kis_adapter import AccountInfo, Order, KISTraderAdapter
 
+
+@pytest.fixture(autouse=True)
+def _deterministic_usdkrw(monkeypatch):
+    """★ Wave 0 D2: 운영 코드는 더 이상 환율 상수(1350)로 대체하지 않으므로, 오프라인 테스트는 환율을 명시적으로 주입한다."""
+    from src.data_collection.central_data_gateway import CentralDataGateway
+    monkeypatch.setattr(CentralDataGateway, 'get_usdkrw_rate', lambda self: 1350.0)
+
+
 def test_account_info_total_asset_alias():
     acc = AccountInfo(total_equity=20000000.0, cash=5000000.0)
     assert acc.total_asset == 20000000.0
@@ -256,6 +264,8 @@ def test_holdings_guard_allows_buy_and_blocks_unheld_sell(monkeypatch):
     monkeypatch.setattr(mc, "is_ticker_tradable_now", lambda ticker: (True, 'regular'))
     adapter = KISTraderAdapter(mode='live')
     adapter.positions.clear()  # No holdings
+    adapter._cached_live_positions = {}
+    adapter.account.cash = 10_000_000.0  # ★ 테스트 격리: 실제 상태 파일의 현금에 의존하지 않음
     monkeypatch.setattr(adapter, "inquire_unexecuted", lambda ticker: [])
 
     # 1. SELL order for unheld stock -> MUST be blocked with skipped_insufficient_holdings

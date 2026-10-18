@@ -96,6 +96,29 @@ _INDEX_ETF_IS_PRICE = True  # ETF 가격은 지수와 다르므로, 변동률 �
 
 from scripts.pipeline.sub_phases import _safe_get_index_close, _phase_premarket, _phase_call_auction_0830, _phase_call_auction_monitor_0850_0854, _phase_market_open_0900, _phase_premarket_trade, sync_ssot_from_me, _phase_aftermarket, _phase_aftermarket_trade, _phase_overnight, _phase_collect_data, _phase_global_data, _update_signal_cache, _phase_intraday, _phase_krx_refresh, _phase_collect_flow, _phase_evening_data, _phase_collect_dart, _phase_collect_consensus, is_us_dst, _us_phase_window_check, _phase_us_premarket, _phase_us_regular_market, _phase_us_market, _phase_weekly_retrain, _phase_weekly_validate
 
+EXIT_ONLY_FLAG = _PROJECT_ROOT / 'results' / 'EXIT_ONLY.flag'
+
+
+def _engage_exit_only(reason: str) -> None:
+    """★ Wave 0 O1: 비상 상황(데이터 불일치·타임아웃·브로커 오류) 시 전량 청산 대신 Exit-Only 모드 진입.
+
+    - results/EXIT_ONLY.flag 생성(사람이 원인 확인 후 수동 삭제해야 해제)
+    - 이후 모든 오케스트레이터 실행에서 신규 매수 차단, 청산(손절/익절)만 허용
+    - 텔레그램 알림
+    """
+    payload = {'reason': str(reason)[:500], 'engaged_at': now_kst().isoformat(), 'cleared_by': 'MANUAL_ONLY'}
+    try:
+        atomic_write_json(EXIT_ONLY_FLAG, payload, indent=2, ensure_ascii=False)
+    except Exception as _fe:
+        logger.critical(f"  ❌ [Exit-Only] 플래그 기록 실패: {_fe}", exc_info=True)
+    logger.critical(f"  🛑 [Exit-Only ENGAGED] {reason} — 신규 매수 전면 차단, 청산만 허용. 해제: {EXIT_ONLY_FLAG} 수동 삭제")
+    try:
+        from src.utils.telegram_notifier import TelegramNotifier
+        TelegramNotifier().send_alert('🛑 EXIT-ONLY 모드 진입',
+                                      f"사유: {reason}\n신규 매수 차단 · 청산 로직 유지\n해제: results/EXIT_ONLY.flag 수동 삭제")
+    except Exception as _te:
+        logger.error(f"  [Exit-Only] 텔레그램 알림 실패: {_te}")
+
 
 
 
@@ -463,32 +486,27 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 # 이 스코프의 변수명은 _market_data임 (market_data는 미정의)
                 _market_data['exit_only'] = True
 
-            # 레짐 판정 — HMM Regime Model 적용 (탈 하드코딩)
-            from src.regime.hmm_regime_model import HMMRegimeModel
-            import pandas as pd
-            
-            hmm_engine = HMMRegimeModel()
-            if not hmm_engine.is_fitted:
-                # 과거 데이터 임시 로드 후 학습 (실제 환경에서는 별도 배치 잡에서 fit 수행 권장)
-                try:
-                    df_hist = pd.DataFrame(_rh.get('vix_history', []))
-                    if not df_hist.empty:
-                        hmm_engine.fit(df_hist)
-                except Exception as e:
-                    logger.error(f"  HMM 초기 학습 실패: {e}", exc_info=True)
-                    
+            # ★ Wave 0 A1: 기존 HMMRegimeModel은 _prepare_features가 `pass`이고 predict()가 모든 분기에서 'caution'을
+            #   반환하는 스텁이었다(모델 출력처럼 표기됨). 검증되지 않은 RegimeEngine(A3 부호반전·평활 미작동 결함)으로
+            #   하룻밤 교체하지 않고, 'caution'을 명시적 고정값으로 기록 + RegimeEngine은 섀도 로그만 남긴다(≥5거래일 비교 후 교체).
+            regime = 'caution'
+            confidence = 0.5
+            regime_result = {'regime': regime, 'confidence': confidence, 'method': 'FIXED_FALLBACK_WAVE0',
+                             'scores': {}, 'measurements': {}}
             try:
-                # 예측 시도
-                features = hmm_engine._prepare_features(_market_data)
-                regime_result = hmm_engine.predict(features)
-                regime = regime_result.get('regime', 'caution')
-                confidence = regime_result.get('confidence', 0.5)
-            except Exception as e:
-                logger.error(f"  HMM 예측 실패, Fallback to RegimeEngine: {e}", exc_info=True)
                 from src.intelligence.regime_engine import RegimeEngine
-                regime_result = RegimeEngine().detect()
-                regime = regime_result.get('regime', 'caution')
-                confidence = regime_result.get('confidence', 0.5)
+                _shadow = RegimeEngine().detect() or {}
+                regime_result['shadow_regime_engine'] = {'regime': _shadow.get('regime'),
+                                                         'confidence': _shadow.get('confidence'),
+                                                         'scores': _shadow.get('scores', {})}
+                with open(_PROJECT_ROOT / 'results' / 'regime_shadow_log.jsonl', 'a', encoding='utf-8') as _sf:
+                    _sf.write(json.dumps({'ts': datetime.now().isoformat(), 'live_regime': regime,
+                                          'shadow_regime': _shadow.get('regime'), 'shadow_conf': _shadow.get('confidence'),
+                                          'shadow_scores': _shadow.get('scores', {})}, ensure_ascii=False, default=str) + '\n')
+                logger.info(f"  🔬 [Regime Shadow] RegimeEngine={_shadow.get('regime')} "
+                            f"(conf={_shadow.get('confidence')}) — 라이브 미반영(섀도)")
+            except Exception as _rs_e:
+                logger.warning(f"  [Regime Shadow] RegimeEngine 섀도 실행 실패: {_rs_e}")
 
             # ★ SSOT 동기화: current_regime.json 및 us_market_regime.json 상시 최신화
             try:
@@ -728,13 +746,9 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                         f"  ⚠️ [Desync 경고] diff={_sync['diff_pct']:.4%} "
                         f"— 주문은 계속 진행 (1% 미달)")
             except DesyncError as _de:
-                logger.critical(
-                    f"  🚨 [Live Transition Task 2] Desync 감지! {_de} "
-                    f"— Hard Liquidate 실행"
-                )
-                from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(reason=f"DesyncError: {_de}")
-                return  # 주문 전체 중단
+                # ★ Wave 0 O1: 장부 불일치는 데이터 문제 → 전량 청산 대신 Exit-Only + 알림 (사람 판단)
+                _engage_exit_only(f"DesyncError(pre-run): {_de}")
+                return  # 주문 생성 중단 (기존 포지션의 실시간 청산 로직은 데몬에서 계속 동작)
             except Exception as _sync_err:
                 # 동기화 체크 자체가 실패해도 주문은 계속 (fail-safe)
                 logger.error(f"  Desync 체크 실패 (계속 진행): {_sync_err}", exc_info=True)
@@ -759,40 +773,17 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
             _api_elapsed = _t.time() - _api_start
             if _api_elapsed > _api_timeout_sec:
-                logger.critical(
-                    f"  🚨 [Live Transition Task 4] API Timeout 감지: "
-                    f"{_api_elapsed:.0f}초 > {_api_timeout_sec}초 "
-                    f"— Hard Liquidate 실행"
-                )
-                from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(
-                    reason=f"API Timeout {_api_elapsed:.0f}s > {_api_timeout_sec}s")
-                return
+                # ★ Wave 0 O1: 사후 타임아웃(주문은 이미 송출됨)으로 전량 청산하던 로직 제거 → Exit-Only + 알림
+                _engage_exit_only(f"Orchestrator slow run {_api_elapsed:.0f}s > {_api_timeout_sec}s")
 
         except DesyncError as _de:
-            logger.critical(
-                f"  🚨 [Live Transition Task 2] DesyncError 발생: {_de} "
-                f"— Hard Liquidate 즉시 실행"
-            )
-            try:
-                from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(reason=f"DesyncError: {_de}")
-            except Exception as _hl_err:
-                logger.critical(f"  ❌ Hard Liquidate 실패: {_hl_err}")
+            _engage_exit_only(f"DesyncError(in-run): {_de}")
             return
 
         except (RuntimeError, ConnectionError, TimeoutError) as _ce:
-            # 브로커 API 연결 오류 / 타임아웃 → 비상 청산
-            logger.critical(
-                f"  🚨 [Live Transition Task 4] 치명적 오류: {type(_ce).__name__}: {_ce} "
-                f"— Hard Liquidate 실행"
-            )
-            try:
-                from src.risk.kill_switch import KillSwitch
-                KillSwitch().hard_liquidate_all(
-                    reason=f"{type(_ce).__name__}: {_ce}")
-            except Exception as _hl_err:
-                logger.critical(f"  ❌ Hard Liquidate 실패: {_hl_err}")
+            # ★ Wave 0 O1: 범용 예외로 실계좌 전량 시장가 청산하던 로직 제거 → Exit-Only + 알림 (사람 판단)
+            logger.critical(f"  🚨 [Market Phase] 오케스트레이터 예외: {type(_ce).__name__}: {_ce}", exc_info=True)
+            _engage_exit_only(f"{type(_ce).__name__}: {_ce}")
             return
 
         if result is None:
@@ -1465,7 +1456,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
                                     # ── 2차: parquet 기반 피처 추출 (fallback) ──
                                     if len(_rows) < 20:
-                                        import pandas as pd
+                                        # (pd는 모듈 상단 import 사용 — 지역 import 시 함수 전체에서 UnboundLocalError 유발, ruff F823)
                                         _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
                                         _kr_mkt_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
                                         _parquets = sorted(_data_dir.glob('kr_0*.parquet'))

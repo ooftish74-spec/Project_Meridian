@@ -499,7 +499,9 @@ class S1ETFSniperStream(BaseStream):
             })
 
         # ── Phase 4: S1 Track F (Cross-Sector Pair Trading) ──
-        if regime in ('caution', 'range', 'bear'):
+        # ★ Wave 0 S6: 트리거 없이 하락/횡보 레짐마다 반도체 롱(conf 0.88)을 무조건 내보내던 로직 → 기본 비활성.
+        #   0-B에서 비용 차감 기대값 기반 스프레드 z 트리거 + 롤링 β 헷지로 재설계 후 재활성.
+        if regime in ('caution', 'range', 'bear') and bool(cfg.get('s1.track_f.enabled', False)):
             pair_semi = cfg.get('s1.pair_long_ticker', '091160')
             pair_inv = cfg.get('s1.pair_short_ticker', '114800')
             logger.info("⚖️ [S1 Track F] 횡보장 0-베타 섹터 페어 트레이딩 신호 생성 (반도체 롱 + 인버스 숏 헷지)")

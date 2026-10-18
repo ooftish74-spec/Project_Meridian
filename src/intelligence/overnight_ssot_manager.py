@@ -32,18 +32,18 @@ class SSOTValidationException(Exception):
 
 @dataclass
 class OvernightDataRecord:
-    trading_date: str                     # YYYY-MM-DD (target trading session date)
-    updated_at: str                       # ISO 8601 timestamp
-    night_futures_close: float            # KRX/Eurex Night Futures Close (e.g. 1106.55)
-    night_futures_change_pct: float       # Change % (e.g. +0.95)
-    sp500_change_1d: float                # S&P 500 %
-    nasdaq_change_1d: float               # NASDAQ %
-    sox_change_1d: float                  # SOX Semiconductor %
-    vix: float                            # VIX Volatility Index (e.g. 16.04)
-    usdkrw: float                         # USD/KRW FX Rate (e.g. 1352.50)
-    us10y: float                          # US 10Y Yield (e.g. 5.213)
-    status: str = "VALIDATED_LIVE"        # VALIDATED_LIVE / RECOVERED / STALE
-    source_checksum: str = ""             # Integrity verification checksum
+    trading_date: str                               # YYYY-MM-DD (target trading session date)
+    updated_at: str                                 # ISO 8601 timestamp
+    night_futures_close: Optional[float]            # KRX Night Futures Close (None = 결측)
+    night_futures_change_pct: Optional[float]       # Change %
+    sp500_change_1d: Optional[float]                # S&P 500 %
+    nasdaq_change_1d: Optional[float]               # NASDAQ %
+    sox_change_1d: Optional[float]                  # SOX Semiconductor %
+    vix: Optional[float]                            # VIX Volatility Index
+    usdkrw: Optional[float]                         # USD/KRW FX Rate
+    us10y: Optional[float]                          # US 10Y Yield
+    status: str = "VALIDATED_LIVE"                  # VALIDATED_LIVE / DEGRADED_MISSING:<fields> / STALE
+    source_checksum: str = ""                       # Integrity verification checksum
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -77,7 +77,7 @@ class OvernightSSoTManager:
                     logger.info(f"  🛡️ [SSoT Gatekeeper] 야간 마감 SSoT 검증 통과 (날짜: {record.trading_date}, 야간선물: {record.night_futures_change_pct:+.2f}%, VIX: {record.vix:.2f})")
                     return record
                 else:
-                    logger.warning(f"  ⚠️ [SSoT Gatekeeper] 과거/미갱신 SSoT 데이터 감지 (기존: {record.trading_date}) ➔ KIS Direct Master 실시간 재수집 가동!")
+                    logger.warning(f"  ⚠️ [SSoT Gatekeeper] 과거/미갱신/결측 SSoT 데이터 감지 (기존: {record.trading_date}, status={record.status}) ➔ 재수집 가동")
             except Exception as e:
                 logger.error(f"  ❌ [SSoT Gatekeeper] SSoT 파일 파손/파싱 에러: {e} ➔ 마스터 재수집 시작")
 
@@ -85,8 +85,11 @@ class OvernightSSoTManager:
         return self.rebuild_and_sync_ssot()
 
     def _validate_record_freshness(self, record: OvernightDataRecord, today_str: str) -> bool:
-        """레코드 신선도 및 수학적 타당성 검증."""
-        if not record.updated_at or record.night_futures_close <= 0 or record.vix <= 0:
+        """레코드 신선도 및 수학적 타당성 검증 (결측(None)·DEGRADED는 불합격)."""
+        if (not record.updated_at or record.night_futures_close is None or record.vix is None
+                or record.night_futures_change_pct is None
+                or record.night_futures_close <= 0 or record.vix <= 0
+                or not str(record.status).startswith("VALIDATED")):
             return False
 
         try:
@@ -113,104 +116,125 @@ class OvernightSSoTManager:
         return False
 
     def rebuild_and_sync_ssot(self, override_night_futures: Optional[Tuple[float, float]] = None) -> OvernightDataRecord:
-        """[Master Active Refetch] 모든 소스를 종합하여 단일 SSoT 파일 영속화."""
+        """[Master Active Refetch] 모든 소스를 종합하여 단일 SSoT 파일 영속화.
+
+        ★ Wave 0 D1: 수집 실패 값을 상수(VIX 16.04, USDKRW 1352.5, 야간선물 1106.55/+0.95% 등)로 날조하고
+          'VALIDATED_LIVE'로 기록하던 로직 제거. 결측은 None, status='DEGRADED_MISSING:<필드>' 로 명시하며
+          소비자는 결측 필드 기반 신규 진입을 보류(fail-closed)해야 한다.
+        """
         today_str = datetime.now().strftime("%Y-%m-%d")
         now_iso = datetime.now().isoformat()
-        
+        missing: List[str] = []
+
         logger.info("  🔄 [SSoT Master Engine] 야간 마감 데이터 통합 갱신 시작...")
 
-        # 1. KIS OpenAPI / Vendor Multiplexer 기반 수집
-        from src.utils.vendor_multiplexer import VendorMultiplexer
-        vmx = VendorMultiplexer()
-        start_d = (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")
+        def _last_from_vendor(symbol: str) -> Optional[float]:
+            try:
+                from src.utils.vendor_multiplexer import VendorMultiplexer
+                start_d = (datetime.now() - timedelta(days=4)).strftime("%Y-%m-%d")
+                s = VendorMultiplexer().fetch(symbol, start_d, today_str)
+                if s is not None and not s.empty:
+                    v = float(s.iloc[-1])
+                    return v if v == v and v > 0 else None   # NaN/비양수 거부
+            except Exception as e:
+                logger.warning(f"  ⚠️ [SSoT] {symbol} 수집 실패: {e}")
+            return None
 
-        # VIX
-        try:
-            vix_s = vmx.fetch('VIX', start_d, today_str)
-            vix_val = float(vix_s.iloc[-1]) if vix_s is not None and not vix_s.empty else 16.04
-        except Exception:
-            vix_val = 16.04
+        vix_val = _last_from_vendor('VIX')
+        fx_val = _last_from_vendor('USDKRW')
+        us10y_val = _last_from_vendor('US10Y')
 
-        # USDKRW
-        try:
-            fx_s = vmx.fetch('USDKRW', start_d, today_str)
-            fx_val = float(fx_s.iloc[-1]) if fx_s is not None and not fx_s.empty else 1352.50
-        except Exception:
-            fx_val = 1352.50
-
-        # US Indices (SP500, NASDAQ, SOX) from signal_cache or live fetch
+        # US Indices (SP500, NASDAQ, SOX) — signal_cache 관측값만 사용 (없으면 None)
+        sp500_chg = nasdaq_chg = sox_chg = None
         sc_path = _PROJECT_ROOT / "results" / "signal_cache.json"
-        sp500_chg, nasdaq_chg, sox_chg = -0.17, 0.19, 1.19
         if sc_path.exists():
             try:
                 with open(sc_path, "r", encoding="utf-8") as f:
                     sc = json.load(f)
-                sp500_chg = float(sc.get("sp500_change_1d", sp500_chg))
-                nasdaq_chg = float(sc.get("nasdaq_change_1d", nasdaq_chg))
-                sox_chg = float(sc.get("sox_change_1d", sox_chg))
-            except Exception:
-                pass
+                def _f(k):
+                    v = sc.get(k)
+                    return float(v) if isinstance(v, (int, float)) else None
+                sp500_chg, nasdaq_chg, sox_chg = _f("sp500_change_1d"), _f("nasdaq_change_1d"), _f("sox_change_1d")
+            except Exception as e:
+                logger.warning(f"  ⚠️ [SSoT] signal_cache 미국지수 로드 실패: {e}")
 
-        # Night Futures (Eurex KOSPI200 Night Session)
-        nf_close = 1106.55
-        nf_chg = 0.95
+        # Night Futures (KRX KOSPI200 Night Session)
+        nf_close = nf_chg = None
         if override_night_futures:
             nf_close, nf_chg = override_night_futures
         else:
             try:
                 from scripts.fetch_night_futures import fetch_and_save_night_futures
                 nf_res = fetch_and_save_night_futures()
-                if nf_res and nf_res.get("close", 0) > 0:
+                if nf_res and float(nf_res.get("close", 0) or 0) > 0 and nf_res.get("change_pct") is not None:
                     nf_close = float(nf_res["close"])
-                    nf_chg = float(nf_res.get("change_pct", 0.95))
+                    nf_chg = float(nf_res["change_pct"])
             except Exception as e:
                 logger.warning(f"  ⚠️ 야간선물 자동 재수집 예외: {e}")
 
+        for name, val in (('night_futures_close', nf_close), ('night_futures_change_pct', nf_chg), ('vix', vix_val),
+                          ('usdkrw', fx_val), ('sp500_change_1d', sp500_chg), ('nasdaq_change_1d', nasdaq_chg),
+                          ('sox_change_1d', sox_chg), ('us10y', us10y_val)):
+            if val is None:
+                missing.append(name)
+        status = "VALIDATED_LIVE" if not missing else f"DEGRADED_MISSING:{','.join(missing)}"
+        if missing:
+            logger.critical(f"  🚨 [SSoT] 결측 필드 {missing} — 날조 없이 DEGRADED 기록 (소비자 fail-closed 필요)")
+
+        _r = lambda v: (round(float(v), 4) if v is not None else None)
         record = OvernightDataRecord(
             trading_date=today_str,
             updated_at=now_iso,
-            night_futures_close=round(nf_close, 2),
-            night_futures_change_pct=round(nf_chg, 2),
-            sp500_change_1d=round(sp500_chg, 2),
-            nasdaq_change_1d=round(nasdaq_chg, 2),
-            sox_change_1d=round(sox_chg, 2),
-            vix=round(vix_val, 2),
-            usdkrw=round(fx_val, 2),
-            us10y=5.213,
-            status="VALIDATED_LIVE",
+            night_futures_close=_r(nf_close),
+            night_futures_change_pct=_r(nf_chg),
+            sp500_change_1d=_r(sp500_chg),
+            nasdaq_change_1d=_r(nasdaq_chg),
+            sox_change_1d=_r(sox_chg),
+            vix=_r(vix_val),
+            usdkrw=_r(fx_val),
+            us10y=_r(us10y_val),
+            status=status,
             source_checksum=f"SSOT_{today_str}_{int(time.time())}"
         )
 
         # Write to SSoT file atomically
         atomic_write_json(self.SSOT_FILE, record.to_dict(), indent=2, ensure_ascii=False)
         
-        # Mirror to secondary legacy files to preserve backward compatibility during migration
+        # Mirror to secondary legacy files — ★ Wave 0 D1: 관측된 값만 미러링 (결측을 상수로 덮지 않음)
         try:
-            legacy_nf = {
-                "symbol": "10100000",
-                "front_code": "F202612",
-                "close": record.night_futures_close,
-                "change_pct": record.night_futures_change_pct,
-                "status": "OK",
-                "source": "OvernightSSoTManager",
-                "timestamp": now_iso
-            }
-            atomic_write_json(_PROJECT_ROOT / "data" / "macro" / "night_futures.json", legacy_nf, indent=2)
-            atomic_write_json(_PROJECT_ROOT / "results" / "krx_futures_overnight.json", legacy_nf, indent=2)
-            
-            # Sync signal_cache.json
+            if record.night_futures_close is not None and record.night_futures_change_pct is not None:
+                try:
+                    from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
+                    _front = DynamicFuturesContractResolver.get_current_front_month_code()
+                except Exception as _fr_e:
+                    logger.warning(f"  ⚠️ [SSoT] 근월물 코드 동적 조회 실패: {_fr_e}")
+                    _front = None
+                legacy_nf = {
+                    "symbol": "10100000",
+                    "front_code": _front,
+                    "close": record.night_futures_close,
+                    "change_pct": record.night_futures_change_pct,
+                    "status": "OK",
+                    "source": "OvernightSSoTManager",
+                    "timestamp": now_iso
+                }
+                atomic_write_json(_PROJECT_ROOT / "data" / "macro" / "night_futures.json", legacy_nf, indent=2)
+                atomic_write_json(_PROJECT_ROOT / "results" / "krx_futures_overnight.json", legacy_nf, indent=2)
+
+            # Sync signal_cache.json (관측값만)
             if sc_path.exists():
                 with open(sc_path, "r", encoding="utf-8") as f:
                     sc_data = json.load(f)
-                sc_data["night_futures"] = record.night_futures_close
-                sc_data["night_futures_change_1d"] = record.night_futures_change_pct
-                sc_data["vix"] = record.vix
-                sc_data["usdkrw"] = record.usdkrw
+                for _k_sc, _v_sc in (("night_futures", record.night_futures_close),
+                                     ("night_futures_change_1d", record.night_futures_change_pct),
+                                     ("vix", record.vix), ("usdkrw", record.usdkrw)):
+                    if _v_sc is not None:
+                        sc_data[_k_sc] = _v_sc
                 atomic_write_json(sc_path, sc_data, indent=2)
         except Exception as e:
             logger.warning(f"  ⚠️ 레거시 미러링 갱신 예외: {e}")
 
-        logger.info(f"  🎉 [SSoT Master Engine] 100% 검증된 단일 SSoT 구축 완료 -> {self.SSOT_FILE}")
+        logger.info(f"  [SSoT Master Engine] SSoT 기록 완료 (status={record.status}) -> {self.SSOT_FILE}")
         return record
 
 if __name__ == "__main__":

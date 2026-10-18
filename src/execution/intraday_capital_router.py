@@ -121,8 +121,12 @@ class IntradayCapitalRouter:
         from src.utils.dynamic_quant_engine import get_quant_engine
         _dqe = get_quant_engine()
 
-        # 작업용 복사본 생성
+        # 작업용 복사본 생성 (+ 상장폐지 구코드 → 후속코드 정규화: 단일 SSOT, 로그 기록)
+        from src.utils.ticker_canonical import canonical_ticker
         working_signals = [dict(s) for s in signals]
+        for _s in working_signals:
+            if 'ticker' in _s:
+                _s['ticker'] = canonical_ticker(_s.get('ticker'), context='intraday_capital_router')
         cancelled_indices = set()
         n = len(working_signals)
 
@@ -136,19 +140,28 @@ class IntradayCapitalRouter:
                 s1 = working_signals[i]
                 s2 = working_signals[j]
 
-                _raw_t1 = str(s1.get('ticker', '')).strip()
-                _raw_t2 = str(s2.get('ticker', '')).strip()
-                _ALIAS = {'430740': '423160', '357330': '357870'}
-                t1 = _ALIAS.get(_raw_t1, _raw_t1)
-                t2 = _ALIAS.get(_raw_t2, _raw_t2)
-                s1['ticker'] = t1
-                s2['ticker'] = t2
+                # ★ Wave 0 D3: 주문 dict의 ticker를 다른 종목으로 치환하던 _ALIAS 제거 (오종목 주문 위험)
+                t1 = str(s1.get('ticker', '')).strip()
+                t2 = str(s2.get('ticker', '')).strip()
 
                 side1 = str(s1.get('side', s1.get('action', 'buy'))).lower()
                 side2 = str(s2.get('side', s2.get('action', 'buy'))).lower()
 
                 # 조건 1: 동일 종목 상충 (Long vs Short)
                 same_ticker_conflict = (t1 == t2) and (side1 != side2)
+
+                # ★ Wave 0 E2: 매도(청산·손절·리밸런싱 축소)는 기존 보유분 감소이므로 절대 상쇄/축소하지 않는다.
+                #   동일 종목 buy↔sell 충돌 시 매수만 취소하고 매도는 원형 그대로 보존.
+                if same_ticker_conflict and ('sell' in (side1, side2)):
+                    buy_idx = i if side1 != 'sell' else j
+                    logger.warning(
+                        f"  🛡️ [Exit Protection] {t1}: 동일 종목 매수/매도 충돌 → 매도(청산) 보존, 매수 신호 취소 "
+                        f"(sell_reason={(s1 if side1 == 'sell' else s2).get('reason', '')!s:.60})"
+                    )
+                    cancelled_indices.add(buy_idx)
+                    if buy_idx == i:
+                        break
+                    continue
 
                 # 조건 2: 역방향 ETF 상충 (정적 매핑 + 경험적 베타 부호 반대 β1 * β2 <= -0.75)
                 _m1 = _dqe.get_asset_metrics(t1)
@@ -262,6 +275,9 @@ class IntradayCapitalRouter:
                 continue
             target_amount = min(rem_cash, float(sig.get('target_amount', rem_cash)))
             is_us = not str(ticker).isdigit()
+            if is_us and not dyn_fx:
+                logger.error(f"  🛑 [FX Guard] {ticker}: USD/KRW 미확보 → 해외 배분 스킵")
+                continue
             eff_price_krw = price * dyn_fx if is_us else price
             qty = math.floor(target_amount / eff_price_krw)
             alloc_val = qty * eff_price_krw
@@ -425,8 +441,8 @@ class IntradayCapitalRouter:
             stream = str(sig.get('stream', sig.get('stream_id', ''))).upper()
             tactic = str(sig.get('tactic', sig.get('strategy', ''))).upper()
             _raw_tk = str(sig.get('ticker', '')).strip()
-            _ALIAS = {'430740': '423160', '357330': '357870'}
-            ticker = _ALIAS.get(_raw_tk, _raw_tk)
+            from src.utils.ticker_canonical import canonical_ticker
+            ticker = canonical_ticker(_raw_tk, context='intraday_capital_router.rank')
 
             if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and str(ticker).upper() in _existing_held:
                 logger.info(f"  🛡️ [Router Position Guard] {ticker}: 이미 보유 중인 종목 ➔ 중복 추가 매수 스킵")
@@ -552,6 +568,9 @@ class IntradayCapitalRouter:
 
             sig['price'] = price
             is_us = not str(ticker).isdigit()
+            if is_us and not dyn_fx:
+                logger.error(f"  🛑 [FX Guard] {ticker}: USD/KRW 미확보 → 해외 라우팅 스킵 (fail-closed)")
+                continue
             eff_price_krw = price * dyn_fx if is_us else price
             raw_qty = math.floor(alloc_cash / eff_price_krw) if eff_price_krw > 0 else 0
 
@@ -600,7 +619,7 @@ class IntradayCapitalRouter:
                             lowest_price = float(lowest_pos.get('current_price', lowest_pos.get('price', 0.0)))
                             lowest_name = lowest_pos.get('name', lowest_ticker)
                             lowest_is_us = not str(lowest_ticker).isdigit()
-                            lowest_price_krw = lowest_price * dyn_fx if lowest_is_us else lowest_price
+                            lowest_price_krw = (lowest_price * dyn_fx if dyn_fx else 0.0) if lowest_is_us else lowest_price
 
                             if lowest_qty > 0 and lowest_price_krw > 0 and eff_price_krw > 0:
                                 # [Pure Dynamic Math] 신규 매수에 필요한 정확한 수량만큼만 정밀 매도 (임의 35% 강제 청산 폐지)

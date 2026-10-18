@@ -109,8 +109,8 @@ class CentralDataGateway:
     # =========================================================================
     def get_current_price(self, symbol: str, is_kr: Optional[bool] = None) -> Dict[str, Any]:
         """종목/지수/ETF 실시간 호가 조회 (3중 핫-페일오버 자동 적용)."""
-        _ALIAS = {'430740': '423160', '357330': '357870'}
-        symbol = _ALIAS.get(str(symbol).strip(), str(symbol).strip())
+        from src.utils.ticker_canonical import canonical_ticker
+        symbol = canonical_ticker(symbol, context='central_data_gateway')
 
         if symbol.upper() in ('USDKRW=X', 'USDKRW', 'KRW=X'):
             macro_res = self.get_macro_indicator('usdkrw')
@@ -182,21 +182,62 @@ class CentralDataGateway:
         """get_current_price 호환 별칭 (일본 .T 종목 등 비치명 처리 포함)."""
         return self.get_current_price(symbol, is_kr=is_kr)
 
-    def get_usdkrw_rate(self) -> float:
-        """KIS 고시환율 및 매크로 지표 기반 실시간 USD/KRW 환율 반환 (메모리 60초 캐시 적용)."""
+    _FX_LAST_GOOD = _RESULTS_DIR / 'usdkrw_last_good.json'
+
+    def get_usdkrw_rate(self) -> Optional[float]:
+        """실시간 USD/KRW (60초 메모리 캐시). ★ Wave 0 D2: 상수 1350.0 반환 제거.
+
+        우선순위: 실시간 소스 → 직전 '실관측' 값(나이 ≤ fx.max_stale_hours, 품질 q=exp(-Δt/τ) 기록) → None.
+        None이면 소비자는 해외 신규 매수를 건너뛴다(fail-closed). 매도/청산은 환율과 무관하게 진행.
+        """
+        import math as _math
         cached = getattr(self, '_cached_usdkrw', None)
         cached_ts = getattr(self, '_cached_usdkrw_ts', 0)
         now = time.time()
         if cached and (now - cached_ts) < 60.0:
             return cached
 
-        res = self.get_macro_indicator('usdkrw')
-        if res and res.get('price') and float(res['price']) > 0:
+        try:
+            res = self.get_macro_indicator('usdkrw')
+        except Exception as _fx_e:
+            logger.error(f"  ❌ [FX] 실시간 환율 조회 예외: {_fx_e}")
+            res = None
+        if res and res.get('price') and float(res['price']) > 0 and str(res.get('status', 'OK')).upper() == 'OK':
             rate = float(res['price'])
             self._cached_usdkrw = rate
             self._cached_usdkrw_ts = now
+            self.fx_quality = 1.0
+            try:
+                from src.utils.file_ops import atomic_write_json
+                atomic_write_json(self._FX_LAST_GOOD, {'rate': rate, 'ts': now, 'source': res.get('source', ''),
+                                                       'observed_at': datetime.now().isoformat()}, indent=2)
+            except Exception as _we:
+                logger.warning(f"  ⚠️ [FX] last-good 기록 실패: {_we}")
             return rate
-        return 1350.0
+
+        # 실시간 실패 → 직전 실관측값 (신선도 한도 내)
+        try:
+            from config.dynamic_config import DynamicConfig as _DCfx
+            _c = _DCfx()
+            max_stale_h = float(_c.get('fx.max_stale_hours', 72.0) or 72.0)
+            tau_h = float(_c.get('fx.quality_tau_hours', 24.0) or 24.0)
+        except Exception:
+            max_stale_h, tau_h = 72.0, 24.0
+        try:
+            if self._FX_LAST_GOOD.exists():
+                lg = json.loads(self._FX_LAST_GOOD.read_text(encoding='utf-8'))
+                age_h = (now - float(lg.get('ts', 0))) / 3600.0
+                rate = float(lg.get('rate', 0) or 0)
+                if rate > 0 and 0 <= age_h <= max_stale_h:
+                    self.fx_quality = round(_math.exp(-age_h / tau_h), 4)
+                    logger.warning(f"  ⚠️ [FX] 실시간 환율 실패 → 직전 실관측 {rate:.2f} 사용 (age={age_h:.1f}h, q={self.fx_quality})")
+                    return rate
+                logger.critical(f"  🚨 [FX] 직전 실관측 환율이 너무 오래됨(age={age_h:.1f}h > {max_stale_h}h) → None")
+        except Exception as _re:
+            logger.error(f"  ❌ [FX] last-good 로드 실패: {_re}")
+        self.fx_quality = 0.0
+        logger.critical("  🚨 [FX] USD/KRW 확보 실패 — 상수 대체 없이 None 반환 (해외 신규 매수 차단)")
+        return None
 
     def get_overnight_futures(self) -> Dict[str, Any]:
         """야간 선물 및 오버나이트 시그널 수집 (KIS OpenAPI 1순위 Direct)."""
@@ -423,6 +464,12 @@ class CentralDataGateway:
                     }
             except Exception as _e_bok:
                 logger.debug(f"  [CentralDataGateway] Tier 3 BOK FX failed: {_e_bok}")
+
+            # ★ Wave 0 D2: 모든 FX tier 실패 → 명시적 미수집 반환
+            #   (기존: get_current_price('USDKRW=X') → get_macro_indicator('usdkrw') 무한 재귀)
+            logger.error("  ❌ [CentralDataGateway] USD/KRW 전 tier 수집 실패")
+            return {'symbol': 'USDKRW', 'price': None, 'status': 'DATA_UNCOLLECTED', 'source': 'ALL_FX_TIERS_FAILED',
+                    'metric': 'usdkrw', 'timestamp': datetime.now().isoformat()}
 
         if m_lower == 'vkospi':
             try:

@@ -106,44 +106,50 @@ def run_calibration():
     # 1. Macro Calibration (KOSPI 200 vs Night Futures)
     # ----------------------------------------------------
     cache_file = base / 'data' / 'macro' / 'night_futures.json'
-    night_futures_ret = 0.0
+    night_futures_ret = None
+    _nf_reason = 'missing'
     if cache_file.exists():
-        with open(cache_file, 'r') as f:
-            cache = json.load(f)
-            night_futures_ret = float(cache.get('change_pct', cache.get('final_pct', 0.0)))
-    
+        try:
+            with open(cache_file, 'r') as f:
+                cache = json.load(f)
+            _nf_raw = cache.get('change_pct', cache.get('final_pct'))
+            _nf_ts = cache.get('timestamp') or cache.get('updated_at')
+            _max_age_h = float(cfg.get('premarket.night_futures_max_age_hours', 16) or 16)
+            _age_h = None
+            if _nf_ts:
+                _age_h = (datetime.now() - datetime.fromisoformat(str(_nf_ts)).replace(tzinfo=None)).total_seconds() / 3600.0
+            if _nf_raw is None:
+                _nf_reason = 'no_change_field'
+            elif str(cache.get('status', 'OK')).upper() not in ('OK', 'VERIFIED'):
+                _nf_reason = f"status={cache.get('status')}"
+            elif _age_h is None or _age_h < -0.5 or _age_h > _max_age_h:
+                _nf_reason = f"stale(age={_age_h if _age_h is None else round(_age_h, 1)}h > {_max_age_h}h)"
+            else:
+                night_futures_ret = float(_nf_raw)
+                _nf_reason = f"fresh(age={_age_h:.1f}h)"
+        except Exception as _nf_e:
+            _nf_reason = f"error:{_nf_e}"
+
     expected_gap = _get_expected_kospi_gap()
-    
-    logger.info(f"  📊 야간 선물(Nasdaq) 등락률: {night_futures_ret:+.2f}%")
-    logger.info(f"  📊 KOSPI 예상 체결 등락률 : {expected_gap:+.2f}%")
-    
-    divergence = expected_gap - night_futures_ret
-    penalty_ratio = 1.0
-    
-    # [대표님 지시 반영] 단순 수동 현금 보존 0.0 차단을 방지하고, 시그널 기반 적극 공격(Inverse Short & EWY Mean Reversion) 전환
-    if night_futures_ret > 0 and expected_gap <= -1.0:
-        logger.warning(f"  ⚡ [OFFENSIVE REVERSAL ATTACK] EWY({night_futures_ret:+.2f}%) 상승 & 동시호가({expected_gap:+.2f}%) 투매 괴리 ➔ 069500 -1.0% 디스카운트 강한 저격 매수 공격 모드 가동!")
-        penalty_ratio = 1.25  # 1.25x 공격 승수 적용!
-    elif night_futures_ret <= 0 and expected_gap <= -1.0:
-        logger.warning(f"  🚀 [INVERSE SHORT ATTACK] 진성 하락장 감지(EWY {night_futures_ret:+.2f}%, 동시호가 {expected_gap:+.2f}%) ➔ 114800 (KODEX 인버스 1X) 100% 하락 저격 공격 전환!")
-        for stream_id, stream_signals in signals.items():
-            for sig in stream_signals:
-                if sig.get('direction') == 'long':
-                    sig['target_ticker'] = cfg.get('tickers.short_inverse', '114800')
-                    sig['reason'] = '진성 하락장 114800 KODEX 인버스 자율 공격 전환'
-        penalty_ratio = 1.0
-    elif abs(divergence) >= 1.5:
-        logger.info(f"  📊 [MACRO DIVERGENCE] 괴리율({divergence:+.2f}%) 감지 ➔ 적정 포지션 유지 (Penalty 1.0)")
-        penalty_ratio = 1.0
-        
-    if penalty_ratio != 1.0:
-        logger.info(f"  ⚡ 매크로 공격/조정 가동: 시그널 size_pct에 Multiplier {penalty_ratio}x 적용")
-        for stream_id, stream_signals in signals.items():
-            for sig in stream_signals:
-                if 'size_pct' in sig:
-                    sig['size_pct'] = round(sig['size_pct'] * penalty_ratio, 4)
+
+    # ★ Wave 0 A2: 야간선물 데이터가 없거나 오래되면 0.0으로 간주하지 않고 매크로 보정을 통째로 생략(pass-through)
+    if night_futures_ret is None:
+        logger.warning(f"  ⏭️ [Macro Calibration] 야간선물 데이터 사용 불가({_nf_reason}) → 매크로 보정 생략 (신호 무변경)")
     else:
-        logger.info("  ✅ 매크로 이상징후 없음.")
+        logger.info(f"  📊 야간 선물 등락률: {night_futures_ret:+.2f}% [{_nf_reason}]")
+        logger.info(f"  📊 KOSPI 예상 체결 등락률 : {expected_gap:+.2f}%")
+        divergence = expected_gap - night_futures_ret
+        # ★ Wave 0 A2: (1) 신호 종목코드를 114800 인버스로 바꾸던 방향 반전 로직 제거
+        #               (2) 검증되지 않은 1.25x 공격 승수 비활성 — 보정은 위험을 줄이는 방향만 허용 (0-B에서 z-gap 모델로 대체)
+        if night_futures_ret <= 0 and expected_gap <= -1.0:
+            logger.warning(f"  ⚠️ [MACRO] 하락 정렬(야간선물 {night_futures_ret:+.2f}%, 동시호가 {expected_gap:+.2f}%) — "
+                           f"신호 종목 변경 없음 (인버스 강제 전환 폐지)")
+        elif night_futures_ret > 0 and expected_gap <= -1.0:
+            logger.info(f"  📊 [MACRO] 야간선물↑/동시호가↓ 괴리({divergence:+.2f}%) — 승수 적용 없음 (공격 승수 비활성)")
+        elif abs(divergence) >= 1.5:
+            logger.info(f"  📊 [MACRO DIVERGENCE] 괴리율({divergence:+.2f}%) 감지 ➔ 적정 포지션 유지")
+        else:
+            logger.info("  ✅ 매크로 이상징후 없음.")
 
     # ----------------------------------------------------
     # 2. Micro Calibration (S2 개별종목 갭 역이용)
@@ -227,7 +233,7 @@ def run_calibration():
     except Exception as _sh_err:
         logger.error(f"  [Self-Healing] 셧다운 플래그 자동 정리 실패: {_sh_err}")
 
-    if penalty_ratio < 1.0 or modified_s2:
+    if modified_s2:
         atomic_write_json(signals_file, data, indent=2)
         logger.info("  ✅ 교정된 시그널(latest_signals.json) 저장 완료.")
     else:

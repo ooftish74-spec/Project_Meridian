@@ -14,6 +14,7 @@ Usage:
 """
 import json
 import logging
+import math
 from datetime import datetime
 from typing import Dict, List
 from config.dynamic_config import DynamicConfig
@@ -92,7 +93,9 @@ class S5OvernightStream(BaseStream):
         _nq_inverse_hedge = False
         try:
             from src.data.market_data_bridge import MarketDataBridge as _MDB
-            _nq_data = _MDB().get_nq_futures_change()
+            _nq_data = _MDB().get_nq_futures_change() or {}
+            if 'chg_1d_pct' not in _nq_data or str(_nq_data.get('source', '')).lower() == 'fallback':
+                raise ValueError(f"NQ data unavailable/placeholder (source={_nq_data.get('source')!r})")
             _nq_chg = float(_nq_data.get('chg_1d_pct', 0.0))
             _base_block = cfg.get('s5.nq_block_threshold_pct', -0.5)
             _base_hedge = cfg.get('s5.nq_hedge_threshold_pct', -1.5)
@@ -103,6 +106,8 @@ class S5OvernightStream(BaseStream):
             _nq_hedge_threshold = round(_base_hedge * _vix_ratio, 4)
             logger.debug(f"  [Phase 11: Dynamic Balance] S5 NQ 탄력 임계값: VIX={vix:.1f}/neutral={_vix_neutral:.1f} -> ratio={_vix_ratio:.2f} -> block={_nq_threshold:.2f}%, hedge={_nq_hedge_threshold:.2f}%")
             if _nq_chg <= _nq_hedge_threshold:
+                # ★ Wave 0 S3: 롱 차단 플래그를 '가장 먼저' 설정 — 이후 계산 예외와 무관하게 2X 오버나잇 롱 차단 보장
+                _nq_blocked = True
                 _nq_inverse_hedge = True
                 from src.utils.dynamic_quant_engine import get_quant_engine
                 _dqe_s5 = get_quant_engine()
@@ -110,14 +115,13 @@ class S5OvernightStream(BaseStream):
                 _nq_bars = _dqe_s5.compute_dynamic_exit_barriers(S5OvernightStream.inv_ticker, regime=regime, vix_level=vix)
                 logger.warning(f"  ⚡ [Phase 10: Alpha Breakthrough] S5 NQ 선물 급락: {_nq_chg:+.2f}% ≤ {_nq_hedge_threshold}% → 인버스 헷지 전환")
                 signals.append({'stream_id': 'S5', 'ticker': S5OvernightStream.inv_ticker, 'name': 'KODEX 200선물인버스2X (NQ급락헷지)', 'direction': 'long', 'confidence': _nq_conf, 'size_pct': cfg.get('s5.nq_hedge_size_pct', 0.2), 'strategy': 'nq_inverse_hedge', 'reason': f"NQ 선물 급락({_nq_chg:+.2f}%) 인버스 헷지 [Phase 11 elastic: hedge_th={_nq_hedge_threshold:.2f}%, VIX_ratio={_vix_ratio:.2f}]", 'tp_pct': cfg.get('s5.nq_hedge_tp_pct', _nq_bars.get('take_profit_pct', 2.0)), 'sl_pct': cfg.get('s5.nq_hedge_sl_pct', _nq_bars.get('stop_loss_pct', -1.0)), 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
-                _nq_blocked = True
             elif _nq_chg <= _nq_threshold:
                 _nq_blocked = True
                 logger.warning(f"  🚫 [Phase 10: Alpha Breakthrough] S5 NQ 선물 필터: {_nq_chg:+.2f}% ≤ {_nq_threshold}% → 오버나이트 매수 취소")
         except Exception as _nq_e:
-            from src.utils.error_logger import log_error_rate_limited
-            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_nq_e}", exc_info=True)
-            logger.debug(f"  [Phase 10] S5 NQ 필터 실패 (무시): {_nq_e}")
+            # ★ Wave 0 S3: NQ 데이터/계산 실패 시 0% 변동으로 간주하던 fail-open 제거 → 오버나잇 레버리지 롱 차단(fail-closed)
+            _nq_blocked = True
+            logger.error(f"  🚫 [S5 NQ Guard] NQ 선물 판정 불가 → 오버나잇 롱 차단 (fail-closed): {_nq_e}", exc_info=True)
         vix_spike_flag = market_data.get('alpha_signals', {}).get('S5_signal', {}).get('vix_spike', False)
         _nq_vol = float(market_data.get('nq_vol_pct', market_data.get('nq_1d_vol', 0.0)))
         _kelly_scale = self._compute_overnight_kelly_scale(vix, nq_vol_pct=_nq_vol, max_alloc=float(cfg.get('s5.max_alloc_ratio', 1.0)))

@@ -69,6 +69,40 @@ def _load(fname: str, default=None) -> Any:
             pass
     return default if default is not None else {}
 
+
+def _resolve_initial_capital(sp: Optional[dict], cfg_obj=None) -> float:
+    """★ Wave 0 M1: 기준 자본 단일 해석기 (None/0 → nav/None TypeError·ZeroDivision로 compute() 전체 크래시 방지).
+
+    우선순위: shadow.initial_capital → DynamicConfig portfolio.initial_capital → 최초 스냅샷 NAV → kis_portfolio 기록.
+    모두 양수가 아니면 명시적 ValueError (조용한 상수 대체 금지).
+    """
+    def _pos(v):
+        try:
+            f = float(v)
+            return f if f > 0 and f == f else None
+        except (TypeError, ValueError):
+            return None
+
+    sp = sp or {}
+    cands = [sp.get('initial_capital')]
+    try:
+        if cfg_obj is not None:
+            cands.append(cfg_obj.get('portfolio.initial_capital'))
+    except Exception:
+        pass
+    snaps = sp.get('daily_snapshots') or []
+    if snaps:
+        cands.append(snaps[0].get('nav'))
+    kp = _load('kis_portfolio.json', {})
+    if isinstance(kp, dict):
+        cands.append((kp.get('account') or {}).get('initial_capital'))
+    for c in cands:
+        v = _pos(c)
+        if v is not None:
+            return v
+    raise ValueError("initial_capital을 결정할 수 없습니다 (shadow/config/snapshot/broker 모두 결측)")
+
+
 class MeasurementEngine:
     """단일 측정 파이프라인.
 
@@ -188,7 +222,7 @@ class MeasurementEngine:
         trade_history = sp.get('trade_history', [])
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
-        initial_capital = sp.get('initial_capital', cfg.get('portfolio.initial_capital'))
+        initial_capital = _resolve_initial_capital(sp, cfg)  # ★ Wave 0 M1
         held_hit = 0
         held_total = 0
         for _pk, _pos in positions.items():
@@ -400,7 +434,7 @@ class MeasurementEngine:
         snapshots = sp.get('daily_snapshots', [])
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
-        initial_capital = sp.get('initial_capital', cfg.get('portfolio.initial_capital'))
+        initial_capital = _resolve_initial_capital(sp, cfg)  # ★ Wave 0 M1
         daily_returns = []
         nav_series = []
         if snapshots:
@@ -1216,7 +1250,7 @@ class MeasurementEngine:
         """
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
-        initial_capital = cfg.get('portfolio.initial_capital')
+        initial_capital = _resolve_initial_capital(sp, cfg)  # ★ Wave 0 M1
         snapshots = sp.get('daily_snapshots', [])
         if snapshots:
             records = sp.get('daily_records', [])
@@ -1358,7 +1392,7 @@ class MeasurementEngine:
         exits = [t for t in trade_history if t.get('action', '').upper() == 'SELL' and (t.get('entry_price', t.get('avg_price', 0)) or 0) > 0]
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
-        initial_capital = cfg.get('portfolio.initial_capital')
+        initial_capital = _resolve_initial_capital(sp, cfg)  # ★ Wave 0 M1
         ic_values = []
         for r in records:
             ic_data = r.get('ic', {})

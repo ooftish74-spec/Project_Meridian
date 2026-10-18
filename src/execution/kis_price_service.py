@@ -122,19 +122,27 @@ class KISPriceService:
         except Exception as e:
             logger.critical(f'  토큰 캐시 저장 실패: {e}', exc_info=True)
 
+    _token_fail_until: float = 0.0   # ★ Wave 0: 프로세스 공용 실패 쿨다운 (epoch sec)
+
     def _request_new_token(self) -> bool:
         """KIS OAuth2 토큰 신규 발급.
 
-        EGW00133 에러 시 재시도 (지수 백오프).
+        ★ Wave 0: 과거 구현은 '모든' 오류에 65s+130s 대기를 반복해, 인증 장애 시 종목 루프마다 195초씩
+          블로킹되어 파이프라인 타임아웃을 유발했다.
+          - EGW00133(토큰 발급 1분 1회 제한)만 65초 대기 후 1회 재시도
+          - 네트워크/기타 오류는 2초 후 1회 재시도 후 실패
+          - 최종 실패 시 60초 동안 프로세스 전체가 즉시 실패(fail-fast) → 호출부는 다른 가격 소스로 폴백
         """
         import requests
+        now_ts = time.time()
+        if now_ts < KISPriceService._token_fail_until:
+            logger.debug("  가격 서비스 토큰 쿨다운 중 → 즉시 실패")
+            return False
         url = f'{self._base_url}{self._token_endpoint}'
         body = {'grant_type': 'client_credentials', 'appkey': self._app_key, 'appsecret': self._app_secret}
-        for attempt in range(3):
-            delay = [0, 65, 130][attempt]
-            if delay > 0:
-                logger.warning(f"  ⏳ 가격 서비스 토큰 재시도 {attempt + 1}/3: {delay}초 대기...")
-                time.sleep(delay)
+        rate_limited_retry_used = False
+        net_retry_used = False
+        while True:
             try:
                 resp = requests.post(url, json=body, timeout=15)
                 data = resp.json()
@@ -143,16 +151,26 @@ class KISPriceService:
                     expires_in = data.get('expires_in', 86400)
                     self._token_expires = datetime.now() + timedelta(seconds=expires_in)
                     self._save_token_cache()
+                    KISPriceService._token_fail_until = 0.0
                     logger.info(f"  ✅ 가격 서비스 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})")
                     return True
                 error_code = data.get('error_code', '')
-                if error_code == 'EGW00133':
+                if error_code == 'EGW00133' and not rate_limited_retry_used:
+                    rate_limited_retry_used = True
+                    logger.warning("  ⏳ 가격 서비스 토큰 발급 제한(EGW00133) → 65초 후 1회 재시도")
+                    time.sleep(65)
                     continue
-                else:
-                    logger.error(f"  ❌ 가격 서비스 인증 실패: {data}")
+                logger.error(f"  ❌ 가격 서비스 인증 실패: {data}")
+                break
             except Exception as e:
                 logger.error(f"  ❌ 가격 서비스 인증 오류: {e}")
-        logger.error('  🚨 KIS 가격 서비스 토큰 갱신 최종 실패')
+                if not net_retry_used:
+                    net_retry_used = True
+                    time.sleep(2)
+                    continue
+                break
+        KISPriceService._token_fail_until = time.time() + 60.0
+        logger.error('  🚨 KIS 가격 서비스 토큰 갱신 최종 실패 (60초 쿨다운)')
         return False
 
     def _get_headers(self) -> Dict:

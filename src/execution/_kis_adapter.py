@@ -26,6 +26,18 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# ★ Wave 0 E3/E4: 긴급 청산 등급 — 직전가 지정가 변환 금지 + 기존 미체결 매도 취소 후 재집행 대상
+_URGENT_EXIT_LEVELS = frozenset({'panic', 'stop', 'high', 'urgent'})
+
+
+def _order_urgency(order) -> str:
+    """Order.notes 의 'urgency=...' 토큰을 파싱 (없으면 'normal')."""
+    for part in str(getattr(order, 'notes', '') or '').split(','):
+        part = part.strip()
+        if part.startswith('urgency='):
+            return part.split('=', 1)[1].strip().lower() or 'normal'
+    return 'normal'
+
 @dataclass
 class Order:
     """주문."""
@@ -368,14 +380,15 @@ class KISTraderAdapter:
         """
         with self._lock:
             order = Order(order_id=self._gen_order_id(), ticker=ticker, side='sell', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
-            order.notes = f"tif={time_in_force}" + (f",{notes}" if notes else "")
-            order_amount = (price or 0) * (quantity or 0)
+            _urg = str(urgency or 'normal').lower()
+            order.notes = f"tif={time_in_force},urgency={_urg}" + (f",{notes}" if notes else "")
             # 🎯 [User Rule] 분할매도/TWAP 전면 금지 ➔ 100% 일괄 즉시 매도 전송
-            pass
             # 🚀 [Smart Limit Order Engine & Institutional IS Mid-Point Pegged]
             now_time = datetime.now().time()
             is_call_auction = (dtime(8, 30) <= now_time < dtime(9, 0))
-            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or urgency == 'repeg')
+            # ★ Wave 0 E4: 긴급 청산(panic/stop/high)은 직전가 지정가 변환 금지 — 급락장 미체결로 손절 불발 방지
+            is_urgent_exit = _urg in _URGENT_EXIT_LEVELS
+            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or _urg == 'repeg' or is_urgent_exit)
             if self.mode in ('live', 'paper') and not is_call_auction and not is_explicit_repeg_market:
                 cur_info = self._get_current_price(ticker)
                 if not cur_info or cur_info <= 0:
@@ -488,24 +501,64 @@ class KISTraderAdapter:
 
             # 매도 주문 잔고 초과 방어 (Usable Quantity Clamping & Unexecuted Duplicate Guard)
             if order.side.lower() in ('sell', 'short'):
+                _urg = _order_urgency(order)
+                _is_urgent = _urg in _URGENT_EXIT_LEVELS
                 try:
                     unexec_list = self.inquire_unexecuted(order.ticker)
-                    if unexec_list and isinstance(unexec_list, list):
-                        for u in unexec_list:
-                            is_sell = str(u.get('sll_buy_dvsn_cd', '')).strip() in ('01', 'sell', 'SELL') or 'sell' in str(u.get('side', '')).lower()
-                            if is_sell:
-                                rem_qty = u.get('psbl_qty', u.get('ord_qty', 0))
-                                logger.info(f"  🛡️ [Unexecuted Sell Guard] {order.ticker}: 증권사 거래소에 이미 대기 중인 미체결 매도 주문(ODNO: {u.get('odno')}, 잔여: {rem_qty}주) 확인 ➔ 중복 매도 주문 스킵 및 기접수 상태 반환")
-                                order.status = 'submitted'
-                                order.order_id = str(u.get('odno', order.order_id))
-                                self.orders.append(order)
-                                self._save_state()
-                                return order
                 except Exception as _ue_err:
-                    logger.debug(f"Unexecuted sell check bypass: {_ue_err}")
+                    unexec_list = None
+                    logger.error(f"  ⚠️ [Unexecuted Sell Guard] 미체결 조회 실패 ({order.ticker}): {_ue_err}")
+                _pending_sells = []
+                for u in (unexec_list if isinstance(unexec_list, list) else []):
+                    is_sell = str(u.get('sll_buy_dvsn_cd', '')).strip() in ('01', 'sell', 'SELL') or 'sell' in str(u.get('side', '')).lower()
+                    _u_odno = str(u.get('odno', '')).strip()
+                    if is_sell and _u_odno and _u_odno not in getattr(self, '_recently_canceled_odnos', set()):
+                        _pending_sells.append(u)
+
+                if _pending_sells and _is_urgent:
+                    # ★ Wave 0 E3: 긴급 청산 — 기존 미체결 매도(예: 익절 지정가)를 취소·확인한 뒤 손절/패닉 매도 집행
+                    _all_cleared = True
+                    for u in _pending_sells:
+                        _odno = str(u.get('odno', '')).strip()
+                        _cres = self.cancel_order(_odno, ticker=order.ticker) or {}
+                        if not _cres.get('success', False):
+                            _st = (self.check_order_status(_odno, ticker=order.ticker) or {}).get('status')
+                            if _st not in ('canceled', 'filled'):
+                                _all_cleared = False
+                                logger.critical(f"  🚨 [Urgent Exit] {order.ticker}: 기존 미체결 매도 {_odno} 취소 미확인 "
+                                                f"(msg={_cres.get('message')!r}, status={_st!r})")
+                    if not _all_cleared:
+                        order.status = 'rejected'
+                        order.notes = (order.notes + ',' if order.notes else '') + 'urgent_exit_blocked:pending_sell_cancel_unconfirmed'
+                        logger.critical(f"  🚨 [Urgent Exit] {order.ticker} {_urg} 매도 미집행 — 기존 매도 취소 미확인. 수동 확인 필요")
+                        if getattr(self, '_dlq', None):
+                            self._dlq.add(dataclasses.asdict(order), 'Urgent exit blocked: pending sell cancel unconfirmed')
+                        self.orders.append(order)
+                        self._save_state()
+                        return order
+                    logger.warning(f"  🛡️ [Urgent Exit] {order.ticker}: 기존 미체결 매도 {len(_pending_sells)}건 취소 확인 → {_urg} 매도 집행")
+                    # 취소 직전 일부 체결됐을 수 있으므로 최신 보유 수량 재조회
+                    try:
+                        _fresh = self.fetch_live_positions() or {}
+                        if getattr(self, '_last_positions_complete', False) and order.ticker in _fresh:
+                            order.quantity = min(int(order.quantity), int(_fresh[order.ticker]))
+                    except Exception as _fp_err:
+                        logger.error(f"  ⚠️ [Urgent Exit] 보유 재조회 실패 ({order.ticker}): {_fp_err}")
+                elif _pending_sells:
+                    u = _pending_sells[0]
+                    rem_qty = u.get('psbl_qty', u.get('ord_qty', 0))
+                    logger.info(f"  🛡️ [Unexecuted Sell Guard] {order.ticker}: 증권사 거래소에 이미 대기 중인 미체결 매도 주문(ODNO: {u.get('odno')}, 잔여: {rem_qty}주) 확인 ➔ 중복 매도 주문 스킵 및 기접수 상태 반환")
+                    order.status = 'submitted'
+                    order.order_id = str(u.get('odno', order.order_id))
+                    order.notes = (order.notes + ',' if order.notes else '') + 'duplicate_existing_sell'
+                    self.orders.append(order)
+                    self._save_state()
+                    return order
 
                 held_pos = self.positions.get(order.ticker)
-                held_qty = int(held_pos.quantity) if held_pos else 0
+                _mem_qty = int(held_pos.quantity) if held_pos else 0
+                _broker_qty = int((getattr(self, '_cached_live_positions', None) or {}).get(order.ticker, 0) or 0)
+                held_qty = max(_mem_qty, _broker_qty)
                 if held_qty <= 0:
                     logger.warning(f"  🛑 [Holdings Guard] {order.ticker} 미보유(수량 0) 매도 시도 차단")
                     order.status = 'skipped_insufficient_holdings'
@@ -710,7 +763,11 @@ class KISTraderAdapter:
             KISTraderAdapter._global_last_order_time = time.time()
 
         active_tr_id = headers.get('tr_id', tr_id)
+        _TOKEN_ERR_CODES = {'EGW00103', 'EGW00121', 'EGW00123'}   # 게이트웨이 단 거부 → 주문 미처리 확정
+        _RATE_LIMIT_CODES = {'EGW00201'}                          # 초당 거래건수 초과 → 주문 미처리 확정
+        _submit_started = datetime.now()
         for attempt in range(max_retries + 1):
+            definitely_not_sent = False
             try:
                 resp = requests.post(url, headers=headers, json=body, timeout=10)
                 if resp.status_code >= 500:
@@ -739,13 +796,16 @@ class KISTraderAdapter:
                     return order
                 else:
                     msg_cd = data.get('msg_cd', '')
-                    if msg_cd == 'EGW00103':
-                        logger.warning('  ⚠️ 토큰 에러(EGW00103) 감지 -> Auth 재시도 필요 (토큰 초기화)')
-                        self._access_token = None
-                        self.authenticate()
-                        headers = self._get_headers()
-                        headers['tr_id'] = active_tr_id
-                        raise requests.exceptions.RequestException('Token Expired EGW00103')
+                    if msg_cd in _TOKEN_ERR_CODES or msg_cd in _RATE_LIMIT_CODES:
+                        # 게이트웨이가 명시적으로 거부 → 주문은 처리되지 않았음이 확정 → 재시도 안전
+                        definitely_not_sent = True
+                        if msg_cd in _TOKEN_ERR_CODES:
+                            logger.warning(f'  ⚠️ 토큰 에러({msg_cd}) 감지 -> 토큰 재발급 후 재시도')
+                            self._access_token = None
+                            self.authenticate()
+                            headers = self._get_headers()
+                            headers['tr_id'] = active_tr_id
+                        raise requests.exceptions.RequestException(f'Gateway rejected before processing: {msg_cd}')
                     order.status = 'rejected'
                     logger.error(f"  ❌ API 주문 거부: {data}")
                     if self._dlq:
@@ -754,31 +814,67 @@ class KISTraderAdapter:
                     self._save_state()
                     return order
             except requests.exceptions.RequestException as e:
-                logger.warning(f"  ⚠️ API 전송 오류 ({attempt + 1}/{max_retries + 1}): {e}")
-                if attempt < max_retries:
-                    # [Idempotency Guard] 타임아웃 재시도 시 증권사 서버에 이미 접수된 주문인지 멱등성 검증 (중복 발송 100% 방지)
-                    try:
-                        unexec_list = self.inquire_unexecuted(order.ticker)
-                        if unexec_list and isinstance(unexec_list, list):
-                            for u in unexec_list:
-                                if str(u.get('pdno', u.get('ticker', ''))) == str(order.ticker):
-                                    logger.info(f"  🛡️ [Idempotency Guard] {order.ticker}: 증권사 서버에 이미 접수된 미체결 주문 확인 (ODNO: {u.get('odno')}). 중복 전송 원천 차단!")
-                                    order.status = 'submitted'
-                                    order.order_id = str(u.get('odno', order.order_id))
-                                    self.orders.append(order)
-                                    self._save_state()
-                                    return order
-                    except Exception as ie:
-                        logger.debug(f"  Idempotency check bypass: {ie}")
+                _err_txt = repr(e)
+                # 연결 자체가 수립되지 않은 경우만 '미전송 확정'으로 간주
+                if (isinstance(e, requests.exceptions.ConnectTimeout)
+                        or 'Failed to establish a new connection' in _err_txt
+                        or 'NameResolutionError' in _err_txt):
+                    definitely_not_sent = True
+                logger.warning(f"  ⚠️ API 전송 오류 ({attempt + 1}/{max_retries + 1}, not_sent={definitely_not_sent}): {e}")
 
+                if not definitely_not_sent:
+                    # ★ Wave 0 E6: 결과 모호(ReadTimeout/5xx/연결 끊김) → 증권사가 이미 접수·체결했을 수 있음.
+                    #   재전송 절대 금지. 동일 종목·방향·수량의 미체결 주문이 보이면 그 주문을 추적, 아니면 'unknown'.
+                    _match = None
+                    try:
+                        _want_side = '01' if order.side.lower() in ('sell', 'short') else '02'
+                        _since_hms = (_submit_started - timedelta(seconds=5)).strftime('%H%M%S')
+                        for u in (self.inquire_unexecuted(order.ticker) or []):
+                            if str(u.get('pdno', u.get('ticker', ''))).strip() != str(order.ticker):
+                                continue
+                            _u_side = str(u.get('sll_buy_dvsn_cd', '')).strip()
+                            _u_qty = int(float(u.get('ord_qty', 0) or 0))
+                            _u_tmd = str(u.get('ord_tmd', u.get('thco_ord_tmd', '')) or '').strip()
+                            if _u_tmd and _u_tmd < _since_hms:
+                                continue   # 제출 이전부터 걸려 있던 다른 주문 → 동일 주문으로 오인 금지
+                            if (_u_side == _want_side or not _u_side) and (_u_qty == int(order.quantity) or not _u_qty):
+                                _match = u
+                                break
+                    except Exception as ie:
+                        logger.error(f"  ⚠️ [Idempotency] 미체결 조회 실패 — 결과 미확정 유지: {ie}")
+                    if _match is None:
+                        # 미체결에 없으면 이미 전량 체결됐을 수 있음 → 당일 주문/체결 원장에서 같은 주문 탐색
+                        try:
+                            _match = self._find_broker_order_since(order, _submit_started)
+                        except Exception as le:
+                            logger.error(f"  ⚠️ [Idempotency] 주문원장 조회 실패 — 결과 미확정 유지: {le}")
+                    if _match is not None:
+                        order.status = 'submitted'
+                        order.order_id = str(_match.get('odno', order.order_id))
+                        logger.warning(f"  🛡️ [Idempotency Guard] {order.ticker}: 모호한 실패 후 증권사 접수 주문 확인(ODNO {order.order_id}) → 재전송 없이 추적")
+                    else:
+                        order.status = 'unknown'
+                        order.notes = (order.notes + ',' if order.notes else '') + f"ambiguous_submit:{type(e).__name__}"
+                        logger.critical(f"  🚨 [Idempotency Guard] {order.side.upper()} {order.ticker} x{order.quantity}: 전송 결과 미확정 "
+                                        f"({type(e).__name__}) → 중복 체결 방지를 위해 재전송 중단. 잔고 대사(reconcile) 필요")
+                        if self._dlq:
+                            self._dlq.add(dataclasses.asdict(order), f"Ambiguous submit (no resend): {e}")
+                    if self._cb:
+                        self._cb.record_failure()
+                    self.orders.append(order)
+                    self._save_state()
+                    return order
+
+                if attempt < max_retries:
                     delay = retry_delays[attempt]
-                    logger.info(f"  ⏳ {delay}초 대기 후 재전송 시도...")
+                    logger.info(f"  ⏳ 미전송 확정 → {delay}초 대기 후 재전송 시도...")
                     time.sleep(delay)
                 else:
                     order.status = 'rejected'
-                    logger.error(f"  ❌ API 주문 최종 실패 (Max Retries 초과): {e}")
+                    logger.error(f"  ❌ API 주문 최종 실패 (Max Retries 초과, 미전송 확정): {e}")
                     if self._cb:
                         self._cb.record_failure()
+                    if self._dlq:
                         self._dlq.add(dataclasses.asdict(order), f"Max Retries 초과: {e}")
         return order
 
@@ -837,18 +933,27 @@ class KISTraderAdapter:
                         matched_item = candidate
                         break
                 if matched_item is None and len(output) == 1:
-                    matched_item = output[0]
+                    _lone = str(output[0].get('odno', output[0].get('ODNO', ''))).strip().lstrip('0')
+                    if not _lone:   # ★ 주문번호가 다른 단일 행을 내 주문으로 오인 금지
+                        matched_item = output[0]
                 if matched_item:
                     total_qty = int(float(matched_item.get('ord_qty', matched_item.get('ORD_QTY', 0)) or 0))
                     filled_qty = int(float(matched_item.get('tot_ccld_qty', matched_item.get('TOT_CCLD_QTY', 0)) or 0))
                     remaining = int(float(matched_item.get('rmn_qty', matched_item.get('RMN_QTY', max(0, total_qty - filled_qty))) or 0))
                     cncl_yn = str(matched_item.get('cncl_yn', matched_item.get('CNCL_YN', matched_item.get('ORD_TMD', '')))).strip()
+                    rjct_qty = int(float(matched_item.get('rjct_qty', 0) or 0))
+                    cncl_cfrm_qty = int(float(matched_item.get('cncl_cfrm_qty', 0) or 0))
                     if (remaining == 0 and filled_qty > 0) or (filled_qty >= total_qty and total_qty > 0):
                         status = 'filled'
-                    elif cncl_yn in ('Y', '취소') or (hasattr(self, '_recently_canceled_odnos') and str(order_no).strip() in self._recently_canceled_odnos):
+                    elif rjct_qty > 0 and filled_qty == 0:
+                        status = 'rejected'
+                    elif cncl_yn in ('Y', '취소') or cncl_cfrm_qty > 0 or (hasattr(self, '_recently_canceled_odnos') and str(order_no).strip() in self._recently_canceled_odnos):
                         status = 'canceled'
                     elif filled_qty > 0:
                         status = 'partial'
+                    elif total_qty > 0 and remaining == 0:
+                        # ★ Wave 0 (KIS 실데이터 검증): 체결 0·잔량 0 = 거부/만료/취소된 '죽은 주문' → 종결 상태
+                        status = 'canceled'
                     else:
                         status = 'pending'
                     return {
@@ -1111,37 +1216,76 @@ class KISTraderAdapter:
             elif status == 'partial':
                 order.filled_quantity = result.get('filled_qty', 0)
                 logger.debug(f"  ⏳ 부분 체결: {order.filled_quantity}/{order.quantity}")
-            elif status in ('canceled', 'error'):
+            elif status in ('canceled', 'error', 'rejected'):
                 order.status = status
                 return order
             time.sleep(check_interval)
         logger.warning(f"  ⏰ 체결 타임아웃 ({timeout_sec}초): {order.ticker}")
         cancel_res = self.cancel_order(order.order_id, ticker=order.ticker)
-        if not cancel_res.get('success', False):
-            _c_msg = str(cancel_res.get('message', '') or '')
-            if '수량이 없습니다' in _c_msg or '체결' in _c_msg or '가능한' in _c_msg:
-                order.status = 'filled'
-                order.filled_quantity = order.quantity
-                order.fill_timestamp = datetime.now().isoformat()
-                logger.info(f"  ✅ [Cancel Guard] {order.ticker} 취소 시점 이미 전량 체결 확인 ({_c_msg}) ➔ 중복 재발주 차단")
-                return order
-        if fallback == 'market':
-            time.sleep(0.4)
-            remaining = order.quantity - order.filled_quantity
-            if remaining > 0:
-                market_order = Order(order_id=self._gen_order_id(), ticker=order.ticker, side=order.side, quantity=remaining, price=0, order_type='market', exchange=order.exchange)
-                result = self._api_order(market_order)
-                _res_status = getattr(result, 'status', None) or (result.get('status') if isinstance(result, dict) else None)
-                if _res_status in ('submitted', 'filled', 'filled_market_fallback') or getattr(market_order, 'status', None) in ('submitted', 'filled'):
+
+        # ★ Wave 0 E7: 취소 시도 후 권위 있는 주문 상태를 재조회 — 취소가 '확인'된 경우에만 잔량 재주문.
+        try:
+            post = self.check_order_status(order.order_id, is_us=is_us, ticker=order.ticker) or {}
+        except Exception as _pe:
+            logger.error(f"  ⚠️ [Cancel Verify] 취소 후 상태 재조회 실패 ({order.ticker}): {_pe}")
+            post = {}
+        post_status = str(post.get('status', '') or '')
+        try:
+            post_filled = int(float(post.get('filled_qty', order.filled_quantity) or 0))
+        except (TypeError, ValueError):
+            post_filled = order.filled_quantity
+        order.filled_quantity = max(int(order.filled_quantity or 0), post_filled)
+
+        if post_status == 'filled' or order.filled_quantity >= order.quantity:
+            order.status = 'filled'
+            order.filled_quantity = min(order.quantity, max(order.filled_quantity, post_filled)) or order.quantity
+            order.filled_price = post.get('filled_price', order.filled_price or order.price)
+            order.fill_timestamp = datetime.now().isoformat()
+            logger.info(f"  ✅ [Cancel Guard] {order.ticker} 취소 시점 이미 전량 체결 확인 ➔ 재발주 없음")
+            return order
+
+        _c_msg = str(cancel_res.get('message', '') or '')
+        cancel_confirmed = bool(cancel_res.get('success', False)) or post_status in ('canceled', 'rejected')
+        if not cancel_confirmed:
+            # 원주문이 아직 살아 있을 수 있음 → 추가 주문 금지 (이중 체결 방지)
+            order.status = 'unknown'
+            order.notes = (order.notes + ',' if order.notes else '') + f"cancel_unconfirmed:{_c_msg[:60]}"
+            logger.critical(f"  🚨 [Cancel Verify] {order.ticker} 취소 미확인(msg={_c_msg!r}, post={post_status!r}) "
+                            f"→ 원주문 생존 가능성으로 시장가 전환 중단. 체결 {order.filled_quantity}/{order.quantity}")
+            return order
+
+        remaining = order.quantity - order.filled_quantity
+        if fallback == 'market' and remaining > 0:
+            market_order = Order(order_id=self._gen_order_id(), ticker=order.ticker, side=order.side, quantity=remaining, price=0, order_type='market', exchange=order.exchange)
+            result = self._api_order(market_order)
+            _res_status = getattr(result, 'status', None)
+            if _res_status in ('submitted', 'filled'):
+                # 시장가 체결 확인(최대 ~5초). 확인되면 실제 수량/가격, 아니면 비체결 상태로 보고(엔진 재주문 방지).
+                _mf = {}
+                for _ in range(5):
+                    try:
+                        _mf = self.check_order_status(market_order.order_id, is_us=is_us, ticker=order.ticker) or {}
+                    except Exception:
+                        _mf = {}
+                    if _mf.get('status') == 'filled':
+                        break
+                    time.sleep(1)
+                if _mf.get('status') == 'filled':
                     order.status = 'filled_market_fallback'
-                    order.filled_quantity = order.quantity
-                    logger.info(f"  🔄 시장가 전환: {remaining}주")
+                    order.filled_quantity = order.filled_quantity + int(float(_mf.get('filled_qty', remaining) or remaining))
+                    order.filled_price = _mf.get('filled_price', order.filled_price or order.price)
+                    order.fill_timestamp = datetime.now().isoformat()
+                    logger.info(f"  🔄 시장가 전환 체결 확인: {remaining}주")
                 else:
-                    order.status = 'rejected_market_fallback'
-                    logger.error(f"  ❌ 시장가 전환 주문 실패/거부 ({order.ticker}): status={_res_status}")
+                    order.status = 'submitted_market_fallback'
+                    order.notes = (order.notes + ',' if order.notes else '') + f"market_fallback_odno:{market_order.order_id}"
+                    logger.warning(f"  ⏳ 시장가 전환 접수(체결 미확인): {order.ticker} {remaining}주 (ODNO {market_order.order_id}) — 잔고 대사로 확정")
+            else:
+                order.status = 'rejected_market_fallback'
+                logger.error(f"  ❌ 시장가 전환 주문 실패/거부 ({order.ticker}): status={_res_status}")
         else:
             order.status = 'canceled_timeout'
-            logger.info(f"  ❌ 타임아웃 취소: {order.ticker}")
+            logger.info(f"  ❌ 타임아웃 취소 확인: {order.ticker} (체결 {order.filled_quantity}/{order.quantity})")
         return order
 
     def get_live_overseas_price(self, ticker: str, exchange: str = 'NASD', ask_side: bool = False) -> Optional[float]:
@@ -1268,7 +1412,19 @@ class KISTraderAdapter:
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             _s4_tickers = set()
         # [Red Team V6] 좀비 포지션 완벽 척결을 위해 로컬 DB(self.positions) 대신 KIS 실계좌 잔고를 직접 긁어옴
-        live_positions = self.fetch_live_positions()
+        live_positions = self.fetch_live_positions() or {}
+        if not getattr(self, '_last_positions_complete', False):
+            # ★ Wave 0 E5: 불완전 스냅샷 → 직전 완전 스냅샷 + 메모리 포지션과 합집합(best-effort).
+            #   증권사가 보유 초과 매도를 거부하므로 과매도 위험 없음.
+            merged = dict(getattr(self, '_cached_live_positions', None) or {})
+            for _t, _p in (self.positions or {}).items():
+                _q = int(getattr(_p, 'quantity', 0) or 0)
+                if _q > 0:
+                    merged[_t] = max(int(merged.get(_t, 0) or 0), _q)
+            for _t, _q in live_positions.items():
+                merged[_t] = max(int(merged.get(_t, 0) or 0), int(_q or 0))
+            logger.critical(f"  🚨 [PANIC SELL] 브로커 스냅샷 불완전 → best-effort 합집합 사용: {merged}")
+            live_positions = merged
         tickers = list(live_positions.keys())
         for ticker in tickers:
             qty = live_positions[ticker]
@@ -1278,7 +1434,8 @@ class KISTraderAdapter:
                 continue
             if qty > 0:
                 logger.critical(f"    - Panic Sell: {ticker} x{qty}")
-                order = self.sell(ticker=ticker, quantity=qty, price=0, order_type='market', exchange='SOR')
+                # ★ Wave 0 E4: urgency='panic' → Smart Limit(직전가 지정가) 변환 금지, 실제 시장가 유지
+                order = self.sell(ticker=ticker, quantity=qty, price=0, order_type='market', exchange='SOR', urgency='panic')
                 panic_orders.append(order)
         if kept_positions:
             logger.critical(f"  🛡️  패닉셀 면제 종목 ({len(kept_positions)}개): {', '.join(kept_positions)}")
@@ -1702,17 +1859,20 @@ class KISTraderAdapter:
             Dict[str, int]: { '069500': 100, '122630': 50 } 형태의 실제 보유 수량 딕셔너리
         """
         if self.mode not in ('live', 'paper'):
+            self._last_positions_complete = True
             return {t: p.quantity for t, p in self.positions.items() if p.quantity > 0}
             
         # [Rate Limit & Slippage Defense] 60초 TTL 인메모리 캐싱
         now_ts = time.time()
-        if hasattr(self, '_last_positions_fetch_ts') and (now_ts - getattr(self, '_last_positions_fetch_ts', 0) < 60) and hasattr(self, '_cached_live_positions'):
+        if (hasattr(self, '_last_positions_fetch_ts') and (now_ts - getattr(self, '_last_positions_fetch_ts', 0) < 60)
+                and hasattr(self, '_cached_live_positions') and getattr(self, '_last_positions_complete', False)):
             return self._cached_live_positions
             
         with self._lock:
             self._last_positions_fetch_ts = now_ts
             if not self._access_token:
                 if not self.authenticate():
+                    self._last_positions_complete = False
                     return {}
             try:
                 import requests
@@ -1732,6 +1892,7 @@ class KISTraderAdapter:
                 
                 live_pos = {}
                 self.live_position_details = {}
+                _complete = True
                 if data.get('rt_cd') == '0':
                     output1 = data.get('output1', [])
                     for item in output1:
@@ -1739,6 +1900,9 @@ class KISTraderAdapter:
                         qty = int(item.get('hldg_qty', 0))
                         if ticker and qty > 0:
                             live_pos[ticker] = qty
+                else:
+                    _complete = False
+                    logger.error(f"  ❌ [Live Positions] 국내 잔고 조회 실패 rt_cd={data.get('rt_cd')} msg={data.get('msg_cd')}/{data.get('msg1')}")
 
                 # [Phase 75 US Live Balance Patch] 해외 주식 잔고 (TTTS3012R) 추가 통합
                 try:
@@ -1772,18 +1936,29 @@ class KISTraderAdapter:
                                     'pnl_pct': u_pnl
                                 }
                                 logger.info(f"  🇺🇸 [US Live Position] {u_ticker}: {u_qty}주 (매수가=${u_avg}, 현재가=${u_cur}, 손실률={u_pnl}%) 포착!")
+                    else:
+                        _complete = False
+                        logger.error(f"  ❌ [Live Positions] 해외 잔고 조회 실패 rt_cd={us_data.get('rt_cd')} msg={us_data.get('msg_cd')}/{us_data.get('msg1')}")
                 except Exception as _ue:
-                    logger.warning(f"  ⚠️ 해외 잔고 동기화 경고: {_ue}")
+                    _complete = False
+                    logger.error(f"  ❌ [Live Positions] 해외 잔고 동기화 예외: {_ue}")
 
-                self._cached_live_positions = live_pos
-                logger.info(f"  ✅ [Live Patch] 실계좌 국내/해외 통합 종목 동기화 완료: {live_pos}")
+                # ★ Wave 0 E5/E9: 불완전 스냅샷을 '보유 없음'으로 오인하지 않도록 완전성 플래그 노출,
+                #   불완전 스냅샷은 권위 캐시로 저장하지 않는다.
+                self._last_positions_complete = _complete
+                if _complete:
+                    self._cached_live_positions = live_pos
+                    logger.info(f"  ✅ [Live Patch] 실계좌 국내/해외 통합 종목 동기화 완료: {live_pos}")
+                else:
+                    logger.critical(f"  🚨 [Live Positions] 불완전 스냅샷(일부 조회 실패): {live_pos} — 대사/Ghost 삭제/NAV 평가에 사용 금지")
                 return live_pos
             except Exception as e:
                 logger.error(f"  ❌ fetch_live_positions 예외: {e}")
+                self._last_positions_complete = False
                 if hasattr(self, '_cached_live_positions') and self._cached_live_positions is not None:
-                    logger.warning("  ⚠️ [Live Patch] 예외 발생 → 기존 보유 잔고 캐시 반환 (Zombie Position 방지)")
-                    return self._cached_live_positions
-                return None
+                    logger.warning("  ⚠️ [Live Patch] 예외 발생 → 직전 완전 스냅샷 캐시 반환 (불완전 플래그 설정)")
+                    return dict(self._cached_live_positions)
+                return {}
 
     def _update_account(self):
         fx = float(getattr(self, 'fx_rate', 0) or self._get_live_fx_rate() or 1334.3)
@@ -1838,6 +2013,61 @@ class KISTraderAdapter:
             logger.warning(f"  🛡️ [Slippage Budget Exceeded] {ticker} 지정가(${submitted_price}) vs 현재가(${cur_p}) 드리프트 {drift_pct*100:.2f}% > {max_bps:.1f}bps")
             return True
         return False
+
+    def _find_broker_order_since(self, order: 'Order', since: datetime, attempts: int = 2) -> Optional[Dict[str, Any]]:
+        """★ Wave 0 E6: 모호한 전송 실패 후 '당일 주문·체결 원장'에서 같은 주문(종목·방향·수량·제출 이후 시각)을 탐색.
+
+        필드명은 2026-10-19 실계좌 읽기 전용 조회로 검증:
+          KRX  TTTC8001R(inquire-daily-ccld): pdno, sll_buy_dvsn_cd('01'매도/'02'매수), ord_qty, ord_dt, ord_tmd(HHMMSS), odno
+          US   TTTS3035R(inquire-ccnl): pdno, sll_buy_dvsn_cd, ft_ord_qty, dmst_ord_dt, thco_ord_tmd, odno
+        """
+        if self.mode not in ('live', 'paper'):
+            return None
+        import requests
+        is_us = not str(order.ticker).isdigit()
+        want_side = '01' if order.side.lower() in ('sell', 'short') else '02'
+        since_hms = (since - timedelta(seconds=5)).strftime('%H%M%S')
+        today = datetime.now().strftime('%Y%m%d')
+        acnt = self.account_no.split('-') if '-' in self.account_no else [self.account_no[:8], self.account_no[8:] or '01']
+        base = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01'}
+        prefix = 'V' if self.mode == 'paper' else 'T'
+        for i in range(max(1, attempts)):
+            headers = self._get_headers()
+            if not is_us:
+                headers['tr_id'] = f"{prefix}TTC8001R"
+                params = {**base, 'INQR_STRT_DT': today, 'INQR_END_DT': today, 'SLL_BUY_DVSN_CD': want_side, 'INQR_DVSN': '00',
+                          'PDNO': order.ticker, 'CCLD_DVSN': '00', 'ORD_GNO_BRNO': '', 'ODNO': '', 'INQR_DVSN_3': '00',
+                          'INQR_DVSN_1': '', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
+                url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
+                rows_key, qty_key, date_key, tmd_key = 'output1', 'ord_qty', 'ord_dt', 'ord_tmd'
+            else:
+                headers['tr_id'] = f"{prefix}TTS3035R"
+                params = {**base, 'PDNO': order.ticker, 'ORD_STRT_DT': (datetime.now() - timedelta(days=1)).strftime('%Y%m%d'),
+                          'ORD_END_DT': (datetime.now() + timedelta(days=1)).strftime('%Y%m%d'), 'SLL_BUY_DVSN': '00',
+                          'CCLD_NCCS_DVSN': '00', 'OVRS_EXCG_CD': '%', 'SORT_SQN': 'DS', 'ORD_DT': '', 'ORD_GNO_BRNO': '',
+                          'ODNO': '', 'CTX_AREA_NK200': '', 'CTX_AREA_FK200': ''}
+                url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl"
+                rows_key, qty_key, date_key, tmd_key = 'output', 'ft_ord_qty', 'dmst_ord_dt', 'thco_ord_tmd'
+            resp = requests.get(url, headers=headers, params=params, timeout=10)
+            data = resp.json()
+            if data.get('rt_cd') == '0':
+                for r in (data.get(rows_key) or []):
+                    if str(r.get('pdno', '')).strip() != str(order.ticker):
+                        continue
+                    if str(r.get('sll_buy_dvsn_cd', '')).strip() != want_side:
+                        continue
+                    if int(float(r.get(qty_key, 0) or 0)) != int(order.quantity):
+                        continue
+                    if str(r.get(date_key, today)) != today:
+                        continue
+                    if str(r.get(tmd_key, '999999') or '999999') < since_hms:
+                        continue
+                    logger.warning(f"  🔎 [Idempotency] 주문원장에서 일치 주문 발견: {order.ticker} {want_side} x{order.quantity} "
+                                   f"(ODNO ***{str(r.get('odno', ''))[-4:]})")
+                    return r
+            if i + 1 < attempts:
+                time.sleep(1.5)  # 증권사 원장 반영 지연 대비
+        return None
 
     def inquire_unexecuted(self, ticker: str = '') -> List[Dict[str, Any]]:
         """증권사 미체결 주문 조회 (국내/해외 거래소 다형성 완비 - NASD/NYSE/AMEX 전수 순회)"""
