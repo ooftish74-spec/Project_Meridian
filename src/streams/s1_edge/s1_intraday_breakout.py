@@ -20,7 +20,7 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RESULTS_DIR = _PROJECT_ROOT / 'results'
 
 class S1IntradayBreakout:

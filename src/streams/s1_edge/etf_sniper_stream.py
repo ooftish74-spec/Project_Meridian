@@ -45,9 +45,31 @@ class S1ETFSniperStream(BaseStream):
         Returns:
             일치하는 첫 번째 ticker 코드. 없으면 '' 반환.
         """
+        _aliases = {
+            'index': ('index', 'index_1x'),
+            'index_1x': ('index_1x', 'index'),
+            'index_inv': ('index_inv', 'index_inv_1x'),
+            'index_inv_1x': ('index_inv_1x', 'index_inv'),
+            'index_lev': ('index_lev', 'index_lev_2x'),
+            'index_lev_2x': ('index_lev_2x', 'index_lev'),
+        }
+        target_types = _aliases.get(etf_type, (etf_type,))
         for ticker, meta in self.universe.items():
-            if meta.get('type') == etf_type:
+            if meta.get('type') in target_types:
                 return ticker
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _dqe = get_quant_engine()
+            if 'inv_2x' in etf_type:
+                _invs = _dqe.get_inverse_hedge_tickers('KR')
+                if _invs:
+                    return _invs[0]
+            elif 'inv' in etf_type:
+                _invs = _dqe.get_inverse_hedge_tickers('KR')
+                if _invs:
+                    return _invs[-1]
+        except Exception:
+            pass
         logger.warning(f"  [S1] universe에서 type='{etf_type}' 티커를 찾을 수 없습니다.")
         return ''
 
@@ -181,10 +203,22 @@ class S1ETFSniperStream(BaseStream):
             tactic_d_trigger = True
             tactic_d_direction = 'short'
             
-        # Tactic C-Global: 미국 레짐이 정상(Bull/Neutral)이고 VIX가 안정적이며, 야간선물이 플러스 갭상승(> +0.5%)일 때만 2배수 롱 베팅
-        us_regime = market_data.get('us_regime', 'neutral')
-        overnight_futures = float(market_data.get('overnight_futures_pct', market_data.get('cme_korea_futures', 0.0)) or 0.0)
-        if us_regime in ['bull', 'neutral'] and vix < 18 and overnight_futures > 0.5:
+        # Tactic C-Global: 미국 레짐이 정상(Bull/Neutral/Caution)이고 VIX가 안정적이며, 야간선물이 플러스 갭상승(> +0.5%)일 때 롱 베팅
+        us_regime = market_data.get('us_regime', signal_cache.get('us_regime', 'neutral'))
+        _ois_fut = signal_cache.get('ois_details', {}).get('components', {}).get('krx_night_futures', {}).get('raw', {}).get('change_pct', 0.0) if isinstance(signal_cache.get('ois_details'), dict) else 0.0
+        overnight_futures = float(
+            market_data.get('overnight_futures_pct')
+            or market_data.get('cme_korea_futures')
+            or signal_cache.get('night_futures_change_1d')
+            or _ois_fut
+            or 0.0
+        )
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _vix_base = float(get_quant_engine().get_vix_regime_quantiles().get('caution', 20.0))
+        except Exception:
+            _vix_base = 20.0
+        if us_regime in ['bull', 'neutral', 'caution'] and vix < _vix_base and overnight_futures > 0.5:
             tactic_c_global_trigger = True
         else:
             tactic_c_global_trigger = False
@@ -205,13 +239,8 @@ class S1ETFSniperStream(BaseStream):
             f"vol_z={vol_z_score:.2f}, sam_vol_z={sam_vol_z:.2f}, hyn_vol_z={hyn_vol_z:.2f} "
             f"(threshold={vr_z_threshold:.1f})")
         
-        if not is_shock and not any([tactic_a_trigger, tactic_b_trigger, tactic_c_sam_trigger, tactic_c_hyn_trigger, tactic_d_trigger, tactic_c_global_trigger, tactic_dip_sniper_trigger]):
-            logger.debug("    - 스나이핑 조건 미달 (VIX 충격 및 수급 교란 없음) -> 평시 관망")
-            return []
-
-        logger.info(f"    🎯 스나이퍼 모드 가동! (Shock={is_shock})")
-
-        tp_pct = float(cfg.get('s1.sniper_tp_pct', 0.015))
+        raw_tp_pct = float(cfg.get('s1.sniper_tp_pct', 0.015))
+        tp_pct = raw_tp_pct * 100.0 if 0 < raw_tp_pct < 0.5 else raw_tp_pct
 
         # ── Model 4: Chandelier Exit (ATR 기반 동적 손절매) ──
         # 공식: sl_pct = max(sl_min_pct, atr_5m * sl_atr_multiplier)
@@ -219,209 +248,235 @@ class S1ETFSniperStream(BaseStream):
         atr_5m            = float(signal_cache.get('atr_5m', 0.0))
         sl_atr_multiplier = float(cfg.get('s1.exit.sl_atr_multiplier', 2.0))
         sl_min_pct        = float(cfg.get('s1.exit.sl_min_pct', 0.003))
-        sl_pct            = max(sl_min_pct, atr_5m * sl_atr_multiplier)
+        raw_sl_pct        = max(sl_min_pct, atr_5m * sl_atr_multiplier)
+        sl_pct            = abs(raw_sl_pct) * 100.0 if 0 < abs(raw_sl_pct) < 0.5 else abs(raw_sl_pct)
 
         # Tactic B/C 확장 TP: cfg에서 배수 로드 (하드코딩 1.5 제거)
         tactic_bc_tp_multiplier = float(cfg.get('s1.tactic_bc_tp_multiplier', 1.5))
 
-        logger.debug(
-            f"    - Chandelier SL (Model 4): atr_5m={atr_5m:.5f}, "
-            f"multiplier={sl_atr_multiplier}, sl_pct={sl_pct:.5f} "
-            f"(min={sl_min_pct:.3f})")
+        if not is_shock and not any([tactic_a_trigger, tactic_b_trigger, tactic_c_sam_trigger, tactic_c_hyn_trigger, tactic_d_trigger, tactic_c_global_trigger, tactic_dip_sniper_trigger]):
+            logger.debug("    - 스나이핑 조건 미달 (VIX 충격 및 수급 교란 없음) -> Phase 3/4 및 비정형 알파 점검 진행")
+        else:
+            logger.info(f"    🎯 스나이퍼 모드 가동! (Shock={is_shock})")
+            logger.debug(
+                f"    - Chandelier SL (Model 4): atr_5m={atr_5m:.5f}, "
+                f"multiplier={sl_atr_multiplier}, sl_pct={sl_pct:.5f}% "
+                f"(min={sl_min_pct:.3f})")
 
-        # Tactic C 최우선 판별
-        # Tactic D 최우선 판별 (Lever 4: LP 호가 불균형 극단값 스케일링)
-        if tactic_d_trigger:
-            tactic_d_tp = tp_pct * 1.66 if abs(lp_pressure) > 150.0 else tp_pct  # 극단값 서지 시 TP +2.5% 확여
-            logger.warning(f"    🎯 [Tactic D Lever 4] LP MOC 헤징 압박 감지! 선행매매 진입 (방향: {tactic_d_direction}, Pressure: {lp_pressure:.1f}, Dynamic TP: {tactic_d_tp*100:.2f}%)")
-            _t_type = 'index_1x' if tactic_d_direction == 'long' else 'index_inv_1x'
-            ticker = self._get_ticker_by_type(_t_type)
-            price_data = signal_cache.get(ticker)
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0,
-                    'price': price,
-                    'confidence': 1.0,
-                    'strategy': 'tactic_d_moc_lp_frontrun',
-                    'reason': f"LP MOC Hedging Arb (Pressure: {lp_pressure:.1f})",
-                    'tp_pct': tactic_d_tp,
-                    'sl_pct': sl_pct,
-                    'holding_time': 'MOC',
-                    'execution_algo': 'vwap'
-                })
-        elif tactic_c_global_trigger:
-            logger.warning("    🎯 [Tactic C-Global] 글로벌 디커플링 감지! 오버나잇 갭상승 베팅 (2배수 롱).")
-            ticker = cfg.get('s1.global_defense_ticker', self._get_ticker_by_type('index') or '069500')
-            price_data = signal_cache.get(ticker) or signal_cache.get('stock_technicals', {}).get(ticker, {})
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price <= 0:
-                try:
-                    from src.data_collection.kis_data_collector import KISDataCollector
-                    live_p = KISDataCollector().get_current_price(ticker)
-                    if live_p and float(live_p.get('stck_prpr', 0)) > 0:
-                        price = float(live_p['stck_prpr'])
-                except Exception as _e:
-                    logger.debug(f"  S1 Tactic C: 실시간 가격 수집 실패: {_e}")
-            if price <= 0:
-                logger.warning(f"  [S1 Tactic C] {ticker} 가격 수집 불가로 시그널 차단")
-                return signals
-            signals.append({
-                'stream_id': self.stream_id,
-                'ticker': ticker,
-                'name': self.universe.get(ticker, {}).get('name', 'TIGER 미국필라델피아반도체나스닥'),
-                'direction': 'long',
-                'size_pct': 1.0,
-                'price': price,
-                'confidence': 1.0,
-                'strategy': 'tactic_c_global_decoupling',
-                'reason': f"US Neutral + KOSPI Drop Decoupling",
-                'tp_pct': tp_pct * tactic_bc_tp_multiplier,
-                'sl_pct': sl_pct,
-                'holding_time': 'OVERNIGHT',
-                'execution_algo': 'vwap'
-            })
-        elif tactic_c_sam_trigger:
-            logger.warning("    🎯 [Tactic C] 삼성전자 단일종목 웩더독 감지! 삼성전자 인버스 저격.")
-            ticker = cfg.get('ss_etf.samsung.inv_ticker')
-            price_data = signal_cache.get(ticker) if ticker else None
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if ticker and price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0,  # Smart Wallet 연동 화력 개방
-                    'price': price,
-                    'confidence': self._calc_dynamic_conf(0.60, sam_features.get('ss_etf_vol_ratio', 0.0), 0.05),
-                    'strategy': 'tactic_c_samsung_wag_the_dog',
-                    'reason': f"삼성전자 웩더독 (VolZ={sam_vol_z:.2f}σ, AnomalyZ={sam_anomaly_z:.2f}σ)",
-                    'tp_pct': tp_pct * tactic_bc_tp_multiplier,
-                    'sl_pct': sl_pct,
-                    'holding_time': '5m',
-                    'execution_algo': 'vwap'
-                })
-        elif tactic_c_hyn_trigger:
-            logger.warning("    🎯 [Tactic C] SK하이닉스 단일종목 웩더독 감지! 하이닉스 인버스 저격.")
-            ticker = cfg.get('ss_etf.hynix.inv_ticker')
-            price_data = signal_cache.get(ticker) if ticker else None
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if ticker and price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0,  # Smart Wallet 연동 화력 개방
-                    'price': price,
-                    'confidence': self._calc_dynamic_conf(0.60, hyn_features.get('ss_etf_vol_ratio', 0.0), 0.05),
-                    'strategy': 'tactic_c_hynix_wag_the_dog',
-                    'reason': f"하이닉스 웩더독 (VolZ={hyn_vol_z:.2f}σ, AnomalyZ={hyn_anomaly_z:.2f}σ)",
-                    'tp_pct': tp_pct * tactic_bc_tp_multiplier,
-                    'sl_pct': sl_pct,
-                    'holding_time': '5m',
-                    'execution_algo': 'vwap'
-                })
-        elif tactic_a_trigger:
-            _is_extreme = ofi_prob < 0.05
-            _t_type = 'index_inv_2x' if _is_extreme else 'index_inv_1x'
-            ticker = self._get_ticker_by_type(_t_type) or ('252670' if _is_extreme else self._get_ticker_by_type('index_inv'))
-            logger.warning(f"    🎯 [Tactic A] Wag-the-Dog 감지. OFI Prob: {ofi_prob:.4f}. {'2배 곱버스' if _is_extreme else '1배 인버스'} 진입.") 
-            price_data = signal_cache.get(ticker)
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0, 
-                    'price': price,
-                    'confidence': self._calc_dynamic_conf(0.55, lp_pressure, 0.0001),
-                    'strategy': 'tactic_a_wag_the_dog_ride',
-                    'reason': f"Wag-the-Dog 인버스 동승 (VolRatio={vol_ratio:.2f}, LPPres={lp_pressure:.0f})",
-                    'tp_pct': tp_pct,
-                    'sl_pct': sl_pct,
-                    'holding_time': '5m',
-                    'execution_algo': 'vwap'
-                })
-        elif tactic_b_trigger:
-            _is_extreme = vol_z_score > 2.5
-            _t_type = 'index_lev' if _is_extreme else 'index_1x'
-            ticker = self._get_ticker_by_type(_t_type) or ('122630' if _is_extreme else self._get_ticker_by_type('index'))
-            logger.warning(f"    🎯 [Tactic B] Climax 역발상 감지. Vol Z-Score: {vol_z_score:.2f}. {'2배 레버리지' if _is_extreme else '1배 롱'} 진입.") 
-            price_data = signal_cache.get(ticker)
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0, 
-                    'price': price,
-                    'confidence': self._calc_dynamic_conf(0.50, vol_anomaly, 0.10),
-                    'strategy': 'tactic_b_climax_reversion',
-                    'reason': f"가짜 하락 반발 매수 (Anomaly={vol_anomaly:.2f}, LPPres={lp_pressure:.0f})",
-                    'tp_pct': tp_pct,
-                    'sl_pct': sl_pct,
-                    'holding_time': '5m',
-                    'execution_algo': 'vwap'
-                })
-        elif is_shock:
-            vix_z = (vix - vix_ma20) / max(vix_std20, 1e-9)
-            _t_type = 'index_inv'
-            ticker = self._get_ticker_by_type(_t_type) or cfg.get('leverage.inverse_ticker', '114800')
-            logger.info(f"    🎯 [VIX Shock] 순수 변동성 스파이크 감지. VIX Z: {vix_z:.2f}. 1배 인버스({ticker}) 진입.")
-            price_data = signal_cache.get(ticker)
-            price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
-            if price > 0:
-                signals.append({
-                    'stream_id': self.stream_id,
-                    'ticker': ticker,
-                    'name': self.universe.get(ticker, {}).get('name', 'ETF'),
-                    'direction': 'long',
-                    'size_pct': 1.0, 
-                    'price': price,
-                    'confidence': self._calc_dynamic_conf(0.60, (vix - vix_ma20) / max(vix_std20, 1e-9), 0.10),
-                    'strategy': 'vix_shock_sniper',
-                    'reason': f"Z-Score 임계치({shock_threshold:.2f}) 돌파 VIX 급등({vix:.2f}) 연동 롱",
-                    'tp_pct': tp_pct,
-                    'sl_pct': sl_pct,
-                    'holding_time': '5m',
-                    'execution_algo': 'vwap'
-                })
-            
-        # ── [V1 Alpha Booster Integration] Option A (Red Team Patched) ──
-        if cfg.get('s1_sniper.v1_alpha_boost_enabled', False) and signals:
-            boost_multiplier = float(cfg.get('s1_sniper.boost_multiplier', 1.5))
-            
-            for sig in signals:
-                # Determine if the ETF represents a long or short position on the market
-                is_short_market = '인버스' in sig.get('name', '') or 'inv' in str(sig.get('ticker', ''))
-                is_long_market = not is_short_market
+            # Tactic C 최우선 판별
+            # Tactic D 최우선 판별 (Lever 4: LP 호가 불균형 극단값 스케일링)
+            if tactic_d_trigger:
+                tactic_d_tp = tp_pct * 1.66 if abs(lp_pressure) > 150.0 else tp_pct  # 극단값 서지 시 TP +2.5% 확여
+                logger.warning(f"    🎯 [Tactic D Lever 4] LP MOC 헤징 압박 감지! 선행매매 진입 (방향: {tactic_d_direction}, Pressure: {lp_pressure:.1f}, Dynamic TP: {tactic_d_tp:.2f}%)")
+                _t_type = 'index_1x' if tactic_d_direction == 'long' else 'index_inv_1x'
+                ticker = self._get_ticker_by_type(_t_type)
+                price_data = signal_cache.get(ticker)
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0,
+                        'price': price,
+                        'confidence': 1.0,
+                        'strategy': 'tactic_d_moc_lp_frontrun',
+                        'reason': f"LP MOC Hedging Arb (Pressure: {lp_pressure:.1f})",
+                        'tp_pct': tactic_d_tp,
+                        'sl_pct': sl_pct,
+                        'holding_time': 'MOC',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_c_global_trigger:
+                logger.warning("    🎯 [Tactic C-Global] 글로벌 디커플링/야간선물 급등 감지! 오버나잇 갭상승 베팅.")
+                ticker = cfg.get('s1.global_defense_ticker', self._get_ticker_by_type('index') or '069500')
+                price_data = signal_cache.get(ticker) or signal_cache.get('stock_technicals', {}).get(ticker, {})
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if price <= 0:
+                    try:
+                        from src.data_collection.kis_data_collector import KISDataCollector
+                        live_p = KISDataCollector().get_current_price(ticker)
+                        if live_p and float(live_p.get('stck_prpr', 0)) > 0:
+                            price = float(live_p['stck_prpr'])
+                    except Exception as _e:
+                        logger.debug(f"  S1 Tactic C: 실시간 가격 수집 실패: {_e}")
+                if price <= 0:
+                    logger.warning(f"  [S1 Tactic C] {ticker} 가격 수집 불가로 시그널 차단")
+                else:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'KODEX 200'),
+                        'direction': 'long',
+                        'size_pct': 1.0,
+                        'price': price,
+                        'confidence': round(min(0.95, 0.65 + 0.05 * overnight_futures), 3),
+                        'strategy': 'tactic_c_global_decoupling',
+                        'reason': f"KRX NightFut {overnight_futures:+.2f}% & VIX={vix:.1f} Rebound Long",
+                        'tp_pct': tp_pct * tactic_bc_tp_multiplier,
+                        'sl_pct': sl_pct,
+                        'holding_time': 'OVERNIGHT',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_c_sam_trigger:
+                logger.warning("    🎯 [Tactic C] 삼성전자 단일종목 웩더독 감지! 삼성전자 인버스 저격.")
+                ticker = cfg.get('ss_etf.samsung.inv_ticker')
+                price_data = signal_cache.get(ticker) if ticker else None
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if ticker and price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0,  # Smart Wallet 연동 화력 개방
+                        'price': price,
+                        'confidence': self._calc_dynamic_conf(0.60, sam_features.get('ss_etf_vol_ratio', 0.0), 0.05),
+                        'strategy': 'tactic_c_samsung_wag_the_dog',
+                        'reason': f"삼성전자 웩더독 (VolZ={sam_vol_z:.2f}σ, AnomalyZ={sam_anomaly_z:.2f}σ)",
+                        'tp_pct': tp_pct * tactic_bc_tp_multiplier,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_c_hyn_trigger:
+                logger.warning("    🎯 [Tactic C] SK하이닉스 단일종목 웩더독 감지! 하이닉스 인버스 저격.")
+                ticker = cfg.get('ss_etf.hynix.inv_ticker')
+                price_data = signal_cache.get(ticker) if ticker else None
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if ticker and price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0,  # Smart Wallet 연동 화력 개방
+                        'price': price,
+                        'confidence': self._calc_dynamic_conf(0.60, hyn_features.get('ss_etf_vol_ratio', 0.0), 0.05),
+                        'strategy': 'tactic_c_hynix_wag_the_dog',
+                        'reason': f"하이닉스 웩더독 (VolZ={hyn_vol_z:.2f}σ, AnomalyZ={hyn_anomaly_z:.2f}σ)",
+                        'tp_pct': tp_pct * tactic_bc_tp_multiplier,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_a_trigger:
+                _is_extreme = ofi_prob < 0.05
+                _t_type = 'index_inv_2x' if _is_extreme else 'index_inv_1x'
+                ticker = self._get_ticker_by_type(_t_type) or ('252670' if _is_extreme else self._get_ticker_by_type('index_inv'))
+                logger.warning(f"    🎯 [Tactic A] Wag-the-Dog 감지. OFI Prob: {ofi_prob:.4f}. {'2배 곱버스' if _is_extreme else '1배 인버스'} 진입.") 
+                price_data = signal_cache.get(ticker)
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0, 
+                        'price': price,
+                        'confidence': self._calc_dynamic_conf(0.55, lp_pressure, 0.0001),
+                        'strategy': 'tactic_a_wag_the_dog_ride',
+                        'reason': f"Wag-the-Dog 인버스 동승 (VolRatio={vol_ratio:.2f}, LPPres={lp_pressure:.0f})",
+                        'tp_pct': tp_pct,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_b_trigger:
+                _is_extreme = vol_z_score > 2.5
+                _t_type = 'index_lev' if _is_extreme else 'index_1x'
+                ticker = self._get_ticker_by_type(_t_type) or ('122630' if _is_extreme else self._get_ticker_by_type('index'))
+                logger.warning(f"    🎯 [Tactic B] Climax 역발상 감지. Vol Z-Score: {vol_z_score:.2f}. {'2배 레버리지' if _is_extreme else '1배 롱'} 진입.") 
+                price_data = signal_cache.get(ticker)
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0, 
+                        'price': price,
+                        'confidence': self._calc_dynamic_conf(0.50, vol_anomaly, 0.10),
+                        'strategy': 'tactic_b_climax_reversion',
+                        'reason': f"가짜 하락 반발 매수 (Anomaly={vol_anomaly:.2f}, LPPres={lp_pressure:.0f})",
+                        'tp_pct': tp_pct,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
+            elif tactic_dip_sniper_trigger:
+                _t_type = 'index_1x'
+                ticker = self._get_ticker_by_type(_t_type) or '069500'
+                price_data = signal_cache.get(ticker)
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or cur_p or 0.0)
+                if price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'KODEX 200'),
+                        'direction': 'long',
+                        'size_pct': 0.5,
+                        'price': price,
+                        'confidence': 0.80,
+                        'strategy': 'tactic_dip_sniper_vwap',
+                        'reason': f"VWAP {fibo_factor} Dip Sniper (Price={cur_p}, VWAP={vwap_val})",
+                        'tp_pct': tp_pct,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
+            elif is_shock:
+                vix_z = (vix - vix_ma20) / max(vix_std20, 1e-9)
+                _t_type = 'index_inv'
+                ticker = self._get_ticker_by_type(_t_type) or cfg.get('leverage.inverse_ticker', '114800')
+                logger.info(f"    🎯 [VIX Shock] 순수 변동성 스파이크 감지. VIX Z: {vix_z:.2f}. 1배 인버스({ticker}) 진입.")
+                price_data = signal_cache.get(ticker)
+                price = float(price_data.get('close', 0.0)) if isinstance(price_data, dict) else float(price_data or 0.0)
+                if price > 0:
+                    signals.append({
+                        'stream_id': self.stream_id,
+                        'ticker': ticker,
+                        'name': self.universe.get(ticker, {}).get('name', 'ETF'),
+                        'direction': 'long',
+                        'size_pct': 1.0, 
+                        'price': price,
+                        'confidence': self._calc_dynamic_conf(0.60, (vix - vix_ma20) / max(vix_std20, 1e-9), 0.10),
+                        'strategy': 'vix_shock_sniper',
+                        'reason': f"Z-Score 임계치({shock_threshold:.2f}) 돌파 VIX 급등({vix:.2f}) 연동 롱",
+                        'tp_pct': tp_pct,
+                        'sl_pct': sl_pct,
+                        'holding_time': '5m',
+                        'execution_algo': 'vwap'
+                    })
                 
-                # [Red Team V4 Zero-Hardcoding] 동적 임계치 로드
-                lp_pressure_threshold = float(cfg.get('s1_sniper.lp_pressure_threshold', 200.0))
+            # ── [V1 Alpha Booster Integration] Option A (Red Team Patched) ──
+            if cfg.get('s1_sniper.v1_alpha_boost_enabled', False) and signals:
+                boost_multiplier = float(cfg.get('s1_sniper.boost_multiplier', 1.5))
                 
-                # Boost if Intraday LP Pressure (real-time smart money) strongly aligns with trade direction
-                if (is_long_market and lp_pressure > lp_pressure_threshold) or (is_short_market and lp_pressure < -lp_pressure_threshold):
-                    logger.info(f"    🚀 [S1 Real-Time Booster] 호가창 수급 쏠림 (LP Pressure={lp_pressure:.0f}) 확인! 확신도(Confidence) {boost_multiplier}배 부스트.")
+                for sig in signals:
+                    # Determine if the ETF represents a long or short position on the market
+                    is_short_market = '인버스' in sig.get('name', '') or 'inv' in str(sig.get('ticker', ''))
+                    is_long_market = not is_short_market
                     
-                    # 수학적 교정: size_pct 상한선 무력화 대신, Kelly 공식에 들어가는 confidence 자체를 증폭
-                    original_conf = float(sig.get('confidence', 0.5))
-                    sig['confidence'] = min(0.99, original_conf * boost_multiplier)
+                    # [Red Team V4 Zero-Hardcoding] 동적 임계치 로드
+                    lp_pressure_threshold = float(cfg.get('s1_sniper.lp_pressure_threshold', 200.0))
                     
-                    # [Red Team V4 Zero-Hardcoding] 글로벌 리스크 관리자(StreamRiskManager) 설정 연동
-                    dynamic_max_exp = float(cfg.get('risk.stream_limits.S1.max_exposure_pct', 0.3))
-                    sig['max_exposure_pct'] = dynamic_max_exp
-                    
-                    sig['reason'] += f" | 🚀 RT Boost (Cap {dynamic_max_exp*100:.0f}%)"
+                    # Boost if Intraday LP Pressure (real-time smart money) strongly aligns with trade direction
+                    if (is_long_market and lp_pressure > lp_pressure_threshold) or (is_short_market and lp_pressure < -lp_pressure_threshold):
+                        logger.info(f"    🚀 [S1 Real-Time Booster] 호가창 수급 쏠림 (LP Pressure={lp_pressure:.0f}) 확인! 확신도(Confidence) {boost_multiplier}배 부스트.")
+                        
+                        # 수학적 교정: size_pct 상한선 무력화 대신, Kelly 공식에 들어가는 confidence 자체를 증폭
+                        original_conf = float(sig.get('confidence', 0.5))
+                        sig['confidence'] = min(0.99, original_conf * boost_multiplier)
+                        
+                        # [Red Team V4 Zero-Hardcoding] 글로벌 리스크 관리자(StreamRiskManager) 설정 연동
+                        dynamic_max_exp = float(cfg.get('risk.stream_limits.S1.max_exposure_pct', 0.3))
+                        sig['max_exposure_pct'] = dynamic_max_exp
+                        
+                        sig['reason'] += f" | 🚀 RT Boost (Cap {dynamic_max_exp*100:.0f}%)"
 
         # ── Phase 3: S1 Tactic F (Pre-Market LP Arbitrage Sniping) ──
         premarket_info = signal_cache.get('premarket_auction', {})
@@ -436,6 +491,8 @@ class S1ETFSniperStream(BaseStream):
                 'direction': 'long',
                 'size_pct': 0.5,
                 'confidence': 0.95,
+                'tp_pct': tp_pct,
+                'sl_pct': sl_pct,
                 'strategy': 'tactic_f_premarket_lp_arbitrage',
                 'reason': f"Pre-Market LP Arbitrage Sniping ({expected_disparity:.2f}%)",
                 'holding_time': '15s_lp_bounce'
@@ -453,27 +510,39 @@ class S1ETFSniperStream(BaseStream):
                 'direction': 'long',
                 'size_pct': 0.25,
                 'confidence': 0.88,
+                'tp_pct': tp_pct,
+                'sl_pct': sl_pct,
                 'strategy': 'track_f_cross_sector_pair',
                 'reason': 'Cross-Sector Pair Trading (0-Beta Relative Value)'
             })
-            signals.append({
-                'stream_id': self.stream_id,
-                'ticker': pair_inv,
-                'name': 'KODEX 인버스 (Pair Short Hedge)',
-                'direction': 'long',
-                'size_pct': 0.25,
-                'confidence': 0.88,
-                'strategy': 'track_f_cross_sector_pair',
-                'reason': 'Cross-Sector Pair Trading (0-Beta Relative Value)'
-            })
+            if not tactic_c_global_trigger and vix >= 22.0:
+                signals.append({
+                    'stream_id': self.stream_id,
+                    'ticker': pair_inv,
+                    'name': 'KODEX 인버스 (Pair Short Hedge)',
+                    'direction': 'long',
+                    'size_pct': 0.25,
+                    'confidence': 0.88,
+                    'tp_pct': tp_pct,
+                    'sl_pct': sl_pct,
+                    'strategy': 'track_f_cross_sector_pair',
+                    'reason': 'Cross-Sector Pair Trading (0-Beta Relative Value)'
+                })
 
         # ── [Tier-1 Unconventional Mathematical Alpha Integration] ──
         try:
             unconventional_eval = self.unconventional_engine.evaluate_all(market_data)
-            # 1. ETP Volatility Decay Signals
+            # 1. ETP Volatility Decay Signals (Directional Exclusivity Guard: Bull vs Bear ETP 동시 매수 원천 차단)
+            _allow_inverse_etp = (regime in ('bear', 'crash', 'crisis')) or is_shock or tactic_a_trigger
+            _allow_bull_etp = (regime in ('bull', 'bull_strong')) and (not is_shock) and (not tactic_a_trigger) and (lp_pressure >= 0)
             for decay_res in unconventional_eval.get('etf_decay_results', []):
                 if decay_res.get('recommended_action') == 'HARVEST_DECAY':
                     t_code = decay_res['ticker']
+                    _is_inv_etp = t_code in ('252670', 'SQQQ', '114800')
+                    if _is_inv_etp and not _allow_inverse_etp:
+                        continue
+                    if (not _is_inv_etp) and not _allow_bull_etp:
+                        continue
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': t_code,
@@ -481,6 +550,8 @@ class S1ETFSniperStream(BaseStream):
                         'direction': 'long',
                         'size_pct': 0.2,
                         'confidence': decay_res['signal_confidence'],
+                        'tp_pct': tp_pct,
+                        'sl_pct': sl_pct,
                         'strategy': 'etf_volatility_decay_harvest',
                         'reason': decay_res['reason'],
                         'execution_algo': 'twap'
@@ -496,6 +567,8 @@ class S1ETFSniperStream(BaseStream):
                     'direction': 'long',
                     'size_pct': 0.3,
                     'confidence': trap_res['squeeze_prob'],
+                    'tp_pct': tp_pct,
+                    'sl_pct': sl_pct,
                     'strategy': 'adversarial_liquidity_trap_squeeze',
                     'reason': trap_res['reason'],
                     'execution_algo': 'lit'
@@ -506,13 +579,8 @@ class S1ETFSniperStream(BaseStream):
         return signals
 
     def get_performance(self) -> Dict[str, Any]:
-        return {
-            'sharpe': 1.5,
-            'cumulative_return_pct': 5.0,
-            'active_positions': 0,
-            'mdd_pct': -2.0
-        }
+        return self._compute_standard_performance()
 
     def get_positions(self) -> List[Dict[str, Any]]:
-        return []
+        return list(self._positions)
 

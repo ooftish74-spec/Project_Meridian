@@ -48,6 +48,8 @@ class AccountReconciler:
             pass
 
             total_positions_krw = 0.0
+            kr_positions_krw = 0.0
+            us_positions_krw = 0.0
             reconciled_pos = {}
 
             for ticker, pos in adapter.positions.items():
@@ -61,6 +63,7 @@ class AccountReconciler:
                 if ticker.isdigit():
                     # 🇰🇷 국내 주식
                     val_krw = qty * cur_price
+                    kr_positions_krw += val_krw
                     total_positions_krw += val_krw
                     reconciled_pos[ticker] = {
                         'market': 'KR',
@@ -74,6 +77,7 @@ class AccountReconciler:
                     # 🇺🇸 미국 주식
                     val_usd = qty * cur_price
                     val_krw = val_usd * fx_rate
+                    us_positions_krw += val_krw
                     total_positions_krw += val_krw
                     reconciled_pos[ticker] = {
                         'market': 'US',
@@ -84,19 +88,30 @@ class AccountReconciler:
                         'value_krw': round(val_krw, 2)
                     }
 
-            # MTS 홈 화면과 1:1 일치하는 총 평가금액 (NAV)
-            exact_total_equity = cash_krw + (cash_usd * fx_rate) + total_positions_krw
+            # MTS 홈 화면과 1:1 일치하는 총 평가금액 (NAV) — 통합증거금 및 D+0 미국주식 미결제 증거금 자본보존 항등식 적용
+            net_kr_cash = float(getattr(adapter, 'net_d2_cash_krw', cash_krw))
+            total_usd_dep = float(getattr(adapter, 'net_usd_cash_for_nav', getattr(adapter, 'total_usd_deposit', cash_usd)) or cash_usd)
+            exact_kr_equity = net_kr_cash + kr_positions_krw
+            exact_us_equity_krw = (total_usd_dep * fx_rate) + us_positions_krw
+            exact_total_equity = exact_kr_equity + exact_us_equity_krw
             raw_api_tot_evlu = float(getattr(adapter.account, 'total_equity', exact_total_equity) or exact_total_equity)
 
+            # KIS 국내잔고 API(TTTC8434R)의 tot_evlu_amt는 국내 자산(exact_kr_equity)만 포함할 수 있으므로
+            # raw_api_tot_evlu가 exact_kr_equity와 근접하면 해외 자산을 합산한 보정값과 대조
+            if raw_api_tot_evlu > 0 and exact_us_equity_krw > 0 and abs(raw_api_tot_evlu - exact_kr_equity) < exact_us_equity_krw * 0.5:
+                comparable_api_tot_evlu = raw_api_tot_evlu + exact_us_equity_krw
+            else:
+                comparable_api_tot_evlu = raw_api_tot_evlu
+
             # 대조 오차(Discrepancy) 계산
-            diff = abs(exact_total_equity - raw_api_tot_evlu)
-            discrepancy_bps = (diff / raw_api_tot_evlu * 10000.0) if raw_api_tot_evlu > 0 else 0.0
+            diff = abs(exact_total_equity - comparable_api_tot_evlu)
+            discrepancy_bps = (diff / comparable_api_tot_evlu * 10000.0) if comparable_api_tot_evlu > 0 else 0.0
             discrepancy_detected = discrepancy_bps > 50.0  # 50bps (0.5%) 이상 오차 시 감지
 
             if discrepancy_detected:
                 log_fn = logger.warning if discrepancy_bps > 500.0 else logger.info
                 log_fn(
-                    f"⚖️ [AccountReconciler] KIS API raw_tot_evlu(₩{raw_api_tot_evlu:,.0f}) vs "
+                    f"⚖️ [AccountReconciler] KIS API 보정원장(₩{comparable_api_tot_evlu:,.0f}) vs "
                     f"MTS 바텀업 교정 NAV(₩{exact_total_equity:,.0f}) 갭 포착! "
                     f"(오차: ₩{diff:,.0f} / {discrepancy_bps:.1f}bps) ➔ MTS 기준으로 완전 교정 집행!"
                 )
@@ -104,14 +119,14 @@ class AccountReconciler:
             # [In-Flight Settlement Guard]
             # 주문 체결 직후 증권사 API가 예수금은 즉시 차감하였으나 신규 보유 종목(output1) 반영까지
             # 5~15초 지연(Latency)이 발생할 때, 바텀업 NAV가 일시적으로 급감하여 KillSwitch가 오작동하는 현상을 방지.
-            # 증권사 공식 평가액(raw_api_tot_evlu) 대비 3% 이상 바텀업 NAV가 낮다면 체결 지연 상태로 판정.
-            if raw_api_tot_evlu > 0 and exact_total_equity < raw_api_tot_evlu * 0.97:
-                in_flight_gap = raw_api_tot_evlu - exact_total_equity
+            # 증권사 공식 평가액(comparable_api_tot_evlu) 대비 3% 이상 바텀업 NAV가 낮다면 체결 지연 상태로 판정.
+            if comparable_api_tot_evlu > 0 and exact_total_equity < comparable_api_tot_evlu * 0.97:
+                in_flight_gap = comparable_api_tot_evlu - exact_total_equity
                 logger.warning(
                     f"⏳ [AccountReconciler] 체결 지연/미반영 자산 감지(In-Flight): ₩{in_flight_gap:,.0f} "
-                    f"(바텀업 ₩{exact_total_equity:,.0f} vs 증권사 원장 ₩{raw_api_tot_evlu:,.0f}) ➔ 증권사 공식 평가액 보호 적용"
+                    f"(바텀업 ₩{exact_total_equity:,.0f} vs 증권사 원장 ₩{comparable_api_tot_evlu:,.0f}) ➔ 증권사 공식 평가액 보호 적용"
                 )
-                final_total_equity = raw_api_tot_evlu
+                final_total_equity = comparable_api_tot_evlu
             else:
                 final_total_equity = exact_total_equity
 

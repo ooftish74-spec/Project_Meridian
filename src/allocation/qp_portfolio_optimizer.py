@@ -13,11 +13,13 @@ import logging
 import numpy as np
 import scipy.optimize as sco
 import pandas as pd
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from config.dynamic_config import DynamicConfig
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class QPortfolioOptimizer:
     """Renaissance 스타일 Quadratic Programming (QP) 자본 배분 최적화기."""
@@ -27,12 +29,64 @@ class QPortfolioOptimizer:
         base_lambda_risk: float = 1.0,
         tx_cost_rate: float = 0.0015,
         max_single_weight: float = 0.35,
-        lookback_days: int = 60
+        lookback_days: int = 60,
+        min_weight: float = 0.0
     ):
         self.base_lambda_risk = cfg.get('optimizer.base_lambda_risk', base_lambda_risk)
         self.tx_cost_rate = cfg.get('optimizer.tx_cost_rate', tx_cost_rate)
         self.max_single_weight = cfg.get('optimizer.max_single_weight', max_single_weight)
         self.lookback_days = cfg.get('optimizer.lookback_days', lookback_days)
+        self.min_weight = float(cfg.get('optimizer.min_weight', min_weight))
+
+    def load_aligned_returns(self, tickers: List[str], lookback_days: Optional[int] = None) -> pd.DataFrame:
+        """[L3-14] Load and date-align returns across KR (`data/kr_markets/`) and US (`data/us_stocks/prices/`) parquet files."""
+        lb = int(lookback_days or self.lookback_days or 60)
+        series_dict: Dict[str, pd.Series] = {}
+        kr_dir = _PROJECT_ROOT / "data" / "kr_markets"
+        us_dir = _PROJECT_ROOT / "data" / "us_stocks" / "prices"
+
+        for tk in tickers:
+            clean_tk = str(tk).replace(".KS", "").replace(".KQ", "").strip()
+            candidates = [
+                kr_dir / f"kr_{clean_tk}.parquet",
+                kr_dir / f"{clean_tk}.parquet",
+                us_dir / f"{clean_tk}.parquet",
+                us_dir / f"{tk}.parquet",
+            ]
+            loaded = False
+            for p in candidates:
+                if p.exists():
+                    try:
+                        df = pd.read_parquet(p)
+                        close_col = next((c for c in ["Close", "close", "Adj Close", "adj_close"] if c in df.columns), None)
+                        if close_col is not None and len(df) > 1:
+                            s = df[close_col].copy()
+                            if not isinstance(s.index, pd.DatetimeIndex):
+                                date_col = next((c for c in ["Date", "date", "timestamp"] if c in df.columns), None)
+                                if date_col is not None:
+                                    s.index = pd.to_datetime(df[date_col])
+                                else:
+                                    s.index = pd.to_datetime(s.index, errors="coerce")
+                            s = s[~s.index.isna()].sort_index()
+                            series_dict[tk] = s.tail(lb + 10)
+                            loaded = True
+                            break
+                    except Exception as e:
+                        logger.debug(f"[QPOptimizer] Parquet load failed for {tk} ({p}): {e}")
+            if not loaded:
+                series_dict[tk] = pd.Series(dtype=float)
+
+        valid_series = {k: v for k, v in series_dict.items() if not v.empty}
+        if not valid_series:
+            return pd.DataFrame(0.0, index=range(lb), columns=tickers)
+
+        price_df = pd.DataFrame(valid_series).sort_index()
+        returns_df = price_df.ffill().pct_change().dropna(how="all").tail(lb)
+        for tk in tickers:
+            if tk not in returns_df.columns:
+                returns_df[tk] = 0.0
+        returns_df = returns_df[tickers].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        return returns_df
 
     def compute_dynamic_lambda_risk(self, vix_spot: float, vix_mean: float = 18.0, vix_std: float = 5.0) -> float:
         """
@@ -52,19 +106,23 @@ class QPortfolioOptimizer:
         """
         Rolling 60일 데이터 기반 EWMA 공분산 행렬(Σ) 계산.
         """
-        if returns_df.empty or len(returns_df) < 5:
-            n_assets = len(returns_df.columns) if not returns_df.empty else 1
+        if returns_df is None or returns_df.empty or len(returns_df) < 5:
+            n_assets = len(returns_df.columns) if (returns_df is not None and not returns_df.empty) else 1
             return np.eye(n_assets) * 0.0004  # Fallback 2% daily vol
 
+        clean_df = returns_df.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
         # EWMA 가중치 계산
-        n_obs = len(returns_df)
+        n_obs = len(clean_df)
         weights = (1 - decay_factor) * (decay_factor ** np.arange(n_obs)[::-1])
         weights /= weights.sum()
 
-        mean_returns = np.average(returns_df.values, axis=0, weights=weights)
-        demeaned = returns_df.values - mean_returns
+        vals = np.nan_to_num(clean_df.values.astype(float), nan=0.0, posinf=0.0, neginf=0.0)
+        mean_returns = np.average(vals, axis=0, weights=weights)
+        demeaned = vals - mean_returns
         weighted_demeaned = demeaned * np.sqrt(weights[:, np.newaxis])
         cov_matrix = weighted_demeaned.T @ weighted_demeaned
+        cov_matrix = np.nan_to_num(cov_matrix, nan=0.0, posinf=0.0, neginf=0.0)
 
         # 수치적 안정성 확보 (Positive semi-definite 보장)
         min_eig = np.min(np.real(np.linalg.eigvals(cov_matrix)))
@@ -178,7 +236,7 @@ class QPortfolioOptimizer:
             return {'weights': {}, 'lambda_risk': 1.0, 'expected_portfolio_alpha': 0.0, 'portfolio_volatility': 0.0, 'turnover': 0.0, 'status': 'empty'}
 
         # ── Phase 2 Solution: Natural FX Hedge Matrix Integration ──
-        cov_matrix_hedged = np.array(cov_matrix, copy=True)
+        cov_matrix_hedged = np.nan_to_num(np.array(cov_matrix, dtype=float, copy=True), nan=0.0, posinf=0.0, neginf=0.0)
         for i, name_i in enumerate(asset_names):
             if any(us_tag in name_i.upper() for us_tag in ['US', 'S5', 'S6', 'TQQQ', 'SOXL', 'NVDA']):
                 for j, name_j in enumerate(asset_names):
@@ -187,15 +245,15 @@ class QPortfolioOptimizer:
                     elif any(us_tag in name_j.upper() for us_tag in ['US', 'S5', 'S6', 'TQQQ', 'SOXL', 'NVDA']):
                         cov_matrix_hedged[i, j] *= 0.85
 
-        cov_matrix = cov_matrix_hedged
+        cov_matrix = np.nan_to_num(cov_matrix_hedged, nan=0.0, posinf=0.0, neginf=0.0)
 
         if cov_matrix.shape != (n_assets, n_assets):
             logger.warning(f"[QPOptimizer] Covariance matrix shape mismatch {cov_matrix.shape} vs ({n_assets}, {n_assets}) → Using diagonal")
             cov_matrix = np.eye(n_assets) * 0.0004
 
         # Compute Tri-Factor Alphas (Crowding Decay + Sharpe Normalization)
-        alpha_vec = self.compute_tri_factor_alphas(alphas, cov_matrix, crowding_z_scores)
-        w0_vec = np.array([current_weights.get(k, 0.0) for k in asset_names], dtype=float)
+        alpha_vec = np.nan_to_num(self.compute_tri_factor_alphas(alphas, cov_matrix, crowding_z_scores), nan=0.0, posinf=0.0, neginf=0.0)
+        w0_vec = np.nan_to_num(np.array([current_weights.get(k, 0.0) for k in asset_names], dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
 
         lambda_risk = self.compute_dynamic_lambda_risk(vix_spot)
 
@@ -211,10 +269,19 @@ class QPortfolioOptimizer:
             {'type': 'ineq', 'fun': lambda w: max_total_exposure - np.sum(w)}  # sum(w) <= max_total_exposure
         ]
 
+        # [L3-14] Dynamically relax min_weight if n_assets * min_weight > max_total_exposure
+        eff_min_w = float(self.min_weight) if (n_assets * float(self.min_weight) <= max_total_exposure) else 0.0
+        eff_max_w = max(eff_min_w, min(self.max_single_weight, max_total_exposure))
+
         if custom_bounds is None:
-            bounds = [(0.0, min(self.max_single_weight, max_total_exposure)) for _ in range(n_assets)]
+            bounds = [(eff_min_w, eff_max_w) for _ in range(n_assets)]
         else:
-            bounds = custom_bounds
+            # Ensure custom bounds do not violate total exposure feasibility
+            sum_min_custom = sum(b[0] for b in custom_bounds)
+            if sum_min_custom > max_total_exposure:
+                bounds = [(0.0, max(0.0, min(b[1], max_total_exposure))) for b in custom_bounds]
+            else:
+                bounds = custom_bounds
 
         # Initial Guess: Equal weight capped at max_total_exposure
         w_init = np.full(n_assets, max_total_exposure / n_assets)

@@ -192,7 +192,8 @@ class PureMathematicalUnconventionalEngine:
         account_equity: float,
         vix_current: float,
         vix_historical_mean: float,
-        var_99_pct: float
+        var_99_pct: float,
+        actual_option_hedge_notional: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         [수학적 안티프래질 옵션 오버레이 및 연속 레버리지 승수 연산]
@@ -206,6 +207,7 @@ class PureMathematicalUnconventionalEngine:
             vix_current: 현재 VIX
             vix_historical_mean: VIX 역사적 평균
             var_99_pct: 99% 1-day/1-week VaR 비율 (% 단위)
+            actual_option_hedge_notional: 실제 보유 중인 옵션 헤지 명목 원금 (None일 경우 이론적 예산 기준)
 
         Returns:
             {
@@ -230,48 +232,60 @@ class PureMathematicalUnconventionalEngine:
 
         # 2. 테일 리스크 헤지 커버리지 연산
         expected_option_payoff_mult = float(self._get('unconventional.expected_option_payoff_mult', 15.0)) # 15배 스파이크
-        tail_protection_amount = option_budget * expected_option_payoff_mult
         portfolio_var_amount = account_equity * (abs(var_99_pct) / 100.0)
+        theoretical_coverage = (option_budget * expected_option_payoff_mult) / max(1.0, portfolio_var_amount)
 
-        coverage_ratio = tail_protection_amount / max(1.0, portfolio_var_amount)
+        effective_hedge = option_budget if actual_option_hedge_notional is None else max(0.0, float(actual_option_hedge_notional))
+        tail_protection_amount = effective_hedge * expected_option_payoff_mult
+        coverage_ratio = tail_protection_amount / max(1.0, portfolio_var_amount) if effective_hedge > 0.0 else 0.0
 
         # 3. 연속 레버리지 승수 연산 (L_min = 1.0, L_max = 2.5)
         l_min = float(self._get('unconventional.l_min', 1.0))
         l_max = float(self._get('unconventional.l_max', 2.5))
         
-        # 커버리지 비율 1.0 이상 시 최대 레버리지 승인
-        dynamic_leverage = l_min + (l_max - l_min) * min(1.0, coverage_ratio)
-        is_tail_hedged = coverage_ratio >= 0.8 # 80% 이상 헤지 완료 시 True
+        dynamic_leverage = l_min + (l_max - l_min) * min(1.0, coverage_ratio) if effective_hedge > 0.0 else l_min
+        is_tail_hedged = bool(effective_hedge > 0.0 and coverage_ratio >= 0.8)
 
         reason = (
             f"🛡️ [Anti-fragile] Option Budget: ₩{option_budget:,.0f} ({option_weight*100:.2f}%), "
-            f"Coverage={coverage_ratio*100:.1f}%, L_dynamic={dynamic_leverage:.2f}x"
+            f"EffectiveHedge: ₩{effective_hedge:,.0f}, Coverage={coverage_ratio*100:.1f}%, L_dynamic={dynamic_leverage:.2f}x"
         )
 
         return {
             'option_budget': round(option_budget, 2),
             'option_weight_pct': round(option_weight * 100.0, 3),
             'hedge_coverage_ratio': round(coverage_ratio, 4),
+            'theoretical_coverage_ratio': round(theoretical_coverage, 4),
             'dynamic_leverage_scale': round(dynamic_leverage, 4),
             'is_tail_hedged': is_tail_hedged,
             'reason': reason
         }
 
-    def evaluate_all(self, market_data: Dict[str, Any], account_equity: float = 150000000.0) -> Dict[str, Any]:
+    def evaluate_all(self, market_data: Dict[str, Any], account_equity: Optional[float] = None) -> Dict[str, Any]:
         """
         통합 비대칭 수학적 알파 연산 평가.
         """
         signal_cache = market_data.get('signal_cache', {})
+        if account_equity is None or account_equity <= 0:
+            account_equity = float(
+                market_data.get('account_equity')
+                or signal_cache.get('total_asset')
+                or self._get('portfolio.initial_capital', 20_000_000.0)
+            )
         vix_now = float(signal_cache.get('vix', 18.0))
         vix_mean = float(self._get('unconventional.vix_mean', 18.0))
         var_99 = float(signal_cache.get('var_99_pct', 3.0))
+        actual_hedge = float(
+            market_data.get('actual_option_hedge_notional', signal_cache.get('actual_option_hedge_notional', 0.0)) or 0.0
+        )
 
         # 1. 안티프래질 옵션 오버레이 평가
         opt_eval = self.antifragile_option_overlay_evaluator(
             account_equity=account_equity,
             vix_current=vix_now,
             vix_historical_mean=vix_mean,
-            var_99_pct=var_99
+            var_99_pct=var_99,
+            actual_option_hedge_notional=actual_hedge,
         )
 
         # 2. 대표 ETP 변동성 마모 평가
@@ -282,10 +296,10 @@ class PureMathematicalUnconventionalEngine:
             etf_results.append(decay_res)
 
         # 3. 유동성 덫 평가
-        vol_hist = market_data.get('volume_history', [100000.0] * 20)
-        depth_hist = market_data.get('depth_history', [50000.0] * 20)
-        curr_vol = float(signal_cache.get('volume_now', 120000.0))
-        curr_depth = float(signal_cache.get('depth_now', 40000.0))
+        vol_hist = market_data.get('volume_history', [])
+        depth_hist = market_data.get('depth_history', [])
+        curr_vol = float(signal_cache.get('volume_now', 0.0))
+        curr_depth = float(signal_cache.get('depth_now', 0.0))
 
         trap_eval = self.adversarial_liquidity_trap_squeeze(vol_hist, depth_hist, curr_vol, curr_depth)
 

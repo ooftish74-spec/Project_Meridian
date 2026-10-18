@@ -69,7 +69,7 @@ class IntradayFlowCollector:
                     row = today_rows.iloc[0]
 
                     def _get_qty(r: pd.Series, prefix: str) -> int:
-                        keys = [f"{prefix}_ntby_qty', f'{prefix}_ntby_quantity', f'{prefix}_ntby_vol"]
+                        keys = [f"{prefix}_ntby_qty", f"{prefix}_ntby_quantity", f"{prefix}_ntby_vol"]
                         for k in keys:
                             if k in r and (not pd.isna(r[k])):
                                 return int(r[k] or 0)
@@ -88,9 +88,9 @@ class IntradayFlowCollector:
         vol_ratio: float = 0.0
         try:
             price_data = kis.get_current_price(ticker) or {}
-            cur_px = int(price_data.get('stck_prpr', price_data.get('current_price', 0)) or 0)
-            today_vol = int(price_data.get('acml_vol', 0) or 0)
-            prev_vol = int(price_data.get('prdy_vol', 0) or 0)
+            cur_px = int(price_data.get('price', price_data.get('stck_prpr', price_data.get('current_price', 0))) or 0)
+            today_vol = int(price_data.get('volume', price_data.get('acml_vol', 0)) or 0)
+            prev_vol = int(price_data.get('prdy_vol', price_data.get('prev_volume', 0)) or 0)
             vol_ratio = round(today_vol / prev_vol, 4) if prev_vol > 0 else 0.0
         except Exception as e:
             logger.warning('[Flow] %s 현재가 조회 실패: %s', ticker, e, exc_info=True)

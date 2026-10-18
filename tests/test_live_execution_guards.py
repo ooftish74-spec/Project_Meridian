@@ -330,4 +330,79 @@ def test_us_night_engine_quantity_and_trailing_stop(monkeypatch):
     assert exit_orders[0]['direction'] == 'sell'
 
 
+def test_lowercase_parquet_alpha_edges_and_s5_kelly_excess_variance():
+    import numpy as np
+    import pandas as pd
+    from src.alpha_factory.edges.microstructure import OrderImbalanceAlpha
+    from src.alpha_factory.edges.stat_arb import PCAMeanReversionAlpha
+    from src.alpha_factory.edges.vol_surface import VolatilitySurfaceAlpha
+    from src.streams.s5_overnight.overnight_stream import S5OvernightStream
+
+    # 1. Verify lowercase 'close' and 'volume' columns (standard parquet format) generate all alpha features
+    df = pd.DataFrame({
+        'close': np.linspace(100.0, 90.0, 30),
+        'volume': np.linspace(1000.0, 2000.0, 30),
+    })
+    df1 = OrderImbalanceAlpha.generate(df)
+    assert 'alpha_order_imbalance_10d' in df1.columns
+    assert 'alpha_smart_money_flow_20d' in df1.columns
+
+    df2 = PCAMeanReversionAlpha.generate(df)
+    assert 'alpha_pca_mr_proxy_20d' in df2.columns
+
+    df3 = VolatilitySurfaceAlpha.generate(df)
+    assert 'alpha_vol_term_structure' in df3.columns
+    assert 'alpha_vol_adj_mom_10d' in df3.columns
+    assert 'alpha_dd_velocity_3d' in df3.columns
+
+    # 2. Verify S5 Kelly scale does not crush normal VIX <= 18.0 to 5%, while blocking extreme VIX >= 30.0
+    scale_normal = S5OvernightStream._compute_overnight_kelly_scale(vix=16.5, nq_vol_pct=0.0, max_alloc=1.0)
+    assert scale_normal == 1.0
+    scale_extreme = S5OvernightStream._compute_overnight_kelly_scale(vix=32.0, nq_vol_pct=1.0, max_alloc=1.0)
+    assert scale_extreme < 0.005
+
+
+def test_cross_market_inverse_routing_and_dynamic_stream_performance(monkeypatch):
+    from src.execution.intraday_capital_router import IntradayCapitalRouter
+    from src.execution.us_night_engine import USNightExecutionEngine
+    from src.streams.s1_edge.etf_sniper_stream import S1ETFSniperStream
+    import src.utils.market_calendar as mc
+
+    # 1. Verify S1ETFSniperStream uses empirical Laplace-Beta(2.5, 2.5) neutral prior instead of hardcoded sharpe=1.5
+    s1 = S1ETFSniperStream()
+    perf = s1.get_performance()
+    assert perf['sharpe'] == 0.0
+    assert perf['win_rate'] == 0.50
+
+    # 2. Verify IntradayCapitalRouter translates KRX inverse 252670 -> SQQQ when KRX is closed and US is open
+    monkeypatch.setattr(
+        mc,
+        "is_ticker_tradable_now",
+        lambda tk: (False, 'closed') if str(tk).isdigit() else (True, 'us_regular')
+    )
+    router = IntradayCapitalRouter()
+    routed = router.route_intraday_capital(
+        signals=[{'stream_id': 'S0', 'ticker': '252670', 'name': 'KODEX 200선물인버스2X', 'confidence': 0.85, 'tp_pct': 3.0, 'sl_pct': 1.5}],
+        market_data={'current_prices': {'SQQQ': 30.0}},
+        total_cash_krw=5_000_000.0,
+        enforce_session_gate=True,
+    )
+    assert len(routed) == 1
+    assert routed[0]['ticker'] == 'SQQQ'
+    assert routed[0]['market'] == 'US'
+    assert routed[0]['quantity'] >= 1
+
+    # 3. Verify USNightExecutionEngine routes 390390 semiconductor short to SOXS and 252670 to SQQQ
+    engine = USNightExecutionEngine()
+    engine.holdings = []
+    monkeypatch.setattr(engine, "is_us_session_active", lambda now=None: True)
+    monkeypatch.setattr(engine, "_get_live_fx_rate", lambda: 1350.0)
+    monkeypatch.setattr(engine, "_save_holdings", lambda: None)
+    orders = engine.process_us_night_signals([
+        {'ticker': '252670', 'name': 'KODEX 200선물인버스2X', 'strategy': 'beta_directional_short_v4', 'price': 30.0, 'size_pct': 0.10},
+        {'ticker': '390390', 'name': 'KODEX 반도체인버스', 'strategy': 'beta_directional_short_v4', 'price': 25.0, 'size_pct': 0.10},
+    ], account_nav=20_000_000.0)
+    assert [o['ticker'] for o in orders] == ['SQQQ', 'SOXS']
+
+
 

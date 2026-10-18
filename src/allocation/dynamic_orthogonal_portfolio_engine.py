@@ -265,11 +265,47 @@ class DynamicConstrainedPortfolioOptimizer:
             try:
                 prob.solve(solver=cp.OSQP, verbose=False)
                 if w.value is not None:
-                    opt_w = np.clip(np.array(w.value).flatten(), 0.0, 1.0)
-                    total_w = np.sum(opt_w)
-                    return opt_w / total_w if total_w > 0 else np.ones(N) / N
+                    opt_w = np.clip(np.array(w.value).flatten(), 0.0, single_asset_cap)
+                    for _ in range(5):
+                        for sec, cap in sector_bounds.items():
+                            mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
+                            sec_sum = float(mask @ opt_w)
+                            if sec_sum > cap > 0:
+                                opt_w[mask > 0] *= (cap / sec_sum)
+                        opt_w = np.clip(opt_w, 0.0, single_asset_cap)
+                        total_w = float(np.sum(opt_w))
+                        if total_w > 1.0:
+                            opt_w = opt_w / total_w
+                    total_w = float(np.sum(opt_w))
+                    return opt_w if total_w > 0 else np.minimum(np.ones(N) / N, single_asset_cap)
             except Exception as e:
                 logger.warning(f"[DynamicOptimizer] CVXPY 풀이 실패 ({e}), scipy 폴백 가동")
+
+        def _project_and_normalize(w_in: np.ndarray) -> np.ndarray:
+            w_p = np.clip(np.asarray(w_in, dtype=float).flatten(), 0.0, single_asset_cap)
+            for _ in range(10):
+                tot_p = float(np.sum(w_p))
+                if tot_p <= 0:
+                    return np.minimum(np.ones(N) / N, single_asset_cap)
+                if abs(tot_p - 1.0) > 1e-5:
+                    # Water-filling scaling within bounds
+                    free_mask = (w_p < single_asset_cap - 1e-6) if tot_p < 1.0 else (w_p > 0)
+                    for sec, cap in sector_bounds.items():
+                        s_mask = np.array([s == sec for s in sector_ids])
+                        if tot_p < 1.0 and float(np.sum(w_p[s_mask])) >= cap - 1e-6:
+                            free_mask = free_mask & (~s_mask)
+                    if np.any(free_mask) and float(np.sum(w_p[free_mask])) > 1e-8:
+                        deficit = 1.0 - tot_p
+                        w_p[free_mask] += deficit * (w_p[free_mask] / float(np.sum(w_p[free_mask])))
+                    elif tot_p > 1.0:
+                        w_p = w_p / tot_p
+                w_p = np.clip(w_p, 0.0, single_asset_cap)
+                for sec, cap in sector_bounds.items():
+                    mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
+                    sec_sum = float(mask @ w_p)
+                    if sec_sum > cap > 0:
+                        w_p[mask > 0] *= (cap / sec_sum)
+            return w_p
 
         # Scipy fallback (SLSQP)
         def neg_utility(weights):
@@ -285,36 +321,26 @@ class DynamicConstrainedPortfolioOptimizer:
             return -grad
 
         bounds = [(0.0, single_asset_cap) for _ in range(N)]
-        cons = [{'type': 'ineq', 'fun': lambda weights: 1.0 - np.sum(weights)}]
+        cons = [{'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1.0}]
         for sec, cap in sector_bounds.items():
             mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
             cons.append({'type': 'ineq', 'fun': lambda weights, m=mask, c=cap: c - float(m @ weights)})
 
         if _SCIPY_AVAILABLE:
-            init_w = np.ones(N) / N
+            init_w = np.minimum(np.ones(N) / N, single_asset_cap)
             res = minimize(neg_utility, init_w, method='SLSQP', bounds=bounds, constraints=cons)
             if res.success:
-                opt_w = np.clip(res.x, 0.0, 1.0)
-                total_w = np.sum(opt_w)
-                return opt_w / total_w if total_w > 0 else np.ones(N) / N
+                return _project_and_normalize(res.x)
 
         # ── 100% Pure NumPy Projected Gradient Descent Fallback (Zero Dependencies) ──
-        w_vec = np.ones(N) / N
+        w_vec = np.minimum(np.ones(N) / N, single_asset_cap)
         lr = 0.01 / (float(np.trace(Sigma)) / N + 1e-6)
         for _ in range(50):
             grad = pure_alphas - lambda_risk * (Sigma @ w_vec)
             if has_cost:
                 grad -= c_friction * np.sign(w_vec - w_curr)
-            w_vec = np.clip(w_vec + lr * grad, 0.0, single_asset_cap)
-            for sec, cap in sector_bounds.items():
-                mask = np.array([1.0 if s == sec else 0.0 for s in sector_ids])
-                sec_sum = float(mask @ w_vec)
-                if sec_sum > cap:
-                    w_vec[mask > 0] *= (cap / sec_sum)
-            if np.sum(w_vec) > 1.0:
-                w_vec /= np.sum(w_vec)
-        tot = np.sum(w_vec)
-        return w_vec / tot if tot > 0 else np.ones(N) / N
+            w_vec = _project_and_normalize(w_vec + lr * grad)
+        return _project_and_normalize(w_vec)
 
     def compute_discrete_shares(
         self,
@@ -423,9 +449,10 @@ class FactorRiskParityDampener:
                 scaled_dampener = np.minimum(scaled_dampener, stock_decay)
 
         damped_w = w * scaled_dampener
+        orig_sum = float(np.sum(w))
         total_damped = float(np.sum(damped_w))
-        if total_damped > 0:
-            damped_w /= total_damped
+        if total_damped > 0 and orig_sum > 0:
+            damped_w = damped_w * (orig_sum / total_damped)
 
         return damped_w, factor_risk_contributions
 

@@ -33,8 +33,25 @@ DATA = PROJECT_ROOT / 'data'
 RESULTS = PROJECT_ROOT / 'results'
 CONFIG = PROJECT_ROOT / 'config'
 from .event_calendar import EventCalendar, IntradayEventDetector
-from .defensive_alpha import DefensiveAlphaFinder, QualityGrowthDiscount, SectorRotationDetector
-__all__ = ['EventCalendar', 'IntradayEventDetector', 'MarketDirectionFilter', 'DefensiveAlphaFinder', 'QualityGrowthDiscount', 'SectorRotationDetector', 'EventMarketFilter']
+from .market_shock_detector import MarketShockDetector
+try:
+    from .defensive_alpha import DefensiveAlphaFinder, QualityGrowthDiscount, SectorRotationDetector
+except ImportError:
+    class DefensiveAlphaFinder:
+        def find_dip_buying_candidates(self, **kwargs):
+            return []
+        def find_defensive_stocks(self, **kwargs):
+            return []
+
+    class QualityGrowthDiscount:
+        def screen(self, **kwargs):
+            return []
+
+    class SectorRotationDetector:
+        def detect_rotation_phase(self):
+            return {'phase': 'unknown', 'signal': '', 'recommendation': 'hold'}
+
+__all__ = ['EventCalendar', 'IntradayEventDetector', 'MarketShockDetector', 'MarketDirectionFilter', 'DefensiveAlphaFinder', 'QualityGrowthDiscount', 'SectorRotationDetector', 'EventMarketFilter']
 
 class MarketDirectionFilter:
     """ML 예측에 시장 방향 보정 적용."""

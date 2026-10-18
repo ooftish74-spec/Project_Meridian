@@ -72,7 +72,7 @@ class RealtimeVaR:
     def _portfolio_var(self, value: float, positions: Dict, confidence: float, lookback: int) -> Dict:
         """포트폴리오 VaR (분산-공분산 + Historical 혼합)."""
         tickers = list(positions.keys())
-        raw_weights = np.array([positions[t].get('weight', 1.0 / len(tickers)) for t in tickers])
+        raw_weights = np.array([positions[t].get('weight', 1.0 / len(tickers)) for t in tickers], dtype=float)
         _w_sum = raw_weights.sum()
         if _w_sum > 1e-10:
             raw_weights = raw_weights / _w_sum
@@ -83,8 +83,12 @@ class RealtimeVaR:
             _var_bench2 = DynamicConfig().get('var.benchmark_ticker', '069500')
             return self._single_asset_var(value, _var_bench2, confidence, lookback)
         n_cols = returns.shape[1]
-        weights = raw_weights[:n_cols]
-        weights = weights / weights.sum() if weights.sum() > 0 else weights
+        matched_tickers = getattr(self, '_matched_tickers', None)
+        if matched_tickers and len(matched_tickers) == n_cols:
+            weights = np.array([float(positions[t].get('weight', 1.0 / len(tickers))) for t in matched_tickers], dtype=float)
+        else:
+            weights = raw_weights[:n_cols]
+        weights = weights / weights.sum() if weights.sum() > 0 else np.ones(n_cols) / max(n_cols, 1)
         port_returns = returns @ weights
         alpha_pct = (1 - confidence) * 100
         var_pct = float(np.percentile(port_returns, alpha_pct))
@@ -298,8 +302,14 @@ class RealtimeVaR:
     def _load_returns(self, tickers, lookback):
         """일별 수익률 행렬 (로컬 Parquet 및 실시간 OpenAPI 지원)."""
         data = {}
+        self._matched_tickers = []
         for t in tickers:
-            fp = _DATA_DIR / f'kr_{t}.parquet'
+            is_us_tk = not str(t).isdigit()
+            fp = _DATA_DIR / (f'us_{t}.parquet' if is_us_tk else f'kr_{t}.parquet')
+            if not fp.exists() and not is_us_tk:
+                fp_alt = _PROJECT_ROOT / 'data' / 'kr_markets' / f'{t}.parquet'
+                if fp_alt.exists():
+                    fp = fp_alt
             close = None
             if fp.exists():
                 try:
@@ -312,7 +322,7 @@ class RealtimeVaR:
                 try:
                     from src.data_collection.kis_data_collector import KISDataCollector
                     collector = KISDataCollector()
-                    is_us = t.isalpha() and len(t) <= 5 and t.isupper()
+                    is_us = str(t).isalpha() and len(str(t)) <= 5 and str(t).isupper()
                     if is_us:
                         df = collector.get_us_daily_ohlcv(t)
                     else:
@@ -336,6 +346,7 @@ class RealtimeVaR:
         min_len = min((len(v) for v in data.values()))
         if min_len < 5:
             return None
+        self._matched_tickers = list(data.keys())
         return np.column_stack([v[-min_len:] for v in data.values()])
 
     def _load_positions(self) -> Optional[Dict]:
@@ -347,14 +358,23 @@ class RealtimeVaR:
                 kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
                 holdings = kis_data.get('holdings', {})
                 if holdings:
-                    fx_rate = 1350.0
+                    fx_rate = float(kis_data.get('fx_rate') or kis_data.get('account', {}).get('fx_rate') or 0.0)
+                    if fx_rate <= 0:
+                        try:
+                            sc_p = _RESULTS / 'signal_cache.json'
+                            if sc_p.exists():
+                                fx_rate = float(json.loads(sc_p.read_text(encoding='utf-8')).get('usdkrw') or 0.0)
+                        except Exception:
+                            pass
+                    if fx_rate <= 0:
+                        fx_rate = 1334.3
                     tot_val = 0.0
                     vals = {}
                     for ticker, h_info in holdings.items():
                         qty = float(h_info.get('qty', 0))
                         p = float(h_info.get('current_price', 0.0))
-                        mkt = h_info.get('market', 'KR')
-                        mult = fx_rate if mkt == 'US' else 1.0
+                        is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not str(ticker).isdigit()
+                        mult = fx_rate if is_us else 1.0
                         pos_v = qty * p * mult
                         if pos_v > 0:
                             vals[ticker] = pos_v
@@ -362,9 +382,11 @@ class RealtimeVaR:
                     if tot_val > 0:
                         positions = {}
                         for ticker, pos_v in vals.items():
+                            h_info = holdings[ticker]
+                            is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not str(ticker).isdigit()
                             positions[ticker] = {
                                 'weight': pos_v / tot_val,
-                                'market': holdings[ticker].get('market', 'KR'),
+                                'market': 'US' if is_us else 'KR',
                                 'current_value': pos_v
                             }
                         return positions

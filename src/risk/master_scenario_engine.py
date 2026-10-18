@@ -88,17 +88,32 @@ class MasterScenarioEngine:
 
         # --- Scenario 3: VKOSPI > 35 Flash Crash & V-Rebound ---
         vkospi = float(signal_cache.get('vkospi', 18.0))
+        ois = float(signal_cache.get('ois', 50.0))
+        kospi_chg = float(signal_cache.get('kospi_change_pct', signal_cache.get('kospi_change', 0.0)) or 0.0)
         if vkospi >= s3_vkospi_thresh:
-            active_scenarios.append({
-                'scenario_id': 'SCENARIO_3',
-                'name': 'VKOSPI Flash Crash & V-Rebound',
-                'defense_ratio': 0.10,
-                'attack_ratio': 0.90,
-                'actions': {
-                    'S0_BETA': {'action': 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH'},
-                    'S11_HIGH_BETA': {'action': 'VKOSPI_MEAN_REVERSION_LEVERAGE_SWITCH'}
-                }
-            })
+            # V-Rebound 스위칭은 야간/장중 반등 시그널(OIS >= 55 또는 KOSPI 양전 반등 >= +0.5%)이 확인될 때만 발화
+            if ois >= 55.0 or kospi_chg >= 0.5:
+                active_scenarios.append({
+                    'scenario_id': 'SCENARIO_3',
+                    'name': 'VKOSPI Flash Crash & V-Rebound',
+                    'defense_ratio': 0.10,
+                    'attack_ratio': 0.90,
+                    'actions': {
+                        'S0_BETA': {'action': 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH'},
+                        'S11_HIGH_BETA': {'action': 'VKOSPI_MEAN_REVERSION_LEVERAGE_SWITCH'}
+                    }
+                })
+            elif ois < 45.0:
+                active_scenarios.append({
+                    'scenario_id': 'SCENARIO_3_CRASH_DEFENSE',
+                    'name': 'VKOSPI Extreme Panic Defense',
+                    'defense_ratio': 0.80,
+                    'attack_ratio': 0.20,
+                    'actions': {
+                        'S0_BETA': {'action': 'HOLD_INVERSE_AND_DEFENSE'},
+                        'S11_HIGH_BETA': {'action': 'DEFENSIVE_HOLD'}
+                    }
+                })
 
         # --- Scenario 4: Yen Carry Unwind ---
         usdjpy_3d_z = float(signal_cache.get('usdjpy_3d_z', 0.0))

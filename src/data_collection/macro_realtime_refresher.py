@@ -95,7 +95,12 @@ class MacroRealtimeRefresher:
         elif tier == 'all':
             result['tier1'] = self._refresh_tier1()
             result['tier2'] = self._refresh_tier2()
-        if tier in ('auto', 't1', 'all') and kr_market_open:
+        _need_kr_backfill = (
+            not self._cache.get('kospi200')
+            or not self._cache.get('kospi_close')
+            or not self._cache.get('kosdaq_close')
+        )
+        if tier in ('auto', 't1', 'all') and (kr_market_open or tier == 'all' or _need_kr_backfill):
             kr_result = self._refresh_kr_indices()
             result['kr_indices'] = kr_result
             
@@ -140,9 +145,6 @@ class MacroRealtimeRefresher:
                 
                 vix_window = int(self._get_cfg('s1.vix_rolling_window', 20))
                 
-                # 1차 시도: 로컬 캐시 및 FRED/KIS VIX 참조 (deprecated yfinance 분리)
-                pass
-                
                 # VIX 폴백 1: 기존 캐시값(전일값) Forward Fill
                 fallback_vix = self._cache.get('vix')
                 
@@ -161,9 +163,9 @@ class MacroRealtimeRefresher:
                         logger.warning(f"  ⚠️ SPY HV 합성 실패: {he}")
                         
                 if fallback_vix is None or fallback_vix <= 0:
-                    fallback_vix = 15.0 # 최후의 수단 (시스템 셧다운 방지)
+                    fallback_vix = 15.0
 
-                # Google Finance 0-Lag 실시간 VIX 1순위 적용 (AlphaVantage 정적 종가 덮어쓰기)
+                # Google Finance 0-Lag 실시간 VIX 1순위 적용
                 try:
                     from src.utils.google_finance_collector import GoogleFinanceCollector
                     gf_vix = GoogleFinanceCollector.get_vix()
@@ -194,11 +196,41 @@ class MacroRealtimeRefresher:
                 vix_hist_raw = self._cache.get('vix_history', [])
                 if not isinstance(vix_hist_raw, list):
                     vix_hist_raw = []
+                # vix_history가 20일 미만이면 Yahoo Direct / 로컬 cross_vix.parquet에서 1개월 일봉 히스토리 백필
+                if len(vix_hist_raw) < vix_window:
+                    try:
+                        import urllib.request
+                        req_vh = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=3mo&interval=1d', headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req_vh, timeout=5) as r_vh:
+                            d_vh = json.loads(r_vh.read().decode('utf-8'))['chart']['result'][0]
+                            closes_vh = [round(float(c), 2) for c in d_vh.get('indicators', {}).get('quote', [{}])[0].get('close', []) if c is not None and 5.0 <= float(c) <= 120.0]
+                            if len(closes_vh) >= vix_window:
+                                vix_hist_raw = closes_vh[-252:]
+                    except Exception:
+                        pass
+                if len(vix_hist_raw) < vix_window:
+                    try:
+                        _cv_p = _PROJECT_ROOT / 'data' / 'kr_markets' / 'cross_vix.parquet'
+                        if _cv_p.exists():
+                            _cv_df = _pd.read_parquet(_cv_p)
+                            _c_col = 'close' if 'close' in _cv_df.columns else ('Close' if 'Close' in _cv_df.columns else None)
+                            if _c_col:
+                                _vals = [round(float(x), 2) for x in _cv_df[_c_col].dropna().tolist() if 5.0 <= float(x) <= 120.0]
+                                if len(_vals) >= 2:
+                                    vix_hist_raw = _vals[-252:]
+                    except Exception:
+                        pass
                 if vix_now and isinstance(vix_now, (int, float)) and (vix_now > 0):
-                    vix_hist_raw = list(vix_hist_raw) + [float(vix_now)]
+                    today_date_str = datetime.now().strftime('%Y-%m-%d')
+                    vix_hist_raw = list(vix_hist_raw)
+                    if (self._cache.get('vix_history_last_date') == today_date_str or (len(vix_hist_raw) > 0 and abs(vix_hist_raw[-1] - float(vix_now)) < 1e-4)) and len(vix_hist_raw) > 0:
+                        vix_hist_raw[-1] = float(vix_now)
+                    else:
+                        vix_hist_raw.append(float(vix_now))
                     if len(vix_hist_raw) > 252:
                         vix_hist_raw = vix_hist_raw[-252:]
                     updates['vix_history'] = vix_hist_raw
+                    updates['vix_history_last_date'] = today_date_str
                 if len(vix_hist_raw) >= 2:
                     window_data = vix_hist_raw[-vix_window:]
                     n_w = len(window_data)
@@ -207,6 +239,10 @@ class MacroRealtimeRefresher:
                     sigma = _math.sqrt(var) if var > 0 else 0.0
                     updates['vix_ma_20'] = round(mu, 4)
                     updates['vix_std_20'] = round(sigma, 4)
+                    if not updates.get('vix_change_1d') and vix_hist_raw[-2] > 0:
+                        updates['vix_change_1d'] = round((vix_hist_raw[-1] / vix_hist_raw[-2] - 1.0) * 100.0, 2)
+                    if len(vix_hist_raw) >= 21 and vix_hist_raw[-21] > 0:
+                        updates['vix_change_1m'] = round((vix_hist_raw[-1] / vix_hist_raw[-21] - 1.0) * 100.0, 2)
                     logger.debug(f"  [S1 Support] VIX Rolling: n={n_w}, ma={mu:.2f}, std={sigma:.2f}")
                 elif vix_now and isinstance(vix_now, (int, float)):
                     updates['vix_ma_20'] = float(vix_now)
@@ -234,60 +270,90 @@ class MacroRealtimeRefresher:
     def _refresh_kr_indices(self) -> Dict:
         """KOSPI/KOSDAQ 실시간 갱신.
 
-        ★ pykrx get_index_ohlcv_by_date는 '지수명' KeyError 발생하므로
-        KODEX200(069500)과 KODEX코스닥150(229200)을 프록시로 사용.
-        전일 종가 + MA20도 히스토리에서 정확하게 계산.
+        ★ 지수 레벨(kospi, kospi_close, kospi_ma20, kospi200, kosdaq_close)에는
+        절대로 ETF 가격(069500, 229200)을 대입하지 않고 pykrx_compat.stock.get_index_ohlcv
+        ('1001', '1028', '2001')를 사용하며, ETF는 지수 OHLCV 실패 시 등락률 계산에만 사용.
         """
         updates = {}
         n_updated = 0
         try:
-            from pykrx import stock as pykrx_stock
+            try:
+                from src.data_collection.pykrx_compat import stock as pykrx_stock
+            except ImportError:
+                from pykrx import stock as pykrx_stock
             from datetime import timedelta
             today_str = datetime.now().strftime('%Y%m%d')
             hist_start = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
             try:
-                df = pykrx_stock.get_market_ohlcv_by_date(hist_start, today_str, '069500')
-                if df is not None and len(df) >= 2:
-                    close_col = '종가' if '종가' in df.columns else df.columns[3]
-                    closes = df[close_col].astype(float)
+                _get_idx = getattr(pykrx_stock, 'get_index_ohlcv', None) or getattr(pykrx_stock, 'get_index_ohlcv_by_date')
+                df_kospi = _get_idx(hist_start, today_str, '1001')
+                if df_kospi is not None and len(df_kospi) >= 1:
+                    close_col = '종가' if '종가' in df_kospi.columns else ('Close' if 'Close' in df_kospi.columns else df_kospi.columns[3])
+                    closes = df_kospi[close_col].astype(float)
                     today_close = float(closes.iloc[-1])
-                    prev_close = float(closes.iloc[-2])
-                    updates['kospi_close'] = today_close
-                    updates['kospi'] = today_close  # [Fix] KOSPI 키 동기화 누락 수정
-                    updates['kospi_prev_close'] = prev_close
-                    if prev_close > 0:
-                        updates['kospi_change_1d'] = round((today_close / prev_close - 1) * 100, 4)
-                    high_col = '고가' if '고가' in df.columns else df.columns[1]
-                    low_col = '저가' if '저가' in df.columns else df.columns[2]
-                    try:
-                        today_high = float(df[high_col].iloc[-1])
-                        today_low = float(df[low_col].iloc[-1])
-                        if today_close > 0 and today_high > today_low:
-                            intraday_range = round((today_high - today_low) / today_close * 100, 4)
-                            updates['intraday_range_pct'] = intraday_range
-                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                        import logging
-                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                        if dhm:
-                            dhm.record('kr_intraday_range', e, 'info', context={'ticker': '069500'})
-                    if len(closes) >= 20:
-                        updates['kospi_ma20'] = round(float(closes.iloc[-20:].mean()), 2)
-                    n_updated += 1
-                    logger.debug(f"  KOSPI proxy(069500): close={today_close:.0f}, prev={prev_close:.0f}, chg={updates.get('kospi_change_1d', '?')}%, MA20={updates.get('kospi_ma20', '?')}, intraday_range={updates.get('intraday_range_pct', '?')}%")
+                    if 1000.0 < today_close < 10000.0:
+                        updates['kospi_close'] = today_close
+                        updates['kospi'] = today_close
+                        if len(closes) >= 2:
+                            prev_close = float(closes.iloc[-2])
+                            updates['kospi_prev_close'] = prev_close
+                            if prev_close > 0:
+                                chg_pct = round((today_close / prev_close - 1) * 100, 4)
+                                updates['kospi_change_1d'] = chg_pct
+                                updates['kospi_change_pct'] = chg_pct
+                        high_col = '고가' if '고가' in df_kospi.columns else ('High' if 'High' in df_kospi.columns else df_kospi.columns[1])
+                        low_col = '저가' if '저가' in df_kospi.columns else ('Low' if 'Low' in df_kospi.columns else df_kospi.columns[2])
+                        try:
+                            today_high = float(df_kospi[high_col].iloc[-1])
+                            today_low = float(df_kospi[low_col].iloc[-1])
+                            if today_close > 0 and today_high > today_low:
+                                updates['intraday_range_pct'] = round((today_high - today_low) / today_close * 100, 4)
+                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
+                            logger.debug(f"Targeted fallback: {e}")
+                        if len(closes) >= 20:
+                            updates['kospi_ma20'] = round(float(closes.iloc[-20:].mean()), 2)
+                        n_updated += 1
+                        logger.debug(f"  KOSPI index(1001): close={today_close:.2f}, chg={updates.get('kospi_change_1d', '?')}%, MA20={updates.get('kospi_ma20', '?')}")
             except Exception as e:
-                if dhm:
-                    dhm.record('kr_kospi_069500', e, 'critical', context={'ticker': '069500', 'method': 'pykrx'}, fallback_used='yfinance ^KS11')
-                else:
-                    logger.warning(f"  KOSPI(069500) 갱신 실패: {e}")
+                logger.warning(f"  KOSPI(1001) 지수 갱신 실패: {e}")
+
+            if 'kospi_change_1d' not in updates:
+                try:
+                    df = pykrx_stock.get_market_ohlcv_by_date(hist_start, today_str, '069500')
+                    if df is not None and len(df) >= 2:
+                        close_col = '종가' if '종가' in df.columns else df.columns[3]
+                        closes = df[close_col].astype(float)
+                        today_etf = float(closes.iloc[-1])
+                        prev_etf = float(closes.iloc[-2])
+                        if prev_etf > 0:
+                            chg_pct = round((today_etf / prev_etf - 1) * 100, 4)
+                            updates['kospi_change_1d'] = chg_pct
+                            updates['kospi_change_pct'] = chg_pct
+                        high_col = '고가' if '고가' in df.columns else df.columns[1]
+                        low_col = '저가' if '저가' in df.columns else df.columns[2]
+                        try:
+                            today_high = float(df[high_col].iloc[-1])
+                            today_low = float(df[low_col].iloc[-1])
+                            if today_etf > 0 and today_high > today_low:
+                                updates['intraday_range_pct'] = round((today_high - today_low) / today_etf * 100, 4)
+                        except Exception:
+                            pass
+                        n_updated += 1
+                except Exception as e:
+                    if dhm:
+                        dhm.record('kr_kospi_069500', e, 'critical', context={'ticker': '069500', 'method': 'pykrx'}, fallback_used='yfinance ^KS11')
+                    else:
+                        logger.warning(f"  KOSPI 등락률 프록시(069500) 갱신 실패: {e}")
+
             if 'kospi_close' not in updates:
                 try:
                     from src.data_collection.alpha_vantage_collector import collect_global_macro
                     av_res = collect_global_macro(['^KS11'])
-                    if '^KS11' in av_res:
+                    if '^KS11' in av_res and 1000.0 < float(av_res['^KS11']['price']) < 10000.0:
                         updates['kospi'] = av_res['^KS11']['price']
+                        updates['kospi_close'] = av_res['^KS11']['price']
                         updates['kospi_change_1d'] = av_res['^KS11']['change_1d']
-                        # [S1 Patch] KOSPI 스케일 오염 방지: pykrx(069500) 실패로 MA20 갱신이 멈췄을 때, 
-                        # 백업 수집된 KOSPI(KS11)와 스케일을 일치시키기 위해 임시 동기화
+                        updates['kospi_change_pct'] = av_res['^KS11']['change_1d']
                         updates['kospi_ma20'] = av_res['^KS11']['price']
                         n_updated += 1
                 except Exception as e:
@@ -295,28 +361,62 @@ class MacroRealtimeRefresher:
                         dhm.record('kr_kospi_alphavantage', e, 'critical', context={'ticker': '^KS11'}, fallback_used='없음 — KOSPI 데이터 완전 누락')
                     else:
                         logger.warning(f"  KOSPI(AlphaVantage) fallback 실패: {e}")
+
             try:
-                df = pykrx_stock.get_market_ohlcv_by_date(hist_start, today_str, '229200')
-                if df is not None and len(df) >= 2:
-                    close_col = '종가' if '종가' in df.columns else df.columns[3]
-                    closes = df[close_col].astype(float)
-                    today_close = float(closes.iloc[-1])
-                    prev_close = float(closes.iloc[-2])
-                    updates['kosdaq_close'] = today_close
-                    updates['kosdaq_prev_close'] = prev_close
-                    if prev_close > 0:
-                        updates['kosdaq_change_1d'] = round((today_close / prev_close - 1) * 100, 4)
-                    if len(closes) >= 20:
-                        updates['kosdaq_ma20'] = round(float(closes.iloc[-20:].mean()), 2)
-                    n_updated += 1
+                _get_idx = getattr(pykrx_stock, 'get_index_ohlcv', None) or getattr(pykrx_stock, 'get_index_ohlcv_by_date')
+                df_k200 = _get_idx(hist_start, today_str, '1028')
+                if df_k200 is not None and len(df_k200) >= 1:
+                    close_col = '종가' if '종가' in df_k200.columns else ('Close' if 'Close' in df_k200.columns else df_k200.columns[3])
+                    closes_200 = df_k200[close_col].astype(float)
+                    k200_close = float(closes_200.iloc[-1])
+                    if 100.0 < k200_close < 2000.0:
+                        updates['kospi200'] = k200_close
+                        if len(closes_200) >= 2:
+                            updates['kospi200_prev_close'] = float(closes_200.iloc[-2])
+                        n_updated += 1
             except Exception as e:
-                if dhm:
-                    dhm.record('kr_kosdaq_229200', e, 'critical', context={'ticker': '229200'})
-                else:
-                    logger.warning(f"  KOSDAQ(229200) 갱신 실패: {e}")
-            if 'kospi_close' in updates:
-                updates['kospi200'] = updates['kospi_close']
-                updates['kospi200_prev_close'] = updates.get('kospi_prev_close', 0)
+                logger.warning(f"  KOSPI200(1028) 지수 갱신 실패: {e}")
+
+            try:
+                _get_idx = getattr(pykrx_stock, 'get_index_ohlcv', None) or getattr(pykrx_stock, 'get_index_ohlcv_by_date')
+                df_kq = _get_idx(hist_start, today_str, '2001')
+                if df_kq is not None and len(df_kq) >= 1:
+                    close_col = '종가' if '종가' in df_kq.columns else ('Close' if 'Close' in df_kq.columns else df_kq.columns[3])
+                    closes_kq = df_kq[close_col].astype(float)
+                    today_kq = float(closes_kq.iloc[-1])
+                    if 200.0 < today_kq < 5000.0:
+                        updates['kosdaq_close'] = today_kq
+                        if len(closes_kq) >= 2:
+                            prev_kq = float(closes_kq.iloc[-2])
+                            updates['kosdaq_prev_close'] = prev_kq
+                            if prev_kq > 0:
+                                kq_chg = round((today_kq / prev_kq - 1) * 100, 4)
+                                updates['kosdaq_change_1d'] = kq_chg
+                                updates['kosdaq_change_pct'] = kq_chg
+                        if len(closes_kq) >= 20:
+                            updates['kosdaq_ma20'] = round(float(closes_kq.iloc[-20:].mean()), 2)
+                        n_updated += 1
+            except Exception as e:
+                logger.warning(f"  KOSDAQ(2001) 지수 갱신 실패: {e}")
+
+            if 'kosdaq_change_1d' not in updates:
+                try:
+                    df = pykrx_stock.get_market_ohlcv_by_date(hist_start, today_str, '229200')
+                    if df is not None and len(df) >= 2:
+                        close_col = '종가' if '종가' in df.columns else df.columns[3]
+                        closes = df[close_col].astype(float)
+                        today_etf = float(closes.iloc[-1])
+                        prev_etf = float(closes.iloc[-2])
+                        if prev_etf > 0:
+                            kq_chg = round((today_etf / prev_etf - 1) * 100, 4)
+                            updates['kosdaq_change_1d'] = kq_chg
+                            updates['kosdaq_change_pct'] = kq_chg
+                        n_updated += 1
+                except Exception as e:
+                    if dhm:
+                        dhm.record('kr_kosdaq_229200', e, 'critical', context={'ticker': '229200'})
+                    else:
+                        logger.warning(f"  KOSDAQ 등락률 프록시(229200) 갱신 실패: {e}")
             try:
                 vk_val = self._safe_pykrx_index('1004', today_str)
                 if vk_val is not None:
@@ -367,10 +467,16 @@ class MacroRealtimeRefresher:
                 sam_feat = engine.compute('005930') or {}
                 lp_now = sam_feat.get('lp_delta_pressure')
                 if lp_now is not None and isinstance(lp_now, (int, float)):
-                    lp_hist = list(lp_hist) + [float(lp_now)]
+                    today_date_str = datetime.now().strftime('%Y-%m-%d')
+                    lp_hist = list(lp_hist)
+                    if self._cache.get('lp_pressure_history_last_date') == today_date_str and len(lp_hist) > 0:
+                        lp_hist[-1] = float(lp_now)
+                    else:
+                        lp_hist.append(float(lp_now))
                     if len(lp_hist) > 252:
                         lp_hist = lp_hist[-252:]
                     updates['lp_pressure_history'] = lp_hist
+                    updates['lp_pressure_history_last_date'] = today_date_str
             except Exception as _e:
                 logger.error(f'  [S1 Support] SSETFFeatureEngine LP 수집 실패: {_e}', exc_info=True)
             if len(lp_hist) >= 2:
@@ -390,29 +496,42 @@ class MacroRealtimeRefresher:
             logger.error(f'  [S1 Support] LP Pressure rolling 계산 실패: {_e}', exc_info=True)
         try:
             atr_5m_window = int(self._get_cfg('s1.atr_5m_window', 5))
-            today_str = datetime.now().strftime('%Y%m%d')
-            from pykrx import stock as _pykrx
-            df_5m = _pykrx.get_market_ohlcv_by_ticker_and_date(today_str, today_str, '069500', freq='T5')
-            if df_5m is not None and len(df_5m) >= atr_5m_window + 1:
-                import numpy as _np
-                high_col = '고가' if '고가' in df_5m.columns else df_5m.columns[1]
-                low_col = '저가' if '저가' in df_5m.columns else df_5m.columns[2]
-                close_col = '종가' if '종가' in df_5m.columns else df_5m.columns[3]
-                h = df_5m[high_col].astype(float).values
-                l = df_5m[low_col].astype(float).values
-                c = df_5m[close_col].astype(float).values
-                pc = _np.roll(c, 1)
-                pc[0] = c[0]
-                tr = _np.maximum(h - l, _np.maximum(_np.abs(h - pc), _np.abs(l - pc)))
-                recent_c = c[-1] if c[-1] > 0 else 1.0
-                atr_val = float(_np.mean(tr[-atr_5m_window:])) / recent_c
-                updates['atr_5m'] = round(atr_val, 6)
-                logger.debug(f"  [S1 Support] ATR 5m: {atr_val:.5f} (window={atr_5m_window}, n_bars={len(df_5m)})")
+            import numpy as _np
+            import pandas as _pd
+            df_daily = None
+            _p069500 = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
+            if _p069500.exists():
+                df_daily = _pd.read_parquet(_p069500)
+            if (df_daily is None or len(df_daily) < atr_5m_window + 1):
+                from src.data_collection.pykrx_compat import stock as _pykrx
+                today_str = datetime.now().strftime('%Y%m%d')
+                start_str = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
+                df_daily = _pykrx.get_market_ohlcv_by_date(start_str, today_str, '069500')
+            if df_daily is not None and len(df_daily) >= atr_5m_window + 1:
+                high_col = 'high' if 'high' in df_daily.columns else ('고가' if '고가' in df_daily.columns else df_daily.columns[1])
+                low_col = 'low' if 'low' in df_daily.columns else ('저가' if '저가' in df_daily.columns else df_daily.columns[2])
+                close_col = 'close' if 'close' in df_daily.columns else ('종가' if '종가' in df_daily.columns else df_daily.columns[3])
+                h = _pd.to_numeric(df_daily[high_col], errors='coerce').dropna().values
+                l = _pd.to_numeric(df_daily[low_col], errors='coerce').dropna().values
+                c = _pd.to_numeric(df_daily[close_col], errors='coerce').dropna().values
+                n_min = min(len(h), len(l), len(c))
+                if n_min >= atr_5m_window + 1:
+                    h, l, c = h[-n_min:], l[-n_min:], c[-n_min:]
+                    pc = _np.roll(c, 1)
+                    pc[0] = c[0]
+                    tr = _np.maximum(h - l, _np.maximum(_np.abs(h - pc), _np.abs(l - pc)))
+                    recent_c = c[-1] if c[-1] > 0 else 1.0
+                    # 일봉 ATR/Close를 정규장 5분봉(하루 78개 바) 스케일(1 / sqrt(78))로 변환
+                    atr_daily = float(_np.mean(tr[-atr_5m_window:])) / recent_c
+                    atr_val = atr_daily / _math.sqrt(78.0)
+                    updates['atr_5m'] = round(atr_val, 6)
+                    logger.debug(f"  [S1 Support] ATR 5m: {atr_val:.5f} (window={atr_5m_window}, n_bars={n_min})")
+                else:
+                    updates.setdefault('atr_5m', 0.0)
             else:
-                logger.debug(f"  [S1 Support] ATR 5m: 5분봉 데이터 부족 (bars={(len(df_5m) if df_5m is not None else 0)}) → fallback 0.0")
                 updates.setdefault('atr_5m', 0.0)
         except Exception as _e:
-            logger.error(f'  [S1 Support] ATR 5m 계산 실패 (fallback 0.0): {_e}', exc_info=True)
+            logger.debug(f'  [S1 Support] ATR 5m 계산 폴백(0.0): {_e}')
             updates.setdefault('atr_5m', 0.0)
         if updates:
             self._update_cache(updates)
@@ -444,8 +563,12 @@ class MacroRealtimeRefresher:
                     updates['usdkrw_change_1d'] = chg
                 logger.info(f"  ✅ 환율 BOK ECOS API 성공: {fx_val:.2f}")
             else:
-                logger.warning('  ⚠️ 환율(KRW=X) BOK ECOS API 수집 실패')
-                errors.append('KRW=X')
+                fx_nv = self._fetch_usdkrw_naver()
+                if fx_nv and fx_nv > 0:
+                    updates['usdkrw'] = fx_nv
+                    logger.info(f"  ✅ 환율 Yahoo Direct 성공: {fx_nv:.2f}")
+                else:
+                    errors.append('KRW=X')
 
         if not symbols_to_fetch:
             return (updates, errors)
@@ -550,12 +673,13 @@ class MacroRealtimeRefresher:
             return True
 
     def _safe_pykrx_index(self, index_code: str, date_str: str) -> Optional[float]:
-        """pykrx 지수 조회 (KeyError/IndexError 방어)."""
+        """pykrx_compat 지수 조회 (KeyError/IndexError 방어)."""
         try:
-            from pykrx import stock as pykrx_stock
-            df = pykrx_stock.get_index_ohlcv_by_date(date_str, date_str, index_code)
+            from src.data_collection.pykrx_compat import stock as pykrx_stock
+            start_str = (datetime.now() - timedelta(days=15)).strftime('%Y%m%d')
+            df = pykrx_stock.get_index_ohlcv_by_date(start_str, date_str, index_code)
             if df is not None and not df.empty and len(df) > 0:
-                for c in ['종가', 'Close', '종가(pt)', '지수']:
+                for c in ['종가', 'Close', 'close', '종가(pt)', '지수']:
                     if c in df.columns:
                         val = float(df[c].iloc[-1])
                         if val > 0:
@@ -565,7 +689,7 @@ class MacroRealtimeRefresher:
                     if val > 0:
                         return val
         except Exception as e:
-            logger.warning(f"  ⚠️ _safe_pykrx_index ({index_code}) 예외: {e}")
+            logger.debug(f"  _safe_pykrx_index ({index_code}) 폴백 스킵: {e}")
         return None
 
     def _load_signal_cache(self) -> Dict:
@@ -579,41 +703,75 @@ class MacroRealtimeRefresher:
             logger.warning('[SILENT_BYPASS] Suppressed exception at macro_realtime_refresher.py:945', exc_info=True)
         return {}
 
+    _INDEX_SANITY_BOUNDS = {
+        'sp500': (2000.0, 20000.0), 'SP500': (2000.0, 20000.0),
+        'nasdaq': (5000.0, 60000.0), 'NASDAQ': (5000.0, 60000.0),
+        'sox': (1500.0, 30000.0), 'SOX': (1500.0, 30000.0),
+        'dji': (15000.0, 100000.0), 'DJI': (15000.0, 100000.0),
+        'dxy': (70.0, 160.0), 'DXY': (70.0, 160.0),
+        'gold_us': (1000.0, 10000.0), 'GOLD_US': (1000.0, 10000.0),
+        'wti': (20.0, 140.0), 'WTI': (20.0, 140.0),
+        'kospi': (1000.0, 10000.0), 'KOSPI': (1000.0, 10000.0),
+        'kospi_close': (1000.0, 10000.0), 'kospi_ma20': (1000.0, 10000.0),
+        'kospi200': (150.0, 1500.0),
+        'kosdaq_close': (300.0, 3000.0), 'kosdaq_ma20': (300.0, 3000.0), 'KOSDAQ': (300.0, 3000.0),
+        'taiex': (5000.0, 100000.0), 'TAIEX': (5000.0, 100000.0),
+        'nikkei': (10000.0, 150000.0), 'NIKKEI': (10000.0, 150000.0),
+        'hangseng': (5000.0, 60000.0), 'HANGSENG': (5000.0, 60000.0),
+        'us10y': (0.5, 15.0), 'US10Y': (0.5, 15.0),
+        'usdkrw': (900.0, 2000.0), 'USDKRW': (900.0, 2000.0),
+        'vix': (5.0, 120.0), 'VIX': (5.0, 120.0),
+    }
+
     def _update_cache(self, updates: Dict):
         """signal_cache.json 원자적(Atomic) 쓰기 업데이트.
 
         [Red Team V5] 다중 프로세스 충돌 방지 (TOC/TOU Data Race 제거).
-        파일 락(fcntl.flock) 기반 safe_json_update 적용.
+        파일 락(fcntl.flock) 기반 safe_json_update 적용 + 지수 스케일 오염 자동 정화.
         """
         try:
             from src.infra.safe_io import safe_json_update
-            
+            bounds_map = self._INDEX_SANITY_BOUNDS
+
             def _apply_updates(existing: dict) -> dict:
+                # 0. 기존 캐시에 남아있는 ETF 가격 오염값(예: sp500=763, nasdaq=709, gold_us=382, dxy=28.9) 사전 제거
+                for _ek in list(existing.keys()):
+                    if _ek in bounds_map and isinstance(existing.get(_ek), (int, float)):
+                        _lo, _hi = bounds_map[_ek]
+                        if not (_lo <= float(existing[_ek]) <= _hi):
+                            existing.pop(_ek, None)
+
                 # --- Z-Score / Threshold Sanity Check (르네상스 스타일 교차검증 방어막) ---
                 safe_updates = {}
                 for k, v in updates.items():
-                    if isinstance(v, (int, float)) and not k.endswith('_ts') and not k.endswith('_1d') and 'history' not in k and 'ma' not in k and 'std' not in k:
+                    if k in bounds_map and isinstance(v, (int, float)):
+                        _lo, _hi = bounds_map[k]
+                        if not (_lo <= float(v) <= _hi):
+                            logger.warning(f"  ⚠️ [Sanity Bounds] {k}={v} 정상 범위({_lo}~{_hi}) 이탈 — 기각")
+                            continue
+                    if isinstance(v, (int, float)) and not k.endswith('_ts') and not k.endswith('_1d') and 'history' not in k and 'ma' not in k and 'std' not in k and 'z_score' not in k and 'gex' not in k:
                         prev = existing.get(k)
                         if prev and isinstance(prev, (int, float)) and prev > 0:
                             jump_pct = abs(v - prev) / prev
-                            
+
                             limit = 0.15  # 지수류 15% 초과 변동 차단
-                            is_vix = 'vix' in k
-                            if is_vix: limit = 2.0  # VIX는 특성상 200% 폭등 가능성 있음 (그러나 거부하진 않음)
-                            elif 'usdkrw' in k: limit = 0.05  # 환율은 5% 초과 변동 차단
-                            elif 'yield' in k: limit = 0.50 # 국채금리 50% 변동 차단
-                            
+                            is_vix = 'vix' in k.lower()
+                            if is_vix: limit = 2.0
+                            elif 'usdkrw' in k.lower(): limit = 0.05
+                            elif 'yield' in k.lower() or 'us10y' in k.lower() or 'us5y' in k.lower() or 'us30y' in k.lower(): limit = 0.50
+
                             if jump_pct > limit:
                                 if is_vix:
-                                    # [Red Team V6] 오라클 중독 복구: VIX 폭등 시 '오류'로 기각하지 않고 100% 수용한다. (CRASH 레짐 발동용)
-                                    logger.critical(f"  🚨 [VIX BLACK SWAN] {k} 미친 폭등 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 정상 데이터로 강제 수용!")
+                                    logger.critical(f"  🚨 [VIX BLACK SWAN] {k} 급등 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 정상 데이터로 수용!")
                                     safe_updates[k] = v
                                 else:
-                                    logger.critical(f"  🚨 [Sanity Check] {k} 비정상 스파이크 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 갱신 기각 및 캐시 강제 유지(Forward-Fill)!")
+                                    logger.critical(f"  🚨 [Sanity Check] {k} 비정상 스파이크 감지 (기존: {prev}, 신규: {v}, 변동: {jump_pct*100:.1f}%). 갱신 기각 및 캐시 유지!")
                                     safe_updates[k] = prev
                                 continue
                     safe_updates[k] = v
-                    
+                    if k.upper() in bounds_map and isinstance(v, (int, float)):
+                        safe_updates[k.upper()] = v
+
                 # Telemetry Key Alias Mapping for US Market Regime & Strategy Compatibility
                 if 'sp500_change_1d' in safe_updates:
                     safe_updates['spx_change_1d'] = safe_updates['sp500_change_1d']
@@ -675,8 +833,12 @@ class MacroRealtimeRefresher:
             gex_call = sum((row['oi'] * row['gamma'] for row in option_data if row['type'] == 'call'))
             gex_put = sum((row['oi'] * row['gamma'] for row in option_data if row['type'] == 'put'))
             gex = gex_call - gex_put
+            today_date_str = datetime.now().strftime('%Y-%m-%d')
             gex_history: list = list(self._cache.get('gex_history', []))
-            gex_history.append(gex)
+            if self._cache.get('gex_history_last_date') == today_date_str and len(gex_history) > 0:
+                gex_history[-1] = gex
+            else:
+                gex_history.append(gex)
             max_hist = int(self._get_cfg('gex.history_length', 20))
             gex_history = gex_history[-max_hist:]
             crash_warning = False
@@ -691,7 +853,7 @@ class MacroRealtimeRefresher:
                     if z_score < gex_threshold:
                         crash_warning = True
                         crash_severity = min(1.0, abs(z_score - gex_threshold) / abs(gex_threshold))
-            updates = {'gex': round(gex, 4), 'gex_call': round(gex_call, 4), 'gex_put': round(gex_put, 4), 'gex_history': gex_history, 'gex_crash_warning': crash_warning, 'gex_crash_severity': round(crash_severity, 4), 'gex_updated_at': datetime.now().isoformat()}
+            updates = {'gex': round(gex, 4), 'gex_call': round(gex_call, 4), 'gex_put': round(gex_put, 4), 'gex_history': gex_history, 'gex_history_last_date': today_date_str, 'gex_crash_warning': crash_warning, 'gex_crash_severity': round(crash_severity, 4), 'gex_updated_at': datetime.now().isoformat()}
             self._update_cache(updates)
             if crash_warning:
                 logger.warning(f"  ⚠️ [GEX 경보] gex={gex:.2f} | crash_warning=True | severity={crash_severity:.2f}")
@@ -750,11 +912,15 @@ class MacroRealtimeRefresher:
                 try:
                     from src.data_collection.kis_data_collector import KISDataCollector
                     kis = KISDataCollector()
-                    tnote_yield = kis.get_us_tnote_futures_tick()
-                    if tnote_yield is not None:
-                        updates_macro['us10y'] = tnote_yield
+                    tnote_res = kis.get_us_tnote_futures_tick()
+                    if isinstance(tnote_res, dict) and tnote_res.get('futures_price'):
+                        updates_macro['us_tnote_futures'] = tnote_res['futures_price']
+                        updates_macro['us_tnote_change_pct'] = tnote_res.get('change_pct', 0.0)
+                        logger.info(f"  🇺🇸 T-Note 선물 KIS 수집: {tnote_res['futures_price']:.4f} ({tnote_res.get('change_pct', 0.0):+.2f}%)")
+                    elif isinstance(tnote_res, (int, float)) and tnote_res > 0:
+                        updates_macro['us10y'] = tnote_res
                         updates_macro['us10y_source'] = 'kis_tnote_proxy'
-                        logger.info(f"  🇺🇸 US10Y KIS 프록시 사용: {tnote_yield:.4f}")
+                        logger.info(f"  🇺🇸 US10Y KIS 프록시 사용: {tnote_res:.4f}")
                 except Exception as _tn_err:
                     logger.error(f'T-Note 프록시 실패: {_tn_err}', exc_info=True)
             if not av_success or 'usdkrw' not in updates_macro:
@@ -779,7 +945,7 @@ class MacroRealtimeRefresher:
                             obs = r_fred.json().get('observations', [])
                             vals = [float(o['value']) for o in obs if o['value'] not in ('.', '')]
                             if vals:
-                                updates_macro['us10y'] = vals[0] / 100.0
+                                updates_macro['us10y'] = round(float(vals[0]), 4)
                                 updates_macro['us10y_source'] = 'fred_daily_interp'
                 except Exception as _fred_err:
                     logger.error(f'FRED US10Y 수집 실패: {_fred_err}', exc_info=True)
@@ -791,15 +957,21 @@ class MacroRealtimeRefresher:
             import statistics
             spike_window = int(self._get_cfg('macro_spike.history_length', 20))
             spike_z_threshold = float(self._get_cfg('macro_spike.z_threshold', 2.5))
+            today_date_str = datetime.now().strftime('%Y-%m-%d')
             for metric_key in ('us10y', 'dxy', 'usdkrw'):
                 current_val = updates_macro.get(metric_key, self._cache.get(metric_key))
                 if current_val is None:
                     continue
                 hist_key = f'{metric_key}_history'
+                date_key = f'{hist_key}_last_date'
                 hist: list = list(self._cache.get(hist_key, []))
-                hist.append(float(current_val))
+                if self._cache.get(date_key) == today_date_str and len(hist) > 0:
+                    hist[-1] = float(current_val)
+                else:
+                    hist.append(float(current_val))
                 hist = hist[-spike_window:]
                 updates_macro[hist_key] = hist
+                updates_macro[date_key] = today_date_str
                 if len(hist) >= 5:
                     mean = statistics.mean(hist)
                     std = statistics.stdev(hist) if len(hist) > 1 else 1e-09

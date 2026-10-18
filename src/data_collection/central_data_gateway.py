@@ -80,15 +80,28 @@ class CentralDataGateway:
 
     def get_historical_ohlcv(self, symbol: str, period: str = "5d"):
         """Get historical OHLCV pandas DataFrame for symbol via VendorMultiplexer fallback."""
+        import pandas as pd
+        import re as _re
         from src.utils.vendor_multiplexer import VendorMultiplexer
         try:
+            days = 10
+            m = _re.match(r'^(\d+)\s*([dmyw])', str(period or '5d').strip().lower())
+            if m:
+                n_val, unit = int(m.group(1)), m.group(2)
+                mult = {'d': 2, 'w': 7, 'm': 31, 'y': 365}.get(unit, 2)
+                days = max(n_val * mult, 7)
+            end_dt = datetime.now()
+            start_dt = end_dt - timedelta(days=days)
+            start_str = start_dt.strftime('%Y-%m-%d')
+            end_str = end_dt.strftime('%Y-%m-%d')
             vmx = VendorMultiplexer()
-            df = vmx.fetch(symbol, start="", end="")
-            if df is not None and not df.empty:
-                return df
+            res = vmx.fetch(symbol, start=start_str, end=end_str)
+            if res is not None and not res.empty:
+                if isinstance(res, pd.Series):
+                    return res.to_frame(name='Close')
+                return res
         except Exception as e:
             logger.warning(f"get_historical_ohlcv failed for {symbol}: {e}")
-        import pandas as pd
         return pd.DataFrame()
 
     # =========================================================================
@@ -105,13 +118,46 @@ class CentralDataGateway:
                 return macro_res
 
         if is_kr is None:
-            if symbol.endswith('.KS') or symbol.endswith('.KQ') or (len(symbol) == 6 and symbol.isdigit()):
+            if symbol.endswith('.KS') or symbol.endswith('.KQ') or (len(symbol) == 6 and symbol[0].isdigit()):
                 is_kr = True
             else:
                 is_kr = False
 
-        price = self.fetcher.get_current_price(symbol)
         now_str = datetime.now().isoformat()
+        if symbol.upper().endswith('.T'):
+            jp_code = symbol.split('.')[0]
+            try:
+                from src.utils.google_finance_collector import GoogleFinanceCollector
+                details = GoogleFinanceCollector.get_quote_details(jp_code, 'TYO')
+                if details and float(details.get('price', 0) or 0) > 0:
+                    return {
+                        'symbol': symbol,
+                        'price': float(details['price']),
+                        'status': 'OK',
+                        'source': 'GoogleFinance_TYO',
+                        'timestamp': now_str
+                    }
+            except Exception as _e_jp:
+                logger.debug(f"  [CentralDataGateway] JP ticker {symbol} GoogleFinance lookup skipped: {_e_jp}")
+            price = self.fetcher.get_current_price(symbol)
+            if price and price > 0:
+                return {
+                    'symbol': symbol,
+                    'price': float(price),
+                    'status': 'OK',
+                    'source': 'Tier2_HotFailover',
+                    'timestamp': now_str
+                }
+            logger.info(f"ℹ️ [CentralDataGateway] 일본 도쿄증시 종목({symbol}) 실시간 시세 미지원 — 스킵")
+            return {
+                'symbol': symbol,
+                'price': None,
+                'status': 'DATA_UNCOLLECTED',
+                'source': 'JP_MARKET_SKIPPED',
+                'timestamp': now_str
+            }
+
+        price = self.fetcher.get_current_price(symbol)
 
         if price and price > 0:
             source = "KIS_Tier1" if "KIS" in str(price) else "Tier2_HotFailover"
@@ -131,6 +177,10 @@ class CentralDataGateway:
             'source': 'ALL_TIERS_FAILED',
             'timestamp': now_str
         }
+
+    def get_realtime_quote(self, symbol: str, is_kr: Optional[bool] = None) -> Dict[str, Any]:
+        """get_current_price 호환 별칭 (일본 .T 종목 등 비치명 처리 포함)."""
+        return self.get_current_price(symbol, is_kr=is_kr)
 
     def get_usdkrw_rate(self) -> float:
         """KIS 고시환율 및 매크로 지표 기반 실시간 USD/KRW 환율 반환 (메모리 60초 캐시 적용)."""
@@ -178,96 +228,71 @@ class CentralDataGateway:
             data_rep = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
             data_specific = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': kis_code})
 
-            # 1. Resolve daytime baseline (regular session close)
-            daytime_price = 0.0
-            
-            # Check get_current_price if provided or mocked (distinct from night price)
-            try:
-                fut_p = kis.get_current_price(front_code)
-                if fut_p and float(fut_p.get('price', 0)) > 500.0 and abs(float(fut_p.get('price', 0)) - 936.82) > 0.05:
-                    daytime_price = float(fut_p['price'])
-            except Exception:
-                pass
+            # 1. Extract KIS Futures quote from output1 (F 202612 / 10100000)
+            # Note: output2 is KOSPI composite index (0001) and output3 is KOSPI200 cash index (2001), NOT night futures!
+            o1 = {}
+            for d_cand in [data_rep, data_specific]:
+                if d_cand and isinstance(d_cand.get('output1'), dict) and d_cand['output1'].get('futs_prpr'):
+                    o1 = d_cand['output1']
+                    break
 
-            sc_path = _RESULTS_DIR / 'signal_cache.json'
-            if daytime_price <= 0.0 and sc_path.exists():
+            fut_price = 0.0
+            daytime_price = 0.0
+            fut_chg = 0.0
+            fut_chg_pct = 0.0
+            if o1:
                 try:
-                    with open(sc_path, 'r', encoding='utf-8') as _sc_f:
-                        _sc_tmp = json.load(_sc_f)
-                        sc_df = float(_sc_tmp.get('daytime_futures', 0.0) or _sc_tmp.get('kospi200_futures_close', 0.0) or 0.0)
-                        if sc_df > 500.0:
-                            daytime_price = sc_df
-                except Exception:
+                    fut_price = float(o1.get('futs_prpr') or 0.0)
+                    daytime_price = float(o1.get('futs_prdy_clpr') or o1.get('futs_sdpr') or 0.0)
+                    raw_vrss = float(o1.get('futs_prdy_vrss') or 0.0)
+                    raw_ctrt = float(o1.get('futs_prdy_ctrt') or 0.0)
+                    sign_code = str(o1.get('prdy_vrss_sign', '3'))
+                    sign_mult = -1.0 if sign_code in ('4', '5') else (1.0 if sign_code in ('1', '2') else 1.0)
+                    fut_chg = sign_mult * abs(raw_vrss) if raw_vrss != 0 else (round(fut_price - daytime_price, 2) if daytime_price > 0 else 0.0)
+                    fut_chg_pct = sign_mult * abs(raw_ctrt) if raw_ctrt != 0 else (round((fut_chg / daytime_price) * 100, 4) if daytime_price > 0 else 0.0)
+                except (ValueError, TypeError):
                     pass
 
-            if daytime_price <= 0.0 and data_rep and isinstance(data_rep.get('output1'), dict):
-                o1 = data_rep['output1']
+            if daytime_price <= 0.0 and data_rep and isinstance(data_rep.get('output3'), dict):
                 try:
-                    daytime_price = float(o1.get('futs_sdpr') or o1.get('futs_prdy_clpr') or o1.get('futs_prpr') or 0.0)
+                    daytime_price = float(data_rep['output3'].get('bstp_nmix_prpr') or 0.0)
                 except (ValueError, TypeError):
                     daytime_price = 0.0
 
-            if daytime_price <= 0.0:
-                daytime_price = 944.80
+            if existing_night and existing_night.get('close', 0) > 0 and str(existing_night.get('source', '')) == 'KRX_Night_Session':
+                fut_price = float(existing_night['close'])
+                try:
+                    dt_quote = kis.get_current_price(front_code)
+                    if isinstance(dt_quote, dict) and float(dt_quote.get('price') or 0.0) > 0:
+                        daytime_price = float(dt_quote['price'])
+                except Exception:
+                    pass
+                if daytime_price > 0:
+                    fut_chg = round(fut_price - daytime_price, 2)
+                    fut_chg_pct = round((fut_chg / daytime_price) * 100, 4)
+            elif daytime_price <= 0.0:
+                try:
+                    dt_quote = kis.get_current_price(front_code)
+                    if isinstance(dt_quote, dict) and float(dt_quote.get('price') or 0.0) > 0:
+                        daytime_price = float(dt_quote['price'])
+                except Exception:
+                    pass
 
-            # If existing night session has a distinct night price from TODAY, protect it!
-            now_date_str = datetime.now().strftime('%Y-%m-%d')
-            existing_ts = str(existing_night.get('timestamp', ''))
-            is_today_night = now_date_str in existing_ts
-
-            if is_today_night and existing_night and existing_night.get('close', 0) > 0:
-                if existing_night.get('source') == 'KRX_Night_Session_Verified':
-                    return existing_night
-                if abs(existing_night['close'] - daytime_price) > 0.05 and 'Daytime' not in existing_night.get('source', ''):
-                    night_close = float(existing_night['close'])
-                    night_chg = round(night_close - daytime_price, 2)
-                    night_chg_pct = round((night_chg / daytime_price) * 100, 4) if daytime_price > 0 else 0.0
-                    res = {
-                        'symbol': kis_code,
-                        'front_code': front_code,
-                        'close': night_close,
-                        'daytime_close': daytime_price,
-                        'change': night_chg,
-                        'change_pct': night_chg_pct,
-                        'direction': 'down' if night_chg < 0 else ('up' if night_chg > 0 else 'flat'),
-                        'status': 'OK',
-                        'source': existing_night.get('source', 'KRX_Night_Session'),
-                        'timestamp': datetime.now().isoformat()
-                    }
-                    from src.utils.file_ops import atomic_write_json
-                    atomic_write_json(overnight_json, res, ensure_ascii=False, indent=2)
-                    return res
-
-            # 2. Extract KRX night market quote from output3
-            night_price = 0.0
-            for d_cand in [data_specific, data_rep]:
-                if d_cand and isinstance(d_cand.get('output3'), dict):
-                    try:
-                        np_val = float(d_cand['output3'].get('bstp_nmix_prpr', 0) or 0)
-                        if np_val > 0:
-                            night_price = np_val
-                            break
-                    except (ValueError, TypeError):
-                        pass
-
-            if night_price > 0:
-                if abs(daytime_price - night_price) < 0.05:
-                    daytime_price = 944.80
-
-            if night_price > 0 and daytime_price > 0:
-                night_chg = round(night_price - daytime_price, 2)
-                night_chg_pct = round((night_chg / daytime_price) * 100, 4)
-                direction = 'down' if night_chg < -0.1 else ('up' if night_chg > 0.1 else 'flat')
+            if fut_price > 0 and daytime_price > 0:
+                if fut_chg == 0.0 and abs(fut_price - daytime_price) > 0.01:
+                    fut_chg = round(fut_price - daytime_price, 2)
+                    fut_chg_pct = round((fut_chg / daytime_price) * 100, 4)
+                direction = 'down' if fut_chg < -0.05 else ('up' if fut_chg > 0.05 else 'flat')
                 res = {
                     'symbol': kis_code,
                     'front_code': front_code,
-                    'close': night_price,
+                    'close': fut_price,
                     'daytime_close': daytime_price,
-                    'change': night_chg,
-                    'change_pct': night_chg_pct,
+                    'change': fut_chg,
+                    'change_pct': fut_chg_pct,
                     'direction': direction,
                     'status': 'OK',
-                    'source': 'KRX_Night_Session',
+                    'source': existing_night.get('source', 'KIS_OpenAPI_Futures_Live') if existing_night else 'KIS_OpenAPI_Futures_Live',
                     'timestamp': datetime.now().isoformat()
                 }
                 from src.utils.file_ops import atomic_write_json
@@ -276,7 +301,10 @@ class CentralDataGateway:
                 macro_night.parent.mkdir(parents=True, exist_ok=True)
                 atomic_write_json(macro_night, res, ensure_ascii=False, indent=2)
                 return res
-            elif existing_night and existing_night.get('close', 0) > 0 and existing_night.get('change_pct', 0) != 0.0:
+            elif existing_night and existing_night.get('close', 0) > 0:
+                if daytime_price > 0 and 'daytime_close' not in existing_night:
+                    existing_night['daytime_close'] = daytime_price
+                    existing_night['change'] = round(float(existing_night['close']) - daytime_price, 2)
                 return existing_night
         except Exception as e:
             logger.warning(f"  ⚠️ KIS OpenAPI 야간선물 수집 예외: {e}")
@@ -395,6 +423,23 @@ class CentralDataGateway:
                     }
             except Exception as _e_bok:
                 logger.debug(f"  [CentralDataGateway] Tier 3 BOK FX failed: {_e_bok}")
+
+        if m_lower == 'vkospi':
+            try:
+                from src.data_collection.market_breadth_collector import MarketBreadthCollector
+                vk_res = MarketBreadthCollector().collect_vkospi()
+                vk_px = float(vk_res.get('vkospi', 0.0) or 0.0)
+                if vk_px > 0:
+                    return {
+                        'symbol': 'VKOSPI',
+                        'price': vk_px,
+                        'status': 'OK',
+                        'source': vk_res.get('source', 'MarketBreadthCollector'),
+                        'metric': 'vkospi',
+                        'timestamp': datetime.now().isoformat()
+                    }
+            except Exception as _e_vk:
+                logger.debug(f"  [CentralDataGateway] VKOSPI MarketBreadthCollector failed: {_e_vk}")
 
         symbol_map = {
             'usdkrw': 'USDKRW=X',

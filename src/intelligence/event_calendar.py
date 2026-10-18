@@ -253,7 +253,7 @@ class EventCalendar:
                 gap_est = ois.get('kospi_gap_estimate', {}).get('estimated_gap_pct', 0)
                 if isinstance(gap_est, (int, float)) and gap_est < -2.0:
                     events.append({'id': 'OIS_GAP_WARNING', 'tier': 1, 'type': 'geopolitical', 'impact': 'high', 'description': f"OIS 갭 다운 경고 ({gap_est:+.1f}%)", 'date': target_date, 'confidence_reduction': 0.5})
-                risk_keywords = ['tariff", "trade war', 'sanction', 'embargo', 'retaliatory', 'escalation', 'geopolitical']
+                risk_keywords = ['tariff', 'trade war', 'sanction', 'embargo', 'retaliatory', 'escalation', 'geopolitical']
                 ois_text = json.dumps(ois, ensure_ascii=False).lower()
                 matched = [kw for kw in risk_keywords if kw in ois_text]
                 if matched:
@@ -280,15 +280,16 @@ class EventCalendar:
         min_t1_distance = 999
         for event_id, meta in self.EVENT_META.items():
             if meta['tier'] == 1:
-                for d in self._get_event_dates(event_id, year):
-                    try:
-                        delta = (date.fromisoformat(d) - target).days
-                        if delta >= 0:
-                            min_t1_distance = min(min_t1_distance, delta)
-                    except ValueError:
-                        from src.utils.error_logger import log_error_rate_limited
-                        log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
-                        continue
+                for y in (year, year + 1):
+                    for d in self._get_event_dates(event_id, y):
+                        try:
+                            delta = (date.fromisoformat(d) - target).days
+                            if delta >= 0:
+                                min_t1_distance = min(min_t1_distance, delta)
+                        except ValueError:
+                            from src.utils.error_logger import log_error_rate_limited
+                            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
+                            continue
         return {'event_count': len(events), 'event_max_tier': min((e['tier'] for e in events)) if events else 0, 'event_is_today': any((e['date'] == target_date for e in events)), 'event_hours_until_t1': min_t1_distance * 24, 'event_confidence_reduction': self.get_max_confidence_reduction(target_date), 'event_type': events[0]['type'] if events else 'none'}
 
 class IntradayEventDetector:

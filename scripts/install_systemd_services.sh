@@ -28,11 +28,14 @@ cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_night_futures.timer
 Description=Timer for Meridian Night Futures Fetcher
 
 [Timer]
-OnCalendar=*-*-* 06:05:00 Asia/Seoul
+OnCalendar=*-*-* 05:10:00 Asia/Seoul
 Persistent=true
+Unit=meridian_night_futures.service
 
 [Install]
 WantedBy=timers.target
+TIMER_EOF
+
 # 1.4 KIS API Token Refresh Timer (Runs at 08:15 AM KST - Single Point Refresh)
 cat << SERVICE_EOF | sudo tee $SERVICE_DIR/meridian_token_refresh.service
 [Unit]
@@ -44,7 +47,7 @@ Type=oneshot
 User=$USER
 WorkingDirectory=$MERIDIAN_ROOT
 EnvironmentFile=/home/ubuntu/Project_Meridian/.env
-ExecStart=$MERIDIAN_ROOT/venv/bin/python3 -c "from src.execution._kis_adapter import KISTraderAdapter; KISTraderAdapter(mode='live')._request_new_token()"
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 -c "from src.execution._kis_adapter import KISTraderAdapter; KISTraderAdapter(mode='live', fetch_balance_on_init=False)._request_new_token()"
 SERVICE_EOF
 
 cat << TIMER_EOF | sudo tee $SERVICE_DIR/meridian_token_refresh.timer

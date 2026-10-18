@@ -32,7 +32,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 logger = logging.getLogger(__name__)
-US_L2_UNIVERSE = {'AAPL': {'sector': 'Technology', 'exchange': 'NASD'}, 'MSFT': {'sector': 'Technology', 'exchange': 'NASD'}, 'GOOGL': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMZN': {'sector': 'Technology', 'exchange': 'NASD'}, 'NVDA': {'sector': 'Technology', 'exchange': 'NASD'}, 'META': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSLA': {'sector': 'Consumer Cyclical', 'exchange': 'NASD'}, 'AVGO': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMD': {'sector': 'Technology', 'exchange': 'NASD'}, 'CRM': {'sector': 'Technology', 'exchange': 'NASD'}, 'ORCL': {'sector': 'Technology', 'exchange': 'NASD'}, 'ADBE': {'sector': 'Technology', 'exchange': 'NASD'}, 'NFLX': {'sector': 'Communication', 'exchange': 'NASD'}, 'INTC': {'sector': 'Technology', 'exchange': 'NASD'}, 'QCOM': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMAT': {'sector': 'Technology', 'exchange': 'NASD'}, 'MU': {'sector': 'Technology', 'exchange': 'NASD'}, 'LRCX': {'sector': 'Technology', 'exchange': 'NASD'}, 'KLAC': {'sector': 'Technology', 'exchange': 'NASD'}, 'MRVL': {'sector': 'Technology', 'exchange': 'NASD'}, 'JPM': {'sector': 'Financial', 'exchange': 'NYSE'}, 'V': {'sector': 'Financial', 'exchange': 'NYSE'}, 'MA': {'sector': 'Financial', 'exchange': 'NYSE'}, 'BAC': {'sector': 'Financial', 'exchange': 'NYSE'}, 'GS': {'sector': 'Financial', 'exchange': 'NYSE'}, 'UNH': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'JNJ': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'LLY': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'ABBV': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'MRK': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'PG': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'KO': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'COST': {'sector': 'Consumer Staples', 'exchange': 'NASD'}, 'WMT': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'HD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'MCD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'CAT': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'DE': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'BA': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'XOM': {'sector': 'Energy', 'exchange': 'NYSE'}, 'CVX': {'sector': 'Energy', 'exchange': 'NYSE'}, 'SPY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'QQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'TQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXL': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXS': {'sector': 'ETF', 'exchange': 'NASD'}, 'TLT': {'sector': 'ETF', 'exchange': 'NASD'}, 'GLD': {'sector': 'ETF', 'exchange': 'AMEX'}, '^VIX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'KRW=X': {'sector': 'Macro', 'exchange': 'FOREX'}, '^TNX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'CL=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'GC=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'DX-Y.NYB': {'sector': 'Macro', 'exchange': 'INDEX'}}
+US_L2_UNIVERSE = {'AAPL': {'sector': 'Technology', 'exchange': 'NASD'}, 'MSFT': {'sector': 'Technology', 'exchange': 'NASD'}, 'GOOGL': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMZN': {'sector': 'Technology', 'exchange': 'NASD'}, 'NVDA': {'sector': 'Technology', 'exchange': 'NASD'}, 'META': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSLA': {'sector': 'Consumer Cyclical', 'exchange': 'NASD'}, 'AVGO': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMD': {'sector': 'Technology', 'exchange': 'NASD'}, 'CRM': {'sector': 'Technology', 'exchange': 'NYSE'}, 'ORCL': {'sector': 'Technology', 'exchange': 'NYSE'}, 'ADBE': {'sector': 'Technology', 'exchange': 'NASD'}, 'NFLX': {'sector': 'Communication', 'exchange': 'NASD'}, 'INTC': {'sector': 'Technology', 'exchange': 'NASD'}, 'QCOM': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMAT': {'sector': 'Technology', 'exchange': 'NASD'}, 'MU': {'sector': 'Technology', 'exchange': 'NASD'}, 'LRCX': {'sector': 'Technology', 'exchange': 'NASD'}, 'KLAC': {'sector': 'Technology', 'exchange': 'NASD'}, 'MRVL': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSM': {'sector': 'Technology', 'exchange': 'NYSE'}, 'TMUS': {'sector': 'Communication', 'exchange': 'NASD'}, 'JPM': {'sector': 'Financial', 'exchange': 'NYSE'}, 'V': {'sector': 'Financial', 'exchange': 'NYSE'}, 'MA': {'sector': 'Financial', 'exchange': 'NYSE'}, 'BAC': {'sector': 'Financial', 'exchange': 'NYSE'}, 'GS': {'sector': 'Financial', 'exchange': 'NYSE'}, 'UNH': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'JNJ': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'LLY': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'ABBV': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'MRK': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'PG': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'KO': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'COST': {'sector': 'Consumer Staples', 'exchange': 'NASD'}, 'WMT': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'HD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'MCD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'CAT': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'DE': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'BA': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'XOM': {'sector': 'Energy', 'exchange': 'NYSE'}, 'CVX': {'sector': 'Energy', 'exchange': 'NYSE'}, 'SPY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'QQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'DIA': {'sector': 'ETF', 'exchange': 'AMEX'}, 'IWM': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SOXX': {'sector': 'ETF', 'exchange': 'NASD'}, 'TQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXL': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SOXS': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SH': {'sector': 'ETF', 'exchange': 'AMEX'}, 'TLT': {'sector': 'ETF', 'exchange': 'NASD'}, 'SHV': {'sector': 'ETF', 'exchange': 'NASD'}, 'SGOV': {'sector': 'ETF', 'exchange': 'AMEX'}, 'GLD': {'sector': 'ETF', 'exchange': 'AMEX'}, 'UUP': {'sector': 'ETF', 'exchange': 'AMEX'}, 'USO': {'sector': 'ETF', 'exchange': 'AMEX'}, 'CPER': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLK': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLE': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLV': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLF': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLI': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XBI': {'sector': 'ETF', 'exchange': 'AMEX'}, 'ITA': {'sector': 'ETF', 'exchange': 'AMEX'}, 'EWY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'FXI': {'sector': 'ETF', 'exchange': 'AMEX'}, '^VIX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'KRW=X': {'sector': 'Macro', 'exchange': 'FOREX'}, '^TNX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'CL=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'GC=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'DX-Y.NYB': {'sector': 'Macro', 'exchange': 'INDEX'}}
 
 class USStockCollector:
     """미국 주식 일봉 + 피처 수집기."""
@@ -104,14 +104,18 @@ class USStockCollector:
 
         def _is_sane(df) -> tuple[bool, float]:
             """Z-Score 기반 이상치 검증. (정상여부, 수익률) 반환"""
-            if df is None or df.empty or 'close' not in df.columns or len(df) < 20:
+            if df is None or df.empty or len(df) < 20:
+                return False, 0.0
+            df = df.copy()
+            df.columns = [str(c).lower() for c in df.columns]
+            if 'close' not in df.columns:
                 return False, 0.0
             
             # Ensure proper index
             if df.index.name != 'date' and 'date' in df.columns:
                 df = df.set_index('date')
             
-            close = df['close'].dropna()
+            close = pd.to_numeric(df['close'], errors='coerce').dropna()
             if len(close) < 20:
                 return False, 0.0
                 
@@ -203,7 +207,12 @@ class USStockCollector:
                         
             elif ticker == '^TNX':
                 # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> FRED (Fallback)
-                df_av = collect_econ_indicator_daily_ohlcv('TREASURY_YIELD', maturity='10year')
+                df_av = None
+                try:
+                    from src.data_collection.alt_sources.alphavantage_econ import collect_econ_indicator_daily_ohlcv
+                    df_av = collect_econ_indicator_daily_ohlcv('TREASURY_YIELD', maturity='10year')
+                except Exception:
+                    df_av = None
                 if df_av is not None and _process_and_save(df_av, ticker):
                     source = "AlphaVantage (TREASURY_YIELD)"
                 else:
@@ -309,10 +318,21 @@ class USStockCollector:
         """수집된 일봉에서 ML 피처 벡터 생성."""
         date_str = date_str or datetime.now().strftime('%Y-%m-%d')
         features = {}
+        price_files = {}
         for csv_file in sorted(self.prices_dir.glob('*.csv')):
-            ticker = csv_file.stem
+            price_files[csv_file.stem] = csv_file
+        for pq_file in sorted(self.prices_dir.glob('*.parquet')):
+            price_files[pq_file.stem] = pq_file
+        for ticker, p_file in sorted(price_files.items()):
             try:
-                df = pd.read_csv(csv_file, index_col='date', parse_dates=True)
+                if p_file.suffix == '.parquet':
+                    df = pd.read_parquet(p_file)
+                else:
+                    df = pd.read_csv(p_file)
+                df.columns = [str(c).lower() for c in df.columns]
+                if 'date' in df.columns and df.index.name != 'date':
+                    df['date'] = pd.to_datetime(df['date'])
+                    df = df.set_index('date')
                 if len(df) < 50:
                     continue
                 feat = self._compute_features(ticker, df)

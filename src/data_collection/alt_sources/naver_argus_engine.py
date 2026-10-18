@@ -116,7 +116,7 @@ class ArgusEngine:
         snippet = text[:2000]
         prompt = f'[TASK] 다음 테마에 대한 한국 언론 기사를 분석하라.\n테마: {theme_name} — {description}\n\n기사 샘플 (상위 2,000자):\n---\n{snippet}\n---\n\n위 기사들을 분석하여 테마 모멘텀을 0.0(최악/하락/부정)에서 1.0(최상/상승/긍정) 사이 실수로 정량화하라.\n오직 JSON만 출력: {{"score": 0.xx, "confidence": 0.xx}}'
         try:
-            headers = {'Authorization': f"Bearer {self.llm_api_key}', 'Content-Type': 'application/json"}
+            headers = {'Authorization': f"Bearer {self.llm_api_key}", 'Content-Type': 'application/json'}
             payload = {'model': self.llm_model, 'messages': [{'role': 'user', 'content': prompt}], 'max_tokens': 64, 'temperature': 0.1}
             resp = requests.post(f'{self.llm_base_url}/chat/completions', headers=headers, json=payload, timeout=20)
             resp.raise_for_status()

@@ -30,15 +30,22 @@ class DynamicExitEvaluator:
         
         exit_orders = res.get('exit_orders', [])
         exit_candidates = []
+        positions_dict = s4_pos if isinstance(s4_pos, dict) else {}
         for o in exit_orders:
+            _tk = o.get('ticker', '')
+            _pk = o.get('pos_key') or f"S4:{_tk}"
+            _pos_info = positions_dict.get(_pk) or positions_dict.get(_tk) or {}
             exit_candidates.append({
-                'ticker': o.get('ticker'),
-                'reasons': [{'rule': 'universal_exit', 'detail': o.get('reason')}]
+                'pos_key': _pk,
+                'ticker': _tk,
+                'name': o.get('name') or _pos_info.get('name', _tk),
+                'pnl_pct': _pos_info.get('return_pct', _pos_info.get('pnl_pct', 0.0)),
+                'urgency': o.get('urgency', 3),
+                'reasons': [{'rule': o.get('sell_type', 'universal_exit'), 'detail': o.get('reason', '')}]
             })
         
         # flow_data 긴급 청산 주입
         if flow_data and 'tickers' in flow_data:
-            positions_dict = s4_pos if isinstance(s4_pos, dict) else {}
             for pos_key, pos in positions_dict.items():
                 ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
                 thresholds = {"stop_loss_pct": 0.07, "trail_stop_atr_mult": 1.5}
@@ -46,8 +53,13 @@ class DynamicExitEvaluator:
                 if flow_res.get('exit'):
                     existing_tickers = [c['ticker'] if isinstance(c, dict) else c for c in exit_candidates]
                     if ticker not in existing_tickers:
+                        _pk = pos_key if ':' in str(pos_key) else f"{pos.get('stream_id', 'S4')}:{ticker}"
                         exit_candidates.append({
+                            'pos_key': _pk,
                             'ticker': ticker,
+                            'name': pos.get('name', ticker),
+                            'pnl_pct': pos.get('return_pct', pos.get('pnl_pct', 0.0)),
+                            'urgency': 3,
                             'reasons': [{'rule': 'flow_dynamic', 'detail': flow_res.get('detail')}]
                         })
                         exit_orders.append({

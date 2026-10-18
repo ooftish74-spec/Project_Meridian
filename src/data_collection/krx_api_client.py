@@ -46,7 +46,7 @@ class KRXApiClient:
         if self.api_key:
             logger.info(f"  🔑 KRX API 초기화 (키: {self.api_key[:8]}...)")
         else:
-            logger.warning('  ⚠️ KRX API 키 미설정 — .env에 KRX_API_KEY 추가 필요')
+            logger.debug('  KRX API 키 미설정 — KIS/Naver 폴백 사용')
 
     @property
     def is_available(self) -> bool:
@@ -67,7 +67,7 @@ class KRXApiClient:
         from src.utils.credential_manager import CredentialManager
         return CredentialManager().read_from_keychain('KRX_API_KEY') or ''
 
-    def _call_api(self, service_path: str, params: dict=None) -> Optional[dict]:
+    def _call_api(self, service_path: str, params: dict=None, _retry_count: int=0) -> Optional[dict]:
         """API 호출 (GET + AUTH_KEY 쿼리파라미터)."""
         if not self.is_available:
             logger.debug('  KRX API 키 미설정 — 스킵')
@@ -92,9 +92,12 @@ class KRXApiClient:
                 logger.warning(f"  🔑 KRX API 인증 실패: {service_path}")
                 return None
             elif resp.status_code == 429:
-                logger.warning('  ⏳ KRX API Rate Limit — 10초 대기')
+                if _retry_count >= 3:
+                    logger.warning(f'  ⏳ KRX API Rate Limit 최대 재시도(3회) 초과: {service_path}')
+                    return None
+                logger.warning(f'  ⏳ KRX API Rate Limit — 10초 대기 (재시도 {_retry_count + 1}/3)')
                 time.sleep(10)
-                return self._call_api(service_path, params)
+                return self._call_api(service_path, params, _retry_count=_retry_count + 1)
             else:
                 logger.warning(f"  KRX API HTTP {resp.status_code}: {service_path}")
                 return None
@@ -247,20 +250,28 @@ class KRXApiClient:
         """
         OHLCV: 로컬 parquet 캐시 → KRX API 전종목 일별.
         """
-        cache_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
-        if cache_path.exists():
-            try:
-                df = pd.read_parquet(cache_path)
-                if 'close' in df.columns:
-                    if hasattr(df.index, 'strftime'):
-                        mask = (df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end))
-                        filtered = df[mask]
-                        if len(filtered) > 0:
-                            return filtered
-                    elif len(df) > 0:
-                        return df
-            except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
+        base_data = Path(__file__).resolve().parent.parent.parent / 'data'
+        for cache_path in (
+            base_data / 'kr_markets' / f'kr_{ticker}.parquet',
+            base_data / 'kr_markets' / f'{ticker}.parquet',
+            base_data / 'historical_10y' / f'kr_{ticker}.parquet',
+        ):
+            if cache_path.exists():
+                try:
+                    df = pd.read_parquet(cache_path)
+                    if 'close' in df.columns or 'Close' in df.columns:
+                        if 'date' in df.columns and not hasattr(df.index, 'strftime'):
+                            df['date'] = pd.to_datetime(df['date'])
+                            df = df.set_index('date').sort_index()
+                        if hasattr(df.index, 'strftime'):
+                            mask = (df.index >= pd.Timestamp(start)) & (df.index <= pd.Timestamp(end))
+                            filtered = df[mask]
+                            if len(filtered) > 0:
+                                return filtered
+                        elif len(df) > 0:
+                            return df
+                except Exception as _e:
+                    logger.warning(f'  suppressed: {_e}', exc_info=True)
         if self.is_available:
             df = self.get_stock_ohlcv_range(ticker, days=30)
             if df is not None and len(df) > 0:
@@ -659,7 +670,7 @@ class KRXApiClient:
         collected = {}
         logger.info(f"\n📡 KRX 전체 수집 — {date}")
         logger.info('=' * 50)
-        stock_results = self.collect_all_stock_daily(date)
+        stock_results = self.collect_all_stocks_daily(date)
         collected['stock'] = {k: len(v) for k, v in stock_results.items()}
         for name, func in [('kospi_index', self.get_kospi_index), ('kosdaq_index', self.get_kosdaq_index)]:
             try:

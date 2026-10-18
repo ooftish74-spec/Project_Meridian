@@ -177,7 +177,7 @@ class OrderbookSlippageInversionEngine:
         # 2. Dynamic Micro-Price Offset
         direction_sign = 1.0 if order_side.upper() == "BUY" else -1.0
         # If BUYing and bid volume > ask volume (omega > 0), place price slightly below ask
-        price_offset = intraday_volatility * np.tanh(omega) * direction_sign
+        price_offset = mid_price * intraday_volatility * np.tanh(omega) * direction_sign
 
         optimal_limit_price = mid_price + price_offset
 

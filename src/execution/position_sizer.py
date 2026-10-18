@@ -211,9 +211,9 @@ class PositionSizer:
         name_str = str(signal.get('name', '')).lower()
         is_etf = (
             stream_id in ('S0', 'S1', 'S3_A', 'S5', 'S_YIELD') or 
-            asset_type in ('etf", "etn') or
+            asset_type in ('etf', 'etn') or
             any(t_str.startswith(prefix) for prefix in ('0695', '1226', '2526', '1148', '4491', '4595', '3811', '2527')) or
-            'etf" in t_str.lower() or "etn' in t_str.lower() or 'kodex' in name_str or 'tiger' in name_str or 'ace' in name_str
+            'etf' in t_str.lower() or 'etn' in t_str.lower() or 'kodex' in name_str or 'tiger' in name_str or 'ace' in name_str
         )
         tax_bps = 0.0 if is_etf else 18.0
         if self._slippage and portfolio_value > 0 and (kelly_size > 0):

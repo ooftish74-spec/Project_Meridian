@@ -111,7 +111,7 @@ class AlgorithmicFootprintTracker:
         ofi_z = float(signal_cache.get('semi_ofi_z', signal_cache.get('ofi_z', 0.0)))
         vpin = float(signal_cache.get('vpin', features.get('vpin', 0.50)))
         inst_flow = float(signal_cache.get('INST_NET_BUY_KRW_15M', signal_cache.get('foreign_net_buy', 0.0)))
-        timestamps = market_data.get('recent_order_timestamps', [0.0, 5.0, 10.1, 15.0, 20.2])
+        timestamps = market_data.get('recent_order_timestamps', [])
 
         w_ofi = float(cfg.get('footprint.w_ofi', 0.30))
         w_vpin = float(cfg.get('footprint.w_vpin', 0.30))

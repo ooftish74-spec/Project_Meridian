@@ -145,7 +145,7 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
         from scripts.train_ensemble import extract_v3
         feat = extract_v3(close, high, low, opn, volume, idx, is_etf)
     except ImportError as e:
-        feat = _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf)
+        feat = _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf, alpha_model=alpha_model)
     if feat is None:
         return None
     n = len(close)
@@ -218,11 +218,11 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     feat['intraday_vol_anomaly'] = float(ss.get('intraday_vol_anomaly', 0.0))
     return feat
 
-def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False):
+def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False, alpha_model=None):
     """V3 피처 독립 추출 (train_ensemble import 불가 시 fallback)."""
     n = len(close)
     _warmup_v3 = int(_cfg.get('ml.warmup_bars_v3', 260)) if _cfg else 260
-    if idx < _warmup_v3 or idx >= n - 1:
+    if idx < _warmup_v3 or idx >= n:
         return None
     c = close[:idx + 1]
     h = high[:idx + 1]
@@ -248,7 +248,11 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False):
     macd_signal = macd_val / (np.std(c[-_macd_slow:]) + 1e-08)
     vol_ma20 = np.mean(v[-20:])
     vol_ratio = v[-1] / vol_ma20 if vol_ma20 > 0 else 1.0
-    tr = np.maximum(h[-20:] - l[-20:], np.abs(h[-20:] - np.roll(c[-20:], 1)[1:20]), np.abs(l[-20:] - np.roll(c[-20:], 1)[1:20]))
+    tr = np.maximum.reduce([
+        h[-19:] - l[-19:],
+        np.abs(h[-19:] - c[-20:-1]),
+        np.abs(l[-19:] - c[-20:-1]),
+    ])
     atr_pct = np.mean(tr[-14:]) / c[-1] * 100 if c[-1] > 0 else 0
     w_fast = _cfg.get('ml.feature_window_fast', 5) if _cfg else 5
     w_mid = _cfg.get('ml.feature_window_mid', 20) if _cfg else 20
@@ -262,7 +266,6 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False):
     ret_20d = (c[-1] / c[-_idx_mid] - 1) * 100 if len(c) >= _idx_mid and c[-_idx_mid] > 0 else 0
     vol_20d = np.std(np.diff(np.log(c[-_idx_mid:]))) * np.sqrt(252) * 100 if len(c) >= _idx_mid else 0
     automl_score = 0.0
-    alpha_model = None
     if alpha_model is not None:
         try:
             ret_1d_val = c[-1] / c[-2] - 1 if len(c) > 1 and c[-2] > 0 else 0.0
@@ -276,7 +279,7 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False):
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             logger.warning('[SILENT_BYPASS] Suppressed exception at v4_features.py:469', exc_info=True)
-    return {'rsi_14': rsi, 'bb_position': _safe(bb), 'macd_signal': _safe(macd_signal), 'volume_ratio_20d': _safe(vol_ratio), 'atr_pct': _safe(atr_pct), 'ma5_dist': _safe((c[-1] / ma5 - 1) * 100), 'ma20_dist': _safe((c[-1] / ma20 - 1) * 100), 'ma60_dist': _safe((c[-1] / ma60 - 1) * 100), 'return_5d': _safe(ret_5d), 'return_20d': _safe(ret_20d), 'volatility_20d': _safe(vol_20d), 'asset_type': 1.0 if is_etf else 0.0, 'mean_reversion': _safe(rsi - 50), 'trend_strength': _safe(abs(c[-1] / ma20 - 1) * 100), 'volume_trend': _safe(np.mean(v[-5:]) / vol_ma20 if vol_ma20 > 0 else 1), 'return_1d': _safe(ret_1d), 'return_3d': _safe(ret_3d), 'ma5_ma20_cross': 1.0 if ma5 > ma20 else 0.0, 'high_low_range': _safe((np.max(h[-20:]) - np.min(l[-20:])) / c[-1] * 100), 'close_to_high_20d': _safe(c[-1] / np.max(h[-20:])), 'rsi_slope_5d': _safe(rsi - (100 - 100 / (1 + np.mean(np.maximum(np.diff(c[-20:-15]), 0)) / (np.mean(np.maximum(-np.diff(c[-20:-15]), 0)) + 1e-08))), 0), 'volume_spike': 1.0 if v[-1] > vol_ma20 * (float(_cfg.get('ml.volume_spike_ratio', 2.0)) if _cfg else 2.0) else 0.0, 'adx_proxy': _safe(abs(ret_5d) / (vol_20d / np.sqrt(252) + 1e-08)), 'overnight_return': _safe((o[-1] / c[-2] - 1) * 100 if c[-2] > 0 else 0), 'intraday_return': _safe((c[-1] / o[-1] - 1) * 100 if o[-1] > 0 else 0), 'automl_alpha_score': _safe(automl_score)}
+    return {'rsi_14': rsi, 'bb_position': _safe(bb), 'macd_signal': _safe(macd_signal), 'volume_ratio_20d': _safe(vol_ratio), 'atr_pct': _safe(atr_pct), 'ma5_dist': _safe((c[-1] / ma5 - 1) * 100), 'ma20_dist': _safe((c[-1] / ma20 - 1) * 100), 'ma60_dist': _safe((c[-1] / ma60 - 1) * 100), 'return_5d': _safe(ret_5d), 'return_20d': _safe(ret_20d), 'volatility_20d': _safe(vol_20d), 'asset_type': 1.0 if is_etf else 0.0, 'mean_reversion': _safe(rsi - 50), 'trend_strength': _safe(abs(c[-1] / ma20 - 1) * 100), 'volume_trend': _safe(np.mean(v[-5:]) / vol_ma20 if vol_ma20 > 0 else 1), 'return_1d': _safe(ret_1d), 'return_3d': _safe(ret_3d), 'ma5_ma20_cross': 1.0 if ma5 > ma20 else 0.0, 'high_low_range': _safe((np.max(h[-20:]) - np.min(l[-20:])) / c[-1] * 100), 'close_to_high_20d': _safe(c[-1] / np.max(h[-20:])), 'rsi_slope_5d': _safe(rsi - (100 - 100 / (1 + np.mean(np.maximum(np.diff(c[-20:-5]), 0)) / (np.mean(np.maximum(-np.diff(c[-20:-5]), 0)) + 1e-08))), 0), 'volume_spike': 1.0 if v[-1] > vol_ma20 * (float(_cfg.get('ml.volume_spike_ratio', 2.0)) if _cfg else 2.0) else 0.0, 'adx_proxy': _safe(abs(ret_5d) / (vol_20d / np.sqrt(252) + 1e-08)), 'overnight_return': _safe((o[-1] / c[-2] - 1) * 100 if c[-2] > 0 else 0), 'intraday_return': _safe((c[-1] / o[-1] - 1) * 100 if o[-1] > 0 else 0), 'automl_alpha_score': _safe(automl_score)}
 
 def _safe_skew(arr):
     n = len(arr)

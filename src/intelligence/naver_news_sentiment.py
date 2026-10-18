@@ -101,6 +101,7 @@ class NaverNewsSentiment:
                         matched_keywords.append(kw)
                 if not matched_keywords:
                     continue
+                entities = self._extract_entities(headline, stock_names)
                 _ent_str = ','.join(sorted((e.get('name', '') for e in entities))) or headline[:30]
                 event_key = f"{event_type}:{_ent_str}"
                 if event_key in seen_events:

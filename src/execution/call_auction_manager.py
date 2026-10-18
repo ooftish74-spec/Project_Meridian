@@ -12,10 +12,13 @@ Project Meridian — KRX Call Auction Dynamic Order Manager
      - Case C (예상등락률 <= -1.0% 허수호가/비정상 찌그러짐): 08:54:00 즉시 매도 주문 취소 (Cancel Order), 09:05 정규장 SOR 전환
 """
 
+import json
 import logging
 import math
+import os
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from config.dynamic_config import DynamicConfig
@@ -24,15 +27,52 @@ from src.data_collection.kis_data_collector import KISDataCollector
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_ORDERS_PATH = _PROJECT_ROOT / "results" / "active_premarket_orders.json"
+
 
 class CallAuctionManager:
     """KRX 08:50 ~ 08:54 동시호가 예상체결가 모니터링 및 주문 동적 취소/유지 엔진."""
 
-    def __init__(self, adapter: Optional[KISTraderAdapter] = None):
+    def __init__(self, adapter: Optional[KISTraderAdapter] = None, orders_path: Optional[Path] = None):
         self.adapter = adapter or KISTraderAdapter(mode="live")
         self.collector = KISDataCollector()
+        self.orders_path = Path(orders_path) if orders_path else _DEFAULT_ORDERS_PATH
         self.active_premarket_order: Optional[Dict[str, Any]] = None
         self.active_premarket_orders: Dict[str, Dict[str, Any]] = {}
+        self._load_active_orders()
+
+    def _load_active_orders(self) -> None:
+        """08:30 단계에서 기록된 장전 동시호가 주문 원장을 복원."""
+        try:
+            if not self.orders_path.exists():
+                return
+            raw = json.loads(self.orders_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return
+            today_prefix = datetime.now().strftime("%Y-%m-%d")
+            loaded: Dict[str, Dict[str, Any]] = {}
+            for tk, info in raw.items():
+                if isinstance(info, dict):
+                    placed_at = str(info.get("placed_at", ""))
+                    if not placed_at or placed_at.startswith(today_prefix):
+                        loaded[str(tk)] = info
+            if loaded:
+                self.active_premarket_orders.update(loaded)
+                self.active_premarket_order = list(loaded.values())[-1]
+        except Exception as e:
+            logger.debug(f"  [CallAuction] 장전 주문 원장 로드 우회: {e}")
+
+    def _save_active_orders(self) -> None:
+        """장전 동시호가 주문 내역을 디스크에 영속화."""
+        try:
+            self.orders_path.parent.mkdir(parents=True, exist_ok=True)
+            self.orders_path.write_text(
+                json.dumps(self.active_premarket_orders, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.debug(f"  [CallAuction] 장전 주문 원장 저장 우회: {e}")
 
     def calculate_kodex_sell_qty(self, target_buy_amount_krw: float) -> int:
         """가용 현금을 차감한 부족액에 맞춰 KODEX 200 (069500) 매도 주수 계산."""
@@ -88,6 +128,7 @@ class CallAuctionManager:
             }
             self.active_premarket_orders[ticker] = order_info
             self.active_premarket_order = order_info  # 하위 호환성 유지
+            self._save_active_orders()
             logger.info(f"  ✅ [CallAuction] 장전 동시호가 매도 주문 제출 성공: {ticker} {sell_qty}주 OrderID={order.order_id}")
             return order_info
         else:
@@ -101,6 +142,8 @@ class CallAuctionManager:
           - is_risk_exit=True (손절/익절) 주문은 예상체결가 급락(<= -1.0%) 시에도 절대 취소하지 않고 무조건 유지(MAINTAIN).
           - 리밸런싱 현금조달 목적의 일반 주문만 허수호가 찌그러짐 시 취소(CANCEL).
         """
+        if not self.active_premarket_orders:
+            self._load_active_orders()
         logger.info("  🔍 [CallAuction 08:50~08:54] 실시간 동시호가 예상체결가 모니터링 시작")
         start_time = time.time()
         monitored_tickers = list(self.active_premarket_orders.keys()) or ["069500"]
@@ -116,7 +159,7 @@ class CallAuctionManager:
             time.sleep(10)
 
         decisions: Dict[str, str] = {}
-        for tk, o_info in self.active_premarket_orders.items():
+        for tk, o_info in list(self.active_premarket_orders.items()):
             last_pct = last_antc_map.get(tk, 0.0)
             is_risk = o_info.get("is_risk_exit", False)
             oid = o_info.get("order_id")
@@ -131,6 +174,7 @@ class CallAuctionManager:
                     cancel_res = self.adapter.cancel_order(oid)
                     logger.info(f"  ✅ [CallAuction] 08:54 매도 주문 취소 집행: {cancel_res}")
                 decisions[tk] = "CANCEL"
+                self.active_premarket_orders.pop(tk, None)
             elif last_pct >= 0.6:
                 logger.info(f"  🚀 [Case A 발동] {tk} 예상체결가 강세({last_pct:+.2f}% >= +0.6%) -> 최고 프리미엄 단일가 체결 매도 주문 유지")
                 decisions[tk] = "MAINTAIN"
@@ -138,4 +182,5 @@ class CallAuctionManager:
                 logger.info(f"  ✅ [Case B 발동] {tk} 예상체결가 정상 수렴({last_pct:+.2f}%) -> 09:00 시초가 체결 매도 주문 유지")
                 decisions[tk] = "MAINTAIN"
 
+        self._save_active_orders()
         return decisions

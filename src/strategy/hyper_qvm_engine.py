@@ -170,14 +170,25 @@ class ModularHyperQVMEngine:
         z_r = calc_z(r_vals)
 
         # Dynamic Inverse Variance Risk Parity Weight Calculation
+        raw_stds = np.array([
+            float(np.std(q_vals)),
+            float(np.std(v_vals)),
+            float(np.std(m_vals)),
+            float(np.std(r_vals)),
+        ])
+        active_mask = raw_stds >= 1e-6
         vars_arr = np.array([
             max(float(np.var(z_q)), 1e-4),
             max(float(np.var(z_v)), 1e-4),
             max(float(np.var(z_m)), 1e-4),
-            max(float(np.var(z_r)), 1e-4)
+            max(float(np.var(z_r)), 1e-4),
         ])
-        inv_vars = 1.0 / vars_arr
-        weights = inv_vars / float(np.sum(inv_vars))
+        inv_vars = np.where(active_mask, 1.0 / vars_arr, 0.0)
+        inv_sum = float(np.sum(inv_vars))
+        if inv_sum > 0.0:
+            weights = inv_vars / inv_sum
+        else:
+            weights = np.zeros(4, dtype=float)
 
         w_q, w_v, w_m, w_r = weights[0], weights[1], weights[2], weights[3]
 

@@ -132,26 +132,45 @@ class OvernightIntelligenceScore:
         return {'score': 50.0, 'detail': 'no data'}
 
     def _score_nxt_premarket(self) -> Dict:
-        """장전 동호가/프리마켓(08:30~09:00 KST) 호가 잔량 및 예상 체결가 모멘텀 점수."""
+        """장전 동호가/프리마켓(08:00~09:00 KST) 호가 잔량 및 프리마켓 체결가(삼성전자/SK하이닉스/KODEX200) 모멘텀 점수."""
         try:
             sc_path = self.results_dir / 'signal_cache.json'
-            if sc_path.exists():
-                sc = json.loads(sc_path.read_text())
-                # 1. premarket_auction / krx_premarket_gap_pct 확인
-                pa = sc.get('premarket_auction', {})
-                gap = pa.get('disparity_pct', sc.get('krx_premarket_gap_pct'))
-                if gap is not None and isinstance(gap, (int, float)):
-                    score = float(np.clip(50.0 + float(gap) * (50.0 / 2.0), 10.0, 90.0))
-                    return {'score': round(score, 1), 'detail': f"Premarket Gap {gap:+.2f}%", 'status': 'OK'}
+            sc = json.loads(sc_path.read_text()) if sc_path.exists() else {}
+            pa = sc.get('premarket_auction', {})
+            gap = pa.get('disparity_pct', sc.get('krx_premarket_gap_pct'))
+            if gap is not None and isinstance(gap, (int, float)):
+                score = float(np.clip(50.0 + float(gap) * (50.0 / 2.0), 10.0, 90.0))
+                return {'score': round(score, 1), 'detail': f"Premarket Gap {gap:+.2f}%", 'status': 'OK'}
+
+            from datetime import time as _dt_time
+            now_time = datetime.now().time()
+            if _dt_time(8, 0) <= now_time <= _dt_time(15, 30):
+                from src.data_collection.kis_data_collector import KISDataCollector
+                kis = KISDataCollector()
+                techs = sc.get('stock_technicals', {})
+                gaps = []
+                for tk in ('005930', '000660', '069500'):
+                    prev_c = float((techs.get(tk) or {}).get('close') or 0.0)
+                    if prev_c > 0:
+                        live_q = kis.get_current_price(tk)
+                        live_p = float((live_q or {}).get('price') or (live_q or {}).get('antc_price') or 0.0) if isinstance(live_q, dict) else float(live_q or 0.0)
+                        if live_p > 0 and abs(live_p - prev_c) / prev_c < 0.30:
+                            gaps.append((live_p - prev_c) / prev_c * 100.0)
+                if gaps:
+                    avg_gap = float(sum(gaps) / len(gaps))
+                    score = float(np.clip(50.0 + avg_gap * (50.0 / 2.0), 10.0, 90.0))
+                    return {'score': round(score, 1), 'detail': f"NXT Premarket/Leader Avg {avg_gap:+.2f}%", 'gap_pct': round(avg_gap, 3), 'status': 'OK'}
+            prev_nxt = (sc.get('ois_details') or {}).get('components', {}).get('nxt_premarket', {})
+            if isinstance(prev_nxt, dict) and isinstance(prev_nxt.get('score'), (int, float)):
+                return prev_nxt
         except Exception as _e:
             logger.warning('nxt_premarket score skip: %s', _e)
             
-        # 장전 동호가 수집 타임윈도우(08:30~09:00) 외에는 'score: None'으로 분리 (가중치 자동 재배분 유도)
         from datetime import time as _dt_time
         now_time = datetime.now().time()
-        if _dt_time(8, 30) <= now_time <= _dt_time(9, 0):
-            return {'score': None, 'detail': 'premarket auction pending (08:30-09:00 KST)'}
-        return {'score': None, 'detail': 'outside premarket window (08:30-09:00 KST)'}
+        if _dt_time(8, 0) <= now_time <= _dt_time(9, 0):
+            return {'score': None, 'detail': 'premarket auction pending (08:00-09:00 KST)'}
+        return {'score': None, 'detail': 'outside premarket window (08:00-09:00 KST)'}
 
     def _score_krx_night_futures(self) -> Dict:
         """KRX 야간선물 (KOSPI 200 야간선물 F202612) → 점수."""

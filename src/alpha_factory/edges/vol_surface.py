@@ -7,9 +7,11 @@ class VolatilitySurfaceAlpha:
     @staticmethod
     def generate(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
+        close_col = 'Close' if 'Close' in df.columns else ('close' if 'close' in df.columns else None)
         
-        if 'Close' in df.columns:
-            returns = df['Close'].pct_change().fillna(0)
+        if close_col:
+            close_s = df[close_col].astype(float)
+            returns = close_s.pct_change().fillna(0)
             vol_5d = returns.rolling(5).std() * np.sqrt(252)
             vol_20d = returns.rolling(20).std() * np.sqrt(252)
             
@@ -19,12 +21,12 @@ class VolatilitySurfaceAlpha:
             df['alpha_vol_term_structure'] = term_structure
             
             # Volatility-Adjusted Momentum (하락장 적극 숏베팅을 위한 지표)
-            mom_10d = df['Close'].pct_change(10).fillna(0)
+            mom_10d = close_s.pct_change(10).fillna(0)
             df['alpha_vol_adj_mom_10d'] = (mom_10d / (vol_20d + 1e-9)).fillna(0)
             
             # Drawdown Velocity
-            rolling_max = df['Close'].rolling(20).max()
-            dd = (df['Close'] / rolling_max) - 1.0
+            rolling_max = close_s.rolling(20).max()
+            dd = (close_s / rolling_max) - 1.0
             dd_velocity = dd.diff(3).fillna(0) # 3일간의 하락 가속도
             df['alpha_dd_velocity_3d'] = dd_velocity
             

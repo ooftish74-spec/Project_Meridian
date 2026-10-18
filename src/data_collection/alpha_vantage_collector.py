@@ -221,62 +221,82 @@ def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None) -> '
         logger.error(f'  ❌ [Alpha Vantage] {function} 데이터 수집 실패: {e}', exc_info=True)
         return None
 
+def _fetch_yahoo_chart_quote(symbol: str) -> Optional[dict]:
+    """Yahoo Finance Direct Chart REST API를 통해 지수/선물/환율의 실제 레벨 및 1일 등락률 조회."""
+    import urllib.request
+    import urllib.parse
+    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range=5d&interval=1d'
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            d = json.loads(r.read().decode('utf-8'))['chart']['result'][0]
+            closes = [float(c) for c in d.get('indicators', {}).get('quote', [{}])[0].get('close', []) if c is not None and float(c) > 0]
+            p = float(d.get('meta', {}).get('regularMarketPrice') or (closes[-1] if closes else 0.0))
+            if p <= 0:
+                return None
+            prev = closes[-2] if len(closes) >= 2 else float(d.get('meta', {}).get('previousClose') or p)
+            chg_1d = round((p / prev - 1.0) * 100.0, 2) if prev > 0 else 0.0
+            return {'price': round(p, 4), 'change_1d': chg_1d}
+    except Exception as e:
+        logger.debug(f"  [YahooDirect] {symbol} 조회 스킵: {e}")
+        return None
+
+
 def collect_global_macro(symbols: list) -> dict:
-    """[Phase 1] Alpha Vantage를 통한 글로벌 매크로 지표 수집 (yfinance 대체).
-    Yahoo Finance 호환 티커를 받아 적절한 Alpha Vantage 전용 엔드포인트로 라우팅합니다.
-    """
+    """[Phase 1] 글로벌 매크로 지표 수집 (지수/선물/환율 실제 레벨 보장 — ETF 가격 오염 차단)."""
     from src.utils.credential_manager import CredentialManager
+    from src.utils.google_finance_collector import GoogleFinanceCollector
     import time
-    
+
     api_key = CredentialManager().read_from_env('ALPHA_VANTAGE_API_KEY') or ''
-    if not api_key:
-        logger.error('  ❌ ALPHA_VANTAGE_API_KEY 누락.')
-        return {}
-        
     results = {}
-    
-    # [라우팅 매핑 테이블] 
-    # YF티커 -> (엔드포인트_타입, AV_심볼_또는_파라미터)
+
+    # 실제 지수/선물/금리/환율 심볼은 ETF 가격(SPY, QQQ, SOXX, GLD, UUP 등)으로 절대 덮어쓰지 않고
+    # Yahoo Chart Direct REST / Google Finance에서 실제 지수 레벨과 1D 등락률을 우선 수집한다.
+    DIRECT_INDEX_SYMBOLS = {
+        '^GSPC', '^IXIC', '^DJI', '^SOX', '^VIX',
+        '^TNX', '^FVX', '^TYX', 'DX-Y.NYB',
+        'CL=F', 'GC=F', 'SI=F', 'HG=F',
+        'KRW=X', 'USDJPY=X', 'EURUSD=X',
+        '^KS11', '^KQ11', '^TWII', '^N225', '^HSI',
+    }
+
     mapping = {
-        # 상품 (Commodities)
         'CL=F': ('WTI', ''),
-        'GC=F': ('ETF', 'GLD'),   # AV Gold 직접조회 불가 -> GLD ETF로 우회
-        'SI=F': ('ETF', 'SLV'),   # AV Silver 직접조회 불가 -> SLV ETF로 우회
-        'HG=F': ('COPPER', ''),   # Copper는 monthly만 제공되나 예외적으로 조회 (daily 부족 시 실패 가능)
-        
-        # 금리 (Yields)
+        'HG=F': ('COPPER', ''),
         '^TNX': ('YIELD', '10year'),
         '^FVX': ('YIELD', '5year'),
         '^TYX': ('YIELD', '30year'),
-        
-        # 환율 (FX)
         'KRW=X': ('FX', 'USD/KRW'),
         'USDJPY=X': ('FX', 'USD/JPY'),
         'EURUSD=X': ('FX', 'EUR/USD'),
-        'DX-Y.NYB': ('ETF', 'UUP'), # 달러인덱스 대체
-        
-        # 지수 (Indices - AV는 지수 미지원, ETF로 대체 매핑)
-        '^GSPC': ('ETF', 'SPY'),
-        '^IXIC': ('ETF', 'QQQ'),
-        '^DJI': ('ETF', 'DIA'),
-        '^SOX': ('ETF', 'SOXX'),
-        '^TWII': ('ETF', 'EWT'),
-        '^N225': ('ETF', 'EWJ'),
-        '^HSI': ('ETF', 'EWH'),
-        '^VIX': ('UNSUPPORTED', '') # VIX는 AV에서 조회 불가. 야후 파이낸스 폴백 유도 위해 에러 리턴.
     }
 
     for symbol in symbols:
         try:
-            route, param = mapping.get(symbol, ('ETF', symbol)) # 기본값은 ETF/주식 취급
-            
-            if route == 'UNSUPPORTED':
-                logger.warning(f"  ⚠️ [Alpha Vantage] {symbol} (VIX 등)는 지원하지 않는 지표입니다.")
+            # [0] 지수/선물/환율/금리: Yahoo Direct Chart REST -> GoogleFinanceCollector 우선 조회
+            if symbol in DIRECT_INDEX_SYMBOLS or symbol.startswith('^') or symbol.endswith('=F') or symbol.endswith('=X'):
+                yd = _fetch_yahoo_chart_quote(symbol)
+                if yd and yd.get('price', 0) > 0:
+                    results[symbol] = yd
+                    logger.info(f"  🌍 [GlobalMacro] {symbol} 수집 성공: {yd['price']} ({yd['change_1d']:+.2f}%)")
+                    continue
+                gf = GoogleFinanceCollector.get_quote_details(symbol)
+                if gf and gf.get('price', 0) > 0:
+                    results[symbol] = {'price': float(gf['price']), 'change_pct': float(gf.get('change_pct', 0.0)), 'change_1d': float(gf.get('change_pct', 0.0))}
+                    logger.info(f"  🌍 [GoogleFinance] {symbol} 수집 성공: {gf['price']} ({gf.get('change_pct', 0.0):+.2f}%)")
+                    continue
+                if symbol not in mapping:
+                    logger.debug(f"  [GlobalMacro] {symbol} 실시간 지수 소스 응답 없음 — 스킵")
+                    continue
+
+            if not api_key:
                 continue
-                
+
+            route, param = mapping.get(symbol, ('ETF', symbol))
             price = None
-            
-            # [1] 주식/ETF 라우팅 (GLOBAL_QUOTE)
+
+            # [1] 실제 US 주식/ETF 라우팅 (EWY, FLKR, FXI 등)
             if route == 'ETF':
                 url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={param}&apikey={api_key}'
                 resp = requests.get(url, timeout=10).json()
@@ -284,19 +304,22 @@ def collect_global_macro(symbols: list) -> dict:
                     price = float(resp['Global Quote']['05. price'])
                     chg_pct = float(resp['Global Quote'].get('10. change percent', '0%').replace('%', ''))
                     results[symbol] = {'price': price, 'change_1d': chg_pct}
-                    logger.info(f"  🌍 [Alpha Vantage] {symbol} (Mapped: {param}) 수집 성공: {price} ({chg_pct:+.2f}%)")
+                    logger.info(f"  🌍 [Alpha Vantage] {symbol} 수집 성공: {price} ({chg_pct:+.2f}%)")
                 else:
-                    logger.warning(f"  ⚠️ [Alpha Vantage] {symbol}({param}) 데이터 없음 또는 한도 도달.")
-                    
+                    yd = _fetch_yahoo_chart_quote(symbol)
+                    if yd and yd.get('price', 0) > 0:
+                        results[symbol] = yd
+                        logger.info(f"  🌍 [GlobalMacro Fallback] {symbol} 수집 성공: {yd['price']} ({yd['change_1d']:+.2f}%)")
+
             # [2] WTI (원유) 라우팅
             elif route == 'WTI':
                 url = f'https://www.alphavantage.co/query?function=WTI&interval=daily&apikey={api_key}'
                 resp = requests.get(url, timeout=10).json()
                 if 'data' in resp and len(resp['data']) > 0:
                     price = float(resp['data'][0]['value'])
-                    results[symbol] = {'price': price, 'change_1d': 0.0} # 과거값 계산 생략
+                    results[symbol] = {'price': price, 'change_1d': 0.0}
                     logger.info(f"  🌍 [Alpha Vantage] {symbol} (WTI) 수집 성공: {price}")
-                    
+
             # [3] COPPER (구리) 라우팅
             elif route == 'COPPER':
                 url = f'https://www.alphavantage.co/query?function=COPPER&interval=monthly&apikey={api_key}'
@@ -305,7 +328,7 @@ def collect_global_macro(symbols: list) -> dict:
                     price = float(resp['data'][0]['value'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
                     logger.info(f"  🌍 [Alpha Vantage] {symbol} (COPPER) 수집 성공: {price}")
-                    
+
             # [4] 국채 금리 라우팅
             elif route == 'YIELD':
                 url = f'https://www.alphavantage.co/query?function=TREASURY_YIELD&interval=daily&maturity={param}&apikey={api_key}'
@@ -314,7 +337,7 @@ def collect_global_macro(symbols: list) -> dict:
                     price = float(resp['data'][0]['value'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
                     logger.info(f"  🌍 [Alpha Vantage] {symbol} ({param} Yield) 수집 성공: {price}")
-                    
+
             # [5] 환율 (FX) 라우팅
             elif route == 'FX':
                 base, quote = param.split('/')
@@ -324,12 +347,12 @@ def collect_global_macro(symbols: list) -> dict:
                     price = float(resp['Realtime Currency Exchange Rate']['5. Exchange Rate'])
                     results[symbol] = {'price': price, 'change_1d': 0.0}
                     logger.info(f"  🌍 [Alpha Vantage] {symbol} (FX {param}) 수집 성공: {price}")
-            
-            time.sleep(0.15) # Premium Burst 방지 딜레이
-            
+
+            time.sleep(0.1)
+
         except Exception as e:
             logger.error(f'  ❌ [Alpha Vantage] {symbol} 수집 실패: {e}', exc_info=True)
-            
+
     return results
 
 def collect_options_pcr(symbol: str='SPY') -> float:

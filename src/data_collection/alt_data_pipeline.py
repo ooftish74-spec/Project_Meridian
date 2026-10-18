@@ -104,7 +104,7 @@ class DerivativesCollector:
         from datetime import date as _date_cls
         _ref = _date_cls.fromisoformat(str(target_date)) if target_date else _date_cls.today()
         try:
-            from pykrx import stock as pykrx_stock
+            from src.data_collection.pykrx_compat import stock as pykrx_stock
             today = _ref.strftime('%Y%m%d')
             yesterday = (_ref - timedelta(days=1)).strftime('%Y%m%d')
             try:

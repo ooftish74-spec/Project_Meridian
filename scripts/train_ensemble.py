@@ -659,7 +659,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
 
         return search.best_estimator_, top_params
 
-    # ═══ GBR ═══
+    # ═══ GBR (1차 학습 + Feature Pruning 선행) ═══
     current += 1
     logger.info(f"\n  📊 {current}/{model_count} GradientBoosting...")
     gbr_params = {
@@ -685,27 +685,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     else:
         gbr.fit(train_X, train_y, sample_weight=sample_weights)
 
-    # [S2 Upgrade] Task 3: GBR Probability Calibration
-    # 학습 직후 Isotonic Calibration 적용 (prefit 모드: 기학습된 모델 위에 val데이터로 추가 fit)
-    calibration_method = cfg.get('ml.calibration_method', 'isotonic')
-    calibration_enabled = cfg.get('ml.calibration_enabled', True)
-    if calibration_enabled:
-        try:
-            gbr_calibrated = CalibratedClassifierCV(
-                estimator=gbr,
-                method=calibration_method,
-                cv=None,  # [S2 Upgrade] sklearn 1.8: cv=None = prefit 동작 (기학습 모델 위에 val 데이터 Calibration)
-            )
-            gbr_calibrated.fit(val_X, val_y)
-            models['gbr'] = gbr_calibrated
-            logger.info(f"    [S2 Upgrade] GBR Calibrated ({calibration_method})")
-        except Exception as _cal_e:
-            logger.warning(f"    ⚠️ GBR Calibration 실패 (fallback 원본 사용): {_cal_e}")
-            models['gbr'] = gbr
-    else:
-        models['gbr'] = gbr
-
-    # ★ DD-03: Feature Selection 자동화 — 하위 N% 피처 제거
+    # ★ DD-03: Feature Selection 자동화 — 하위 N% 피처 제거 (Calibration 이전에 수행)
     pruning_pct = cfg.get('ml.feature_pruning_pct', 10)
     pruned_features = []
     if pruning_pct > 0 and train_X.shape[1] > 5:
@@ -734,9 +714,52 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         val_X = val_X[:, keep_indices]
 
         # GBR 재학습 (축소된 피처로)
-        gbr = GradientBoostingClassifier(**gbr_params)
-        gbr.fit(train_X, train_y, sample_weight=sample_weights); models['gbr'] = gbr
+        gbr = GradientBoostingClassifier(**gbr.get_params())
+        gbr.fit(train_X, train_y, sample_weight=sample_weights)
         logger.info(f"  🔄 GBR 재학습 완료 ({len(keep_indices)} 피처)")
+
+    # ★ L2-01: val_X, val_y를 시계열 순으로 cal_X/cal_y(전반 50%)와 eval_X/eval_y(후반 50%)로 분할
+    cal_X, cal_y = val_X, val_y
+    eval_X, eval_y = val_X, val_y
+    if len(val_X) >= 40:
+        _mid = len(val_X) // 2
+        _c_y, _e_y = val_y[:_mid], val_y[_mid:]
+        if len(np.unique(_c_y)) >= 2 and len(np.unique(_e_y)) >= 2:
+            cal_X, cal_y = val_X[:_mid], _c_y
+            eval_X, eval_y = val_X[_mid:], _e_y
+            logger.info(f"  📐 Val 분할: cal={len(cal_X)}건, eval={len(eval_X)}건")
+
+    # [S2 Upgrade] Task 3: Probability Calibration (FrozenEstimator 기반 prefit 보정)
+    calibration_method = cfg.get('ml.calibration_method', 'isotonic')
+    calibration_enabled = cfg.get('ml.calibration_enabled', True)
+    try:
+        from sklearn.frozen import FrozenEstimator as _FrozenEstimator
+    except ImportError:
+        _FrozenEstimator = None
+
+    def _calibrate_prefit(base_model, model_label: str):
+        if not calibration_enabled:
+            return base_model
+        try:
+            if _FrozenEstimator is not None:
+                cal = CalibratedClassifierCV(
+                    estimator=_FrozenEstimator(base_model),
+                    method=calibration_method,
+                )
+            else:
+                cal = CalibratedClassifierCV(
+                    estimator=base_model,
+                    method=calibration_method,
+                    cv='prefit',
+                )
+            cal.fit(cal_X, cal_y)
+            logger.info(f"    [S2 Upgrade] {model_label} Calibrated ({calibration_method})")
+            return cal
+        except Exception as _cal_e:
+            logger.warning(f"    ⚠️ {model_label} Calibration 실패 (fallback 원본 사용): {_cal_e}")
+            return base_model
+
+    models['gbr'] = _calibrate_prefit(gbr, 'GBR')
 
     # ═══ XGBoost ═══
     if has_xgb:
@@ -772,19 +795,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         else:
             xm.fit(train_X, train_y, sample_weight=sample_weights)
 
-        # [S2 Upgrade] Task 3: XGBoost Calibration
-        if calibration_enabled:
-            try:
-                xm_calibrated = CalibratedClassifierCV(
-                    estimator=xm, method=calibration_method, cv=None)
-                xm_calibrated.fit(val_X, val_y)
-                models['xgb'] = xm_calibrated
-                logger.info(f"    [S2 Upgrade] XGB Calibrated ({calibration_method})")
-            except Exception as _cal_e:
-                logger.warning(f"    ⚠️ XGB Calibration 실패: {_cal_e}")
-                models['xgb'] = xm
-        else:
-            models['xgb'] = xm
+        models['xgb'] = _calibrate_prefit(xm, 'XGB')
 
     # ═══ RandomForest ═══
     current += 1
@@ -811,19 +822,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     else:
         rf.fit(train_X, train_y, sample_weight=sample_weights)
 
-    # [S2 Upgrade] Task 3: RandomForest Calibration
-    if calibration_enabled:
-        try:
-            rf_calibrated = CalibratedClassifierCV(
-                estimator=rf, method=calibration_method, cv=None)
-            rf_calibrated.fit(val_X, val_y)
-            models['rf'] = rf_calibrated
-            logger.info(f"    [S2 Upgrade] RF Calibrated ({calibration_method})")
-        except Exception as _cal_e:
-            logger.warning(f"    ⚠️ RF Calibration 실패: {_cal_e}")
-            models['rf'] = rf
-    else:
-        models['rf'] = rf
+    models['rf'] = _calibrate_prefit(rf, 'RF')
 
     # ═══ LightGBM ═══
     if has_lgbm:
@@ -858,19 +857,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         else:
             lgb.fit(train_X, train_y, sample_weight=sample_weights)
 
-        # [S2 Upgrade] Task 3: LightGBM Calibration
-        if calibration_enabled:
-            try:
-                lgb_calibrated = CalibratedClassifierCV(
-                    estimator=lgb, method=calibration_method, cv=None)
-                lgb_calibrated.fit(val_X, val_y)
-                models['lgbm'] = lgb_calibrated
-                logger.info(f"    [S2 Upgrade] LGBM Calibrated ({calibration_method})")
-            except Exception as _cal_e:
-                logger.warning(f"    ⚠️ LGBM Calibration 실패: {_cal_e}")
-                models['lgbm'] = lgb
-        else:
-            models['lgbm'] = lgb
+        models['lgbm'] = _calibrate_prefit(lgb, 'LGBM')
 
     # ═══ CatBoost ═══
     if has_catboost:
@@ -902,23 +889,11 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         else:
             cb.fit(train_X, train_y, sample_weight=sample_weights)
 
-        # [S2 Upgrade] Task 3: CatBoost Calibration
-        if calibration_enabled:
-            try:
-                cb_calibrated = CalibratedClassifierCV(
-                    estimator=cb, method=calibration_method, cv=None)
-                cb_calibrated.fit(val_X, val_y)
-                models['catboost'] = cb_calibrated
-                logger.info(f"    [S2 Upgrade] CatBoost Calibrated ({calibration_method})")
-            except Exception as _cal_e:
-                logger.warning(f"    ⚠️ CatBoost Calibration 실패: {_cal_e}")
-                models['catboost'] = cb
-        else:
-            models['catboost'] = cb
+        models['catboost'] = _calibrate_prefit(cb, 'CatBoost')
 
     logger.info(
         f"\n  [S2 Upgrade] Task 3 완료: "
-        f"{sum(1 for m in models.values() if hasattr(m, 'calibrated_classifiers'))}"
+        f"{sum(1 for m in models.values() if hasattr(m, 'calibrated_classifiers_'))}"
         f"/{len(models)}모델 Calibration 적용 (method={calibration_method})")
 
     # ★ 자동 튜닝 결과를 DynamicConfig에 영속 저장
@@ -947,17 +922,17 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         except Exception as e:
             logger.warning(f"  ⚠️ 튜닝 결과 저장 실패: {e}")
 
-    # ═══ 평가 ═══
+    # ═══ 평가 (eval_X, eval_y 기준) ═══
     logger.info(f"\n═══ Validation ({len(models)}-model ensemble) ═══")
     preds = {}
     per_model_metrics = {}  # ★ P0: 개별 모델 ACC/AUC 기록
     model_aucs = {}
     model_accs = {}
     for name, model in models.items():
-        pp = model.predict_proba(val_X)[:, 1]
+        pp = model.predict_proba(eval_X)[:, 1]
         preds[name] = pp
-        acc = accuracy_score(val_y, (pp >= 0.5).astype(int))
-        auc = roc_auc_score(val_y, pp)
+        acc = accuracy_score(eval_y, (pp >= 0.5).astype(int))
+        auc = roc_auc_score(eval_y, pp)
         model_aucs[name] = auc
         model_accs[name] = acc
         per_model_metrics[name] = {
@@ -994,22 +969,24 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     ensemble_weights = {m: round(float(w), 4) for m, w in zip(model_names, weights)}
     logger.info(f"  가중치: {ensemble_weights}")
 
-    # 가중 앙상블 예측
-    ens = np.zeros(len(val_y))
+    # 가중 앙상블 예측 (eval_X, eval_y)
+    ens = np.zeros(len(eval_y))
     for m, w in zip(model_names, weights):
         ens += w * preds[m]
 
-    ens_acc = accuracy_score(val_y, (ens >= 0.5).astype(int))
-    ens_auc = roc_auc_score(val_y, ens)
+    ens_acc = accuracy_score(eval_y, (ens >= 0.5).astype(int))
+    ens_auc = roc_auc_score(eval_y, ens)
     logger.info(f"\n  🏆 앙상블({len(models)}모델, {weighting_method}): "
                 f"ACC={ens_acc:.3f} AUC={ens_auc:.3f}")
 
-    # [Phase 2] Fast-Slow Ensemble: FastCorrector 학습
+    # [Phase 2] Fast-Slow Ensemble: FastCorrector 학습 (cal_X, cal_y 사용)
     try:
         from src.ml.fast_slow_ensemble import FastCorrector
         fast_model = FastCorrector(alpha=1.0)
-        # val_y는 실제값, ens는 Slow 앙상블의 확률 예측값
-        fast_model.fit(val_X, val_y, ens)
+        cal_ens = np.zeros(len(cal_y))
+        for m, w in zip(model_names, weights):
+            cal_ens += w * models[m].predict_proba(cal_X)[:, 1]
+        fast_model.fit(cal_X, cal_y, cal_ens)
         # MODEL_DIR 에 바로 저장
         fast_model.save(MODEL_DIR / 'fast_corrector.joblib')
     except Exception as e:
@@ -1020,20 +997,22 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     for t in [0.55, 0.58, 0.60]:
         m = ens >= t
         if m.sum() > 5:
-            logger.info(f"  DA@{t:.2f}: {val_y[m].mean():.1%} ({m.sum()}건)")
+            logger.info(f"  DA@{t:.2f}: {eval_y[m].mean():.1%} ({m.sum()}건)")
 
     # ═══ M7: Stacking Meta-Learner ═══
-    # OOF 예측으로 메타 피처 생성 → LogisticRegression 메타 모델 학습
+    # cal_X 예측으로 메타 모델 학습 → eval_X에서 OOS 평가
     try:
         import joblib
         from sklearn.linear_model import LogisticRegression
 
-        meta_features = np.column_stack(
-            [model.predict_proba(val_X)[:, 1] for model in models.values()])
+        cal_meta_features = np.column_stack(
+            [model.predict_proba(cal_X)[:, 1] for model in models.values()])
+        eval_meta_features = np.column_stack(
+            [model.predict_proba(eval_X)[:, 1] for model in models.values()])
         meta_C = cfg.get('ml.meta_learner_C', 1.0)
         meta_max_iter = cfg.get('ml.meta_learner_max_iter', 1000)
         meta_model = LogisticRegression(C=meta_C, max_iter=meta_max_iter)
-        meta_model.fit(meta_features, val_y)
+        meta_model.fit(cal_meta_features, cal_y)
 
         # 메타 모델 저장
         joblib.dump(meta_model, MODEL_DIR / 'meta_learner.joblib')
@@ -1045,15 +1024,15 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         logger.info(f"    계수: {{{', '.join(f'{k}: {v:.4f}' for k, v in meta_coefs.items())}}}")
         logger.info(f"    최고 가중 모델: {best_meta} ({meta_coefs[best_meta]:.4f})")
 
-        # 메타 AUC vs 단순 평균 AUC 비교
-        meta_pred = meta_model.predict_proba(meta_features)[:, 1]
-        meta_auc = roc_auc_score(val_y, meta_pred)
+        # 메타 AUC vs 단순 평균 AUC 비교 (eval_X, eval_y)
+        meta_pred = meta_model.predict_proba(eval_meta_features)[:, 1]
+        meta_auc = roc_auc_score(eval_y, meta_pred)
         logger.info(f"    Meta AUC={meta_auc:.4f} vs Simple Avg AUC={ens_auc:.4f} "
                     f"(Δ={meta_auc - ens_auc:+.4f})")
     except Exception as e:
         logger.warning(f"  ⚠️ M7 Meta-Learner 학습 실패: {e}")
 
-    return models, ens_acc, ens_auc, per_model_metrics, ensemble_weights, val_X, active_features
+    return models, ens_acc, ens_auc, per_model_metrics, ensemble_weights, train_X, val_X, active_features
 
 
 # ═══════════════════════════════════════════════════════
@@ -1241,8 +1220,8 @@ def check_retrain_triggers() -> Optional[str]:
         state_file = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
         if state_file.exists():
             state = json.loads(state_file.read_text())
-            prev_regime = state.get('prev_regime')
-            curr_regime = state.get('regime')
+            prev_regime = state.get('kr_prev_regime', state.get('prev_regime'))
+            curr_regime = state.get('kr_regime', state.get('regime'))
             if prev_regime and curr_regime and prev_regime != curr_regime:
                 logger.info(f"  🔄 레짐 전환 감지: {prev_regime} → {curr_regime}")
                 return 'regime_change'
@@ -1277,11 +1256,19 @@ def check_retrain_triggers() -> Optional[str]:
         cache = _PROJECT_ROOT / 'results' / 'signal_cache.json'
         if cache.exists():
             signals = json.loads(cache.read_text())
-            vix = signals.get('VIX', {})
-            vix_val = vix.get('value')
-            vix_prev = vix.get('prev_value')
-            if vix_val and vix_prev and abs(vix_val - vix_prev) >= 5:
-                logger.info(f"  📊 VIX 급변: {vix_prev:.1f} → {vix_val:.1f}")
+            vix_raw = signals.get('vix', signals.get('VIX'))
+            if isinstance(vix_raw, dict):
+                vix_val = vix_raw.get('value', vix_raw.get('close'))
+                vix_prev = vix_raw.get('prev_value', vix_raw.get('prev_close'))
+            elif isinstance(vix_raw, (int, float)):
+                vix_val = float(vix_raw)
+                vix_prev = signals.get('vix_prev', signals.get('vix_prev_close'))
+                if vix_prev is None and isinstance(signals.get('vix_change_1d'), (int, float)):
+                    vix_prev = vix_val - float(signals['vix_change_1d'])
+            else:
+                vix_val, vix_prev = None, None
+            if vix_val is not None and vix_prev is not None and abs(float(vix_val) - float(vix_prev)) >= 5:
+                logger.info(f"  📊 VIX 급변: {float(vix_prev):.1f} → {float(vix_val):.1f}")
                 return 'vix_spike'
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
         import logging
@@ -1373,23 +1360,57 @@ def should_retrain() -> Tuple[bool, str]:
     _cfg = DynamicConfig()
 
     meta_file = MODEL_DIR / 'ensemble_meta.json'
+    candidate_dates = []
+
+    if meta_file.exists():
+        try:
+            meta = json.loads(meta_file.read_text())
+            _raw = meta.get('train_date') or meta.get('promoted_at') or meta.get('registered_at')
+            if _raw:
+                candidate_dates.append(_raw)
+        except Exception:
+            pass
+
+    try:
+        from src.learning.model_registry_manager import ModelRegistryManager
+        for _reg_dir in (str(MODEL_DIR), None):
+            _reg = ModelRegistryManager(registry_dir=_reg_dir)
+            _reg_data = _reg._load_registry()
+            _act_ver = _reg_data.get('active_version')
+            if _act_ver and _act_ver in _reg_data.get('versions', {}):
+                _vinfo = _reg_data['versions'][_act_ver]
+                _raw_reg = (
+                    _vinfo.get('promoted_at')
+                    or _vinfo.get('registered_at')
+                    or _vinfo.get('metadata', {}).get('train_date')
+                )
+                if _raw_reg:
+                    candidate_dates.append(_raw_reg)
+    except Exception:
+        pass
 
     # 1. 모델이 없으면 무조건 학습
-    if not meta_file.exists():
+    if not candidate_dates:
         return True, 'no_model'
 
-    meta = json.loads(meta_file.read_text())
-    _raw_train_date = meta.get('train_date', '2020-01-01')
-    last_train = datetime.fromisoformat(_raw_train_date)
-    # ★ tz-naive vs tz-aware 비교 오류 수정:
-    #   ensemble_meta.json의 train_date가 naive(tzinfo=None)이면
-    #   now_kst()와 비교할 수 없으므로 KST로 통일
     _now = now_kst()
-    if last_train.tzinfo is None and _now.tzinfo is not None:
-        import pytz as _pytz
-        last_train = _pytz.timezone('Asia/Seoul').localize(last_train)
-    elif last_train.tzinfo is not None and _now.tzinfo is None:
-        last_train = last_train.replace(tzinfo=None)
+    parsed_dates = []
+    for _raw_train_date in candidate_dates:
+        try:
+            _dt = datetime.fromisoformat(_raw_train_date)
+            if _dt.tzinfo is None and _now.tzinfo is not None:
+                import pytz as _pytz
+                _dt = _pytz.timezone('Asia/Seoul').localize(_dt)
+            elif _dt.tzinfo is not None and _now.tzinfo is None:
+                _dt = _dt.replace(tzinfo=None)
+            parsed_dates.append(_dt)
+        except Exception:
+            continue
+
+    if not parsed_dates:
+        return True, 'no_model'
+
+    last_train = max(parsed_dates)
     days_since = (_now - last_train).days
 
     # 2. 주간 재학습 주기 (동적 — 기본 7일)
@@ -1460,6 +1481,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         return None
 
     # ── Drift Guard: 현재 피처 vs 이전 참조 비교 ──
+    drift_result = {}
     try:
         from src.risk.drift_guard import DriftGuard
         dg = DriftGuard()
@@ -1473,7 +1495,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     import numpy as np
     train_X = np.nan_to_num(train_X, nan=0.0)
     val_X = np.nan_to_num(val_X, nan=0.0)
-    models, val_acc, val_auc, per_model_metrics, ensemble_weights, val_X_pruned, active_features = train_ensemble(train_X, train_y, val_X, val_y, active_features)
+    models, val_acc, val_auc, per_model_metrics, ensemble_weights, train_X, val_X, active_features = train_ensemble(train_X, train_y, val_X, val_y, active_features)
     # ═══════════════════════════════════════════════════════
     # ★ #7: Model CI/CD (Registry Manager)
     # ═══════════════════════════════════════════════════════
@@ -1484,6 +1506,8 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         'val_acc': val_acc,
         'val_auc': val_auc,
         'feature_names': active_features,  # ★ H-21: AutoML 시 실제 피쳐명 저장
+        'feature_means': train_X.mean(axis=0).tolist() if len(train_X) > 0 else [],
+        'feature_stds': train_X.std(axis=0).tolist() if len(train_X) > 0 else [],
         'trigger': trigger,
         'ensemble_weights': ensemble_weights,
         'train_size': len(train_X),
@@ -1499,6 +1523,8 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
             if hasattr(_base, 'calibrated_classifiers_'):
                 _base = _base.calibrated_classifiers_[0].estimator
             elif hasattr(_base, 'estimator'):
+                _base = _base.estimator
+            if hasattr(_base, 'estimator') and not hasattr(_base, 'feature_importances_'):
                 _base = _base.estimator
             if hasattr(_base, 'feature_importances_'):
                 _fi = np.array(_base.feature_importances_)
@@ -1566,7 +1592,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     promoted, msg = registry.evaluate_and_promote(
         new_version_id=version_id,
         new_auc=val_auc,
-        min_improvement=-100.0,
+        min_improvement=_dynamic_hurdle,
     )
     
     challenger_result = {'status': 'adopted' if promoted else 'rejected', 'reason': msg}
@@ -1770,6 +1796,39 @@ def run_regime_split_training(window_days: int = None,
         logger.warning('  [Phase 10] 학습 데이터 없음 — 레짐 분리 학습 스킵')
         return {}
 
+    # ★ L2-02: 메인 앙상블의 활성 feature_names와 차원 동기화
+    try:
+        from src.learning.model_registry_manager import ModelRegistryManager
+        _reg = ModelRegistryManager(registry_dir=str(MODEL_DIR))
+        _active_pkg = _reg.get_active_model()
+        if _active_pkg is None:
+            _active_pkg = ModelRegistryManager().get_active_model()
+        _target_features = None
+        if isinstance(_active_pkg, dict):
+            _target_features = (
+                _active_pkg.get('feature_names')
+                or _active_pkg.get('metadata', {}).get('feature_names')
+            )
+        if not _target_features:
+            _reg_data = _reg._load_registry()
+            _act_ver = _reg_data.get('active_version')
+            if _act_ver and _act_ver in _reg_data.get('versions', {}):
+                _target_features = _reg_data['versions'][_act_ver].get('metadata', {}).get('feature_names')
+        if not _target_features and (MODEL_DIR / 'ensemble_meta.json').exists():
+            _em = json.loads((MODEL_DIR / 'ensemble_meta.json').read_text())
+            _target_features = _em.get('feature_names')
+        if _target_features and active_features and list(active_features) != list(_target_features):
+            _feat_to_idx = {fn: idx for idx, fn in enumerate(active_features)}
+            if all(fn in _feat_to_idx for fn in _target_features):
+                _keep_idx = [_feat_to_idx[fn] for fn in _target_features]
+                train_X = train_X[:, _keep_idx]
+                if len(val_X) > 0:
+                    val_X = val_X[:, _keep_idx]
+                active_features = list(_target_features)
+                logger.info(f'  ✂️ [Phase 10] Registry 피처 동기화 완료 ({len(active_features)}개 피처)')
+    except Exception as _sync_e:
+        logger.debug(f'  [Phase 10] Registry 피처 동기화 스킵: {_sync_e}')
+
     # 2. 레짐 히스토리 로드 (결과 폴더에서 날짜별 레짐 매핑)
     # 레짐 레이블이 없으면 VIX 기반 대략적 분류 사용
     try:
@@ -1904,6 +1963,7 @@ def run_regime_split_training(window_days: int = None,
         results['trigger'] = trigger
         results['window_days'] = window_days
         results['current_regime'] = _current_regime
+        results['feature_names'] = active_features
         _meta_path = MODEL_DIR / 'regime_model_meta.json'
         _meta_path.write_text(json.dumps(results, indent=2, ensure_ascii=False))
         logger.info(f'  📋 [Phase 10] 레짐 분리 모델 메타 저장: {_meta_path}')
@@ -1975,7 +2035,10 @@ if __name__ == '__main__':
         if str(_PROJECT_ROOT) not in sys.path:
             sys.path.insert(0, str(_PROJECT_ROOT))
             
-        from src.learning.gap_analysis import GapAnalyzer
+        try:
+            from src.learning.gap_analysis import GapAnalyzer
+        except ImportError:
+            from scripts.gap_analysis import GapAnalyzer
         ga = GapAnalyzer()
         # 최근 14일간의 예측 vs 체결 오차 분석 (슬리피지 + 수익률 갭)
         feedback = ga.analyze_recent_gaps(lookback_days=14)

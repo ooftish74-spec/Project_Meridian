@@ -34,6 +34,7 @@ class S0BetaStream(BaseStream):
     def __init__(self):
         super().__init__('S0', 'S0 Beta Stream V4 Engine')
         self.stream_id = 'S0'
+        self.TICKER_INVERSE_2X = '252670'
         self._bull_history: list = []
         self._crash_history: list = []
         self._pnl_history: list = []
@@ -77,17 +78,24 @@ class S0BetaStream(BaseStream):
         def _b(key: str, fb: bool) -> bool: return bool(_cfg.get(key, fb))
         def _i(key: str, fb: int) -> int: return int(_cfg.get(key, fb))
 
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+        _vq = _dqe.get_vix_regime_quantiles(market_data.get('signal_cache') if isinstance(market_data, dict) else None)
+        _kr_invs = _dqe.get_inverse_hedge_tickers('KR')
+        _opt_park = _dqe.get_optimal_kr_parking_ticker() or '357870'
+
         v4_enabled = _b('s0_beta.v4_enabled', True)
         leverage_ticker = _s('s0_beta.leverage_ticker', '122630')
         inverse2x_ticker = _s('s0_beta.inverse2x_ticker', '252670')
-        inverse_tech_ticker = _s('s0_beta.target_inverse_tech', '390390')
+        self.TICKER_INVERSE_2X = inverse2x_ticker
+        inverse_tech_ticker = _s('s0_beta.target_inverse_tech', _kr_invs[0] if _kr_invs else '390390')
         inverse_kq_ticker = _s('s0_beta.target_inverse_kosdaq', '251340')
         hist_max_len = _i('s0_beta.history_max_length', 120)
-        vkospi_default = _f('s0_beta.vkospi_default', 15.0)
-        vix_stress_thr = _f('s0_beta.vix_stress_threshold', 25.0)
-        vkospi_stress_thr = _f('s0_beta.vkospi_stress_threshold', 22.0)
+        vkospi_default = _f('s0_beta.vkospi_default', _vq.get('baseline', 16.5))
+        vix_stress_thr = _f('s0_beta.vix_stress_threshold', _vq.get('bear', 25.0))
+        vkospi_stress_thr = _f('s0_beta.vkospi_stress_threshold', _vq.get('caution', 22.0))
         base_enabled = _b('s0_beta.base_position_enabled', True)
-        base_ticker = _s('s0_beta.base_ticker', '357870')
+        base_ticker = _s('s0_beta.base_ticker', _opt_park)
 
         alert_thresh = _f('s0_beta.alert_zone_threshold', 1.5)
         trigger_thresh = _f('s0_beta.trigger_zone_threshold', 2.5)
@@ -96,7 +104,36 @@ class S0BetaStream(BaseStream):
             market_data = {}
 
         pipeline_state = market_data.get('pipeline_state', {})
-        hmm_trans = pipeline_state.get('hmm_transition', {})
+        if not pipeline_state or not isinstance(pipeline_state, dict):
+            import json
+            from pathlib import Path
+            for _cand_path in (Path('results/pipeline_state.json'), Path('results/current_regime.json')):
+                if _cand_path.exists():
+                    try:
+                        with open(_cand_path, 'r', encoding='utf-8') as _f_ps:
+                            _loaded = json.load(_f_ps)
+                        if isinstance(_loaded, dict) and _loaded:
+                            if 'hmm_transition' in _loaded:
+                                pipeline_state = _loaded
+                                break
+                            elif 'probabilities' in _loaded and isinstance(_loaded['probabilities'], dict):
+                                pipeline_state = {'hmm_transition': _loaded['probabilities']}
+                                break
+                            elif any(k in _loaded for k in ('bull', 'bear', 'crash', 'regime')):
+                                _reg_str = str(_loaded.get('regime', regime)).lower()
+                                _conf_v = float(_loaded.get('confidence', 0.6))
+                                pipeline_state = {
+                                    'hmm_transition': {
+                                        'bull': float(_loaded.get('bull', _conf_v if 'bull' in _reg_str else 0.0)),
+                                        'bear': float(_loaded.get('bear', _conf_v if 'bear' in _reg_str else 0.0)),
+                                        'crash': float(_loaded.get('crash', _conf_v if ('crash' in _reg_str or 'crisis' in _reg_str) else 0.0)),
+                                    }
+                                }
+                                break
+                    except Exception:
+                        pass
+
+        hmm_trans = pipeline_state.get('hmm_transition', {}) if isinstance(pipeline_state, dict) else {}
         bull_prob = float(hmm_trans.get('bull', 0.0))
         bear_prob = float(hmm_trans.get('bear', 0.0))
         crash_prob = float(hmm_trans.get('crash', 0.0))
@@ -105,10 +142,16 @@ class S0BetaStream(BaseStream):
         signal_cache = market_data.get('signal_cache', {})
         vix = float(market_data.get('vix', signal_cache.get('vix', 0.0)))
         vkospi = float(signal_cache.get('vkospi', vkospi_default))
+        ois_val = float(signal_cache.get('ois', 50.0) or 50.0)
+        nf_chg = float(signal_cache.get('night_futures_change_1d', 0.0) or 0.0)
         features = market_data.get('features', {})
         vol_adj_mom = float(features.get('alpha_vol_adj_mom_10d', 0.0))
         dd_vel = float(features.get('alpha_dd_velocity_3d', 0.0))
-        is_vix_spike = (vix > 0.0 and vix >= vix_stress_thr) or (vkospi > 0.0 and vkospi >= vkospi_stress_thr)
+        # Backward-looking 20d realized vol proxy for VKOSPI must not trigger inverse entry if VIX is calm and overnight futures/OIS are rebounding
+        _vkospi_confirmed = (vkospi > 0.0 and vkospi >= vkospi_stress_thr) and (
+            vix >= _vq.get('caution', 22.0) or (ois_val < 48.0 and nf_chg <= 0.2)
+        )
+        is_vix_spike = (vix > 0.0 and vix >= vix_stress_thr) or _vkospi_confirmed
 
         self._bull_history.append(bull_prob)
         self._crash_history.append(down_prob)
@@ -153,25 +196,27 @@ class S0BetaStream(BaseStream):
             })
 
         elif v4_enabled and is_alert_zone and not is_trigger_zone:
-            # ── [Module 3 Step 1] Alert Zone: 예수금 3% OTM 풋스프레드 사전 매수 ──
+            # ── [Module 3 Step 1] Alert Zone: 예수금 3% 인버스 ETF 사전 헤지 매수 ──
             opt_budget = _f('s0_beta.alert_option_budget_pct', 0.03)
+            _alert_conf = round(float(1.0 / (1.0 + math.exp(-(d_macro - alert_thresh + 0.8)))), 4)
             signals.append({
-                'ticker': 'KRX_PUT_SPREAD',
-                'name': 'KOSPI200 OTM 풋스프레드 (Alert Zone 헤지)',
+                'ticker': self.TICKER_INVERSE_2X,
+                'name': 'KODEX 200선물인버스2X (Alert Zone 헤지)',
                 'strategy': 'beta_convexity_hedge_alert',
-                'confidence': 0.75,
-                'predict_proba': 0.75,
-                'direction': 'buy',
+                'confidence': _alert_conf,
+                'predict_proba': _alert_conf,
+                'direction': 'long',
                 'size_pct': opt_budget,
                 'target_sweep_ratio': opt_budget,
-                'expected_return': 0.15,
-                'reason': f'🛡️ [Alert Zone] D_macro={d_macro:.2f} >= {alert_thresh} -> 예수금 {opt_budget:.0%} OTM 풋스프레드 사전 헤지'
+                'expected_return': round(0.05 * d_macro, 4),
+                'reason': f'🛡️ [Alert Zone] D_macro={d_macro:.2f} >= {alert_thresh} -> 예수금 {opt_budget:.0%} 인버스2X 사전 헤지'
             })
 
         elif is_crash_ or is_vix_spike or is_trigger_zone:
-            # ── [Module 2] 다중 하방 자산 라우터 집행 ──
-            conf = max(down_prob, 0.80 if is_trigger_zone else (0.80 if is_vix_spike else 0.0))
-            sweep = sweep_crash if is_crash_ else 0.50
+            # ── [Module 2] 다중 하방 자산 라우터 집행 (연속 로지스틱 확신도 및 켈리 스윕) ──
+            _sig_stress = 1.0 / (1.0 + math.exp(-max(d_macro - alert_thresh, (vix - vix_stress_thr) / 5.0 if vix > 0 else 0.0, 1.1)))
+            conf = round(float(max(down_prob, _sig_stress, 0.76)), 4)
+            sweep = sweep_crash if is_crash_ else round(float(np.clip(0.35 + 0.30 * _sig_stress, 0.35, 0.85)), 4)
             z_val = self._z_score_of(down_prob, self._crash_history)
 
             # 원인별 타겟 라우팅
@@ -200,22 +245,24 @@ class S0BetaStream(BaseStream):
                 'size_pct': 1.0,
                 'trigger_cash_sweep': True,
                 'target_sweep_ratio': sweep,
-                'expected_return': exp_crash,
+                'expected_return': exp_crash if exp_crash > 0 else round(0.03 * conf, 4),
                 'reason': f'📉 [S0 V4 Downside Router] {target_name} ({target_ticker}) | D_macro={d_macro:.2f} | Kelly={sweep:.1%}'
             })
 
         if base_enabled and not signals:
+            _park_m = _dqe.get_asset_metrics(base_ticker)
+            _park_ret = max(float(_park_m.get('mu_ann', 0.035)), 0.025)
             signals.append({
                 'ticker': base_ticker,
-                'name': 'KOFR (기본 방어 포지션)',
+                'name': 'KOFR/CD 파킹 (동적 기본 방어 포지션)',
                 'strategy': 'beta_base_hold',
-                'confidence': 0.50,
-                'predict_proba': 0.50,
+                'confidence': round(float(max(0.50, 1.0 - bull_prob - down_prob)), 4),
+                'predict_proba': round(float(max(0.50, 1.0 - bull_prob - down_prob)), 4),
                 'direction': 'long',
                 'size_pct': 1.0,
                 'trigger_cash_sweep': False,
-                'target_sweep_ratio': 0.80,
-                'expected_return': 0.035,
+                'target_sweep_ratio': round(float(np.clip(1.0 - 0.5 * (bull_prob + down_prob), 0.50, 0.90)), 4),
+                'expected_return': round(_park_ret, 4),
                 'is_base_position': True,
                 'reason': f'중립 레짐 수비수 대기 (D_macro={d_macro:.2f}, bull={bull_prob:.2f}, down={down_prob:.2f})'
             })
@@ -246,8 +293,21 @@ class S0BetaStream(BaseStream):
         max_sweep = _f('s0_beta.max_sweep_ratio', 1.0)
         exp_daily_vol = _f('s0_beta.expected_return_daily_vol', 0.05)
         hist_min_len = _i('s0_beta.history_min_length', 30)
+        cold_start_prob_thr = _f('s0_beta.cold_start_prob_threshold', 0.70)
+
+        # Bayesian Blended Win Rate (D_macro 반영 승률 보정)
+        blended_win_rate = (hmm_weight * current_prob) + ((1.0 - hmm_weight) * wr)
+        if is_crash and d_macro >= 1.5:
+            blended_win_rate = max(blended_win_rate, 0.65)
+
+        q = 1.0 - blended_win_rate
+        full_kelly = (blended_win_rate * payoff - q) / payoff if payoff > 1e-9 else 0.0
 
         if len(history) < hist_min_len:
+            if current_prob >= cold_start_prob_thr and full_kelly > 0:
+                target_ratio = min(max_sweep, max(kelly_min_ratio, full_kelly * fraction_mult))
+                expected_return = max(0.01, full_kelly * exp_daily_vol)
+                return True, float(target_ratio), float(expected_return)
             return False, 0.0, 0.0
 
         arr = np.array(history, dtype=float)
@@ -255,6 +315,10 @@ class S0BetaStream(BaseStream):
         std = float(np.std(arr))
 
         if std < 1e-9:
+            if current_prob >= cold_start_prob_thr and full_kelly > 0:
+                target_ratio = min(max_sweep, max(kelly_min_ratio, full_kelly * fraction_mult))
+                expected_return = max(0.01, full_kelly * exp_daily_vol)
+                return True, float(target_ratio), float(expected_return)
             return False, 0.0, 0.0
 
         dynamic_z_thresh = base_z_score
@@ -267,14 +331,6 @@ class S0BetaStream(BaseStream):
             dynamic_z_thresh = max(z_thresh_floor, base_z_score + vol_signal)
 
         z_score = (current_prob - mean) / std
-
-        # Bayesian Blended Win Rate (D_macro 반영 승률 보정)
-        blended_win_rate = (hmm_weight * current_prob) + ((1.0 - hmm_weight) * wr)
-        if is_crash and d_macro >= 1.5:
-            blended_win_rate = max(blended_win_rate, 0.65)
-
-        q = 1.0 - blended_win_rate
-        full_kelly = (blended_win_rate * payoff - q) / payoff if payoff > 1e-9 else 0.0
 
         if not (full_kelly > 0 and z_score >= dynamic_z_thresh):
             return False, 0.0, 0.0
@@ -324,5 +380,7 @@ class S0BetaStream(BaseStream):
 
     def get_performance(self) -> Dict[str, Any]:
         """성과 지표 반환 (BaseStream 인터페이스 구현)."""
-        return {'total_trades': len(self._pnl_history), 'pnl_history': self._pnl_history}
+        perf = self._compute_standard_performance(self._pnl_history)
+        perf['pnl_history'] = list(self._pnl_history)
+        return perf
 

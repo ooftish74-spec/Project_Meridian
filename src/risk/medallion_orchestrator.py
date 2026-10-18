@@ -137,9 +137,9 @@ class MedallionOrchestrator:
                 prob = pos.get('up_probability', 0.5)
                 ev = pos.get('kelly_ev', None)
                 if ev is not None and ev < 0.003:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"EV={ev:.4f} < 0.30% (음의 엣지)', 'severity': 'WARNING"})
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"EV={ev:.4f} < 0.30% (음의 엣지)", 'severity': 'WARNING'})
                 elif prob < 0.5:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"P(UP)={prob:.3f} < 0.50', 'severity': 'CRITICAL"})
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"P(UP)={prob:.3f} < 0.50", 'severity': 'CRITICAL'})
         return {'principle': '① Edge', 'status': 'PASS' if not issues else 'WARN', 'issues': issues, 'n_issues': len(issues)}
 
     def _validate_risk(self, positions: Dict, sentiment: Dict) -> Dict:
@@ -147,7 +147,7 @@ class MedallionOrchestrator:
         issues = []
         fg = sentiment.get('fear_greed', 50)
         if fg >= self.fg_extreme_greed:
-            issues.append({'layer': 'portfolio', 'issue': f"F&G={fg} ≥ {self.fg_extreme_greed}', 'severity': 'CRITICAL"})
+            issues.append({'layer': 'portfolio', 'issue': f"F&G={fg} ≥ {self.fg_extreme_greed}", 'severity': 'CRITICAL'})
         for layer, pos_dict in positions.items():
             for ticker, pos in pos_dict.items():
                 pnl = pos.get('unrealized_pnl_pct', 0)
@@ -160,8 +160,8 @@ class MedallionOrchestrator:
                 else:
                     stop_loss = base_sl
                 if isinstance(pnl, (int, float)) and pnl < stop_loss:
-                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"PnL={pnl:.1f}% < {stop_loss:.1f}% (Dynamic SL 위반)', 'severity': 'CRITICAL"})
-        has_critical = any((i['severity'] == 'CRITICAL' for i in issues))
+                    issues.append({'layer': layer, 'ticker': ticker, 'issue': f"PnL={pnl:.1f}% < {stop_loss:.1f}% (Dynamic SL 위반)", 'severity': 'CRITICAL'})
+        has_critical = any((i.get('severity') == 'CRITICAL' for i in issues))
         return {'principle': '② Risk', 'status': 'FAIL' if has_critical else 'PASS', 'issues': issues, 'n_issues': len(issues)}
 
     def _validate_diversification(self, positions: Dict) -> Dict:
@@ -203,15 +203,15 @@ class MedallionOrchestrator:
             limit = stream_sector_limits.get(sid, self.max_sector_per_stream)
             for sec, cnt in sc.items():
                 if sec != 'Unknown' and cnt > limit:
-                    issues.append({'layer': 'stream', 'issue': f"[{sid}] 섹터 [{sec}] {cnt}종목 > {limit}', 'severity': 'WARNING"})
+                    issues.append({'layer': 'stream', 'issue': f"[{sid}] 섹터 [{sec}] {cnt}종목 > {limit}", 'severity': 'WARNING'})
         for sec, cnt in global_sector_counts.items():
             if sec != 'Unknown' and cnt > self.max_sector_global:
-                issues.append({'layer': 'aggregate', 'issue': f"섹터 [{sec}] 전체 {cnt}종목 > {self.max_sector_global}', 'severity': 'WARNING"})
+                issues.append({'layer': 'aggregate', 'issue': f"섹터 [{sec}] 전체 {cnt}종목 > {self.max_sector_global}", 'severity': 'WARNING'})
         n_sectors = len(set(global_sector_counts.keys()) - {'Unknown'})
         n_individual = sum(global_sector_counts.values())
         if 0 < n_sectors < self.min_sectors and n_individual >= self.min_sectors:
-            issues.append({'layer': 'portfolio', 'issue': f"{n_sectors}섹터 < {self.min_sectors} (분산 부족)', 'severity': 'WARNING"})
-        has_warn = any((i['severity'] in ('CRITICAL', 'WARNING') for i in issues))
+            issues.append({'layer': 'portfolio', 'issue': f"{n_sectors}섹터 < {self.min_sectors} (분산 부족)", 'severity': 'WARNING'})
+        has_warn = any((i.get('severity') in ('CRITICAL', 'WARNING') for i in issues))
         return {'principle': '③ Diversification', 'status': 'WARN' if has_warn else 'PASS', 'sectors': global_sector_counts, 'stream_sectors': stream_sector_counts, 'total_sectors': n_sectors, 'issues': issues, 'n_issues': len(issues)}
 
     def _validate_no_override(self) -> Dict:
@@ -235,12 +235,12 @@ class MedallionOrchestrator:
                 elif ks_triggered and ks_can_buy:
                     fo = ks.get('forward_override', {})
                     fo_reason = fo.get('reason', '')
-                    issues.append({'layer': 'system', 'issue': f"Kill Switch 트리거 but Override 적용: {fo_reason}', 'severity': 'INFO"})
+                    issues.append({'layer': 'system', 'issue': f"Kill Switch 트리거 but Override 적용: {fo_reason}", 'severity': 'INFO'})
             except Exception as _e_mo1:
                 logger.critical(f'  [medallion_orchestrator] 메달리온 계산 실패: {_e_mo1}', exc_info=True)
         meaningful_issues = [i for i in issues if i.get('severity') != 'INFO']
-        has_critical = any((i['severity'] == 'CRITICAL' for i in meaningful_issues))
-        has_warn = any((i['severity'] == 'WARNING' for i in meaningful_issues))
+        has_critical = any((i.get('severity') == 'CRITICAL' for i in meaningful_issues))
+        has_warn = any((i.get('severity') == 'WARNING' for i in meaningful_issues))
         status = 'FAIL' if has_critical else 'WARN' if has_warn else 'PASS'
         return {'principle': '④ No Override', 'status': status, 'issues': meaningful_issues, 'n_issues': len(meaningful_issues)}
 

@@ -183,7 +183,7 @@ class MeasurementEngine:
           - Alpha: 벤치마크(KOSPI) 대비 초과 수익
         """
         cum = sp.get('cumulative', {})
-        records = sp.get('daily_records', [])
+        records = sp.get('daily_records') or sp.get('daily_snapshots', [])
         positions = sp.get('positions', {})
         trade_history = sp.get('trade_history', [])
         from config.dynamic_config import DynamicConfig
@@ -241,7 +241,7 @@ class MeasurementEngine:
         cumulative_return_pct = (virtual_nav / initial_capital - 1) * 100
         bench_pct = 0.0
         try:
-            from pykrx import stock as _pykrx
+            from src.data_collection.pykrx_compat import stock as _pykrx
             from datetime import datetime as _dt, timedelta as _td
             _bench_tk = cfg.get('measurement.benchmark_ticker', '069500')
             _snapshots = sp.get('daily_snapshots', [])
@@ -803,7 +803,7 @@ class MeasurementEngine:
         + 슬리브별(A1/A2/A3) 기여 분해.
         """
         try:
-            from src.allocation.pnl_attribution import compute_attribution_view
+            from src.measurement.pnl_attribution import compute_attribution_view
             return compute_attribution_view(sp)
         except Exception as e:
             logger.debug(f"  Attribution View 계산 실패: {e}")
@@ -818,7 +818,7 @@ class MeasurementEngine:
           - trade_history → 신뢰도별 적중률 (hit_rate_by_conviction)
           - platt_calibration_state.json → Brier/ECE (있으면)
         """
-        records = sp.get('daily_records', [])
+        records = sp.get('daily_records') or sp.get('daily_snapshots', [])
         trade_history = sp.get('trade_history', [])
         portfolio = portfolio or {}
         ic_values = []
@@ -1611,12 +1611,25 @@ class MeasurementEngine:
         target_ic = cfg.get('go.ic.ok', 0.02)
         target_alpha = cfg.get('go.alpha.ok', 0)
         target_pf = cfg.get('go.profit_factor.ok', 1.5)
-        criteria = {'shadow_days': {'value': n_days, 'threshold': min_days, 'pass': n_days >= min_days, 'detail': f"{n_days}일 / {min_days}일"}, 'total_return': {'value': round(cum_ret, 2), 'threshold': 0, 'pass': cum_ret >= 0, 'detail': f"{cum_ret:+.2f}%"}, 'win_rate': {'value': round(wr * 100, 1), 'threshold': target_wr * 100, 'pass': wr >= target_wr, 'detail': f"{wr:.1%} / {target_wr:.0%}"}, 'mdd': {'value': round(mdd, 2), 'threshold': target_mdd, 'pass': mdd > target_mdd, 'detail': f"{mdd:.2f}% / {target_mdd:.1f}%"}, 'da': {'value': round(da * 100, 1) if da else 0, 'threshold': target_da * 100, 'pass': (da or 0) >= target_da, 'detail': f"{da:.1%} / {target_da:.0%}" if da else 'N/A'}, 'ic': {'value': round(ic, 4) if ic is not None else None, 'threshold': target_ic, 'pass': (ic or 0) >= target_ic, 'detail': f"{ic:.4f} / {target_ic}" if ic is not None else 'N/A', 'pending': ic is None}, 'net_alpha': {'value': round(alpha, 2), 'threshold': target_alpha, 'pass': alpha >= target_alpha, 'detail': f"{alpha:+.2f}% / {target_alpha:.1f}%"}, 'sharpe': {'value': round(sharpe, 3), 'threshold': target_sharpe, 'pass': sharpe >= target_sharpe, 'detail': f"{sharpe:.3f} / {target_sharpe:.1f}"}, 'profit_factor': {'value': round(pf, 3), 'threshold': target_pf, 'pass': pf >= target_pf, 'detail': f"{pf:.3f} / {target_pf:.1f}"}}
+        criteria = {
+            'shadow_days': {'value': n_days, 'threshold': min_days, 'pass': n_days >= min_days, 'detail': f"{n_days}일 / {min_days}일"},
+            'total_return': {'value': round(cum_ret, 2), 'threshold': 0, 'pass': cum_ret >= 0, 'detail': f"{cum_ret:+.2f}%"},
+            'win_rate': {'value': round(wr * 100, 1), 'threshold': target_wr * 100, 'pass': wr >= target_wr, 'detail': f"{wr:.1%} / {target_wr:.0%}"},
+            'mdd': {'value': round(mdd, 2), 'threshold': target_mdd, 'pass': mdd >= target_mdd, 'detail': f"{mdd:.2f}% / {target_mdd:.1f}%"},
+            'da': {'value': round(da * 100, 1) if da else 0, 'threshold': target_da * 100, 'pass': (da or 0) >= target_da, 'detail': f"{da:.1%} / {target_da:.0%}" if da else 'N/A'},
+            'ic': {'value': round(ic, 4) if ic is not None else None, 'threshold': target_ic, 'pass': (ic or 0) >= target_ic, 'detail': f"{ic:.4f} / {target_ic}" if ic is not None else 'N/A', 'pending': ic is None},
+            'net_alpha': {'value': round(alpha, 2), 'threshold': target_alpha, 'pass': alpha >= target_alpha, 'detail': f"{alpha:+.2f}% / {target_alpha:.1f}%"},
+            'sharpe': {'value': round(sharpe, 3), 'threshold': target_sharpe, 'pass': sharpe >= target_sharpe, 'detail': f"{sharpe:.3f} / {target_sharpe:.1f}"},
+            'profit_factor': {'value': round(pf, 3), 'threshold': target_pf, 'pass': pf >= target_pf, 'detail': f"{pf:.3f} / {target_pf:.1f}"},
+            'sharpe_pass': sharpe >= target_sharpe,
+            'winrate_pass': wr >= target_wr,
+            'dd_pass': mdd >= target_mdd,
+        }
         daily_returns = []
         try:
-            daily_records = sp.get('daily_records', [])
+            daily_records = sp.get('daily_records') or sp.get('daily_snapshots', [])
             for rec in daily_records:
-                dr = rec.get('daily_return_pct', 0)
+                dr = rec.get('daily_return_pct', rec.get('return_pct', 0))
                 if dr is not None:
                     daily_returns.append(dr / 100)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:

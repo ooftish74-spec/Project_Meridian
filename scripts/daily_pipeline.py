@@ -56,8 +56,8 @@ logger.propagate = False
 # ★ FIX: 내부 모듈(virtual_trading 등)의 로그가 무시되지 않도록 Root Logger에도 핸들러 복사
 _root_logger = logging.getLogger()
 _root_logger.setLevel(logger.level)
-for _h in logger.handlers:
-    if _h not in _root_logger.handlers:
+if not _root_logger.handlers:
+    for _h in logger.handlers:
         _root_logger.addHandler(_h)
 
 cfg = DynamicConfig()
@@ -215,7 +215,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         return
 
     from scripts.stream_orchestrator import StreamOrchestrator
-    exec_mode = cfg.get('execution.mode', 'shadow')
+    exec_mode = cfg.get('execution.current_mode', cfg.get('execution.mode', 'shadow'))
     orch = StreamOrchestrator(exec_mode=exec_mode)
 
     # ── Kill Switch 게이트 ──
@@ -223,13 +223,22 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
     try:
         from src.risk.kill_switch import KillSwitch
         ks = KillSwitch()
-        # Shadow NAV 로드
+        # Live SSOT / Shadow NAV 로드
+        _current_nav = None
+        _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+        if exec_mode == 'live' and _kis_f.exists():
+            try:
+                _kis_d = json.loads(_kis_f.read_text(encoding='utf-8'))
+                _current_nav = _kis_d.get('nav') or _kis_d.get('account', {}).get('total_equity')
+            except Exception:
+                pass
         _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-        if _shadow_f.exists():
+        if not _current_nav and _shadow_f.exists():
             import json as _json
             _shadow_data = _json.loads(_shadow_f.read_text())
-            _current_nav = _shadow_data.get('virtual_nav', cfg.get('portfolio.initial_capital'))
-            _kill_switch_result = ks.check(_current_nav)
+            _current_nav = _shadow_data.get('nav', _shadow_data.get('total_value', _shadow_data.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
+        if _current_nav:
+            _kill_switch_result = ks.check(float(_current_nav))
             _fo = _kill_switch_result.get('forward_override', {})
             if _kill_switch_result['triggered']:
                 logger.warning(f"  🚨 Kill Switch: {_kill_switch_result['reason']}")
@@ -275,11 +284,20 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
     # ── Drawdown Guard 게이트 ──
     try:
         from src.risk.drawdown_guard import DrawdownGuard
+        _nav = None
+        _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+        if exec_mode == 'live' and _kis_f.exists():
+            try:
+                _kd = json.loads(_kis_f.read_text(encoding='utf-8'))
+                _nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+            except Exception:
+                pass
         _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-        if _shadow_f.exists():
+        if not _nav and _shadow_f.exists():
             _sd = json.loads(_shadow_f.read_text())
-            _nav = _sd.get('virtual_nav', cfg.get('portfolio.initial_capital'))
-            _dd = DrawdownGuard().check(_nav)
+            _nav = _sd.get('nav', _sd.get('total_value', _sd.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
+        if _nav:
+            _dd = DrawdownGuard().check(float(_nav))
             _dd_exposure = _dd.get('exposure', 1.0)
             _kill_switch_result['position_scale'] *= _dd_exposure
             if _dd_exposure < 1.0:
@@ -471,6 +489,29 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 regime_result = RegimeEngine().detect()
                 regime = regime_result.get('regime', 'caution')
                 confidence = regime_result.get('confidence', 0.5)
+
+            # ★ SSOT 동기화: current_regime.json 및 us_market_regime.json 상시 최신화
+            try:
+                _regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
+                _regime_out = {
+                    'regime': regime,
+                    'confidence': float(confidence),
+                    'scores': regime_result.get('scores', {}),
+                    'method': regime_result.get('method', 'hmm_regime_ssot'),
+                    'measurements': regime_result.get('measurements', {}),
+                    'timestamp': datetime.now().isoformat(),
+                    'data_source': 'daily_pipeline_morning'
+                }
+                atomic_write_json(_regime_file, _regime_out, indent=2, ensure_ascii=False, default=str)
+                _update_signal_cache({'regime': regime, 'current_regime': regime, 'regime_confidence': float(confidence)})
+            except Exception as _cr_err:
+                logger.warning(f"  current_regime.json 동기화 경고: {_cr_err}")
+
+            try:
+                from src.intelligence.us_market_regime import USMarketRegimeEngine
+                USMarketRegimeEngine().detect()
+            except Exception as _usr_err:
+                logger.debug(f"  us_market_regime.json 갱신 우회: {_usr_err}")
             
             # ★ S4 Dynamic Scaling을 위해 confidence를 market_data에 주입
             _market_data['regime_confidence'] = confidence
@@ -495,6 +536,8 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                         if _sigs:
                             _morning_signals[_stream.stream_id] = []
                             for _sig in (_sigs or [])[:20]:
+                                if _sig.get('ticker') == '_SYS_META':
+                                    continue
                                 _morning_signals[_stream.stream_id].append({
                                     'ticker': _sig.get('ticker', ''),
                                     'name': _sig.get('name', ''),
@@ -621,7 +664,10 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 equity = float(sp_mgr.get_total_equity()) if sp_mgr.get_total_equity() > 0 else 20911598.0
                 vix_z = float(_signal_cache_data.get('vix_z_score', 0.0))
                 
-                overlay_alloc = {k: float(v) * equity for k, v in allocs.items()} if isinstance(allocs, dict) else {'S1': equity * 0.3, 'S2': equity * 0.4}
+                overlay_alloc = {
+                    k: (float(v) if float(v) > 1.0 else float(v) * equity)
+                    for k, v in allocs.items()
+                } if isinstance(allocs, dict) else {'S1': equity * 0.3, 'S2': equity * 0.4}
                 overlay_engine = SyntheticFuturesOverlay()
                 overlay_res = overlay_engine.calculate_futures_overlay(
                     spot_notional_allocations=overlay_alloc,
@@ -781,15 +827,25 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         # ★ 누락 파일 저장 — Data Freshness STALE 근본 수정
         # (1) stream_metrics.json: 스트림 성과
         try:
+            _sm_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
+            _sm_existing = {}
+            if _sm_path.exists():
+                try:
+                    _sm_existing = json.loads(_sm_path.read_text())
+                except Exception:
+                    _sm_existing = {}
             _sm = result.get('streams', {})
             if not _sm:
                 # streams가 없으면 각 스트림에서 직접 수집
                 _sm = {}
                 for _s in orch.streams:
                     _sm[_s.stream_id] = _s.get_performance()
+            if 'raw_data' in _sm_existing and 'raw_data' not in _sm:
+                _sm['raw_data'] = _sm_existing['raw_data']
+            if 'metrics' in _sm_existing and 'metrics' not in _sm:
+                _sm['metrics'] = _sm_existing['metrics']
             _sm['_timestamp'] = datetime.now().isoformat()
             _sm['_regime'] = result.get('regime', 'unknown')
-            _sm_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
             atomic_write_json(_sm_path, 
                 _sm, indent=2)
             logger.info("  💾 stream_metrics.json 갱신")
@@ -809,6 +865,8 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             for _sid, _sigs in result.get('signals', {}).items():
                 _signals_out['signals'][_sid] = []
                 for _sig in (_sigs or [])[:20]:
+                    if _sig.get('ticker') == '_SYS_META':
+                        continue
                     _signals_out['signals'][_sid].append({
                         'ticker': _sig.get('ticker', ''),
                         'name': _sig.get('name', ''),
@@ -943,7 +1001,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
                 # ★ 전체 스트림 MTM + TP/SL Exit 체크 (S1/S2/S3/S4 공통)
                 try:
-                    from pykrx import stock as _pykrx_exit
+                    from src.data_collection.pykrx_compat import stock as _pykrx_exit
                     _today_exit = date.today().strftime('%Y%m%d')
                     _all_tickers = set()
                     for pk in _mgr.positions:
@@ -1006,7 +1064,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
                 if s1_positions:
                     # 현재가 조회
-                    from pykrx import stock as _pykrx_close
+                    from src.data_collection.pykrx_compat import stock as _pykrx_close
                     _today_close = date.today().strftime('%Y%m%d')
                     _close_prices = {}
                     for pk in s1_positions:
@@ -1121,9 +1179,9 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
         # ★ DD-20: PnL Attribution 자동 갱신 (5-스트림 기여도 분리)
         try:
-            from src.allocation.pnl_attribution import PnLAttributionEngine
-            _pnl_eng = PnLAttributionEngine()
-            _pnl_result = _pnl_eng.compute()
+            from src.measurement.pnl_attribution import PnLAttribution
+            _pnl_eng = PnLAttribution()
+            _pnl_result = _pnl_eng.generate_report()
             if _pnl_result:
                 import tempfile as _tf20
                 _pnl_path = _PROJECT_ROOT / 'results' / 'pnl_attribution.json'
@@ -1140,8 +1198,18 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         try:
             from src.risk.drawdown_guard import DrawdownGuard
             _ddg = DrawdownGuard()
-            _sp_data = json.loads((_PROJECT_ROOT / 'results' / 'shadow_portfolio.json').read_text())
-            _current_nav = _sp_data.get('nav', _sp_data.get('total_value', cfg.get('portfolio.initial_capital')))
+            _exec_m = cfg.get('execution.current_mode', cfg.get('execution.mode', 'shadow'))
+            _current_nav = None
+            _kis_p = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            if _exec_m == 'live' and _kis_p.exists():
+                try:
+                    _kd = json.loads(_kis_p.read_text(encoding='utf-8'))
+                    _current_nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+                except Exception:
+                    pass
+            if not _current_nav:
+                _sp_data = json.loads((_PROJECT_ROOT / 'results' / 'shadow_portfolio.json').read_text())
+                _current_nav = _sp_data.get('nav', _sp_data.get('total_value', cfg.get('portfolio.initial_capital')))
             _dd_status = _ddg.check(nav=float(_current_nav))
 
             # pipeline_state.json에 직접 기록
@@ -1399,7 +1467,11 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                                     if len(_rows) < 20:
                                         import pandas as pd
                                         _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
-                                        _parquets = sorted(_data_dir.glob('kr_0*.parquet'))[:50]
+                                        _kr_mkt_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+                                        _parquets = sorted(_data_dir.glob('kr_0*.parquet'))
+                                        if len(_parquets) < 20 and _kr_mkt_dir.exists():
+                                            _parquets = sorted(list(_parquets) + list(_kr_mkt_dir.glob('*.parquet')))
+                                        _parquets = _parquets[:50]
                                         for _pf in _parquets:
                                             try:
                                                 _pdf = pd.read_parquet(_pf)
@@ -1656,7 +1728,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                         _results['conformal'] = {
                             'reason': f"insufficient_positions_{len(positions)}"}
             else:
-                logger.error("  ℹ️ Conformal: 모델 없음 (스킵)", exc_info=True)
+                logger.info("  ℹ️ Conformal: 모델 없음 (스킵)")
                 _results['conformal'] = {'reason': 'no_model'}
         except Exception as e:
             logger.error(f"  Conformal 실패: {e}", exc_info=True)
@@ -1709,14 +1781,15 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     _n_models = 0
                     for _mname, _mobj in _models.items():
                         try:
-                            _fi = _mobj.feature_importances_
+                            _base = _mobj.calibrated_classifiers_[0].estimator if hasattr(_mobj, 'calibrated_classifiers_') else getattr(_mobj, 'estimator', _mobj)
+                            _fi = _base.feature_importances_
                             if _imp_sum is None:
                                 _imp_sum = list(_fi)
                             else:
                                 for _i in range(len(_imp_sum)):
                                     _imp_sum[_i] += _fi[_i]
                             _n_models += 1
-                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError, AttributeError) as e:
                             logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
                     if _imp_sum and _n_models > 0:
                         _imp_avg = [v / _n_models for v in _imp_sum]
@@ -1875,7 +1948,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
     if phase == 'all':
         for name, func in phases.items():
-            logger.error(f"\n{'─'*40}", exc_info=True)
+            logger.info(f"\n{'─'*40}")
             logger.info(f"  Phase: {name.upper()}")
             _run_with_checkpoint(name, func)
     elif ',' in phase:
@@ -2094,9 +2167,9 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     caption_text = f"📈 Ultimate Quant Report ({today.strftime('%Y-%m-%d')})"
                     
                     if error_collector.errors:
-                        err_summary = "\\n🚨 [Pipeline Errors]\\n" + "\\n".join(error_collector.errors[:5])
+                        err_summary = "\n🚨 [Pipeline Errors]\n" + "\n".join(error_collector.errors[:5])
                         if len(error_collector.errors) > 5:
-                            err_summary += f"\\n...and {len(error_collector.errors)-5} more errors."
+                            err_summary += f"\n...and {len(error_collector.errors)-5} more errors."
                         caption_text += err_summary
                         
                     notifier.send_document(

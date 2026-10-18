@@ -80,8 +80,8 @@ class MorningIntelligenceFusion:
         """
         sc = self._signal_cache
         oi = sc.get('overnight_intel', {})
-        sp500_chg = oi.get('sp500_change_pct', 0)
-        nasdaq_chg = oi.get('nasdaq_change_pct', 0)
+        sp500_chg = oi.get('sp500_change_pct', sc.get('sp500_change_1d', 0))
+        nasdaq_chg = oi.get('nasdaq_change_pct', sc.get('nasdaq_change_1d', 0))
         if sp500_chg == 0 or nasdaq_chg == 0:
             us_market = oi.get('components', {}).get('us_market', {})
             us_raw = us_market.get('raw', {})
@@ -93,15 +93,20 @@ class MorningIntelligenceFusion:
                     nasdaq_chg = changes[1]
                 elif nasdaq_chg == 0 and len(changes) >= 1:
                     nasdaq_chg = changes[0]
+        if sp500_chg == 0 and sc.get('sp500_change_1d'):
+            sp500_chg = float(sc['sp500_change_1d'])
         if sp500_chg == 0:
             sp_1m = sc.get('sp500_change_1m', 0)
             if sp_1m:
                 sp500_chg = float(sp_1m) / 21
+        if nasdaq_chg == 0 and sc.get('nasdaq_change_1d'):
+            nasdaq_chg = float(sc['nasdaq_change_1d'])
         if nasdaq_chg == 0:
             nq_1m = sc.get('nasdaq_change_1m', 0)
             if nq_1m:
                 nasdaq_chg = float(nq_1m) / 21
-        return {'ois': sc.get('ois', 50), 'us_regime': sc.get('us_regime', 'neutral'), 'us_regime_confidence': sc.get('us_regime_confidence', 0), 'sp500_change': round(sp500_chg, 4) if sp500_chg else 0, 'nasdaq_change': round(nasdaq_chg, 4) if nasdaq_chg else 0, 'sox_change': oi.get('sox_change_pct', sc.get('sox_change', 0)), 'vix': sc.get('vix', 20), 'vkospi': sc.get('vkospi', 18), 'usdkrw': sc.get('usdkrw', 1350), 'ewy_change': sc.get('ewy_change_1d', sc.get('ewy_change_1m', 0) / 21 if sc.get('ewy_change_1m') else 0), 'dxy_change': sc.get('dxy_change_1d', 0), 'copper_change': sc.get('copper_change_1d', sc.get('copper_change_1m', 0) / 21 if sc.get('copper_change_1m') else 0), 'usdjpy_change': sc.get('usdjpy_change_1d', sc.get('usdjpy_change_1m', 0) / 21 if sc.get('usdjpy_change_1m') else 0), 'taiex_change': sc.get('taiex_change_1d', sc.get('taiex_change_1m', 0) / 21 if sc.get('taiex_change_1m') else 0), 'nikkei_change': sc.get('nikkei_change_1d', sc.get('nikkei_change_1m', 0) / 21 if sc.get('nikkei_change_1m') else 0), 'hangseng_change': sc.get('hangseng_change_1d', sc.get('hangseng_change_1m', 0) / 21 if sc.get('hangseng_change_1m') else 0)}
+        sox_chg = oi.get('sox_change_pct', sc.get('sox_change_1d', sc.get('sox_change', 0)))
+        return {'ois': sc.get('ois', 50), 'us_regime': sc.get('us_regime', 'neutral'), 'us_regime_confidence': sc.get('us_regime_confidence', 0), 'sp500_change': round(float(sp500_chg), 4) if sp500_chg else 0, 'nasdaq_change': round(float(nasdaq_chg), 4) if nasdaq_chg else 0, 'sox_change': sox_chg, 'vix': sc.get('vix', 20), 'vkospi': sc.get('vkospi', 18), 'usdkrw': sc.get('usdkrw', 1350), 'ewy_change': sc.get('ewy_change_1d', sc.get('ewy_change_1m', 0) / 21 if sc.get('ewy_change_1m') else 0), 'dxy_change': sc.get('dxy_change_1d', 0), 'copper_change': sc.get('copper_change_1d', sc.get('copper_change_1m', 0) / 21 if sc.get('copper_change_1m') else 0), 'usdjpy_change': sc.get('usdjpy_change_1d', sc.get('usdjpy_change_1m', 0) / 21 if sc.get('usdjpy_change_1m') else 0), 'taiex_change': sc.get('taiex_change_1d', sc.get('taiex_change_1m', 0) / 21 if sc.get('taiex_change_1m') else 0), 'nikkei_change': sc.get('nikkei_change_1d', sc.get('nikkei_change_1m', 0) / 21 if sc.get('nikkei_change_1m') else 0), 'hangseng_change': sc.get('hangseng_change_1d', sc.get('hangseng_change_1m', 0) / 21 if sc.get('hangseng_change_1m') else 0)}
 
     def _detect_conflicts(self, overnight: Dict) -> list:
         """이브닝 학습 조정 vs 야간 글로벌 데이터 상충 감지."""
@@ -116,13 +121,13 @@ class MorningIntelligenceFusion:
             if 'semiconductor' in param.lower() or 'semi' in param.lower():
                 sox = overnight.get('sox_change', 0)
                 if direction == 'down' and sox > 1.5:
-                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↓ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_reduction"})
+                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↓ but SOX {sox:+.1f}%", 'param': param, 'severity': 'medium', 'recommendation': 'ease_reduction'})
                 elif direction == 'up' and sox < -1.5:
-                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↑ but SOX {sox:+.1f}%', 'param': param, 'severity': 'medium', 'recommendation': 'ease_increase"})
+                    conflicts.append({'type': 'sector_reversal', 'detail': f"SelfLearning이 반도체 비중↑ but SOX {sox:+.1f}%", 'param': param, 'severity': 'medium', 'recommendation': 'ease_increase'})
             if 'exposure' in param.lower() or 'confidence' in param.lower():
                 ois = overnight.get('ois', 50)
                 if direction == 'down' and ois > 70:
-                    conflicts.append({'type': 'regime_conflict', 'detail': f"SelfLearning이 노출↓ but OIS={ois:.0f} (강세)', 'param': param, 'severity': 'low', 'recommendation': 'maintain_moderate"})
+                    conflicts.append({'type': 'regime_conflict', 'detail': f"SelfLearning이 노출↓ but OIS={ois:.0f} (강세)", 'param': param, 'severity': 'low', 'recommendation': 'maintain_moderate'})
         return conflicts
 
     def _compute_regime_adjustment(self, overnight: Dict) -> float:
@@ -187,30 +192,30 @@ class MorningIntelligenceFusion:
         flags = []
         vix = overnight.get('vix', 20)
         if vix > 35:
-            flags.append({'flag': 'VIX_SPIKE', 'detail': f"VIX={vix:.1f} (>35)', 'severity': 'high"})
+            flags.append({'flag': 'VIX_SPIKE', 'detail': f"VIX={vix:.1f} (>35)", 'severity': 'high'})
         elif vix > 25:
-            flags.append({'flag': 'VIX_ELEVATED', 'detail': f"VIX={vix:.1f} (>25)', 'severity': 'medium"})
+            flags.append({'flag': 'VIX_ELEVATED', 'detail': f"VIX={vix:.1f} (>25)", 'severity': 'medium'})
         sp_chg = overnight.get('sp500_change', 0)
         if sp_chg < -2.0:
-            flags.append({'flag': 'US_CRASH', 'detail': f"S&P500 {sp_chg:+.1f}%', 'severity': 'high"})
+            flags.append({'flag': 'US_CRASH', 'detail': f"S&P500 {sp_chg:+.1f}%", 'severity': 'high'})
         usdjpy = overnight.get('usdjpy_change', 0)
         if usdjpy < -1.5:
-            flags.append({'flag': 'YEN_CARRY_UNWIND', 'detail': f"USD/JPY {usdjpy:+.1f}%', 'severity': 'high"})
+            flags.append({'flag': 'YEN_CARRY_UNWIND', 'detail': f"USD/JPY {usdjpy:+.1f}%", 'severity': 'high'})
         dxy = overnight.get('dxy_change', 0)
         if dxy > 1.0:
-            flags.append({'flag': 'DOLLAR_SURGE', 'detail': f"DXY {dxy:+.1f}%', 'severity': 'medium"})
+            flags.append({'flag': 'DOLLAR_SURGE', 'detail': f"DXY {dxy:+.1f}%", 'severity': 'medium'})
         hsi = overnight.get('hangseng_change', 0)
         if hsi < -2.0:
-            flags.append({'flag': 'CHINA_RISK', 'detail': f"HangSeng {hsi:+.1f}%', 'severity': 'medium"})
+            flags.append({'flag': 'CHINA_RISK', 'detail': f"HangSeng {hsi:+.1f}%", 'severity': 'medium'})
         macro = self._signal_cache.get('macro_features', {})
         if macro:
             if macro.get('credit_stress', 0):
-                flags.append({'flag': 'CREDIT_STRESS', 'detail': f"HY Spread 확대 (fred_hy={macro.get('fred_hy_spread', '?')})', 'severity': 'high"})
+                flags.append({'flag': 'CREDIT_STRESS', 'detail': f"HY Spread 확대 (fred_hy={macro.get('fred_hy_spread', '?')})", 'severity': 'high'})
             if macro.get('yield_curve_inverted', 0):
-                flags.append({'flag': 'YIELD_CURVE_INVERTED', 'detail': f"10Y-2Y={macro.get('cross_yield_curve', '?')}%', 'severity': 'medium"})
+                flags.append({'flag': 'YIELD_CURVE_INVERTED', 'detail': f"10Y-2Y={macro.get('cross_yield_curve', '?')}%", 'severity': 'medium'})
             news = macro.get('news_llm_sentiment', macro.get('news_naver_sentiment', 0))
             if news < -0.6:
-                flags.append({'flag': 'NEWS_VERY_NEGATIVE', 'detail': f"감성={news:.2f}', 'severity': 'medium"})
+                flags.append({'flag': 'NEWS_VERY_NEGATIVE', 'detail': f"감성={news:.2f}", 'severity': 'medium'})
         return flags
 
     def _get_ewy_change(self) -> float:

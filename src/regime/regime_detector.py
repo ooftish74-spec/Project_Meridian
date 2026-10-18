@@ -106,21 +106,25 @@ class RegimeDetector:
         crash_prob = raw_result.get('crash_prob', 0.0)
         was_active = self._crash_radar_state.get('is_active', False)
         hold_elapsed = self._crash_radar_state.get('hold_days_elapsed', 0)
+        today_str = datetime.now().strftime('%Y-%m-%d')
         if not was_active:
             if crash_prob >= entry_thresh:
-                self._crash_radar_state.update({'is_active': True, 'activated_at': datetime.now().isoformat(), 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
+                self._crash_radar_state.update({'is_active': True, 'activated_at': datetime.now().isoformat(), 'last_updated_date': today_str, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
                 logger.warning(f"  🚨 [CrashRadar Hysteresis] 경보 ON: crash_prob={crash_prob:.3f} >= entry={entry_thresh:.2f}")
                 is_warning = True
             else:
                 is_warning = False
         else:
-            hold_elapsed += 1
-            self._crash_radar_state['hold_days_elapsed'] = hold_elapsed
+            last_date = self._crash_radar_state.get('last_updated_date')
+            if last_date != today_str:
+                hold_elapsed += 1
+                self._crash_radar_state['hold_days_elapsed'] = hold_elapsed
+                self._crash_radar_state['last_updated_date'] = today_str
             self._crash_radar_state['last_crash_prob'] = crash_prob
             min_hold_met = hold_elapsed >= min_hold_days
             below_exit = crash_prob < exit_thresh
             if min_hold_met and below_exit:
-                self._crash_radar_state.update({'is_active': False, 'activated_at': None, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
+                self._crash_radar_state.update({'is_active': False, 'activated_at': None, 'last_updated_date': today_str, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
                 logger.info(f"  ✅ [CrashRadar Hysteresis] 경보 OFF: crash_prob={crash_prob:.3f} < exit={exit_thresh:.2f}, 유지일={hold_elapsed}/{min_hold_days}")
                 is_warning = False
             else:
@@ -162,6 +166,25 @@ class RegimeDetector:
 
     def detect(self, market_data: Dict) -> Dict:
         """레짐 감지. (Priority 락 체크 포함)
+
+        Args:
+            market_data: {
+                'signal_cache': {'vix': float, 'vkospi': float, ...},
+                'kospi_returns': [float, ...],  # 최근 60일+ 일간 수익률
+                'vix_history': [float, ...],    # 최근 60일+ VIX 수준
+            }
+
+        Returns:
+            {
+                'regime': str,          # 'bull', 'caution', 'bear', 'crash'
+                'confidence': float,    # 0.0 ~ 1.0
+                'rule_regime': str,     # Rule-Based 결과
+                'rule_score': float,    # 0~100
+                'hmm_regime': str,      # HMM 결과 (없으면 None)
+                'hmm_state': int,       # HMM state (0 or 1)
+                'method': str,          # 'rule_only' or 'ensemble'
+            }
+        """
         try:
             import json
             from datetime import datetime
@@ -187,26 +210,6 @@ class RegimeDetector:
                         }
         except Exception as e:
             logger.error(f"  Priority Lock 검사 중 오류: {e}")
-
-
-        Args:
-            market_data: {
-                'signal_cache': {'vix': float, 'vkospi': float, ...},
-                'kospi_returns': [float, ...],  # 최근 60일+ 일간 수익률
-                'vix_history': [float, ...],    # 최근 60일+ VIX 수준
-            }
-
-        Returns:
-            {
-                'regime': str,          # 'bull', 'caution', 'bear', 'crash'
-                'confidence': float,    # 0.0 ~ 1.0
-                'rule_regime': str,     # Rule-Based 결과
-                'rule_score': float,    # 0~100
-                'hmm_regime': str,      # HMM 결과 (없으면 None)
-                'hmm_state': int,       # HMM state (0 or 1)
-                'method': str,          # 'rule_only' or 'ensemble'
-            }
-        """
         signal = market_data.get('signal_cache', {})
         critical_keys = ['vix', 'vkospi', 'usdkrw']
         import pandas as pd
@@ -347,6 +350,7 @@ class RegimeDetector:
                         _cp_val = result.get('crash_prob', 0)
                         logger.info(f"  [CrashDecay] VIX 안정화(<25.0) 조건 충족. CRASH 지속 초과={_excess}일 -> crash_prob {_cp_val:.3f} -> {_decayed:.3f} (지수감쇠 적용)")
                         result['crash_prob'] = round(_decayed, 4)
+                        crash_prob = result['crash_prob']
                     else:
                         logger.info(f"  [CrashDecay] VIX({vix_now:.1f}) >= 25.0 유지중. 기간 경과({_hold_days}일)에도 불구하고 감쇠 보류 (구조적 위기 지속).")
             except Exception as _decay_e:
@@ -469,21 +473,25 @@ class RegimeDetector:
                 score -= pcr_risk_penalty * 2
         elif pcr >= pcr_risk_th:
             score -= pcr_risk_penalty
-        kospi = parse_metric(signal, 'kospi', 2600.0)
-        kospi_ma20 = parse_metric(signal, 'kospi_ma20', 2600.0)
-        force_regime = None
-        crash_type = None
+        kospi = parse_metric(signal, 'kospi', parse_metric(signal, 'kospi_close', 0.0))
+        kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
+        _rebound_active = (ois >= 60.0 and vix < vix_caution)
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
             # [Quant Institutional Patch] 0.5 ~ 2.0 스케일 범위 검증 및 HMM/Ensemble 연속 레짐 스코어링
             if 0.5 < trend_ratio < 2.0:
                 if trend_ratio < 0.88:
-                    score -= 35
-                    force_regime = 'crash'
-                    crash_type = 'flash_crash'
+                    if _rebound_active:
+                        score -= 15
+                        force_regime = 'caution'
+                        crash_type = 'rebound_from_bleed'
+                    else:
+                        score -= 35
+                        force_regime = 'crash'
+                        crash_type = 'flash_crash'
                 elif trend_ratio < 0.95:
-                    score -= 25
-                    force_regime = 'bear'
+                    score -= 20 if not _rebound_active else 10
+                    force_regime = 'caution' if _rebound_active else 'bear'
                 elif trend_ratio < 0.98:
                     score -= 15
                 elif trend_ratio > 1.02:
@@ -496,14 +504,20 @@ class RegimeDetector:
             neg_count = sum((1 for r in recent_10 if r < 0))
             cum_ret_10d = sum(recent_10) * 100
             if neg_count >= 8 or cum_ret_10d < -6.0:
-                logger.info(f"  [RegimeDetector] Slow Bleed 감지! (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Crash 강제 전환")
-                score -= 50
-                force_regime = 'crash'
-                crash_type = 'slow_bleed'
+                if _rebound_active:
+                    logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 야간/프리마켓 반등(OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
+                    score -= 15
+                    force_regime = 'caution'
+                    crash_type = 'rebound_from_bleed'
+                else:
+                    logger.info(f"  [RegimeDetector] Slow Bleed 감지! (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Crash 강제 전환")
+                    score -= 50
+                    force_regime = 'crash'
+                    crash_type = 'slow_bleed'
             elif neg_count >= 6 or cum_ret_10d < -3.0:
                 logger.info(f"  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환")
                 score -= 30
-                force_regime = force_regime or 'bear'
+                force_regime = force_regime or ('caution' if _rebound_active else 'bear')
         export_yoy = parse_metric(signal, 'export_yoy', 0.0)
         macro_cycle = market_data.get('alpha_macro_cycle', 'Expansion')
         argus_scitech = parse_metric(signal, 'argus_scitech', 1.0)
@@ -586,6 +600,8 @@ class RegimeDetector:
             if not vix_hist or not kospi_rets:
                 return None
             n = min(len(vix_hist), len(kospi_rets))
+            if n < 30:
+                return None
             df = pd.DataFrame({'vix': vix_hist[-n:], 'kospi_ret': kospi_rets[-n:]})
             n_hmm_states = int(self._get('regime.hmm_n_states', 2))
             if not hasattr(self, '_hmm_predictor') or not hasattr(self, '_hmm_last_n') or n - self._hmm_last_n > 20:
@@ -595,6 +611,23 @@ class RegimeDetector:
                 self._hmm_last_n = n
             else:
                 predictor = self._hmm_predictor
+            self._hmm_model = predictor.model
+            self._hmm_fitted = bool(predictor.is_fitted and predictor.model is not None)
+            if self._hmm_fitted and hasattr(self._hmm_model, 'means_'):
+                sorted_states = np.argsort(self._hmm_model.means_[:, 0])
+                n_st = len(sorted_states)
+                if n_st == 1:
+                    self._state_to_regime = {int(sorted_states[0]): 'bull'}
+                elif n_st == 2:
+                    self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'bear'}
+                elif n_st == 3:
+                    self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'caution', int(sorted_states[2]): 'bear'}
+                else:
+                    self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'caution', int(sorted_states[2]): 'bear'}
+                    for idx_s in sorted_states[3:]:
+                        self._state_to_regime[int(idx_s)] = 'crash'
+            if not self._hmm_fitted:
+                return None
             probs = predictor.predict_regime_probabilities(df)
             best_regime = max(probs, key=probs.get).replace('_prob', '')
             confidence = probs[f"{best_regime}_prob"]
@@ -653,9 +686,14 @@ class RegimeDetector:
                 regime_scores['bull'] += gi_weight / 2 * gi['confidence']
                 regime_scores['caution'] += gi_weight / 2 * gi['confidence']
             elif season == 'Deflation':
-                regime_scores['crash'] += gi_weight * gi['confidence']
+                if rule.get('crash_type') == 'rebound_from_bleed':
+                    regime_scores['caution'] += gi_weight * gi['confidence']
+                else:
+                    regime_scores['crash'] += gi_weight * gi['confidence']
             elif season == 'Stagflation':
                 regime_scores['bear'] += gi_weight * gi['confidence']
+        if rule.get('crash_type') == 'rebound_from_bleed':
+            regime_scores['crash'] = 0.0
         best_regime = max(regime_scores, key=regime_scores.get)
         best_score = regime_scores[best_regime]
         if rule['regime'] in ('crash', 'bear'):
@@ -724,8 +762,8 @@ class RegimeDetector:
         us10y = parse_metric(signal, 'us10y', 4.0)
         ois = parse_metric(signal, 'ois', 50.0)
         import numpy as np
-        kospi = parse_metric(signal, 'kospi', 2600.0)
-        kospi_ma20 = parse_metric(signal, 'kospi_ma20', 2600.0)
+        kospi = parse_metric(signal, 'kospi', parse_metric(signal, 'kospi_close', 0.0))
+        kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
         # [S1 Patch] Bridgewater-style Macro Trend Oscillator
         # 일간 수익률 노이즈 대신 KOSPI 중장기 추세 이격도를 Z-Score로 변환하여 실물 성장 모멘텀 반영
         if kospi_ma20 > 0:
@@ -743,9 +781,9 @@ class RegimeDetector:
             z_us10y = signal['us10y_zscore']
         else:
             z_us10y = max(-3.0, min(3.0, (us10y - 4.0) / 0.5))
-        z_ois = -(ois - 50.0) / 20.0
-        delta_g = z_kospi - z_hy
-        delta_i = z_us10y + z_ois
+        z_ois = (ois - 50.0) / 20.0
+        delta_g = z_kospi - z_hy + 0.5 * z_ois
+        delta_i = z_us10y - 0.5 * z_ois
         if delta_g >= 0 and delta_i < 0:
             season = 'Goldilocks'
         elif delta_g >= 0 and delta_i >= 0:

@@ -55,7 +55,7 @@ class KellyCriterion:
 
     def __init__(self):
         from config.dynamic_config import DynamicConfig as _DC
-        self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
         self._measurement_data = None
         self._stream_metrics = None
         self._signal_cache = None
@@ -74,6 +74,8 @@ class KellyCriterion:
         Returns:
             Kelly 비율 (음수 가능 — 이 경우 투자하지 않음)
         """
+        if win_rate > 1.0:
+            win_rate = win_rate / 100.0
         if win_rate >= 1.0:
             logger.warning(f"win_rate={win_rate:.4f} ≥ 1.0: 비현실적 입력 가능성 높음 — 데이터 확인 권장")
             win_rate = min(win_rate, 0.99)
@@ -224,10 +226,11 @@ class KellyCriterion:
         stats = {'win_rate': 0, 'avg_win': 0, 'avg_loss': 0, 'n_trades': 0}
         if self._stream_metrics:
             metrics = self._stream_metrics.get('metrics', {})
-            stream_data = metrics.get('stream_performance', {}).get(stream_id, {})
+            stream_data = metrics.get('stream_performance', {}).get(stream_id, {}) or metrics.get('stream_summary', {}).get(stream_id, {})
             if stream_data:
-                stats['win_rate'] = stream_data.get('win_rate', 0)
-                stats['n_trades'] = stream_data.get('total_trades', 0)
+                raw_wr = float(stream_data.get('win_rate', 0) or 0)
+                stats['win_rate'] = raw_wr / 100.0 if raw_wr > 1.0 else raw_wr
+                stats['n_trades'] = stream_data.get('total_trades', stream_data.get('n_buys', 0) + stream_data.get('n_sells', 0))
                 avg_win_pct = stream_data.get('avg_win_pct', 0)
                 avg_loss_pct = stream_data.get('avg_loss_pct', 0)
                 if avg_win_pct:
@@ -237,7 +240,8 @@ class KellyCriterion:
         if self._measurement_data:
             quant = self._measurement_data.get('quant_metrics', {})
             if stats['n_trades'] == 0:
-                stats['win_rate'] = quant.get('win_rate', 0)
+                raw_wr = float(quant.get('win_rate', 0) or 0)
+                stats['win_rate'] = raw_wr / 100.0 if raw_wr > 1.0 else raw_wr
                 stats['n_trades'] = quant.get('total_trades', 0)
             if stats['avg_win'] == 0:
                 avg_w = quant.get('avg_win_pct', 0)

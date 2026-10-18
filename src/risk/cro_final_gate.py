@@ -88,15 +88,25 @@ class CROFinalGate:
 
         n_tickers = len(ticker_order_map)
         weights_vec = np.zeros(n_tickers)
+        buy_exposure_pct = 0.0
 
         for order in orders:
             t = order['ticker']
             if t in ticker_order_map:
                 idx = ticker_order_map[t]
-                w = (order['direction'] * order['net_amount']) / portfolio_value
-                weights_vec[idx] = w
+                raw_dir = order.get('action', order.get('direction', 1))
+                sign = -1.0 if str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit') else 1.0
+                price = float(order.get('price', 0.0) or 0.0)
+                fx_rate = float(order.get('fx_rate', 1350.0) or 1350.0) if not str(t).isdigit() else 1.0
+                price_krw = price * fx_rate
+                qty = float(order.get('net_shares', order.get('quantity', 0)) or 0)
+                amt = float(order.get('net_amount', order.get('amount_krw', qty * price_krw)) or 0.0)
+                w = (sign * amt) / max(portfolio_value, 1.0)
+                weights_vec[idx] += w
+                if sign > 0:
+                    buy_exposure_pct += amt / max(portfolio_value, 1.0)
 
-        proposed_exposure_pct = float(np.sum(np.abs(weights_vec)))
+        proposed_exposure_pct = float(buy_exposure_pct)
         proposed_var_krw, proposed_var_pct = self.compute_parametric_var(weights_vec, cov_matrix, portfolio_value)
 
         # Dynamic Leverage Expansion via Anti-fragile Option Coverage
@@ -142,21 +152,42 @@ class CROFinalGate:
             reasons.append(f"Exposure 초과 ({proposed_exposure_pct*100:.1f}% > 한도 {self.max_portfolio_exposure*100:.1f}%)")
         reason_str = " & ".join(reasons) if reasons else "PASS"
 
-        # 주문 수량 비례 축소 (Vector Projection Scaling)
+        # 주문 수량 비례 축소 (Vector Projection Scaling — 매도/청산 주문은 리스크 축소 목적이므로 축소 제외)
         scaled_orders = []
         for order in orders:
-            if order.get('is_netted_out', False) or order['net_shares'] == 0:
+            raw_shares = int(order.get('net_shares', order.get('quantity', 0)) or 0)
+            if order.get('is_netted_out', False) or raw_shares == 0:
                 scaled_orders.append(order)
                 continue
 
-            scaled_shares = int(order['net_shares'] * final_scaling_factor)
-            price = order.get('price', 0.0)
-            scaled_amount = scaled_shares * price
+            raw_dir = order.get('action', order.get('direction', 1))
+            is_sell = str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit')
+            if is_sell:
+                scaled_orders.append(dict(order))
+                continue
+
+            t = order.get('ticker', '')
+            scaled_shares = int(raw_shares * final_scaling_factor)
+            price = float(order.get('price', 0.0) or 0.0)
+            fx_rate = float(order.get('fx_rate', 1350.0) or 1350.0) if not str(t).isdigit() else 1.0
+            price_krw = price * fx_rate
+            if (
+                scaled_shares == 0
+                and raw_shares >= 1
+                and final_scaling_factor > 0.0
+                and (order.get('_min_lot_sweep') or (price_krw > 0 and price_krw <= portfolio_value * 0.15))
+            ):
+                scaled_shares = 1
+            scaled_amount_krw = scaled_shares * price_krw
 
             new_order = dict(order)
-            new_order['net_shares'] = scaled_shares
-            new_order['net_amount'] = round(scaled_amount, 2)
-            new_order['net_weight'] = round(scaled_amount / portfolio_value, 4)
+            if 'net_shares' in new_order or 'quantity' not in new_order:
+                new_order['net_shares'] = scaled_shares
+                new_order['net_amount'] = round(scaled_amount_krw, 2)
+                new_order['net_weight'] = round(scaled_amount_krw / max(portfolio_value, 1.0), 4)
+            if 'quantity' in new_order:
+                new_order['quantity'] = scaled_shares
+            new_order['amount_krw'] = round(scaled_amount_krw, 0)
             new_order['is_netted_out'] = (scaled_shares == 0)
             new_order['cro_scaling_applied'] = final_scaling_factor
             scaled_orders.append(new_order)

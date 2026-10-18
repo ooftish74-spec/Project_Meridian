@@ -114,7 +114,7 @@ class RealtimeCollector(NewsSentimentMixin):
 
     def collect_valuation_snapshot(self, sectors: list) -> Dict:
         """미국 종목 멀티팩터 밸류에이션 + KR PER 현재값 (Google Finance / KIS API 전용)"""
-        from src.data_collection.google_finance_collector import GoogleFinanceCollector
+        from src.utils.google_finance_collector import GoogleFinanceCollector
         from src.data_collection.pykrx_compat import stock as pykrx_stock
         logger.info('\n📌 밸류에이션 스냅샷 수집')
         gfc = GoogleFinanceCollector()
@@ -126,7 +126,7 @@ class RealtimeCollector(NewsSentimentMixin):
             stocks = []
             for ticker in tickers:
                 try:
-                    q = gfc.fetch_quote(ticker)
+                    q = gfc.get_quote_details(ticker)
                     p = q.get('price', 0) if q else 0
                     entry = {'ticker': ticker, 'forward_pe': 0, 'peg_ratio': 0, 'price_to_book': 0, 'ev_to_ebitda': 0, 'ev_to_revenue': 0, 'dividend_yield': 0, 'revenue_growth': 0, 'profit_margins': 0, 'roe': 0, 'market_cap': p, 'free_cashflow': 0, 'fcf_yield': 0}
                     stocks.append(entry)

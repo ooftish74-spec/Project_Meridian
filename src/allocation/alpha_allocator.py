@@ -47,28 +47,28 @@ class AlphaAllocator:
     STREAMS = None
 
     def _default_regime_weights(self) -> Dict[str, Dict[str, float]]:
-        """레짐별 기본 배분 (DynamicConfig 동적 로드).
-        S4(Advisory) 예산을 제외하고 S1, S2, S3, S5로 재분배.
-        """
-        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
+        """레짐별 기본 배분 (MaxEnt KL-사영 수리 모델 + DynamicConfig 오버라이드)."""
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        dqe = get_quant_engine()
+        active_streams = self.STREAMS or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
         regimes = ['bull', 'caution', 'bear', 'crash']
-        defaults = {
-            'bull': {'S0': 0.20, 'S1': 0.25, 'S2': 0.20, 'S3': 0.10, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.00, 'S14_PAIR_ALPHA': 0.05},
-            'caution': {'S0': 0.15, 'S1': 0.15, 'S2': 0.15, 'S3': 0.15, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.05, 'S14_PAIR_ALPHA': 0.15},
-            'bear': {'S0': 0.20, 'S1': 0.15, 'S2': 0.10, 'S3': 0.05, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.05, 'S14_PAIR_ALPHA': 0.15},
-            'crash': {'S0': 0.30, 'S1': 0.20, 'S2': 0.10, 'S3': 0.00, 'S5': 0.00, 'S10': 0.05, 'S11_HIGHBETA_SNIPER': 0.10, 'S12_DERIVATIVE_SQUEEZE': 0.05, 'S13_JAPAN_ALPHA': 0.00, 'S14_PAIR_ALPHA': 0.10}
-        }
         result = {}
         for regime in regimes:
-            d = defaults[regime]
-            result[regime] = {sid: cfg.get(f'allocator.base_weight.{regime}.{sid}', d.get(sid, 0.0)) for sid in active_streams}
+            maxent_w = dqe.compute_maxent_stream_weights(active_streams, regime=regime)
+            row = {sid: float(cfg.get(f'allocator.base_weight.{regime}.{sid}', maxent_w.get(sid, 0.0)) or maxent_w.get(sid, 0.0)) for sid in active_streams}
+            tot = sum(row.values()) or 1.0
+            result[regime] = {sid: round(val / tot, 4) for sid, val in row.items()}
         return result
 
     def __init__(self):
         self._last_weights: Dict[str, float] = {}
         self._allocation_history: List[Dict] = []
         _cfg_streams = cfg.get('allocator.active_streams', None)
-        self.STREAMS = _cfg_streams or ['S0', 'S1', 'S2', 'S3', 'S5', 'S10', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
+        _default_streams = ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
+        if _cfg_streams and isinstance(_cfg_streams, list):
+            self.STREAMS = [s for s in dict.fromkeys(list(_cfg_streams) + [s for s in _default_streams if s not in _cfg_streams]) if s != 'S4']
+        else:
+            self.STREAMS = list(_default_streams)
         self.us_night_cap = cfg.get('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
 
     def compute_entry_score(self, signal: Dict, stream_id: str='unknown') -> Dict:
@@ -218,7 +218,7 @@ class AlphaAllocator:
                 from src.intelligence.corporate_action_proxy_engine import CorporateActionProxyEngine
                 dart_feats = (market_data or {}).get('dart_features', {})
                 proxy_boosts = CorporateActionProxyEngine.evaluate_proxy_boost(dart_feats)
-                if sid in ('S1', 'S11') and proxy_boosts:
+                if sid.split('_')[0] in ('S1', 'S11') and proxy_boosts:
                     max_p_boost = max(proxy_boosts.values())
                     ev += max_p_boost
                     logger.info(f"  🚀 [CorporateActionProxy] {sid} Proxy Boost applied: +{max_p_boost:.4f}")
@@ -534,45 +534,43 @@ class AlphaAllocator:
             n_trades = int(s2_rolling.get('n_trades_5d', 0) or 0)
             if wr_5d is None or n_trades < 3:
                 logger.info('  [Phase 40] S2 성과 패널티 가드: 최근 5일 실현 거래 표본 부족 (n=%d < 3) ➔ 예산 삭감 패널티 미발동 (정상 가중치 유지)', n_trades)
-                return weights
-            penalty_triggered = float(wr_5d) < wr_threshold or (ic_5d is not None and float(ic_5d) < ic_threshold)
-            if not penalty_triggered:
-                logger.info(f"  [Phase 40] S2 Auto-Fallback: 정상 (WR={wr_5d:.1%}, IC={ic_5d})")
-                return weights
-            weights = dict(weights)
-            s2_keys = [k for k in weights if k.upper().startswith('S2')]
-            if not s2_keys:
-                return weights
-            total_surplus = 0.0
-            for k in s2_keys:
-                original = weights[k]
-                penalized = original * penalty_ratio
-                surplus = original - penalized
-                weights[k] = penalized
-                total_surplus += surplus
-            s3a_keys = [k for k in weights if 'S3' in k.upper() and 'A' in k.upper()]
-            s3b_keys = [k for k in weights if 'S3' in k.upper() and 'B' in k.upper()]
-            if not s3a_keys:
-                s3a_keys = [k for k in weights if k.upper().startswith('S3')][:1]
-            if not s3b_keys and len([k for k in weights if k.upper().startswith('S3')]) > 1:
-                s3b_keys = [k for k in weights if k.upper().startswith('S3')][1:]
-            if s3a_keys:
-                weights[s3a_keys[0]] = weights.get(s3a_keys[0], 0.0) + total_surplus * s3a_ratio
-            if s3b_keys:
-                weights[s3b_keys[0]] = weights.get(s3b_keys[0], 0.0) + total_surplus * s3b_ratio
-            if not s3a_keys and (not s3b_keys):
-                for k in s2_keys:
-                    weights[k] += total_surplus / len(s2_keys)
-            total_w = sum(weights.values())
-            if total_w > 0:
-                weights = {k: v / total_w for k, v in weights.items()}
-            logger.warning(f"  ⚠️ [Phase 40] S2 Auto-Fallback 발동! WR={wr_5d:.1%}, IC={ic_5d}, 잉여 {total_surplus:.3f} → S3 이관. 조정 weights={weights}")
-            try:
-                from src.measurement.event_ledger import log_event
-                log_event('S2_FALLBACK', {'wr_5d': wr_5d, 'ic_5d': ic_5d, 'surplus_transferred': total_surplus, 'new_weights': weights}, source='alpha_allocator')
-            except Exception as _e1:
-                logger.critical(f'  [alpha_allocator] 알파 배분 로직: {_e1}', exc_info=True)
-            return weights
+            else:
+                penalty_triggered = float(wr_5d) < wr_threshold or (ic_5d is not None and float(ic_5d) < ic_threshold)
+                if not penalty_triggered:
+                    logger.info(f"  [Phase 40] S2 Auto-Fallback: 정상 (WR={wr_5d:.1%}, IC={ic_5d})")
+                else:
+                    weights = dict(weights)
+                    s2_keys = [k for k in weights if k.upper().startswith('S2')]
+                    if s2_keys:
+                        total_surplus = 0.0
+                        for k in s2_keys:
+                            original = weights[k]
+                            penalized = original * penalty_ratio
+                            surplus = original - penalized
+                            weights[k] = penalized
+                            total_surplus += surplus
+                        s3a_keys = [k for k in weights if 'S3' in k.upper() and 'A' in k.upper()]
+                        s3b_keys = [k for k in weights if 'S3' in k.upper() and 'B' in k.upper()]
+                        if not s3a_keys:
+                            s3a_keys = [k for k in weights if k.upper().startswith('S3')][:1]
+                        if not s3b_keys and len([k for k in weights if k.upper().startswith('S3')]) > 1:
+                            s3b_keys = [k for k in weights if k.upper().startswith('S3')][1:]
+                        if s3a_keys:
+                            weights[s3a_keys[0]] = weights.get(s3a_keys[0], 0.0) + total_surplus * s3a_ratio
+                        if s3b_keys:
+                            weights[s3b_keys[0]] = weights.get(s3b_keys[0], 0.0) + total_surplus * s3b_ratio
+                        if not s3a_keys and (not s3b_keys):
+                            for k in s2_keys:
+                                weights[k] += total_surplus / len(s2_keys)
+                        total_w = sum(weights.values())
+                        if total_w > 0:
+                            weights = {k: v / total_w for k, v in weights.items()}
+                        logger.warning(f"  ⚠️ [Phase 40] S2 Auto-Fallback 발동! WR={wr_5d:.1%}, IC={ic_5d}, 잉여 {total_surplus:.3f} → S3 이관. 조정 weights={weights}")
+                        try:
+                            from src.measurement.event_ledger import log_event
+                            log_event('S2_FALLBACK', {'wr_5d': wr_5d, 'ic_5d': ic_5d, 'surplus_transferred': total_surplus, 'new_weights': weights}, source='alpha_allocator')
+                        except Exception as _e1:
+                            logger.critical(f'  [alpha_allocator] 알파 배분 로직: {_e1}', exc_info=True)
         except Exception as e:
             logger.critical(f'  [Phase 40] S2 Auto-Fallback 오류 (skip): {e}', exc_info=True)
         try:
@@ -925,8 +923,9 @@ class AlphaAllocator:
 
             return float(round(min(sec_cap, max(floor_cap, cap)), 4))
 
+        all_sids = list(dict.fromkeys(list(self.STREAMS) + list(weights.keys()) + list(stream_signals.keys())))
         asset_exposure: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
-        for sid in self.STREAMS:
+        for sid in all_sids:
             stream_w = weights.get(sid, 0)
             signals = stream_signals.get(sid, [])
             if not signals or stream_w <= 0:
@@ -940,7 +939,8 @@ class AlphaAllocator:
                 if contribution > 0:
                     asset_exposure[underlying].append((sid, contribution))
 
-        scale_factors: Dict[str, float] = {sid: 1.0 for sid in self.STREAMS}
+        scale_factors: Dict[str, float] = {sid: 1.0 for sid in all_sids}
+        cash_sweep_addition = 0.0
         for underlying, exposures in asset_exposure.items():
             total_exp = sum((c for _, c in exposures))
             effective_cap = max((_get_dynamic_cap(underlying, exp_sid, stream_signals.get(exp_sid, [])) for exp_sid, _ in exposures))
@@ -949,26 +949,35 @@ class AlphaAllocator:
             excess = total_exp - effective_cap
             logger.warning(f"  ⚠️ 단일자산 초과: {underlying} = {total_exp:.2%} (수학적 동적캡 {effective_cap:.2%}, 초과 {excess:.2%})")
             _priority = cfg.get('allocator.stream_priority', self._STREAM_PRIORITY_DEFAULT)
-            sorted_exp = sorted(exposures, key=lambda x: _priority.get(x[0], 0))
+            by_stream: Dict[str, float] = defaultdict(float)
+            for exp_sid, exp_contrib in exposures:
+                by_stream[exp_sid] += exp_contrib
+            sorted_exp = sorted(by_stream.items(), key=lambda x: _priority.get(x[0], 0))
             remaining_excess = excess
             for exp_sid, exp_contrib in sorted_exp:
                 if remaining_excess <= 0:
                     break
                 reducible = min(exp_contrib, remaining_excess)
-                if exp_contrib > 0:
-                    reduction_ratio = reducible / exp_contrib
+                stream_w_denom = max(exp_contrib, float(weights.get(exp_sid, exp_contrib) or exp_contrib))
+                if stream_w_denom > 0:
+                    reduction_ratio = reducible / stream_w_denom
                     new_scale = scale_factors[exp_sid] * (1.0 - reduction_ratio)
                     scale_factors[exp_sid] = max(0.0, new_scale)
                     remaining_excess -= reducible
+                    cash_sweep_addition += reducible
                     logger.info(f"    → {exp_sid} 축소: {underlying} 기여 {exp_contrib:.2%} → {exp_contrib - reducible:.2%} (스케일 {scale_factors[exp_sid]:.3f})")
 
         any_scaled = any((sf < 1.0 for sf in scale_factors.values()))
         if not any_scaled:
             return weights
-        adjusted = {sid: round(weights.get(sid, 0) * scale_factors[sid], 6) for sid in self.STREAMS}
+        adjusted = {sid: round(weights.get(sid, 0) * scale_factors.get(sid, 1.0), 6) for sid in all_sids if sid in weights or sid in self.STREAMS}
+        if 'S5' in adjusted:
+            adjusted['S5'] = round(adjusted['S5'] + cash_sweep_addition, 6)
         total = sum(adjusted.values())
-        if total > 0:
+        if total > 1.0:
             adjusted = {sid: round(w / total, 4) for sid, w in adjusted.items()}
+        else:
+            adjusted = {sid: round(w, 4) for sid, w in adjusted.items()}
         logger.info(f"  📊 [Dynamic single-asset limit] 수학적 동적 단일자산 제한: {weights} → {adjusted} (스케일: {scale_factors})")
         return adjusted
 
@@ -979,8 +988,9 @@ class AlphaAllocator:
         MarketContextManager의 sector_cap을 참조하여 비중을 축소합니다.
         축소된 잉여 자본은 강제로 S5(현금) 비중을 늘려 방어합니다.
         """
+        all_sids = list(dict.fromkeys(list(self.STREAMS) + list(weights.keys()) + list(stream_signals.keys())))
         sector_exposure: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
-        for sid in self.STREAMS:
+        for sid in all_sids:
             stream_w = weights.get(sid, 0)
             signals = stream_signals.get(sid, [])
             if not signals or stream_w <= 0:
@@ -992,9 +1002,11 @@ class AlphaAllocator:
                 contribution = stream_w * size_pct
                 if contribution > 0:
                     sector_exposure[sector].append((sid, contribution))
-        scale_factors: Dict[str, float] = {sid: 1.0 for sid in self.STREAMS}
+        scale_factors: Dict[str, float] = {sid: 1.0 for sid in all_sids}
         cash_sweep_addition = 0.0
         for sector, exposures in sector_exposure.items():
+            if sector in ('Cash_Equivalent', 'Unknown'):
+                continue
             total_exp = sum((c for _, c in exposures))
             max_cap = market_ctx.get_sector_cap(sector)
             if total_exp <= max_cap:
@@ -1002,14 +1014,18 @@ class AlphaAllocator:
             excess = total_exp - max_cap
             logger.warning(f"  🛡️ 섹터 쏠림 감지: [{sector}] = {total_exp:.2%} (한도 {max_cap:.2%}, 초과 {excess:.2%})")
             _priority = cfg.get('allocator.stream_priority', self._STREAM_PRIORITY_DEFAULT)
-            sorted_exp = sorted(exposures, key=lambda x: _priority.get(x[0], 0))
+            by_stream: Dict[str, float] = defaultdict(float)
+            for exp_sid, exp_contrib in exposures:
+                by_stream[exp_sid] += exp_contrib
+            sorted_exp = sorted(by_stream.items(), key=lambda x: _priority.get(x[0], 0))
             remaining_excess = excess
             for exp_sid, exp_contrib in sorted_exp:
                 if remaining_excess <= 0:
                     break
                 reducible = min(exp_contrib, remaining_excess)
-                if exp_contrib > 0:
-                    reduction_ratio = reducible / exp_contrib
+                stream_w_denom = max(exp_contrib, float(weights.get(exp_sid, exp_contrib) or exp_contrib))
+                if stream_w_denom > 0:
+                    reduction_ratio = reducible / stream_w_denom
                     new_scale = scale_factors[exp_sid] * (1.0 - reduction_ratio)
                     scale_factors[exp_sid] = max(0.0, new_scale)
                     remaining_excess -= reducible
@@ -1018,20 +1034,28 @@ class AlphaAllocator:
         any_scaled = any((sf < 1.0 for sf in scale_factors.values()))
         if not any_scaled:
             return weights
-        adjusted = {sid: round(weights.get(sid, 0) * scale_factors[sid], 6) for sid in self.STREAMS}
+        adjusted = {sid: round(weights.get(sid, 0) * scale_factors.get(sid, 1.0), 6) for sid in all_sids if sid in weights or sid in self.STREAMS}
         if 'S5' in adjusted:
             adjusted['S5'] += cash_sweep_addition
         total = sum(adjusted.values())
-        if total > 0:
+        if total > 1.0:
             adjusted = {sid: round(w / total, 4) for sid, w in adjusted.items()}
+        else:
+            adjusted = {sid: round(w, 4) for sid, w in adjusted.items()}
         logger.info(f"  📊 섹터 중립화 적용 완료. S5 현금 전환 = +{cash_sweep_addition:.2%}")
         return adjusted
 
     def _apply_sentiment_penalty(self, stream_signals: Dict[str, List[Dict]]) -> Dict[str, List[Dict]]:
         """대안 데이터(감성 분석) 기반 종목별 비중 페널티 적용.
         
-        Sentiment 점수가 극도로 낮을 경우 편입 제외 또는 비중을 대폭 삭감합니다.
+        [Dynamic Mathematical Classification]
+        하드코딩된 티커 셋 대신 DynamicQuantEngine의 경험적 시장 베타(β <= 0.20),
+        하방 꼬리 베타(β^- <= 0.12) 및 방향성 메타데이터를 이용해
+        인버스/숏/안전자산/파킹 자산을 수학적으로 자동 식별하여 감성 페널티에서 면제합니다.
         """
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        dqe = get_quant_engine()
+        _dynamic_exempt = dqe.get_defensive_exempt_tickers()
         try:
             from src.data.alternative_data_bridge import AlternativeDataBridge
             alt_bridge = AlternativeDataBridge()
@@ -1045,7 +1069,31 @@ class AlphaAllocator:
                 if not ticker:
                     valid_signals.append(sig)
                     continue
-                sentiment = alt_bridge.fetch_sentiment_score(ticker)
+                if str(ticker).startswith('_'):
+                    continue
+                direction = str(sig.get('direction', '')).lower()
+                asset_type = str(sig.get('asset_type', '')).lower()
+                name_upper = str(sig.get('name', '')).upper()
+                emp_beta = float(dqe.get_asset_metrics(str(ticker)).get('beta', 1.0))
+                is_defensive_or_inverse = (
+                    str(ticker).upper() in _dynamic_exempt
+                    or emp_beta <= 0.20
+                    or direction in ('short', 'inverse', 'hedge')
+                    or 'inverse' in asset_type
+                    or 'bond' in asset_type
+                    or any(kw in name_upper for kw in ('인버스', '선물인버스', 'INVERSE', 'SHORT', 'KOFR', 'CD금리', '머니마켓', '국고채', '미국채', '달러선물'))
+                )
+                if is_defensive_or_inverse:
+                    valid_signals.append(sig)
+                    continue
+                raw_sig_sent = sig.get('news_sentiment_mean', sig.get('news_sentiment', None))
+                if raw_sig_sent is not None:
+                    sentiment = (float(raw_sig_sent) + 1.0) / 2.0
+                else:
+                    sentiment = alt_bridge.fetch_sentiment_score(ticker)
+                    if sentiment < 0.0:
+                        sentiment = (sentiment + 1.0) / 2.0
+                sentiment = max(0.0, min(1.0, float(sentiment)))
                 if sentiment < 0.2:
                     logger.warning(f"  🔻 감성 악화 (Sentiment={sentiment:.2f}): {ticker} 편입 제외")
                     continue

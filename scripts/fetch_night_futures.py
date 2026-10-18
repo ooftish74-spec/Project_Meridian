@@ -74,7 +74,7 @@ def fetch_and_save_night_futures(
                 except Exception:
                     pass
 
-            if is_prev_verified and ov_data.get("source") != "KRX_Night_Session_Verified":
+            if is_prev_verified and ov_data.get("source") not in ("KRX_Night_Session_Verified", "KIS_OpenAPI_Futures_Live"):
                 logger.info(f"  🛡️ [Verified Protection] 기검증된 야간 체결가({night_data['close']} / {night_data['source']})를 KIS 미갱신 시세로부터 보호합니다.")
             elif ov_data.get("source") == "KIS_OpenAPI_Direct_Daytime":
                 night_data["daytime_close"] = ov_data["close"]
@@ -110,11 +110,11 @@ def fetch_and_save_night_futures(
                 try:
                     with open(sc_path, "r", encoding="utf-8") as f:
                         sc_tmp = json.load(f)
-                    d_close = float(sc_tmp.get("daytime_futures") or sc_tmp.get("kospi200_futures_close") or 944.80)
+                    d_close = float(sc_tmp.get("daytime_futures") or sc_tmp.get("kospi200_futures_close") or override_close)
                 except Exception:
-                    d_close = 944.80
+                    d_close = override_close
             else:
-                d_close = 944.80
+                d_close = override_close
         night_data["daytime_close"] = d_close
 
         night_change = round(override_close - d_close, 2)
@@ -138,7 +138,7 @@ def fetch_and_save_night_futures(
             with open(sc_path, "r", encoding="utf-8") as f:
                 sc = json.load(f)
             sc["night_futures"] = night_data["close"]
-            sc["daytime_futures"] = night_data.get("daytime_close", 944.80)
+            sc["daytime_futures"] = night_data.get("daytime_close", night_data["close"])
             sc["night_futures_change_1d"] = night_data["change_pct"]
             
             # Recalculate OIS with true night futures

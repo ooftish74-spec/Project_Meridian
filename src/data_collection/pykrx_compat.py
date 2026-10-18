@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 import pandas as pd
 logger = logging.getLogger(__name__)
-_KR_TICKER_RE = re.compile('^\\d{5}[0-9KLM]$')
+_KR_TICKER_RE = re.compile('^\\d{4}[0-9A-Z]{2}$')
 
 class _PykrxCompatStock:
     """pykrx.stock 호환 래퍼 클래스."""
@@ -42,7 +42,7 @@ class _PykrxCompatStock:
             from src.data_collection.krx_api_client import KRXApiClient
             self._client = KRXApiClient()
             if not self._client.is_available:
-                logger.warning('KRX API 키 미설정 — 일부 기능 제한')
+                logger.debug('KRX API 키 미설정 — KIS/Naver 폴백 사용')
         return self._client
 
     def _fmt_date(self, date_str: str) -> str:
@@ -55,7 +55,10 @@ class _PykrxCompatStock:
         try:
             df = self.client.get_ohlcv_with_fallback(start, end, ticker)
             if df is not None and (not df.empty):
-                col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
+                col_map = {
+                    'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량',
+                    'open': '시가', 'high': '고가', 'low': '저가', 'close': '종가', 'volume': '거래량',
+                }
                 df = df.rename(columns=col_map)
                 return df
         except Exception as e:
@@ -74,38 +77,49 @@ class _PykrxCompatStock:
         """
         start_d, end_d = (self._fmt_date(start), self._fmt_date(end))
         
-        # 1순위: KRX API (사용자 키)
-        try:
-            if index_code in ('1001', '0001'):
-                idx = self.client.get_kospi_index(end_d)
-            elif index_code in ('2001',):
-                idx = self.client.get_kosdaq_index(end_d)
-            else:
-                try:
-                    idx = self.client._call_api(self.client.SERVICES.get('krx_index', '/idx/krx_dd_trd'), {'basDd': end_d, 'idxIndMidclssCd': index_code})
-                    if idx is None or (hasattr(idx, 'empty') and idx.empty):
-                        idx = self.client._call_api(self.client.SERVICES['kospi_index'], {'basDd': end_d, 'idxIndMidclssCd': index_code})
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
+        # 1순위: KRX API (단일 일자 조회일 때만 해당 지수 행 필터링하여 사용; 다중 일자 시계열은 Naver/KIS 사용)
+        if start_d == end_d:
+            try:
+                if index_code in ('1001', '0001', '1028'):
+                    idx = self.client.get_kospi_index(end_d)
+                elif index_code in ('2001', '2203'):
+                    idx = self.client.get_kosdaq_index(end_d)
+                else:
                     idx = None
-            if idx is not None and (not getattr(idx, 'empty', True)):
-                result = pd.DataFrame()
-                if 'clpr' in idx.columns:
-                    result['종가'] = pd.to_numeric(idx['clpr'], errors='coerce')
-                if 'mkp' in idx.columns:
-                    result['시가'] = pd.to_numeric(idx['mkp'], errors='coerce')
-                if 'hipr' in idx.columns:
-                    result['고가'] = pd.to_numeric(idx['hipr'], errors='coerce')
-                if 'lopr' in idx.columns:
-                    result['저가'] = pd.to_numeric(idx['lopr'], errors='coerce')
-                if 'acc_trdvol' in idx.columns:
-                    result['거래량'] = pd.to_numeric(idx['acc_trdvol'], errors='coerce')
-                if not result.empty:
-                    logger.debug(f"get_index_ohlcv({index_code}): KRX API OK ({len(result)}행)")
-                    return result
-        except Exception as e:
-            logger.error(f'get_index_ohlcv({index_code}): KRX API 실패: {e}', exc_info=True)
+                if idx is not None and (not getattr(idx, 'empty', True)):
+                    target_names = {
+                        '1001': ('코스피', 'KOSPI'),
+                        '0001': ('코스피', 'KOSPI'),
+                        '1028': ('코스피 200', 'KOSPI 200', '코스피200'),
+                        '2001': ('코스닥', 'KOSDAQ'),
+                        '2203': ('코스닥 150', 'KOSDAQ 150', '코스닥150'),
+                    }.get(index_code, ())
+                    for name_col in ('IDX_NM', 'idx_nm', 'IDX_IND_NM'):
+                        if name_col in idx.columns and target_names:
+                            filtered = idx[idx[name_col].astype(str).str.strip().isin(target_names)]
+                            if not filtered.empty:
+                                idx = filtered.iloc[[0]]
+                            break
+                    result = pd.DataFrame()
+                    for dst_col, src_candidates in [
+                        ('종가', ('clpr', 'TDD_CLSPRC', 'close')),
+                        ('시가', ('mkp', 'TDD_OPNPRC', 'open')),
+                        ('고가', ('hipr', 'TDD_HGPRC', 'high')),
+                        ('저가', ('lopr', 'TDD_LWPRC', 'low')),
+                        ('거래량', ('acc_trdvol', 'ACC_TRDVOL', 'volume')),
+                    ]:
+                        for sc in src_candidates:
+                            if sc in idx.columns:
+                                result[dst_col] = pd.to_numeric(
+                                    idx[sc].astype(str).str.replace(',', ''), errors='coerce'
+                                )
+                                break
+                    if not result.empty and '종가' in result.columns:
+                        result.index = pd.DatetimeIndex([pd.Timestamp(end_d)] * len(result))
+                        logger.debug(f"get_index_ohlcv({index_code}): KRX API OK ({len(result)}행)")
+                        return result
+            except Exception as e:
+                logger.error(f'get_index_ohlcv({index_code}): KRX API 실패: {e}', exc_info=True)
 
         # 2순위: Naver Finance API (가장 강력한 오픈 API 대안)
         _NAVER_SYM_MAP = {'1001': 'KOSPI', '0001': 'KOSPI', '2001': 'KOSDAQ', '1028': 'KPI200'}
@@ -130,13 +144,12 @@ class _PykrxCompatStock:
                 logger.error(f'get_index_ohlcv Naver API({index_code}): {_nv_e}', exc_info=True)
 
         # 3순위: KIS API (공식 브로커 API, 트레이딩 영향 최소화를 위해 Rate Limit 안배)
-        _KIS_SYM_MAP = {'1001': '0001', '0001': '0001', '2001': '1001', '1028': '2001', '2203': '1203'} # KIS 업종코드
+        _KIS_SYM_MAP = {'1001': '0001', '0001': '0001', '2001': '1001', '1028': '2001', '2203': '1203', '1004': '0304'}
         _kis_sym = _KIS_SYM_MAP.get(index_code)
         if _kis_sym:
             try:
                 import time
                 from src.data_collection.kis_data_collector import KISDataCollector
-                # 트레이딩 세션에 무리를 주지 않도록 0.2초 딜레이 (Rate Limit 안배)
                 time.sleep(0.2)
                 kis = KISDataCollector()
                 df_kis = kis.get_kr_sector_daily(_kis_sym, start_d, end_d)
@@ -145,35 +158,13 @@ class _PykrxCompatStock:
                     df_kis = df_kis.rename(columns=col_map)
                     logger.debug(f"get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)")
                     return df_kis[['시가', '고가', '저가', '종가', '거래량']]
+                if index_code == '1004':
+                    vk_closes = kis.get_vkospi_1min(n_candles=5)
+                    if vk_closes:
+                        val = float(vk_closes[-1])
+                        return pd.DataFrame({'시가': [val], '고가': [val], '저가': [val], '종가': [val], '거래량': [0]}, index=pd.DatetimeIndex([pd.Timestamp(end_d)]))
             except Exception as _kis_e:
-                logger.error(f'get_index_ohlcv KIS API({index_code}): {_kis_e}', exc_info=True)
-
-        # 4순위: PyKRX Native 및 KIS API 폴백 (yfinance 전면 폐기 완료)
-        try:
-            from pykrx import stock as _pykrx_stock
-            df_native = _pykrx_stock.get_index_ohlcv_by_date(start_d, end_d, index_code)
-            if df_native is not None and not df_native.empty:
-                logger.info(f"get_index_ohlcv({index_code}): PyKRX native fallback → {len(df_native)} rows")
-                return df_native
-        except Exception as e2:
-            logger.debug(f'PyKRX native fallback({index_code}): {e2}')
-                
-        # 5순위: pykrx native (최후의 보루, 단 버그를 막기 위해 에러 억제)
-        try:
-            from pykrx import stock as _pykrx_stock
-            import inspect as _inspect
-            _sig = _inspect.signature(_pykrx_stock.get_index_ohlcv_by_date)
-            _kwargs = {}
-            if 'name_display' in _sig.parameters:
-                _kwargs['name_display'] = False
-            df_raw = _pykrx_stock.get_index_ohlcv_by_date(start_d, end_d, index_code, **_kwargs)
-            if df_raw is not None and (not df_raw.empty):
-                col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량', '시가': '시가', '고가': '고가', '저가': '저가', '종가': '종가', '거래량': '거래량'}
-                df_raw = df_raw.rename(columns={c: col_map[c] for c in df_raw.columns if c in col_map})
-                logger.debug(f"get_index_ohlcv({index_code}): pykrx native OK ({len(df_raw)}행)")
-                return df_raw
-        except Exception as _pykrx_e:
-            logger.debug(f'get_index_ohlcv({index_code}): pykrx native fallback gracefully handled: {type(_pykrx_e).__name__}')
+                logger.debug(f'get_index_ohlcv KIS API({index_code}): {_kis_e}')
 
         return pd.DataFrame()
 
@@ -188,7 +179,25 @@ class _PykrxCompatStock:
         mkt = mkt_map.get(market, 'STK')
         try:
             df = self.client.get_market_cap(date_fmt, market=mkt)
+            if market == 'ALL' and ticker and (df is None or df.empty or (
+                ticker not in df.index and (
+                    'ISU_SRT_CD' not in df.columns or df[df['ISU_SRT_CD'] == ticker].empty
+                )
+            )):
+                df_ksq = self.client.get_market_cap(date_fmt, market='KSQ')
+                if df_ksq is not None and not df_ksq.empty:
+                    df = pd.concat([df, df_ksq]) if (df is not None and not df.empty) else df_ksq
             if df is not None and (not df.empty):
+                if ticker:
+                    tk_str = str(ticker).strip()
+                    if tk_str in df.index:
+                        return df.loc[[tk_str]]
+                    for col in ('ISU_SRT_CD', 'ticker', 'ISU_CD'):
+                        if col in df.columns:
+                            sub = df[df[col].astype(str).str.strip() == tk_str]
+                            if not sub.empty:
+                                return sub
+                    return df.iloc[0:0]
                 return df
         except Exception as e:
             logger.error(f'get_market_cap_by_ticker({date}): {e}', exc_info=True)
@@ -307,13 +316,13 @@ class _PykrxCompatStock:
             cache_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'raw' / 'krx_stock_daily'
             if cache_dir.exists():
                 prefix = 'kospi_' if market in ('KOSPI', 'STK', 'ALL') else 'kosdaq_'
-                csvs = sorted(cache_dir.glob(f"{prefix}*.csv"), reverse=True)
-                for csv in csvs[:5]:
+                files = sorted(list(cache_dir.glob(f"{prefix}*.parquet")) + list(cache_dir.glob(f"{prefix}*.csv")), reverse=True)
+                for fpath in files[:5]:
                     try:
-                        df = pd.read_csv(csv)
+                        df = pd.read_parquet(fpath) if fpath.suffix == '.parquet' else pd.read_csv(fpath)
                         code_col = 'ISU_SRT_CD' if 'ISU_SRT_CD' in df.columns else None
                         if code_col and len(df) > 0:
-                            tickers = df[code_col].dropna().tolist()
+                            tickers = df[code_col].dropna().astype(str).str.zfill(6).tolist()
                             if len(tickers) > 100:
                                 logger.debug(f"ticker_list via cache: {len(tickers)}종목")
                                 return tickers
@@ -336,13 +345,15 @@ class _PykrxCompatStock:
         except Exception as e:
             logger.error(f'get_market_ticker_list API: {e}', exc_info=True)
         try:
-            data_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'historical_10y'
-            if data_dir.exists():
-                tickers = [f.stem.replace('kr_', '') for f in data_dir.glob('kr_*.parquet')]
-                tickers = [t for t in tickers if _KR_TICKER_RE.match(t)]
-                if tickers:
-                    logger.debug(f"ticker_list via parquet: {len(tickers)}종목")
-                    return sorted(tickers)
+            base_data = Path(__file__).resolve().parent.parent.parent / 'data'
+            for sub in ('kr_markets', 'historical_10y'):
+                data_dir = base_data / sub
+                if data_dir.exists():
+                    tickers = [f.stem.replace('kr_', '') for f in data_dir.glob('*.parquet')]
+                    tickers = [t for t in tickers if _KR_TICKER_RE.match(t)]
+                    if tickers:
+                        logger.debug(f"ticker_list via parquet ({sub}): {len(tickers)}종목")
+                        return sorted(set(tickers))
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         return []

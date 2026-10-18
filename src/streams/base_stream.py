@@ -99,6 +99,57 @@ class BaseStream(ABC):
             }
         """
 
+    def _compute_standard_performance(self, returns_override: Optional[List[float]] = None) -> Dict[str, Any]:
+        """[Dynamic Empirical Performance] 하드코딩 배제: 실제 수익률 이력 및 Laplace-Beta(2.5, 2.5) 사전분포 기반 동적 성과 산출."""
+        import math
+        raw_returns = returns_override if returns_override is not None else (
+            getattr(self, '_daily_returns', None)
+            or getattr(self, '_pnl_history', None)
+            or self._daily_pnl
+        )
+        rets = [float(r) for r in (raw_returns or []) if r is not None]
+        n = len(rets)
+        wins = sum(1 for r in rets if r > 0)
+        # Laplace-Beta(2.5, 2.5) empirical Bayes smoothing (0.50 neutral prior when n == 0)
+        win_rate = round((wins + 2.5) / (n + 5.0), 4)
+
+        if n >= 2:
+            mean_r = sum(rets) / n
+            var_r = sum((r - mean_r) ** 2 for r in rets) / (n - 1)
+            std_r = math.sqrt(max(var_r, 1e-12))
+            sharpe = round((mean_r / std_r) * math.sqrt(252), 3) if std_r > 1e-9 else 0.0
+        else:
+            sharpe = 0.0
+
+        cum_prod = 1.0
+        peak = 1.0
+        max_dd = 0.0
+        for r in rets:
+            # Handle both fraction (-0.01) and percentage (-1.0) conventions safely
+            r_frac = r / 100.0 if abs(r) > 0.5 else r
+            cum_prod *= max(0.01, 1.0 + r_frac)
+            if cum_prod > peak:
+                peak = cum_prod
+            dd = (cum_prod / peak - 1.0) * 100.0
+            if dd < max_dd:
+                max_dd = dd
+        cum_ret_pct = round((cum_prod - 1.0) * 100.0, 2) if n > 0 else 0.0
+        mdd_pct = round(max_dd, 2)
+
+        return {
+            'stream_id': self.stream_id,
+            'daily_returns': rets,
+            'cumulative_return_pct': cum_ret_pct,
+            'total_return': cum_ret_pct,
+            'sharpe': sharpe,
+            'max_drawdown_pct': mdd_pct,
+            'mdd_pct': mdd_pct,
+            'win_rate': win_rate,
+            'total_trades': n,
+            'active_positions': len(getattr(self, '_positions', []) or []),
+            'score': round(max(0.1, min(2.0, 0.5 + sharpe * 0.25)), 4),
+        }
+
     def is_active(self, current_time: Optional[datetime]=None) -> bool:
         """현재 시간에 스트림이 활성화 상태인지 확인.
 

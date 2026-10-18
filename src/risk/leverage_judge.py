@@ -86,7 +86,7 @@ class LeverageJudge:
         """
         if not cfg.get('leverage.enabled', True):
             return {'leverage_level': 1, 'inverse_allowed': False, 'reason': '레버리지 비활성화'}
-        leverage = 2 if regime in ('bull', 'caution') else 1
+        leverage = 1
         reasons = []
         min_sharpe_3x = cfg.get('leverage.3x_min_sharpe', 2.0)
         max_mdd_3x = cfg.get('leverage.3x_max_mdd_pct', -3.0)
@@ -189,7 +189,7 @@ class LeverageJudge:
             qty = pos.get('quantity', pos.get('qty', 0))
             if qty <= 0:
                 continue
-            entry_price = float(pos.get('entry_price', 0))
+            entry_price = float(pos.get('entry_price') or pos.get('avg_price', 0) or 0)
             current_price = float(pos.get('current_price', 0))
             if entry_price <= 0 or current_price <= 0:
                 continue
@@ -232,7 +232,7 @@ class LeverageJudge:
                 reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
             if reason:
-                exit_orders.append({'stream_id': stream_id, 'ticker': ticker, 'name': pos.get('name', ''), 'direction': 'short', 'amount_krw': pos.get('amount', 0), 'price': current_price, 'confidence': 1.0, 'strategy': 'etf_dynamic_exit', 'reason': reason, 'sell_type': 'etf_stop', 'urgency': urgency, 'pos_key': pos_key, 'pnl_pct': pnl_pct})
+                exit_orders.append({'stream_id': stream_id, 'ticker': ticker, 'name': pos.get('name', ''), 'action': 'sell', 'direction': 'sell', 'quantity': int(qty), 'amount_krw': pos.get('amount') or pos.get('eval_krw') or round(qty * current_price), 'price': current_price, 'confidence': 1.0, 'strategy': 'etf_dynamic_exit', 'reason': reason, 'sell_type': 'etf_stop', 'urgency': urgency, 'pos_key': pos_key, 'pnl_pct': pnl_pct})
         active_keys = set(positions.keys())
         for key in list(self.etf_state.keys()):
             if key not in active_keys or positions.get(key, {}).get('quantity', positions.get(key, {}).get('qty', 0)) <= 0:

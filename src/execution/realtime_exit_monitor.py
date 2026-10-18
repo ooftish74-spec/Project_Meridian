@@ -309,7 +309,7 @@ class RealtimeExitMonitor:
             self._exit_in_progress = True
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
-            initial_capital = _cfg_get('portfolio.initial_capital', 100000000)
+            initial_capital = _cfg_get('portfolio.initial_capital', 20_000_000)
             with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
                 with self._prices_lock:
                     prices = dict(self._latest_prices)
@@ -322,10 +322,11 @@ class RealtimeExitMonitor:
                 regime = self._load_regime()
                 sell_orders = mgr.check_exit_conditions(regime)
                 if sell_orders:
+                    # [L4-03] shadow_portfolio.json 청산 주문을 실계좌 ExecutionEngine(mode='live')로 송출하는 치명적 혼선 차단
+                    # (실계좌 장중 청산은 run_live_trader_daemon.py의 UniversalExitEngine이 kis_portfolio.json SSOT 기반으로 전담)
                     try:
                         from src.execution.execution_engine import ExecutionEngine
-                        mode = _cfg_get('execution.current_mode', 'live')
-                        ee = ExecutionEngine(mode=mode)
+                        ee = ExecutionEngine(mode='shadow')
                         auto_orders = []
                         manual_orders = []
                         for so in sell_orders:
@@ -342,9 +343,9 @@ class RealtimeExitMonitor:
                                 send_emergency_page(f"🚨 [FATAL] {e} at realtime_exit_monitor.py", exc_info=e)
                         if auto_orders:
                             ee_result = ee.execute(auto_orders, portfolio=mgr.get_summary())
-                            logger.info(f"  ⚡ ExecutionEngine (Intraday): {ee_result.n_filled}/{ee_result.n_orders} 체결 완료 (회수된 현금은 리스크 관리 및 자본 보존을 위해 100% 현금 동결 보존)")
+                            logger.info(f"  ⚡ ExecutionEngine (Shadow TCA): {ee_result.n_filled}/{ee_result.n_orders} 시뮬레이션 완료")
                     except Exception as ee_err:
-                        logger.critical(f"  ❌ ExecutionEngine (Intraday) 연동 실패: {ee_err}", exc_info=True)
+                        logger.critical(f"  ❌ ExecutionEngine (Shadow TCA) 연동 실패: {ee_err}", exc_info=True)
                         send_emergency_page(f"🚨 [FATAL] {ee_err} at realtime_exit_monitor.py", exc_info=ee_err)
                     etf_comm = _cfg_get('execution.etf_commission_rate', 0.00015)
                     s1_sells = [s for s in sell_orders if s.get('stream_id') == 'S1']
@@ -440,7 +441,7 @@ class RealtimeExitMonitor:
         """
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
-            initial_capital = _cfg_get('portfolio.initial_capital', 100000000)
+            initial_capital = _cfg_get('portfolio.initial_capital', 20_000_000)
             with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
                 alert_margin = _cfg_get('monitor.alert_margin_pct', 10)
                 cfg = DynamicConfig() if DynamicConfig else None
@@ -491,7 +492,7 @@ class RealtimeExitMonitor:
                                 sl_pct = min(sl_pct if sl_pct is not None else -0.012, _whipsaw_sl_pct)
                         except Exception:
                             pass
-                    else:
+                    if sl_pct is None or tp_pct is None:
                         vix = 20.0
                         try:
                             import json as _fj
@@ -506,8 +507,10 @@ class RealtimeExitMonitor:
                         daily_vol = vix / 100.0 / math.sqrt(252)
                         dyn_sl_pct = -daily_vol * 1.5
                         dyn_tp_pct = daily_vol * 3.0
-                        sl_pct = dyn_sl_pct if sl_pct is None else dyn_sl_pct
-                        tp_pct = dyn_tp_pct if tp_pct is None else dyn_tp_pct
+                        if sl_pct is None:
+                            sl_pct = dyn_sl_pct
+                        if tp_pct is None:
+                            tp_pct = dyn_tp_pct
                     az = AlertZone(pos_key=pos_key, ticker=ticker, stream_id=stream_id, avg_price=avg_price, sl_pct=sl_pct, tp_pct=tp_pct, alert_margin_pct=alert_margin)
                     new_zones[pos_key] = az
                     logger.debug(f"    Alert Zone [{stream_id}:{ticker}]: SL=₩{az.sl_price:,.0f} ({sl_pct * 100:+.2f}%), TP=₩{az.tp_price:,.0f} ({tp_pct * 100:+.2f}%), AlertSL=₩{az.sl_alert_price:,.0f}, AlertTP=₩{az.tp_alert_price:,.0f}")
@@ -536,9 +539,11 @@ class RealtimeExitMonitor:
                 svc = KISPriceService()
                 for ticker in missing:
                     try:
-                        p = svc.get_current_price(ticker)
+                        p = svc.get_price_float(ticker) if hasattr(svc, 'get_price_float') else svc.get_current_price(ticker)
+                        if isinstance(p, dict):
+                            p = float(p.get('price', 0) or 0)
                         if p and p > 0:
-                            prices[ticker] = p
+                            prices[ticker] = float(p)
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                         import logging
                         logging.getLogger(__name__).debug(f"Targeted fallback: {e}")

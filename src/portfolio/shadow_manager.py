@@ -669,14 +669,26 @@ class ShadowPortfolioManager:
             del local_pos[k]
             changed = True
             
+        _kp_holdings = {}
+        _kp_nav = 0.0
+        try:
+            _kp_path = _RESULTS / 'kis_portfolio.json'
+            if _kp_path.exists():
+                _kp_raw = json.loads(_kp_path.read_text(encoding='utf-8'))
+                _kp_holdings = _kp_raw.get('holdings', {}) or {}
+                _kp_nav = float(_kp_raw.get('total_nav', _kp_raw.get('nav', 0.0)) or 0.0)
+        except Exception:
+            pass
+
         for t, live_qty in live_positions.items():
             loc_qty = local_aggregated.get(t, 0)
             diff = live_qty - loc_qty
             recon_key = f"S_RECON:{t}"
             dtls = (position_details or {}).get(t, {})
-            avg_p = dtls.get('entry_price', 0.0)
-            cur_p = dtls.get('current_price', 0.0)
-            pnl_p = dtls.get('pnl_pct', 0.0)
+            _kp_h = _kp_holdings.get(str(t), {}) if isinstance(_kp_holdings, dict) else {}
+            avg_p = float(dtls.get('entry_price', 0.0) or _kp_h.get('avg_price', 0.0) or 0.0)
+            cur_p = float(dtls.get('current_price', 0.0) or _kp_h.get('current_price', 0.0) or avg_p or 0.0)
+            pnl_p = float(dtls.get('pnl_pct', 0.0) or _kp_h.get('return_pct', 0.0) or 0.0)
 
             matching_keys = [k for k, p in local_pos.items() if p.get('ticker') == t]
             if matching_keys:
@@ -689,6 +701,8 @@ class ShadowPortfolioManager:
                     if cur_p > 0:
                         p['current_price'] = cur_p
                         p['market_value'] = cur_p * p.get('quantity', 0)
+                        if not p.get('amount') or float(p.get('amount', 0.0)) <= 0:
+                            p['amount'] = (avg_p if avg_p > 0 else cur_p) * p.get('quantity', 0)
                         changed = True
                     if pnl_p != 0:
                         p['pnl_pct'] = pnl_p
@@ -697,10 +711,10 @@ class ShadowPortfolioManager:
             elif diff > 0:
                 logger.critical(f"  🚨 [RECON] KIS 초과 수량 발견 (Zombie). {recon_key}에 {diff}주 (매수가=${avg_p}, 현재가=${cur_p}, PnL={pnl_p}%) 강제 편입!")
                 local_pos[recon_key] = {
-                    'stream_id': 'S_RECON', 'ticker': t, 'quantity': diff,
+                    'stream_id': _kp_h.get('stream_id', 'S_RECON'), 'ticker': t, 'quantity': diff,
                     'entry_price': avg_p, 'avg_price': avg_p, 'current_price': cur_p,
-                    'amount': avg_p * diff, 'market_value': cur_p * diff,
-                    'unrealized_pnl': (cur_p - avg_p) * diff, 'pnl_pct': pnl_p,
+                    'amount': (avg_p if avg_p > 0 else cur_p) * diff, 'market_value': cur_p * diff,
+                    'unrealized_pnl': (cur_p - avg_p) * diff if avg_p > 0 and cur_p > 0 else 0.0, 'pnl_pct': pnl_p,
                     'sl_pct': -1.15
                 }
                 changed = True
@@ -708,6 +722,12 @@ class ShadowPortfolioManager:
         if live_cash > 0 and abs(self.data.get('cash', 0) - live_cash) > 10:
             logger.critical(f"  🚨 [RECON] 현금 강제 동기화: {self.data.get('cash',0)} -> {live_cash}")
             self.data['cash'] = live_cash
+            changed = True
+
+        if _kp_nav > 0 and float(self.data.get('total_nav', 0.0) or 0.0) <= 0:
+            self.data['total_nav'] = _kp_nav
+            self.data['nav'] = _kp_nav
+            self.data['virtual_nav'] = _kp_nav
             changed = True
             
         if changed:
@@ -738,6 +758,9 @@ class ShadowPortfolioManager:
     @property
     def nav(self) -> float:
         return self.data['virtual_nav']
+
+    def get_total_equity(self) -> float:
+        return float(self.data.get('virtual_nav') or self.data.get('total_nav') or self.data.get('cash') or 0.0)
 
     # ═══════════════════════════════════════
     # Mark-to-Market
@@ -1974,7 +1997,7 @@ class ShadowPortfolioManager:
             # pos_key가 'S4:005930' 형태일 경우 stream_id 추출
             if ':' in pos_key:
                 _extracted_sid = pos_key.split(':')[0]
-                if _extracted_sid in ('S1','S2','S3','S4','S5','H'):
+                if _extracted_sid.startswith('S') or _extracted_sid == 'H':
                     stream_id = _extracted_sid
             strategy = pos.get('strategy', '')
 
@@ -2025,7 +2048,7 @@ class ShadowPortfolioManager:
         return self.execute_sells(sell_orders, current_prices, commission_rate=_panic_slippage)
 
     def execute_sells(self, sell_orders: List[Dict],
-                      prices: Dict[str, float],
+                      prices: Dict[str, float] = None,
                       commission_rate: float = 0.00015) -> Dict:
         """
         매도 주문 체결. pos_key 기반으로 포지션 삭제.
@@ -2043,6 +2066,12 @@ class ShadowPortfolioManager:
         Returns:
             체결 결과 요약
         """
+        if prices is None:
+            prices = {
+                str(o.get('ticker', '')): float(o.get('price', o.get('sell_price', o.get('entry_price', 0))) or 0)
+                for o in (sell_orders or [])
+                if isinstance(o, dict) and o.get('ticker')
+            }
         from src.risk.liquidity_monitor import LiquidityMonitor
         lm = LiquidityMonitor()
         

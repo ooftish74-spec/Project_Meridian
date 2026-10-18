@@ -62,7 +62,7 @@ class DataFreshnessValidator:
         logger.warning(f"🚨 [Freshness Gate] 실패: {reason}")
         try:
             from src.infra.alert_manager import AlertManager
-            AlertManager().report_error(source='DataFreshnessValidator', message=f"데이터 최신화 실패로 인한 프로세스 차단: {reason}', severity='critical")
+            AlertManager().report_error(source='DataFreshnessValidator', message=f"데이터 최신화 실패로 인한 프로세스 차단: {reason}", severity='critical')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")

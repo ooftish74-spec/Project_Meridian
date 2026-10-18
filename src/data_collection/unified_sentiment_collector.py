@@ -53,9 +53,9 @@ NAVER_QUERY_MAP = {'market': {'queries': ['코스피 전망', '코스닥 전망'
 POSITIVE_KW = {'호실적': 2.0, '어닝서프라이즈': 2.0, '실적 개선': 1.5, '매출 증가': 1.5, '영업이익 증가': 1.8, '사상 최대': 2.0, '흑자 전환': 2.0, '성장': 1.0, '턴어라운드': 1.5, '수주': 1.2, '대형 계약': 1.5, '신고가': 1.5, '상한가': 1.5, '급등': 1.3, '목표가 상향': 1.8, '매수 추천': 1.5, '저평가': 1.2, '상승': 0.8, '강세': 1.0, '반등': 1.0, '돌파': 0.8, '외국인 매수': 1.5, '기관 매수': 1.3, '자사주 매입': 1.5, '금리 인하': 1.3, '경기 회복': 1.2, '수출 증가': 1.3, 'AI 수혜': 1.5, '반도체 호황': 1.8, 'HBM': 1.3}
 NEGATIVE_KW = {'어닝쇼크': -2.0, '실적 악화': -1.5, '영업 적자': -1.8, '매출 감소': -1.5, '적자 전환': -2.0, '적자 확대': -1.8, '실적 부진': -1.5, '구조조정': -1.5, '감원': -1.3, '급락': -1.5, '폭락': -2.0, '하한가': -2.0, '목표가 하향': -1.8, '매도 추천': -1.5, '약세': -1.0, '하락': -0.8, '외국인 매도': -1.5, '기관 매도': -1.3, '공매도': -1.5, '금리 인상': -1.3, '경기 침체': -1.5, '인플레이션': -1.0, '무역 전쟁': -1.3, '관세': -1.2, '제재': -1.5, '소송': -1.2, '과징금': -1.3, '반도체 불황': -1.8, '수요 둔화': -1.3}
 EN_POS = ['surge', 'rally', 'gain', 'jump', 'rise', 'bull', 'upgrade', 'record high', 'optimism', 'recovery', 'boost', 'soar', 'breakthrough', 'fda approval', 'partnership', 'contract award', 'defense order', 'ai adoption', 'clinical trial success', 'quantum milestone', 'renewable expansion']
-EN_NEG = ['crash', 'plunge', 'drop', 'fall', 'fear', 'war', 'crisis', 'recession', 'sell-off", "sanctions', 'tariff", "inflation', 'downgrade', 'slump', 'collapse', 'conflict', 'threat', 'clinical trial fail', 'ai regulation', 'arms embargo', 'defense cut', 'nuclear proliferation', 'cyber attack', 'data breach', 'supply disruption']
+EN_NEG = ['crash', 'plunge', 'drop', 'fall', 'fear', 'war', 'crisis', 'recession', 'sell-off', 'sanctions', 'tariff', 'inflation', 'downgrade', 'slump', 'collapse', 'conflict', 'threat', 'clinical trial fail', 'ai regulation', 'arms embargo', 'defense cut', 'nuclear proliferation', 'cyber attack', 'data breach', 'supply disruption']
 RSS_SOURCES = {'bloomberg': 'https://www.bloomberg.com/feeds/markets/news.rss', 'wsj': 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', 'ft': 'https://www.ft.com/?format=rss', 'seeking_alpha': 'https://seekingalpha.com/feed.xml', 'marketwatch': 'https://www.marketwatch.com/rss/topstories', 'investing': 'https://www.investing.com/rss/news.rss'}
-GEO_RISK_KW = {'high': ['war', 'attack', 'invasion', 'blockade', 'nuclear', 'sanctions', 'missile', 'military strike', 'tariff war', 'embargo', 'arms race', 'hypersonic', 'drone strike', 'cyber warfare', 'nuclear test', 'weapons of mass', 'military buildup'], 'medium': ['tension', 'conflict', 'protest', 'coup', 'threat', 'geopolitical', 'escalation', 'retaliation', 'tariff", "defense spending', 'arms deal', 'military exercise', 'chip ban', 'export control', 'tech decoupling', 'ai weapon', 'autonomous weapon'], 'low': ['negotiation', 'diplomacy', 'summit', 'ceasefire', 'deal', 'agreement', 'de-escalation', 'defense cooperation', 'arms reduction', 'treaty']}
+GEO_RISK_KW = {'high': ['war', 'attack', 'invasion', 'blockade', 'nuclear', 'sanctions', 'missile', 'military strike', 'tariff war', 'embargo', 'arms race', 'hypersonic', 'drone strike', 'cyber warfare', 'nuclear test', 'weapons of mass', 'military buildup'], 'medium': ['tension', 'conflict', 'protest', 'coup', 'threat', 'geopolitical', 'escalation', 'retaliation', 'tariff', 'defense spending', 'arms deal', 'military exercise', 'chip ban', 'export control', 'tech decoupling', 'ai weapon', 'autonomous weapon'], 'low': ['negotiation', 'diplomacy', 'summit', 'ceasefire', 'deal', 'agreement', 'de-escalation', 'defense cooperation', 'arms reduction', 'treaty']}
 
 class UnifiedSentimentCollector:
     """4개 감성 모듈을 통합한 단일 수집기."""
@@ -280,6 +280,9 @@ class UnifiedSentimentCollector:
                         break
         except Exception as e:
             logger.error(f"  KRX 선물: {e}", exc_info=True)
+        return result
+
+    def _collect_vix_term(self) -> Dict:
         try:
             from src.utils.google_finance_collector import GoogleFinanceCollector
             v = GoogleFinanceCollector.get_vix()

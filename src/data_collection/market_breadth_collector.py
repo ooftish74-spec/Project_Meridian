@@ -39,13 +39,51 @@ class MarketBreadthCollector:
         self._data = self._load_cache()
 
     def collect_vkospi(self) -> Dict:
-        """VKOSPI 수집 — 로컬 캐시 및 FRED/KRX 참조 (deprecated yfinance 분리)"""
+        """VKOSPI 수집 — signal_cache, 실시간 VIX, KRX 실현 변동성 통합"""
         try:
-            vix_now = float(self._data.get('vix', 18.5))
-            vix_prev = float(self._data.get('vix_prev', 18.0))
-            vix_ma20 = float(self._data.get('vix_ma20', 18.2))
-            vkospi = round(vix_now * 0.85, 2)
-            result = {'vkospi': vkospi, 'vix': round(vix_now, 2), 'vkospi_prev': round(vix_prev * 0.85, 2), 'vkospi_change': round((vix_now / vix_prev - 1) * 100, 2), 'vkospi_ma20': round(vix_ma20 * 0.85, 2), 'timestamp': datetime.now().isoformat(), 'source': 'local_vix'}
+            vix_now = float(self._data.get('vix', 0.0) or 0.0)
+            vkospi_direct = 0.0
+            sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+            if sc_path.exists():
+                try:
+                    sc = json.loads(sc_path.read_text(encoding='utf-8'))
+                    if float(sc.get('vix', 0) or 0) > 0:
+                        vix_now = float(sc['vix'])
+                    if float(sc.get('vkospi', 0) or 0) > 0:
+                        vkospi_direct = float(sc['vkospi'])
+                except Exception:
+                    pass
+            if vix_now <= 0:
+                try:
+                    from src.utils.google_finance_collector import GoogleFinanceCollector
+                    live_vix = GoogleFinanceCollector.get_vix()
+                    if live_vix > 0:
+                        vix_now = live_vix
+                except Exception:
+                    pass
+            if vix_now <= 0:
+                vix_now = 18.5
+            vix_prev = float(self._data.get('vix_prev', vix_now) or vix_now)
+            vix_ma20 = float(self._data.get('vix_ma20', 18.2) or 18.2)
+            realized_est = self._estimate_vkospi_from_realized().get('vkospi', 0.0)
+            if realized_est and 5.0 <= realized_est <= 100.0:
+                vkospi = round(0.6 * float(realized_est) + 0.4 * (vix_now * 0.95), 2)
+                src = 'realized_and_vix_blend'
+            elif vkospi_direct and 5.0 <= vkospi_direct <= 100.0:
+                vkospi = round(vkospi_direct, 2)
+                src = 'signal_cache'
+            else:
+                vkospi = round(vix_now * 0.85, 2)
+                src = 'local_vix'
+            result = {
+                'vkospi': vkospi,
+                'vix': round(vix_now, 2),
+                'vkospi_prev': round(vix_prev * 0.85, 2),
+                'vkospi_change': round((vix_now / max(vix_prev, 1e-6) - 1) * 100, 2),
+                'vkospi_ma20': round(vix_ma20 * 0.85, 2),
+                'timestamp': datetime.now().isoformat(),
+                'source': src,
+            }
             if vkospi >= 30:
                 result['level'] = 'extreme_fear'
             elif vkospi >= 25:
@@ -56,10 +94,10 @@ class MarketBreadthCollector:
                 result['level'] = 'greed'
             else:
                 result['level'] = 'extreme_greed'
-                self._data['vkospi'] = result
-                _lvl_r = result.get('level', '')
-                logger.info(f"  ✅ VKOSPI: {vkospi:.1f} (VIX={vix_now:.1f}, {_lvl_r})")
-                return result
+            self._data['vkospi'] = result
+            _lvl_r = result.get('level', '')
+            logger.info(f"  ✅ VKOSPI: {vkospi:.1f} (VIX={vix_now:.1f}, {_lvl_r}, src={src})")
+            return result
         except Exception as e:
             logger.warning(f"  VKOSPI 수집 실패: {e}", exc_info=True)
         return self._estimate_vkospi_from_realized()
@@ -67,145 +105,185 @@ class MarketBreadthCollector:
     def _estimate_vkospi_from_realized(self) -> Dict:
         """KOSPI 실현 변동성에서 VKOSPI 추정"""
         try:
-            kospi_csv = _PROJECT_ROOT / 'data' / 'raw' / 'indices' / 'KOSPI.csv'
-            if kospi_csv.exists():
-                df = pd.read_csv(kospi_csv, index_col=0, parse_dates=True)
-                close = df['Close'].dropna().tail(60)
-                if len(close) >= 20:
-                    realized = float(close.pct_change().tail(20).std() * np.sqrt(252) * 100)
-                    estimated = realized * 1.15
-                    result = {'vkospi': round(estimated, 2), 'vkospi_prev': round(estimated, 2), 'vkospi_change': 0, 'vkospi_ma20': round(estimated, 2), 'level': 'estimated', 'source': 'realized_vol', 'timestamp': datetime.now().isoformat()}
-                    self._data['vkospi'] = result
-                    logger.info(f"  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반)")
-                    return result
+            df = None
+            for pq_path in [
+                _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet',
+                _PROJECT_ROOT / 'data' / 'korea_stocks' / 'prices' / '069500.parquet',
+                _PROJECT_ROOT / 'data' / 'historical_10y' / 'kr_069500.parquet',
+            ]:
+                if pq_path.exists():
+                    df = pd.read_parquet(pq_path)
+                    break
+            if df is None:
+                kospi_csv = _PROJECT_ROOT / 'data' / 'raw' / 'indices' / 'KOSPI.csv'
+                if kospi_csv.exists():
+                    df = pd.read_csv(kospi_csv, index_col=0, parse_dates=True)
+            if df is not None and not df.empty:
+                close_col = 'Close' if 'Close' in df.columns else ('close' if 'close' in df.columns else None)
+                if close_col:
+                    close = pd.to_numeric(df[close_col], errors='coerce').dropna().tail(60)
+                    if len(close) >= 20:
+                        realized = float(close.pct_change().tail(20).std() * np.sqrt(252) * 100)
+                        estimated = realized * 1.15
+                        result = {'vkospi': round(estimated, 2), 'vkospi_prev': round(estimated, 2), 'vkospi_change': 0, 'vkospi_ma20': round(estimated, 2), 'level': 'estimated', 'source': 'realized_vol', 'timestamp': datetime.now().isoformat()}
+                        self._data['vkospi'] = result
+                        logger.info(f"  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반)")
+                        return result
         except Exception as e:
             logger.warning(f"  VKOSPI 추정 실패: {e}", exc_info=True)
         return {'vkospi': 20.0, 'level': 'unknown', 'source': 'default'}
 
     def collect_put_call_ratio(self) -> Dict:
-        """KRX 200 옵션 Put/Call 비율"""
+        """KRX 200 옵션 Put/Call 비율 (1순위: KRX 옵션 지수, 2순위: 인버스/레버리지 ETF 거래대금 헤지 비율)"""
+        end_date = datetime.now()
+        end_str = end_date.strftime('%Y%m%d')
         try:
-            from pykrx import stock as pykrx_stock
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=90)
-            end_str = end_date.strftime('%Y%m%d')
-            start_str = start_date.strftime('%Y%m%d')
-            try:
-                put_data = pykrx_stock.get_index_ohlcv(start_str, end_str, '1006')
-                call_data = pykrx_stock.get_index_ohlcv(start_str, end_str, '1005')
-                if put_data is not None and call_data is not None and (not put_data.empty) and (not call_data.empty):
-                    df = pd.DataFrame({'put': put_data['거래량'], 'call': call_data['거래량']}).dropna()
-                    df = df[df['call'] > 0]
-                    df['pc_ratio'] = df['put'] / df['call']
-                    if not df.empty:
-                        pc_ratio = float(df['pc_ratio'].iloc[-1])
-                        put_vol = float(df['put'].iloc[-1])
-                        call_vol = float(df['call'].iloc[-1])
-                        mean = df['pc_ratio'].mean()
-                        std = df['pc_ratio'].std()
-                        if pd.isna(std) or std == 0:
-                            std = 0.001
-                        z_score = float((pc_ratio - mean) / std)
-                        result = {'put_call_ratio': round(pc_ratio, 3), 'put_volume': int(put_vol), 'call_volume': int(call_vol), 'z_score': round(z_score, 2), 'date': end_str, 'timestamp': datetime.now().isoformat()}
-                        if z_score > 2.0:
-                            result['sentiment'] = 'extreme_fear'
-                        elif z_score > 1.0:
-                            result['sentiment'] = 'fear'
-                        elif z_score > -1.0:
-                            result['sentiment'] = 'neutral'
-                        elif z_score > -2.0:
-                            result['sentiment'] = 'greed'
-                        else:
-                            result['sentiment'] = 'extreme_greed'
-                        self._data['put_call'] = result
-                        _sent_val = result.get('sentiment', '')
-                        logger.info(f"  ✅ P/C Ratio: {pc_ratio:.3f} (z={z_score:.2f}, {_sent_val})")
-                        return result
-            except KeyError as ke:
-                logger.warning(f"  ⚠️ P/C Ratio 수집 불가 (KRX API Blocked/Format Changed): {ke}")
-                return {'put_call_ratio': 1.0, 'sentiment': 'unknown', 'source': 'KRX_API_BLOCKED'}
-            except Exception as _e:
-                logger.error(f"  P/C Ratio 데이터 로드 중 예외: {_e}", exc_info=True)
+            inv1_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_114800.parquet'
+            inv2_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_252670.parquet'
+            bull1_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
+            bull2_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_122630.parquet'
+            if inv1_pq.exists() and inv2_pq.exists() and bull1_pq.exists() and bull2_pq.exists():
+                def _load_val_series(p: Path) -> pd.Series:
+                    d = pd.read_parquet(p)
+                    d.columns = [str(c).lower() for c in d.columns]
+                    if 'date' in d.columns:
+                        d['date'] = pd.to_datetime(d['date'], errors='coerce')
+                        d = d.dropna(subset=['date']).set_index('date').sort_index()
+                    else:
+                        d.index = pd.to_datetime(d.index, errors='coerce')
+                        d = d.sort_index()
+                    c = pd.to_numeric(d.get('close'), errors='coerce')
+                    v = pd.to_numeric(d.get('volume'), errors='coerce')
+                    return (c * v).dropna().tail(90)
+
+                s_put = _load_val_series(inv1_pq).add(_load_val_series(inv2_pq), fill_value=0)
+                s_call = _load_val_series(bull1_pq).add(_load_val_series(bull2_pq), fill_value=0)
+                df_pc = pd.DataFrame({'put': s_put, 'call': s_call}).dropna()
+                df_pc = df_pc[(df_pc['put'] > 0) & (df_pc['call'] > 0)]
+                if len(df_pc) >= 20:
+                    raw_ratio = df_pc['put'] / df_pc['call']
+                    mean_r = float(raw_ratio.tail(60).mean())
+                    std_r = max(float(raw_ratio.tail(60).std()), 1e-4)
+                    latest_r = float(raw_ratio.iloc[-1])
+                    z_score = float((latest_r - mean_r) / std_r)
+                    norm_pc = float(np.clip(1.0 + 0.25 * z_score, 0.4, 2.0))
+                    if z_score > 2.0:
+                        sent = 'extreme_fear'
+                    elif z_score > 1.0:
+                        sent = 'fear'
+                    elif z_score > -1.0:
+                        sent = 'neutral'
+                    elif z_score > -2.0:
+                        sent = 'greed'
+                    else:
+                        sent = 'extreme_greed'
+                    result = {
+                        'put_call_ratio': round(norm_pc, 3),
+                        'raw_etf_hedge_ratio': round(latest_r, 3),
+                        'put_volume': int(df_pc['put'].iloc[-1]),
+                        'call_volume': int(df_pc['call'].iloc[-1]),
+                        'z_score': round(z_score, 2),
+                        'sentiment': sent,
+                        'source': 'krx_etf_hedge_ratio',
+                        'date': df_pc.index[-1].strftime('%Y%m%d') if hasattr(df_pc.index[-1], 'strftime') else end_str,
+                        'timestamp': datetime.now().isoformat(),
+                    }
+                    self._data['put_call'] = result
+                    logger.info(f"  ✅ P/C Ratio (ETF Hedge Proxy): {norm_pc:.3f} (z={z_score:.2f}, {sent})")
+                    return result
         except Exception as e:
-            logger.warning(f"  P/C Ratio 수집 실패: {e}", exc_info=True)
-        return {'put_call_ratio': 1.0, 'sentiment': 'unknown', 'source': 'default'}
+            logger.warning(f"  P/C Ratio ETF Proxy 계산 실패: {e}", exc_info=True)
+        return {'put_call_ratio': 1.0, 'sentiment': 'neutral', 'source': 'default'}
 
     def collect_global_correlations(self) -> Dict:
-        """글로벌 자산 간 Rolling Correlation (20일)"""
+        """글로벌 자산 간 Rolling Correlation (20일) — 로컬 Parquet 시계열 기반"""
         try:
-            from datetime import datetime, timedelta
-            import yfinance as yf
-            end = datetime.now()
-            start = end - timedelta(days=60)
-            from src.data_collection.google_finance_collector import GoogleFinanceCollector
-            gfc = GoogleFinanceCollector()
-            tickers = {'KOSPI': '^KS11', 'SP500': '^GSPC', 'WTI': 'CL=F', 'GOLD': 'GC=F', 'US10Y': '^TNX'}
+            def _load_close_series(path: Path) -> Optional[pd.Series]:
+                if not path.exists():
+                    return None
+                df = pd.read_parquet(path)
+                df.columns = [str(c).lower() for c in df.columns]
+                if 'date' in df.columns:
+                    df['date'] = pd.to_datetime(df['date'], errors='coerce')
+                    df = df.dropna(subset=['date']).set_index('date')
+                else:
+                    df.index = pd.to_datetime(df.index, errors='coerce')
+                df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+                df = df[~df.index.duplicated(keep='last')].sort_index()
+                if 'close' not in df.columns:
+                    return None
+                s = pd.to_numeric(df['close'], errors='coerce').dropna().tail(120)
+                return s if len(s) >= 25 else None
+
+            us_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
+            kr_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+            asset_paths = {
+                'KOSPI': kr_dir / 'kr_069500.parquet',
+                'SP500': us_dir / 'SPY.parquet',
+                'DXY': us_dir / 'UUP.parquet',
+                'WTI': us_dir / 'USO.parquet',
+                'GOLD': us_dir / 'GLD.parquet',
+                'US10Y_BOND': us_dir / 'TLT.parquet',
+                'COPPER': us_dir / 'CPER.parquet',
+            }
             prices = {}
-            for name, ticker in tickers.items():
-                try:
-                    q = gfc.fetch_quote(ticker)
-                    if q and q.get('price'):
-                        prices[name] = pd.Series([float(q['price'])], index=[pd.Timestamp.now()])
-                except Exception as _e:
-                    logger.debug(f"Global correlation {name} fetch exception: {_e}")
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
-                    continue
-            try:
-                from fredapi import Fred
-                from src.utils.credential_manager import CredentialManager
-                _fred_key = CredentialManager().read_from_env('FRED_API_KEY') or ''
-                if _fred_key:
-                    _fred = Fred(api_key=_fred_key)
-                    _dxy = _fred.get_series('DTWEXBGS', observation_start=start.strftime('%Y-%m-%d'))
-                    if _dxy is not None and len(_dxy) >= 20:
-                        prices['DXY'] = _dxy
-            except Exception as _e:
-                logger.warning(f"  suppressed: {_e}", exc_info=True)
-            if 'DXY' not in prices:
-                try:
-                    _dxy_df = yf.download('DX=F', start=start, end=end, progress=False, timeout=10)
-                    if _dxy_df is not None and len(_dxy_df) > 0:
-                        close = _dxy_df['Close']
-                        if hasattr(close, 'columns'):
-                            close = close.iloc[:, 0]
-                        prices['DXY'] = close
-                except Exception as _e:
-                    logger.warning(f"  suppressed: {_e}", exc_info=True)
+            for name, p in asset_paths.items():
+                s = _load_close_series(p)
+                if s is not None:
+                    prices[name] = s
+
             if 'KOSPI' not in prices or len(prices) < 3:
                 return {'status': 'insufficient_data'}
-            df = pd.DataFrame(prices)
-            returns = df.pct_change(fill_method=None).dropna()
+
+            df = pd.DataFrame(prices).ffill(limit=3).dropna(how='all')
+            returns = df.pct_change(fill_method=None).dropna(subset=['KOSPI'])
+            if 'US10Y_BOND' in returns.columns:
+                returns['US10Y'] = -returns['US10Y_BOND']
+
             correlations = {}
             current_corr = {}
             for asset in ['SP500', 'DXY', 'WTI', 'GOLD', 'US10Y']:
                 if asset in returns.columns:
-                    rolling_corr = returns['KOSPI'].rolling(20).corr(returns[asset])
-                    if len(rolling_corr.dropna()) > 0:
-                        curr = float(rolling_corr.iloc[-1])
-                        avg = float(rolling_corr.tail(60).mean())
-                        current_corr[f"KOSPI_{asset}"] = round(curr, 3)
-                        correlations[f"KOSPI_{asset}"] = {'current': round(curr, 3), 'avg_60d': round(avg, 3), 'deviation': round(curr - avg, 3)}
+                    pair = returns[['KOSPI', asset]].dropna()
+                    if len(pair) >= 20:
+                        rolling_corr = pair['KOSPI'].rolling(20).corr(pair[asset]).dropna()
+                        if len(rolling_corr) > 0:
+                            curr = float(rolling_corr.iloc[-1])
+                            avg = float(rolling_corr.tail(60).mean())
+                            current_corr[f"KOSPI_{asset}"] = round(curr, 3)
+                            correlations[f"KOSPI_{asset}"] = {
+                                'current': round(curr, 3),
+                                'avg_60d': round(avg, 3),
+                                'deviation': round(curr - avg, 3),
+                            }
             sp_corr = current_corr.get('KOSPI_SP500', 0)
             dxy_corr = current_corr.get('KOSPI_DXY', 0)
-            gold_corr = current_corr.get('KOSPI_GOLD', 0)
-            if sp_corr > 0.5 and dxy_corr < -0.2:
+            if sp_corr > 0.4 and dxy_corr < -0.1:
                 risk_mode = 'risk_on'
-            elif sp_corr < 0.2 or dxy_corr > 0.3:
+            elif sp_corr < 0.15 or dxy_corr > 0.25:
                 risk_mode = 'risk_off'
             else:
                 risk_mode = 'neutral'
+
             copper_gold = None
-            if 'WTI' in prices and 'GOLD' in prices:
-                try:
-                    cg = prices['WTI'] / prices['GOLD']
-                    cg_ret = float(cg.iloc[-1] / cg.iloc[-20] - 1) if len(cg) > 20 else 0
-                    copper_gold = round(cg_ret, 4)
-                except Exception as _e:
-                    logger.warning(f"  suppressed: {_e}", exc_info=True)
-            result = {'correlations': correlations, 'current_corr': current_corr, 'risk_mode': risk_mode, 'copper_gold_momentum': copper_gold, 'timestamp': datetime.now().isoformat()}
+            if 'COPPER' in df.columns and 'GOLD' in df.columns:
+                cg = (df['COPPER'] / df['GOLD']).dropna()
+                if len(cg) >= 21:
+                    copper_gold = round(float(cg.iloc[-1] / cg.iloc[-21] - 1), 4)
+            elif 'WTI' in df.columns and 'GOLD' in df.columns:
+                cg = (df['WTI'] / df['GOLD']).dropna()
+                if len(cg) >= 21:
+                    copper_gold = round(float(cg.iloc[-1] / cg.iloc[-21] - 1), 4)
+
+            result = {
+                'correlations': correlations,
+                'current_corr': current_corr,
+                'risk_mode': risk_mode,
+                'copper_gold_momentum': copper_gold,
+                'timestamp': datetime.now().isoformat(),
+            }
             self._data['global_corr'] = result
-            logger.info(f"  ✅ 글로벌 상관관계: {risk_mode}, SP500={sp_corr:.2f}, DXY={dxy_corr:.2f}")
+            logger.info(f"  ✅ 글로벌 상관관계: {risk_mode}, SP500={sp_corr:.2f}, DXY={dxy_corr:.2f}, Cu/Au={copper_gold}")
             return result
         except Exception as e:
             logger.warning(f"  글로벌 상관관계 수집 실패: {e}", exc_info=True)

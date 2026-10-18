@@ -79,20 +79,50 @@ class OnlineBayesianParticleFilter:
             self.weights = np.ones(self.num_particles) / self.num_particles
 
         # Resampling (Effective Particle Number N_eff 검증)
-        n_eff = 1.0 / np.sum(self.weights ** 2)
+        n_eff = 1.0 / max(np.sum(self.weights ** 2), 1e-12)
         if n_eff < self.num_particles / 2.0:
             indices = np.random.choice(self.num_particles, size=self.num_particles, p=self.weights)
             self.particles = self.particles[indices]
             self.weights = np.ones(self.num_particles) / self.num_particles
 
+        # [Ergodic Markov Transition Kernel] 입자 멸종(Particle Degeneracy) 원천 차단
+        mutation_prob = float(cfg.get('bayesian_filter.transition_mutation_prob', 0.04))
+        if mutation_prob > 0.0:
+            mutate_mask = np.random.random(self.num_particles) < mutation_prob
+            n_mutate = int(np.sum(mutate_mask))
+            if n_mutate > 0:
+                self.particles[mutate_mask] = np.random.choice(
+                    self.states, size=n_mutate, p=[0.35, 0.30, 0.25, 0.10]
+                )
+
+        # 모든 상태에 최소 1개 이상의 입자 생존 보장 (Zero-Probability Lockout 방지)
+        missing_states = [st for st in self.states if not np.any(self.particles == st)]
+        if missing_states:
+            counts = {s: int(np.sum(self.particles == s)) for s in self.states}
+            majority_state = max(counts, key=counts.get)
+            maj_indices = np.where(self.particles == majority_state)[0]
+            for idx_offset, st in enumerate(missing_states):
+                if idx_offset < len(maj_indices):
+                    replace_idx = int(maj_indices[idx_offset])
+                else:
+                    replace_idx = idx_offset % self.num_particles
+                self.particles[replace_idx] = st
+                self.weights[replace_idx] = 1.0 / self.num_particles
+        self.weights /= max(np.sum(self.weights), 1e-12)
+
         # 상태별 확률 집계
-        prob_dict = {}
+        prob_dict: Dict[str, Any] = {}
+        posterior_map: Dict[str, float] = {}
         for st in self.states:
             mask = (self.particles == st)
-            prob_dict[f"p_{st}"] = float(np.sum(self.weights[mask]))
+            p_val = float(np.sum(self.weights[mask]))
+            prob_dict[f"p_{st}"] = p_val
+            posterior_map[st] = p_val
 
-        dominant_st = max(prob_dict, key=prob_dict.get).replace('p_', '')
+        dominant_st = max(posterior_map, key=posterior_map.get)
         prob_dict['dominant_regime'] = dominant_st
+        prob_dict['posterior'] = posterior_map
+        prob_dict['probabilities'] = dict(posterior_map)
 
         return prob_dict
 
@@ -113,7 +143,7 @@ class OnlineBayesianParticleFilter:
             return False
 
     def load_state(self, filepath: str) -> bool:
-        """디스크에서 베이지안 입자 필터 분포 복원."""
+        """디스크에서 베이지안 입자 필터 분포 복원 (입자 멸종 상태 감지 시 자동 복원)."""
         try:
             import json
             from pathlib import Path
@@ -125,8 +155,17 @@ class OnlineBayesianParticleFilter:
             saved_particles = data.get('particles', [])
             saved_weights = data.get('weights', [])
             if len(saved_particles) == self.num_particles and len(saved_weights) == self.num_particles:
-                self.particles = np.array(saved_particles)
-                self.weights = np.array(saved_weights)
+                arr_p = np.array(saved_particles)
+                arr_w = np.array(saved_weights, dtype=float)
+                # 입자 멸종(2개 이하 상태로 붕괴) 감지 시 에르고딕 다양성 주입
+                unique_states = set(arr_p.tolist())
+                if len(unique_states) < len(self.states):
+                    for idx_s, st in enumerate(self.states):
+                        if st not in unique_states:
+                            arr_p[idx_s * 2:(idx_s + 1) * 2] = st
+                    arr_w = np.ones(self.num_particles) / self.num_particles
+                self.particles = arr_p
+                self.weights = arr_w / max(np.sum(arr_w), 1e-12)
                 logger.info(f"📂 [Bayesian Filter] 디스크 입자 분포 복원 성공: {filepath}")
                 return True
         except Exception as e:

@@ -200,14 +200,15 @@ class MeridianTelegram:
         me = _load_json('measurement_engine.json')
         sp = _load_json('shadow_portfolio.json')
         if nav is None:
-            nav = sp.get('nav', me.get('portfolio', {}).get('nav', 0))
+            nav = sp.get('total_nav', sp.get('nav', me.get('views', {}).get('portfolio', me.get('portfolio', {})).get('nav', 0)))
         if returns_pct is None:
-            daily = me.get('daily_series', [])
+            daily = me.get('daily_series', sp.get('daily_snapshots', []))
             returns_pct = daily[-1].get('daily_return_pct', 0) if daily else 0
         if n_positions is None:
             n_positions = len(sp.get('positions', {}))
-        msg = f"{_TAG} 📈 Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  NAV: ₩{nav:,.0f}' if nav else '"
-        msg += f'\n  Return: {returns_pct:+.2f}%\n  Positions: {n_positions}\n━━━━━━━━━━━━━━━━━━━━'
+        nav_str = f"₩{nav:,.0f}" if nav else "N/A"
+        msg = f"{_TAG} 📈 Daily Report ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  NAV: {nav_str}"
+        msg += f"\n  Return: {returns_pct:+.2f}%\n  Positions: {n_positions}\n━━━━━━━━━━━━━━━━━━━━"
         self._send(msg)
 
     def send_test(self):

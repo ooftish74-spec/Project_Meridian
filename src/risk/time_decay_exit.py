@@ -36,8 +36,8 @@ class TimeDecayExitEvaluator:
             return {'trigger': False, 'scale_out_pct': 0.0, 'reason': ''}
 
         entry_price = float(position.get('avg_price', position.get('entry_price', current_price)))
-        high_price = float(position.get('highest_price', max(entry_price, current_price)))
-        low_price = float(position.get('lowest_price', min(entry_price, current_price)))
+        high_price = float(position.get('highest_price') or position.get('peak_price') or max(entry_price, current_price))
+        low_price = float(position.get('lowest_price') or min(entry_price, current_price))
 
         price_range = abs(high_price - low_price)
         allowed_range = self.range_atr_mult * max(0.01, atr_val)

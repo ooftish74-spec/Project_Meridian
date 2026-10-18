@@ -230,26 +230,33 @@ def compute_stream_metrics():
                 daily_costs.append(cost)
                 regimes.append('caution')
 
-        # ── 3b. 미실현 수익률 (현재 보유 포지션) ──
-        # 각 포지션의 현재 P&L%를 하나의 "수익률 포인트"로 추가
-        for pos in pos_list:
-            pnl_pct = pos.get('pnl_pct', 0)
-            avg_price = pos.get('avg_price', 0)
-            current_price = pos.get('current_price', 0)
+        # 시계열 상관계수 전용 순차 일별 수익률 보존 (횡단면 보유포지션 제외)
+        ts_returns = list(daily_returns)
 
-            # pnl_pct가 0이지만 current_price != avg_price인 경우 직접 계산
-            if pnl_pct == 0 and avg_price > 0 and current_price > 0:
-                pnl_pct = (current_price - avg_price) / avg_price * 100
-
-            if pnl_pct != 0:
-                daily_returns.append(pnl_pct / 100)
+        # ── 3b. 미실현 수익률 (현재 보유 포지션 가중평균 1개 시점만 반영, 개별 종목 횡단면 나열 금지) ──
+        if pos_list:
+            tot_pos_cost = 0.0
+            tot_pos_pnl = 0.0
+            for pos in pos_list:
+                avg_price = float(pos.get('avg_price', 0) or 0)
+                current_price = float(pos.get('current_price', 0) or 0)
+                qty = float(pos.get('quantity', pos.get('qty', 0)) or 0)
+                cost_amt = float(pos.get('amount', avg_price * qty) or 0)
+                pnl_pct = float(pos.get('pnl_pct', 0) or 0)
+                if pnl_pct == 0 and avg_price > 0 and current_price > 0:
+                    pnl_pct = (current_price - avg_price) / avg_price * 100.0
+                if cost_amt > 0 and pnl_pct != 0:
+                    tot_pos_cost += cost_amt
+                    tot_pos_pnl += cost_amt * (pnl_pct / 100.0)
+            if tot_pos_cost > 0 and tot_pos_pnl != 0:
+                daily_returns.append(tot_pos_pnl / tot_pos_cost)
                 daily_costs.append(0)
                 regimes.append('caution')
 
         # ── 3c. daily_snapshots에서 전체 포트폴리오 수익률 프록시 ──
         # 스트림 자체의 일별 수익률이 부족하면, 전체 daily_return을
         # 스트림 투자비율로 가중하여 추정
-        if not daily_returns and snapshots and pos_list:
+        if not ts_returns and snapshots and pos_list:
             total_invested = sum(p.get('amount', 0) for p in pos_list)
             for snap in snapshots:
                 portfolio_ret = snap.get('daily_return_pct', 0) / 100  # → decimal
@@ -259,9 +266,11 @@ def compute_stream_metrics():
                     stream_weight = total_invested / total_market_val \
                         if total_market_val > 0 else 0
                     est_return = portfolio_ret * stream_weight
-                    daily_returns.append(est_return)
-                    daily_costs.append(0)
-                    regimes.append(snap.get('regime', 'caution'))
+                    ts_returns.append(est_return)
+                    if len(daily_returns) <= 1:
+                        daily_returns.append(est_return)
+                        daily_costs.append(0)
+                        regimes.append(snap.get('regime', 'caution'))
 
         # ★ n_trades: 실제 거래 수 (BUY + SELL)
         n_trades = len(trades)
@@ -278,6 +287,7 @@ def compute_stream_metrics():
 
         raw_data[sid] = {
             'daily_returns': daily_returns,
+            'ts_returns': ts_returns,
             'daily_costs': daily_costs[:len(daily_returns)],
             'regimes': regimes[:len(daily_returns)],
             'n_trades': n_trades,
@@ -329,14 +339,14 @@ def compute_stream_metrics():
             '120': calc_sharpe(returns, 120),
         }
 
-    # Correlation matrix
+    # Correlation matrix (횡단면 보유종목 수익률을 배제한 순수 시계열 ts_returns 사용)
     correlation_matrix = {}
     for i, sid_i in enumerate(streams):
         for j, sid_j in enumerate(streams):
             if j <= i:
                 continue
-            ret_i = raw_data[sid_i]['daily_returns']
-            ret_j = raw_data[sid_j]['daily_returns']
+            ret_i = raw_data[sid_i].get('ts_returns', [])
+            ret_j = raw_data[sid_j].get('ts_returns', [])
             correlation_matrix[f"{sid_i}_{sid_j}"] = calc_correlation(ret_i, ret_j)
 
     # Cost efficiency
@@ -400,6 +410,25 @@ def compute_stream_metrics():
         buys = [t for t in trades if t.get('action') == 'BUY']
         win_sells = sum(1 for t in sells if t.get('realized_pnl', 0) > 0)
 
+        win_pcts = []
+        loss_pcts = []
+        for t in sells:
+            cost_b = float(t.get('avg_price', 0) or 0) * float(t.get('quantity', 0) or 0)
+            rpnl = float(t.get('realized_pnl', 0) or 0)
+            ret_pct = float(t.get('pnl_pct', (rpnl / cost_b * 100.0) if cost_b > 0 else 0.0) or 0.0)
+            if rpnl > 0 or ret_pct > 0:
+                win_pcts.append(abs(ret_pct))
+            elif rpnl < 0 or ret_pct < 0:
+                loss_pcts.append(abs(ret_pct))
+        if not sells:
+            for r in raw_data[sid]['daily_returns']:
+                if r > 0:
+                    win_pcts.append(abs(r * 100.0))
+                elif r < 0:
+                    loss_pcts.append(abs(r * 100.0))
+        avg_win_pct = round(sum(win_pcts) / len(win_pcts), 3) if win_pcts else 0.0
+        avg_loss_pct = round(sum(loss_pcts) / len(loss_pcts), 3) if loss_pcts else 0.0
+
         total_invested = sum(p.get('amount', 0) for p in pos_list)
         total_pnl = sum(p.get('unrealized_pnl', 0) for p in pos_list)
         realized_pnl = sum(t.get('realized_pnl', 0) for t in sells)
@@ -408,7 +437,10 @@ def compute_stream_metrics():
             'n_positions': len(pos_list),
             'n_buys': len(buys),
             'n_sells': len(sells),
+            'total_trades': len(sells) if sells else len(trades),
             'win_rate': round(win_sells / len(sells) * 100, 1) if sells else 0,
+            'avg_win_pct': avg_win_pct,
+            'avg_loss_pct': avg_loss_pct,
             'total_invested': round(total_invested),
             'unrealized_pnl': round(total_pnl),
             'realized_pnl': round(realized_pnl),
@@ -425,6 +457,7 @@ def compute_stream_metrics():
             'cost_efficiency': cost_efficiency,
             'regime_conditional': regime_conditional,
             'stream_summary': stream_summary,
+            'stream_performance': stream_summary,
             'tracking_start': _TRACKING_START,
             'last_updated': datetime.now().isoformat(),
         },

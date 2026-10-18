@@ -183,9 +183,14 @@ class AdaptiveThreshold:
         """
         if vix <= 0:
             return 1.0
-        vix_baseline = float(_cfg.get('adaptive_threshold.vix_baseline', 18.0))
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _dqe_vix_base = float(get_quant_engine().get_vix_regime_quantiles().get('baseline', 18.0))
+        except Exception:
+            _dqe_vix_base = 18.0
+        vix_baseline = float(_cfg.get('adaptive_threshold.vix_baseline', _dqe_vix_base))
         elasticity = float(_cfg.get('adaptive_threshold.vix_log_elasticity', 0.5))
-        log_ratio = math.log(vix / vix_baseline)
+        log_ratio = math.log(vix / max(vix_baseline, 1.0))
         raw_scale = 1.0 + max(0.0, log_ratio) * elasticity
         return max(1.0, raw_scale)
 
@@ -272,7 +277,11 @@ class AdaptiveThreshold:
             idx = min(idx, len(sorted_vals) - 1)
             raw = sorted_vals[idx]
         else:
-            raw = 25.0
+            try:
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                raw = float(get_quant_engine().get_vix_regime_quantiles().get('bear', 25.0))
+            except Exception:
+                raw = 25.0
         return max(self.VIX_ASSURANCE_FLOOR, min(self.VIX_ASSURANCE_CEILING, raw))
 
     def _compute_sentiment_thresholds(self) -> Dict[str, float]:
@@ -302,7 +311,7 @@ class AdaptiveThreshold:
         if us_change is None:
             us_change = self._us_change_history[-1] if self._us_change_history else 0.0
         if vix is None or vix <= 0:
-            vix = self._vix_history[-1] if self._vix_history else self.VIX_BASELINE
+            vix = self._vix_history[-1] if self._vix_history else float(_cfg.get('adaptive_threshold.vix_baseline', 18.0))
         if pcr is None or pcr <= 0:
             pcr = self._pcr_history[-1] if self._pcr_history else 1.0
         if sentiment is None:

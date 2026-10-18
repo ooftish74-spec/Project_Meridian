@@ -66,7 +66,8 @@ class S5OvernightStream(BaseStream):
         decay_k = float(_g('s5.kelly.decay_k', 3.0))
         base_var = (vix_base / 100) ** 2 / 252
         ov_var = (vix / 100) ** 2 / 252 + w_nq * (nq_vol_pct / 100) ** 2
-        scale = max_alloc * math.exp(-decay_k * ov_var / max(base_var, 1e-12))
+        excess_var_ratio = max(0.0, (ov_var / max(base_var, 1e-12)) - 1.0)
+        scale = max_alloc * math.exp(-decay_k * excess_var_ratio)
         return round(min(max_alloc, max(0.0, scale)), 4)
 
     def __init__(self):
@@ -103,8 +104,12 @@ class S5OvernightStream(BaseStream):
             logger.debug(f"  [Phase 11: Dynamic Balance] S5 NQ 탄력 임계값: VIX={vix:.1f}/neutral={_vix_neutral:.1f} -> ratio={_vix_ratio:.2f} -> block={_nq_threshold:.2f}%, hedge={_nq_hedge_threshold:.2f}%")
             if _nq_chg <= _nq_hedge_threshold:
                 _nq_inverse_hedge = True
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                _dqe_s5 = get_quant_engine()
+                _nq_conf = round(float(1.0 / (1.0 + math.exp(-(abs(_nq_chg) - abs(_nq_hedge_threshold) + 1.0)))), 4)
+                _nq_bars = _dqe_s5.compute_dynamic_exit_barriers(S5OvernightStream.inv_ticker, regime=regime, vix_level=vix)
                 logger.warning(f"  ⚡ [Phase 10: Alpha Breakthrough] S5 NQ 선물 급락: {_nq_chg:+.2f}% ≤ {_nq_hedge_threshold}% → 인버스 헷지 전환")
-                signals.append({'stream_id': 'S5', 'ticker': S5OvernightStream.inv_ticker, 'name': 'KODEX 200선물인버스2X (NQ급락헷지)', 'direction': 'long', 'confidence': 0.75, 'size_pct': cfg.get('s5.nq_hedge_size_pct', 0.2), 'strategy': 'nq_inverse_hedge', 'reason': f"NQ 선물 급락({_nq_chg:+.2f}%) 인버스 헷지 [Phase 11 elastic: hedge_th={_nq_hedge_threshold:.2f}%, VIX_ratio={_vix_ratio:.2f}]", 'tp_pct': cfg.get('s5.nq_hedge_tp_pct', 2.0), 'sl_pct': cfg.get('s5.nq_hedge_sl_pct', -1.0), 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
+                signals.append({'stream_id': 'S5', 'ticker': S5OvernightStream.inv_ticker, 'name': 'KODEX 200선물인버스2X (NQ급락헷지)', 'direction': 'long', 'confidence': _nq_conf, 'size_pct': cfg.get('s5.nq_hedge_size_pct', 0.2), 'strategy': 'nq_inverse_hedge', 'reason': f"NQ 선물 급락({_nq_chg:+.2f}%) 인버스 헷지 [Phase 11 elastic: hedge_th={_nq_hedge_threshold:.2f}%, VIX_ratio={_vix_ratio:.2f}]", 'tp_pct': cfg.get('s5.nq_hedge_tp_pct', _nq_bars.get('take_profit_pct', 2.0)), 'sl_pct': cfg.get('s5.nq_hedge_sl_pct', _nq_bars.get('stop_loss_pct', -1.0)), 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
                 _nq_blocked = True
             elif _nq_chg <= _nq_threshold:
                 _nq_blocked = True
@@ -150,13 +155,15 @@ class S5OvernightStream(BaseStream):
             direction = 'short'
             confidence = min(0.85, 0.5 + abs(kospi_chg) * 0.1)
             reason = f"KOSPI 급등({kospi_chg:+.2f}%) → 종가 숏 베팅 (th={short_entry_th:.2f}%)"
-        vix_max = cfg.get('s5.max_vix_for_overlay', 25.0)
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe_vq = get_quant_engine().get_vix_regime_quantiles(signal_cache)
+        vix_max = cfg.get('s5.max_vix_for_overlay', _dqe_vq.get('bear', 25.0))
         if vix >= vix_max:
             direction = 'neutral'
-            reason = f"VIX({vix:.1f})가 임계치({vix_max}) 초과 → 오버레이 포기"
-        if vix_blocked:
+            reason = f"VIX({vix:.1f})가 동적 임계치({vix_max}) 초과 → 오버레이 포기"
+        if vix_blocked or _nq_blocked:
             direction = 'neutral'
-        if direction in ('long', 'short') and (not vix_blocked):
+        if direction in ('long', 'short') and not (vix_blocked or _nq_blocked):
             ticker = S5OvernightStream.lev_ticker if direction == 'long' else S5OvernightStream.inv_ticker
             min_conf = cfg.get('s5.overlay_min_confidence', 0.55)
             max_conf = cfg.get('s5.overlay_max_confidence', 0.85)
@@ -206,8 +213,14 @@ class S5OvernightStream(BaseStream):
             if parking_etfs:
                 logger.debug('  🅿️ 파킹 ETF: DynamicConfig 값 사용')
         if not parking_etfs:
-            parking_etfs = self.DEFAULT_PARKING_ETFS
-            logger.debug('  🅿️ 파킹 ETF: DEFAULT_PARKING_ETFS 하드코딩 폴백 사용')
+            _opt_pk = get_quant_engine().get_optimal_kr_parking_ticker()
+            if _opt_pk:
+                from src.utils.ticker_name_resolver import resolve_name
+                parking_etfs = [{'ticker': _opt_pk, 'name': resolve_name(_opt_pk)}]
+                logger.debug(f'  🅿️ 파킹 ETF: DynamicQuantEngine 최적 파킹 ETF 선정 ({_opt_pk})')
+            else:
+                parking_etfs = self.DEFAULT_PARKING_ETFS
+                logger.debug('  🅿️ 파킹 ETF: DEFAULT_PARKING_ETFS 폴백 사용')
         # [Phase 95-B Net Yield vs Friction Cost Guard]
         # 왕복 거래 수수료(0.028%) 대비 KOFR 이자 수익(3.55% p.a.)이 확실한 플러스(+)일 때만 파킹 매입 허용
         # 한국증시 ↔ 미국증시 교차 세션 간 48시간 미만 단기 유휴 시 수수료 마찰 손실 방지를 위해 현금 보충 유지
@@ -215,7 +228,7 @@ class S5OvernightStream(BaseStream):
         min_parking_hours = float(cfg.get('s5.min_parking_hours', 48.0))
         if expected_idle_hours < min_parking_hours:
             logger.info(f"  🛑 [Friction Guard] 유휴 예정 시간({expected_idle_hours:.1f}h) < 최소 이자 파킹 기준({min_parking_hours}h) → 수수료 마찰(0.028%) 손실 방지를 위해 현금 파킹 보류")
-            return []
+            return signals
 
         best_parking = parking_etfs[0]
         signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': 1.0, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': 99.0, 'sl_pct': -99.0, 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
@@ -224,7 +237,7 @@ class S5OvernightStream(BaseStream):
         return signals
 
     def get_performance(self) -> dict:
-        return {'sharpe': 0.0, 'daily_returns': []}
+        return self._compute_standard_performance()
 
     def get_positions(self) -> list:
         """[Phase 48 C-5] BaseStream 스펙 준수: List[Dict] 반환."""

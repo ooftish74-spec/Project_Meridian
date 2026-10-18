@@ -44,28 +44,60 @@ class S3CrossAssetSleeve:
         Returns:
             대체자산 롱 신호 리스트 (미국 전용)
         """
-        # Zero-Hardcoding 파라미터 지연 로드
-        spread_threshold = float(cfg.get('s3.track_c.spread_threshold', 0.005)) # +0.5%
+        # Zero-Hardcoding 파라미터 지연 로드 + 수리적 동적 보정
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+        spread_threshold = float(cfg.get('s3.track_c.spread_threshold', 0.005))
         min_confidence = float(cfg.get('s3.track_c.min_confidence', 0.75))
 
-        cross_universe = cfg.get('s3.track_c.universe', {
+        cross_universe = dict(cfg.get('s3.track_c.universe', {
             'GLD': {'name': 'SPDR Gold Shares', 'category': 'gold'},
             'USO': {'name': 'United States Oil Fund', 'category': 'oil'},
             'CPER': {'name': 'United States Copper Index Fund', 'category': 'copper'},
             'TLT': {'name': 'iShares 20+ Year Treasury Bond', 'category': 'treasury'},
             'UUP': {'name': 'Invesco DB US Dollar Index Bullish', 'category': 'dollar'}
-        })
+        }))
+        if regime in ('bear', 'crash'):
+            for _inv_tk in _dqe.get_inverse_hedge_tickers('US')[:4]:
+                cross_universe.setdefault(_inv_tk, {'name': _inv_tk, 'category': 'inverse_hedge'})
+            cross_universe.setdefault('SQQQ', {'name': 'ProShares UltraPro Short QQQ', 'category': 'inverse_hedge'})
+            cross_universe.setdefault('SOXS', {'name': 'Direxion Daily Semiconductor Bear 3X', 'category': 'inverse_hedge'})
 
+        def _get_live_5d_return(tk: str) -> float:
+            try:
+                from pathlib import Path
+                import pandas as pd
+                pq_path = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'us_stocks' / 'prices' / f'{tk}.parquet'
+                if pq_path.exists():
+                    df = pd.read_parquet(pq_path)
+                    close_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if close_col and len(df) >= 6:
+                        s = df[close_col].dropna()
+                        if len(s) >= 6 and float(s.iloc[-6]) > 0:
+                            return float(s.iloc[-1]) / float(s.iloc[-6]) - 1.0
+            except Exception:
+                pass
+            return 0.0
+
+        has_explicit_returns = ('spy_return_5d' in market_data) or ('sp500_return_5d' in market_data) or ('asset_returns' in market_data)
         signals = []
-        spy_return = float(market_data.get('spy_return_5d', market_data.get('sp500_return_5d', 0.0)) or 0.0)
+        if has_explicit_returns:
+            spy_return = float(market_data.get('spy_return_5d', market_data.get('sp500_return_5d', 0.0)) or 0.0)
+        else:
+            spy_return = _get_live_5d_return('SPY')
 
         for ticker, meta in cross_universe.items():
             key_ret = f"{ticker.lower()}_return_5d"
-            asset_ret = float(market_data.get(key_ret, market_data.get('asset_returns', {}).get(ticker, 0.0)) or 0.0)
+            if key_ret in market_data or (isinstance(market_data.get('asset_returns'), dict) and ticker in market_data['asset_returns']):
+                asset_ret = float(market_data.get(key_ret, market_data.get('asset_returns', {}).get(ticker, 0.0)) or 0.0)
+            elif not has_explicit_returns:
+                asset_ret = _get_live_5d_return(ticker)
+            else:
+                asset_ret = 0.0
             spread = asset_ret - spy_return
 
             is_flight_to_quality = (regime in ['bear', 'crash', 'caution']) and (asset_ret > 0.0)
-            is_momentum_outperformance = spread >= spread_threshold
+            is_momentum_outperformance = spread >= spread_threshold and (meta.get('category') != 'inverse_hedge' or asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
                 confidence = min(1.0, min_confidence + abs(spread) * 2.0)

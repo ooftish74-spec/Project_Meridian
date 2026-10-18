@@ -42,8 +42,8 @@ class TestS0BetaStreamV4:
 
         signals = self.stream.generate_signals('sideways', market_data)
         assert len(signals) >= 1
-        # Alert zone should trigger OTM Put Spread
-        assert signals[0]['ticker'] == 'KRX_PUT_SPREAD'
+        # Alert zone should trigger executable Inverse 2X ETF (252670)
+        assert signals[0]['ticker'] == '252670'
         assert signals[0]['strategy'] == 'beta_convexity_hedge_alert'
 
     def test_trigger_zone_downside_router(self):

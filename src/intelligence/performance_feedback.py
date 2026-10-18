@@ -33,7 +33,7 @@ import logging
 import math
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 from config.dynamic_config import DynamicConfig
 logger = logging.getLogger(__name__)
@@ -81,19 +81,40 @@ class PerformanceFeedback:
             logger.debug('PerformanceFeedback.update: trade_history 비어있음')
             return
         rolling_window = self._cfg.get('feedback.rolling_window', 20)
+        sl_limit = int(self._cfg.get('feedback.consecutive_sl_limit', 3))
+        blacklist_days = int(self._cfg.get('feedback.blacklist_days', 30))
         stream_trades: Dict[str, List[Dict]] = {}
+        ticker_stream_trades: Dict[str, List[Tuple[float, str]]] = {}
         for trade in trade_history:
             stream = trade.get('stream', 'unknown')
+            ticker = trade.get('ticker')
             pnl = trade.get('pnl_pct')
             if pnl is not None:
                 try:
                     pnl_val = float(pnl)
                     if not math.isnan(pnl_val):
                         stream_trades.setdefault(stream, []).append(trade)
+                        if ticker:
+                            key = f'{ticker}::{stream}'
+                            exit_reason = str(trade.get('exit_reason', '') or '').lower()
+                            ticker_stream_trades.setdefault(key, []).append((pnl_val, exit_reason))
                 except (ValueError, TypeError):
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
                     continue
+        for key, t_list in ticker_stream_trades.items():
+            streak = 0
+            for pnl_val, exit_reason in t_list:
+                is_sl = pnl_val < 0 and (not exit_reason or 'sl' in exit_reason or 'stop' in exit_reason or '손절' in exit_reason)
+                if is_sl:
+                    streak += 1
+                else:
+                    streak = 0
+            self._ticker_sl_count[key] = streak
+            if streak >= sl_limit and key not in self._blacklist:
+                expires_dt = datetime.now() + timedelta(days=blacklist_days)
+                self._blacklist[key] = expires_dt.isoformat()
+                logger.warning('PerformanceFeedback 블랙리스트 등록: %s (연속 SL %d회, 만료: %s)', key, streak, self._blacklist[key][:10])
         for stream_id, trades in stream_trades.items():
             recent = trades[-rolling_window:]
             n = len(recent)
@@ -193,19 +214,21 @@ class PerformanceFeedback:
         kelly_frac = float(cfg.get('feedback.kelly_fraction', 0.25))
         f_star = self.compute_dynamic_kelly(stream_id)
         _s3_exempt = str(stream_id).upper().startswith('S3') or str(stream_id).upper() in cfg.get('feedback.kelly_exempt_streams', ['S3', 'S3_A', 'S3_B'])
+        _softfall_base = float(cfg.get('feedback.kelly_softfall_base', 1.0))
+        _softfall_cap = float(cfg.get('feedback.kelly_softfall_cap', 0.1))
+        _s3_floor = float(cfg.get('feedback.s3_min_kelly_scale', 0.1))
         if f_star <= 0.0 and (not _s3_exempt):
-            _softfall_base = float(cfg.get('feedback.kelly_softfall_base', 1.0))
-            _softfall_cap = float(cfg.get('feedback.kelly_softfall_cap', 0.1))
-            scale = max(0.0, f_star * kelly_max + _softfall_base)
-            scale = min(scale, _softfall_cap)
-            reason = f'[Phase74] Kelly Soft-kill f*={f_star:.4f}'
+            scale = max(0.0, _softfall_cap * (1.0 + f_star / max(_softfall_base, 1e-6)))
+            scale = round(min(scale, _softfall_cap), 4)
+            reason = f'[Phase74] Kelly Soft-kill f*={f_star:.4f} -> {scale:.3f}'
             active = scale > 0.0
         elif f_star <= 0.0 and _s3_exempt:
-            scale = float(cfg.get('feedback.s3_min_kelly_scale', 0.1))
+            scale = round(_s3_floor, 4)
             reason = f'[Phase79] S3 Kelly 면제 (f*={f_star:.4f} 무시, scale={scale:.2f})'
             active = True
         else:
-            scale = min(f_star * kelly_frac * kelly_max, kelly_max)
+            base_floor = _s3_floor if _s3_exempt else _softfall_cap
+            scale = min(base_floor + f_star * kelly_frac * kelly_max, kelly_max)
             scale = round(scale, 4)
             reason = f'[Phase74] Kelly scale f*={f_star:.4f} -> {scale:.3f}'
             active = True

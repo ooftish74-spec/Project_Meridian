@@ -43,7 +43,7 @@ class PnLAttributor:
     @property
     def STREAMS(self):
         """★ SSOT: system.active_streams (Legacy Purge 2026-07-19)"""
-        return list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        return list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
 
     def compute(self, stream_metrics: Dict=None, portfolio_value: float=None, current_weights: Dict[str, float]=None) -> Dict:
         """PnL Attribution 계산.

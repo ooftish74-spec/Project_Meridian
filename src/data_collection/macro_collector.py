@@ -80,6 +80,10 @@ class MacroCollector:
             _r2 = float(self._cfg.get('imputer.r2_threshold', 0.9) if self._cfg and hasattr(self._cfg, 'get') else 0.9)
             _imputer = OrthogonalDataImputer(r2_threshold=_r2)
             for _col in list(df.columns):
+                # 최근 10영업일 구간에 실제 관측치가 모두 존재하면 선행(Leading) 시작일 차이만 bfill 처리
+                if not df[_col].iloc[-10:].isna().any():
+                    df[_col] = df[_col].bfill()
+                    continue
                 if not df[_col].isna().any():
                     continue
                 _proxies = _proxy_for_impute.drop(columns=[_col]).dropna(how='any')
@@ -89,11 +93,10 @@ class MacroCollector:
                     df[_col] = df[_col].fillna(_imputer.impute(_col, df[_col], _proxies, df.index))
                     logger.info(f'  [Phase 70] {_col}: PCA 직교 합성 성공')
                 except DataNoGoException as _dne:
-                    logger.warning(f'  [Phase 70 DATA_NOGO] {_col}: R²={_dne.r2:.3f} < {_dne.threshold:.2f} — 해당 컬럼은 결측치(NaN)를 유지한 채 Graceful Degradation 진행합니다.')
-                    # raise 대신 패스
+                    logger.info(f'  [Phase 70 DATA_NOGO] {_col}: R²={_dne.r2:.3f} < {_dne.threshold:.2f} — 결측치(NaN) 유지 Graceful Degradation')
         except (ImportError, Exception) as _imp_e:
             if 'DataNoGoException' in type(_imp_e).__name__:
-                logger.warning(f'  [Phase 70] Imputer 예외(Graceful): {_imp_e}')
+                logger.info(f'  [Phase 70] Imputer 예외(Graceful): {_imp_e}')
             else:
                 logger.error(f'  [Phase 70] Imputer 에러: {_imp_e}', exc_info=True)
         df = df.dropna(how='all')

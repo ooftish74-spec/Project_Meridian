@@ -56,8 +56,9 @@ class S14SectorPairStream(BaseStream):
 
             if p.exists():
                 df = pd.read_parquet(p)
-                if not df.empty and 'close' in df.columns:
-                    closes = df['close'].dropna().values
+                _c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                if not df.empty and _c_col:
+                    closes = df[_c_col].dropna().values
                     if len(closes) >= days + 1:
                         ret = float((closes[-1] - closes[-days-1]) / closes[-days-1])
                         log_rets = np.diff(np.log(closes[-days-1:]))
@@ -89,8 +90,9 @@ class S14SectorPairStream(BaseStream):
 
             if p.exists():
                 df = pd.read_parquet(p)
-                if not df.empty and 'close' in df.columns:
-                    closes = df['close'].dropna().tolist()
+                _c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                if not df.empty and _c_col:
+                    closes = df[_c_col].dropna().tolist()
                     return self.whipsaw_defense.compute_kaufman_efficiency_ratio(closes, period=20)
         except Exception as e:
             logger.debug(f"[compute_market_ker] {benchmark} KER 연산 예외: {e}")
@@ -165,17 +167,27 @@ class S14SectorPairStream(BaseStream):
             )
 
             if us_pair_res.get('pair_active') and us_pair_res.get('spread_z', 0.0) >= active_spread_threshold:
+                _us_inv_map = {'semi': 'SOXS', 'tech': 'PSQ', 'SOXX': 'SOXS', 'XLK': 'PSQ'}
                 for order in us_pair_res.get('pair_orders', []):
                     t_dir = order.get('direction', 'long').lower()
                     ticker = order['ticker']
-                    action = order['action'].lower()
+                    action = order.get('action', 'buy').lower()
+                    is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or action in ('sell', 'buy_inverse')
                     
-                    if t_dir == 'short' and action == 'sell':
-                        ticker_to_trade = ticker
-                        direction_to_trade = 'short'
+                    if is_inv_hedge:
+                        sec_key = str(order.get('sector', '')).lower()
+                        if ticker in ('SH', 'PSQ', 'SOXS', 'SQQQ'):
+                            ticker_to_trade = ticker
+                        else:
+                            ticker_to_trade = _us_inv_map.get(sec_key, _us_inv_map.get(ticker, 'SH'))
+                        direction_to_trade = 'long'
+                        action_to_trade = 'buy'
+                        leg_label = 'INVERSE_HEDGE'
                     else:
                         ticker_to_trade = ticker
                         direction_to_trade = 'long'
+                        action_to_trade = 'buy'
+                        leg_label = 'LONG'
 
                     # 연속적 노이즈 강도에 따른 동적 포지션 크기 스케일링
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_us, 4)
@@ -183,9 +195,9 @@ class S14SectorPairStream(BaseStream):
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': ticker_to_trade,
-                        'name': f"US Pair {order['sector'].upper()} ({direction_to_trade.upper()})",
+                        'name': f"US Pair {order['sector'].upper()} ({leg_label})",
                         'direction': direction_to_trade,
-                        'action': action,
+                        'action': action_to_trade,
                         'size_pct': dynamic_size,
                         'confidence': order.get('confidence', 0.70),
                         'strategy': 'us_sector_pair_alpha',
@@ -216,22 +228,33 @@ class S14SectorPairStream(BaseStream):
             )
 
             if kr_pair_res.get('pair_active') and kr_pair_res.get('spread_z', 0.0) >= active_spread_threshold:
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                _kr_inv_list = get_quant_engine().get_inverse_hedge_tickers('KR')
+                _kr_1x_inv = _kr_inv_list[-1] if _kr_inv_list else '114800'
+                _sc_kr = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
+                _vix_kr = float((market_data or {}).get('vix') or _sc_kr.get('vix', 20.0) or 20.0)
+                _ois_kr = float((market_data or {}).get('ois') or _sc_kr.get('ois', 50.0) or 50.0)
                 for order in kr_pair_res.get('pair_orders', []):
                     t_dir = order.get('direction', 'long').lower()
+                    is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or order.get('action') in ('sell', 'buy_inverse')
                     
-                    if t_dir == 'short' and order.get('action') == 'buy_inverse':
-                        trade_ticker = '114800'  # KODEX 인버스 (1X)
+                    if is_inv_hedge:
+                        if _vix_kr < 22.0 and _ois_kr >= 55.0:
+                            continue  # VIX 안정 + 강세 반등 구간에서는 Step 4.7 인버스 강제청산 및 지수 롱 상쇄 방지를 위해 인버스 헤지 생략
+                        trade_ticker = _kr_1x_inv
                         trade_dir = 'long'      # 인버스를 매수하므로 현물 계좌 주문 방향은 long
+                        leg_label = 'INVERSE_HEDGE'
                     else:
                         trade_ticker = order['ticker']
-                        trade_dir = t_dir
+                        trade_dir = 'long'
+                        leg_label = 'LONG'
 
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_kr, 4)
 
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': trade_ticker,
-                        'name': f"KR Pair {order['sector'].upper()} ({t_dir.upper()})",
+                        'name': f"KR Pair {order['sector'].upper()} ({leg_label})",
                         'direction': trade_dir,
                         'action': 'buy',
                         'size_pct': dynamic_size,
@@ -241,6 +264,31 @@ class S14SectorPairStream(BaseStream):
                         'spread_z': kr_pair_res.get('spread_z', 0.0),
                         'timestamp': pd.Timestamp.now().isoformat()
                     })
+
+        # ── 4. Ornstein-Uhlenbeck 평균회귀 반감기 기반 무하드코딩 동적 공적분 페어 보강 ──
+        if not signals:
+            try:
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                _dqe = get_quant_engine()
+                for _mkt, _noise in (('KR', noise_kr), ('US', noise_us)):
+                    for _p in _dqe.discover_stat_arb_pairs(_mkt, max_pairs=1):
+                        if abs(_p['z_score']) >= active_spread_threshold:
+                            signals.append({
+                                'stream_id': self.stream_id,
+                                'ticker': _p['long_ticker'],
+                                'name': f"{_mkt} StatArb {_p['long_ticker']}/{_p['short_ticker']} (LONG)",
+                                'direction': 'long',
+                                'action': 'buy',
+                                'size_pct': round(0.08 * _noise, 4),
+                                'confidence': _p['confidence'],
+                                'expected_return': _p['expected_return'],
+                                'strategy': f"{_mkt.lower()}_ou_cointegration_pair",
+                                'reason': f"[S14 OU StatArb] {_p['pair_id']} Z={_p['z_score']:+.2f} (HalfLife={_p['half_life']:.1f}d, ρ={_p['corr']:.2f})",
+                                'spread_z': abs(_p['z_score']),
+                                'timestamp': pd.Timestamp.now().isoformat()
+                            })
+            except Exception as _ou_e:
+                logger.debug(f"  [S14 OU StatArb] 동적 페어 탐색 참고: {_ou_e}")
 
         logger.info(f"  ⚖️ [S14 Sector Pair Stream] {len(signals)}개 마켓 뉴트럴 페어 신호 생성 (KER_US={ker_us:.2f}, KER_KR={ker_kr:.2f})")
         return signals

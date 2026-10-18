@@ -472,7 +472,8 @@ class ExecutionEngine:
                             continue
                 stream_id = str(order.get('stream', order.get('stream_id', ''))).upper()
                 if stream_id == 'S1':
-                    tp_pct = float(order.get('tp_pct', 0.015))
+                    _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
+                    tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
                     max_spread = tp_pct / 3.0
                     spread_pct = 0.0
                     try:
@@ -592,7 +593,8 @@ class ExecutionEngine:
           - Alpha Decay Threshold: α_expected * 0.50 (기대 알파의 50%)
           - Net EV Limit: α_expected - Slippage - Fee <= 0 (기대값 0 이하 시 완전 취소)
         """
-        exp_alpha = float(order.get('expected_alpha', order.get('tp_pct', 0.015) or 0.015))
+        raw_alpha = float(order.get('expected_alpha') or order.get('expected_return') or order.get('tp_pct') or 0.015)
+        exp_alpha = raw_alpha / 100.0 if raw_alpha > 1.0 else raw_alpha
         decay_ratio = float(_cfg.get('execution.alpha_decay_ratio', 0.50)) if _cfg else 0.50
         fee_rate = float(_cfg.get('execution.fee_rate', 0.0015)) if _cfg else 0.0015
         
@@ -667,15 +669,19 @@ class ExecutionEngine:
             if stream_id == 'S1':
                 tif = 'IOC'
                 logger.debug(f"  ⚡ [Live Transition Task 1] S1 IOC 적용: {ticker} {action}")
-                tp_pct = float(order.get('tp_pct', 0.015))
+                _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
+                tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
                 max_spread = tp_pct / 3.0
                 spread_pct = 0.0
                 try:
                     from src.data_collection.realtime_data_bus import RealtimeDataBus
-                    bus = RealtimeDataBus()
-                    ob = bus.get_orderbook(ticker)
-                    if ob and ob.get('ask1') and ob.get('bid1') and ob['bid1'] > 0:
-                        spread_pct = (ob['ask1'] - ob['bid1']) / ob['bid1']
+                    bus = RealtimeDataBus.get_instance()
+                    ob_dp = bus.get_orderbook(ticker)
+                    ob = ob_dp.value if hasattr(ob_dp, 'value') and isinstance(ob_dp.value, dict) else (ob_dp if isinstance(ob_dp, dict) else {})
+                    ask1 = float(ob.get('ask1') or (ob.get('asks', [{}])[0].get('price', 0) if ob.get('asks') else 0) or 0)
+                    bid1 = float(ob.get('bid1') or (ob.get('bids', [{}])[0].get('price', 0) if ob.get('bids') else 0) or 0)
+                    if ask1 > 0 and bid1 > 0:
+                        spread_pct = (ask1 - bid1) / bid1
                 except Exception as e:
                     logger.debug(f"RealtimeDataBus orderbook fetch fail: {e}")
                 if spread_pct > max_spread and spread_pct > 0:
@@ -698,8 +704,8 @@ class ExecutionEngine:
             raw_p = price if price > 0 else curr_price
             order_price = _snap_to_exchange_tick(raw_p, ticker)
             
-            # Stage 3 Check: Net EV <= 0 Cutoff (Outright Cancel)
-            if is_limits['expected_alpha'] - slip_pct - is_limits['fee_rate'] <= 0 and slip_pct > 0:
+            # Stage 3 Check: Net EV <= 0 Cutoff (Outright Cancel — Buy/Entry Only, NEVER block Sell/Exit/Stop-Loss)
+            if str(action).lower() in ('buy', 'add_on') and is_limits['expected_alpha'] - slip_pct - is_limits['fee_rate'] <= 0 and slip_pct > 0:
                 logger.warning(
                     f"  🛑 [Institutional IS Stage 3] Net EV <= 0 ({ticker}): "
                     f"α={is_limits['expected_alpha']:.2%}, Slip={slip_pct:.2%}, Fee={is_limits['fee_rate']:.2%} → 트래킹 에러 차단 전량 취소")
@@ -791,7 +797,7 @@ class ExecutionEngine:
                             result.total_sell_amount += amount
                         result.estimated_commission += fill.commission
                         result.estimated_slippage += fill.slippage * fill.filled_quantity
-                        result.fills.append({'timestamp': fill.fill_timestamp, 'stream': stream_id, 'ticker': ticker, 'action': action, 'quantity': fill.filled_quantity, 'fill_price': fill.filled_price, 'commission': fill.commission, 'exchange': fill.exchange, 'time_in_force': res.get('tif", "DAY'), 'mode': self.mode, 'status': fill.status})
+                        result.fills.append({'timestamp': fill.fill_timestamp, 'stream': stream_id, 'ticker': ticker, 'action': action, 'quantity': fill.filled_quantity, 'fill_price': fill.filled_price, 'commission': fill.commission, 'exchange': fill.exchange, 'time_in_force': res.get('tif', 'DAY'), 'mode': self.mode, 'status': fill.status})
                     else:
                         result.n_rejected += 1
                         result.errors.append(f"{ticker}: {fill.status}")
@@ -856,13 +862,13 @@ class ExecutionEngine:
         nav_system: float = 0.0
         result_sync: Dict = {'ok': True, 'nav_system': 0.0, 'nav_broker': 0.0, 'diff_pct': 0.0, 'level': 'ok', 'message': ''}
         try:
-            if self.mode in ('live', 'paper'):
+            if portfolio and portfolio.get('total_nav'):
+                nav_system = float(portfolio['total_nav'])
+            elif self.mode in ('live', 'paper'):
                 trader = self._get_trader()
                 if trader:
                     trader.fetch_live_account_balance()
                     nav_system = float(trader.account.total_equity)
-            if nav_system <= 0 and portfolio and portfolio.get('total_nav'):
-                nav_system = float(portfolio['total_nav'])
         except Exception as e:
             logger.warning(f"  [Desync] 실시간 KIS 계좌 NAV 수집 실패: {e}")
         if nav_system <= 0:

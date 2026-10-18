@@ -85,7 +85,8 @@ def check_api_health():
             'timestamp': datetime.now().isoformat(),
             'message': msg,
             'token_expires': token_expires.isoformat() if token_expires else None,
-            'last_success_notified_date': last_notified_date
+            'last_success_notified_date': last_notified_date,
+            'token_warn_date': prev_status.get('token_warn_date', ''),
         }
         try:
             status_file.parent.mkdir(parents=True, exist_ok=True)
@@ -126,29 +127,21 @@ def check_api_health():
             save_and_notify(False, err_msg)
             return False
             
-        # 3. 토큰 만료 임박 체크 (하루 1회 Debounce)
+        # 3. 토큰 만료 임박 시 선제 재발급 시도 (장 개장 전 만료 원천 차단)
         token_expires = getattr(adapter, '_token_expires', None)
         if token_expires:
             time_left = token_expires - datetime.now()
             if time_left < timedelta(hours=2):
-                warn_msg = f"⚠️ [API Health Check 경고] KIS Token 만료가 {time_left.seconds // 3600}시간 남았습니다."
-                logger.warning(warn_msg)
-                # [Debounce] 오늘 이미 경고를 발송한 경우 스킵 (스팸 방지)
-                _token_warn_sent_date = prev_status.get('token_warn_date', '')
-                if _token_warn_sent_date != today_str:
-                    bot.send_message(warn_msg)
-                    # 오늘 발송 기록 저장 (status_file에 추가 기록)
-                    try:
-                        _warn_state = {}
-                        if status_file.exists():
-                            _warn_state = json.loads(status_file.read_text())
-                        _warn_state['token_warn_date'] = today_str
-                        status_file.write_text(json.dumps(_warn_state, indent=2, ensure_ascii=False))
-                        logger.info(f"  📲 토큰 만료 경고 발송 완료 (오늘: {today_str})")
-                    except Exception as _we:
-                        logger.debug(f"  token_warn_date 기록 실패: {_we}")
-                else:
-                    logger.info(f"  ⏳ 토큰 만료 경고 Debounce — 오늘({today_str}) 이미 발송됨. 스킵.")
+                logger.info(f"  🔄 [API Health Check] KIS Token 만료 임박 ({max(0, int(time_left.total_seconds() // 60))}분 남음) → 선제 재발급 실행")
+                try:
+                    if hasattr(adapter, '_request_new_token') and adapter._request_new_token():
+                        token_expires = getattr(adapter, '_token_expires', token_expires)
+                        logger.info(f"  ✅ [API Health Check] KIS Token 선제 재발급 완료 (신규 만료: {token_expires})")
+                    else:
+                        warn_msg = f"⚠️ [API Health Check 경고] KIS Token 만료가 {time_left.seconds // 3600}시간 남았습니다."
+                        logger.warning(warn_msg)
+                except Exception as _re_e:
+                    logger.warning(f"  ⚠️ KIS Token 선제 재발급 예외: {_re_e}")
                 
         success_msg = "✅ [API Health Check] KIS API 정상 작동 확인"
         logger.info(success_msg)

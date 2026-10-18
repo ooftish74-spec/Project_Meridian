@@ -44,6 +44,29 @@ US_SECTOR_ETF_MAP = {
 }
 
 
+US_INVERSE_ETF_MAP = {
+    'tech':          'PSQ',
+    'semi':          'SOXS',
+    'energy':        'SH',
+    'financial':     'SH',
+    'health':        'SH',
+    'industrial':    'SH',
+    'consumer_disc': 'SH',
+    'consumer_stap': 'SH',
+}
+
+KR_INVERSE_ETF_MAP = {
+    'semi':      '114800',
+    'auto':      '114800',
+    'battery':   '114800',
+    'ship':      '114800',
+    'steel':     '114800',
+    'petrochem': '114800',
+    'beauty':    '114800',
+    'finance':   '114800',
+}
+
+
 class SectorPairAlphaEngine:
     """섹터 상대강도 Market-Neutral Long Strong / Short Weak 페어 트레이딩 엔진."""
 
@@ -162,7 +185,11 @@ class SectorPairAlphaEngine:
             weight_weak = pair_budget * (inv_vol_w / total_inv_vol)
 
             long_ticker = etf_map.get(strong_sec, strong_sec)
-            short_ticker = etf_map.get(weak_sec, weak_sec)
+            underlying_short_ticker = etf_map.get(weak_sec, weak_sec)
+            if market.upper() == 'US':
+                short_ticker = US_INVERSE_ETF_MAP.get(weak_sec, 'SH')
+            else:
+                short_ticker = KR_INVERSE_ETF_MAP.get(weak_sec, '114800')
 
             # 수학적 Gaussian CDF 기반 신뢰도 (Error Function erf)
             conf_strong = float(0.5 * (1.0 + math.erf(abs(strong_z) / math.sqrt(2))))
@@ -180,13 +207,16 @@ class SectorPairAlphaEngine:
             })
             pair_orders.append({
                 'ticker': short_ticker,
+                'inverse_ticker': short_ticker,
+                'underlying_short_ticker': underlying_short_ticker,
                 'sector': weak_sec,
                 'direction': 'short',
-                'action': 'sell' if market.upper() == 'US' else 'buy_inverse',
+                'action': 'buy_inverse',
+                'is_inverse_hedge': True,
                 'target_weight': round(weight_weak, 4),
                 'z_score': round(weak_z, 2),
                 'confidence': round(min(0.99, max(0.50, conf_weak)), 3),
-                'reason': f'Market-Neutral Pair Short #{idx+1} (Sector {weak_sec}, Z={weak_z:+.2f}σ, RiskParity={inv_vol_w/total_inv_vol:.1%})'
+                'reason': f'Market-Neutral Pair Short Hedge #{idx+1} via {short_ticker} (Sector {weak_sec}, Z={weak_z:+.2f}σ, RiskParity={inv_vol_w/total_inv_vol:.1%})'
             })
             active_pairs.append({
                 'strong': strong_sec,

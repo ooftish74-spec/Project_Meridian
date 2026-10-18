@@ -125,9 +125,9 @@ class USMarketRegimeEngine:
         except Exception:
             pass
 
-        spy_sc = float(sc.get('spx_change_1d', 0.0) or 0.0) / 100.0
-        qqq_sc = float(sc.get('ixic_change_1d', 0.0) or 0.0) / 100.0
-        sox_sc = float(sc.get('soxx_change_1d', 0.0) or 0.0) / 100.0
+        spy_sc = float(sc.get('sp500_change_1d', sc.get('spx_change_1d', 0.0)) or 0.0) / 100.0
+        qqq_sc = float(sc.get('nasdaq_change_1d', sc.get('ixic_change_1d', 0.0)) or 0.0) / 100.0
+        sox_sc = float(sc.get('sox_change_1d', sc.get('soxx_change_1d', 0.0)) or 0.0) / 100.0
 
         spy_ret = float(us.get('us_spy', {}).get('ret_1d', 0)) or spy_sc
         qqq_ret = float(us.get('us_qqq', {}).get('ret_1d', 0)) or qqq_sc
@@ -160,9 +160,22 @@ class USMarketRegimeEngine:
 
     def _f3_overnight_mom(self) -> Tuple[float, Dict]:
         """Overnight 모멘텀 복합 신호."""
+        sc = {}
+        try:
+            sc_file = RESULTS / 'signal_cache.json'
+            if sc_file.exists():
+                sc = json.loads(sc_file.read_text())
+        except Exception:
+            pass
         oi_score = float(self.oi.get('overnight_score', {}).get('score', 0))
         oi_conf = float(self.oi.get('overnight_score', {}).get('confidence', 0))
+        if oi_score == 0 and sc.get('ois') is not None:
+            oi_score = max(-1.0, min(1.0, (float(sc.get('ois', 50.0)) - 50.0) / 50.0))
+            if oi_conf == 0:
+                oi_conf = 0.5
         ewy_ret = float((self.oi.get('korea_overnight', {}) or {}).get('ewy', {}).get('ret_1d', 0))
+        if ewy_ret == 0 and sc.get('ewy_change_1d') is not None:
+            ewy_ret = float(sc.get('ewy_change_1d', 0.0) or 0.0) / 100.0
         ewy_score = max(-1.0, min(1.0, ewy_ret * 15))
         score = oi_score * 0.6 + ewy_score * 0.4
         return (score, {'overnight_score': round(oi_score, 3), 'overnight_conf': round(oi_conf, 2), 'ewy_ret': round(ewy_ret, 4), 'ewy_score': round(ewy_score, 3), 'score': round(score, 3)})
@@ -170,12 +183,23 @@ class USMarketRegimeEngine:
     def _f4_fear_greed(self) -> Tuple[float, Dict]:
         """Fear & Greed Index proxy (VIX 기반 대체)."""
         us = self.oi.get('us_market', {})
+        sc = {}
+        try:
+            sc_file = RESULTS / 'signal_cache.json'
+            if sc_file.exists():
+                sc = json.loads(sc_file.read_text())
+        except Exception:
+            pass
         fg = us.get('fear_greed', {})
-        fg_val = float(fg.get('value', -1)) if fg else -1
+        fg_val = float(fg.get('value', -1)) if isinstance(fg, dict) and fg else -1
+        if fg_val < 0 and sc.get('fear_greed') is not None:
+            sc_fg = sc.get('fear_greed')
+            fg_val = float(sc_fg.get('value', -1) if isinstance(sc_fg, dict) else sc_fg)
         if fg_val >= 0:
             score = (fg_val - 50) / 50
         else:
-            vix = float(us.get('vix', {}).get('close', 20) or 20)
+            sc_vix = float(sc.get('vix', 0.0) or 0.0)
+            vix = sc_vix if sc_vix > 0 else float(us.get('vix', {}).get('close', 20) or 20)
             score = max(-1.0, min(1.0, (25 - vix) / 20))
             fg_val = None
         return (score, {'fear_greed_value': fg_val, 'score': round(score, 3), 'source': 'direct' if fg_val is not None else 'vix_proxy'})
@@ -218,12 +242,6 @@ class USMarketRegimeEngine:
 
     def _f7_ted_spread(self) -> Tuple[float, Dict]:
         """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
-        tnx_val = None
-        irx_val = None
-        source = 'none'
-        # yfinance 폐기 — FRED API 우선 참조
-    def _f7_ted_spread(self) -> Tuple[float, Dict]:
-        """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
         # yfinance 폐기 — FRED API 우선 참조
         return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable'})
 
@@ -258,8 +276,12 @@ class USMarketRegimeEngine:
         else:
             regime = 'neutral'
         scores = [f1_score, f2_score, f3_score, f4_score, f5_score, f6_score, f7_score]
-        same_sign = sum((1 for s in scores if (s > 0) == (total_score > 0)))
-        agreement = same_sign / len(scores)
+        active_scores = [s for s in scores if abs(s) > 1e-6]
+        if active_scores:
+            same_sign = sum((1 for s in active_scores if (s > 0) == (total_score > 0)))
+            agreement = same_sign / len(active_scores)
+        else:
+            agreement = 0.5
         base_conf = agreement * 0.8
         score_bonus = min(0.2, abs(total_score) * 0.4)
         confidence = min(0.95, base_conf + score_bonus)

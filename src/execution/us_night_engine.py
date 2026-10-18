@@ -26,13 +26,19 @@ _US_HOLDINGS_FILE = _RESULTS_DIR / 'us_night_holdings.json'
 
 _US_TICKER_MAP = {
     '381180': 'SOXX',  # TIGER 미국필라델피아반도체 -> iShares Semiconductor ETF
-    '390390': 'NVDA',  # KODEX 미국반도체 -> Nvidia Corp
+    '390390': 'NVDA',  # KODEX 미국반도체 -> Nvidia Corp (롱 기본값; 인버스 전략일 경우 SOXS로 동적 분기)
     '091160': 'QQQ',   # KODEX 반도체 -> Invesco QQQ Trust
     '396500': 'SOXX',  # TIGER 반도체TOP10 -> SOXX
     '000660': 'TSM',   # SK하이닉스 -> TSMC ADR
     '005930': 'AAPL',  # 삼성전자 -> Apple Inc
     '005380': 'TSLA',  # 현대차 -> Tesla Inc
     '227550': 'SPY',   # KODEX 200 -> SPDR S&P 500
+    '069500': 'SPY',   # KODEX 200 -> SPDR S&P 500
+    '122630': 'TQQQ',  # KODEX 레버리지 -> ProShares UltraPro QQQ
+    '233740': 'TQQQ',  # KODEX 코스닥150레버리지 -> ProShares UltraPro QQQ
+    '252670': 'SQQQ',  # KODEX 200선물인버스2X -> ProShares UltraPro Short QQQ
+    '114800': 'SH',    # KODEX 인버스 -> ProShares Short S&P500
+    '251340': 'SQQQ',  # KODEX 코스닥150선물인버스 -> ProShares UltraPro Short QQQ
     '000270': 'TSLA',  # 기아 -> Tesla Inc
     '009540': 'CAT',   # HD한국조선해양 -> Caterpillar
     '030200': 'TMUS',  # KT -> T-Mobile US
@@ -41,8 +47,15 @@ _US_TICKER_MAP = {
 
 _US_NAME_MAP = {
     'SOXX': 'iShares Semiconductor ETF',
+    'SOXS': 'Direxion Daily Semiconductor Bear 3X Shares',
     'NVDA': 'NVIDIA Corp',
     'QQQ': 'Invesco QQQ Trust (Nasdaq 100)',
+    'TQQQ': 'ProShares UltraPro QQQ',
+    'SQQQ': 'ProShares UltraPro Short QQQ',
+    'SH': 'ProShares Short S&P500',
+    'TLT': 'iShares 20+ Year Treasury Bond ETF',
+    'GLD': 'SPDR Gold Shares',
+    'UUP': 'Invesco DB US Dollar Index Bullish',
     'TSM': 'Taiwan Semiconductor Manufacturing ADR',
     'AAPL': 'Apple Inc',
     'TSLA': 'Tesla Inc',
@@ -58,6 +71,8 @@ class USNightExecutionEngine:
     def __init__(self):
         self.max_exposure_pct = self._compute_dynamic_exposure_cap()
         self.trailing_stop_pct = self._compute_dynamic_trailing_stop()
+        self.trail_activation_pct = float(cfg.get('us_night.trail_activation_pct', 0.015))
+        self.hard_stop_pct = float(cfg.get('us_night.hard_stop_pct', 0.05))
         self._load_holdings()
 
     def _compute_dynamic_exposure_cap(self) -> float:
@@ -104,6 +119,23 @@ class USNightExecutionEngine:
     def _load_holdings(self):
         """미국 장 야간 보유 포지션 로드 (KIS 실계좌 SSOT 및 HWM 연동)."""
         self.holdings: List[Dict[str, Any]] = []
+        saved_hwm_map: Dict[str, float] = {}
+        if _US_HOLDINGS_FILE.exists():
+            try:
+                _saved_list = json.loads(_US_HOLDINGS_FILE.read_text(encoding='utf-8'))
+                if isinstance(_saved_list, list):
+                    for _sh in _saved_list:
+                        if isinstance(_sh, dict) and _sh.get('ticker'):
+                            _sh_tk = str(_sh['ticker'])
+                            _sh_hi = max(
+                                float(_sh.get('highest_price', 0.0) or 0.0),
+                                float(_sh.get('peak_price', 0.0) or 0.0)
+                            )
+                            if _sh_hi > 0:
+                                saved_hwm_map[_sh_tk] = _sh_hi
+            except Exception:
+                pass
+
         kp_path = _RESULTS_DIR / 'kis_portfolio.json'
         if kp_path.exists():
             try:
@@ -113,17 +145,28 @@ class USNightExecutionEngine:
                 today_str = datetime.now().strftime('%Y-%m-%d')
                 for t, h in kp.get('holdings', {}).items():
                     if not t.isdigit():  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
-                        curr_p = float(h.get('current_price', 0.0))
-                        curr_ret = float(h.get('return_pct', 0.0))
-                        hwm = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                        entry_p = float(h.get('avg_price', 0.0) or 0.0)
+                        curr_p = float(h.get('current_price', 0.0) or 0.0)
+                        curr_ret = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
+                        ledger_hwm = ledger_mgr.get_hwm(t)
+                        saved_high = max(
+                            saved_hwm_map.get(t, 0.0),
+                            float(ledger_hwm.get('peak_price', 0.0) or 0.0),
+                            float(h.get('highest_price', 0.0) or 0.0),
+                            float(h.get('peak_price', 0.0) or 0.0),
+                        )
+                        merged_high = max(curr_p, entry_p, saved_high)
+                        hwm = ledger_mgr.update_hwm(t, current_price=merged_high, current_pnl_pct=curr_ret)
+                        final_peak = max(merged_high, float(hwm.get('peak_price', merged_high) or merged_high))
                         self.holdings.append({
                             'ticker': t,
                             'name': h.get('name', t),
-                            'entry_price': float(h.get('avg_price', 0.0)),
+                            'entry_price': entry_p,
                             'current_price': curr_p,
-                            'peak_price': float(hwm.get('peak_price', curr_p) or curr_p),
+                            'highest_price': final_peak,
+                            'peak_price': final_peak,
                             'peak_pnl_pct': float(hwm.get('peak_pnl_pct', curr_ret) or curr_ret),
-                            'trail_activated': bool(hwm.get('trail_activated', False)),
+                            'trail_activated': bool(hwm.get('trail_activated', False)) or (entry_p > 0 and final_peak >= entry_p * (1.0 + self.trail_activation_pct)),
                             'quantity': int(h.get('qty', 0)),
                             'amount': float(h.get('qty', 0)) * curr_p,
                             'entry_date': ledger_mgr.get_entry_date(t) or today_str
@@ -174,8 +217,15 @@ class USNightExecutionEngine:
 
         seen_us_tickers = set()
         for sig in s3_signals:
-            raw_ticker = sig.get('ticker')
-            us_ticker = _US_TICKER_MAP.get(raw_ticker, raw_ticker)
+            raw_ticker = str(sig.get('ticker', '')).strip()
+            strat_str = str(sig.get('strategy', '')).lower()
+            name_str = str(sig.get('name', ''))
+            if raw_ticker == '390390' and ('short' in strat_str or 'inverse' in strat_str or '인버스' in name_str):
+                us_ticker = 'SOXS'
+            else:
+                us_ticker = _US_TICKER_MAP.get(raw_ticker, raw_ticker)
+            if not us_ticker or str(us_ticker).isdigit():
+                continue
             if us_ticker in seen_us_tickers:
                 continue
             seen_us_tickers.add(us_ticker)
@@ -186,6 +236,16 @@ class USNightExecutionEngine:
             target_amount_krw = min(available_us_cash_krw, account_nav * float(weight))
 
             px = float(sig.get('price', 0.0) or 0.0)
+            if px <= 0:
+                try:
+                    from src.data_collection.central_data_gateway import get_central_data_gateway
+                    _cdg_p = get_central_data_gateway().get_current_price(us_ticker)
+                    if isinstance(_cdg_p, dict) and float(_cdg_p.get('price', 0) or 0) > 0:
+                        px = float(_cdg_p['price'])
+                    elif isinstance(_cdg_p, (int, float)) and _cdg_p > 0:
+                        px = float(_cdg_p)
+                except Exception:
+                    pass
             if px <= 0:
                 continue
 
@@ -203,9 +263,11 @@ class USNightExecutionEngine:
                 'ticker': us_ticker,
                 'name': us_name,
                 'direction': direction,
+                'action': 'buy' if direction in ('long', 'buy') else 'sell',
                 'price': px,
                 'quantity': qty,
                 'amount': actual_order_amount_krw,
+                'amount_krw': actual_order_amount_krw,
                 'amount_usd': qty * px,
                 'order_type': 'LIMIT_BEST',
                 'session': 'US_NIGHT',
@@ -213,11 +275,13 @@ class USNightExecutionEngine:
                 'strategy': 'S3_US_MOMENTUM_SWING'
             }
             orders.append(order)
+            available_us_cash_krw = max(0.0, available_us_cash_krw - actual_order_amount_krw)
 
             # 포지션에 트레일링 스탑 피크 가격 등록
             self.holdings.append({
                 'ticker': us_ticker,
                 'entry_price': px,
+                'highest_price': px,
                 'peak_price': px,
                 'quantity': qty,
                 'amount': qty * px,
@@ -241,23 +305,45 @@ class USNightExecutionEngine:
                 continue
 
             entry_p = float(h.get('entry_price', price) or price)
+            prev_peak = max(
+                float(h.get('highest_price', 0.0) or 0.0),
+                float(h.get('peak_price', entry_p) or entry_p),
+                entry_p
+            )
             curr_pnl_pct = (price - entry_p) / entry_p * 100.0 if entry_p > 0 else 0.0
-            hwm = ledger_mgr.update_hwm(ticker, current_price=price, current_pnl_pct=curr_pnl_pct)
-            peak = float(hwm.get('peak_price', price) or price)
-            h['peak_price'] = peak
+            hwm = ledger_mgr.update_hwm(ticker, current_price=max(price, prev_peak), current_pnl_pct=curr_pnl_pct)
+            highest_price = max(prev_peak, float(hwm.get('peak_price', price) or price), price)
+            h['peak_price'] = highest_price
+            h['highest_price'] = highest_price
 
-            drop_pct = (price - peak) / peak if peak > 0 else 0.0
+            entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
+            drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
 
             # Dynamic Volatility ATR Trailing Stop
             ticker_atr = atr_map.get(ticker, 0.015) if atr_map else 0.015
             atr_multiplier = cfg.get('us_night.trailing_stop_atr_mult', 2.0)
             dynamic_trailing_stop_pct = max(0.015, min(0.05, ticker_atr * atr_multiplier))
 
-            if drop_pct <= -dynamic_trailing_stop_pct:
+            # 1) Hard Stop-Loss (수익 활성화 전에도 진입가 대비 -hard_stop_pct 이탈 시 즉시 손절)
+            if entry_p > 0 and entry_return <= -self.hard_stop_pct:
+                logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 한도=-{self.hard_stop_pct*100:.2f}%)")
+                exit_orders.append({
+                    'ticker': ticker,
+                    'direction': 'sell',
+                    'action': 'sell',
+                    'quantity': h.get('quantity', 0),
+                    'amount': h.get('amount', 0),
+                    'price': price,
+                    'reason': f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)",
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+            # 2) Trailing Stop (고점이 진입가 대비 +trail_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화)
+            elif entry_p > 0 and highest_price >= entry_p * (1.0 + self.trail_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")
                 exit_orders.append({
                     'ticker': ticker,
                     'direction': 'sell',
+                    'action': 'sell',
                     'quantity': h.get('quantity', 0),
                     'amount': h.get('amount', 0),
                     'price': price,

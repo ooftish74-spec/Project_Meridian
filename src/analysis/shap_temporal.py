@@ -38,7 +38,8 @@ class SHAPAnalyzer:
 
     def analyze(self, model, X_val: np.ndarray,
                 feature_names: List[str],
-                method: str = 'tree') -> Dict:
+                method: str = 'tree',
+                y_val: Optional[np.ndarray] = None) -> Dict:
         """SHAP 분석 실행.
 
         Args:
@@ -46,6 +47,7 @@ class SHAPAnalyzer:
             X_val: 검증 데이터
             feature_names: 피처 이름
             method: 'tree' or 'permutation'
+            y_val: 검증 타겟 (permutation importance 시 선택적 전달)
 
         Returns:
             {'importances': dict, 'top_features': list, 'weak_features': list}
@@ -55,7 +57,7 @@ class SHAPAnalyzer:
         if method == 'tree':
             importances = self._tree_shap(model, X_val, feature_names)
         else:
-            importances = self._permutation_importance(model, X_val, feature_names)
+            importances = self._permutation_importance(model, X_val, feature_names, y_val=y_val)
 
         if not importances:
             # Fallback: 모델 내장 중요도
@@ -147,12 +149,17 @@ class SHAPAnalyzer:
             logger.debug(f"TreeSHAP 실패: {e}")
             return {}
 
-    def _permutation_importance(self, model, X_val, feature_names):
+    def _permutation_importance(self, model, X_val, feature_names, y_val: Optional[np.ndarray] = None):
         """Permutation importance (shap 없어도 가능)."""
         try:
             from sklearn.inspection import permutation_importance
-            result = permutation_importance(model, X_val[:500],
-                                           np.zeros(min(500, len(X_val))),
+            X_sub = X_val[:500]
+            if y_val is not None and len(y_val) >= len(X_sub):
+                y_target = y_val[:len(X_sub)]
+            else:
+                y_target = model.predict(X_sub)
+            result = permutation_importance(model, X_sub,
+                                           y_target,
                                            n_repeats=5, random_state=42)
             return {f: float(v) for f, v in zip(feature_names, result.importances_mean)}
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:

@@ -26,12 +26,33 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _SIGNAL_CACHE = _PROJECT_ROOT / 'results' / 'signal_cache.json'
 
+STREAM_ID_MAP: Dict[str, str] = {
+    'S0': 's0_beta',
+    'S1': 's1_edge',
+    'S2': 's2_ml_alpha',
+    'S3': 's3_active_macro',
+    'S4': 's4_multi_asset',
+    'S5': 's5_cash',
+    'S10': 's10_mega_trend',
+    'S10_MEGA_TREND': 's10_mega_trend',
+    'S11': 's11_high_beta',
+    'S11_HIGHBETA_SNIPER': 's11_high_beta',
+    'S12': 's12_derivative_squeeze',
+    'S12_DERIVATIVE_SQUEEZE': 's12_derivative_squeeze',
+    'S13': 's13_japan_alpha',
+    'S13_JAPAN_ALPHA': 's13_japan_alpha',
+    'S14': 's14_pair_alpha',
+    'S14_PAIR_ALPHA': 's14_pair_alpha',
+}
+
 class SmartWalletAllocator:
     """HMM + VIX 기반 연속 방정식 자본 할당기.
 
     절대 `if regime == 'crash': ...` 같은 하드코딩 분기문 금지.
     f_long 수식 하나로 모든 레짐을 연속적으로 처리.
     """
+
+    STREAM_ID_MAP = STREAM_ID_MAP
 
     def __init__(self):
         self._cfg = DynamicConfig()
@@ -210,13 +231,17 @@ class MetaCapitalAllocator:
     신규 코드는 SmartWalletAllocator를 사용하라.
     """
 
-    def __init__(self, total_capital: float=200000000.0):
+    STREAM_ID_MAP = STREAM_ID_MAP
+
+    def __init__(self, total_capital: Optional[float] = None):
+        self.cfg = DynamicConfig()
+        if total_capital is None or total_capital <= 0:
+            total_capital = float(self.cfg.get('portfolio.initial_capital', 20_000_000.0))
         if _VAM_AVAILABLE:
             self.virtual_manager = _VAM(total_master_capital=total_capital)
         else:
             self.virtual_manager = None
             self._total_capital = total_capital
-        self.cfg = DynamicConfig()
 
     def _get_regime_multiplier(self, stream_id: str) -> float:
         try:

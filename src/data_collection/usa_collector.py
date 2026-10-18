@@ -217,7 +217,6 @@ class USADataCollector:
                 'WTI_Oil': 'DCOILWTICO',
                 'Brent_Oil': 'DCOILBRENTEU',
                 'Natural_Gas': 'DHHNGSP',
-                'Gold': 'GOLDAMGBD228NLBM'
             }
             data = {}
             for name, series_id in commodities_map.items():
@@ -228,6 +227,31 @@ class USADataCollector:
                         logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
                 except Exception as e:
                     logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
+            # Gold: FRED GOLDAMGBD228NLBM is retired; use GLD / GoogleFinance proxy without FRED 400 warning
+            try:
+                from pathlib import Path as _P
+                gld_path = _P(__file__).resolve().parents[2] / 'data' / 'us_stocks' / 'GLD.csv'
+                if gld_path.exists():
+                    df_gld = pd.read_csv(gld_path)
+                    col_m = {str(c).lower(): c for c in df_gld.columns}
+                    d_c = col_m.get('date')
+                    c_c = col_m.get('close')
+                    if d_c and c_c:
+                        df_gld[d_c] = pd.to_datetime(df_gld[d_c], errors='coerce')
+                        df_gld = df_gld.dropna(subset=[d_c]).set_index(d_c).sort_index()
+                        s_gld = pd.to_numeric(df_gld[c_c], errors='coerce').dropna() * 10.8
+                        s_gld = s_gld.loc[start_date:end_date]
+                        if not s_gld.empty:
+                            data['Gold'] = s_gld
+                if 'Gold' not in data:
+                    from src.utils.google_finance_collector import GoogleFinanceCollector
+                    details = GoogleFinanceCollector.get_quote_details('GC=F')
+                    if details and details.get('price', 0) > 0:
+                        idx = pd.date_range(start_date, end_date, freq='B')
+                        if len(idx) > 0:
+                            data['Gold'] = pd.Series(float(details['price']), index=idx, name='Gold')
+            except Exception as _ge:
+                logger.debug(f'  Gold proxy fallback skipped: {_ge}')
             if data:
                 result = pd.concat(data, axis=1)
                 logger.info(f"✓ Collected {len(result)} records for US commodities via FRED")

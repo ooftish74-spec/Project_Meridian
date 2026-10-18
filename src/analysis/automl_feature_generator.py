@@ -46,6 +46,9 @@ class AutoMLFeatureGenerator:
         if len(df) < 260:
             return pd.DataFrame()
 
+        df = df.copy()
+        df.columns = [str(c).lower() for c in df.columns]
+
         # 1. Base Price/Volume Features
         close = df['close'].astype(np.float32)
         high = df['high'].astype(np.float32)
@@ -92,7 +95,7 @@ class AutoMLFeatureGenerator:
 
         # High/Low Range
         feat_df['high_low_range'] = (df['high'].rolling(20).max() - df['low'].rolling(20).min()) / close * 100
-        feat_df['close_to_high_20d'] = (close / df['high'].rolling(20).max() - 1) * 100
+        feat_df['close_to_high_20d'] = close / df['high'].rolling(20).max()
 
         # Overnight/Intraday
         feat_df['overnight_return'] = (opn / close.shift(1) - 1) * 100
@@ -119,7 +122,7 @@ class AutoMLFeatureGenerator:
         # 3. Handle NaNs & Infinite
         feat_df = feat_df.replace([np.inf, -np.inf], np.nan)
         # Drop initial rows that lack full rolling window
-        feat_df = feat_df.iloc[260:]
+        feat_df = feat_df.iloc[259:]
         
         return feat_df
 

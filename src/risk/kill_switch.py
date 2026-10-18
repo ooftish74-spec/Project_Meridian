@@ -645,7 +645,7 @@ class KillSwitch:
         """
         if not streams:
             from config.dynamic_config import DynamicConfig as _DC
-            streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+            streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
         ts = now_kst().isoformat()
         _dash_str = '=' * 60
         logger.critical(f"\n{_dash_str}\n  🚨🚨 HARD LIQUIDATE ALL 발동 🚨🚨\n  사유: {reason}\n  대상: {streams}\n  시각: {ts}\n{_dash_str}")

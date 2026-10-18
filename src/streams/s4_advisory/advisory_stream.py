@@ -345,18 +345,17 @@ class S4AdvisoryStream(BaseStream):
                 logger.debug(f"  [Alpha Factory] QV Decay 조정 실패 (무시): {_qv_e}")
             result = evaluator.evaluate(positions, market_data, regime)
             exit_candidates = result.get('exit_candidates', [])
+            _hc_cnt = result.get('hold_count', 0)
             if exit_candidates:
-                _hc_cnt = result.get('hold_count', 0)
-            logger.info(f"  📊 S4 Exit 평가: {len(exit_candidates)} exit / {_hc_cnt} hold (regime={regime})")
-            for c in exit_candidates:
-                _reasons = ', '.join((r.get('rule', '') for r in c.get('reasons', [])))
-                _urg = c.get('urgency', 0)
-                _cnm = c.get('name', '?')
-                _pnl = c.get('pnl_pct', 0)
-                logger.info(f"    [{_urg}] {_cnm} P&L={_pnl:+.1f}% — {_reasons}")
+                logger.info(f"  📊 S4 Exit 평가: {len(exit_candidates)} exit / {_hc_cnt} hold (regime={regime})")
+                for c in exit_candidates:
+                    _reasons = ', '.join((r.get('rule', '') for r in c.get('reasons', [])))
+                    _urg = c.get('urgency', 0)
+                    _cnm = c.get('name', '?')
+                    _pnl = c.get('pnl_pct', 0)
+                    logger.info(f"    [{_urg}] {_cnm} P&L={_pnl:+.1f}% — {_reasons}")
             else:
-                _hc_cnt2 = result.get('hold_count', 0)
-                logger.info(f"  ✅ S4 Exit 평가: 교체 대상 없음 ({_hc_cnt2} hold)")
+                logger.info(f"  ✅ S4 Exit 평가: 교체 대상 없음 ({_hc_cnt} hold)")
             sell_orders = []
             for c in exit_candidates:
                 if c.get('urgency', 0) >= 2:

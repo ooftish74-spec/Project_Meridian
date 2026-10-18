@@ -23,7 +23,8 @@ class RiskParityOptimizer:
         주어진 가중치(weights)와 공분산 행렬(cov_matrix)에 대해
         각 자산/스트림의 리스크 기여도를 계산합니다.
         """
-        portfolio_volatility = np.sqrt(weights.T @ cov_matrix @ weights)
+        port_var = max(float(weights.T @ cov_matrix @ weights), 1e-12)
+        portfolio_volatility = np.sqrt(port_var)
         # Marginal Risk Contribution
         mrc = (cov_matrix @ weights) / portfolio_volatility
         # Risk Contribution
@@ -57,7 +58,10 @@ class RiskParityOptimizer:
         :param previous_weights: 직전 포트폴리오 비중 배열 (Turnover 계산용)
         :param current_aum: 운용 자산 규모 (원화). 규모가 클수록 회전율 페널티가 강화됨.
         """
+        cov_matrix = np.nan_to_num(np.asarray(cov_matrix, dtype=float), nan=0.0, posinf=0.0, neginf=0.0)
         N = cov_matrix.shape[0]
+        if N == 0:
+            return np.array([], dtype=float)
         init_weights = np.repeat(1 / N, N)
         
         # AUM 기반 동적 Turnover Penalty 프레임워크
@@ -96,9 +100,14 @@ class RiskParityOptimizer:
             options={'ftol': self.tolerance, 'disp': False}
         )
         
-        if not result.success:
-            logger.critical("Risk Parity Optimization failed to converge.")
-            raise RuntimeError(f"Risk Parity Optimization failed: {result.message}")
+        if not result.success or result.x is None or np.any(np.isnan(result.x)):
+            logger.warning(f"Risk Parity SLSQP did not converge ({result.message}) → falling back to inverse-volatility weights.")
+            diag_var = np.maximum(np.diag(cov_matrix), 1e-8)
+            inv_vols = 1.0 / np.sqrt(diag_var)
+            inv_vol_sum = float(np.sum(inv_vols))
+            if inv_vol_sum > 0:
+                return inv_vols / inv_vol_sum
+            return init_weights
             
         return result.x
 

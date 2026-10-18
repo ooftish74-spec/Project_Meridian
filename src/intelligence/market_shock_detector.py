@@ -161,6 +161,33 @@ class MarketShockDetector:
                         scores.append(15)
                         self.shock_signals.append(f"NASDAQ {nasdaq_ret * 100:+.1f}% (MODERATE)")
             if not scores:
+                sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if sc_path.exists():
+                    sc = json.loads(sc_path.read_text())
+                    oi = sc.get('overnight_intel', {})
+                    sp_1d = sc.get('sp500_change_1d', oi.get('sp500_change_pct'))
+                    if sp_1d is None and sc.get('sp500_change_1m'):
+                        sp_1d = float(sc['sp500_change_1m']) / 21.0
+                    if sp_1d:
+                        sp_ret = float(sp_1d) / 100.0 if abs(float(sp_1d)) > 0.3 else float(sp_1d)
+                        if sp_ret < self.THRESHOLDS['us_sp500_severe']:
+                            scores.append(40)
+                            self.shock_signals.append(f"S&P500 {sp_ret * 100:+.1f}% (SEVERE)")
+                        elif sp_ret < self.THRESHOLDS['us_sp500_moderate']:
+                            scores.append(20)
+                            self.shock_signals.append(f"S&P500 {sp_ret * 100:+.1f}% (MODERATE)")
+                    nq_1d = sc.get('nasdaq_change_1d', oi.get('nasdaq_change_pct'))
+                    if nq_1d is None and sc.get('nasdaq_change_1m'):
+                        nq_1d = float(sc['nasdaq_change_1m']) / 21.0
+                    if nq_1d:
+                        nq_ret = float(nq_1d) / 100.0 if abs(float(nq_1d)) > 0.3 else float(nq_1d)
+                        if nq_ret < self.THRESHOLDS['us_nasdaq_severe']:
+                            scores.append(35)
+                            self.shock_signals.append(f"NASDAQ {nq_ret * 100:+.1f}% (SEVERE)")
+                        elif nq_ret < self.THRESHOLDS['us_nasdaq_moderate']:
+                            scores.append(15)
+                            self.shock_signals.append(f"NASDAQ {nq_ret * 100:+.1f}% (MODERATE)")
+            if not scores:
                 sp = self._safe_yf_download('^GSPC', timeout=self.YF_TIMEOUT)
                 if sp is not None and len(sp) >= 2:
                     last_ret = float(sp['close'].iloc[-1] / sp['close'].iloc[-2] - 1)
@@ -195,6 +222,21 @@ class MarketShockDetector:
                             scores.append(15)
                             self.shock_signals.append(f"VIX {vix:.1f} (MODERATE)")
                     break
+            if not scores:
+                sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if sc_path.exists():
+                    sc = json.loads(sc_path.read_text())
+                    vix_sc = sc.get('vix')
+                    if isinstance(vix_sc, dict):
+                        vix_sc = vix_sc.get('value', vix_sc.get('close'))
+                    if vix_sc:
+                        vix_val = float(vix_sc)
+                        if vix_val > self.THRESHOLDS['vix_severe']:
+                            scores.append(30)
+                            self.shock_signals.append(f"VIX {vix_val:.1f} (SEVERE)")
+                        elif vix_val > self.THRESHOLDS['vix_moderate']:
+                            scores.append(15)
+                            self.shock_signals.append(f"VIX {vix_val:.1f} (MODERATE)")
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         if not scores:
@@ -231,6 +273,23 @@ class MarketShockDetector:
                             scores.append(12)
                             self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (MODERATE)")
                     break
+            if not scores:
+                sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if sc_path.exists():
+                    sc = json.loads(sc_path.read_text())
+                    oi = sc.get('overnight_intel', {})
+                    night_ret = sc.get(
+                        'night_futures_change_pct',
+                        oi.get('night_futures_change_pct', sc.get('ewy_change_1d', 0)),
+                    )
+                    if night_ret:
+                        night_ret = float(night_ret) / 100.0 if abs(float(night_ret)) > 0.3 else float(night_ret)
+                        if night_ret < self.THRESHOLDS['futures_severe']:
+                            scores.append(25)
+                            self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (SEVERE)")
+                        elif night_ret < self.THRESHOLDS['futures_moderate']:
+                            scores.append(12)
+                            self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (MODERATE)")
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         return scores
@@ -242,9 +301,14 @@ class MarketShockDetector:
             sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
             if sc_path.exists():
                 sc = json.loads(sc_path.read_text())
-                usdkrw_chg = sc.get('usdkrw_change_1m', 0)
-                if usdkrw_chg:
-                    fx_ret = float(usdkrw_chg) / 100 / 21
+                fx_ret = None
+                if sc.get('usdkrw_change_1d') is not None:
+                    fx_ret = float(sc['usdkrw_change_1d']) / 100.0
+                elif sc.get('usdkrw') and sc.get('usdkrw_prev') and float(sc['usdkrw_prev']) > 0:
+                    fx_ret = float(sc['usdkrw']) / float(sc['usdkrw_prev']) - 1.0
+                elif sc.get('usdkrw_change_1m'):
+                    fx_ret = float(sc['usdkrw_change_1m']) / 100.0 / 21.0
+                if fx_ret is not None:
                     if fx_ret > self.THRESHOLDS['usdkrw_severe']:
                         scores.append(20)
                         self.shock_signals.append(f"USD/KRW {fx_ret * 100:+.1f}% (원화 급락)")

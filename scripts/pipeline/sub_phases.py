@@ -428,6 +428,9 @@ def sync_ssot_from_me():
                 'raw_data': _sm_existing.get('raw_data', {}),  # 보존
                 'metrics': {},
             }
+            for _k, _v in _sm_existing.items():
+                if _k.startswith('S') and isinstance(_v, dict):
+                    _sm_ssot[_k] = _v
             for _sid in sorted(set(list(_sleeves.keys()) + list(_per_stream.keys()))):
                 _sv = _sleeves.get(_sid, {})
                 _ps_v = _per_stream.get(_sid, {})
@@ -443,6 +446,8 @@ def sync_ssot_from_me():
                         'mdd': _sv.get('mdd'),
                         'sortino': _sv.get('sortino'),
                     }
+                    if _sid not in _sm_ssot:
+                        _sm_ssot[_sid] = _sm_ssot['metrics'][_sid]
             _sm_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
             atomic_write_json(_sm_path, 
                 _sm_ssot, indent=2)
@@ -1098,21 +1103,20 @@ def _phase_overnight():
 
         # stock_technicals (삼성전자/하이닉스 RSI, MACD, 거래량비)
         try:
-            from pykrx import stock as _pykrx2
-            from datetime import timedelta as _td3
-            _end = datetime.now().strftime('%Y%m%d')
-            _start = (datetime.now() - _td3(days=30)).strftime('%Y%m%d')
-
+            from src.data_collection.unified_collector import collect_kr_ohlcv
             stock_techs = {}
             _tech_tickers = cfg.get(
                 'data.tech_indicator_tickers',
                 [['005930', '삼성전자'], ['000660', 'SK하이닉스']]
             )
             for _ticker, _name in _tech_tickers:
-                _ohlcv = _pykrx2.get_market_ohlcv(_start, _end, _ticker)
+                _ohlcv = collect_kr_ohlcv(_ticker, days=45)
                 if _ohlcv is not None and len(_ohlcv) >= 14:
-                    closes = _ohlcv['종가'].values.astype(float)
-                    volumes = _ohlcv['거래량'].values.astype(float)
+                    _ohlcv.columns = [str(c).lower() for c in _ohlcv.columns]
+                    _c_col = 'close' if 'close' in _ohlcv.columns else '종가'
+                    _v_col = 'volume' if 'volume' in _ohlcv.columns else '거래량'
+                    closes = _ohlcv[_c_col].values.astype(float)
+                    volumes = _ohlcv[_v_col].values.astype(float)
 
                     # RSI-14
                     deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
@@ -1626,13 +1630,13 @@ def _phase_intraday():
             ws_tickers = list(ws_tickers)[:_ws_max]
             ws = start_realtime_streaming(ws_tickers)
             if ws.is_running:
-                logger.error(f"  🟢 WebSocket 스트리밍: {len(ws_tickers)}종목 구독", exc_info=True)
+                logger.info(f"  🟢 WebSocket 스트리밍: {len(ws_tickers)}종목 구독")
             else:
-                logger.error("  ℹ️ WebSocket 미가용 → REST fallback", exc_info=True)
+                logger.info("  ℹ️ WebSocket 미가용 → REST fallback")
         except ImportError:
-            logger.error("  kis_websocket import 실패 — REST 전용", exc_info=True)
+            logger.info("  kis_websocket import 실패 — REST 전용")
         except Exception as e:
-            logger.error(f"  ℹ️ WebSocket 미가용: {e} → REST fallback", exc_info=True)
+            logger.info(f"  ℹ️ WebSocket 미가용: {e} → REST fallback")
     except Exception as e:
         logger.info(f"  RealtimeExitMonitor 시작 실패: {e} → 기존 방식")
 
@@ -1696,7 +1700,6 @@ def _phase_intraday():
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1510", exc_info=True)
 
             if _now_ts - _last_ts >= _flow_interval_sec:
                 # 현재 보유 종목 + S1 관심 유니버스 대상 수집
@@ -1712,7 +1715,6 @@ def _phase_intraday():
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1526", exc_info=True)
                 # 핵심 SS-ETF 기초자산 추가
                 _default_tickers = cfg.get("intraday.default_watch_tickers", [])
                 _flow_tickers.update(_default_tickers)
@@ -1727,7 +1729,6 @@ def _phase_intraday():
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                    logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1541", exc_info=True)
                 logger.info(f"  ✅ [Phase 36] 장중 수급 수집: {len(_flow_tickers)}종목")
             else:
                 # 아직 interval 미달 → 캐시 재사용
@@ -1784,9 +1785,9 @@ def _phase_intraday():
             if _all_exit_tickers:
                 logger.info(f"  🔍 장중 Exit 체크: {len(_all_exit_tickers)}종목")
 
-                # pykrx로 현재가 조회
+                # pykrx_compat으로 현재가 조회
                 try:
-                    from pykrx import stock as _pykrx_stock
+                    from src.data_collection.pykrx_compat import stock as _pykrx_stock
                     _today_short = date.today().strftime('%Y%m%d')
                     rt_prices = {}
                     for _tk in _all_exit_tickers:
@@ -1794,13 +1795,12 @@ def _phase_intraday():
                             _df = _pykrx_stock.get_market_ohlcv(
                                 _today_short, _today_short, _tk)
                             if len(_df) > 0:
-                                _price = _df.iloc[-1].get('종가', 0)
+                                _price = _df.iloc[-1].get('종가', _df.iloc[-1].get('close', 0))
                                 if _price > 0:
                                     rt_prices[_tk] = float(_price)
                         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                             import logging
                             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                            logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1614", exc_info=True)
 
                     if rt_prices:
                         # MTM 업데이트 + Exit 체크
@@ -1816,7 +1816,6 @@ def _phase_intraday():
                         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                             import logging
                             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                            logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:1630", exc_info=True)
 
                         sell_orders = _mgr.check_exit_conditions(_regime)
 
@@ -2005,11 +2004,7 @@ def _phase_evening_data():
 
     # KR 기술적 지표 (확정가 기준 RSI/MACD)
     try:
-        from pykrx import stock as _pykrx
-        from datetime import timedelta as _td3
-        _end = datetime.now().strftime('%Y%m%d')
-        _start = (datetime.now() - _td3(days=30)).strftime('%Y%m%d')
-
+        from src.data_collection.unified_collector import collect_kr_ohlcv
         s1_cache_updates = {}
         stock_techs = {}
         _tech_tickers2 = cfg.get(
@@ -2017,10 +2012,13 @@ def _phase_evening_data():
             [['005930', '삼성전자'], ['000660', 'SK하이닉스']]
         )
         for _ticker, _name in _tech_tickers2:
-            _ohlcv = _pykrx.get_market_ohlcv(_start, _end, _ticker)
+            _ohlcv = collect_kr_ohlcv(_ticker, days=45)
             if _ohlcv is not None and len(_ohlcv) >= 14:
-                closes = _ohlcv['종가'].values.astype(float)
-                volumes = _ohlcv['거래량'].values.astype(float)
+                _ohlcv.columns = [str(c).lower() for c in _ohlcv.columns]
+                _c_col = 'close' if 'close' in _ohlcv.columns else '종가'
+                _v_col = 'volume' if 'volume' in _ohlcv.columns else '거래량'
+                closes = _ohlcv[_c_col].values.astype(float)
+                volumes = _ohlcv[_v_col].values.astype(float)
                 # RSI-14
                 deltas = [closes[i] - closes[i-1] for i in range(1, len(closes))]
                 gains = [max(0, d) for d in deltas[-14:]]
@@ -2032,7 +2030,10 @@ def _phase_evening_data():
                 vol_avg = float(volumes[-20:].mean()) if len(volumes) >= 20 else 1
                 vol_ratio = float(volumes[-1] / vol_avg) if vol_avg > 0 else 1
                 stock_techs[_ticker] = {
-                    'rsi_14': round(rsi, 1), 'volume_ratio': round(vol_ratio, 2), 'name': _name,
+                    'rsi_14': round(rsi, 1),
+                    'volume_ratio': round(vol_ratio, 2),
+                    'name': _name,
+                    'close': float(closes[-1]),
                 }
         if stock_techs:
             s1_cache_updates['stock_technicals'] = stock_techs
@@ -2235,8 +2236,8 @@ def _phase_us_premarket():
     # ── 1. US 가격 데이터 갱신 ──────────────────────────────────────────────
     try:
         from src.data_collection.us_stock_collector import USStockCollector
-        USStockCollector().collect_all()
-        logger.info(f'  ✅ {_tag} US 종목 수집')
+        USStockCollector().collect_daily()
+        logger.info(f'  ✅ {_tag} US 종목 및 피처 수집')
     except Exception as e:
         logger.error(f'  {_tag} US 수집 스킵: {e}', exc_info=True)
 
@@ -2247,6 +2248,11 @@ def _phase_us_premarket():
     except Exception as e:
         logger.error(f'  {_tag} 글로벌 시그널 실패: {e}', exc_info=True)
 
+    try:
+        from src.intelligence.us_market_regime import USMarketRegimeEngine
+        USMarketRegimeEngine().detect()
+    except Exception as e_usr:
+        logger.debug(f'  {_tag} USMarketRegimeEngine 갱신 스킵: {e_usr}')
 
     logger.info(f'  ✅ {_tag} US 프리마켓 페이즈 완료')
 
@@ -2274,8 +2280,8 @@ def _phase_us_regular_market():
     if now_ts - last_collect >= 60.0:
         try:
             from src.data_collection.us_stock_collector import USStockCollector
-            USStockCollector().collect_all()
-            logger.info(f'  ✅ {_tag} US 종목 가격 수집 완료')
+            USStockCollector().collect_daily()
+            logger.info(f'  ✅ {_tag} US 종목 가격 및 피처 수집 완료')
         except Exception as e:
             logger.debug(f'  {_tag} US 수집 예외: {e}')
 
@@ -2285,6 +2291,11 @@ def _phase_us_regular_market():
             logger.info(f'  ✅ {_tag} 글로벌 시그널: {len(signals)}개')
         except Exception as e:
             logger.debug(f'  {_tag} 글로벌 시그널 예외: {e}')
+        try:
+            from src.intelligence.us_market_regime import USMarketRegimeEngine
+            USMarketRegimeEngine().detect()
+        except Exception as e_usr:
+            logger.debug(f'  {_tag} USMarketRegimeEngine 갱신 예외: {e_usr}')
         _phase_us_regular_market._last_collect = now_ts
 
     # ── 3. 동적 통합 엔진 (StreamOrchestrator) 가동 ──────────────────────
@@ -2295,36 +2306,9 @@ def _phase_us_regular_market():
     except Exception as e:
         logger.error(f"  ❌ {_tag} US 정규장 동적 엔진 가동 실패: {e}", exc_info=True)
 
-    # ── 4. US Night Execution Engine Trailing Stop 모니터링 & 청산 집행 ──
-    try:
-        from src.execution.us_night_engine import USNightExecutionEngine
-        us_engine = USNightExecutionEngine()
-        if getattr(us_engine, 'holdings', None):
-            logger.info(f"  🇺🇸 {_tag} US Night Engine 포지션({len(us_engine.holdings)}개) 트레일링 스탑 감시 및 평가 개시")
-            from src.execution._kis_adapter import KISTraderAdapter
-            _adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
-            current_prices = {}
-            for h in us_engine.holdings:
-                tk = h['ticker']
-                p = _adapter.get_live_overseas_price(tk, 'NASD') or _adapter.get_live_overseas_price(tk, 'NYSE') or float(h.get('current_price', 0.0))
-                if p > 0:
-                    current_prices[tk] = p
-            exit_orders = us_engine.update_trailing_stop(current_prices)
-            if exit_orders:
-                logger.info(f"  🚨 {_tag} US Night Engine 트레일링 스탑 발화: {len(exit_orders)}건 청산 집행!")
-                for eo in exit_orders:
-                    try:
-                        _adapter.sell(
-                            ticker=eo['ticker'],
-                            quantity=eo['quantity'],
-                            price=eo['price'],
-                            order_type='limit',
-                            notes=eo.get('reason', 'US Night Trailing Stop')
-                        )
-                    except Exception as _ex_err:
-                        logger.error(f"  ❌ {_tag} 트레일링 스탑 매도 주문 전송 실패 ({eo['ticker']}): {_ex_err}")
-    except Exception as e:
-        logger.debug(f"  {_tag} USNightEngine 실행 예외: {e}")
+    # ── 4. US Night Execution Engine Trailing Stop 모니터링 ──
+    # [L4-01] US 트레일링 스탑 감시 및 매도 집행은 run_live_trader_daemon.py (300s In-Flight 쿨다운 적용)에서 전담하여 중복 발주 경합 원천 차단
+    logger.info(f"  🇺🇸 {_tag} US Night Trailing Stop 감시는 LiveTraderDaemon 전담 (중복 발주 방지)")
 
     logger.info(f'  ✅ {_tag} US 본장 페이즈 완료')
 
@@ -2340,8 +2324,8 @@ def _phase_us_market():
     try:
         from src.data_collection.us_stock_collector import USStockCollector
         collector = USStockCollector()
-        collector.collect_all()
-        logger.info("  ✅ US 종목 수집")
+        collector.collect_daily()
+        logger.info("  ✅ US 종목 및 피처 수집")
     except ImportError as e:
         logger.error("  us_stock_collector import 실패", exc_info=True)
     except Exception as e:
@@ -2423,13 +2407,13 @@ def _phase_weekly_validate():
         logger.info(f"  ✅ 검증 완료: {result}")
     except ImportError as e:
         # 검증 함수가 없으면 기본 데이터 무결성 체크
-        logger.error("  ⏭️ 전용 검증 함수 없음 — 데이터 무결성 체크", exc_info=True)
+        logger.info("  ⏭️ 전용 검증 함수 없음 — 데이터 무결성 체크")
         try:
             import pandas as pd
             data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
             parquets = list(data_dir.glob('kr_*.parquet'))
             valid = sum(1 for p in parquets if pd.read_parquet(p).shape[0] > 0)
-            logger.error(f"  ✅ 데이터 무결성: {valid}/{len(parquets)} 파일 정상", exc_info=True)
+            logger.info(f"  ✅ 데이터 무결성: {valid}/{len(parquets)} 파일 정상")
         except Exception as e:
             logger.error(f"  데이터 무결성 체크 실패: {e}", exc_info=True)
     except Exception as e:
@@ -2527,6 +2511,8 @@ def _phase_call_auction_0830():
                 kp = json.loads(kp_path.read_text(encoding='utf-8'))
                 positions_to_eval = {}
                 for t, h in kp.get('holdings', {}).items():
+                    if not str(t).isdigit():
+                        continue
                     curr_p = float(h.get('current_price', 0.0))
                     curr_ret = float(h.get('return_pct', 0.0))
                     hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
@@ -2539,9 +2525,11 @@ def _phase_call_auction_0830():
                         'unrealized_pnl_pct': curr_ret,
                         'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
                         'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
+                        'lowest_price': float(hwm_data.get('lowest_price', curr_p) or curr_p),
+                        'scaled_out': bool(hwm_data.get('scaled_out', False)),
                         'trail_activated': bool(hwm_data.get('trail_activated', False)),
                         'holding_minutes': 999.0,
-                        'market': h.get('market', 'KR' if t.isdigit() else 'US')
+                        'market': 'KR'
                     }
                 exit_eval = UniversalExitEngine().evaluate_all_positions(positions_to_eval, regime='caution')
                 for exit_order in exit_eval.get('exit_orders', []):

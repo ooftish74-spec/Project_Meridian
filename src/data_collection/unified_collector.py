@@ -70,7 +70,7 @@ if not _HAS_TENACITY:
 _DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 _SIGNAL_DIR = _PROJECT_ROOT / 'data' / 'signals'
 _SIGNAL_CACHE = _PROJECT_ROOT / 'results' / 'signal_cache.json'
-_KR_TICKER_RE = re.compile('^\\d{5}[0-9KLM]$')
+_KR_TICKER_RE = re.compile('^\\d{4}[0-9A-Z]{2}$')
 _PYKRX_DELAY = 1.0
 
 @retry(wait=wait_exponential(multiplier=1, min=1, max=3), stop=stop_after_attempt(1), reraise=True)
@@ -88,7 +88,7 @@ def _fetch_kr_ohlcv_with_retry(pykrx_stock, start: str, end: str, ticker: str):
         return pd.DataFrame()
 
 def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optional[pd.DataFrame]:
-    """KIS API를 최우선(Primary)으로 호출하고 실패 시 pykrx로 Fallback.
+    """KIS API를 최우선(Primary)으로 호출하고, 장기 히스토리(days > 100 또는 backfill)는 FinanceDataReader(Naver)와 병합.
 
     Args:
         ticker: 종목코드 (6자리)
@@ -96,89 +96,72 @@ def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optiona
         backfill: True면 10년 백필
     """
     if backfill:
-        start = (datetime.now() - timedelta(days=3650)).strftime('%Y%m%d')
+        target_days = 3650
     else:
-        start = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+        target_days = days
+    start = (datetime.now() - timedelta(days=target_days)).strftime('%Y%m%d')
     end = datetime.now().strftime('%Y%m%d')
-    
-    # 1. KIS API 호출 시도 (Primary)
+
+    def _normalize_ohlcv_df(raw_df: pd.DataFrame) -> pd.DataFrame:
+        if raw_df is None or raw_df.empty:
+            return pd.DataFrame()
+        d = raw_df.reset_index()
+        d.columns = [str(c).lower() for c in d.columns]
+        rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
+        d = d.rename(columns=rename)
+        if 'date' not in d.columns:
+            d = d.rename(columns={d.columns[0]: 'date'})
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in d.columns:
+                d[col] = pd.to_numeric(d[col], errors='coerce')
+        d = d.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+        d['date'] = pd.to_datetime(d['date'])
+        if pd.api.types.is_datetime64tz_dtype(d['date']):
+            d['date'] = d['date'].dt.tz_localize(None)
+        return d.sort_values('date').drop_duplicates(subset='date', keep='last')
+
+    df_kis = pd.DataFrame()
+    # 1. KIS API 호출 시도 (Primary — 단, 단일 호출 최대 100영업일 반환)
     try:
         from src.data_collection.kis_data_collector import KISDataCollector
         kis = KISDataCollector()
         if kis._ensure_auth():
-            df = kis.get_kr_daily_ohlcv(ticker, start, end)
-            if df is not None and not df.empty:
-                # KIS 데이터 포맷을 통일 (소문자 전환 및 이름 변경)
-                df = df.reset_index()
-                df.columns = [c.lower() for c in df.columns]
-                rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
-                df = df.rename(columns=rename)
-                if 'date' not in df.columns:
-                    df = df.rename(columns={df.columns[0]: 'date'})
-                for col in ['open', 'high', 'low', 'close', 'volume']:
-                    if col in df.columns:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
-                df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
-                logger.debug(f'  [KIS API] {ticker} 수집 성공')
-                return df
+            raw_kis = kis.get_kr_daily_ohlcv(ticker, start, end)
+            df_kis = _normalize_ohlcv_df(raw_kis)
+            if not df_kis.empty and target_days <= 120:
+                logger.debug(f'  [KIS API] {ticker} 수집 성공 ({len(df_kis)}행)')
+                return df_kis
     except Exception as e:
-        logger.warning(f'  ⚠️ KIS API 호출 오류 ({ticker}): {e} -> pykrx Fallback 시도')
-        
-    # 2. pykrx 호출 (Fallback 1)
+        logger.warning(f'  ⚠️ KIS API 호출 오류 ({ticker}): {e} -> Fallback 시도')
+
+    # 2. 장기 히스토리(target_days > 120 또는 backfill)이거나 KIS 실패 시 Naver API(FDR) 호출하여 병합
+    df_fdr = pd.DataFrame()
+    try:
+        import FinanceDataReader as fdr
+        raw_fdr = fdr.DataReader(ticker, start, end)
+        df_fdr = _normalize_ohlcv_df(raw_fdr)
+    except Exception as naver_e:
+        logger.debug(f'  {ticker}: Naver API(FDR) 수집 예외 — {naver_e}')
+
+    if not df_fdr.empty and not df_kis.empty:
+        combined = pd.concat([df_fdr, df_kis]).drop_duplicates(subset='date', keep='last').sort_values('date')
+        return combined
+    if not df_fdr.empty:
+        return df_fdr
+    if not df_kis.empty:
+        return df_kis
+
+    # 3. pykrx 호출 (최종 Fallback)
     try:
         from pykrx import stock as pykrx_stock
-        df = _fetch_kr_ohlcv_with_retry(pykrx_stock, start, end, ticker)
-        if df is not None and not df.empty:
-            df = df.reset_index()
-            df.columns = [c.lower() for c in df.columns]
-            rename = {'날짜': 'date', '시가': 'open', '고가': 'high', '저가': 'low', '종가': 'close', '거래량': 'volume'}
-            df = df.rename(columns=rename)
-            if 'date' not in df.columns:
-                df = df.rename(columns={df.columns[0]: 'date'})
-            for col in ['open', 'high', 'low', 'close', 'volume']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
-            df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
-            logger.debug(f'  [pykrx Fallback] {ticker} 수집 성공')
-            return df
+        raw_pykrx = _fetch_kr_ohlcv_with_retry(pykrx_stock, start, end, ticker)
+        df_pykrx = _normalize_ohlcv_df(raw_pykrx)
+        if not df_pykrx.empty:
+            return df_pykrx
     except Exception as e:
         logger.warning(f'  {ticker}: pykrx 수집 실패 — {e}')
 
-    # 3. Naver API 호출 (Final Fallback via FinanceDataReader)
-    logger.warning(f'  ⚠️ pykrx Fallback 실패 ({ticker}) -> Naver API(FDR) 최종 Fallback 시도')
-    try:
-        import FinanceDataReader as fdr
-        # start, end formats are YYYYMMDD string. fdr accepts this format natively.
-        df = fdr.DataReader(ticker, start, end)
-        
-        if df is None or df.empty:
-            logger.error(f'  {ticker}: Naver API(FDR) 데이터 없음')
-            return None
-            
-        df = df.reset_index()
-        df.columns = [str(c).lower() for c in df.columns]
-        
-        rename = {'date': 'date', 'open': 'open', 'high': 'high', 'low': 'low', 'close': 'close', 'volume': 'volume'}
-        df = df.rename(columns=rename)
-        if 'date' not in df.columns:
-            df = df.rename(columns={df.columns[0]: 'date'})
-            
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        # 🛡️ Data Poisoning Defense: Drop any row with NaNs in critical OHLCV columns
-        df = df.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
-        
-        if pd.api.types.is_datetime64tz_dtype(df['date']):
-            df['date'] = df['date'].dt.tz_localize(None)
-            
-        logger.info(f'  ✅ [Naver API Fallback] {ticker} 수집 성공')
-        return df
-    except Exception as naver_e:
-        logger.error(f'  ❌ {ticker}: Naver API 수집 최종 실패 — {naver_e}')
-        return None
+    return None
 
 def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
     """전체 KR ETF 유니버스 수집.
@@ -214,24 +197,28 @@ def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
         out_file = _DATA_DIR / f'kr_{ticker}.parquet'
         if out_file.exists() and (not backfill):
             existing = pd.read_parquet(out_file)
+            existing.columns = [str(c).lower() for c in existing.columns]
             last_date = pd.to_datetime(existing['date']).max()
             days_since = (datetime.now() - last_date).days
-            if days_since <= 0:
+            needs_history = len(existing) < 300
+            if days_since <= 0 and not needs_history:
                 logger.debug(f'  [{i}/{total}] {ticker}: 최신 (스킵)')
                 results[ticker] = 0
                 continue
-            df = collect_kr_ohlcv(ticker, days=days_since + 5)
+            fetch_days = max(days_since + 5, 730 if needs_history else 60)
+            df = collect_kr_ohlcv(ticker, days=fetch_days)
             if df is not None and (not df.empty):
+                df.columns = [str(c).lower() for c in df.columns]
                 existing['date'] = pd.to_datetime(existing['date'])
                 df['date'] = pd.to_datetime(df['date']) if 'date' in df.columns else df
                 combined = pd.concat([existing, df]).drop_duplicates(subset='date', keep='last').sort_values('date')
                 safe_parquet_write(combined, out_file)
                 results[ticker] = len(df)
-                logger.info(f'  [{i}/{total}] {ticker}: +{len(df)}행 추가')
+                logger.info(f'  [{i}/{total}] {ticker}: +{len(df)}행 병합 (총 {len(combined)}행)')
             else:
                 results[ticker] = 0
         else:
-            df = collect_kr_ohlcv(ticker, backfill=backfill)
+            df = collect_kr_ohlcv(ticker, days=730, backfill=backfill)
             if df is not None and (not df.empty):
                 _DATA_DIR.mkdir(parents=True, exist_ok=True)
                 safe_parquet_write(df, out_file)
@@ -250,13 +237,16 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
     logger.info(f'  KR 개별종목 수집 시작: {total}종목')
 
     def _ensure_date_col(df):
-        """DataFrame에 date 컬럼이 있는지 보장."""
+        """DataFrame에 date 컬럼이 있는지 보장 및 컬럼 소문자 정규화."""
         if df is None or df.empty:
             return df
+        df = df.copy()
+        df.columns = [str(c).lower() for c in df.columns]
         if 'date' in df.columns:
             return df
-        if hasattr(df.index, 'dtype') and ('datetime' in str(df.index.dtype) or df.index.name in ('날짜', 'date', 'Date')):
+        if hasattr(df.index, 'dtype') and ('datetime' in str(df.index.dtype) or str(df.index.name).lower() in ('날짜', 'date')):
             df = df.reset_index()
+            df.columns = [str(c).lower() for c in df.columns]
             if df.columns[0] != 'date':
                 df = df.rename(columns={df.columns[0]: 'date'})
             return df
@@ -273,7 +263,7 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                 existing = pd.read_parquet(out_file)
                 existing = _ensure_date_col(existing)
                 if 'date' not in existing.columns:
-                    df = collect_kr_ohlcv(ticker, backfill=backfill)
+                    df = collect_kr_ohlcv(ticker, days=730, backfill=backfill)
                     if df is not None and (not df.empty):
                         _DATA_DIR.mkdir(parents=True, exist_ok=True)
                         safe_parquet_write(df, out_file)
@@ -283,16 +273,18 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                     continue
                 last_date = pd.to_datetime(existing['date']).max()
                 days_since = (datetime.now() - last_date).days
-                if days_since <= 0:
+                needs_history = len(existing) < 300
+                if days_since <= 0 and not needs_history:
                     results[ticker] = 0
                     continue
-                df = collect_kr_ohlcv(ticker, days=days_since + 5)
+                fetch_days = max(days_since + 5, 730 if needs_history else 60)
+                df = collect_kr_ohlcv(ticker, days=fetch_days)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {_e}')
-                df = collect_kr_ohlcv(ticker, days=60)
+                df = collect_kr_ohlcv(ticker, days=730)
         else:
-            df = collect_kr_ohlcv(ticker, backfill=backfill)
+            df = collect_kr_ohlcv(ticker, days=730, backfill=backfill)
         if df is not None and (not df.empty):
             if out_file.exists() and (not backfill):
                 try:
@@ -328,7 +320,7 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     """
     from src.data_collection.alpha_vantage_collector import collect_global_macro
     _CROSS_SYNC_MAP = {'vix': ['cross_vix.parquet', 'us_vix.parquet'], 'sp500': ['cross_sp500.parquet'], 'usdkrw': ['cross_usdkrw.parquet'], 'us10y': ['cross_us10y.parquet'], 'wti': ['cross_oil_futures.parquet'], 'gold_us': ['cross_gold_futures.parquet']}
-    _US_STOCKS_SYNC_MAP = {'sp500': ['SPY.parquet'], 'nasdaq': ['QQQ.parquet'], 'vix': ['^VIX.parquet'], 'ewy': ['EWY.parquet']}
+    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet'], 'ewy': ['EWY.parquet']}
     signals = {}
     today_dt = datetime.now()
     from src.data_collection.bok_ecos_collector import BOKEcosCollector
@@ -402,18 +394,23 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                 us_path = _DATA_DIR / 'us_stocks' / us_file
                 try:
                     us_path.parent.mkdir(parents=True, exist_ok=True)
+                    df_us = df.set_index('date') if 'date' in df.columns else df.copy()
                     if us_path.exists():
                         existing = pd.read_parquet(us_path)
                         existing.columns = [c.lower() for c in existing.columns]
-                        combined = pd.concat([existing, df])
+                        if 'date' in existing.columns:
+                            existing = existing.set_index('date')
+                        combined = pd.concat([existing, df_us])
                         combined = combined[~combined.index.duplicated(keep='last')]
                         safe_parquet_write(combined, us_path)
                     else:
-                        df.set_index('date', inplace=True)
-                        safe_parquet_write(df, us_path)
+                        safe_parquet_write(df_us, us_path)
                 except Exception as e:
                     logger.error(f'  us_stocks sync {us_file} 실패: {e}', exc_info=True)
             signals[name] = price
+            signals[name_lower] = price
+            if yf_ticker in av_data and av_data[yf_ticker].get('change_1d') is not None:
+                signals[f'{name_lower}_change_1d'] = float(av_data[yf_ticker]['change_1d'])
     try:
         from src.data_collection.alpha_vantage_collector import collect_options_pcr
         pcr = collect_options_pcr('SPY')
@@ -876,12 +873,13 @@ def run_daily(mode: str='full', **kwargs):
         except Exception as e:
             logger.error(f'  사전 적재 실패: {e}', exc_info=True)
         logger.info('\n[6/6] 최종 Data Freshness 검증')
-        final_stale = _count_stale_files(threshold_h=20)
+        _final_thresh_h = float(freshness_results.get('threshold_h', 20.0)) if isinstance(freshness_results, dict) else 20.0
+        final_stale = _count_stale_files(threshold_h=_final_thresh_h)
         results['final_stale_count'] = final_stale
         if final_stale > 0:
-            logger.warning(f'  ⚠️ 시그널 생성 전 미갱신 파일 {final_stale}개 잔존')
+            logger.warning(f'  ⚠️ 시그널 생성 전 미갱신 파일 {final_stale}개 잔존 (기준: {_final_thresh_h:.1f}h)')
         else:
-            logger.info('  ✅ 전 데이터 Fresh — 시그널 생성 준비 완료')
+            logger.info(f'  ✅ 전 데이터 Fresh (기준: {_final_thresh_h:.1f}h) — 시그널 생성 준비 완료')
     elif mode == 'evening':
         logger.info('\n[0/7] 🅿️ 동적 파킹 ETF 탐색 (S5 Cash Sweep)')
         try:

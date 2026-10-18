@@ -72,7 +72,10 @@ class S3FactorStream(BaseStream):
     DEFENSIVE_ETFS = {
         'TLT': {'name': 'iShares 20+ Year Treasury Bond ETF', 'sector': 'bond', 'market': 'US'},
         'GLD': {'name': 'SPDR Gold Shares', 'sector': 'commodity', 'market': 'US'},
-        'UUP': {'name': 'Invesco DB US Dollar Index Bullish', 'sector': 'currency', 'market': 'US'}
+        'UUP': {'name': 'Invesco DB US Dollar Index Bullish', 'sector': 'currency', 'market': 'US'},
+        'SQQQ': {'name': 'ProShares UltraPro Short QQQ', 'sector': 'us_inverse_tech', 'market': 'US'},
+        'SOXS': {'name': 'Direxion Daily Semiconductor Bear 3X Shares', 'sector': 'us_inverse_semi', 'market': 'US'},
+        'SH': {'name': 'ProShares Short S&P500', 'sector': 'us_inverse_broad', 'market': 'US'},
     }
     DIVIDEND_BLACKLIST = {'279530', '211560', '289480', '458730', '441640', '458760', '211900', '494330'}
 
@@ -143,7 +146,9 @@ class S3FactorStream(BaseStream):
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 return default
-        vix_base = float(_g('s3.dynamic_sl.vix_baseline', 18.0))
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe_vix_base = get_quant_engine().get_vix_regime_quantiles().get('baseline', 18.0)
+        vix_base = float(_g('s3.dynamic_sl.vix_baseline', _dqe_vix_base))
         vix_scale = max(0.5, min(3.0, vix / max(vix_base, 1e-06)))
         regime_atr_mult = {'bull': float(_g('s3.dynamic_sl.atr_mult.bull', 2.0)), 'caution': float(_g('s3.dynamic_sl.atr_mult.caution', 2.5)), 'bear': float(_g('s3.dynamic_sl.atr_mult.bear', 3.0)), 'crash': float(_g('s3.dynamic_sl.atr_mult.crash', 4.0))}.get(regime, 2.5)
         tp_atr_mult = float(_g('s3.dynamic_sl.tp_atr_mult', 4.0))
@@ -165,10 +170,20 @@ class S3FactorStream(BaseStream):
         today = now_kst().day
         if today != rebalance_day and self._current_holdings:
             return signals
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+        _dyn_def_etfs = dict(self.DEFENSIVE_ETFS)
+        for _item in _dqe.get_us_defensive_basket(top_k=6, include_inverse=True):
+            _dtk = _item['ticker']
+            _dyn_def_etfs.setdefault(_dtk, {'name': _dtk, 'sector': 'us_dynamic_defensive', 'market': 'US'})
         if regime == 'crash':
-            sector_scores = self._compute_multifactor_scores(self.DEFENSIVE_ETFS, market_data, source='sector')
+            sector_scores = self._compute_multifactor_scores(_dyn_def_etfs, market_data, source='sector')
             global_scores = []
-            logger.info('  🛡️ [S3 Active Macro] Crash Regime: DEFENSIVE_ETFS 유니버스로 스위칭')
+            logger.info('  🛡️ [S3 Active Macro] Crash Regime: 동적 수리 방어 유니버스(DEFENSIVE_ETFS)로 스위칭')
+        elif regime == 'bear':
+            sector_scores = self._compute_multifactor_scores({**self.SECTOR_ETFS, **_dyn_def_etfs}, market_data, source='sector')
+            global_scores = self._compute_multifactor_scores({**self.GLOBAL_ETFS, **_dyn_def_etfs}, market_data, source='global')
+            logger.info('  🛡️ [S3 Active Macro] Bear Regime: 동적 수리 방어 유니버스 병합 스코어링')
         else:
             sector_scores = self._compute_multifactor_scores(self.SECTOR_ETFS, market_data, source='sector')
             global_scores = self._compute_multifactor_scores(self.GLOBAL_ETFS, market_data, source='global')
@@ -193,7 +208,6 @@ class S3FactorStream(BaseStream):
                         try:
                             _adj = float(_fc_value) * _boost_scale
                             _adj = max(-_boost_cap, min(_boost_cap, _adj))
-                            _score_item = dict(_score_item)
                             _score_item['score'] = round(_score_item.get('score', 0.0) + _adj, 4)
                             _score_item['alpha_factory_boost'] = round(_adj, 4)
                             _boosted.append(_ticker)
@@ -228,7 +242,11 @@ class S3FactorStream(BaseStream):
             pick['_type'] = 'ETF'
         qvm_safe = []
         top_n_qvm = cfg.get('s3.qvm_max_positions', 5)
-        if regime == 'crash':
+        allow_kr_qvm = bool(cfg.get('s3.qvm.allow_kr_stocks', False))
+        if not allow_kr_qvm:
+            qvm_selected = []
+            logger.info('  🛡️ [S3 Active Macro] Track B (KR QVM) 비활성화 (s3.qvm.allow_kr_stocks=False) — Track A US ETF 100% 집중')
+        elif regime == 'crash':
             qvm_selected = []
             logger.info('  🛡️ [S3 Active Macro] Crash Regime: Track B (QVM) 작동 중지 (주식 100% 매도)')
         else:
@@ -241,40 +259,47 @@ class S3FactorStream(BaseStream):
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  [Track B] ICIR 팩터 검증 실패: {e}')
             qvm_safe = self._qvm_scorer.screen_value_traps(qvm_scored)
-        current_qvm_tickers = {h['ticker'] for h in self._current_holdings if h.get('_type') == 'QVM'}
-        held_qvm_picks = []
-        qvm_dict = {s['ticker']: s for s in qvm_safe}
-        for ticker in current_qvm_tickers:
-            if ticker in qvm_dict:
-                stock = qvm_dict[ticker]
-                if stock.get('margin_of_safety_pct', 0) < 0:
-                    _nm = stock.get('name', ticker)
-                    logger.info(f"  [Track B] {_nm} 매도: 안전마진 소진 (고평가)")
-                    continue
-                held_qvm_picks.append(stock)
-            else:
-                logger.info(f'  [Track B] {ticker} 매도: 유니버스/안전성 이탈')
-        new_qvm_needed = max(0, top_n_qvm - len(held_qvm_picks))
-        new_qvm_picks = []
-        if new_qvm_needed > 0:
-            candidates = [s for s in qvm_safe if s['ticker'] not in current_qvm_tickers]
-            candidates.sort(key=lambda x: x['qvm_score'], reverse=True)
-            new_qvm_picks = candidates[:new_qvm_needed]
-            for pick in new_qvm_picks:
-                _nm = pick.get('name', '')
-                _qvm_sc = pick.get('qvm_score', 0)
-                logger.info(f"  [Track B] {_nm} 신규 편입: QVM={_qvm_sc}")
-        qvm_selected = held_qvm_picks + new_qvm_picks
+        if allow_kr_qvm and regime != 'crash':
+            current_qvm_tickers = {h['ticker'] for h in self._current_holdings if h.get('_type') == 'QVM'}
+            held_qvm_picks = []
+            qvm_dict = {s['ticker']: s for s in qvm_safe}
+            for ticker in current_qvm_tickers:
+                if ticker in qvm_dict:
+                    stock = qvm_dict[ticker]
+                    if stock.get('margin_of_safety_pct', 0) < 0:
+                        _nm = stock.get('name', ticker)
+                        logger.info(f"  [Track B] {_nm} 매도: 안전마진 소진 (고평가)")
+                        continue
+                    held_qvm_picks.append(stock)
+                else:
+                    logger.info(f'  [Track B] {ticker} 매도: 유니버스/안전성 이탈')
+            new_qvm_needed = max(0, top_n_qvm - len(held_qvm_picks))
+            new_qvm_picks = []
+            if new_qvm_needed > 0:
+                candidates = [s for s in qvm_safe if s['ticker'] not in current_qvm_tickers]
+                candidates.sort(key=lambda x: x['qvm_score'], reverse=True)
+                new_qvm_picks = candidates[:new_qvm_needed]
+                for pick in new_qvm_picks:
+                    _nm = pick.get('name', '')
+                    _qvm_sc = pick.get('qvm_score', 0)
+                    logger.info(f"  [Track B] {_nm} 신규 편입: QVM={_qvm_sc}")
+            qvm_selected = held_qvm_picks + new_qvm_picks
+        else:
+            new_qvm_picks = []
+            qvm_selected = []
         for pick in qvm_selected:
             pick['_type'] = 'QVM'
             pick['score'] = pick.get('qvm_score', 0) / 100.0
-        target_qvm_weight = cfg.get('s3.allocation.qvm_base_weight', 0.5)
-        if len(new_qvm_picks) >= top_n_qvm and all((s.get('margin_of_safety_pct', 0) > 50 for s in new_qvm_picks)):
-            target_qvm_weight = cfg.get('s3.allocation.qvm_max_weight', 0.7)
-            logger.info('  [하이브리드] 딥 밸류장 감지: QVM 비중 70%로 확대')
-        elif regime in ['bear', 'crash']:
-            target_qvm_weight = cfg.get('s3.allocation.qvm_min_weight', 0.3)
-            logger.info(f'  [하이브리드] {regime} 레짐 감지: QVM 방어적 축소 (30%)')
+        if not qvm_selected:
+            target_qvm_weight = 0.0
+        else:
+            target_qvm_weight = cfg.get('s3.allocation.qvm_base_weight', 0.5)
+            if len(new_qvm_picks) >= top_n_qvm and all((s.get('margin_of_safety_pct', 0) > 50 for s in new_qvm_picks)):
+                target_qvm_weight = cfg.get('s3.allocation.qvm_max_weight', 0.7)
+                logger.info('  [하이브리드] 딥 밸류장 감지: QVM 비중 70%로 확대')
+            elif regime in ['bear', 'crash']:
+                target_qvm_weight = cfg.get('s3.allocation.qvm_min_weight', 0.3)
+                logger.info(f'  [하이브리드] {regime} 레짐 감지: QVM 방어적 축소 (30%)')
         target_etf_weight = 1.0 - target_qvm_weight
         etf_sum = sum((max(0.01, p['score']) for p in etf_selected))
         for pick in etf_selected:
@@ -564,14 +589,51 @@ class S3FactorStream(BaseStream):
         return final_picks
 
     def _read_feature_store(self, ticker: str) -> Optional[Dict]:
-        """feature_store에서 단일 종목 최신 데이터 읽기."""
+        """feature_store에서 단일 종목 최신 데이터 읽기 (US/KR OHLCV parquet 폴백 지원)."""
         try:
             import pandas as pd
+            import numpy as np
             pf = _FEATURE_STORE_DIR / f'{ticker}.parquet'
             if pf.exists():
                 df = pd.read_parquet(pf)
                 if not df.empty:
                     return df.iloc[-1].to_dict()
+            fallback_paths = [
+                _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
+                _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
+                _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
+            ]
+            for fb_path in fallback_paths:
+                if fb_path.exists():
+                    df = pd.read_parquet(fb_path)
+                    c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if not df.empty and c_col:
+                        closes = df[c_col].dropna().astype(float)
+                        if len(closes) >= 21:
+                            c_vals = closes.values
+                            ret_20d = float((c_vals[-1] - c_vals[-21]) / max(c_vals[-21], 1e-8))
+                            mom_63 = float((c_vals[-1] - c_vals[-64]) / max(c_vals[-64], 1e-8)) if len(c_vals) >= 64 else ret_20d * 3.0
+                            mom_126 = float((c_vals[-1] - c_vals[-127]) / max(c_vals[-127], 1e-8)) if len(c_vals) >= 127 else mom_63 * 2.0
+                            rets = pd.Series(c_vals).pct_change().dropna()
+                            vol_20d = float(rets.tail(20).std() * np.sqrt(252)) if len(rets) >= 5 else 0.20
+                            vol_60d = float(rets.tail(60).std() * np.sqrt(252)) if len(rets) >= 20 else vol_20d
+                            ma20 = float(np.mean(c_vals[-20:]))
+                            ma20_ratio = float(c_vals[-1] / max(ma20, 1e-8))
+                            deltas = np.diff(c_vals[-15:])
+                            gains = np.mean(np.maximum(deltas, 0.0))
+                            losses = np.mean(np.maximum(-deltas, 0.0))
+                            rsi_14 = float(100.0 - (100.0 / (1.0 + gains / max(losses, 1e-8))))
+                            return {
+                                'ret_20d': ret_20d,
+                                'volatility_20d': vol_20d,
+                                'rsi_14': rsi_14,
+                                'ma20_ratio': ma20_ratio,
+                                'mom_21': ret_20d,
+                                'mom_63': mom_63,
+                                'mom_126': mom_126,
+                                'vol_60d': vol_60d,
+                                'volatility': vol_20d,
+                            }
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

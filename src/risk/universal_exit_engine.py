@@ -18,6 +18,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from config.dynamic_config import DynamicConfig
+from src.utils.dynamic_quant_engine import get_quant_engine
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
@@ -57,7 +58,18 @@ class UniversalExitEngine:
         except Exception:
             pass
 
-        # 2. 자산군(Asset Class) 프로파일 기반 동적 변동성 추정
+        # 2. DynamicQuantEngine 경험적 일간 변동성(σ_daily * sqrt(8/π) ≈ 1.253 * σ_daily) 기반 동적 ATR 추정
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _dqe = get_quant_engine()
+            _m = _dqe.get_asset_metrics(ticker)
+            if _m and _m.get('vol_daily', 0) > 0 and _m.get('vol_daily') != 0.02:
+                atr_pct = float(np.clip(float(_m['vol_daily']) * 1.2533, 0.003, 0.080))
+                self._atr_cache[ticker] = atr_pct
+                return atr_pct
+        except Exception:
+            pass
+
         if ticker in ('252670', '233740', '122630', 'TQQQ', 'SQQQ', 'SOXL'):
             atr_pct = 0.045
         elif ticker in ('NVDA', '091160', 'SOXX', 'XLK', 'TSLA'):
@@ -109,17 +121,26 @@ class UniversalExitEngine:
             
         exit_orders = []
         
-        # [Pure Dynamic Math] VIX 및 레짐 적응형 연속 샹들리에 배수
-        _vix = float((market_data or {}).get('vix', (market_data or {}).get('signal_cache', {}).get('vix', 18.0)) or 18.0)
-        if regime == 'bull':
-            chandelier_mult = round(max(2.0, min(3.5, 3.5 - (_vix / 20.0))), 2)
-        elif regime == 'caution':
-            chandelier_mult = round(max(1.2, min(2.0, 2.0 - (_vix / 30.0))), 2)
-        elif regime == 'bear':
-            chandelier_mult = round(max(0.8, min(1.3, 1.5 - (_vix / 35.0))), 2)
-        else:
-            chandelier_mult = round(max(0.6, min(1.0, 1.0 - (_vix / 50.0))), 2)
-        
+        # [Pure Dynamic Math] VIX 분위수 및 레짐 기반 확률과정 최적 정지(Optimal Stopping) 엔진 연동
+        _dqe = get_quant_engine()
+        _vq = _dqe.get_vix_regime_quantiles((market_data or {}).get('signal_cache'))
+        _vix = float(
+            (market_data or {}).get('vix')
+            or (market_data or {}).get('signal_cache', {}).get('vix')
+            or _vq.get('baseline', 16.5)
+        )
+        _sc_dict = (market_data or {}).get('signal_cache') or {}
+        if not _sc_dict:
+            try:
+                _sc_p = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if _sc_p.exists():
+                    _sc_dict = json.loads(_sc_p.read_text(encoding='utf-8'))
+            except Exception:
+                _sc_dict = {}
+        _fx_rate = float((market_data or {}).get('usdkrw') or _sc_dict.get('usdkrw') or 1334.3)
+        _dyn_cash_eq = _dqe.get_cash_equivalent_tickers()
+        _PARKING_EXEMPT = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'} | _dyn_cash_eq
+
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
             stream_id = pos.get('stream_id', pos_key.split(':')[0] if ':' in pos_key else 'S4')
@@ -128,23 +149,46 @@ class UniversalExitEngine:
             if qty <= 0:
                 continue
 
-            # S_BETA 헷지 포지션은 전사 Exit에서 제외 (S_BETA는 전용 모듈에서 통제)
-            if stream_id == 'S_BETA':
+            # S_BETA 헷지 포지션 및 파킹 자산은 전사 Exit에서 제외
+            if stream_id in ('S_BETA', 'BETA', 'S_YIELD') or str(ticker).upper() in _PARKING_EXEMPT:
                 continue
 
-            pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', 0.0))))
+            price = float(pos.get('current_price', 0.0) or 0.0)
+            entry_px = float(pos.get('entry_price', pos.get('avg_price', 0.0)) or 0.0)
+            if price <= 0:
+                try:
+                    _pq_p = _PROJECT_ROOT / 'data' / 'historical_10y' / (f"kr_{ticker}.parquet" if str(ticker).isdigit() else f"us_{ticker}.parquet")
+                    if _pq_p.exists():
+                        import pandas as _pd_ex
+                        price = float(_pd_ex.read_parquet(_pq_p)['close'].dropna().iloc[-1])
+                except Exception:
+                    pass
+                if price <= 0:
+                    price = entry_px if entry_px > 0 else 1.0
+            pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
             peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
-            price = float(pos.get('current_price', pos.get('entry_price', pos.get('avg_price', 1.0))))
             atr_pct = self.compute_ticker_atr(ticker)
 
-            # ── 0. [Profit-Lock Break-Even Escalation] (수익 종목 손실 전환 100% 방지) ──
-            profit_lock_min_pct = float(cfg.get('exit.profit_lock_min_pct', 6.0))
-            profit_lock_atr_mult = float(cfg.get('exit.profit_lock_atr_mult', 3.0))
-            profit_lock_trigger = max(profit_lock_min_pct, atr_pct * profit_lock_atr_mult * 100.0)
-            if peak_pnl >= profit_lock_trigger:
-                break_even_floor = float(cfg.get('exit.profit_lock_floor_pct', 0.50))
+            # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
+            is_kr_tk = str(ticker).isdigit()
+            order_val_krw = qty * price * (1.0 if is_kr_tk else _fx_rate)
+            _opt = _dqe.compute_optimal_stopping_params(
+                ticker=str(ticker),
+                regime=regime,
+                vix_level=_vix,
+                order_value_krw=max(order_val_krw, 500_000.0),
+                price=price,
+                atr_pct=atr_pct,
+            )
+            min_holding_required = _opt['min_holding_minutes']
+            holding_minutes = float(pos.get('holding_minutes', pos.get('holding_time_min', min_holding_required * 2.0)))
+
+            # ── 0. [Profit-Lock Break-Even Escalation] (마찰비용+변동성 결합 동적 본전 보존 장벽) ──
+            profit_lock_trigger = _opt['profit_lock_trigger_pct']
+            break_even_floor = _opt['break_even_floor_pct']
+            if holding_minutes >= min_holding_required and peak_pnl >= profit_lock_trigger:
                 if pnl_pct < break_even_floor:
-                    detail = f"🔒 [Profit-Lock Escalation] {ticker} ({stream_id}): 고점 P&L {peak_pnl:+.1f}% >= {profit_lock_trigger:.1f}% 달성 후 P&L {pnl_pct:+.2f}% < 본전 지지선 +{break_even_floor:.1f}% 이탈 ➔ 이익 보존 100% 청산"
+                    detail = f"🔒 [Profit-Lock Escalation] {ticker} ({stream_id}): 고점 P&L {peak_pnl:+.1f}% >= {profit_lock_trigger:.1f}% 달성 후 P&L {pnl_pct:+.2f}% < 동적 본전 지지선 +{break_even_floor:.2f}% 이탈 (보유 {holding_minutes:.0f}m >= {min_holding_required:.0f}m) ➔ 이익 보존 100% 청산"
                     logger.info(f"  {detail}")
                     action_type = 'buy' if pos.get('direction') == 'short' or pos.get('is_short') else 'sell'
                     exit_orders.append({
@@ -154,13 +198,10 @@ class UniversalExitEngine:
                     })
                     continue
 
-            # ── 1. [1차 손절] Hard Entry Stop-Loss (진입가 대비 변동성 적응형 하방 손절) ──
-            # 고베타 종목 노이즈 털림 방지: ATR 2.0배 또는 최소 3.0% 적용 (음수 max 수치 버그 정밀 수정)
-            hard_sl_pct = abs(float(cfg.get('exit.hard_stop_loss_pct', 3.0)))
-            sl_atr_mult = float(cfg.get('exit.sl_atr_multiplier', 2.0))
-            hard_sl_limit = -max(hard_sl_pct, atr_pct * sl_atr_mult * 100.0)
+            # ── 1. [1차 손절] Hard Entry Stop-Loss (확률과정 첫 도달 하방 장벽) ──
+            hard_sl_limit = _opt['hard_sl_limit_pct']
             if pnl_pct <= hard_sl_limit:
-                detail = f"🛑 [1차 진입 손절 발화] {ticker} ({stream_id}): P&L {pnl_pct:+.2f}% <= 하방 손절한도 {hard_sl_limit:+.2f}% 도달"
+                detail = f"🛑 [1차 진입 손절 발화] {ticker} ({stream_id}): P&L {pnl_pct:+.2f}% <= 동적 하방 손절한도 {hard_sl_limit:+.2f}% 도달"
                 logger.warning(f"  {detail}")
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
@@ -169,14 +210,12 @@ class UniversalExitEngine:
                 })
                 continue
 
-
-            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 폭락 손절) ──
-            catastrophic_mult = float(cfg.get('exit.catastrophic_atr_mult', 3.5))
-            allowed_cat_drop = atr_pct * catastrophic_mult * 100.0
+            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 99.9% 꼬리 폭락 손절) ──
+            allowed_cat_drop = _opt['catastrophic_drop_pct']
             peak_drawdown = peak_pnl - pnl_pct
 
             if peak_pnl > 0 and peak_drawdown >= allowed_cat_drop:
-                detail = f"🚨 [2차 고점 폭락 손절 발화] {ticker} ({stream_id}): 고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 안전망 -{allowed_cat_drop:.1f}% 이탈"
+                detail = f"🚨 [2차 고점 폭락 손절 발화] {ticker} ({stream_id}): 고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 동적 안전망 -{allowed_cat_drop:.1f}% 이탈"
                 logger.warning(f"  {detail}")
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
@@ -185,25 +224,18 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 트레일링 익절) ──
-            # 보유 기간 보장 (기존 포트폴리오 스윙 종목은 기본 999분으로 즉시 평가 허용)
-            holding_minutes = float(pos.get('holding_minutes', pos.get('holding_time_min', 999.0)))
-            min_holding_required = float(cfg.get('exit.min_holding_minutes_for_trailing', 15.0))
-            
-            chandelier_drop = atr_pct * chandelier_mult * 100.0
-            min_drop = float(cfg.get('exit.trailing_drop_floor', 2.0))
-            chandelier_drop = max(min_drop, chandelier_drop)
-
-            trailing_trigger = float(cfg.get('exit.trailing_tp_trigger', 2.5))
+            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절) ──
+            chandelier_drop = _opt['chandelier_drop_pct']
+            trailing_trigger = _opt['trailing_trigger_pct']
             is_trail_activated = bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger)
             is_trailing_exit = (
-                (holding_minutes >= min_holding_required or is_trail_activated) and 
-                is_trail_activated and 
+                holding_minutes >= min_holding_required and
+                is_trail_activated and
                 pnl_pct < (peak_pnl - chandelier_drop)
             )
 
             if is_trailing_exit:
-                detail = f"✂️ [Chandelier Trailing Exit] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% (고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 샹들리에 밴드 -{chandelier_drop:.1f}% 이탈, N={holding_minutes:.0f}m)"
+                detail = f"✂️ [Chandelier Trailing Exit] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% (고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 샹들리에 밴드 -{chandelier_drop:.1f}% 이탈, N={holding_minutes:.0f}m >= {min_holding_required:.0f}m)"
                 logger.info(f"  {detail}")
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
@@ -212,50 +244,60 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 4. 50% Scale-Out Runner (분할 차익실현) ──
-            scaled_out = pos.get('scaled_out', False)
-            scale_out_min_pct = float(cfg.get('exit.scale_out_min_pct', 15.0))
-            scale_out_atr_mult = float(cfg.get('exit.scale_out_atr_mult', 8.0))
-            scale_out_ratio = float(cfg.get('exit.scale_out_ratio', 0.50))
-            scale_out_target = max(atr_pct * scale_out_atr_mult * 100.0, scale_out_min_pct)
+            # ── 4. Dynamic Scale-Out Runner (정보비율 IR 기반 동적 분할 차익실현) ──
+            scaled_out = bool(pos.get('scaled_out', False))
+            scale_out_target = _opt['scale_out_target_pct']
+            scale_out_ratio = _opt['scale_out_ratio']
             
             if not scaled_out and pnl_pct >= scale_out_target:
-                # 1주 이하 포지션은 50% 분할 매도 시 전량 100% 청산되므로 스킵하고 러너(Runner)로 지속 보유
                 if qty <= 1:
-                    logger.info(f"  🎯 [Scale-Out Skip] {ticker} ({stream_id}): 잔고 1주 이하 ({qty}주)로 50% 분할 매도 스킵 ➔ 100% 러너 포지션으로 유지")
+                    logger.info(f"  🎯 [Scale-Out Skip] {ticker} ({stream_id}): 잔고 1주 이하 ({qty}주)로 분할 매도 스킵 ➔ 100% 러너 포지션으로 유지")
                     continue
                 so_qty = max(1.0, math.floor(qty * scale_out_ratio))
-                detail = f"🎯 [Scale-Out 50%] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% >= 목표 {scale_out_target:.1f}% (50% 차익실현)"
+                detail = f"🎯 [Scale-Out {scale_out_ratio*100:.0f}%] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% >= 동적 목표 {scale_out_target:.1f}% ({scale_out_ratio*100:.0f}% 차익실현)"
                 logger.info(f"  {detail}")
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': so_qty, 'price': price, 'execution_algo': 'market',
+                    'exit_type': 'scale_out_50pct',
                     'reason': detail
                 })
                 continue
 
             # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산) ──
-            try:
-                from src.risk.time_decay_exit import TimeDecayExitEvaluator
-                holding_days = float(pos.get('holding_days', pos.get('holding_minutes', 0.0) / (24.0 * 60.0)))
-                time_decay_eval = TimeDecayExitEvaluator().evaluate_time_decay(
-                    position=pos,
-                    current_price=price,
-                    atr_val=price * atr_pct,
-                    holding_days=holding_days
-                )
-                if time_decay_eval.get('trigger', False):
-                    so_pct = time_decay_eval.get('scale_out_pct', 0.50)
-                    decay_qty = max(1, math.floor(qty * so_pct))
-                    detail = time_decay_eval.get('reason', f"⏱️ [Time-Decay Exit] {ticker} ({stream_id})")
-                    exit_orders.append({
-                        'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
-                        'action': 'sell', 'quantity': decay_qty, 'price': price, 'execution_algo': 'market',
-                        'reason': detail
-                    })
-                    continue
-            except Exception as e_td:
-                logger.debug(f"  Time-Decay exit check bypass: {e_td}")
+            if not scaled_out:
+                try:
+                    from src.risk.time_decay_exit import TimeDecayExitEvaluator
+                    holding_days = float(pos.get('holding_days', 0.0) or 0.0)
+                    if holding_days <= 0:
+                        _ed_str = str(pos.get('entry_date', '') or '')[:10]
+                        if _ed_str:
+                            try:
+                                from datetime import date as _dt_date
+                                holding_days = float(max(0, (_dt_date.today() - _dt_date.fromisoformat(_ed_str)).days))
+                            except Exception:
+                                holding_days = 0.0
+                        elif pos.get('holding_minutes'):
+                            holding_days = float(pos.get('holding_minutes', 0.0)) / (24.0 * 60.0)
+                    time_decay_eval = TimeDecayExitEvaluator().evaluate_time_decay(
+                        position=pos,
+                        current_price=price,
+                        atr_val=price * atr_pct,
+                        holding_days=holding_days
+                    )
+                    if time_decay_eval.get('trigger', False):
+                        so_pct = time_decay_eval.get('scale_out_pct', 0.50)
+                        decay_qty = max(1, math.floor(qty * so_pct))
+                        detail = time_decay_eval.get('reason', f"⏱️ [Time-Decay Exit] {ticker} ({stream_id})")
+                        exit_orders.append({
+                            'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
+                            'action': 'sell', 'quantity': decay_qty, 'price': price, 'execution_algo': 'market',
+                            'exit_type': 'time_decay_exit',
+                            'reason': detail
+                        })
+                        continue
+                except Exception as e_td:
+                    logger.debug(f"  Time-Decay exit check bypass: {e_td}")
 
         logger.info(f"  🛡️ [Universal Exit SSOT] 전사 포지션({len(positions)}개) 평가 ➔ 체결/손절 주문 {len(exit_orders)}건 발화")
         return {'exit_orders': exit_orders, 'evaluated_count': len(positions)}

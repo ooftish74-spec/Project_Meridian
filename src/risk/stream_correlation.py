@@ -37,9 +37,10 @@ class StreamCorrelationMonitor:
 
     def __init__(self):
         from config.dynamic_config import DynamicConfig as _DC
-        self.STREAM_IDS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        self.STREAM_IDS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
         self._stream_returns: Dict[str, List[float]] = {s: [] for s in self.STREAM_IDS}
-        self._risk_budget: Dict[str, float] = {s: 0.25 for s in self.STREAM_IDS}
+        _eq_w = round(1.0 / max(len(self.STREAM_IDS), 1), 4)
+        self._risk_budget: Dict[str, float] = {s: _eq_w for s in self.STREAM_IDS}
         self._correlation_matrix: Optional[np.ndarray] = None
 
     def record_return(self, stream_id: str, daily_return: float):

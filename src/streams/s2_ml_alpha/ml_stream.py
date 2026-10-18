@@ -37,6 +37,8 @@ cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _MODEL_DIR = _PROJECT_ROOT / 'results' / 'models'
 _FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store' / 'latest'
+if not _FEATURE_STORE_DIR.exists() or not any(_FEATURE_STORE_DIR.glob('*.parquet')):
+    _FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store'
 _HISTORICAL_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
 _SECTOR_MAP_PATH = _PROJECT_ROOT / 'data' / 'sector_map.json'
 try:
@@ -112,10 +114,10 @@ class S2MLAlphaStream(BaseStream):
                     if _loaded >= 3:
                         self._models = _models
                         from src.intelligence.v4_features import FEATURE_NAMES_V6
-                        self._feature_names = FEATURE_NAMES_V6
+                        self._feature_names = _meta.get('feature_names') or FEATURE_NAMES_V6
                         self._model_meta = {'val_acc': _meta.get('val_acc', 0), 'val_auc': _meta.get('val_auc', 0), 'train_date': _meta.get('train_date', ''), 'version': _meta.get('version', '')}
                         self._model_loaded = True
-                        raw_weights = _meta.get('model_weights', {})
+                        raw_weights = _meta.get('model_weights') or _meta.get('ensemble_weights', {})
                         if raw_weights:
                             self._model_weights = raw_weights
                         self._model_meta['model_weights'] = self._model_weights
@@ -147,15 +149,19 @@ class S2MLAlphaStream(BaseStream):
             return
         try:
             pkg = self._safe_pickle_load(ensemble_path)
+            meta = pkg.get('metadata', {}) or {}
             self._models = pkg.get('models', {})
-            self._feature_names = pkg.get('feature_names', [])
-            if not self._feature_names and 'metadata' in pkg:
-                self._feature_names = pkg['metadata'].get('feature_names', [])
-            self._model_meta = {'val_acc': pkg.get('val_acc', 0), 'val_auc': pkg.get('val_auc', 0), 'train_date': pkg.get('train_date', ''), 'version': pkg.get('version', '')}
+            self._feature_names = pkg.get('feature_names') or meta.get('feature_names', [])
+            self._model_meta = {
+                'val_acc': pkg.get('val_acc', meta.get('val_acc', 0)),
+                'val_auc': pkg.get('val_auc', meta.get('val_auc', 0)),
+                'train_date': pkg.get('train_date', meta.get('train_date', '')),
+                'version': pkg.get('version', meta.get('version', ''))
+            }
             self._model_loaded = True
-            raw_weights = pkg.get('model_weights', {})
+            raw_weights = pkg.get('model_weights') or pkg.get('ensemble_weights') or meta.get('model_weights') or meta.get('ensemble_weights', {})
             if not raw_weights:
-                model_scores = pkg.get('model_scores', {})
+                model_scores = pkg.get('model_scores') or meta.get('model_scores', {})
                 if model_scores:
                     max_s = max(model_scores.values()) if model_scores else 0
                     exp_s = {k: math.exp(v - max_s) for k, v in model_scores.items()}
@@ -165,8 +171,8 @@ class S2MLAlphaStream(BaseStream):
             if self._model_weights:
                 logger.info(f"  S2: 가중 앙상블 weights 로드: {', '.join((f'{k}={v:.3f}' for k, v in self._model_weights.items()))}")
             self._model_meta['model_weights'] = self._model_weights
-            feat_means = pkg.get('feature_means')
-            feat_stds = pkg.get('feature_stds')
+            feat_means = pkg.get('feature_means') if pkg.get('feature_means') is not None else meta.get('feature_means')
+            feat_stds = pkg.get('feature_stds') if pkg.get('feature_stds') is not None else meta.get('feature_stds')
             if feat_means is not None:
                 self._feature_means = np.array(feat_means)
                 self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
@@ -286,9 +292,9 @@ class S2MLAlphaStream(BaseStream):
             return signals
         if self._model_loaded:
             _s2_target_date = market_data.get('date') or datetime.now().strftime('%Y-%m-%d')
-            scored = self._ml_predict(candidates, market_data, target_date=_s2_target_date)
-            if scored:
-                pass
+            scored = self._ml_predict(candidates, market_data, target_date=_s2_target_date, regime=regime)
+            if not scored:
+                scored = self._fallback_score(candidates, market_data)
         else:
             scored = self._fallback_score(candidates, market_data)
         for s in scored:
@@ -386,13 +392,18 @@ class S2MLAlphaStream(BaseStream):
         qualified.sort(key=lambda x: x['up_prob'], reverse=True)
         qualified = qualified[:max_positions]
         qualified = self._enforce_sector_neutrality(qualified)
+        for s in scored:
+            if not s.get('sector') or s.get('sector') == 'unknown':
+                _clean_t = str(s.get('ticker', '')).replace('.KS', '').replace('.KQ', '').zfill(6)
+                if self._sector_map and _clean_t in self._sector_map:
+                    s['sector'] = self._sector_map[_clean_t]
         vix_ref = signal_cache_ref.get('vix', cfg.get('s2.vix_fallback_default', 18.0))
         vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
         use_etf_basket = cfg.get('s2.etf_basket.enabled', True)
-        if use_etf_basket and scored:
+        if use_etf_basket and (qualified or scored):
             from src.streams.s2_ml_alpha.etf_basket_decomposer import S2ETFBasketDecomposer
             decomposer = S2ETFBasketDecomposer()
-            etf_sigs = decomposer.decompose_to_etf_signals(scored)
+            etf_sigs = decomposer.decompose_to_etf_signals(qualified if qualified else scored)
             for es in etf_sigs:
                 es['size_pct'] = round(1.0 / max(1, len(etf_sigs)), 4)
                 es['suggested_weight'] = es['size_pct']
@@ -400,7 +411,7 @@ class S2MLAlphaStream(BaseStream):
                 es['regime'] = regime
                 es['timestamp'] = now_kst().isoformat()
                 signals.append(es)
-        else:
+        if not signals:
             for stock in qualified:
                 tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
                 tp_pct_val = tp_sl_meta['tp_pct']
@@ -507,10 +518,14 @@ class S2MLAlphaStream(BaseStream):
             pass
         logger.info('  S2: Feature Store 데이터 직접 섭취 (중복 연산 제거)')
         parquets = sorted(_FEATURE_STORE_DIR.glob('*.parquet'))
+        seen_tickers = set()
         for pf in parquets:
-            ticker = pf.name.split('_')[0]
+            ticker = pf.stem.replace('kr_', '').replace('_features', '')
+            if ticker in seen_tickers:
+                continue
             if universe and ticker not in universe:
                 continue
+            seen_tickers.add(ticker)
             try:
                 df = pd.read_parquet(pf)
                 if df.empty:
@@ -576,7 +591,7 @@ class S2MLAlphaStream(BaseStream):
             logger.debug(f'  S2: cross-asset 로드 실패: {e}')
         return ca
 
-    def _ml_predict(self, candidates: List[Dict], market_data: Dict, target_date=None) -> List[Dict]:
+    def _ml_predict(self, candidates: List[Dict], market_data: Dict, target_date=None, regime: str = 'caution') -> List[Dict]:
         """ML 앙상블 예측.
 
         feature_store의 51피처 → 앙상블 모델 입력 → P(up) 예측.
@@ -590,13 +605,35 @@ class S2MLAlphaStream(BaseStream):
             data_dir = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'historical_10y'
             automl_gen = AutoMLFeatureGenerator(data_dir)
         for stock in candidates:
-            features = stock.get('features', {})
+            features = dict(stock.get('features', {}) or {})
+            if not features or 'rsi_14' not in features:
+                try:
+                    from src.data.market_data_bridge import MarketDataBridge
+                    from src.intelligence.v4_features import extract_v4
+                    _bridge = MarketDataBridge()
+                    _df = _bridge._load_price_history(stock['ticker'])
+                    if _df is not None and len(_df) >= 20:
+                        _c = _df['close'].values.astype(float)
+                        _h = _df['high'].values.astype(float)
+                        _l = _df['low'].values.astype(float)
+                        _o = _df['open'].values.astype(float)
+                        _v = _df['volume'].values.astype(float)
+                        _idx = len(_df) - 1
+                        _is_etf = stock['ticker'] in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
+                        _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, is_etf=_is_etf) or {}
+                        for _vk, _vv in _v4_feats.items():
+                            features.setdefault(_vk, _vv)
+                except Exception as _e_feat:
+                    logger.debug(f"  extract_v4 live KIS build failed for {stock['ticker']}: {_e_feat}")
             if use_automl:
                 try:
                     import pandas as pd
                     fp = data_dir / f"kr_{stock['ticker']}.parquet"
                     if fp.exists():
                         df = pd.read_parquet(fp)
+                        if 'date' in df.columns:
+                            df['date'] = pd.to_datetime(df['date'])
+                            df = df.set_index('date').sort_index()
                         if target_date is not None:
                             try:
                                 _pit_mask = df.index <= pd.Timestamp(target_date)
@@ -610,38 +647,18 @@ class S2MLAlphaStream(BaseStream):
                                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_pit_am_e}", exc_info=True)
                                 logger.debug(f'  S2 PIT AutoML 슬라이싱 실패: {_pit_am_e}')
                         df = df.tail(300)
-                        if 'date' in df.columns:
-                            df['date'] = pd.to_datetime(df['date'])
-                            df = df.set_index('date').sort_index()
                         feat_df = automl_gen.generate_features(stock['ticker'], df)
                         if not feat_df.empty:
-                            features = feat_df.iloc[-1].to_dict()
+                            automl_feats = feat_df.iloc[-1].to_dict()
+                            features.update(automl_feats)
                 except Exception as e:
                     logger.warning(f"  🚨 AutoML 피처 생성 실패 ({stock['ticker']}): {e}")
-            if not features:
-                try:
-                    from src.data.market_data_bridge import MarketDataBridge
-                    from src.intelligence.v4_features import extract_v4
-                    _bridge = MarketDataBridge()
-                    _df = _bridge._load_price_history(stock['ticker'])
-                    if _df is not None and len(_df) >= 20:
-                        _c = _df['close'].values.astype(float)
-                        _h = _df['high'].values.astype(float)
-                        _l = _df['low'].values.astype(float)
-                        _o = _df['open'].values.astype(float)
-                        _v = _df['volume'].values.astype(float)
-                        _idx = len(_df) - 1
-                        _is_etf = stock['ticker'] in ('069500', '091160', '122630', '252670') or stock.get('is_etf', False)
-                        features = extract_v4(_c, _h, _l, _o, _v, _idx, is_etf=_is_etf) or {}
-                except Exception as _e_feat:
-                    logger.debug(f"  extract_v4 live KIS build failed for {stock['ticker']}: {_e_feat}")
             if not features:
                 fb = self._fallback_score_single(stock, market_data)
                 scored.append(fb)
                 continue
             if cfg.get('s2.filter_placeholder_features', True):
                 _excluded = set(cfg.get('s2.placeholder_features', ['dart_disclosure', 'institutional_flow', 'short_interest', 'options_flow']))
-                _excluded.update(['cross_gscpi_vol', 'macro_gscpi_chg_20d', 'macro_gscpi'])
                 features = {k: v for k, v in features.items() if k not in _excluded}
             try:
                 if self._feature_names:
@@ -666,10 +683,11 @@ class S2MLAlphaStream(BaseStream):
                 try:
                     from src.ml.ml_regime_router import get_router as _get_router
                     _router = _get_router()
-                    _router_info = _router.get_model_info('caution')
+                    _r_key = (regime or 'caution').lower()
+                    _router_info = _router.get_model_info(_r_key)
                     if _router_info.get('model_file_exists'):
-                        _regime_up_prob = _router.predict(X, regime='caution')
-                        logger.debug(f"  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} CAUTION 모델 예측={_regime_up_prob:.4f}")
+                        _regime_up_prob = _router.predict(X, regime=_r_key)
+                        logger.debug(f"  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} {_r_key.upper()} 모델 예측={_regime_up_prob:.4f}")
                 except Exception as _re:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_re}", exc_info=True)
@@ -725,9 +743,10 @@ class S2MLAlphaStream(BaseStream):
                 if self._conformal_state:
                     try:
                         cal_scores = self._conformal_state.get('calibration_scores', [])
-                        q_level = self._conformal_state.get('quantile_level', 0.1)
+                        q_level = float(self._conformal_state.get('quantile_level', 0.90))
                         if cal_scores:
-                            q = np.quantile(cal_scores, 1 - q_level)
+                            target_q = q_level if q_level >= 0.5 else (1.0 - q_level)
+                            q = float(np.quantile(cal_scores, max(0.01, min(0.99, target_q))))
                             conf_lower = max(0, up_prob - q)
                             conf_upper = min(1, up_prob + q)
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
@@ -736,7 +755,7 @@ class S2MLAlphaStream(BaseStream):
                         pass
                 ev = self._dynamic_ev(stock, up_prob)
                 ensemble_std = float(np.std(preds)) if preds else 0.0
-                news_sent = float(features.get('news_sentiment', 0.0))
+                news_sent = float(features.get('news_sentiment_mean', features.get('news_sentiment', 0.0)))
                 meta_confidence = 1.0 - ensemble_std * 2.0 - ood_score * 0.5 + news_sent * 0.1
                 meta_confidence = max(0.1, min(1.0, meta_confidence))
                 up_prob = up_prob * meta_confidence
@@ -918,7 +937,7 @@ class S2MLAlphaStream(BaseStream):
         kelly_raw = (p * b - q) / b
         try:
             _adtv = float(stock.get('adtv', stock.get('avg_volume_value', 0.0)))
-            _order = abs(kelly_raw) * float(cfg.get('s2.tca.portfolio_base', 100000000))
+            _order = abs(kelly_raw) * float(cfg.get('s2.tca.portfolio_base', cfg.get('portfolio.initial_capital', 20_000_000)))
             _coeff = float(cfg.get('s2.tca.sqrt_impact_coeff', 0.1))
             if _adtv > 0 and _order > 0:
                 _tca_cost = _coeff * (_order / _adtv) ** 0.5
@@ -1148,7 +1167,7 @@ class S2MLAlphaStream(BaseStream):
         """
         if model_name not in self._ic_history:
             self._ic_history[model_name] = []
-        ic_point = 1.0 if (predicted > 0) == (actual > 0) else -1.0
+        ic_point = 1.0 if (predicted > 0.5) == (actual > 0) else -1.0
         self._ic_history[model_name].append(ic_point)
         max_history = cfg.get('s2.ic_max_history', 200)
         if len(self._ic_history[model_name]) > max_history:

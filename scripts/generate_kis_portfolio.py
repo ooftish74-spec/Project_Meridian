@@ -74,9 +74,15 @@ def _get_tradeable_sessions(stream_id: str) -> list:
 
 def generate():
     """KIS API 기준 전체 포트폴리오 생성."""
-    # Live 모드 안전 장치: kis_portfolio.json이 live 모드일 경우 shadow_portfolio.json 데이터로 덮어쓰지 않음
+    # Live 모드 안전 장치: kis_portfolio.json이 live 모드이거나 시스템 설정이 live일 경우 shadow_portfolio.json 데이터로 덮어쓰지 않음
     existing_kis = _load_json('kis_portfolio.json')
-    if existing_kis.get('kis_mode') == 'live':
+    current_exec_mode = str(cfg.get('execution.current_mode', cfg.get('execution.mode', 'live'))).lower()
+    if existing_kis.get('kis_mode') == 'live' or (current_exec_mode == 'live' and existing_kis.get('account', {}).get('nav', 0) > 0):
+        if existing_kis.get('kis_mode') != 'live':
+            existing_kis['kis_mode'] = 'live'
+            existing_kis.setdefault('holdings', {})
+            out_path = _RESULTS / 'kis_portfolio.json'
+            out_path.write_text(json.dumps(existing_kis, indent=2, default=str, ensure_ascii=False))
         logger.info("  🔒 Live 모드 감지: shadow_portfolio.json으로 kis_portfolio.json을 덮어쓰지 않고 라이브 잔고를 보존합니다.")
         return existing_kis
 
@@ -155,7 +161,14 @@ def generate():
     # ── 스트림별 시그널 ──
     stream_signals = {}
     all_sigs = signals.get('signals', {})
-    for sid in ['S1', 'S2', 'S3', 'S4']:
+    try:
+        from config.dynamic_config import DynamicConfig as _DC
+        _cfg_sids = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
+    except Exception:
+        _cfg_sids = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']
+    active_sids = list(dict.fromkeys(['S1', 'S2', 'S3', 'S4'] + _cfg_sids + list(stream_positions.keys()) + list(all_sigs.keys())))
+
+    for sid in active_sids:
         sigs = all_sigs.get(sid, [])
         stream_signals[sid] = [{
             'ticker': s.get('ticker', ''),
@@ -213,7 +226,7 @@ def generate():
         'streams': {},
     }
 
-    for sid in ['S1', 'S2', 'S3', 'S4']:
+    for sid in active_sids:
         sessions = _get_tradeable_sessions(sid)
         kpi = _calc_stream_kpi(sid)
         n_positions = len(stream_positions.get(sid, []))
@@ -221,14 +234,22 @@ def generate():
 
         stream_data = {
             'name': {
+                'S0': 'Macro Beta Overlay',
                 'S1': 'Directional ETF',
                 'S2': 'ML Alpha (개별주)',
                 'S3': 'Sector Rotation ETF',
                 'S4': 'Quality-Value (개별주)',
+                'S5': 'Overnight & Cash Sweep',
+                'S10': 'Mega Trend Leader',
+                'S10_MEGA_TREND': 'Mega Trend Leader',
+                'S11': 'High-Beta Sniper',
+                'S12': 'Derivative Squeeze',
+                'S13': 'Japan Alpha',
+                'S14_PAIR_ALPHA': 'Statistical Pair Alpha',
             }.get(sid, sid),
             'tradeable_sessions': sessions,
-            'exchange': 'SOR' if sid in ('S1', 'S3') else 'auto (NXT pre/after, SOR regular)',
-            'asset_type': 'ETF' if sid in ('S1', 'S3') else 'STOCK',
+            'exchange': 'SOR' if sid in ('S0', 'S1', 'S3', 'S5') else 'auto (NXT pre/after, SOR regular)',
+            'asset_type': 'ETF' if sid in ('S0', 'S1', 'S3', 'S5') else 'STOCK',
             'api_eligible': True,
             'positions': stream_positions.get(sid, []),
             'n_positions': n_positions,
@@ -257,10 +278,10 @@ def generate():
         portfolio['streams'][sid] = stream_data
 
     # ── 전체 요약 ──
-    total_positions = sum(len(stream_positions.get(sid, [])) for sid in ['S1', 'S2', 'S3', 'S4'])
-    total_signals = sum(len(stream_signals.get(sid, [])) for sid in ['S1', 'S2', 'S3', 'S4'])
-    total_realized = sum(_calc_stream_kpi(sid)['realized_pnl'] for sid in ['S1', 'S2', 'S3', 'S4'])
-    total_unrealized = sum(_calc_stream_kpi(sid)['unrealized_pnl'] for sid in ['S1', 'S2', 'S3', 'S4'])
+    total_positions = sum(len(stream_positions.get(sid, [])) for sid in active_sids)
+    total_signals = sum(len(stream_signals.get(sid, [])) for sid in active_sids)
+    total_realized = sum(_calc_stream_kpi(sid)['realized_pnl'] for sid in active_sids)
+    total_unrealized = sum(_calc_stream_kpi(sid)['unrealized_pnl'] for sid in active_sids)
 
     portfolio['summary'] = {
         'total_positions': total_positions,
@@ -280,7 +301,7 @@ def generate():
     logger.info(f"   Positions: {total_positions} | Signals: {total_signals}")
     logger.info(f"   PnL: ₩{total_realized + total_unrealized:+,.0f} (실현 ₩{total_realized:+,.0f})")
 
-    for sid in ['S1', 'S2', 'S3', 'S4']:
+    for sid in active_sids:
         sd = portfolio['streams'][sid]
         k = sd['kpi']
         sessions = '/'.join(sd['tradeable_sessions'])
@@ -289,7 +310,8 @@ def generate():
         _wr_v = k.get("win_rate", 0)
         _pf_v = k.get("profit_factor", 0)
         _pnl_v = k.get("total_pnl", 0)
-        print(f"   {sid} [{sessions}]: {_n_pos}pos / {_n_sig}sig / WR={_wr_v:.0f}% / PF={_pf_v:.2f} / PnL=₩{_pnl_v:+,.0f}")
+        if _n_pos > 0 or _n_sig > 0 or sid in ('S1', 'S2', 'S3', 'S4'):
+            print(f"   {sid} [{sessions}]: {_n_pos}pos / {_n_sig}sig / WR={_wr_v:.0f}% / PF={_pf_v:.2f} / PnL=₩{_pnl_v:+,.0f}")
 
     return portfolio
 

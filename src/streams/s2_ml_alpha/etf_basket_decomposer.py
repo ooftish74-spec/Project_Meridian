@@ -22,9 +22,11 @@ import logging
 from typing import Dict, List, Any
 import numpy as np
 from config.dynamic_config import DynamicConfig
+from src.data.market_context import MarketContextManager
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+market_ctx = MarketContextManager()
 
 class S2ETFBasketDecomposer:
     """S2 ML 개별주 앙상블 점수를 거래세 0% 섹터 ETF 신호로 변환하는 엔진."""
@@ -49,19 +51,36 @@ class S2ETFBasketDecomposer:
         top_k_sectors = int(cfg.get('s2.etf_basket.top_k_sectors', 3))
 
         # 기본 섹터 ➔ 대표 ETF 매핑 맵 (DynamicConfig override 지원)
-        sector_etf_map = cfg.get('s2.etf_basket.sector_etf_map', {
+        default_sector_etf_map = {
             'IT/Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
+            'IT_Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
+            'semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
+            'it': {'ticker': '091160', 'name': 'KODEX 반도체'},
             'Battery/Auto': {'ticker': '091170', 'name': 'KODEX 자동차'},
+            'Automotive_Battery': {'ticker': '091170', 'name': 'KODEX 자동차'},
+            'battery': {'ticker': '305720', 'name': 'KODEX 2차전지산업'},
+            'auto': {'ticker': '091170', 'name': 'KODEX 자동차'},
             'Bio/Healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},
+            'Healthcare_Bio': {'ticker': '244580', 'name': 'KODEX 바이오'},
+            'bio': {'ticker': '244580', 'name': 'KODEX 바이오'},
+            'healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},
             'Financials': {'ticker': '091180', 'name': 'KODEX 은행'},
-            'Heavy Industry': {'ticker': '117460', 'name': 'KODEX 에너지역티브'}
-        })
+            'finance': {'ticker': '091180', 'name': 'KODEX 은행'},
+            'Heavy Industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
+            'heavy_industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
+            'chemical': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
+            'defense': {'ticker': '139260', 'name': 'TIGER 200 중공업'},
+        }
+        sector_etf_map = {**default_sector_etf_map, **(cfg.get('s2.etf_basket.sector_etf_map', {}) or {})}
 
         # 1. 섹터별 스코어 집계 (Sector Aggregation)
         sector_scores: Dict[str, List[float]] = {}
         for stock in scored_stocks:
-            sector = stock.get('sector', 'IT/Semiconductor')
-            score = float(stock.get('predict_proba', stock.get('score', 0.5)))
+            raw_sector = stock.get('sector')
+            if not raw_sector or raw_sector == 'unknown':
+                raw_sector = market_ctx.get_sector(str(stock.get('ticker', '')))
+            sector = raw_sector if (raw_sector and raw_sector != 'Unknown') else 'IT/Semiconductor'
+            score = float(stock.get('up_prob', stock.get('predict_proba', stock.get('score', 0.5))))
             if sector not in sector_scores:
                 sector_scores[sector] = []
             sector_scores[sector].append(score)

@@ -353,21 +353,29 @@ class StreamOrchestrator:
                     kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
                     raw_holdings = kis_data.get('holdings', {})
                     acct_data = kis_data.get('account', {})
-                    total_nav = float(acct_data.get('nav', total_nav))
+                    total_nav = float(acct_data.get('total_equity') or kis_data.get('nav') or acct_data.get('nav', total_nav))
                     cash = float(acct_data.get('cash', cash))
+                    _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 1334.3)
                     for t, h in raw_holdings.items():
                         holdings[t] = h
+                        _qty_h = int(h.get('qty', 0))
+                        _cp_h = float(h.get('current_price', 0.0))
+                        _is_us_h = not str(t).isdigit()
+                        _amt_krw = float(h.get('eval_krw', 0.0) or (_qty_h * _cp_h * (_fx_orch if _is_us_h else 1.0)))
+                        _ret_h = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
                         positions[t] = {
                             'ticker': t,
                             'name': h.get('name', t),
-                            'quantity': int(h.get('qty', 0)),
-                            'qty': int(h.get('qty', 0)),
+                            'quantity': _qty_h,
+                            'qty': _qty_h,
                             'avg_price': float(h.get('avg_price', 0.0)),
-                            'current_price': float(h.get('current_price', 0.0)),
-                            'amount': float(h.get('qty', 0)) * float(h.get('current_price', 0.0)),
-                            'unrealized_pnl_pct': float(h.get('return_pct', 0.0)),
-                            'pnl_pct': float(h.get('return_pct', 0.0)),
-                            'market': h.get('market', 'KR')
+                            'current_price': _cp_h,
+                            'amount': _amt_krw,
+                            'market_value': _amt_krw,
+                            'unrealized_pnl_pct': _ret_h,
+                            'pnl_pct': _ret_h,
+                            'return_pct': _ret_h,
+                            'market': h.get('market', 'US' if _is_us_h else 'KR')
                         }
                 except Exception as _k_err:
                     logger.warning(f"kis_portfolio.json 로드 예외: {_k_err}")
@@ -394,10 +402,16 @@ class StreamOrchestrator:
                     positions = raw_pos
                     holdings = raw_pos
 
+            _live_hwm = max(total_nav, initial)
+            if getattr(self, 'exec_mode', 'live') == 'live' and total_nav > 0:
+                # 통합증거금 이중계상 제거 후 실계좌 실제 순자산(True NAV) 기준 HWM 정렬
+                if initial > total_nav * 1.04:
+                    _live_hwm = total_nav
+
             portfolio = {
                 'total_nav': total_nav,
                 'nav': total_nav,
-                'hwm': max(total_nav, initial),
+                'hwm': _live_hwm,
                 'daily_returns': [],
                 'active_positions': len(positions),
                 'cash': cash,
@@ -625,7 +639,11 @@ class StreamOrchestrator:
                 logger.error(f"    ❌ S10_MEGA_TREND 신호 생성 실패: {e}", exc_info=True)
                 all_signals['S10_MEGA_TREND'] = []
                 market_data['s10_status'] = 'neutral'
-        all_signals['S10'] = all_signals.get('S10_MEGA_TREND', [])
+        if 'S10' in all_signals:
+            if not all_signals.get('S10_MEGA_TREND'):
+                all_signals['S10_MEGA_TREND'] = all_signals.pop('S10')
+            else:
+                all_signals.pop('S10', None)
 
 
 
@@ -648,11 +666,25 @@ class StreamOrchestrator:
         rebalance_orders = []
         try:
             import json as _json_rebal
-            _sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
-            _sp_data = {}
-            if _sp_path.exists():
-                _sp_data = _json_rebal.loads(_sp_path.read_text())
-            _all_positions = dict(_sp_data.get('positions', {}))
+            _all_positions = {}
+            if getattr(self, 'exec_mode', 'live') != 'live':
+                _sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
+                if _sp_path.exists():
+                    _sp_data = _json_rebal.loads(_sp_path.read_text())
+                    _all_positions = dict(_sp_data.get('positions', {}))
+            elif (_ROOT / 'results' / 'kis_portfolio.json').exists() and not (portfolio and portfolio.get('positions')):
+                _kp_data = _json_rebal.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
+                for _kt, _kh in (_kp_data.get('holdings') or {}).items():
+                    if isinstance(_kh, dict) and float(_kh.get('qty', _kh.get('quantity', 0)) or 0) > 0:
+                        _tk_up = str(_kt).upper()
+                        _sid = 'S3' if _tk_up in ('NVDA', 'QQQ', 'SOXX', 'XLK', '091160', 'MSFT', 'AAPL', 'TSLA') else ('S0' if _tk_up in ('069500', '229200') else 'S3')
+                        _all_positions[f"{_sid}:{_tk_up}"] = {
+                            'ticker': _tk_up,
+                            'stream_id': _sid,
+                            'qty': _kh.get('qty', _kh.get('quantity', 0)),
+                            'amount': float(_kh.get('qty', 0) or 0) * float(_kh.get('current_price', 0.0) or 0.0),
+                            'current_price': float(_kh.get('current_price', 0.0) or 0.0),
+                        }
 
             # [SSoT Integration] 실계좌 포트폴리오(portfolio) 주입 시 보유 종목 스트림 매핑 주입
             if portfolio and portfolio.get('positions'):
@@ -677,6 +709,7 @@ class StreamOrchestrator:
                             _all_positions[f"{_sid}:{_tk_up}"] = _p_dict
 
             # [SSoT Policy] 리밸런싱 주문 생성: S3, S4 및 활성화된 스트림의 rebalance.enabled 확인
+            existing_tickers = {(pv.get('ticker') if isinstance(pv, dict) else getattr(pv, 'ticker', '')) or str(pk).split(':')[-1] for pk, pv in _all_positions.items()}
             _candidate_rebal_streams = ['S3', 'S4', 'S0', 'S1', 'S2']
             _active_rebal_streams = [s for s in _candidate_rebal_streams if _cfg_get(f"{s.lower()}.rebalance.enabled", False)]
             for _rebal_sid in _active_rebal_streams:
@@ -786,95 +819,99 @@ class StreamOrchestrator:
             _missing_tickers = set()
             for _sigs in all_signals.values():
                 for _s in _sigs:
+                    if not isinstance(_s, dict):
+                        continue
+                    _t = str(_s.get('ticker', '') or '')
+                    if not _t or _t.startswith('_') or _s.get('strategy') == '_sys_meta' or _s.get('direction') == 'exit':
+                        continue
                     if not _s.get('price') or _s['price'] <= 0:
-                        _t = _s.get('ticker', '')
-                        if _t:
-                            _missing_tickers.add(_t)
+                        _missing_tickers.add(_t)
 
-                _ALIAS = {'430740': '423160', '357330': '357870'}
-                _PARKING_FALLBACK_PX = {
-                    '459580': 1074340.0,
-                    '423160': 110770.0,
-                    '449170': 112110.0,
-                    '430740': 110770.0,
-                    '357870': 58190.0,
-                    '357330': 58190.0,
-                    'SHV': 110.0,
-                    'SGOV': 100.0,
-                }
-                _injected = 0
-                for _t in _missing_tickers:
-                    _norm_t = _ALIAS.get(_t, _t)
+            _ALIAS = {'430740': '423160', '357330': '357870'}
+            _PARKING_FALLBACK_PX = {
+                '459580': 1074340.0,
+                '423160': 110770.0,
+                '449170': 112110.0,
+                '430740': 110770.0,
+                '357870': 58190.0,
+                '357330': 58190.0,
+                'SHV': 110.0,
+                'SGOV': 100.0,
+            }
+            _injected = 0
+            for _t in _missing_tickers:
+                _norm_t = _ALIAS.get(_t, _t)
+                try:
+                    # 1순위: CentralDataGateway (3-tier hot failover)
                     try:
-                        # 1순위: CentralDataGateway (3-tier hot failover)
-                        try:
-                            from src.data_collection.central_data_gateway import CentralDataGateway
-                            _cdg_res = CentralDataGateway().get_current_price(_norm_t)
-                            if isinstance(_cdg_res, dict) and _cdg_res.get('price'):
-                                _px = float(_cdg_res['price'])
-                                if _px > 0:
-                                    for _sigs in all_signals.values():
-                                        for _s in _sigs:
-                                            if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
-                                                _s['ticker'] = _norm_t
-                                                _s['price'] = _px
-                                                _injected += 1
-                                    continue
-                        except Exception:
-                            pass
-
-                        # 2순위: KIS Price Service
-                        try:
-                            from src.execution.kis_price_service import KISPriceService
-                            _kps_res = KISPriceService().get_current_price(_norm_t)
-                            if isinstance(_kps_res, dict) and _kps_res.get('price'):
-                                _px = float(_kps_res['price'])
-                                if _px > 0:
-                                    for _sigs in all_signals.values():
-                                        for _s in _sigs:
-                                            if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
-                                                _s['ticker'] = _norm_t
-                                                _s['price'] = _px
-                                                _injected += 1
-                                    continue
-                        except Exception:
-                            pass
-
-                        # 3순위: 파킹 ETF 기준가(NAV Anchor)
-                        if _norm_t in _PARKING_FALLBACK_PX:
-                            _px = _PARKING_FALLBACK_PX[_norm_t]
-                            for _sigs in all_signals.values():
-                                for _s in _sigs:
-                                    if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
-                                        _s['ticker'] = _norm_t
-                                        _s['price'] = _px
-                                        _injected += 1
-                            continue
-
-                        # 4순위: 인스티튜셔널 OHLCV (Naver / KRX API)
-                        from src.data_collection.pykrx_compat import stock as _krx_compat
-                        from datetime import date as _date_orch, timedelta as _td_orch
-                        _today_orch = _date_orch.today().strftime('%Y%m%d')
-                        _week_ago = (_date_orch.today() - _td_orch(days=7)).strftime('%Y%m%d')
-                        _df = _krx_compat.get_market_ohlcv_by_date(_week_ago, _today_orch, _norm_t)
-                        if len(_df) > 0:
-                            _close = float(_df.iloc[-1].get('종가', 0))
-                            if _close > 0:
+                        from src.data_collection.central_data_gateway import CentralDataGateway
+                        _cdg_res = CentralDataGateway().get_current_price(_norm_t)
+                        if isinstance(_cdg_res, dict) and _cdg_res.get('price'):
+                            _px = float(_cdg_res['price'])
+                            if _px > 0:
                                 for _sigs in all_signals.values():
                                     for _s in _sigs:
                                         if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
                                             _s['ticker'] = _norm_t
-                                            _s['price'] = _close
+                                            _s['price'] = _px
                                             _injected += 1
-                    except Exception as _e:
-                        logger.debug(f"Missing price injection skipped for {_t}: {_e}")
-                if _injected:
-                    logger.info(f"    📡 기관급 가격 주입(KIS/Gateway/Anchor): {_injected}건 ({len(_missing_tickers)}종목)")
+                                continue
+                    except Exception:
+                        pass
+
+                    # 2순위: KIS Price Service
+                    try:
+                        from src.execution.kis_price_service import KISPriceService
+                        _kps_res = KISPriceService().get_current_price(_norm_t)
+                        if isinstance(_kps_res, dict) and _kps_res.get('price'):
+                            _px = float(_kps_res['price'])
+                            if _px > 0:
+                                for _sigs in all_signals.values():
+                                    for _s in _sigs:
+                                        if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                            _s['ticker'] = _norm_t
+                                            _s['price'] = _px
+                                            _injected += 1
+                                continue
+                    except Exception:
+                        pass
+
+                    # 3순위: 파킹 ETF 기준가(NAV Anchor)
+                    if _norm_t in _PARKING_FALLBACK_PX:
+                        _px = _PARKING_FALLBACK_PX[_norm_t]
+                        for _sigs in all_signals.values():
+                            for _s in _sigs:
+                                if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                    _s['ticker'] = _norm_t
+                                    _s['price'] = _px
+                                    _injected += 1
+                        continue
+
+                    # 4순위: 인스티튜셔널 OHLCV (Naver / KRX API)
+                    from src.data_collection.pykrx_compat import stock as _krx_compat
+                    from datetime import date as _date_orch, timedelta as _td_orch
+                    _today_orch = _date_orch.today().strftime('%Y%m%d')
+                    _week_ago = (_date_orch.today() - _td_orch(days=7)).strftime('%Y%m%d')
+                    _df = _krx_compat.get_market_ohlcv_by_date(_week_ago, _today_orch, _norm_t)
+                    if len(_df) > 0:
+                        _close = float(_df.iloc[-1].get('종가', 0))
+                        if _close > 0:
+                            for _sigs in all_signals.values():
+                                for _s in _sigs:
+                                    if _s.get('ticker') in (_t, _norm_t) and (not _s.get('price') or _s['price'] <= 0):
+                                        _s['ticker'] = _norm_t
+                                        _s['price'] = _close
+                                        _injected += 1
+                except Exception as _e:
+                    logger.debug(f"Missing price injection skipped for {_t}: {_e}")
+            if _injected:
+                logger.info(f"    📡 기관급 가격 주입(KIS/Gateway/Anchor): {_injected}건 ({len(_missing_tickers)}종목)")
         except Exception as _pe:
             logger.debug(f"가격 주입 처리 완료: {_pe}")
 
         # ── Step 4.7: 글로벌 Exit Manager (TP/SL/Trailing Stop) ──
         logger.info("  📋 Step 4.7: 글로벌 Exit Manager (TP/SL)")
+        self._latest_signals = all_signals
         exit_orders = self._evaluate_exits(market_data, regime, portfolio=portfolio)
         if exit_orders:
             logger.info(f"    🔔 Exit Manager: {len(exit_orders)}건 청산 주문 생성")
@@ -917,13 +954,40 @@ class StreamOrchestrator:
             if 'holdings_ev' not in market_data:
                 market_data['holdings_ev'] = _router.compute_holdings_ev(portfolio, market_data)
 
-            # Step 2: 현금 부족으로 미주문된 신규 매수 시그널 수집 (S10, S2, S3 등)
+            # Step 2: 현금 부족으로 미주문된 신규 매수 시그널 수집 (이미 보유 중인 종목 및 파킹 ETF 제외)
             _ordered_tickers = {o.get('ticker') for o in orders if o.get('direction') in ('buy', 'long') or o.get('action') == 'buy'}
+            _held_swap_set = set()
+            if portfolio and isinstance(portfolio, dict):
+                for _sk in ('positions', 'holdings'):
+                    _sd = portfolio.get(_sk) or {}
+                    if isinstance(_sd, dict):
+                        for _pk, _pv in _sd.items():
+                            _pt = (_pv.get('ticker') if isinstance(_pv, dict) else None) or str(_pk).split(':')[-1]
+                            _pq = int((_pv.get('quantity', _pv.get('qty', 0)) if isinstance(_pv, dict) else 0) or 0)
+                            if _pt and _pq > 0:
+                                _held_swap_set.add(str(_pt).upper())
+            if getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
+                try:
+                    _kp_swap = json.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
+                    for _kt, _kh in (_kp_swap.get('holdings') or {}).items():
+                        if int((_kh.get('qty', _kh.get('quantity', 0)) if isinstance(_kh, dict) else 0) or 0) > 0:
+                            _held_swap_set.add(str(_kt).upper())
+                except Exception:
+                    pass
+            _PARKING_SWAP_SKIP = {'459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV', 'BIL'}
             _candidate_sigs = []
             for _sid, _sigs in all_signals.items():
+                if _sid in ('S0', 'S4', 'S5', 'S_YIELD'):
+                    continue
                 for _s in _sigs:
-                    _tk = _s.get('ticker')
-                    if _tk and _tk not in _ordered_tickers and _s.get('direction', _s.get('action', 'long')) in ('long', 'buy', 'BUY'):
+                    _tk = str(_s.get('ticker', '')).strip()
+                    if (
+                        _tk
+                        and _tk not in _ordered_tickers
+                        and _tk.upper() not in _held_swap_set
+                        and _tk.upper() not in _PARKING_SWAP_SKIP
+                        and _s.get('direction', _s.get('action', 'long')) in ('long', 'buy', 'BUY')
+                    ):
                         _candidate_sigs.append(_s)
 
             # Step 3: 자본 스왑 라우팅 집행 (기존 최저 EV 보유자산 매도 + 신규 매수 주문 쌍 생성)
@@ -967,7 +1031,8 @@ class StreamOrchestrator:
                     if o.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge'):
                         _prev_hedge = o['amount_krw']
                         _argus_hedge_cut = float(cfg.get('argus.bull_shield_hedge_cut', 0.5))
-                        _new_h_amt = o['amount_krw']
+                        _new_h_amt = round(_prev_hedge * _argus_hedge_cut)
+                        o['amount_krw'] = _new_h_amt
                         logger.info(f"  [Phase 66 Argus 오버레이] Bull 쉴드 발동 (policy={_argus_policy:.2f} semi={_argus_semi:.2f}) → 헤지 {_prev_hedge:.0f}→{_new_h_amt:.0f} (-50%)")
 
         # — Bear 쉴드: 상승장 신호에서 인플레 과열이면 롱 20% 삭감 (기존 orders에 직접 적용)
@@ -1000,17 +1065,26 @@ class StreamOrchestrator:
             'stream.macro_bound_streams',
             ['S3', 'S4']
         ))
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+        _dyn_inv_set = set(_dqe.get_inverse_hedge_tickers())
+        _dyn_def_set = _dqe.get_defensive_exempt_tickers()
+        _all_confs = [float(x.get('confidence', 0.0) or 0.0) for x in (orders if isinstance(orders, list) else [orders])]
         _curr_regime = regime  # run() 스코프에서 직접 참조
+        _dyn_caution_cut = _dqe.compute_dynamic_confidence_cutoff(_all_confs, regime=_curr_regime)
         _filtered_orders = []
         for _ord in (orders if isinstance(orders, list) else [orders]):
             _stream = str(_ord.get('stream_id', _ord.get('stream', '')))
             _action = str(_ord.get('action', _ord.get('direction', ''))).upper()
+            _tk_u = str(_ord.get('ticker', '')).upper()
             _is_exit  = _action in ('SELL', 'EXIT', 'CLOSE', 'REDUCE')
             _is_hedge = (
                 _ord.get('is_hedge', False)
+                or _tk_u in _dyn_inv_set
+                or float(_dqe.get_asset_metrics(_tk_u).get('beta', 1.0)) <= -0.35
                 or 'hedge' in str(_ord.get('reason', '')).lower()
                 or 'inverse' in str(_ord.get('ticker', '')).lower()
-                or _ord.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge')
+                or _ord.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge', 'beta_directional_short_v4')
             )
             
             # [Phase 80] Short-term AlphaStreams (S1, S8) 및 HEDGE/EXIT는 필터 면제
@@ -1021,11 +1095,12 @@ class StreamOrchestrator:
                 _filtered_orders.append(_ord)
                 continue
 
-            # MACRO_BOUND BUY → caution/bear/crash 시 기각 (동적 완화 및 S3 불타기 허용)
-            if _stream in _MACRO_BOUND and _action in ('BUY', 'LONG', ''):
+            # MACRO_BOUND BUY → caution/bear/crash 시 기각 (동적 완화, 방어형 ETF 면제 및 S3 불타기 허용)
+            _DEFENSIVE_TICKERS = {'TLT', 'GLD', 'UUP', 'SHV', 'SGOV', 'BIL', 'SH', 'SQQQ', 'SOXS', '114800', '252670', '251340', '459580', '449170'} | _dyn_def_set
+            if _stream in _MACRO_BOUND and _action in ('BUY', 'LONG', '') and _tk_u not in _DEFENSIVE_TICKERS:
                 _conf = float(_ord.get('confidence', 0.0))
-                _macro_caution_pass_conf = float(cfg.get('risk.macro_guard_caution_pass_conf', 0.60))
-                # caution 장세라도 확신도가 임계값 이상이면 진입 허용 (S3 강제기각 방지)
+                _macro_caution_pass_conf = float(cfg.get('risk.macro_guard_caution_pass_conf', _dyn_caution_cut))
+                # caution 장세라도 확신도가 동적 분위수 임계값 이상이면 진입 허용
                 if _curr_regime == 'caution' and _conf >= _macro_caution_pass_conf:
                     logger.info(f"  [Phase 76 MacroGuard] {_stream} BUY 통과 (regime=caution 이나 confidence={_conf:.2f}>={_macro_caution_pass_conf:.2f})")
                 elif _curr_regime in ('caution', 'bear', 'crash'):
@@ -1038,7 +1113,7 @@ class StreamOrchestrator:
             # [Task 2] S3 Pyramiding (불타기) 허용
             if _stream == 'S3' and _action in ('BUY', 'LONG'):
                 _conf = float(_ord.get('confidence', 0.0))
-                _pyramid_conf_th  = float(cfg.get('s3.pyramiding_conf_threshold', 0.70))
+                _pyramid_conf_th  = float(cfg.get('s3.pyramiding_conf_threshold', max(0.65, _dyn_caution_cut + 0.10)))
                 _pyramid_scale    = float(cfg.get('s3.pyramiding_scale_factor',   2.00))  # (conf-th)*scale = max boost
                 if _conf >= _pyramid_conf_th:
                     _pyramid_mult = 1.0 + (_conf - _pyramid_conf_th) * _pyramid_scale
@@ -1068,8 +1143,9 @@ class StreamOrchestrator:
             _filtered_orders.append(_ord)
         # ★ [SSoT Live Order Policy] 허용 스트림 및 모든 청산/교체매매(Swap) 주문 통과
         _ORDER_PERMITTED_STREAMS = {
-            'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S10', 'S11',
-            'S0_BETA', 'S1_EDGE', 'S2_ML_ALPHA', 'S3_ACTIVE_MACRO', 'S10_MEGA_TREND', 'S11_HIGH_BETA',
+            'S0', 'S1', 'S2', 'S3', 'S3_A', 'S3_B', 'S4', 'S5', 'S6', 'S10', 'S11', 'S12', 'S13', 'S14',
+            'S0_BETA', 'S1_EDGE', 'S2_ML_ALPHA', 'S3_ACTIVE_MACRO', 'S10_MEGA_TREND',
+            'S11_HIGH_BETA', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA',
             'S_BETA', 'S_YIELD', 'EXIT_MANAGER', 'SYS_SWAP', 'SYS_NET', 'SYS_KILL', 'TACTIC_D', 'TACTIC_E'
         }
         orders = [
@@ -1080,9 +1156,9 @@ class StreamOrchestrator:
         ]
 
         # [Phase 78] S_YIELD (KOFR / CD) Auto-Liquidation
-        # 새로운 매수 주문이 있거나 현금 부족 시, 파킹된 자산(459580, 449170 등) 전량을 가용 현금화합니다.
-        _PARKING_TICKERS = {'459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV'}
-        _cfg_kofr = str(cfg.get('sc_yield.kofr_ticker', '459580'))
+        # 새로운 매수 주문이 있거나 현금 부족 시, 파킹된 자산 전량을 가용 현금화합니다.
+        _PARKING_TICKERS = {'459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV'} | _dqe.get_cash_equivalent_tickers()
+        _cfg_kofr = str(cfg.get('sc_yield.kofr_ticker', _dqe.get_optimal_kr_parking_ticker() or '459580'))
         _PARKING_TICKERS.add(_cfg_kofr)
 
         positions_source = portfolio.get('positions', {}) if portfolio else {}
@@ -1185,8 +1261,8 @@ class StreamOrchestrator:
                         'stream_id': 'TACTIC_E',
                         'strategy': 'EarningsEventSqueezeSniper',
                         'ticker': tactic_e_res['target_ticker'],
-                        'action': 'buy' if tactic_e_res['action'] == 'LONG' else 'sell',
-                        'direction': 'long' if tactic_e_res['action'] == 'LONG' else 'short',
+                        'action': 'buy',
+                        'direction': 'long',
                         'amount_krw': tactic_e_res['allocated_capital'],
                         'confidence': 0.90,
                         'reason': tactic_e_res['reason']
@@ -1211,22 +1287,28 @@ class StreamOrchestrator:
             logger.info("  📋 Step 8.4: 가격/수량 및 증거금 확정")
             valid_orders = []
             actual_total_margin = 0.0
+            actual_krw_margin = 0.0
             from src.data_collection.central_data_gateway import CentralDataGateway
             _dyn_fx = CentralDataGateway().get_usdkrw_rate()
+            _jpy_fx = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
             
             for o in orders:
                 if o.get('action') == 'sell' or o.get('direction') == 'short':
                     # 매도 주문 수량 보장
                     if not o.get('quantity') and o.get('price', 0) > 0:
                         _p = float(o['price'])
-                        _is_us = not str(o.get('ticker', '')).isdigit()
-                        _p_krw = _p * _dyn_fx if _is_us else _p
+                        _tk_str = str(o.get('ticker', '')).strip()
+                        _is_jp = _tk_str.upper().endswith('.T')
+                        _is_us = (not _tk_str.isdigit()) and (not _is_jp)
+                        _p_krw = (_p * _jpy_fx) if _is_jp else ((_p * _dyn_fx) if _is_us else _p)
                         o['quantity'] = max(1, int(float(o.get('amount_krw', 0.0)) / _p_krw))
                     valid_orders.append(o)
                     continue
                     
                 _exec_price = o.get('price', 0)
-                _is_us = not str(o.get('ticker', '')).isdigit()
+                _tk_str_b = str(o.get('ticker', '')).strip()
+                _is_jp = _tk_str_b.upper().endswith('.T')
+                _is_us = (not _tk_str_b.isdigit()) and (not _is_jp)
                 if not _exec_price or _exec_price <= 0:
                     _raw_tk = str(o.get('ticker', '')).strip()
                     _ticker = {'430740': '423160', '357330': '357870'}.get(_raw_tk, _raw_tk)
@@ -1304,41 +1386,60 @@ class StreamOrchestrator:
                     margin_rate = round(1.0 + min(0.20, max(0.01, _v * 2.5)), 4)
                 else:
                     margin_rate = 1.0
-                _cost_per_share_krw = (_exec_price * _dyn_fx * margin_rate) if _is_us else (_exec_price * margin_rate)
+                if _is_jp:
+                    _cost_per_share_krw = _exec_price * _jpy_fx * margin_rate
+                elif _is_us:
+                    _cost_per_share_krw = _exec_price * _dyn_fx * margin_rate
+                else:
+                    _cost_per_share_krw = _exec_price * margin_rate
                 
                 # 수량이 이미 설정되어 있지 않다면 amount_krw 기반 산출
                 qty = int(o.get('quantity', 0))
                 if qty <= 0:
                     qty = int(o.get('amount_krw', 0.0) / _cost_per_share_krw) if _cost_per_share_krw > 0 else 0
                 
-                # Min-Lot Sweep: 고확신 매수 시그널 0주 절삭 방지 1주 보장
-                if qty <= 0 and (o.get('amount_krw', 0.0) > 0 or float(o.get('confidence', 0.0)) >= 0.5):
+                # Min-Lot Sweep: 기보유 수량이 0주인 신규 진입 종목에 한해 1주 이산 한계 순효용 검증 후 배정
+                _tk_check = str(o.get('ticker', '')).split(':')[-1].upper()
+                _already_held_s84 = False
+                if portfolio and isinstance(portfolio, dict):
+                    for _ps_k in ('positions', 'holdings'):
+                        for _pk_s, _pv_s in (portfolio.get(_ps_k) or {}).items():
+                            if isinstance(_pv_s, dict):
+                                _pt_s = str(_pv_s.get('ticker') or str(_pk_s).split(':')[-1]).upper()
+                                if _pt_s == _tk_check and float(_pv_s.get('quantity', _pv_s.get('qty', 0)) or 0) > 0:
+                                    _already_held_s84 = True
+                                    break
+                if qty <= 0 and not _already_held_s84 and (o.get('amount_krw', 0.0) > 0 or float(o.get('confidence', 0.0)) >= 0.5):
                     qty = 1
-                    logger.info(f"    💡 [Step 8.4 Min-Lot Sweep] {o.get('ticker')} (단가: {_exec_price:.2f}) 예산 미달 절삭 방지 ➔ 최소 1주 배정")
+                    o['_min_lot_sweep'] = True
+                    logger.info(f"    💡 [Step 8.4 Min-Lot Sweep] {o.get('ticker')} (단가: {_exec_price:.2f}) 신규 진입 예산 미달 절삭 방지 ➔ 최소 1주 배정")
 
                 if qty > 0:
                     o['quantity'] = qty
                     o['required_margin'] = qty * _cost_per_share_krw
                     actual_total_margin += o['required_margin']
+                    if not _is_us and not _is_jp:
+                        actual_krw_margin += o['required_margin']
                     valid_orders.append(o)
                 else:
                     logger.warning(f"    ⚠️ 예산 부족으로 스킵: {o.get('ticker')} (예산: {o.get('amount_krw'):,.0f} < 필요증거금: {_cost_per_share_krw:,.0f})")
 
             orders = valid_orders
             
-            # 메인 계좌의 남은 잉여 현금 계산
-            available_cash = portfolio.get('cash', total_nav)
+            # 메인 계좌의 남은 잉여 순수 원화 현금 계산 (달러 통합증거금 침범 100% 차단)
+            available_cash = portfolio.get('cash', 0.0)
             if hasattr(self, 'execution_engine') and getattr(self.execution_engine, 'mode', '') in ('live', 'paper'):
                 try:
                     _trader = self.execution_engine._get_trader(stream_id='S_YIELD')
                     if _trader:
                         _trader.fetch_live_balance()
-                        available_cash = _trader.account.cash
-                        logger.info(f"    [S_YIELD] 실계좌 현금 연동 성공: {available_cash:,.0f}원")
+                        _raw_d2 = float(getattr(_trader, 'raw_d2_cash', _trader.account.cash) or 0.0)
+                        available_cash = max(0.0, min(float(_trader.account.cash or 0.0), _raw_d2))
+                        logger.info(f"    [S_YIELD] 실계좌 순수 원화 현금 연동 성공: {available_cash:,.0f}원 (통합증거금 제외)")
                 except Exception as e:
                     logger.warning(f"    [S_YIELD] 실계좌 현금 연동 실패, portfolio 백업 사용: {e}")
             
-            idle_cash = available_cash - actual_total_margin
+            idle_cash = available_cash - actual_krw_margin
             
             yield_ticker = str(cfg.get('sc_yield.kofr_ticker', '449170'))  # KODEX KOFR금리액티브(합성)
             
@@ -1487,6 +1588,18 @@ class StreamOrchestrator:
                             curr_p = float(h.get('current_price', 0.0))
                             curr_ret = float(h.get('return_pct', 0.0))
                             hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                            _ed_str = str(h.get('entry_date') or hwm_data.get('entry_date') or '')[:10]
+                            _today_s = datetime.now().strftime('%Y-%m-%d')
+                            if 'holding_minutes' in h:
+                                _h_mins = float(h['holding_minutes'])
+                            elif _ed_str and _ed_str < _today_s:
+                                _h_mins = 1440.0
+                            else:
+                                try:
+                                    _c_dt = datetime.fromisoformat(str(hwm_data.get('created_at', '')))
+                                    _h_mins = max(0.0, (datetime.now() - _c_dt).total_seconds() / 60.0)
+                                except Exception:
+                                    _h_mins = 0.0
                             all_positions[f"LIVE_SSOT:{t}"] = {
                                 'ticker': t,
                                 'stream_id': 'LIVE_SSOT',
@@ -1497,26 +1610,31 @@ class StreamOrchestrator:
                                 'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
                                 'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
                                 'trail_activated': bool(hwm_data.get('trail_activated', False)),
-                                'holding_minutes': h.get('holding_minutes', 999.0),
+                                'holding_minutes': _h_mins,
                                 'market': h.get('market', 'KR' if t.isdigit() else 'US')
                             }
                     except Exception as _kpe:
                         logger.warning(f"kis_portfolio.json 로드 예외: {_kpe}")
 
-                # 2순위: 섀도우 포트폴리오 포지션 병합
-                sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
-                if sp_path.exists():
-                    try:
-                        sp = json.loads(sp_path.read_text(encoding='utf-8'))
-                        for pk, pv in sp.get('positions', {}).items():
-                            if pk not in all_positions:
-                                all_positions[pk] = pv
-                    except Exception as _spe:
-                        logger.debug(f"shadow_portfolio.json 병합 생략: {_spe}")
+                # 2순위: 섀도우 포트폴리오 포지션 병합 (Live 모드에서는 실계좌 SSOT 오염 방지를 위해 차단)
+                if getattr(self, 'exec_mode', 'live') != 'live':
+                    sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
+                    if sp_path.exists():
+                        try:
+                            sp = json.loads(sp_path.read_text(encoding='utf-8'))
+                            for pk, pv in sp.get('positions', {}).items():
+                                if pk not in all_positions:
+                                    all_positions[pk] = pv
+                        except Exception as _spe:
+                            logger.debug(f"shadow_portfolio.json 병합 생략: {_spe}")
                     
                 # 전사 공통 Exit 평가 실행 (S0~S11)
                 exit_eval = universal_exit.evaluate_all_positions(all_positions, market_data, regime)
-                dynamic_exit_orders = exit_eval.get('exit_orders', [])
+                _already_exited_tickers = {str(eo.get('ticker', '')).split(':')[-1] for eo in exit_orders if eo.get('ticker')}
+                dynamic_exit_orders = [
+                    deo for deo in exit_eval.get('exit_orders', [])
+                    if str(deo.get('ticker', '')).split(':')[-1] not in _already_exited_tickers
+                ]
                 
                 result['universal_exit'] = {
                     'evaluated_count': exit_eval.get('evaluated_count', 0),
@@ -1529,23 +1647,87 @@ class StreamOrchestrator:
 
         # ── Step 9: ExecutionEngine 체결 ──
         logger.info("  📋 Step 9: ExecutionEngine 체결")
-        # 🎯 [Risk Dominance Gate] Stop-Loss / Chandelier Trailing Exit 우선권 보장:
-        # Exit 시그널(매도)이 발화된 종목은 신규 매수 주문을 즉시 Veto/차단하고,
-        # Exit 매도 주문은 타 매수 주문과 상계되지 않고 100% 독립 매도 집행되도록 보장!
-        exit_tickers = {o['ticker'] for o in dynamic_exit_orders if o.get('action') == 'sell' or o.get('direction') == 'short'}
-        if exit_tickers:
+        # 🎯 [Risk Dominance Gate & Sunk-Cost Exponential Decay Re-Entry Hurdle]:
+        # 1) 현 사이클에서 즉시 청산(매도)되는 종목은 동시 매수 충돌을 차단하고,
+        # 2) 당일 이전에 청산된 종목은 고정 '자정까지 무조건 금지' 대신 매몰비용·변동성 지수감쇠 허들(H_reentry)을 초과하는 기대수익 신호만 통과!
+        exit_tickers = {
+            str(o['ticker']).upper() for o in (exit_orders + dynamic_exit_orders)
+            if o.get('ticker') and (o.get('action') == 'sell' or o.get('direction') in ('short', 'sell'))
+        }
+        same_day_exit_details = {}
+        if getattr(self, 'exec_mode', 'live') == 'live':
+            try:
+                from src.execution.position_ledger import PositionLedgerManager
+                _plm = PositionLedgerManager()
+                for _eo_rec in (exit_orders + dynamic_exit_orders):
+                    if _eo_rec.get('ticker') and (_eo_rec.get('action') == 'sell' or _eo_rec.get('direction') in ('short', 'sell')):
+                        _plm.record_daily_exit(
+                            str(_eo_rec['ticker']),
+                            str(_eo_rec.get('reason', 'OrchestratorExit')),
+                            realized_pnl_pct=float(_eo_rec.get('pnl_pct', _eo_rec.get('unrealized_pnl_pct', 0.0)) or 0.0),
+                        )
+                same_day_exit_details = _plm.get_daily_exit_details()
+            except Exception:
+                pass
+        if exit_tickers or same_day_exit_details:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _dqe_step9 = get_quant_engine()
             filtered_orders = []
             for o in orders:
-                if o.get('ticker') in exit_tickers and (o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long')):
-                    logger.warning(f"  🛑 [Risk Exit Veto] {o.get('ticker')} 리스크 청산/트레일링스탑 발화 중 ➔ 신규 매수 시그널({o.get('stream_id', o.get('stream', ''))}) 강제 취소")
-                else:
-                    filtered_orders.append(o)
+                _otk = str(o.get('ticker', '')).upper()
+                _is_buy_o = o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long')
+                if _is_buy_o and _otk in exit_tickers:
+                    logger.warning(f"  🛑 [Risk Exit Veto] {_otk} 동시 청산 발화 중 ➔ 신규 매수 시그널({o.get('stream_id', o.get('stream', ''))}) 취소")
+                    continue
+                if _is_buy_o and _otk in same_day_exit_details:
+                    _ex_info = same_day_exit_details[_otk]
+                    try:
+                        _ex_dt = datetime.fromisoformat(str(_ex_info.get('exited_at', '')))
+                        _elapsed_m = max(0.0, (datetime.now() - _ex_dt).total_seconds() / 60.0)
+                    except Exception:
+                        _elapsed_m = 0.0
+                    _prev_pnl = float(_ex_info.get('realized_pnl_pct', 0.0) or 0.0)
+                    _ord_val = float(o.get('amount_krw', 2_500_000.0) or 2_500_000.0)
+                    _ord_px = float(o.get('price', 0.0) or 0.0)
+                    _hurdle_pct = _dqe_step9.compute_reentry_hurdle_pct(
+                        _otk, elapsed_minutes=_elapsed_m, prev_realized_pnl_pct=_prev_pnl, order_value_krw=_ord_val, price=_ord_px
+                    )
+                    _raw_tp = float(o.get('expected_return_pct', o.get('tp_pct', 0.0)) or 0.0)
+                    if 0 < _raw_tp < 0.50:
+                        _raw_tp *= 100.0
+                    _sig_ev_pct = _raw_tp * float(o.get('confidence', 0.5) or 0.5)
+                    if _sig_ev_pct < _hurdle_pct:
+                        logger.warning(
+                            f"  🛑 [Sunk-Cost Re-Entry Hurdle Veto] {_otk}: 기대수익({_sig_ev_pct:.2f}%) < "
+                            f"매몰비용·변동성 감쇠 허들({_hurdle_pct:.2f}%, 경과 {_elapsed_m:.0f}m) ➔ 재매수 기각"
+                        )
+                        continue
+                filtered_orders.append(o)
             orders = filtered_orders
 
         # [Red Team Fix] 주문 충돌 방지 (Order Netting): 우세 방향 가격/메타데이터 정밀 상계 및 50만 원 미만 잔챙이 차단
         netted_orders_map = {}
         all_candidate_orders = orders + dynamic_exit_orders
         min_order_krw = float(cfg.get('execution.min_order_value_krw', 500000.0) or 500000.0)
+        _held_qty_by_ticker = {}
+        for _pk_h, _pv_h in (portfolio.get('positions', {}) if portfolio else {}).items():
+            if isinstance(_pv_h, dict):
+                _tk_h = str(_pv_h.get('ticker') or str(_pk_h).split(':')[-1])
+                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0))
+        for _pk_h, _pv_h in (portfolio.get('holdings', {}) if portfolio else {}).items():
+            if isinstance(_pv_h, dict):
+                _tk_h = str(_pv_h.get('ticker') or str(_pk_h).split(':')[-1])
+                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0))
+        if not _held_qty_by_ticker and getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
+            try:
+                _kp_net = json.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
+                for _kt_n, _kh_n in (_kp_net.get('holdings') or {}).items():
+                    if isinstance(_kh_n, dict):
+                        _held_qty_by_ticker[str(_kt_n)] = max(_held_qty_by_ticker.get(str(_kt_n), 0), int(_kh_n.get('qty', _kh_n.get('quantity', 0)) or 0))
+            except Exception:
+                pass
+
+        _jpy_fx_net = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
 
         for o in all_candidate_orders:
             ticker = o.get('ticker', '')
@@ -1565,8 +1747,13 @@ class StreamOrchestrator:
             qty = int(o.get('quantity', 0))
             amount_krw = float(o.get('amount_krw', 0.0))
             if not qty and price > 0:
-                is_us_stock = not str(ticker).isdigit()
-                if is_us_stock:
+                _tk_s = str(ticker).strip()
+                is_jp_stock = _tk_s.upper().endswith('.T')
+                is_us_stock = (not _tk_s.isdigit()) and (not is_jp_stock)
+                if is_jp_stock:
+                    eff_price_krw = price * _jpy_fx_net
+                    qty = int(amount_krw / eff_price_krw) if eff_price_krw > 0 else 0
+                elif is_us_stock:
                     from src.data_collection.central_data_gateway import CentralDataGateway
                     fx_rate = CentralDataGateway().get_usdkrw_rate()
                     eff_price_krw = price * fx_rate
@@ -1574,13 +1761,20 @@ class StreamOrchestrator:
                 else:
                     qty = int(amount_krw / price)
                 
-                # 💡 [Min-Lot Liquidity Sweep] 고확신 매수 시그널 0주 절삭 시 단기 파킹 자산 부족분 스윕 1주 보장
-                if qty == 0 and action == 'buy' and (amount_krw > 0 or o.get('entry_score', 0) >= 0.5):
+                # 💡 [Min-Lot Liquidity Sweep] 미보유(0주) 신규 진입 시그널 0주 절삭 시 단기 파킹 자산 부족분 스윕 1주 보장
+                if qty == 0 and action == 'buy' and _held_qty_by_ticker.get(str(ticker), 0) == 0 and (amount_krw > 0 or o.get('entry_score', 0) >= 0.5):
                     qty = 1
+                    o['_min_lot_sweep'] = True
                     logger.info(f"💡 [Min-Lot Sweep] {ticker} (단가: {price:.2f}) 배정 예산({amount_krw:,.0f} KRW) < 1주 단가 → 단기 파킹 자산(SHV/KOFR) 부족분 스윕 후 최소 1주 매수 집행 보장")
 
             if qty <= 0:
                 continue
+
+            if action == 'sell':
+                _max_sell_q = _held_qty_by_ticker.get(str(ticker), 0)
+                if _max_sell_q <= 0:
+                    logger.warning(f"    🛑 [Cash-Account Short Guard] {ticker}: 미보유 종목(0주) 매도/공매도 차단 ({o.get('stream_id', o.get('stream', ''))})")
+                    continue
 
             if ticker not in netted_orders_map:
                 netted_orders_map[ticker] = {
@@ -1595,7 +1789,8 @@ class StreamOrchestrator:
                     netted_orders_map[ticker]['buy_prices'].append(price)
                 netted_orders_map[ticker]['buy_orders'].append(o)
             else:
-                netted_orders_map[ticker]['sell_qty'] += qty
+                _max_sell_q = _held_qty_by_ticker.get(str(ticker), 0)
+                netted_orders_map[ticker]['sell_qty'] = min(_max_sell_q, netted_orders_map[ticker]['sell_qty'] + qty)
                 if price > 0:
                     netted_orders_map[ticker]['sell_prices'].append(price)
                 netted_orders_map[ticker]['sell_orders'].append(o)
@@ -1617,26 +1812,47 @@ class StreamOrchestrator:
             elif ndata['buy_prices'] or ndata['sell_prices']:
                 final_price = max(ndata['buy_prices'] + ndata['sell_prices'])
                 
-            sample_order = dominant_orders[0] if dominant_orders else (ndata['buy_orders'] + ndata['sell_orders'])[0]
+            if dominant_orders:
+                sample_order = max(
+                    dominant_orders,
+                    key=lambda x: (int(x.get('quantity', 0) or 0), float(x.get('amount_krw', 0.0) or 0.0)),
+                )
+            else:
+                sample_order = (ndata['buy_orders'] + ndata['sell_orders'])[0]
+            contributing_streams = list(dict.fromkeys(
+                str(do.get('stream_id', do.get('stream', 'SYS_NET')))
+                for do in (dominant_orders or (ndata['buy_orders'] + ndata['sell_orders']))
+            ))
+            dominant_stream_id = sample_order.get('stream_id', sample_order.get('stream', 'SYS_NET'))
             
             # 소액 잔챙이 상계 주문 차단 (50만 원 미만)
-            is_us_net = not str(ticker).isdigit()
-            if is_us_net:
+            _tk_net_s = str(ticker).strip()
+            is_jp_net = _tk_net_s.upper().endswith('.T')
+            is_us_net = (not _tk_net_s.isdigit()) and (not is_jp_net)
+            if is_jp_net:
+                _net_fx = _jpy_fx_net
+                netted_val_krw = final_price * _net_fx * abs(net_qty)
+            elif is_us_net:
                 from src.data_collection.central_data_gateway import CentralDataGateway
                 _net_fx = CentralDataGateway().get_usdkrw_rate()
                 netted_val_krw = final_price * _net_fx * abs(net_qty)
             else:
+                _net_fx = 1.0
                 netted_val_krw = final_price * abs(net_qty)
 
             # 소액 잔챙이 주문 차단 (신규 매수 주문에만 적용 — 매도/손절은 100% 집행 보장)
-            # US 종목의 경우 최소 1주 이상이며 $50 USD 이상이면 정상 집행 허용
-            effective_min_val = (50.0 * _net_fx) if is_us_net else min_order_krw
-            if final_action == 'buy' and final_price > 0 and netted_val_krw < effective_min_val:
+            # US 종목의 경우 최소 1주 이상이며 $50 USD 이상이면 정상 집행 허용, Min-Lot Sweep 또는 a3.min_trade_amount 이상도 허용
+            _min_trade_cfg = float(cfg.get('a3.min_trade_amount', 200_000) or 200_000)
+            effective_min_val = (50.0 * _net_fx) if is_us_net else min(min_order_krw, _min_trade_cfg)
+            _is_min_lot = any(bo.get('_min_lot_sweep') for bo in ndata['buy_orders'])
+            if final_action == 'buy' and final_price > 0 and netted_val_krw < effective_min_val and not _is_min_lot:
                 logger.info(f"    🛑 [Order Netting Drop] {ticker}: 신규 매수 상계 금액(₩{netted_val_krw:,.0f}) < ₩{effective_min_val:,.0f} 미달 스킵")
                 continue
 
             exec_orders.append({
-                'stream': sample_order.get('stream_id', sample_order.get('stream', 'SYS_NET')),
+                'stream': dominant_stream_id,
+                'stream_id': dominant_stream_id,
+                'contributing_streams': contributing_streams,
                 'ticker': ticker,
                 'action': final_action,
                 'direction': 'long' if final_action == 'buy' else 'short',
@@ -1645,7 +1861,8 @@ class StreamOrchestrator:
                 'execution_algo': sample_order.get('execution_algo', 'market'),
                 'execution_start_time': sample_order.get('execution_start_time', ''),
                 'strategy': sample_order.get('strategy', 'netted_order'),
-                'reason': f"OrderNetting (Buy:{ndata['buy_qty']}, Sell:{ndata['sell_qty']} -> Net:{net_qty})",
+                'reason': f"OrderNetting (Buy:{ndata['buy_qty']}, Sell:{ndata['sell_qty']} -> Net:{net_qty}, Streams:{','.join(contributing_streams)})",
+                '_min_lot_sweep': _is_min_lot,
             })
 
         # ── Step 9.1: Global Cross-Venue Netting & Dark Pool RPI Routing ──
@@ -1800,18 +2017,27 @@ class StreamOrchestrator:
 
         # 3. 가용 예산 동적 배분 (순수 Softmax EV 수학적 비중 100% 반영)
         stream_budgets = {}
-        for sid in ['S1', 'S2', 'S3', 'S4']:
+        for _w_sid, _w_val in (weights or {}).items():
+            stream_budgets[_w_sid] = available_capital * float(_w_val or 0.0)
+        for sid in ['S0', 'S1', 'S2', 'S3', 'S4', 'S5']:
             w = weights.get(sid, 0.0)
             stream_budgets[sid] = available_capital * w
         
-        stream_budgets['S10_MEGA_TREND'] = available_capital * (weights.get('S10', 0.0) or weights.get('S10_MEGA_TREND', 0.0))
-        stream_budgets['S10'] = stream_budgets['S10_MEGA_TREND']
+        stream_budgets['S10_MEGA_TREND'] = available_capital * (weights.get('S10_MEGA_TREND', 0.0) or weights.get('S10', 0.0))
+        if 'S10' in signals and 'S10_MEGA_TREND' not in signals:
+            stream_budgets['S10'] = stream_budgets['S10_MEGA_TREND']
+        else:
+            stream_budgets.pop('S10', None)
         stream_budgets['S11_HIGHBETA_SNIPER'] = available_capital * (weights.get('S11_HIGHBETA_SNIPER', 0.0) or weights.get('S11', 0.0))
         stream_budgets['S11'] = stream_budgets['S11_HIGHBETA_SNIPER']
-
-        # S5 예산
-        stream_budgets['S5'] = available_capital * weights.get('S5', 0.0)
+        stream_budgets['S12_DERIVATIVE_SQUEEZE'] = available_capital * (weights.get('S12_DERIVATIVE_SQUEEZE', 0.0) or weights.get('S12', 0.0))
+        stream_budgets['S12'] = stream_budgets['S12_DERIVATIVE_SQUEEZE']
+        stream_budgets['S13_JAPAN_ALPHA'] = available_capital * (weights.get('S13_JAPAN_ALPHA', 0.0) or weights.get('S13', 0.0))
+        stream_budgets['S13'] = stream_budgets['S13_JAPAN_ALPHA']
+        stream_budgets['S14_PAIR_ALPHA'] = available_capital * (weights.get('S14_PAIR_ALPHA', 0.0) or weights.get('S14', 0.0))
+        stream_budgets['S14'] = stream_budgets['S14_PAIR_ALPHA']
         
+
 
         # [Phase 47: DI 우선] 기존 종목 수집 + 예산 차감
         # ★ portfolio 딕셔너리가 주입된 경우 shadow_portfolio.json I/O 완전 차단
@@ -1824,46 +2050,78 @@ class StreamOrchestrator:
                 _positions = portfolio['positions']
             else:
                 # Live 전용 Fallback (백테스트에서는 절대 실행되지 않아야 함)
+                if portfolio and isinstance(portfolio.get('holdings'), dict):
+                    for _hk, _hv in portfolio['holdings'].items():
+                        if isinstance(_hv, dict) and float(_hv.get('qty', _hv.get('quantity', _hv.get('shares', 1))) or 0) > 0:
+                            existing_tickers.add(str(_hv.get('ticker', '') or _hk))
+                            _positions[str(_hk)] = _hv
                 import json as _json_budget
-                _sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
-                if _sp_path.exists():
-                    _sp_data = _json_budget.loads(_sp_path.read_text())
-                    _positions = _sp_data.get('positions', {})
+                if not _positions and getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
+                    _kp_b = _json_budget.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
+                    _positions = _kp_b.get('holdings', {})
+                elif getattr(self, 'exec_mode', 'live') != 'live':
+                    _sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
+                    if _sp_path.exists():
+                        _sp_data = _json_budget.loads(_sp_path.read_text())
+                        _positions = _sp_data.get('positions', {})
 
+            _unattributed_held_krw = 0.0
             for _pk, _pv in _positions.items():
                 # VirtualPortfolio 형식: {ticker: {'ticker': ..., 'stream_id': ..., 'amount': ...}}
                 # shadow_portfolio 형식:  {'S3:005930': {'ticker': ..., 'stream_id': ..., 'amount': ...}}
                 # 두 형식 모두 _pv.get('ticker') 또는 _pk(= ticker 자체)로 처리
                 _t = _pv.get('ticker', '') or _pk
                 if _t:
-                    existing_tickers.add(_t)
+                    existing_tickers.add(str(_t).split(':')[-1])
+
+                _pos_val = float(_pv.get('amount', 0.0) or _pv.get('market_value', 0.0) or 0.0)
+                if _pos_val <= 0:
+                    _pos_val = float(_pv.get('quantity', _pv.get('qty', 0)) or 0.0) * float(
+                        _pv.get('current_price', 0.0) or _pv.get('avg_price', 0.0) or _pv.get('entry_price', 0.0) or 0.0
+                    )
 
                 _sid = _pk.split(':')[0] if ':' in _pk else _pv.get('stream_id', '?')
                 if _sid in stream_budgets:
-                    stream_budgets[_sid] = max(0, stream_budgets[_sid] - _pv.get('amount', 0))
+                    stream_budgets[_sid] = max(0, stream_budgets[_sid] - _pos_val)
+                else:
+                    _unattributed_held_krw += _pos_val
         except Exception as _et_e:
             logger.error(f"    [Phase 47] existing_tickers 수집 실패: {_et_e}", exc_info=True)
 
-        # ★ [Dynamic Budget Recycling] 시그널이 없는 스트림의 유휴 예산을 활성 시그널 보유 스트림으로 전격 재활용
+        # ★ [Dynamic Budget Recycling + Capital Conservation Identity]
+        # 시그널이 없는 스트림의 유휴 예산에서 이미 S_RECON 등으로 실계좌에 투입된 자본(_unattributed_held_krw)을 우선 차감하여 이중 계상 원천 차단
         _idle_budget = 0.0
         _active_streams_with_buys = []
+        _seen_canonical = set()
+        _CANONICAL_MAP = {
+            'S10': 'S10_MEGA_TREND', 'S10_MEGA_TREND': 'S10_MEGA_TREND',
+            'S11': 'S11_HIGHBETA_SNIPER', 'S11_HIGHBETA_SNIPER': 'S11_HIGHBETA_SNIPER',
+            'S12': 'S12_DERIVATIVE_SQUEEZE', 'S12_DERIVATIVE_SQUEEZE': 'S12_DERIVATIVE_SQUEEZE',
+            'S13': 'S13_JAPAN_ALPHA', 'S13_JAPAN_ALPHA': 'S13_JAPAN_ALPHA',
+            'S14': 'S14_PAIR_ALPHA', 'S14_PAIR_ALPHA': 'S14_PAIR_ALPHA',
+        }
         for _s_key, _s_sigs in signals.items():
+            _canon = _CANONICAL_MAP.get(_s_key, _s_key)
             _has_buy = any(str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy') for _s in _s_sigs)
             _b = stream_budgets.get(_s_key, 0.0)
             if not _has_buy and _b > 0:
-                _idle_budget += _b
+                if _canon not in _seen_canonical:
+                    _idle_budget += _b
+                    _seen_canonical.add(_canon)
                 stream_budgets[_s_key] = 0.0
+                stream_budgets[_canon] = 0.0
             elif _has_buy:
                 _active_streams_with_buys.append(_s_key)
 
+        _idle_budget = max(0.0, _idle_budget - _unattributed_held_krw)
         if _idle_budget > 0 and _active_streams_with_buys:
-            # [Pure Dynamic Math] 유휴 예산을 활성 스트림의 수학적 EV 가중치 비율로 정밀 배분
+            # [Pure Dynamic Math] 순 유휴 예산을 활성 스트림의 수학적 EV 가중치 비율로 정밀 배분
             _active_weights = {k: max(0.001, float(weights.get(k, weights.get(k.replace('_MEGA_TREND', ''), 0.01)))) for k in _active_streams_with_buys}
             _sum_w = sum(_active_weights.values())
             for _s_key in _active_streams_with_buys:
                 _prop = _active_weights[_s_key] / _sum_w
                 stream_budgets[_s_key] = stream_budgets.get(_s_key, 0.0) + (_idle_budget * _prop)
-            logger.info(f"  ♻️ [Dynamic Budget Recycling] 무신호 유휴 예산 ₩{_idle_budget:,.0f}을 활성 스트림 {_active_streams_with_buys}의 EV 비중에 비례하여 동적 재분배")
+            logger.info(f"  ♻️ [Dynamic Budget Recycling] 순 유휴 예산 ₩{_idle_budget:,.0f}을 활성 스트림 {_active_streams_with_buys}의 EV 비중에 비례하여 동적 재분배")
 
         # [L4 Upgrade] Task 1: 시그널 증발 버그 복구 — S1/S2/S3/S5 시그널 순회 및 주문 생성
         # (S4는 Advisory 전용: 자동 주문 제외)
@@ -1878,6 +2136,7 @@ class StreamOrchestrator:
             logger.error("    ⚠️ PositionSizer 로드 실패: 마찰비용 및 SNR 필터링이 스킵됩니다.", exc_info=True)
 
         stream_orders = {}
+        _cumulative_ordered_krw_by_ticker = {}
         for stream_id, stream_signals in signals.items():
             stream_orders[stream_id] = []
             budget = stream_budgets.get(stream_id, 0)
@@ -1925,19 +2184,26 @@ class StreamOrchestrator:
                 except Exception as _e:
                     logger.warning(f"Failed to compute unified factor score: {_e}")
                 
+                _orig_sizes = {id(s): float(s.get('size_pct', 0.0) or 0.0) for s in stream_signals if isinstance(s, dict)}
+                for s in stream_signals:
+                    if isinstance(s, dict) and '_orig_stream_size_pct' not in s:
+                        s['_orig_stream_size_pct'] = float(s.get('size_pct', 0.0) or 0.0)
                 stream_signals = filter_by_friction(
                     signals=stream_signals,
                     portfolio_value=nav,
                     regime=regime,
                     vix=_vix_val
                 )
+                for s in stream_signals:
+                    if isinstance(s, dict) and s.get('_orig_stream_size_pct', 0.0) > 0:
+                        s['nav_probe_size_pct'] = s.get('size_pct', 0.0)
+                        s['size_pct'] = s['_orig_stream_size_pct']
 
-            # [Phase 52: Normalization & S6 Pipeline] 이중 비율 축소 방지 정규화 (보유 종목 제외 후)
+            # [Symmetric Normalization & 3-Sigma Cap] 기보유 종목(existing_tickers)과 신규 종목 구분 없이 동일한 리스크 상한 적용
             valid_signals = [
                 sig for sig in stream_signals
                 if sig and sig.get('direction', 'long') == 'long' 
-                and sig.get('size_pct', 0) > 0 
-                and sig.get('ticker') not in existing_tickers
+                and sig.get('size_pct', 0) > 0
             ]
             
             # [Red Team V5] 매직 넘버(30%) 삭제 및 100% 수학적 한도(Kelly/Volatility/Drawdown) 주입
@@ -1980,6 +2246,7 @@ class StreamOrchestrator:
 
                 # [Phase 46 BugFix] 무조건 스킵하던 로직 제거 -> DCA 갭투자로 변경
                 _t = sig.get('ticker', '')
+                _t_clean = str(_t).split(':')[-1].upper()
 
                 size_pct = sig.get('size_pct', 0)
                 if size_pct <= 0:
@@ -1994,22 +2261,76 @@ class StreamOrchestrator:
                 # 노출도 & 레버리지 반영
                 target_amount = target_amount * max_exposure * lev_level
 
-                # 현재 보유 금액 파악
-                current_amount = 0.0
+                # 현재 보유 금액 및 타 스트림 선행 발주 금액 파악 (중복 매수 방지)
+                current_amount = float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
+                current_qty = 0
                 if portfolio:
                     pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
                     pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
                     for pos in pos_iterable:
                         if isinstance(pos, dict):
                             pos_t = pos.get('ticker', '')
-                            if pos_t == _t or (pos_t and pos_t in _t) or (_t and _t in pos_t):
-                                current_amount += pos.get('amount', float(pos.get('quantity', pos.get('qty', 0))) * float(pos.get('current_price', pos.get('avg_price', 0.0))))
+                            if pos_t and _t and pos_t.split(':')[-1].upper() == _t_clean:
+                                _p_qty = float(pos.get('quantity', pos.get('qty', 0)) or 0.0)
+                                _p_px = float(pos.get('current_price', 0.0) or pos.get('avg_price', 0.0) or pos.get('entry_price', 0.0) or sig.get('price', 0.0) or 0.0)
+                                _p_amt = float(pos.get('amount', 0.0) or pos.get('market_value', 0.0) or 0.0)
+                                if _p_amt <= 0:
+                                    _p_amt = _p_qty * _p_px
+                                current_amount += _p_amt
+                                current_qty += int(_p_qty)
 
                 gap = target_amount - current_amount
                 
                 # 목표 달성 또는 초과 시 매수 스킵 (시그널 소멸 시에도 자동 스킵됨)
                 if gap <= 0:
                     continue
+
+                # [Constantinides-Leland 3제곱근 무거래 영역 & Grinold-Kahn 이산 수량 한계 순효용 검증]
+                if current_amount > 0 and target_amount > 0:
+                    try:
+                        from src.utils.dynamic_quant_engine import get_quant_engine
+                        _dqe_ord = get_quant_engine()
+                        _sig_px = float(sig.get('price', 0.0) or 0.0)
+                        _nt_band = _dqe_ord.compute_no_trade_band_ratio(
+                            str(_t_clean),
+                            order_value_krw=target_amount,
+                            price=_sig_px,
+                            regime=regime,
+                        )
+                        if (gap / target_amount) < _nt_band:
+                            logger.info(
+                                f"    🛡️ [Constantinides No-Trade Band Skip] {_t}: 기보유 ₩{current_amount:,.0f} vs 목표 ₩{target_amount:,.0f} "
+                                f"(괴리 {gap/target_amount*100:.1f}% < 동적 무거래 반폭 {_nt_band*100:.1f}%) ➔ 추가매수 스킵"
+                            )
+                            continue
+                        if _sig_px > 0 and current_qty > 0:
+                            if str(_t_clean).isdigit():
+                                _eff_px_krw = _sig_px
+                            elif str(_t_clean).endswith('.T'):
+                                _jpy_fx_ord = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
+                                _eff_px_krw = _sig_px * _jpy_fx_ord
+                            else:
+                                _eff_px_krw = _sig_px * 1345.0
+                            _dq_est = max(1, int(gap / max(_eff_px_krw, 1.0)))
+                            _util_res = _dqe_ord.compute_discrete_lot_marginal_utility(
+                                _t_clean,
+                                delta_qty=_dq_est,
+                                current_qty=current_qty,
+                                price_krw=_eff_px_krw,
+                                nav_krw=float(nav or 25_000_000.0),
+                                target_value_krw=target_amount,
+                                confidence=float(sig.get('confidence', 0.55) or 0.55),
+                                regime=regime,
+                            )
+                            if not _util_res.get('is_optimal_trade', False):
+                                logger.info(
+                                    f"    🛡️ [Grinold-Kahn Discrete-Lot Skip] {_t}: Δq=+{_dq_est}주 "
+                                    f"(한계순효용 {_util_res['net_marginal_utility_pct']:+.3f}%, 사유={_util_res['reason']}) ➔ 추가매수 스킵"
+                                )
+                                continue
+                    except Exception:
+                        if (gap / target_amount) < 0.20:
+                            continue
                     
                 # 🎯 [User Rule] 100% 일시불 즉시 진입 (분할매수/DCA 100% 원천 차단)
                 amount_krw = gap
@@ -2017,6 +2338,8 @@ class StreamOrchestrator:
                 min_trade = cfg.get('a3.min_trade_amount', 200_000)
                 if amount_krw < min_trade:
                     continue
+
+                _cumulative_ordered_krw_by_ticker[_t_clean] = _cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0) + amount_krw
 
                 order = {
                     'stream_id': stream_id,
@@ -2037,12 +2360,12 @@ class StreamOrchestrator:
                     if _mk in sig:
                         order[_mk] = sig[_mk]
 
-                logger.error(f"    [DEBUG] Appending order for {stream_id} {sig.get('ticker')}: keys={list(order.keys())}", exc_info=True)
+                logger.debug(f"    [DEBUG] Appending order for {stream_id} {sig.get('ticker')}: keys={list(order.keys())}")
                 stream_orders[stream_id].append(order)
                 orders.append(order)
 
         # 각 스트림별로 독립적으로 포지션 스케일링
-        for sid in ['S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND']:
+        for sid in list(stream_orders.keys()):
             _n = sum(1 for o in orders if o.get('stream_id') == sid)
             _amt = sum(o['amount_krw'] for o in orders if o.get('stream_id') == sid)
             _bgt = stream_budgets.get(sid, 0)
@@ -2102,6 +2425,17 @@ class StreamOrchestrator:
             if isinstance(positions, list):
                 positions = {p.get('ticker', f"pos_{i}"): p for i, p in enumerate(positions) if isinstance(p, dict)}
 
+            _explicit_exit_map = {}
+            for _esid, _esigs in (getattr(self, '_latest_signals', None) or {}).items():
+                for _es in (_esigs or []):
+                    if isinstance(_es, dict) and (
+                        str(_es.get('direction', '')).lower() == 'exit'
+                        or str(_es.get('action', '')).lower() == 'exit'
+                    ):
+                        _etk = str(_es.get('ticker', '')).split(':')[-1].upper()
+                        if _etk:
+                            _explicit_exit_map[_etk] = (_esid, _es)
+
             # [Task 3 Phase50: ATR Elastic Band] VKOSPI 정비례 고무줄 밴드 — Whipsaw 방지
             # 원칙: 고변동성 시장은 잔파도가 크므로 밴드를 넓혀 털림 방지
             #       저변동성 시장은 밴드를 조여 이익을 빠르게 확정
@@ -2141,20 +2475,33 @@ class StreamOrchestrator:
                         else:
                             stream_id = 'S3'  # 기본값을 단기 S1이 아닌 중기 S3로 안전하게 지정
 
-                # ── S_BETA (포트폴리오 헷지) 및 S10 (메가 트렌드)는 L4 Global Exit(개별 종목 TP/SL)에서 제외 ──
-                if stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD'):
-                    continue  # S10 및 S_YIELD는 단기 TP/SL 대상에서 제외
+                _pos_ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
+                _pos_ticker_up = str(_pos_ticker).split(':')[-1].upper()
 
                 if pos.get('quantity', pos.get('qty', 0)) <= 0:
                     continue
 
+                # ── S10 등 스트림 명시적 Exit 시그널(direction='exit') 우선 점검 ──
+                _explicit_exit_info = _explicit_exit_map.get(_pos_ticker_up)
+
+                # ── S_BETA (포트폴리오 헷지) 및 S10 (메가 트렌드)는 L4 Global Exit(개별 종목 TP/SL)에서 제외 (단, 명시적 exit 시그널은 허용) ──
+                if stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD') and not _explicit_exit_info:
+                    continue  # S10 및 S_YIELD는 단기 TP/SL 대상에서 제외
+
                 pnl_pct = pos.get('unrealized_pnl_pct', pos.get('pnl_pct', 0))
                 tp_pct = pos.get('tp_pct')
                 sl_pct = pos.get('sl_pct')  # 양수값 저장 규약
+                if tp_pct is not None:
+                    tp_pct = float(tp_pct)
+                    if 0 < tp_pct < 0.5:
+                        tp_pct *= 100.0
+                if sl_pct is not None:
+                    sl_pct = abs(float(sl_pct))
+                    if 0 < sl_pct < 0.5:
+                        sl_pct *= 100.0
                 # [Phase 51: Bias-Free ATR Exit] 종목별 역사적 변동성 기반 Z-Score 밴드
                 # 공식: activate = vol_daily(%) × Z=3.0 (3σ 이익권 확인 후 추적 시작)
                 #        dist    = vol_daily(%) × Z=2.0 (고점 대비 2σ=95% CI 이탈 시 청산)
-                _pos_ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
                 _asset_vol_daily = _compute_asset_daily_volatility(
                     _pos_ticker, market_data, fallback=0.02)
                 _trail_z_act  = float(cfg.get('exit.trail_z_activate',   3.0))
@@ -2173,7 +2520,7 @@ class StreamOrchestrator:
                     f"→ activate={_dyn_trail_activate:.2f}%, dist={_dyn_trail_dist:.2f}%, sl={_dyn_sl_pct:.2f}%")
                 trail_activate = pos.get('trail_activate_pct') or _dyn_trail_activate
                 trail_dist = pos.get('trail_distance_pct') or _dyn_trail_dist
-                sl_pct = pos.get('sl_pct') or _dyn_sl_pct  # 포지션 메타 우선, 없으면 동적 밴드 사용
+                sl_pct = sl_pct or _dyn_sl_pct  # 포지션 메타 우선, 없으면 동적 밴드 사용
                 
                 days_held = pos.get('days_held')
                 entry_date_str = pos.get('entry_date') or getattr(pos, 'entry_date', None)
@@ -2223,8 +2570,13 @@ class StreamOrchestrator:
                 reason = None
                 urgency = 0
 
+                if _explicit_exit_info is not None:
+                    _ex_sid, _ex_sig = _explicit_exit_info
+                    reason = f"[Stream Exit Signal] {_ex_sid}: {_ex_sig.get('reason', 'Explicit exit signal')}"
+                    urgency = 3
+
                 # ── TP 도달 ──
-                if tp_pct is not None and pnl_pct >= tp_pct:
+                elif tp_pct is not None and pnl_pct >= tp_pct:
                     reason = f"[L4 Exit] TP: {pnl_pct:+.1f}% >= {tp_pct:.1f}%"
                     urgency = 2
 
@@ -2248,7 +2600,7 @@ class StreamOrchestrator:
                 peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct) or pnl_pct)
                 drawdown_from_peak = peak_pnl - pnl_pct
                 is_trail_activated = bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate)
-                if (trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
+                if (reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
                     reason = (
                         f"[L4 Exit] Trail: peak={peak_pnl:+.1f}% → "
                         f"now={pnl_pct:+.1f}% (↓{drawdown_from_peak:.1f}% "
@@ -2263,10 +2615,15 @@ class StreamOrchestrator:
                     _amt_exit = float(pos.get('amount', 0.0))
                     _p_exit = float(pos.get('current_price', 0.0))
                     _tk_exit = str(pos.get('ticker', pos_key.split(':')[-1]))
-                    _is_us_exit = not _tk_exit.isdigit()
+                    _is_jp_exit = _tk_exit.upper().endswith('.T')
+                    _is_us_exit = (not _tk_exit.isdigit()) and (not _is_jp_exit)
                     from src.data_collection.central_data_gateway import CentralDataGateway
                     _dyn_fx_exit = CentralDataGateway().get_usdkrw_rate()
-                    if _is_us_exit:
+                    _jpy_fx_exit = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
+                    if _is_jp_exit:
+                        if _qty_exit > 0 and _p_exit > 0:
+                            _amt_exit = _qty_exit * _p_exit * _jpy_fx_exit
+                    elif _is_us_exit:
                         if _qty_exit > 0 and _p_exit > 0:
                             _amt_exit = _qty_exit * _p_exit * _dyn_fx_exit
                     elif not _amt_exit and _qty_exit > 0 and _p_exit > 0:
@@ -2329,29 +2686,40 @@ class StreamOrchestrator:
 
         try:
             import json
-            sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
-            if not sp_path.exists():
-                return orders
-            sp = json.loads(sp_path.read_text())
-            positions = sp.get('positions', {})
-            active_pos = [p for p in positions.values() if p.get('quantity', 0) > 0 and str(p.get('stream_id')) not in ('S1', 'S2', 'S5')]
+            positions = (portfolio or {}).get('positions') or (portfolio or {}).get('holdings') or {}
+            if not positions:
+                sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
+                if not sp_path.exists():
+                    return orders
+                sp = json.loads(sp_path.read_text())
+                positions = sp.get('positions', {})
+            pos_list = positions.values() if isinstance(positions, dict) else positions
+            active_pos = [
+                p for p in pos_list
+                if isinstance(p, dict) and p.get('quantity', p.get('qty', 0)) > 0
+                and str(p.get('stream_id')) not in ('S1', 'S2', 'S5', 'S_BETA', 'BETA', 'S_YIELD')
+            ]
             
             if dd_action == 'force_sell_bottom_20':
                 if not active_pos:
                     return orders
                 # 수익률 하위 정렬
-                active_pos.sort(key=lambda x: x.get('unrealized_pnl_pct', 0))
+                active_pos.sort(key=lambda x: x.get('unrealized_pnl_pct', x.get('return_pct', 0)))
                 n_sell = max(1, int(len(active_pos) * force_sell_ratio))
                 targets = active_pos[:n_sell]
                 
                 for t in targets:
+                    _qty = int(t.get('quantity', t.get('qty', 0)))
+                    _prc = float(t.get('current_price', t.get('avg_price', 0)))
                     orders.append({
                         'stream_id': t.get('stream_id', 'S0'),
                         'ticker': t['ticker'],
                         'name': t.get('name', ''),
                         'direction': 'short',
-                        'amount_krw': t.get('amount', 0),
-                        'price': 0,
+                        'action': 'sell',
+                        'quantity': _qty,
+                        'amount_krw': t.get('amount') or t.get('market_value') or (_qty * _prc),
+                        'price': _prc,
                         'confidence': 1.0,
                         'strategy': 'dd_overlay_force_sell',
                         'reason': f"DD Stage 1: 수익률 하위 {n_sell}종목 강제 청산",

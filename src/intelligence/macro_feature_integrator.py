@@ -93,9 +93,19 @@ class MacroFeatureIntegrator:
             cs = float(cs)
             features['fred_consumer_sentiment'] = round(np.clip((cs - 65) / 30, -1, 1), 3)
         hy = sc.get('hy_credit_spread')
+        if hy is None:
+            try:
+                _mp_hy = _DATA / 'macro' / 'macro_data.parquet'
+                if _mp_hy.exists():
+                    _df_hy = pd.read_parquet(_mp_hy)
+                    if 'high_yield_spread' in _df_hy.columns and not _df_hy['high_yield_spread'].dropna().empty:
+                        hy = float(_df_hy['high_yield_spread'].dropna().iloc[-1])
+            except Exception:
+                pass
         if hy is not None:
             hy = float(hy)
-            features['fred_hy_spread'] = round(np.clip((4.0 - hy) / 3.0, -1, 1), 3)
+            features['fred_hy_spread'] = round(float(np.clip((4.0 - hy) / 3.0, -1, 1)), 3)
+            features['fred_hy_spread_raw'] = round(float(hy), 4)
             features['credit_stress'] = 1 if hy > 5.0 else 0
         ig = sc.get('ig_credit_spread')
         if ig is not None:
@@ -336,10 +346,17 @@ class MacroFeatureIntegrator:
                     logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:493', exc_info=True)
             existing['macro_features'] = features
+            for _top_k in ('fred_hy_spread', 'fred_hy_spread_raw', 'credit_stress'):
+                if _top_k in features:
+                    existing[_top_k] = features[_top_k]
             existing['macro_features_ts'] = datetime.now().isoformat()
             atomic_write_json(sc_file, existing, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f'  signal_cache 적재 실패: {e}', exc_info=True)
+
+    def integrate_to_signal_cache(self) -> Dict[str, Any]:
+        """integrate_all() 호환 별칭."""
+        return self.integrate_all()
 
 def run_macro_integration() -> Dict:
     """모듈 레벨 실행 함수."""

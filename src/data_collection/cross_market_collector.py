@@ -85,7 +85,7 @@ class CrossMarketCollector:
             us_10y = None
             if self.fred:
                 us_10y = self.fred.get_series('DGS10', observation_start=(datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d'))
-            if us_10y is None or us_10y.empty:
+            if (us_10y is None or us_10y.empty) and self.yf:
                 df = self.yf.download('^TNX', period=f'{lookback_years}y', progress=False)
                 us_10y = df['Close'].squeeze() if not df.empty else None
             jp_10y = None
@@ -130,7 +130,7 @@ class CrossMarketCollector:
                     s = self.fred.get_series(series_id, observation_start=fred_start_date)
                     if s is not None and (not s.empty):
                         results[col_name] = s
-                        logger.warning(f"  FRED {series_id}: {len(s)}행")
+                        logger.info(f"  FRED {series_id}: {len(s)}행")
                         break
                 except Exception as _fe:
                     logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
@@ -139,10 +139,10 @@ class CrossMarketCollector:
             if df is not None and (not df.empty):
                 results['China_FXI_Proxy'] = df['Close'].resample('ME').last()
                 logger.info('  ⚠️ FRED 불가 → FXI ETF 대리 지표 사용')
-            else:
-                old_df = self._load_csv_ffill(DATA_DIR / 'china_pmi.csv')
-                if old_df is not None and (not old_df.empty):
-                    results = old_df
+        if results.empty:
+            old_df = self._load_csv_ffill(DATA_DIR / 'china_pmi.csv')
+            if old_df is not None and (not old_df.empty):
+                results = old_df
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_pmi.csv', file_format='csv')
@@ -169,7 +169,7 @@ class CrossMarketCollector:
                     s = self.fred.get_series(series_id, observation_start=fred_start_date)
                     if s is not None and (not s.empty):
                         results[col_name] = s.resample('ME').last()
-                        logger.warning(f"  FRED {series_id}: {len(s)}행")
+                        logger.info(f"  FRED {series_id}: {len(s)}행")
                 except Exception as _fe:
                     logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
         if results.empty and self.yf:
@@ -177,10 +177,10 @@ class CrossMarketCollector:
             if df_xli is not None and (not df_xli.empty):
                 results['XLI_Industrial_ETF'] = df_xli['Close'].resample('ME').last()
                 logger.info('  ⚠️ FRED 불가 → XLI 산업 ETF 대리 지표 사용')
-            else:
-                old_df = self._load_csv_ffill(DATA_DIR / 'us_ism_pmi.csv')
-                if old_df is not None and (not old_df.empty):
-                    results = old_df
+        if results.empty:
+            old_df = self._load_csv_ffill(DATA_DIR / 'us_ism_pmi.csv')
+            if old_df is not None and (not old_df.empty):
+                results = old_df
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'us_ism_pmi.csv', file_format='csv')
@@ -212,10 +212,10 @@ class CrossMarketCollector:
             if df is not None and (not df.empty):
                 results['China_Bond_ETF'] = df['Close']
                 logger.info('  ⚠️ FRED 불가 → CBON ETF 대리 지표')
-            else:
-                old_df = self._load_csv_ffill(DATA_DIR / 'china_monetary.csv')
-                if old_df is not None and (not old_df.empty):
-                    results = old_df
+        if results.empty:
+            old_df = self._load_csv_ffill(DATA_DIR / 'china_monetary.csv')
+            if old_df is not None and (not old_df.empty):
+                results = old_df
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_monetary.csv', file_format='csv')
@@ -247,10 +247,10 @@ class CrossMarketCollector:
                 df = self._yf_fetch_with_retry('^IRX', period=f'{lookback_years}y', n_retry=3)
                 if df is not None and (not df.empty):
                     results['US_2Y'] = df['Close'].squeeze()
-                else:
-                    old_df = self._load_csv_ffill(DATA_DIR / 'us_yield_curve.csv', col='US_2Y')
-                    if old_df is not None and 'US_2Y' in old_df.columns:
-                        results['US_2Y'] = old_df['US_2Y']
+            if 'US_2Y' not in results.columns:
+                old_df = self._load_csv_ffill(DATA_DIR / 'us_yield_curve.csv', col='US_2Y')
+                if old_df is not None and 'US_2Y' in old_df.columns:
+                    results['US_2Y'] = old_df['US_2Y']
             if 'US_2Y' in results.columns and 'US_10Y' in results.columns:
                 results = results.dropna()
                 results['Yield_Curve_2Y10Y'] = results['US_10Y'] - results['US_2Y']

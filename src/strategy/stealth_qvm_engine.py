@@ -84,7 +84,7 @@ class StealthQVMEngine:
         v_std = float(vol_hist_ratios.std()) if len(vol_hist_ratios) > 5 else 0.2
 
         z_vol = z_score(vol_ratio, v_mean, v_std)
-        cdf_vol = norm_cdf(z_vol)
+        cdf_vol = norm_cdf(-z_vol)
 
         # Range contraction CDF
         price_ranges = (prices.rolling(w_short).max() - prices.rolling(w_short).min()) / (prices + 1e-6)
@@ -169,12 +169,18 @@ class StealthQVMEngine:
         if fcf < 0:
             quality_score *= float(self._get_param('stealth_qvm.fcf_penalty_factor', 0.8))
 
-        # Value score
-        per_ratio = per / max(sector_per_mean, 1e-6)
-        pbr_ratio = pbr / max(sector_pbr_mean, 1e-6)
+        # Value score (적자 기업 PER <= 0 또는 자본잠식 PBR <= 0 페널티 부여)
+        if per <= 0:
+            z_per = 3.0
+        else:
+            per_ratio = per / max(sector_per_mean, 1e-6)
+            z_per = z_score(per_ratio, 1.0, 0.3)
 
-        z_per = z_score(per_ratio, 1.0, 0.3)
-        z_pbr = z_score(pbr_ratio, 1.0, 0.3)
+        if pbr <= 0:
+            z_pbr = 3.0
+        else:
+            pbr_ratio = pbr / max(sector_pbr_mean, 1e-6)
+            z_pbr = z_score(pbr_ratio, 1.0, 0.3)
 
         value_score = 0.5 * (1.0 - norm_cdf(z_per)) + 0.5 * (1.0 - norm_cdf(z_pbr))
 

@@ -19,7 +19,7 @@ class ModelRegistryManager:
     def __init__(self, registry_dir: str=None):
         if registry_dir is None:
             project_root = Path(__file__).resolve().parent.parent.parent
-            registry_dir = project_root / 'models' / 's2_ensemble'
+            registry_dir = project_root / 'results' / 'models'
         self.registry_dir = Path(registry_dir)
         self.registry_dir.mkdir(parents=True, exist_ok=True)
         self.registry_file = self.registry_dir / 'registry_metadata.json'
@@ -45,7 +45,18 @@ class ModelRegistryManager:
         now = datetime.now()
         version_id = f"v_{now.strftime('%Y%m%d_%H%M%S')}"
         model_path = self.registry_dir / f'ensemble_{version_id}.pkl'
-        pkg = {'models': models_dict, 'version': version_id, 'metadata': metadata, 'registered_at': now.isoformat()}
+        pkg = {
+            'models': models_dict,
+            'version': version_id,
+            'metadata': metadata,
+            'registered_at': now.isoformat(),
+            'val_acc': metadata.get('val_acc', 0.0),
+            'val_auc': metadata.get('val_auc', 0.0),
+            'feature_names': metadata.get('feature_names', []),
+            'model_weights': metadata.get('ensemble_weights', metadata.get('model_weights', {})),
+            'feature_means': metadata.get('feature_means', []),
+            'feature_stds': metadata.get('feature_stds', []),
+        }
         with open(model_path, 'wb') as f:
             pickle.dump(pkg, f)
         registry = self._load_registry()
@@ -94,14 +105,24 @@ class ModelRegistryManager:
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
         try:
-            self.latest_link.symlink_to(target_path.resolve())
+            self.latest_link.symlink_to(target_path.name)
         except OSError:
             shutil.copy2(target_path, self.latest_link)
+        promoted_at = datetime.now().isoformat()
         registry['active_version'] = version_id
         registry['versions'][version_id]['status'] = 'active'
-        registry['versions'][version_id]['promoted_at'] = datetime.now().isoformat()
+        registry['versions'][version_id]['promoted_at'] = promoted_at
         registry['versions'][version_id]['promote_reason'] = reason
         self._save_registry(registry)
+
+        meta_payload = dict(registry['versions'][version_id].get('metadata', {}))
+        meta_payload.setdefault('train_date', registry['versions'][version_id].get('registered_at', promoted_at))
+        meta_payload['version'] = version_id
+        meta_payload['promoted_at'] = promoted_at
+        meta_payload['promote_reason'] = reason
+        if 'ensemble_weights' in meta_payload and 'model_weights' not in meta_payload:
+            meta_payload['model_weights'] = meta_payload['ensemble_weights']
+        atomic_write_json(self.registry_dir / 'ensemble_meta.json', meta_payload, indent=2)
         logger.info(f"  🚀 Model {version_id} successfully promoted to ACTIVE. Reason: {reason}")
 
     def get_active_model(self) -> Dict:

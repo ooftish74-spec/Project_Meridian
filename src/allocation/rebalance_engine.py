@@ -113,7 +113,7 @@ class RebalanceEngine:
             ticker = pk.split(':')[1] if ':' in pk else pv.get('ticker', '')
             if not ticker:
                 continue
-            held_tickers[ticker] = {'pos_key': pk, 'ticker': ticker, 'name': pv.get('name', ticker), 'amount': pv.get('amount', 0), 'market_value': pv.get('market_value', 0), 'entry_date': pv.get('entry_date', ''), 'confidence': pv.get('up_prob', pv.get('confidence', 0.5)), 'strategy': pv.get('strategy', ''), 'account': pv.get('account', ''), 'is_held': True}
+            held_tickers[ticker] = {'pos_key': pk, 'ticker': ticker, 'name': pv.get('name', ticker), 'amount': pv.get('amount', 0), 'market_value': pv.get('market_value') or pv.get('amount', 0), 'entry_date': pv.get('entry_date', ''), 'confidence': pv.get('up_prob', pv.get('confidence', 0.5)), 'strategy': pv.get('strategy', ''), 'account': pv.get('account', ''), 'is_held': True}
         new_candidates = {}
         for sig in new_signals:
             ticker = sig.get('ticker', '')
@@ -185,7 +185,7 @@ class RebalanceEngine:
                 if score >= stricter_exit:
                     logger.debug(f"    {ticker} 절세보호: 수익 중이므로 편출 억제 (score={score:.3f} >= {stricter_exit:.3f})")
                     continue
-            exit_candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'alpha_score': score, 'amount': info.get('amount', 0), 'market_value': info.get('market_value', 0), 'pos_key': info.get('pos_key', f"{stream_id}:{ticker}"), 'account': info.get('account', '')})
+            exit_candidates.append({'ticker': ticker, 'name': info.get('name', ticker), 'alpha_score': score, 'amount': info.get('amount', 0), 'market_value': info.get('market_value') or info.get('amount', 0), 'pos_key': info.get('pos_key', f"{stream_id}:{ticker}"), 'account': info.get('account', '')})
         exit_candidates.sort(key=lambda x: x['alpha_score'])
         entry_candidates = []
         for ticker, info in new_candidates.items():
@@ -196,7 +196,7 @@ class RebalanceEngine:
         entry_candidates.sort(key=lambda x: -x['alpha_score'])
         max_replace = _cfg_get(f"{sid}.rebalance.max_replacements_per_cycle", 2)
         max_turnover = _cfg_get(f"{sid}.rebalance.max_turnover_pct", 0.4)
-        total_mv = sum((h.get('market_value', h.get('amount', 0)) for h in held_tickers.values()))
+        total_mv = sum((h.get('market_value') or h.get('amount', 0) for h in held_tickers.values()))
         max_turnover_amount = total_mv * max_turnover if total_mv > 0 else 0
         replacements = 0
         turnover_amount = 0
@@ -210,7 +210,7 @@ class RebalanceEngine:
                 _bnm_r = buy.get('name', '')
                 logger.info(f"    ⏸ 교체 중단: alpha gap {alpha_gap:.3f} < hurdle {cost_hurdle:.3f} ({_snm_r} -> {_bnm_r})")
                 break
-            sell_amount = sell.get('market_value', sell.get('amount', 0))
+            sell_amount = sell.get('market_value') or sell.get('amount', 0)
             if turnover_amount + sell_amount > max_turnover_amount > 0:
                 logger.info(f"    ⏸ 턴오버 한도 도달: ₩{turnover_amount + sell_amount:,.0f} > ₩{max_turnover_amount:,.0f}")
                 break

@@ -32,6 +32,8 @@ class HMMRegimePredictor:
         self.lookback_window = lookback_window
         self.model = None
         self.is_fitted = False
+        self._train_mean = None
+        self._train_std = None
 
     def fit(self, historical_data: pd.DataFrame):
         """
@@ -43,12 +45,13 @@ class HMMRegimePredictor:
         if not _HMM_AVAILABLE:
             logger.error('hmmlearn is not installed. Cannot fit HMM.')
             return
-        if historical_data.empty or len(historical_data) < self.lookback_window:
-            logger.warning('Not enough data to fit HMM.')
+        if historical_data.empty or len(historical_data) < max(30, self.n_components * 10, self.lookback_window):
+            logger.debug(f'Not enough data to fit HMM ({len(historical_data)} rows). Using rule/ensemble fallback.')
             return
         train_data = historical_data.iloc[-self.lookback_window:].copy()
-        std = train_data.std().replace(0.0, 1e-9)
-        X = (train_data - train_data.mean()) / std
+        self._train_mean = train_data.mean()
+        self._train_std = train_data.std().replace(0.0, 1e-9)
+        X = (train_data - self._train_mean) / self._train_std
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
         self.model = GaussianHMM(n_components=self.n_components, covariance_type='full', n_iter=100, random_state=42)
         try:
@@ -87,8 +90,9 @@ class HMMRegimePredictor:
         """
         if not self.is_fitted or self.model is None:
             return {'bull_prob': 0.33, 'caution_prob': 0.33, 'bear_prob': 0.34}
-        std = recent_data.std().replace(0.0, 1e-9)
-        X = (recent_data - recent_data.mean()) / std
+        mean = self._train_mean if self._train_mean is not None else recent_data.mean()
+        std = self._train_std if self._train_std is not None else recent_data.std().replace(0.0, 1e-9)
+        X = (recent_data - mean) / std
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
         hidden_states = self.model.predict_proba(X)
         current_state_prob = hidden_states[-1]

@@ -186,5 +186,5 @@ class DrawdownGuard:
         result = self.assess(portfolio, regime)
         measurement = result['measurement']
         judgment = result['judgment']
-        stage_name = f"Stage {judgment['dd_stage']}' if judgment['dd_stage'] > 0 else 'Normal"
+        stage_name = f"Stage {judgment['dd_stage']}" if judgment['dd_stage'] > 0 else 'Normal'
         return {'drawdown_pct': measurement['total_dd_pct'], 'exposure': judgment['target_exposure'], 'scale_multiplier': judgment['scale_multiplier'], 'action_required': judgment['action_required'], 'stage': stage_name, 'dd_stage': judgment['dd_stage'], 'safe': judgment['safe']}

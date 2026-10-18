@@ -24,8 +24,8 @@ _OPS: List[Tuple[str, Callable]] = [
     ('sub',          lambda a, b: a - b),
     ('mul',          lambda a, b: a * b),
     ('div',          lambda a, b: np.where(np.abs(b) > 1e-8, a / b, 0.0)),
-    ('rank',         lambda a, _: pd.Series(a).rank(pct=True).values),
-    ('zscore',       lambda a, _: (a - a.mean()) / (a.std() + 1e-8)),
+    ('rank',         lambda a, _: pd.Series(a).rolling(60, min_periods=5).rank(pct=True).fillna(0.5).values),
+    ('zscore',       lambda a, _: ((pd.Series(a) - pd.Series(a).rolling(60, min_periods=5).mean()) / (pd.Series(a).rolling(60, min_periods=5).std() + 1e-8)).fillna(0.0).values),
     ('log',          lambda a, _: np.log1p(np.abs(a)) * np.sign(a)),
     ('diff',         lambda a, _: np.diff(a, prepend=a[0])),
     ('rolling_mean', lambda a, _: pd.Series(a).rolling(5, min_periods=1).mean().values),
@@ -127,6 +127,56 @@ class GeneticFeatureGenerator:
             _pop.append(f"{_op}({_c1},{_c2})")
         return _pop
 
+    @staticmethod
+    def _split_top_level_args(arg_str: str) -> List[str]:
+        """괄호 깊이를 고려하여 최상위 콤마(,) 기준으로 인자 분리."""
+        args: List[str] = []
+        depth = 0
+        current: List[str] = []
+        for ch in arg_str:
+            if ch == '(':
+                depth += 1
+                current.append(ch)
+            elif ch == ')':
+                depth = max(0, depth - 1)
+                current.append(ch)
+            elif ch == ',' and depth == 0:
+                args.append(''.join(current).strip())
+                current = []
+            else:
+                current.append(ch)
+        if current:
+            args.append(''.join(current).strip())
+        return args
+
+    def _eval_expr_node(self, expr: str, raw_df: pd.DataFrame) -> Optional[np.ndarray]:
+        """단일 컬럼명 또는 중첩 함수 표현식을 재귀적으로 평가."""
+        expr = expr.strip()
+        if not expr:
+            return None
+        if '(' not in expr:
+            s = raw_df.get(expr)
+            if s is None or len(s) == 0:
+                return None
+            return s.values.astype(float)
+        if not expr.endswith(')'):
+            return None
+        lparen = expr.find('(')
+        op_name = expr[:lparen].strip()
+        op_fn = dict(_OPS).get(op_name)
+        if op_fn is None:
+            return None
+        inner = expr[lparen + 1:-1]
+        args = self._split_top_level_args(inner)
+        if not args:
+            return None
+        a = self._eval_expr_node(args[0], raw_df)
+        b = self._eval_expr_node(args[1] if len(args) > 1 else args[0], raw_df)
+        if a is None or b is None or len(a) == 0 or len(b) == 0:
+            return None
+        m = min(len(a), len(b))
+        return np.asarray(op_fn(a[:m], b[:m]), dtype=float)
+
     def _evaluate_feature(
         self,
         expression: str,
@@ -134,27 +184,14 @@ class GeneticFeatureGenerator:
         forward_returns: pd.Series,
         generation: int,
     ) -> GeneticFeature:
-        """[Phase 70-C] 피처 표현식 평가."""
+        """[Phase 70-C] 피처 표현식 평가 (중첩 트리 표현식 재귀 지원)."""
         try:
-            _parts = expression.split('(')
-            if len(_parts) < 2:
-                return GeneticFeature(expression, generation=generation)
-            _op_name = _parts[0]
-            _args = _parts[1].rstrip(')').split(',')
-            _op_fn = dict(_OPS).get(_op_name)
-            if _op_fn is None:
+            _raw_vals = self._eval_expr_node(expression, raw_df)
+            if _raw_vals is None or len(_raw_vals) == 0 or len(forward_returns) == 0:
                 return GeneticFeature(expression, generation=generation)
 
-            _a = raw_df.get(_args[0].strip(), pd.Series(dtype=float)).values.astype(float)
-            _arg2 = _args[1].strip() if len(_args) > 1 else _args[0].strip()
-            _b = raw_df.get(_arg2, pd.Series(dtype=float)).values.astype(float)
-
-            if len(_a) == 0 or len(_b) == 0:
-                return GeneticFeature(expression, generation=generation)
-
-            _min_len = min(len(_a), len(_b), len(forward_returns))
-            _vals = _op_fn(_a[:_min_len], _b[:_min_len])
-            _vals = np.nan_to_num(_vals.astype(float), nan=0.0, posinf=0.0, neginf=0.0)
+            _min_len = min(len(_raw_vals), len(forward_returns))
+            _vals = np.nan_to_num(_raw_vals[:_min_len].astype(float), nan=0.0, posinf=0.0, neginf=0.0)
 
             _ic = self._compute_ic(_vals, forward_returns.values[:_min_len])
             return GeneticFeature(expression=expression, ic=_ic,

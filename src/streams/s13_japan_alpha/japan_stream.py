@@ -112,7 +112,7 @@ class S13JapanAlphaStream(BaseStream):
             # Reform Score: Higher buyback & lower PBR -> Higher score
             pbr_reform_score = norm_cdf((1.5 - pbr) * 0.5 + buyback * 20.0)
 
-            if 'semiconductor' in info.get('sector', ''):
+            if 'semiconductor' in info.get('sector', '').lower():
                 composite_score = float(0.6 * us_lead_signal + 0.4 * pbr_reform_score) * fx_scale
             else: # Trading Houses
                 composite_score = float(0.3 * us_lead_signal + 0.7 * pbr_reform_score) * fx_scale
@@ -167,21 +167,27 @@ class S13JapanAlphaStream(BaseStream):
                 continue
 
             signals.append({
+                'stream_id': self.stream_id,
                 'stream': 'S13',
+                'ticker': stock['ticker'],
                 'symbol': stock['ticker'],
                 'name': stock['name'],
+                'direction': 'long',
                 'action': 'BUY',
+                'confidence': round(min(0.95, max(0.5, float(stock['composite_score']))), 3),
+                'size_pct': stock['suggested_weight'],
                 'target_weight': stock['suggested_weight'],
                 'composite_score': stock['composite_score'],
                 'us_lead_signal': lead_sig,
                 'market': 'JP',
+                'strategy': 'japan_niche_alpha',
                 'timestamp': now_kst().isoformat()
             })
 
         return signals
 
     def get_performance(self) -> Dict[str, Any]:
-        return {'sharpe': 0.0, 'daily_returns': []}
+        return self._compute_standard_performance()
 
     def get_positions(self) -> List[Dict[str, Any]]:
         return self._positions

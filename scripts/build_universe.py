@@ -46,6 +46,13 @@ def get_feature_store_tickers() -> Set[str]:
                 t = p.stem.replace('kr_', '').replace('_features', '')
                 if t and not t.startswith('cross_') and not t.startswith('signal_'):
                     tickers.add(t)
+    try:
+        from src.data_collection.universe_loader import get_universe_tickers
+        for t in get_universe_tickers(market='KR+ETF'):
+            if t and not t.startswith('cross_') and not t.startswith('signal_'):
+                tickers.add(t)
+    except Exception:
+        pass
     return tickers
 
 
@@ -62,6 +69,7 @@ def compute_liquidity(ticker: str, lookback_days: int = 20) -> float:
         if fp.exists():
             try:
                 df = pd.read_parquet(fp)
+                df.columns = [str(c).lower() for c in df.columns]
                 if 'volume' not in df.columns or 'close' not in df.columns:
                     return 10000000000.0  # US stocks / ETFs default fallback liquidity
                 recent = df.tail(lookback_days)

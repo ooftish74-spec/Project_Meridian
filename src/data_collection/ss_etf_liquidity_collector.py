@@ -110,27 +110,30 @@ class SSETFLiquidityCollector:
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         self._universe = _get_etf_universe()
         try:
-            from pykrx import stock as _pykrx
+            from src.data_collection.pykrx_compat import stock as _pykrx
             self._pykrx = _pykrx
-        except ImportError as e:
+        except ImportError:
             self._pykrx = None
-            logger.error('  SS-ETF Collector: pykrx 미설치 → 수집 불가', exc_info=True)
+            logger.error('  SS-ETF Collector: pykrx_compat 미설치 → 수집 불가', exc_info=True)
 
     def collect(self, target_date: str=None) -> pd.DataFrame:
         """메인 수집 엔트리포인트.
 
         Args:
-            target_date: 'YYYYMMDD' 형식. None이면 오늘.
+            target_date: 'YYYYMMDD' 형식. None이면 오늘(비영업일이면 직전 영업일).
 
         Returns:
             DataFrame: 수집된 유동성 데이터 (기초자산 기준 1행/종목)
-            컬럼: [date, underlying, underlying_name,
-                   lev_volume, lev_amount, lev_retail_net,
-                   inv_volume, inv_amount, inv_retail_net,
-                   underlying_volume]
         """
         if target_date is None:
             target_date = date.today().strftime('%Y%m%d')
+        try:
+            from src.utils.market_calendar import get_calendar
+            _cal = get_calendar()
+            if not _cal.is_trading_day(target_date):
+                target_date = _cal.get_previous_trading_day(target_date)
+        except Exception:
+            pass
         if _is_before_listing(target_date):
             logger.info(f"  SS-ETF: {target_date} < 상장일 {_SS_ETF_LISTING_DATE_STR} → 빈 DataFrame 반환 (사전 상장)")
             return self._empty_df(target_date)
@@ -168,12 +171,7 @@ class SSETFLiquidityCollector:
             return None
 
     def collect_investor(self, ticker: str, target_date: str) -> Optional[pd.Series]:
-        """개별 ETF 당일 투자자별 순매수 조회 (KIS OpenAPI 1순위).
-
-        Returns:
-            Series: [retail_net_buy, foreign_net_buy, inst_net_buy] (금액, 원) or None
-        """
-        # 1. KIS OpenAPI 직접 조회 (공식 계좌 API)
+        """개별 ETF 당일 투자자별 순매수 조회 (KIS OpenAPI 1순위)."""
         try:
             from src.data_collection.kis_data_collector import KISDataCollector
             collector = KISDataCollector()
@@ -182,21 +180,6 @@ class SSETFLiquidityCollector:
                 return pd.Series(trend)
         except Exception as _e_kis:
             logger.debug(f"  [SS-ETF KIS Investor] 실패 ({ticker}): {_e_kis}")
-
-        # 2. pykrx 종목별 일자별 거래실적 fallback
-        if self._pykrx is not None:
-            try:
-                df2 = _pykrx_safe(self._pykrx.get_market_trading_value_by_date, target_date, target_date, ticker)
-                if df2 is not None and len(df2) > 0:
-                    row2 = df2.iloc[-1]
-                    retail_net = float(row2.get('개인', row2.get('retail', 0)) or 0)
-                    return pd.Series({
-                        'retail_net_buy': retail_net,
-                        'foreign_net_buy': float(row2.get('외국인', row2.get('foreign', 0)) or 0),
-                        'inst_net_buy': float(row2.get('기관', row2.get('institution', 0)) or 0)
-                    })
-            except Exception as _e_pykrx:
-                logger.debug(f"  [SS-ETF pykrx Investor] 실패 ({ticker}): {_e_pykrx}")
 
         return None
 

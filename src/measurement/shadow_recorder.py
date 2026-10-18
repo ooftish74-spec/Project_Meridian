@@ -61,7 +61,7 @@ class ShadowRecorder:
                 existing = []
         entry = {'timestamp': now_kst().isoformat(), 'regime': orch_result.get('regime', 'unknown'), 'streams': {}, 'orders': orch_result.get('orders', []), 'n_orders': len(orch_result.get('orders', [])), 'risk': orch_result.get('risk', {}), 'nav_estimate': orch_result.get('nav_estimate', 0)}
         from config.dynamic_config import DynamicConfig as _DC
-        _active_streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        _active_streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
         for s in _active_streams:
             stream_data = orch_result.get(f'stream_{s}', orch_result.get(s, {}))
             if stream_data:
@@ -144,7 +144,7 @@ class ShadowRecorder:
             try:
                 pf_data = json.loads(portfolio_file.read_text())
                 for t in pf_data.get('trade_history', []):
-                    d = t.get('date', '')
+                    d = str(t.get('date', t.get('timestamp', '')))[:10]
                     if not d:
                         continue
                     if d not in trade_by_date:

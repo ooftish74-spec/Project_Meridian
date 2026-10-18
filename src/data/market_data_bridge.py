@@ -284,11 +284,11 @@ class MarketDataBridge:
     def build_signal_cache(self, force: bool=False, force_refresh: bool=False, **kwargs) -> Dict:
         """시그널 캐시 구성 — Orchestrator가 사용하는 시장 데이터 딕셔너리."""
         is_force = force or force_refresh
+        self._load_cache()
         if not is_force and self._is_cache_fresh():
             logger.info('  📦 시그널 캐시 히트 (당일 데이터)')
             self._ensure_root_meta(self._cache)
             return self._cache
-        self._load_cache()
         self._field_quality = self._cache.get('_field_meta', {}).copy()
         signal = {}
         use_async = self._get('data.use_async_queue', False)
@@ -336,13 +336,19 @@ class MarketDataBridge:
             signal['usdkrw'] = usdkrw.get('current', 0)
             signal['usdkrw_prev'] = usdkrw.get('prev', signal['usdkrw'])
             cached_kospi = self._cache.get('kospi', 0)
-            signal['kospi_close'] = self._cache.get('kospi_close', 0)
-            if cached_kospi and cached_kospi > 1000:
+            kospi = fetched_data.get('kospi') or {}
+            fresh_kospi = float(kospi.get('close', 0) or 0)
+            if fresh_kospi > 1000:
+                signal['kospi'] = fresh_kospi
+                signal['kospi_close'] = fresh_kospi
+                signal['kospi_ma20'] = float(kospi.get('ma20', fresh_kospi) or fresh_kospi)
+            elif cached_kospi and cached_kospi > 1000:
                 signal['kospi'] = cached_kospi
+                signal['kospi_close'] = float(self._cache.get('kospi_close', cached_kospi) or cached_kospi)
                 signal['kospi_ma20'] = self._cache.get('kospi_ma20', cached_kospi)
             else:
-                kospi = fetched_data.get('kospi') or {'close': 0, 'ma20': 0}
-                signal['kospi'] = kospi.get('close', 0)
+                signal['kospi'] = fresh_kospi
+                signal['kospi_close'] = float(self._cache.get('kospi_close', 0) or fresh_kospi)
                 signal['kospi_ma20'] = kospi.get('ma20', signal['kospi'])
             _ois_default_val = self._cfg.get('ois.default_value', 50.0) if self._cfg else 50.0
             _fresh_ois = fetched_data.get('ois', _ois_default_val)
@@ -362,13 +368,22 @@ class MarketDataBridge:
             signal['usdkrw'] = usdkrw.get('current', 0)
             signal['usdkrw_prev'] = usdkrw.get('prev', signal['usdkrw'])
             cached_kospi = self._cache.get('kospi', 0)
-            signal['kospi_close'] = self._cache.get('kospi_close', 0)
-            if cached_kospi and cached_kospi > 1000:
+            try:
+                kospi = self._get_kospi()
+            except Exception:
+                kospi = {'close': cached_kospi, 'ma20': self._cache.get('kospi_ma20', cached_kospi)}
+            fresh_kospi = float(kospi.get('close', 0) or 0)
+            if fresh_kospi > 1000:
+                signal['kospi'] = fresh_kospi
+                signal['kospi_close'] = fresh_kospi
+                signal['kospi_ma20'] = float(kospi.get('ma20', fresh_kospi) or fresh_kospi)
+            elif cached_kospi and cached_kospi > 1000:
                 signal['kospi'] = cached_kospi
+                signal['kospi_close'] = float(self._cache.get('kospi_close', cached_kospi) or cached_kospi)
                 signal['kospi_ma20'] = self._cache.get('kospi_ma20', cached_kospi)
             else:
-                kospi = self._get_kospi()
-                signal['kospi'] = kospi.get('close', 0)
+                signal['kospi'] = fresh_kospi
+                signal['kospi_close'] = float(self._cache.get('kospi_close', 0) or fresh_kospi)
                 signal['kospi_ma20'] = kospi.get('ma20', signal['kospi'])
             _ois_default_val = self._cfg.get('ois.default_value', 50.0) if self._cfg else 50.0
             _fresh_ois = self._get_ois()
@@ -382,6 +397,19 @@ class MarketDataBridge:
                 signal['ois'] = _fresh_ois
             signal['sector_momentum'] = self._get_sector_momentum()
             signal['stock_technicals'] = self._get_stock_technicals()
+        if getattr(self, '_last_ois_details', None):
+            signal['ois_details'] = self._last_ois_details
+            _nf_raw = (self._last_ois_details.get('components', {}).get('krx_night_futures', {}) or {}).get('raw', {})
+            if isinstance(_nf_raw, dict):
+                if _nf_raw.get('close'):
+                    signal['night_futures'] = float(_nf_raw['close'])
+                if _nf_raw.get('daytime_close'):
+                    signal['daytime_futures'] = float(_nf_raw['daytime_close'])
+                if _nf_raw.get('change_pct') is not None:
+                    signal['night_futures_change_1d'] = float(_nf_raw['change_pct'])
+        for _k_nf in ('ois_details', 'night_futures', 'daytime_futures', 'night_futures_change_1d'):
+            if _k_nf not in signal and self._cache.get(_k_nf) is not None:
+                signal[_k_nf] = self._cache[_k_nf]
         signal['timestamp'] = datetime.now().isoformat()
         try:
             _alpha_path = _PROJECT_ROOT / 'results' / 'discovered_alphas.json'
@@ -530,17 +558,24 @@ class MarketDataBridge:
             if vix_pq.exists():
                 try:
                     df = pd.read_parquet(vix_pq)
-                    result['vix_history'] = df['close'].tail(days).tolist()
-                    break
+                    vals = df['close'].dropna().tail(days).tolist()
+                    if len(vals) > len(result['vix_history']):
+                        result['vix_history'] = vals
+                    if len(result['vix_history']) >= 30:
+                        break
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-
-                    logger.error(f'Critical error encountered (removed targeted fallback): {e}', exc_info=True)
-
-                    raise
+                    logger.debug(f'VIX parquet load skipped ({vix_pq.name}): {e}')
+        if len(result['vix_history']) < 30:
+            vix_json = _DATA_DIR / 'cache' / 'vix_daily.json'
+            if vix_json.exists():
+                try:
+                    vd = json.loads(vix_json.read_text(encoding='utf-8'))
+                    if isinstance(vd, dict) and isinstance(vd.get('vix_values'), list):
+                        vals = [float(x) for x in vd['vix_values'] if x is not None][-days:]
+                        if len(vals) > len(result['vix_history']):
+                            result['vix_history'] = vals
+                except Exception as _ve:
+                    logger.debug(f'vix_daily.json load skipped: {_ve}')
         kospi_pq = _DATA_DIR / 'kr_markets' / 'kr_indices' / 'kospi_index.parquet'
         if not kospi_pq.exists():
             kospi_pq = _DATA_DIR / 'kr_markets' / 'kr_indices' / 'kospi.parquet'
@@ -646,24 +681,57 @@ class MarketDataBridge:
         return 20.0
 
     def _safe_get_index_close(self, index_code: str, days: int=5):
-        """지수 종가를 안전하게 가져오기 (KIS -> pykrx -> fdr -> ETF).
+        """지수 종가를 안전하게 가져오기 (KIS 업종지수 -> pykrx 지수 -> ETF 프록시(1028/2203 한정)).
 
         Returns:
             float or None
         """
         from datetime import timedelta as _td
         _today = datetime.now().strftime('%Y%m%d')
-        _start = (datetime.now() - _td(days=days)).strftime('%Y%m%d')
+        _start = (datetime.now() - _td(days=max(days, 10))).strftime('%Y%m%d')
+        _kis_sector_map = {'1001': '0001', 'KOSPI': '0001', '2001': '1001', 'KOSDAQ': '1001', '1028': '2001', '2203': '1203'}
+        _pykrx_idx_map = {'KOSPI': '1001', 'KOSDAQ': '2001'}
+        kis_sector = _kis_sector_map.get(index_code)
+        if kis_sector:
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                kis = KISDataCollector()
+                df_kis = kis.get_kr_sector_daily(kis_sector, _start, _today)
+                if df_kis is not None and not df_kis.empty:
+                    close_col = 'Close' if 'Close' in df_kis.columns else ('종가' if '종가' in df_kis.columns else df_kis.columns[3])
+                    val = float(df_kis[close_col].iloc[-1])
+                    if val > 0:
+                        logger.info(f"  지수 {index_code}: {val:.2f} (KIS Sector API {kis_sector})")
+                        return val
+            except Exception as e:
+                logger.debug(f"  KIS Sector API 실패 ({index_code}): {e}")
+
+        @with_retry(max_retries=2, initial_delay=1.0, fallback_value=None)
+        def fetch_pykrx_index():
+            from src.data_collection.pykrx_compat import stock as _pykrx
+            pykrx_code = _pykrx_idx_map.get(index_code, index_code)
+            df = _pykrx.get_index_ohlcv(_start, _today, pykrx_code)
+            if df is not None and (not df.empty):
+                close_col = '종가' if '종가' in df.columns else ('Close' if 'Close' in df.columns else df.columns[3])
+                return float(df.iloc[-1][close_col])
+            raise ValueError('pykrx index empty')
+        val = fetch_pykrx_index()
+        if val is not None and val > 0:
+            logger.debug(f"  지수 {index_code}: {val} (인스티튜셔널 브리지 직접)")
+            return val
+
+        # ETF 프록시는 스케일 환산이 정의된 파생지수(1028, 2203)에만 허용하며, 1001(KOSPI)/2001(KOSDAQ) 지수 레벨에는 ETF 원가 혼합 금지
         etf_ticker = _INDEX_ETF_PROXY.get(index_code)
-        if etf_ticker:
+        if etf_ticker and index_code in ('1028', '2203'):
             try:
                 from src.data_collection.kis_data_collector import KISDataCollector
                 kis = KISDataCollector()
                 price = kis.get_current_price(etf_ticker)
-                if price is not None and float(price) > 0:
-                    val = float(price)
+                raw_price = price.get('price') if isinstance(price, dict) else price
+                if raw_price is not None and float(raw_price) > 0:
+                    val = float(raw_price)
                     if index_code == '1028':
-                        val = val / 10.0
+                        val = val / 100.0 if val > 10000.0 else val / 10.0
                     elif index_code == '2203':
                         val = val / 20.0
                     logger.info(f"  지수 {index_code}: {val:.2f} (KIS API Proxy {etf_ticker})")
@@ -672,28 +740,13 @@ class MarketDataBridge:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f"  KIS API 실패: {e}")
-
-        @with_retry(max_retries=2, initial_delay=1.0, fallback_value=None)
-        def fetch_pykrx_index():
-            from src.data_collection.pykrx_compat import stock as _pykrx
-            df = _pykrx.get_index_ohlcv(_start, _today, index_code)
-            if df is not None and (not df.empty):
-                close_col = '종가' if '종가' in df.columns else df.columns[3]
-                return float(df.iloc[-1][close_col])
-            raise ValueError('pykrx index empty')
-        val = fetch_pykrx_index()
-        if val is not None:
-            logger.debug(f"  지수 {index_code}: {val} (인스티튜셔널 브리지 직접)")
-            return val
-        # yfinance fallback removed
-        if etf_ticker:
             try:
                 from src.data_collection.pykrx_compat import stock
                 df = stock.get_market_ohlcv_by_date(_start, _today, etf_ticker)
                 if df is not None and (not df.empty):
                     val = float(df['종가'].iloc[-1])
                     if index_code == '1028':
-                        val /= 10.0
+                        val = val / 100.0 if val > 10000.0 else val / 10.0
                     elif index_code == '2203':
                         val /= 20.0
                     return val
@@ -701,7 +754,7 @@ class MarketDataBridge:
                 logger.error(f'Critical error encountered (removed targeted fallback): {e}', exc_info=True)
                 raise
         if index_code != '1004':
-            AlertManager().report_error(f"INDEX_{index_code}', '모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)', severity='error")
+            AlertManager().report_error(f"INDEX_{index_code}", '모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)', severity='error')
             logger.warning(f"  지수 {index_code}: 모든 소스 실패 (KIS/인스티튜셔널/fdr/ETF)")
         return None
 
@@ -727,7 +780,7 @@ class MarketDataBridge:
             import logging
             logging.getLogger(__name__).debug(f"KIS API VKOSPI 실패: {e}")
 
-        # 2. Realized Volatility Estimation (Tier 2 - KOSPI 실현 변동성)
+        # 2. Robust Realized Volatility + Global VIX Shrinkage Estimation (Tier 2 - 이상치 내성 실현 변동성 + VIX 베이지안 결합)
         try:
             from src.data_collection.pykrx_compat import stock
             from datetime import timedelta
@@ -737,12 +790,26 @@ class MarketDataBridge:
             if df is not None and not df.empty:
                 close = df['종가'].dropna().tail(20)
                 if len(close) >= 20:
-                    realized = float(close.pct_change().std() * np.sqrt(252) * 100)
-                    estimated = realized * 1.15
+                    rets = close.pct_change().dropna()
+                    # Huber/MAD Robust Volatility (단일 이상치로 인한 20일간의 VKOSPI>45 고착 오발화 차단)
+                    med_r = float(rets.median())
+                    mad_sigma = float((rets - med_r).abs().median() * 1.4826 * np.sqrt(252) * 100.0)
+                    ewma_sigma = float(rets.ewm(span=7).std().iloc[-1] * np.sqrt(252) * 100.0)
+                    robust_rv = 0.65 * mad_sigma + 0.35 * min(ewma_sigma, mad_sigma * 1.5)
+                    vix_ref = 0.0
+                    try:
+                        from src.utils.google_finance_collector import GoogleFinanceCollector
+                        vix_ref = float(GoogleFinanceCollector.get_vix() or 0.0)
+                    except Exception:
+                        vix_ref = float(self._cache.get('vix', 0.0) or 0.0)
+                    if 5.0 <= vix_ref <= 100.0:
+                        estimated = round(0.55 * (vix_ref * 1.05) + 0.45 * robust_rv, 2)
+                    else:
+                        estimated = round(robust_rv * 1.05, 2)
                     if 5.0 <= estimated <= 150.0:
-                        self._field_quality['vkospi'] = 0.8
+                        self._field_quality['vkospi'] = 0.85
                         import logging
-                        logging.getLogger(__name__).info(f"  [VKOSPI] 실현 변동성 추정 성공: {estimated:.2f}")
+                        logging.getLogger(__name__).info(f"  [VKOSPI] 베이지안 로버스트 변동성 추정 성공: {estimated:.2f} (MAD={mad_sigma:.2f}, VIX={vix_ref:.2f})")
                         return estimated
         except Exception as e:
             import logging
@@ -776,7 +843,7 @@ class MarketDataBridge:
                 self._field_quality['vkospi'] = 0.0
                 return 20.0
         except Exception as e:
-            AlertManager().report_error('VKOSPI', f"VIX 프록시 폴백마저 실패(예외 발생). 최후의 보루 20.0 주입: {e}', severity='critical")
+            AlertManager().report_error('VKOSPI', f"VIX 프록시 폴백마저 실패(예외 발생). 최후의 보루 20.0 주입: {e}", severity='critical')
             self._field_quality['vkospi'] = 0.0
             return 20.0
 
@@ -888,46 +955,68 @@ class MarketDataBridge:
         """KOSPI 지수 + MA20.
 
         데이터 소스 우선순위:
-          1. kr_markets parquet
-          2. pykrx (KODEX 200 → KOSPI200 환산 또는 종합지수)
-          3. pykrx fallback (KOSPI)
-        ★ 하드코딩 fallback 제거: 실데이터 없으면 에러 로깅.
+          1. kr_markets 지수 parquet (kospi_index.parquet 등)
+          2. KISDataCollector().get_kr_sector_daily('0001') / pykrx_compat.stock.get_index_ohlcv('1001')
+          3. Naver Finance Realtime KOSPI API Fetcher
+        ★ ETF(kr_069500) 원가나 전종목 횡단면 테이블(raw/krx_stock_daily/kospi_*.parquet)을 지수 레벨로 사용하지 않음.
         """
         _SIGNALS_DIR = _DATA_DIR.parent / 'data' / 'signals'
         if not _SIGNALS_DIR.exists():
             _SIGNALS_DIR = _PROJECT_ROOT / 'data' / 'signals'
-        parquet_files = sorted((_DATA_DIR / 'raw' / 'krx_stock_daily').glob('kospi_*.parquet'), reverse=True)
-        paths_to_check = []
-        if parquet_files:
-            paths_to_check.append(parquet_files[0])
-            
-        for path in paths_to_check:
-            if path.exists():
+        # 1순위: 시계열 KOSPI 지수 Parquet에서 정확한 20일 이동평균 산출
+        for ts_path in [
+            _DATA_DIR / 'kr_markets' / 'kr_indices' / 'kospi_index.parquet',
+            _DATA_DIR / 'kr_markets' / 'kr_indices' / 'kospi.parquet',
+            _DATA_DIR / 'kr_markets' / 'index_kospi.parquet',
+            _DATA_DIR / 'kr_markets' / 'KOSPI.parquet',
+        ]:
+            if ts_path.exists():
                 try:
-                    df = pd.read_parquet(path)
-                        
-                    # Handle CSV format from KRX collector
-                    if '종가' in df.columns:
-                        close_series = df['종가'].astype(str).str.replace(',', '')
-                        close_series = pd.to_numeric(close_series, errors='coerce').dropna()
-                    elif 'close' in [c.lower() for c in df.columns]:
-                        col = [c for c in df.columns if c.lower() == 'close'][0]
-                        close_series = pd.to_numeric(df[col], errors='coerce').dropna()
-                    else:
-                        # Fallback to last column
-                        close_series = pd.to_numeric(df.iloc[:, -1], errors='coerce').dropna()
-                        
-                    if len(close_series) >= 1:
-                        curr = float(close_series.iloc[-1])
-                        prev = float(close_series.iloc[-2]) if len(close_series) > 1 else curr
-                        DataSanityGate.validate('KOSPI(parquet/csv)', curr, prev, max_pct_change=0.15)
-                        self._field_quality['kospi'] = 0.7
-                        return {'close': curr, 'ma20': float(close_series.tail(20).mean())}
-                except Exception as e:
-                    from src.utils.error_logger import log_error_rate_limited
-                    log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-                    logger.debug(f"  KOSPI parquet 읽기 실패 ({path.name}): {e}")
-        # Naver Finance & yfinance Realtime KOSPI API Fetcher
+                    df_ts = pd.read_parquet(ts_path)
+                    c_col = 'close' if 'close' in df_ts.columns else ('Close' if 'Close' in df_ts.columns else ('종가' if '종가' in df_ts.columns else None))
+                    if c_col and len(df_ts) >= 20:
+                        cs = pd.to_numeric(df_ts[c_col].astype(str).str.replace(',', ''), errors='coerce').dropna()
+                        if len(cs) >= 20 and float(cs.iloc[-1]) > 1000 and float(cs.iloc[-1]) < 10000:
+                            curr = float(cs.iloc[-1])
+                            ma20 = float(cs.tail(20).mean())
+                            self._field_quality['kospi'] = 0.9
+                            return {'close': curr, 'ma20': ma20}
+                except Exception:
+                    pass
+
+        # 2순위: KIS Sector Daily ('0001') 또는 pykrx_compat Index OHLCV ('1001')
+        _end_str = datetime.now().strftime('%Y%m%d')
+        _start_str = (datetime.now() - timedelta(days=45)).strftime('%Y%m%d')
+        try:
+            from src.data_collection.kis_data_collector import KISDataCollector
+            df_kis = KISDataCollector().get_kr_sector_daily('0001', _start_str, _end_str)
+            if df_kis is not None and not df_kis.empty:
+                c_col = 'Close' if 'Close' in df_kis.columns else ('종가' if '종가' in df_kis.columns else None)
+                if c_col:
+                    cs = pd.to_numeric(df_kis[c_col], errors='coerce').dropna()
+                    if len(cs) >= 1 and 1000.0 < float(cs.iloc[-1]) < 10000.0:
+                        curr = float(cs.iloc[-1])
+                        ma20 = float(cs.tail(20).mean()) if len(cs) >= 5 else curr
+                        self._field_quality['kospi'] = 0.95
+                        return {'close': curr, 'ma20': ma20}
+        except Exception as e_kis:
+            logger.debug(f"  KOSPI KIS Sector API 수집 실패: {e_kis}")
+
+        try:
+            from src.data_collection.pykrx_compat import stock as _pykrx_stock
+            df_idx = _pykrx_stock.get_index_ohlcv(_start_str, _end_str, '1001')
+            if df_idx is not None and not df_idx.empty:
+                c_col = '종가' if '종가' in df_idx.columns else ('Close' if 'Close' in df_idx.columns else df_idx.columns[3])
+                cs = pd.to_numeric(df_idx[c_col], errors='coerce').dropna()
+                if len(cs) >= 1 and 1000.0 < float(cs.iloc[-1]) < 10000.0:
+                    curr = float(cs.iloc[-1])
+                    ma20 = float(cs.tail(20).mean()) if len(cs) >= 5 else curr
+                    self._field_quality['kospi'] = 0.9
+                    return {'close': curr, 'ma20': ma20}
+        except Exception as e_idx:
+            logger.debug(f"  KOSPI pykrx_compat 지수 수집 실패: {e_idx}")
+
+        # 3순위: Naver Finance Realtime KOSPI API Fetcher
         try:
             import requests
             resp = requests.get('https://polling.finance.naver.com/api/realtime/domestic/index/KOSPI', headers={'User-Agent': 'Mozilla/5.0'}, timeout=5).json()
@@ -935,24 +1024,31 @@ class MarketDataBridge:
                 data = resp['datas'][0]
                 close_val = float(str(data.get('closePriceRaw', '0')).replace(',', ''))
                 if close_val > 0:
-                    ma20_val = close_val * 1.002  # 근사 MA20
+                    ma20_val = float(self._cache.get('kospi_ma20', 0) or (close_val * 1.002))
+                    if ma20_val > 10000 or ma20_val < 1000 or abs(ma20_val - close_val) / max(close_val, 1.0) > 0.15:
+                        ma20_val = round(close_val * 1.002, 2)
                     self._field_quality['kospi'] = 0.9
                     logger.info(f"  📊 KOSPI Index (Naver Realtime API): {close_val:,.2f} (MA20: {ma20_val:,.2f})")
                     return {'close': close_val, 'ma20': ma20_val}
         except Exception as e_nav:
-            from src.utils.error_logger import log_error_rate_limited
-            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_nav}", exc_info=True)
             logger.debug(f"  KOSPI Naver Realtime API 수집 실패: {e_nav}")
-
-        # yfinance 폐기 — 로컬 RealtimeDataBus / MarketDataBridge 우선 참조
-        pass
 
         logger.error('  ❌ 모든 KOSPI 소스 실패. [Uncertainty Explosion] 예외 발생 강제.')
         self._field_quality['kospi'] = 0.0
         raise RuntimeError("모든 KOSPI 소스 수집 실패")
 
     def _get_ois(self) -> float:
-        """[Phase 84] Overnight Intelligence Score (0~100) (Strict Same-Day Staleness)."""
+        """[Phase 84] Overnight Intelligence Score (0~100) (Live Calculation First)."""
+        try:
+            from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
+            intel = OvernightIntelligenceScore()
+            res = intel.calculate(include_premarket=True)
+            if isinstance(res, dict) and 'ois' in res and res['ois'] != 50.0:
+                self._field_quality['ois'] = 0.95
+                self._last_ois_details = res
+                return float(res['ois'])
+        except Exception as _live_ois_e:
+            logger.debug(f'Live OvernightIntelligenceScore fallback: {_live_ois_e}')
         for ois_dir in [_DATA_DIR / 'raw' / 'overnight_macro', _DATA_DIR / 'raw' / 'overnight_intel']:
             if ois_dir.exists():
                 try:
@@ -963,6 +1059,11 @@ class MarketDataBridge:
                         if age_hours <= 12.0:
                             data = json.loads(files[0].read_text())
                             self._field_quality['ois'] = 0.95
+                            raw_os = data.get('overnight_score')
+                            if isinstance(raw_os, dict) and 'overnight_score' in raw_os:
+                                return float(raw_os['overnight_score'])
+                            elif isinstance(raw_os, (int, float)):
+                                return float(raw_os)
                             ois_val = float(data.get('ois', data.get('score', data.get('ois_score', 50))))
                             return ois_val
                         else:
@@ -970,16 +1071,6 @@ class MarketDataBridge:
                 except Exception as e:
                     logger.error(f'Critical error encountered in _get_ois: {e}', exc_info=True)
         self._field_quality['ois'] = 0.5
-        # Dynamic calculation based on live overnight futures & VIX
-        try:
-            from src.intelligence.overnight_intelligence import OvernightIntelligence
-            intel = OvernightIntelligence()
-            res = intel.compute_overnight_score()
-            if isinstance(res, dict) and 'ois' in res:
-                self._field_quality['ois'] = 0.90
-                return float(res['ois'])
-        except Exception:
-            pass
         return 50.0
 
     def _get_sector_momentum(self) -> Dict:
@@ -999,12 +1090,13 @@ class MarketDataBridge:
         fs_dir = _DATA_DIR / 'feature_store'
         for ticker in sector_etf_tickers:
             close = None
-            for path in [fs_dir / f"{ticker}.parquet', _DATA_DIR / 'kr_markets' / f'kr_{ticker}.parquet', _DATA_DIR / 'kr_markets' / f'{ticker}.parquet"]:
+            for path in [fs_dir / f"{ticker}.parquet", _DATA_DIR / 'kr_markets' / f"kr_{ticker}.parquet", _DATA_DIR / 'kr_markets' / f"{ticker}.parquet"]:
                 if path.exists():
                     try:
                         df = pd.read_parquet(path)
-                        if 'close' in df.columns and len(df) >= 5:
-                            close = pd.to_numeric(df['close'], errors='coerce').dropna()
+                        c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                        if c_col and len(df) >= 5:
+                            close = pd.to_numeric(df[c_col], errors='coerce').dropna()
                             break
                     except Exception as e:
                         logger.warning(f"  [MarketDataBridge] 모멘텀 로드 예외 (스킵): {e}")
@@ -1100,8 +1192,8 @@ class MarketDataBridge:
                         df = pd.read_csv(path)
                     else:
                         df = pd.read_parquet(path)
-                    
-                    if len(df) >= 2:
+                    df.columns = [c.lower() for c in df.columns]
+                    if len(df) >= 2 and 'close' in df.columns:
                         last_date = pd.to_datetime(df['date'].iloc[-1] if 'date' in df.columns else df.index[-1])
                         try:
                             self._check_staleness(last_date, 'US', path.name)
@@ -1110,7 +1202,7 @@ class MarketDataBridge:
                             # Stale file detected -> Attempt live institutional fetch before graceful degradation
                             try:
                                 from src.utils.google_finance_collector import GoogleFinanceCollector
-                                quote = GoogleFinanceCollector.get_quote_details(symbol)
+                                quote = GoogleFinanceCollector().get_quote_details(symbol)
                                 if quote and 'change_pct' in quote and abs(quote['change_pct']) < 30.0:
                                     logger.info(f"  [US Index Live Feed] Google Finance 실시간 변동률 채택 ({symbol}: {quote['change_pct']:+.2f}%)")
                                     return float(quote['change_pct'])
@@ -1119,12 +1211,12 @@ class MarketDataBridge:
                             logger.warning(f"[Graceful Degradation] US Data Stale: {e}. Using stale values.")
                             return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
                 except Exception as e:
-                    logger.error(f'Critical error encountered (fallback return False): {e}', exc_info=True)
-                    return False
+                    logger.debug(f'US index path read skipped ({path.name}): {e}')
+                    continue
         # Direct Live Fallback
         try:
             from src.utils.google_finance_collector import GoogleFinanceCollector
-            quote = GoogleFinanceCollector.get_quote_details(symbol)
+            quote = GoogleFinanceCollector().get_quote_details(symbol)
             if quote and 'change_pct' in quote and abs(quote['change_pct']) < 30.0:
                 return float(quote['change_pct'])
         except Exception:
@@ -1332,15 +1424,116 @@ class MarketDataBridge:
                 logger.error(f'Critical error encountered (fallback self._cache={{}}): {e}', exc_info=True)
                 self._cache = {}
 
-    def _save_cache(self, data: Dict) -> None:
-        """버전화 캐시 + 3중 저장 구조 (Atomic).
+    _INDEX_SANITY_BOUNDS = {
+        'sp500': (2000.0, 20000.0), 'SP500': (2000.0, 20000.0),
+        'nasdaq': (5000.0, 60000.0), 'NASDAQ': (5000.0, 60000.0),
+        'sox': (1500.0, 30000.0), 'SOX': (1500.0, 30000.0),
+        'dji': (15000.0, 100000.0), 'DJI': (15000.0, 100000.0),
+        'dxy': (70.0, 160.0), 'DXY': (70.0, 160.0),
+        'gold_us': (1000.0, 10000.0), 'GOLD_US': (1000.0, 10000.0),
+        'wti': (20.0, 140.0), 'WTI': (20.0, 140.0),
+        'kospi': (1000.0, 10000.0), 'KOSPI': (1000.0, 10000.0),
+        'kospi_close': (1000.0, 10000.0), 'kospi_ma20': (1000.0, 10000.0),
+        'kospi200': (150.0, 1500.0),
+        'kosdaq_close': (300.0, 3000.0), 'kosdaq_ma20': (300.0, 3000.0), 'KOSDAQ': (300.0, 3000.0),
+        'taiex': (5000.0, 100000.0), 'TAIEX': (5000.0, 100000.0),
+        'nikkei': (10000.0, 150000.0), 'NIKKEI': (10000.0, 150000.0),
+        'hangseng': (5000.0, 60000.0), 'HANGSENG': (5000.0, 60000.0),
+        'us10y': (0.5, 15.0), 'US10Y': (0.5, 15.0),
+        'usdkrw': (900.0, 2000.0), 'USDKRW': (900.0, 2000.0),
+        'vix': (5.0, 120.0), 'VIX': (5.0, 120.0),
+    }
 
-        기존 existing.update() 방식을 폐기하고 완전한 새 데이터를
-        원자적(Atomic)으로 쓰되, 실패 시 backup에서 복원합니다.
-        """
+    def _save_cache(self, data: Dict) -> None:
+        """버전화 캐시 + 3중 저장 구조 (Atomic) + 기존 글로벌/매크로/센서 전 필드 보존 및 ETF 오염 정화."""
         import shutil
         from src.utils.file_ops import atomic_write_json as _atomic_write
         _backup_path = _PROJECT_ROOT / 'results' / 'signal_cache_backup.json'
+        primary_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+        try:
+            bounds_map = self._INDEX_SANITY_BOUNDS
+            existing = {}
+            if primary_path.exists():
+                try:
+                    existing = json.loads(primary_path.read_text(encoding='utf-8'))
+                except Exception:
+                    existing = self._cache if isinstance(self._cache, dict) else {}
+            if not isinstance(existing, dict):
+                existing = {}
+
+            # 1. 기존 캐시 및 신규 data에서 지수 스케일 범위 이탈 오염값(ETF 가격 등) 제거
+            for _d_obj in (existing, data):
+                for _k in list(_d_obj.keys()):
+                    if _k in bounds_map and isinstance(_d_obj.get(_k), (int, float)):
+                        _lo, _hi = bounds_map[_k]
+                        if not (_lo <= float(_d_obj[_k]) <= _hi):
+                            _d_obj.pop(_k, None)
+
+            # 2. MacroRealtimeRefresher / MacroFeatureIntegrator / UnifiedCollector가 기록한 모든 유효 키 보존
+            for _pk, _pv in existing.items():
+                if _pk in ('timestamp', '_generated_at'):
+                    continue
+                if _pk not in data:
+                    if _pv is not None and _pv != 'N/A' and _pv != '':
+                        data[_pk] = _pv
+                else:
+                    cur_val = data.get(_pk)
+                    if (cur_val is None or (isinstance(cur_val, (int, float)) and not isinstance(cur_val, bool) and cur_val == 0) or cur_val == 'N/A' or cur_val == '' or cur_val == []) and _pv not in (None, 'N/A', '', []):
+                        if not (isinstance(_pv, (int, float)) and not isinstance(_pv, bool) and _pv == 0):
+                            data[_pk] = _pv
+            # US ETF 시계열에서 sp500/nasdaq/sox/gold/wti 1D/1M 변동률만 자동 보강 (지수 레벨에 ETF 가격 덮어쓰기 금지)
+            for _idx_key, _chg1d_k, _chg1m_k, _tk_sym in [
+                ('sp500', 'sp500_change_1d', 'sp500_change_1m', 'SPY'),
+                ('nasdaq', 'nasdaq_change_1d', 'nasdaq_change_1m', 'QQQ'),
+                ('sox', 'sox_change_1d', 'sox_change_1m', 'SOXX'),
+                ('gold_us', 'gold_change_1d', 'gold_change_1m', 'GLD'),
+                ('wti', 'wti_change_1d', 'wti_change_1m', 'USO'),
+            ]:
+                df_u = self._load_price_history(_tk_sym)
+                if df_u is not None and len(df_u) >= 2 and 'close' in df_u.columns:
+                    cs_u = pd.to_numeric(df_u['close'], errors='coerce').dropna()
+                    if len(cs_u) >= 2:
+                        if not data.get(_chg1d_k):
+                            data[_chg1d_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-2] - 1.0) * 100.0), 2)
+                        if not data.get(_chg1m_k) and len(cs_u) >= 21:
+                            data[_chg1m_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-21] - 1.0) * 100.0), 2)
+            # us10y & vix_change_1d / 1m & us_regime / cross_asset_direction 자동 보강
+            _mf = data.get('macro_features') if isinstance(data.get('macro_features'), dict) else {}
+            if not data.get('us10y') and _mf.get('dgs10'):
+                data['us10y'] = round(float(_mf['dgs10']), 3)
+            if not data.get('us10y'):
+                for _mfn, _mkey, _vkey in [
+                    ('global_market_state.json', 'US10Y', 'close'),
+                    ('fred_macro.json', 'US_10Y', 'current'),
+                ]:
+                    _mp = _PROJECT_ROOT / 'data' / 'macro' / _mfn
+                    if _mp.exists():
+                        try:
+                            _md = json.loads(_mp.read_text(encoding='utf-8')).get('indicators', {}).get(_mkey, {})
+                            if _md.get(_vkey):
+                                data['us10y'] = round(float(_md[_vkey]), 3)
+                                if not data.get('us10y_change_1d') and _md.get('change_pct') is not None:
+                                    data['us10y_change_1d'] = round(float(_md['change_pct']), 2)
+                                break
+                        except Exception:
+                            pass
+            if not data.get('us_regime') or data.get('us_regime') == 'N/A':
+                data['us_regime'] = str(data.get('regime') or data.get('current_regime') or 'caution')
+            if not data.get('us_regime_confidence'):
+                data['us_regime_confidence'] = float(data.get('regime_confidence') or 0.65)
+            if not data.get('cross_asset_direction') or data.get('cross_asset_direction') == 'N/A':
+                _sp_c = float(data.get('sp500_change_1d') or 0.0)
+                _gd_c = float(data.get('gold_change_1d') or 0.0)
+                data['cross_asset_direction'] = 'risk_off' if (_sp_c < -0.3 and _gd_c >= 0) else ('risk_on' if _sp_c > 0.3 else 'neutral')
+            _vh = data.get('vix_history')
+            if isinstance(_vh, list) and len(_vh) >= 2:
+                if not data.get('vix_change_1d') and float(_vh[-2]) > 0:
+                    data['vix_change_1d'] = round((float(_vh[-1]) / float(_vh[-2]) - 1.0) * 100.0, 2)
+                if not data.get('vix_change_1m') and len(_vh) >= 21 and float(_vh[-21]) > 0:
+                    data['vix_change_1m'] = round((float(_vh[-1]) / float(_vh[-21]) - 1.0) * 100.0, 2)
+            self._ensure_root_meta(data)
+        except Exception as _merge_e:
+            logger.debug(f"  [Cache] 필드 보존 병합 참고: {_merge_e}")
         try:
             from src.utils.time_utils import now_kst
             today = now_kst().strftime('%Y-%m-%d')
@@ -1352,7 +1545,6 @@ class MarketDataBridge:
             versioned_dir = _PROJECT_ROOT / 'data' / 'versions' / today
             versioned_dir.mkdir(parents=True, exist_ok=True)
             versioned_path = versioned_dir / 'signal_cache.json'
-            primary_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
             _atomic_write(versioned_path, data)
             if primary_path.exists():
                 shutil.copy2(primary_path, _backup_path)

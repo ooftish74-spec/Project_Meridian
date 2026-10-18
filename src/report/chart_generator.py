@@ -331,7 +331,7 @@ class ChartGenerator:
             ax1.plot(p5, color='orange', linewidth=2, linestyle='--', label='5th percentile')
             ax1.plot(p95, color='green', linewidth=2, linestyle='--', label='95th percentile')
             ax1.axhline(y=initial_value, color='black', linestyle=':', linewidth=2, label='Initial Value')
-            ax1.set_title(f"{title} - Portfolio Value Over Time', fontsize=14, fontweight='bold")
+            ax1.set_title(f"{title} - Portfolio Value Over Time", fontsize=14, fontweight='bold')
             ax1.set_xlabel('Days', fontsize=12)
             ax1.set_ylabel('Portfolio Value ($)', fontsize=12)
             ax1.legend(loc='best')

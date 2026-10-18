@@ -41,14 +41,21 @@ def inspect_live_truth(as_json: bool = False):
     # Hard Enforcement of Live KIS API Fetch
     live_fetched = False
     error_msg = ""
+    holdings = {}
+    account_info = kis_data.get("account", {})
+    from datetime import datetime
+    live_date = datetime.now().strftime("%Y-%m-%d %H:%M KST")
     try:
         sys.path.insert(0, str(PROJECT_ROOT))
         from src.execution._kis_adapter import KISTraderAdapter
-        adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=True)
-        if adapter.fetch_live_balance() and adapter.positions:
+        from src.utils.file_ops import atomic_write_json
+        adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+        if adapter.fetch_live_balance():
             live_holdings = {}
             from src.utils.ticker_name_resolver import resolve_name
             for ticker, pos in adapter.positions.items():
+                if int(getattr(pos, 'quantity', 0) or 0) <= 0:
+                    continue
                 c_price = float(pos.current_price) if pos.current_price > 0 else float(pos.avg_price)
                 a_price = float(pos.avg_price) if pos.avg_price > 0 else c_price
                 ret_pct = round((c_price / a_price - 1.0) * 100.0, 2) if a_price > 0 else 0.0
@@ -56,30 +63,33 @@ def inspect_live_truth(as_json: bool = False):
                 prod_name = pos.name or resolve_name(ticker)
                 live_holdings[ticker] = {
                     'name': prod_name,
-                    'qty': pos.quantity,
+                    'qty': int(pos.quantity),
                     'avg_price': round(a_price, 2),
                     'current_price': round(c_price, 2),
                     'return_pct': ret_pct,
                     'market': mkt
                 }
-            if live_holdings:
-                holdings = live_holdings
-                from datetime import datetime
-                live_date = datetime.now().strftime("%Y-%m-%d %H:%M KST")
-                account_info = kis_data.get("account", {})
-                if hasattr(adapter, 'account') and getattr(adapter.account, 'total_equity', 0) > 0:
-                    account_info['nav'] = round(adapter.account.total_equity, 2)
-                if hasattr(adapter, 'account') and getattr(adapter.account, 'cash', 0) >= 0:
-                    account_info['cash'] = round(adapter.account.cash, 2)
-                account_info['cash_usd'] = round(getattr(adapter, 'direct_usd_cash', 0.0), 2)
-                account_info['integrated_margin_usd'] = round(getattr(adapter, 'us_cash_usd', 0.0), 2)
-                
-                kis_data['date'] = live_date
-                kis_data['account'] = account_info
-                kis_data['holdings'] = holdings
-                with open(kis_path, "w", encoding="utf-8") as f_out:
-                    json.dump(kis_data, f_out, indent=2, ensure_ascii=False)
-                live_fetched = True
+            holdings = live_holdings
+            live_fx = round(float(adapter._get_live_fx_rate() or 1353.63), 2)
+            if hasattr(adapter, 'account') and getattr(adapter.account, 'total_equity', 0) > 0:
+                account_info['nav'] = round(adapter.account.total_equity, 2)
+            if hasattr(adapter, 'account') and getattr(adapter.account, 'cash', 0) >= 0:
+                account_info['cash'] = round(adapter.account.cash, 2)
+            account_info['cash_usd'] = round(getattr(adapter, 'direct_usd_cash', getattr(adapter, 'us_cash_usd', 0.0)), 2)
+            account_info['integrated_margin_usd'] = round(
+                getattr(adapter, 'integrated_margin_usd', getattr(adapter, 'us_buying_power_usd', getattr(adapter, 'us_cash_usd', 0.0))), 2
+            )
+            account_info['fx_rate'] = live_fx
+            account_info['number'] = adapter.account_no or account_info.get('number', '44223699-01')
+            account_info['type'] = account_info.get('type', 'Main (종합 위탁)')
+
+            kis_data['date'] = live_date
+            kis_data['timestamp'] = datetime.now().isoformat()
+            kis_data['kis_mode'] = 'live'
+            kis_data['account'] = account_info
+            kis_data['holdings'] = holdings
+            atomic_write_json(kis_path, kis_data, indent=2, ensure_ascii=False)
+            live_fetched = True
     except Exception as e_live:
         error_msg = str(e_live)
         live_fetched = False

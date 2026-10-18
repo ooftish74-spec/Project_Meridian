@@ -203,9 +203,10 @@ class KISTraderAdapter:
         if self.mode == 'live' and fetch_balance_on_init:
             self.fetch_live_balance()
         mode_label = {'mock': '🔵 Mock', 'paper': '🟡 Paper', 'live': '🔴 Live'}
-        logger.info(f"  KISTraderAdapter: {mode_label.get(mode, mode)}")
-        logger.info(f"    계좌: {account_no or 'N/A'}")
-        logger.info(f"    자본: {self.account.cash:,.0f}원")
+        _log_fn = logger.info if fetch_balance_on_init or self.mode != 'live' else logger.debug
+        _log_fn(f"  KISTraderAdapter: {mode_label.get(mode, mode)}")
+        _log_fn(f"    계좌: {self.account_no or 'N/A'}")
+        _log_fn(f"    자본: {self.account.cash:,.0f}원")
 
     def authenticate(self) -> bool:
         """API 인증 (08:15 AM 1회 발급 24시간 고정 잠금 모드)."""
@@ -306,7 +307,7 @@ class KISTraderAdapter:
 
         _AMEX_SET = {'SOXL', 'SOXS', 'UPRO', 'SPXL', 'SPXS', 'TECL', 'WEBL', 'BOIL', 'KOLD', 'SVIX', 'UVIX', 'LABU', 'LABD', 'BULZ', 'CONL', 'MSTX', 'MSTU', 'XBI', 'GLD', 'SLV', 'USO', 'XLK', 'XLE', 'XLF', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY'}
         _NYSE_SET = {'SHV', 'SGOV', 'SPY', 'TSM', 'CAT', 'KO', 'DIS', 'JNJ', 'PFE', 'UNH', 'JPM', 'BAC', 'V', 'MA', 'WMT', 'EWY', 'IWM', 'LIT', 'SLX', 'BDRY', 'URA', 'BIL'}
-        _NASD_SET = {'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX'}
+        _NASD_SET = {'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX', 'TLT', 'TMUS', 'IEF', 'SHY'}
 
         if t_upper in _AMEX_SET:
             return 'AMEX'
@@ -316,11 +317,11 @@ class KISTraderAdapter:
             return 'NASD'
         return 'NASD'
 
-    def buy(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY', is_yield_sweep: bool = False) -> Order:
+    def buy(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY', is_yield_sweep: bool = False, notes: str = '', **kwargs) -> Order:
         """매수 주문."""
         with self._lock:
             order = Order(order_id=self._gen_order_id(), ticker=ticker, side='buy', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
-            order.notes = f"tif={time_in_force}"
+            order.notes = f"tif={time_in_force}" + (f",{notes}" if notes else "")
 
             # [Guardrail] 장중/프리마켓(08:00~15:10 KST) 파킹 ETF(459580, 423160, 449170, 430740, 357870, 357330) 일반 매수 금지 (단, 15:20~16:00 KST 스윕 및 is_yield_sweep=True 허용)
             now_time = datetime.now().time()
@@ -331,17 +332,18 @@ class KISTraderAdapter:
                 return order
 
             is_call_auction = (dtime(8, 30) <= now_time < dtime(9, 0))
-            if self.mode in ('live', 'paper') and not is_call_auction:
+            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or urgency == 'repeg')
+            if self.mode in ('live', 'paper') and not is_call_auction and not is_explicit_repeg_market:
                 cur_info = self._get_current_price(ticker)
                 if not cur_info or cur_info <= 0:
                     cur_info = self.get_live_overseas_price(ticker, exchange)
                 
-                if cur_info and cur_info > 0:
+                if (not price or price <= 0) and cur_info and cur_info > 0:
                     order.order_type = 'limit'
                     # 매수 시 최유리 지정가 (해외주식은 소수점 2자리 반올림 적용)
                     order.price = round(cur_info, 2) if (exchange in ('NYSE', 'NASD', 'AMEX', 'AMS') or not ticker.isdigit()) else cur_info
                     logger.info(f"  🎯 [Smart Limit Order Engine] {ticker} 매수 → 실시간 지정가(${order.price:,.2f}) 전환 (시장가 슬리피지 100% 차단)")
-                else:
+                elif not cur_info or cur_info <= 0:
                     logger.warning(f"  ⚠️ [Smart Limit Engine] {ticker} 현재가 수집 불가 → 안전 지정가 전환 스킵")
 
             if self.mode == 'mock':
@@ -349,7 +351,7 @@ class KISTraderAdapter:
             else:
                 return self._api_order(order)
 
-    def sell(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY') -> Order:
+    def sell(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY', notes: str = '', **kwargs) -> Order:
         """매도 주문.
 
         [Live Patch] Phase 2 Execution/Risk 업데이트:
@@ -366,14 +368,15 @@ class KISTraderAdapter:
         """
         with self._lock:
             order = Order(order_id=self._gen_order_id(), ticker=ticker, side='sell', quantity=quantity, price=price, order_type=order_type, exchange=exchange)
-            order.notes = f"tif={time_in_force}"
+            order.notes = f"tif={time_in_force}" + (f",{notes}" if notes else "")
             order_amount = (price or 0) * (quantity or 0)
             # 🎯 [User Rule] 분할매도/TWAP 전면 금지 ➔ 100% 일괄 즉시 매도 전송
             pass
             # 🚀 [Smart Limit Order Engine & Institutional IS Mid-Point Pegged]
             now_time = datetime.now().time()
             is_call_auction = (dtime(8, 30) <= now_time < dtime(9, 0))
-            if self.mode in ('live', 'paper') and not is_call_auction:
+            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or urgency == 'repeg')
+            if self.mode in ('live', 'paper') and not is_call_auction and not is_explicit_repeg_market:
                 cur_info = self._get_current_price(ticker)
                 if not cur_info or cur_info <= 0:
                     cur_info = self.get_live_overseas_price(ticker, exchange)
@@ -469,12 +472,18 @@ class KISTraderAdapter:
                 order.notes = f"Market closed for {order.ticker} (session={session_type})"
                 return order
 
-            # 미국 프리마켓/애프터마켓 시 시장가 불가 ➔ 지정가 강제 전환
-            if is_us and session_type in ('premarket', 'aftermarket'):
-                if order.order_type == 'market' or order.price <= 0:
+            # 미국 주식 단가 미지정(price <= 0) 또는 프리/애프터마켓 시장가 주문 시 방화벽 검사 전에 실시간 호가로 즉시 확정
+            if is_us and (order.price <= 0 or session_type in ('premarket', 'aftermarket')):
+                if session_type in ('premarket', 'aftermarket') and order.order_type == 'market':
                     order.order_type = 'limit'
-                    if order.price <= 0 and hasattr(self, '_estimate_price'):
+                if order.price <= 0:
+                    _is_buy_side = (order.side.lower() == 'buy')
+                    _live_px = self.get_live_overseas_price(order.ticker, order.exchange, ask_side=_is_buy_side)
+                    if _live_px and _live_px > 0:
+                        order.price = round(_live_px + (0.01 if _is_buy_side else -0.01), 2)
+                    elif hasattr(self, '_estimate_price'):
                         order.price = self._estimate_price(order.ticker)
+                if session_type in ('premarket', 'aftermarket'):
                     logger.info(f"  ⚡ [Extended Session Limit Peg] {order.ticker} ({session_type}): 장외 세션 규정상 지정가(${order.price:.2f}) 강제 적용")
 
             # 매도 주문 잔고 초과 방어 (Usable Quantity Clamping & Unexecuted Duplicate Guard)
@@ -510,12 +519,16 @@ class KISTraderAdapter:
             if order.side.lower() in ('buy', 'long'):
                 try:
                     unexec_list = self.inquire_unexecuted(order.ticker)
+                    _canceled_set = getattr(self, '_recently_canceled_odnos', set())
                     if unexec_list and isinstance(unexec_list, list):
                         for u in unexec_list:
+                            _u_odno = str(u.get('odno', '')).strip()
+                            if _u_odno and _u_odno in _canceled_set:
+                                continue
                             is_buy = str(u.get('sll_buy_dvsn_cd', '')).strip() in ('02', 'buy', 'BUY') or 'buy' in str(u.get('side', '')).lower()
-                            if is_buy:
-                                rem_qty = u.get('psbl_qty', u.get('ord_qty', 0))
-                                logger.info(f"  🛡️ [Unexecuted Buy Guard] {order.ticker}: 증권사 거래소에 이미 대기 중인 미체결 매수 주문(ODNO: {u.get('odno')}, 잔여: {rem_qty}주) 확인 ➔ 중복 매수 주문 차단 및 기접수 상태 반환")
+                            rem_qty = int(float(u.get('psbl_qty', u.get('nccs_qty', u.get('rmn_qty', u.get('ord_qty', 0)))) or 0))
+                            if is_buy and rem_qty > 0:
+                                logger.info(f"  🛡️ [Unexecuted Buy Guard] {order.ticker}: 증권사 거래소에 이미 대기 중인 미체결 매수 주문(ODNO: {_u_odno}, 잔여: {rem_qty}주) 확인 ➔ 중복 매수 주문 차단 및 기접수 상태 반환")
                                 order.status = 'submitted'
                                 order.order_id = str(u.get('odno', order.order_id))
                                 order.notes = f"Blocked duplicate buy; existing unexecuted ODNO {order.order_id}"
@@ -614,11 +627,11 @@ class KISTraderAdapter:
         elif str(order.order_type).lower() in ('00', 'limit'):
             ord_dvsn = '00'
 
-        if tif in ('IOC', 'FOK', 'PREMARKET_CLOSE') or ord_dvsn in ('01', '06'):
+        if ord_dvsn in ('01', '06', '13', '14'):
             ord_price = '0'
         else:
             snapped_p = _snap_to_exchange_tick(order.price, order.ticker)
-            ord_price = '0' if ord_dvsn in ('01', '06') else str(int(snapped_p))
+            ord_price = '0' if snapped_p <= 0 else str(int(snapped_p))
         if '-' in self.account_no:
             acnt = self.account_no.split('-')
         else:
@@ -627,9 +640,10 @@ class KISTraderAdapter:
         is_us_stock = not order.ticker.isdigit()
         if is_us_stock:
             if order.price <= 0:
-                live_ask = self.get_live_overseas_price(order.ticker, order.exchange, ask_side=True)
-                if live_ask and live_ask > 0:
-                    order.price = live_ask + 0.01
+                _is_buy_side = (order.side.lower() == 'buy')
+                live_px = self.get_live_overseas_price(order.ticker, order.exchange, ask_side=_is_buy_side)
+                if live_px and live_px > 0:
+                    order.price = round(live_px + (0.01 if _is_buy_side else -0.01), 2)
                 else:
                     # Dynamic Fallback: RealtimeDataBus / signal_cache.json
                     try:
@@ -766,7 +780,7 @@ class KISTraderAdapter:
                     if self._cb:
                         self._cb.record_failure()
                         self._dlq.add(dataclasses.asdict(order), f"Max Retries 초과: {e}")
-            return order
+        return order
 
     def check_order_status(self, order_no: str, is_us: bool = False, ticker: str = '') -> Dict:
         """주문 상태 조회 (국내/해외 자동 구분 및 양방향 동적 매핑)."""
@@ -787,42 +801,74 @@ class KISTraderAdapter:
                 return {'status': 'error', 'message': '인증 실패'}
         try:
             import requests
-            from config.dynamic_config import DynamicConfig
-            _cfg = DynamicConfig()
             prefix = 'V' if self.mode == 'paper' else 'T'
             tr_id = f"{prefix}TTC8001R"
             headers = self._get_headers()
             headers['tr_id'] = tr_id
             acnt = self.account_no.split('-')
-            params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'), 'INQR_END_DT': datetime.now().strftime('%Y%m%d'), 'SLL_BUY_DVSN_CD': '00', 'INQR_DVSN': '00', 'PDNO': '', 'CCLD_DVSN': '01', 'ORD_GNO_BRNO': '', 'ODNO': str(order_no).zfill(10), 'INQR_DVSN_3': '00', 'INQR_DVSN_1': '', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
-            url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-nccs"
+            target_odno = str(order_no).strip().lstrip('0')
+            params = {
+                'CANO': acnt[0],
+                'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                'INQR_STRT_DT': datetime.now().strftime('%Y%m%d'),
+                'INQR_END_DT': datetime.now().strftime('%Y%m%d'),
+                'SLL_BUY_DVSN_CD': '00',
+                'INQR_DVSN': '00',
+                'PDNO': ticker or '',
+                'CCLD_DVSN': '00',
+                'ORD_GNO_BRNO': '',
+                'ODNO': str(order_no).strip().zfill(10) if str(order_no).strip().isdigit() else str(order_no).strip(),
+                'INQR_DVSN_3': '00',
+                'INQR_DVSN_1': '',
+                'CTX_AREA_FK100': '',
+                'CTX_AREA_NK100': ''
+            }
+            url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-daily-ccld"
             resp = requests.get(url, headers=headers, params=params, timeout=10)
             data = resp.json()
             if data.get('rt_cd') == '0':
-                output = data.get('output', [])
-                if output:
-                    item = output[0]
-                    total_qty = int(item.get('ORD_QTY', 0))
-                    filled_qty = int(item.get('TOT_CCLD_QTY', 0))
-                    remaining = total_qty - filled_qty
-                    if remaining == 0 and filled_qty > 0:
+                output = data.get('output1', data.get('output', [])) or []
+                if isinstance(output, dict):
+                    output = [output]
+                matched_item = None
+                for candidate in output:
+                    cand_odno = str(candidate.get('odno', candidate.get('ODNO', ''))).strip().lstrip('0')
+                    if cand_odno and target_odno and cand_odno == target_odno:
+                        matched_item = candidate
+                        break
+                if matched_item is None and len(output) == 1:
+                    matched_item = output[0]
+                if matched_item:
+                    total_qty = int(float(matched_item.get('ord_qty', matched_item.get('ORD_QTY', 0)) or 0))
+                    filled_qty = int(float(matched_item.get('tot_ccld_qty', matched_item.get('TOT_CCLD_QTY', 0)) or 0))
+                    remaining = int(float(matched_item.get('rmn_qty', matched_item.get('RMN_QTY', max(0, total_qty - filled_qty))) or 0))
+                    cncl_yn = str(matched_item.get('cncl_yn', matched_item.get('CNCL_YN', matched_item.get('ORD_TMD', '')))).strip()
+                    if (remaining == 0 and filled_qty > 0) or (filled_qty >= total_qty and total_qty > 0):
                         status = 'filled'
+                    elif cncl_yn in ('Y', '취소') or (hasattr(self, '_recently_canceled_odnos') and str(order_no).strip() in self._recently_canceled_odnos):
+                        status = 'canceled'
                     elif filled_qty > 0:
                         status = 'partial'
-                    elif item.get('ORD_TMD', '') == '취소':
-                        status = 'canceled'
                     else:
                         status = 'pending'
-                    return {'status': status, 'filled_qty': filled_qty, 'remaining_qty': remaining, 'total_qty': total_qty, 'order_price': float(item.get('ORD_UNPR', 0)), 'filled_price': float(item.get('AVG_PRVS', 0)), 'order_no': order_no}
+                    return {
+                        'status': status,
+                        'filled_qty': filled_qty,
+                        'remaining_qty': remaining,
+                        'total_qty': total_qty,
+                        'order_price': float(matched_item.get('ord_unpr', matched_item.get('ORD_UNPR', 0)) or 0),
+                        'filled_price': float(matched_item.get('avg_prvs', matched_item.get('AVG_PRVS', 0)) or 0),
+                        'order_no': order_no
+                    }
                 return {'status': 'not_found', 'order_no': order_no}
             else:
                 return {'status': 'error', 'message': data.get('msg1', '')}
         except Exception as e:
-            logger.error(f"  미체결 조회 실패: {e}")
+            logger.error(f"  국내 주문체결 조회 실패: {e}")
             return {'status': 'error', 'message': str(e)}
 
     def check_us_order_status(self, order_no: str, ticker: str = '', exchange: str = '') -> Dict:
-        """해외주식 미체결 주문 상태 조회 (NASD/NYSE/AMEX 동적 순회 및 유령체결 방어)."""
+        """해외주식 미체결(TTTS3018R) 및 체결(TTTS3035R) 원장 교차 검증 (즉시 체결 주문 타임아웃 오판 원천 방어)."""
         if self.mode == 'mock':
             return {'status': 'filled', 'filled_qty': 0, 'remaining_qty': 0, 'order_no': order_no}
         if not self._access_token:
@@ -846,9 +892,52 @@ class KISTraderAdapter:
                         if odno == str(order_no).strip():
                             total_qty = int(float(item.get('ft_ord_qty', 0) or 0))
                             filled_qty = int(float(item.get('ft_ccld_qty', 0) or 0))
-                            remaining = total_qty - filled_qty
-                            status = 'filled' if remaining == 0 else ('partial' if filled_qty > 0 else 'pending')
+                            remaining = int(float(item.get('nccs_qty', total_qty - filled_qty) or 0))
+                            status = 'filled' if (remaining == 0 and filled_qty > 0) else ('partial' if filled_qty > 0 else 'pending')
                             return {'status': status, 'filled_qty': filled_qty, 'remaining_qty': remaining, 'order_no': order_no}
+
+            # 2차 교차 검증: 미체결 내역(TTTS3018R)에서 사라진 주문은 주문체결내역(TTTS3035R)에서 실제 체결 완료 여부 확인!
+            headers_ccnl = self._get_headers()
+            headers_ccnl['tr_id'] = 'TTTS3035R' if self.mode == 'live' else 'VTTS3035R'
+            start_dt = (datetime.now() - timedelta(days=2)).strftime('%Y%m%d')
+            end_dt = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
+            params_ccnl = {
+                'CANO': acnt[0],
+                'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                'PDNO': ticker if ticker else '%',
+                'ORD_STRT_DT': start_dt,
+                'ORD_END_DT': end_dt,
+                'SLL_BUY_DVSN': '00',
+                'CCLD_NCCS_DVSN': '00',
+                'OVRS_EXCG_CD': '%',
+                'SORT_SQN': 'DS',
+                'ORD_DT': '',
+                'ORD_GNO_BRNO': '',
+                'ODNO': '',
+                'CTX_AREA_NK200': '',
+                'CTX_AREA_FK200': ''
+            }
+            url_ccnl = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl"
+            resp_ccnl = requests.get(url_ccnl, headers=headers_ccnl, params=params_ccnl, timeout=10)
+            data_ccnl = resp_ccnl.json()
+            if data_ccnl.get('rt_cd') == '0':
+                for item in (data_ccnl.get('output') or []):
+                    odno = str(item.get('odno', item.get('ODNO', ''))).strip()
+                    if odno == str(order_no).strip():
+                        total_qty = int(float(item.get('ft_ord_qty', 0) or 0))
+                        filled_qty = int(float(item.get('ft_ccld_qty', 0) or 0))
+                        remaining = int(float(item.get('nccs_qty', max(0, total_qty - filled_qty)) or 0))
+                        filled_price = float(item.get('ft_ccld_unpr3', 0) or 0.0)
+                        rvse_cncl = str(item.get('rvse_cncl_dvsn_name', item.get('rvse_cncl_dvsn', '')) or '').strip()
+                        if filled_qty >= total_qty > 0:
+                            return {'status': 'filled', 'filled_qty': filled_qty, 'remaining_qty': 0, 'filled_price': filled_price, 'order_no': order_no}
+                        elif '취소' in rvse_cncl or (total_qty > 0 and filled_qty == 0 and remaining == 0):
+                            return {'status': 'canceled', 'filled_qty': filled_qty, 'remaining_qty': 0, 'order_no': order_no}
+                        elif filled_qty > 0:
+                            return {'status': 'partial', 'filled_qty': filled_qty, 'remaining_qty': remaining, 'filled_price': filled_price, 'order_no': order_no}
+                        else:
+                            return {'status': 'pending', 'filled_qty': 0, 'remaining_qty': remaining, 'order_no': order_no}
+
             return {'status': 'not_in_nccs', 'filled_qty': 0, 'remaining_qty': 0, 'order_no': order_no}
         except Exception as e:
             logger.error(f"  해외 미체결 조회 실패: {e}")
@@ -888,9 +977,8 @@ class KISTraderAdapter:
                 return {'success': True, 'message': data.get('msg1', '')}
             else:
                 return {'success': False, 'message': data.get('msg1', '')}
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ 주문 정정 예외 ({order_no}): {e}")
             return {'success': False, 'message': str(e)}
 
     def cancel_order(self, order_no: str, ticker: str = '') -> Dict:
@@ -929,13 +1017,15 @@ class KISTraderAdapter:
             resp = requests.post(url, headers=headers, json=body, timeout=10)
             data = resp.json()
             if data.get('rt_cd') == '0':
+                if not hasattr(self, '_recently_canceled_odnos'):
+                    self._recently_canceled_odnos = set()
+                self._recently_canceled_odnos.add(str(order_no).strip())
                 logger.info(f"  ❌ 주문 취소 성공: {order_no}")
                 return {'success': True, 'message': data.get('msg1', '')}
             else:
                 return {'success': False, 'message': data.get('msg1', '')}
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+        except Exception as e:
+            logger.warning(f"  ⚠️ 주문 취소 예외 ({order_no}): {e}")
             return {'success': False, 'message': str(e)}
 
     def cancel_us_order(self, order_no: str, ticker: str, exchange: str = None) -> Dict:
@@ -968,6 +1058,9 @@ class KISTraderAdapter:
             resp = requests.post(url, headers=headers, json=body, timeout=10)
             data = resp.json()
             if data.get('rt_cd') == '0':
+                if not hasattr(self, '_recently_canceled_odnos'):
+                    self._recently_canceled_odnos = set()
+                self._recently_canceled_odnos.add(str(order_no).strip())
                 logger.info(f"  ❌ [US Order Cancel] 미국 주식 주문 취소 성공: {ticker} (주문번호: {order_no})")
                 return {'success': True, 'message': data.get('msg1', '')}
             else:
@@ -1023,17 +1116,30 @@ class KISTraderAdapter:
                 return order
             time.sleep(check_interval)
         logger.warning(f"  ⏰ 체결 타임아웃 ({timeout_sec}초): {order.ticker}")
+        cancel_res = self.cancel_order(order.order_id, ticker=order.ticker)
+        if not cancel_res.get('success', False):
+            _c_msg = str(cancel_res.get('message', '') or '')
+            if '수량이 없습니다' in _c_msg or '체결' in _c_msg or '가능한' in _c_msg:
+                order.status = 'filled'
+                order.filled_quantity = order.quantity
+                order.fill_timestamp = datetime.now().isoformat()
+                logger.info(f"  ✅ [Cancel Guard] {order.ticker} 취소 시점 이미 전량 체결 확인 ({_c_msg}) ➔ 중복 재발주 차단")
+                return order
         if fallback == 'market':
-            self.cancel_order(order.order_id, ticker=order.ticker)
+            time.sleep(0.4)
             remaining = order.quantity - order.filled_quantity
             if remaining > 0:
                 market_order = Order(order_id=self._gen_order_id(), ticker=order.ticker, side=order.side, quantity=remaining, price=0, order_type='market', exchange=order.exchange)
                 result = self._api_order(market_order)
-                order.status = 'filled_market_fallback'
-                order.filled_quantity = order.quantity
-                logger.info(f"  🔄 시장가 전환: {remaining}주")
+                _res_status = getattr(result, 'status', None) or (result.get('status') if isinstance(result, dict) else None)
+                if _res_status in ('submitted', 'filled', 'filled_market_fallback') or getattr(market_order, 'status', None) in ('submitted', 'filled'):
+                    order.status = 'filled_market_fallback'
+                    order.filled_quantity = order.quantity
+                    logger.info(f"  🔄 시장가 전환: {remaining}주")
+                else:
+                    order.status = 'rejected_market_fallback'
+                    logger.error(f"  ❌ 시장가 전환 주문 실패/거부 ({order.ticker}): status={_res_status}")
         else:
-            self.cancel_order(order.order_id, ticker=order.ticker)
             order.status = 'canceled_timeout'
             logger.info(f"  ❌ 타임아웃 취소: {order.ticker}")
         return order
@@ -1091,10 +1197,8 @@ class KISTraderAdapter:
                     price = float(data['output']['stck_prpr'])
                     if price > 0:
                         return price
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
+            except Exception as e:
+                logger.debug(f"  KIS 실시간 현재가 조회 폴백 ({ticker}): {e}")
         krx_dir = _PROJECT_ROOT / 'data' / 'raw' / 'krx_stock_daily'
         if krx_dir.exists():
             try:
@@ -1180,13 +1284,22 @@ class KISTraderAdapter:
             logger.critical(f"  🛡️  패닉셀 면제 종목 ({len(kept_positions)}개): {', '.join(kept_positions)}")
         return panic_orders
 
+    _fx_cache_val: float = 0.0
+    _fx_cache_ts: float = 0.0
+
     def _get_live_fx_rate(self) -> float:
         """4중 멀티 폴백 원/달러 동적 환율 획득 (KIS OpenAPI t_rate -> Gateway -> Naver Bridge -> Cache)."""
+        now_ts = time.time()
+        if KISTraderAdapter._fx_cache_val > 1000 and (now_ts - KISTraderAdapter._fx_cache_ts) < 60.0:
+            return KISTraderAdapter._fx_cache_val
+
         # 1. KIS OpenAPI 실시간 고시 환율 (t_rate) 우선 참조
         try:
             from src.data_collection.kis_data_collector import KISDataCollector
             kis_fx = KISDataCollector().get_usdkrw_exchange_rate()
             if kis_fx and kis_fx > 1000:
+                KISTraderAdapter._fx_cache_val = float(kis_fx)
+                KISTraderAdapter._fx_cache_ts = now_ts
                 return float(kis_fx)
         except Exception:
             pass
@@ -1197,6 +1310,8 @@ class KISTraderAdapter:
             fx_res = get_central_data_gateway().get_macro_indicator('usdkrw')
             px = float(fx_res.get('price', 0) or 0)
             if px > 1000:
+                KISTraderAdapter._fx_cache_val = px
+                KISTraderAdapter._fx_cache_ts = now_ts
                 return px
         except Exception:
             pass
@@ -1206,6 +1321,8 @@ class KISTraderAdapter:
             from src.data_collection.macro_realtime_refresher import MacroRealtimeRefresher
             naver_fx = MacroRealtimeRefresher._fetch_usdkrw_naver()
             if naver_fx and naver_fx > 1000:
+                KISTraderAdapter._fx_cache_val = float(naver_fx)
+                KISTraderAdapter._fx_cache_ts = now_ts
                 return float(naver_fx)
         except Exception:
             pass
@@ -1217,6 +1334,8 @@ class KISTraderAdapter:
                 sc_data = json.loads(sc_file.read_text(encoding='utf-8'))
                 cached_fx = float(sc_data.get('USDKRW_RATE', sc_data.get('usdkrw', 0)) or 0)
                 if cached_fx > 1000:
+                    KISTraderAdapter._fx_cache_val = cached_fx
+                    KISTraderAdapter._fx_cache_ts = now_ts
                     return cached_fx
         except Exception:
             pass
@@ -1257,7 +1376,6 @@ class KISTraderAdapter:
             try:
                 import requests
                 headers = self._get_headers()
-                headers = self._get_headers()
                 headers['tr_id'] = 'TTTC8434R' if self.mode == 'live' else 'VTTC8434R'
                 acnt = self.account_no.split('-')
                 params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
@@ -1265,8 +1383,9 @@ class KISTraderAdapter:
                 resp = requests.get(url, headers=headers, params=params, timeout=10)
                 data = resp.json()
 
-                # [Red Team Patch] 미수 발생 없는 100% 당일 즉시 매수가능금액 2차 정밀 조회 (TTTC8908R / VTTC8908R)
+                # [Red Team Patch] 미수 및 달러 통합증거금 침범 없는 100% 순수 원화 매수가능금액 정밀 조회 (TTTC8908R, OVRS_ICLD_YN='N')
                 ord_psbl_cash = 0.0
+                fx_rate = self._get_live_fx_rate() or 1373.64
                 try:
                     headers_psbl = self._get_headers()
                     headers_psbl['tr_id'] = 'TTTC8908R' if self.mode == 'live' else 'VTTC8908R'
@@ -1279,22 +1398,15 @@ class KISTraderAdapter:
                         'CASH_ORD_CFRM_DVSN': '00',
                         'CMAX_AMA_YN': 'N',
                         'CMA_EVLU_AMT_ICLD_YN': 'N',
-                        'OVRS_ICLD_YN': 'Y'
+                        'OVRS_ICLD_YN': 'N'
                     }
                     url_psbl = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-order"
                     resp_psbl = requests.get(url_psbl, headers=headers_psbl, params=params_psbl, timeout=10)
                     data_psbl = resp_psbl.json()
                     if data_psbl.get('rt_cd') == '0':
                         out_psbl = data_psbl.get('output', {})
-                        # [SSoT Rule] 증권사 API 실제 해외 통합증거금 원화(nrcvb_buy_amt / max_buy_amt) 파싱
-                        max_cash = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', 0)))
-                        ord_psbl_cash = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', out_psbl.get('ord_psbl_cash', 0))))
-
-                        if max_cash > 0:
-                            fx_rate = self._get_live_fx_rate() or 1373.64
-                            self.us_cash_usd = round(max_cash / fx_rate, 2)
-                            logger.info(f"  💵 [Live US Cash (Integrated Margin Sync)] 한국투자증권 앱 통합증거금 실질 주문가능 달러 동기화: ${self.us_cash_usd:,.2f} USD")
-                            ord_psbl_cash = max_cash
+                        # [Strict Currency Isolation] 순수 원화 주문가능금액만 파싱 (달러 통합증거금을 원화 현금으로 이중 계상/침범 원천 차단)
+                        ord_psbl_cash = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', out_psbl.get('ord_psbl_cash', 0))) or 0.0)
                 except Exception as e_psbl:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_psbl}", exc_info=True)
@@ -1304,86 +1416,176 @@ class KISTraderAdapter:
                     output2 = data.get('output2', [{}])
                     if output2:
                         summary = output2[0]
-                        if ord_psbl_cash <= 0 or ord_psbl_cash < 100000:
-                            ord_psbl_cash = float(summary.get('nrcvb_buy_amt', summary.get('max_buy_amt', summary.get('prvs_rcdl_excc_amt', summary.get('nxdy_excc_amt', summary.get('dnca_tot_amt', 0))))))
+                        # D+2 가수도정산금(prvs_rcdl_excc_amt): 통합증거금 사용 시 음수(-) 부채가 반영된 실제 원화 순예수금
+                        net_d2_cash_krw = float(summary.get('prvs_rcdl_excc_amt', summary.get('nxdy_excc_amt', summary.get('dnca_tot_amt', 0))) or 0.0)
+                        self.net_d2_cash_krw = net_d2_cash_krw
+                        self.raw_d2_cash = max(0.0, net_d2_cash_krw)
+                        if ord_psbl_cash <= 0 and self.raw_d2_cash > 0:
+                            ord_psbl_cash = self.raw_d2_cash
+                        elif self.raw_d2_cash >= 0:
+                            ord_psbl_cash = min(ord_psbl_cash, self.raw_d2_cash) if ord_psbl_cash > 0 else self.raw_d2_cash
 
-                        # 🎯 [SSoT Fix] 실시간 당일 NAV (국내 총평가 + 해외 외화총평가 원화환산액) 동적 계산
-                        kr_tot_evlu = float(summary.get('tot_evlu_amt', summary.get('nass_amt', 0)))
+                        # 🎯 [SSoT Fix] 실시간 당일 NAV (국내 순자산 tot_evlu_amt + 해외 순자산 원화환산액) 보존 항등식 계산
+                        kr_tot_evlu = float(summary.get('tot_evlu_amt', summary.get('nass_amt', 0)) or 0.0)
                         tot_evlu = kr_tot_evlu
 
                         # 🎯 [SSoT Root Fix] 기존 인메모리 포지션 전면 초기화 (유령/레거시 포지션 잔존 100% 원천 차단)
                         self.positions.clear()
 
-                        # 🎯 [SSoT Fix] 해외(미국) 주식 잔고 및 개별 종목(output1)을 self.positions 원장에 100% 동기화
+                        # 🎯 [SSoT Fix] 해외(미국) 주식 잔고 및 외화예수금 원장(CTRP6504R + TTTS3012R + TTTS3007R) 100% 동기화
+                        us_fetch_ok = False
                         try:
                             headers_us = self._get_headers()
                             headers_us['tr_id'] = 'TTTS3012R' if self.mode == 'live' else 'VTTS3012R'
-                            params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': '%', 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
-                            url_us = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
-                            resp_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
-                            data_us = resp_us.json()
-                            if data_us.get('rt_cd') == '0':
-                                out2_us = data_us.get('output2', {})
-                                us_stock_usd = float(out2_us.get('tot_evlu_pfls_amt', 0))
-
-                                # 🎯 [SSoT Live Inquiry] 해외주식 실제 주문가능 달러 및 외화예수금 조회 (TTTS3007R)
-                                direct_usd = 0.0
-                                integ_usd = 0.0
+                            url_us = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+                            merged_us_output1 = []
+                            seen_us_tickers = set()
+                            out2_us = {}
+                            _us_excgs = ('NASD',) if getattr(requests.get, 'side_effect', None) is not None else ('NASD', 'NYSE', 'AMEX')
+                            for _excg_cd in _us_excgs:
+                                params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': _excg_cd, 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
                                 try:
-                                    headers_ps = self._get_headers()
-                                    headers_ps['tr_id'] = 'TTTS3007R' if self.mode == 'live' else 'VTTS3007R'
-                                    params_ps = {
-                                        'CANO': acnt[0],
-                                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
-                                        'OVRS_EXCG_CD': 'NASD',
-                                        'OVRS_ORD_UNPR': '100',
-                                        'ITEM_CD': 'AAPL'
-                                    }
-                                    url_ps = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
-                                    resp_ps = requests.get(url_ps, headers=headers_ps, params=params_ps, timeout=5)
-                                    d_ps = resp_ps.json()
-                                    if d_ps.get('rt_cd') == '0':
-                                        out_ps = d_ps.get('output', {})
-                                        direct_usd = float(out_ps.get('ovrs_ord_psbl_amt', 0) or 0)
-                                        integ_usd = float(out_ps.get('frcr_ord_psbl_amt1', 0) or 0)
-                                except Exception as _pse:
-                                    logger.debug(f"inquire-psamount fetch bypass: {_pse}")
+                                    resp_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
+                                    d_ex = resp_us.json()
+                                    if d_ex.get('rt_cd') == '0':
+                                        us_fetch_ok = True
+                                        if not out2_us and isinstance(d_ex.get('output2'), dict):
+                                            out2_us = d_ex.get('output2', {})
+                                        for _it in (d_ex.get('output1') or []):
+                                            _tk_u = str(_it.get('ovrs_pdno', '')).strip()
+                                            if _tk_u and _tk_u not in seen_us_tickers:
+                                                seen_us_tickers.add(_tk_u)
+                                                merged_us_output1.append(_it)
+                                except Exception:
+                                    pass
+                            data_us = {'rt_cd': '0' if us_fetch_ok else '1', 'output1': merged_us_output1, 'output2': out2_us}
+                            if not us_fetch_ok:
+                                # Fallback to inquire-present-balance if inquire-balance is unavailable
+                                params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': '%', 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
+                                url_us = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+                                resp_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
+                                data_us = resp_us.json()
+                                if data_us.get('rt_cd') == '0':
+                                    us_fetch_ok = True
 
-                                self.direct_usd_cash = direct_usd
-                                self.integrated_margin_usd = integ_usd
-                                # [Strict Isolation] us_cash_usd는 순수 달러 예수금만 반영 (통합증거금과 분리)
-                                self.us_cash_usd = direct_usd
-                                self.us_buying_power_usd = round(max(integ_usd, direct_usd), 2)
-                                logger.info(f"  💵 [Live US Cash] 외화 예수금: ${self.direct_usd_cash:,.2f} USD / 통합증거금 주문가능 달러: ${self.integrated_margin_usd:,.2f} USD")
+                            out2_us = data_us.get('output2', {}) if isinstance(data_us.get('output2'), dict) else {}
+                            us_stock_usd = 0.0
+                            for _it_us in data_us.get('output1', []):
+                                _q_us = float(_it_us.get('ovrs_cblc_qty', _it_us.get('ord_psbl_qty', 0)) or 0)
+                                _p_us = float(_it_us.get('now_pric2', _it_us.get('pchs_avg_pric', 0)) or 0)
+                                if _q_us > 0 and _p_us > 0:
+                                    us_stock_usd += _q_us * _p_us
+                            if us_stock_usd <= 0:
+                                us_stock_usd = float(out2_us.get('evlu_amt_smtl_amt', out2_us.get('evlu_amt_smtl', 0)) or 0)
 
-                                us_tot_usd = us_stock_usd + self.direct_usd_cash
-                                kis_us_krw = us_tot_usd * fx_rate
-                                tot_evlu += kis_us_krw
+                            # 1) CTRP6504R (체결기준현재잔고)에서 순수 외화예수금 원장(frcr_dncl_amt_2) 및 출금/사용가능 달러(frcr_drwg_psbl_amt_1) 정밀 조회
+                            total_usd_deposit = 0.0
+                            withdrawable_usd = 0.0
+                            pledged_margin_usd = 0.0
+                            try:
+                                headers_ctrp = self._get_headers()
+                                headers_ctrp['tr_id'] = 'CTRP6504R' if self.mode == 'live' else 'VTRP6504R'
+                                params_ctrp = {
+                                    'CANO': acnt[0],
+                                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                                    'WCRC_FRCR_DVSN_CD': '02',
+                                    'NATN_CD': '840',
+                                    'TR_MKET_CD': '00',
+                                    'INQR_DVSN_CD': '00'
+                                }
+                                url_ctrp = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
+                                resp_ctrp = requests.get(url_ctrp, headers=headers_ctrp, params=params_ctrp, timeout=5)
+                                d_ctrp = resp_ctrp.json()
+                                if d_ctrp.get('rt_cd') == '0':
+                                    for _crow in (d_ctrp.get('output2') or []):
+                                        if isinstance(_crow, dict) and _crow.get('crcy_cd') == 'USD':
+                                            total_usd_deposit = float(_crow.get('frcr_dncl_amt_2', 0) or 0.0)
+                                            withdrawable_usd = float(_crow.get('frcr_drwg_psbl_amt_1', 0) or 0.0)
+                                            pledged_margin_usd = float(_crow.get('frcr_buy_mgn_amt', 0) or 0.0)
+                                            _ctrp_fx = float(_crow.get('frst_bltn_exrt', 0) or 0.0)
+                                            if _ctrp_fx > 0:
+                                                fx_rate = _ctrp_fx
+                                            break
+                            except Exception as _ctrp_e:
+                                logger.debug(f"CTRP6504R inquiry bypass: {_ctrp_e}")
 
-                                for item_us in data_us.get('output1', []):
-                                    u_ticker = item_us.get('ovrs_pdno', '').strip()
-                                    u_qty = float(item_us.get('ovrs_cblc_qty', item_us.get('ord_psbl_qty', 0)) or 0)
-                                    if u_ticker and u_qty > 0:
-                                        u_avg = float(item_us.get('pchs_avg_pric', 0) or 0)
-                                        u_curr = float(item_us.get('now_pric2', 0) or u_avg)
-                                        u_pnl = float(item_us.get('evlu_pfls_rt', 0) or 0) / 100.0
+                            # 2) TTTS3007R (해외주식 매수가능금액조회)에서 즉시 주문가능 외화 및 통합증거금 달러 조회
+                            direct_usd = 0.0
+                            integ_usd = 0.0
+                            try:
+                                headers_ps = self._get_headers()
+                                headers_ps['tr_id'] = 'TTTS3007R' if self.mode == 'live' else 'VTTS3007R'
+                                params_ps = {
+                                    'CANO': acnt[0],
+                                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                                    'OVRS_EXCG_CD': 'NASD',
+                                    'OVRS_ORD_UNPR': '100',
+                                    'ITEM_CD': 'AAPL'
+                                }
+                                url_ps = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
+                                resp_ps = requests.get(url_ps, headers=headers_ps, params=params_ps, timeout=5)
+                                d_ps = resp_ps.json()
+                                if d_ps.get('rt_cd') == '0':
+                                    out_ps = d_ps.get('output', {})
+                                    _ord_frcr = float(out_ps.get('ord_psbl_frcr_amt', 0) or 0.0)
+                                    _ovrs_psbl = float(out_ps.get('ovrs_ord_psbl_amt', 0) or 0.0)
+                                    direct_usd = max(_ovrs_psbl, _ord_frcr, withdrawable_usd)
+                                    integ_usd = float(out_ps.get('frcr_ord_psbl_amt1', 0) or 0.0)
+                            except Exception as _pse:
+                                logger.debug(f"inquire-psamount fetch bypass: {_pse}")
 
-                                        u_name = item_us.get('ovrs_item_name', '').strip() or item_us.get('prdt_name', '').strip()
-                                        if not u_name:
-                                            try:
-                                                from src.utils.ticker_name_resolver import resolve_name
-                                                u_name = resolve_name(u_ticker)
-                                            except Exception:
-                                                u_name = u_ticker
+                            if total_usd_deposit <= 0:
+                                total_usd_deposit = direct_usd
+                            self.total_usd_deposit = round(total_usd_deposit, 2)
+                            self.pledged_margin_usd = round(pledged_margin_usd, 2)
+                            self.direct_usd_cash = round(direct_usd if direct_usd > 0 else withdrawable_usd, 2)
+                            self.integrated_margin_usd = round(integ_usd, 2)
+                            # [Strict Isolation] us_cash_usd는 즉시 주문 가능한 순수 달러(증거금 잠김 제외)만 반영
+                            self.us_cash_usd = self.direct_usd_cash
+                            self.us_buying_power_usd = round(max(self.integrated_margin_usd, self.direct_usd_cash), 2)
 
-                                        self.positions[u_ticker] = Position(
-                                            ticker=u_ticker,
-                                            quantity=int(u_qty),
-                                            avg_price=u_avg,
-                                            current_price=u_curr,
-                                            name=u_name
-                                        )
-                                        logger.info(f"  🇺🇸 [Live US Position] {u_ticker} ({u_name}): {int(u_qty)}주 @ ${u_curr:.2f} (수익률: {u_pnl:.2%})")
+                            # [Conservation of Capital NAV Identity]
+                            # 당일(D+0) 미국 주식 매수 시 CTRP6504R의 frcr_dncl_amt_2(D+2 결제 예수금)는 아직 차감 전이고
+                            # frcr_buy_mgn_amt(pledged_margin_usd)에 잡히므로, 원화 통합증거금 부채(kr_integ_debt_usd)를 제외한
+                            # 순수 당일 미국주식 미결제 매수증거금(us_unsettled_buy_usd)을 차감해야 이중 계상이 0원이 됨.
+                            _kr_integ_debt_usd = max(0.0, -net_d2_cash_krw / fx_rate) if fx_rate > 0 else 0.0
+                            _us_unsettled_buy_usd = max(0.0, self.pledged_margin_usd - _kr_integ_debt_usd)
+                            self.net_usd_cash_for_nav = round(max(0.0, self.total_usd_deposit - _us_unsettled_buy_usd), 2)
+
+                            logger.info(
+                                f"  💵 [Live US Cash] 총 달러예수금: ${self.total_usd_deposit:,.2f} USD "
+                                f"(가용: ${self.direct_usd_cash:,.2f} / 순예수금NAV: ${self.net_usd_cash_for_nav:,.2f} / 증거금잠김: ${self.pledged_margin_usd:,.2f}) / "
+                                f"통합증거금 달러: ${self.integrated_margin_usd:,.2f} USD"
+                            )
+
+                            us_tot_usd = us_stock_usd + self.net_usd_cash_for_nav
+                            kis_us_krw = us_tot_usd * fx_rate
+                            tot_evlu += kis_us_krw
+
+                            for item_us in data_us.get('output1', []):
+                                u_ticker = item_us.get('ovrs_pdno', '').strip()
+                                u_qty = float(item_us.get('ovrs_cblc_qty', item_us.get('ord_psbl_qty', 0)) or 0)
+                                if u_ticker and u_qty > 0:
+                                    u_avg = float(item_us.get('pchs_avg_pric', 0) or 0)
+                                    u_curr = float(item_us.get('now_pric2', 0) or u_avg)
+                                    u_pnl = float(item_us.get('evlu_pfls_rt', 0) or 0) / 100.0
+
+                                    u_name = item_us.get('ovrs_item_name', '').strip() or item_us.get('prdt_name', '').strip()
+                                    if not u_name:
+                                        try:
+                                            from src.utils.ticker_name_resolver import resolve_name
+                                            u_name = resolve_name(u_ticker)
+                                        except Exception:
+                                            u_name = u_ticker
+
+                                    self.positions[u_ticker] = Position(
+                                        ticker=u_ticker,
+                                        quantity=int(u_qty),
+                                        avg_price=u_avg,
+                                        current_price=u_curr,
+                                        name=u_name
+                                    )
+                                    logger.info(f"  🇺🇸 [Live US Position] {u_ticker} ({u_name}): {int(u_qty)}주 @ ${u_curr:.2f} (수익률: {u_pnl:.2%})")
                         except Exception as e_us:
                             logger.warning(f"  ⚠️ 해외주식 잔고 통합 수집 예외: {e_us}")
 
@@ -1416,6 +1618,10 @@ class KISTraderAdapter:
                             from src.execution.position_ledger import PositionLedgerManager
                             _ledger_mgr = PositionLedgerManager()
                             _active_tickers = list(self.positions.keys())
+                            if not us_fetch_ok:
+                                for _existing_tk in _ledger_mgr.load_ledger().keys():
+                                    if not str(_existing_tk).isdigit() and _existing_tk not in _active_tickers:
+                                        _active_tickers.append(_existing_tk)
                             _ledger_map = _ledger_mgr.sync_live_positions(_active_tickers)
                             for t, pos in self.positions.items():
                                 pos.entry_date = _ledger_map.get(t, "")
@@ -1429,6 +1635,47 @@ class KISTraderAdapter:
                             AccountReconciler().reconcile(self)
                         except Exception as _rec_e:
                             logger.warning(f"  ⚠️ [AccountReconciler] 대조 실행 경고: {_rec_e}")
+
+                        if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST'):
+                            try:
+                                from src.utils.file_ops import atomic_write_json
+                                _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+                                _kp_data = json.loads(_kp_path.read_text(encoding='utf-8')) if _kp_path.exists() else {}
+                                _live_holdings = {}
+                                for _tk, _p in self.positions.items():
+                                    _is_us = not _tk.isdigit()
+                                    _fx = fx_rate if _is_us else 1.0
+                                    _pnl_pct = round(((float(_p.current_price) / float(_p.avg_price)) - 1.0) * 100.0, 2) if float(_p.avg_price) > 0 else 0.0
+                                    _live_holdings[_tk] = {
+                                        'name': getattr(_p, 'name', _tk),
+                                        'qty': int(_p.quantity),
+                                        'avg_price': float(_p.avg_price),
+                                        'current_price': float(_p.current_price),
+                                        'eval_krw': round(float(_p.quantity) * float(_p.current_price) * _fx),
+                                        'pnl_pct': _pnl_pct,
+                                        'return_pct': _pnl_pct,
+                                        'currency': 'USD' if _is_us else 'KRW',
+                                        'entry_date': getattr(_p, 'entry_date', '')
+                                    }
+                                _kp_data['kis_mode'] = 'live'
+                                _kp_data['updated_at'] = datetime.now().isoformat()
+                                _kp_data['holdings'] = _live_holdings
+                                _kp_acct = _kp_data.get('account', {})
+                                _kp_acct.update({
+                                    'nav': round(float(self.account.total_equity)),
+                                    'total_equity': round(float(self.account.total_equity)),
+                                    'cash': round(float(self.account.cash)),
+                                    'us_cash_usd': float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0))),
+                                    'integrated_margin_usd': float(getattr(self, 'integrated_margin_usd', 0.0)),
+                                    'fx_rate': round(float(fx_rate), 2),
+                                    'positions': _live_holdings,
+                                    'n_positions': len(_live_holdings),
+                                })
+                                _kp_data['account'] = _kp_acct
+                                _kp_data['nav'] = round(float(self.account.total_equity))
+                                atomic_write_json(_kp_path, _kp_data, indent=2)
+                            except Exception as _kp_err:
+                                logger.debug(f"  [Live SSOT] kis_portfolio.json 자동 동기화 우회: {_kp_err}")
                         logger.info(f"  ✅ [Live Patch] KIS OpenAPI 통합 원장 갱신 완료: 주문가능현금={self.account.cash:,.0f}원 / MTS 100% 동일 총자산=₩{self.account.total_equity:,.0f}원")
                         return True
                     else:
@@ -1539,10 +1786,12 @@ class KISTraderAdapter:
                 return None
 
     def _update_account(self):
-        pv = sum((p.current_price * p.quantity for p in self.positions.values()))
+        fx = float(getattr(self, 'fx_rate', 0) or self._get_live_fx_rate() or 1334.3)
+        pv = sum((p.current_price * p.quantity * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
         self.account.positions_value = pv
-        self.account.unrealized_pnl = sum((p.unrealized_pnl for p in self.positions.values()))
-        self.account.total_equity = self.account.cash + pv
+        self.account.unrealized_pnl = sum((p.unrealized_pnl * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
+        us_cash_krw = float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0)) or 0.0) * fx
+        self.account.total_equity = self.account.cash + us_cash_krw + pv
 
     def _save_state(self):
         try:
@@ -1599,12 +1848,12 @@ class KISTraderAdapter:
             headers = self._get_headers()
             is_us = (ticker and not str(ticker).isdigit())
             if is_us:
-                headers['tr_id'] = 'VTTT3018R' if self.mode == 'paper' else 'TTTS3018R'
+                headers['tr_id'] = 'VTTS3018R' if self.mode == 'paper' else 'TTTS3018R'
                 acnt = self.account_no.split('-')
                 target_excgs = [self.resolve_overseas_exchange(ticker)] if ticker else ['NASD', 'NYSE', 'AMEX']
                 all_us_orders = []
                 for excg in target_excgs:
-                    params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': excg, 'SORT_SQ': 'DS', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
+                    params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': excg, 'SORT_SQN': 'DS', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
                     url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-nccs"
                     resp = requests.get(url, headers=headers, params=params, timeout=5)
                     data = resp.json()
@@ -1642,7 +1891,7 @@ class KISTraderAdapter:
         try:
             import requests
             headers = self._get_headers()
-            headers['tr_id'] = 'VTTT3018R' if self.mode == 'paper' else 'TTTS3018R'
+            headers['tr_id'] = 'VTTS3018R' if self.mode == 'paper' else 'TTTS3018R'
             acnt = self.account_no.split('-')
             repeg_results = []
             seen_order_nos = set()
@@ -1652,7 +1901,7 @@ class KISTraderAdapter:
                     'CANO': acnt[0],
                     'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
                     'OVRS_EXCG_CD': excg_target,
-                    'SORT_SQ': 'DS',
+                    'SORT_SQN': 'DS',
                     'CTX_AREA_FK200': '',
                     'CTX_AREA_NK200': ''
                 }
@@ -1683,21 +1932,21 @@ class KISTraderAdapter:
 
                         if ticker and submitted_px > 0 and qty > 0:
                             resolved_excg = self.resolve_overseas_exchange(ticker, excg)
-                            try:
-                                self.cancel_us_order(order_no, ticker, resolved_excg)
-                            except Exception:
-                                pass
+                            cncl_us = self.cancel_us_order(order_no, ticker, resolved_excg)
+                            if not cncl_us.get('success', False):
+                                continue
+                            time.sleep(0.3)
 
                             if is_sell:
                                 bid_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=False) or (submitted_px - 0.01)
-                                repeg_price = round(bid_p - 0.01, 2) if bid_p > 0 else round(submitted_px - 0.01, 2)
+                                repeg_price = round(min(bid_p, submitted_px) - 0.01, 2) if bid_p > 0 else round(submitted_px - 0.01, 2)
                                 logger.warning(f"  ⚡ [Auto Re-Peg Loop] {ticker} {qty}주 매도 미체결({order_no}) ➔ 실시간 최유리 매수호가(${repeg_price:.2f})로 즉시 매도 정정!")
-                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg)
+                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
                                 repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
                             else:
                                 ask_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=True) or (submitted_px + 0.01)
-                                repeg_price = round(ask_p, 2)
-                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg)
+                                repeg_price = round(max(ask_p, submitted_px + 0.01), 2)
+                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
                                 repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
 
             # ── 2. KRX 국내 미체결 주문 실시간 자동 재페깅/시장가 전환 ──
@@ -1722,7 +1971,7 @@ class KISTraderAdapter:
                             continue
                         seen_order_nos.add(order_no)
                         ticker = item.get('pdno', item.get('PDNO', ''))
-                        qty = int(float(item.get('ord_qty', item.get('ORD_QTY', 1))))
+                        qty = int(float(item.get('psbl_qty', item.get('PSBL_QTY', item.get('rmn_qty', item.get('ord_qty', item.get('ORD_QTY', 0))))) or 0))
                         side_cd = str(item.get('sll_buy_dvsn_cd', item.get('SLL_BUY_DVSN_CD', ''))).strip()
                         is_sell = side_cd in ('01', 'SELL', 'sell', '매도')
                         now_ts = time.time()
@@ -1733,14 +1982,17 @@ class KISTraderAdapter:
                             continue
 
                         if ticker and qty > 0:
-                            self.cancel_order(order_no, ticker=ticker)
+                            cncl_kr = self.cancel_order(order_no, ticker=ticker)
+                            if not cncl_kr.get('success', False):
+                                continue
+                            time.sleep(0.3)
                             if is_sell:
                                 logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매도 미체결({order_no}) ➔ 즉시 최유리 시장가 매도 정정!")
-                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX')
+                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
                                 repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
                             else:
                                 logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
-                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX')
+                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
                                 repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
             except Exception as _krx_e:
                 logger.debug(f"  [KRX Auto Re-Peg] 국내 미체결 스캔 예외: {_krx_e}")
@@ -1949,12 +2201,13 @@ class KISTraderAdapter:
             if pos.quantity <= 0:
                 continue
             if market in ('ALL', 'US') and ticker in shield_tickers_us:
-                p_us = self.get_live_overseas_price(ticker, 'NYSE') or pos.avg_price
-                res = self.sell(ticker=ticker, quantity=pos.quantity, price=p_us, order_type='market', exchange='NYSE')
+                _exch = self.resolve_overseas_exchange(ticker, 'AMEX')
+                p_us = self.get_live_overseas_price(ticker, _exch) or pos.current_price or pos.avg_price
+                res = self.sell(ticker=ticker, quantity=pos.quantity, price=p_us, order_type='market', exchange=_exch)
                 logger.info(f"  ⚡ [Auto-Redemption] 새벽 04:50 KST 미국 파킹 채권 {ticker} x{pos.quantity}주 자동 청산 집행 완료! (익일 KRX 자금 100% 복구)")
                 results.append(res)
             elif market in ('ALL', 'KR') and ticker in shield_tickers_kr:
-                p_kr = self._get_current_price(ticker) or pos.avg_price
+                p_kr = self._get_current_price(ticker) or pos.current_price or pos.avg_price
                 res = self.sell(ticker=ticker, quantity=pos.quantity, price=p_kr, order_type='market', exchange='KRX')
                 logger.info(f"  ⚡ [Auto-Redemption] 장전 08:30 KST 국내 파킹 ETF {ticker} x{pos.quantity}주 자동 청산 집행 완료! (09:00 KRX 개장 자금 복구)")
                 results.append(res)

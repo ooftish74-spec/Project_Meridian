@@ -87,17 +87,38 @@ class VendorMultiplexer:
         """[Phase 70-A] 단일 벤더에서 데이터 수집."""
         if source == 'kis_api':
             try:
-                from src.execution.kis_price_service import KISPriceService
-                svc = KISPriceService()
-                
+                from datetime import datetime as _dt, timedelta as _td
+                from src.data_collection.kis_data_collector import KISDataCollector
+                kis = KISDataCollector()
                 kis_ticker_map = {
-                    '^VIX': 'VIX', 'ES=F': 'SPX', 'NQ=F': 'COMP', 'YM=F': 'INDU', 
-                    'CL=F': 'USO', 'GC=F': 'GLD', 'DX-Y.NYB': 'UUP', '^TNX': 'IEF', 
-                    'EWY': 'EWY', 'FLKR': 'FLKR'
+                    'CL=F': 'USO', 'GC=F': 'GLD', 'DX-Y.NYB': 'UUP', '^TNX': 'IEF',
+                    'EWY': 'EWY', 'FLKR': 'FLKR',
                 }
                 mapped = kis_ticker_map.get(ticker, ticker)
-                logger.info(f"[Vendor] KIS API (1순위): {ticker} -> {mapped}")
-                # KISPriceService 시계열 기간조회 미구현 시 안전하게 다음 2순위(naver / alpha_vantage)로 전환
+                s_str = (start or (_dt.now() - _td(days=14)).strftime('%Y-%m-%d')).replace('-', '')[:8]
+                e_str = (end or _dt.now().strftime('%Y-%m-%d')).replace('-', '')[:8]
+                df_kis = None
+                if len(mapped) == 6 and mapped[0].isdigit():
+                    df_kis = kis.get_kr_daily_ohlcv(mapped, s_str, e_str)
+                elif ('KRW' in mapped.upper() and 'USD' in mapped.upper()) or mapped.upper() in ('USDKRW', 'USDKRW=X', 'DEXKOUS', 'KRW=X'):
+                    fx_rate = kis.get_usdkrw_exchange_rate()
+                    if fx_rate and fx_rate > 0:
+                        idx = pd.date_range(start or (_dt.now() - _td(days=5)).strftime('%Y-%m-%d'), end or _dt.now().strftime('%Y-%m-%d'), freq='B')
+                        if len(idx) == 0:
+                            idx = pd.DatetimeIndex([_dt.now()])
+                        return pd.Series(float(fx_rate), index=idx, name=ticker)
+                elif mapped.isalpha() and len(mapped) <= 5:
+                    df_kis = kis.get_us_daily_ohlcv(mapped, e_str)
+                if df_kis is not None and not df_kis.empty:
+                    col = field if field in df_kis.columns else ('Close' if 'Close' in df_kis.columns else df_kis.columns[-1])
+                    s_out = pd.to_numeric(df_kis[col], errors='coerce').dropna().rename(ticker)
+                    if start and end:
+                        s_slice = s_out.loc[start:end]
+                        if not s_slice.empty:
+                            s_out = s_slice
+                    if not s_out.empty:
+                        logger.info(f"[Vendor] KIS API (1순위): {ticker} -> {mapped} ({len(s_out)}건)")
+                        return s_out
                 return None
             except Exception as e:
                 logger.error(f"[Vendor] KIS API 에러 ({ticker}): {e}")
@@ -109,19 +130,23 @@ class VendorMultiplexer:
                 details = GoogleFinanceCollector.get_quote_details(ticker)
                 if details and details.get('price', 0) > 0:
                     price = float(details['price'])
+                    prev_close = float(details.get('prev_close', price) or price)
                     idx = pd.date_range(start, end, freq='B')
-                    logger.info(f"[Vendor] Google Finance Direct (1순위): {ticker} -> {price:.2f} (0-Lag T-0)")
-                    return pd.Series(price, index=idx, name=ticker)
+                    if len(idx) < 2:
+                        idx = pd.date_range(end=end, periods=2, freq='B')
+                    vals = [prev_close] * (len(idx) - 1) + [price]
+                    logger.info(f"[Vendor] Google Finance Direct (1순위): {ticker} -> {price:.2f} (prev={prev_close:.2f}, 0-Lag T-0)")
+                    return pd.Series(vals, index=idx, name=ticker)
             except Exception as e_gf:
                 logger.debug(f"[Vendor] Google Finance Quote fetch error ({ticker}): {e_gf}")
 
-        if source == 'naver' or source == 'alpha_vantage':
+        if source == 'naver':
             try:
-                if 'KRW' in ticker and 'USD' in ticker or ticker in ['USDKRW', 'USDKRW=X', 'DEXKOUS']:
+                if ('KRW' in ticker and 'USD' in ticker) or ticker in ['USDKRW', 'USDKRW=X', 'DEXKOUS', 'KRW=X']:
                     import urllib.request, json, re
                     try:
                         req_api = urllib.request.Request('https://api.stock.naver.com/marketindex/exchange/FX_USDKRW', headers={'User-Agent': 'Mozilla/5.0'})
-                        res_api = urllib.request.urlopen(req_api)
+                        res_api = urllib.request.urlopen(req_api, timeout=5)
                         data_api = json.loads(res_api.read().decode('utf-8'))
                         rate = float(data_api.get('exchangeInfo', {}).get('calcPrice', 0))
                         if rate > 0:
@@ -131,15 +156,36 @@ class VendorMultiplexer:
                     except Exception as e_api:
                         logger.debug(f"[Vendor] Naver API error: {e_api}")
                     req = urllib.request.Request('https://finance.naver.com/marketindex/', headers={'User-Agent': 'Mozilla/5.0'})
-                    html = urllib.request.urlopen(req).read().decode('euc-kr', errors='ignore')
+                    html = urllib.request.urlopen(req, timeout=5).read().decode('euc-kr', errors='ignore')
                     m = re.search(r'class="value">(.*?)</span>', html)
                     if m:
                         rate = float(m.group(1).replace(',', ''))
                         idx = pd.date_range(start, end, freq='B')
                         logger.info(f"[Vendor] Naver Real-Time Live FX (USDKRW): {rate:.2f} KRW (0% Lag)")
                         return pd.Series(rate, index=idx, name=ticker)
+                elif (len(ticker) == 6 and ticker[0].isdigit()) or ticker.upper() in ('KOSPI', 'KOSDAQ', 'KPI200'):
+                    import requests as _req, ast as _ast
+                    from datetime import datetime as _dt, timedelta as _td
+                    s_str = (start or (_dt.now() - _td(days=14)).strftime('%Y-%m-%d')).replace('-', '')[:8]
+                    e_str = (end or _dt.now().strftime('%Y-%m-%d')).replace('-', '')[:8]
+                    url = f"https://api.finance.naver.com/siseJson.naver?symbol={ticker}&requestType=1&startTime={s_str}&endTime={e_str}&timeframe=day"
+                    resp = _req.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=8)
+                    data_str = resp.text.strip()
+                    if data_str:
+                        rows = _ast.literal_eval(data_str)
+                        if len(rows) > 1:
+                            df_nv = pd.DataFrame(rows[1:], columns=[str(c).strip() for c in rows[0]])
+                            df_nv['날짜'] = pd.to_datetime(df_nv['날짜'].astype(str).str.strip(), errors='coerce')
+                            df_nv = df_nv.dropna(subset=['날짜']).set_index('날짜').sort_index()
+                            col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
+                            nv_col = col_map.get(field, '종가')
+                            if nv_col in df_nv.columns:
+                                s_nv = pd.to_numeric(df_nv[nv_col], errors='coerce').dropna().rename(ticker)
+                                if not s_nv.empty:
+                                    logger.info(f"[Vendor] Naver siseJson ({ticker}): {len(s_nv)}건")
+                                    return s_nv
             except Exception as e_naver:
-                logger.debug(f"[Vendor] Naver Real-Time FX fetch error: {e_naver}")
+                logger.debug(f"[Vendor] Naver fetch error ({ticker}): {e_naver}")
 
         if source == 'alpha_vantage':
             try:

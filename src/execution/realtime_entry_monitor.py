@@ -78,7 +78,14 @@ class RealtimeEntryMonitor:
 
         # 미국 주식(알파벳 티커)은 환율 고려 동적 환산 ($500K ~ $1M USD)
         if any(c.isalpha() for c in ticker) and not ticker.startswith('0') and not ticker.startswith('2'):
-            min_val = min_val / 1350.0
+            _fx_em = 1334.3
+            try:
+                _sc_em = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                if _sc_em.exists():
+                    _fx_em = float(json.loads(_sc_em.read_text(encoding='utf-8')).get('usdkrw') or 1334.3)
+            except Exception:
+                pass
+            min_val = min_val / max(_fx_em, 900.0)
 
         if trading_value > 0 and trading_value < min_val:
             logger.debug(f"  [EntryMonitor] {ticker} 거래대금 동적 하한선 미달 ({trading_value:,.0f} < {min_val:,.0f}) → 스킵")
@@ -164,7 +171,7 @@ class RealtimeEntryMonitor:
         return None
 
     def scan_intraday_entries(self, held_tickers: Optional[set] = None) -> List[Dict[str, Any]]:
-        """장중 5초 루프 내 호출되는 시장 전수 동적 스캔 메인 메소드."""
+        """장중 동적 스캔 메인 메소드 (진정한 20일 거래량 통계 Z-Score 기반)."""
         if held_tickers is None:
             held_tickers = set()
 
@@ -172,58 +179,18 @@ class RealtimeEntryMonitor:
         signals = []
 
         try:
-            # 배치 조회를 통해 API Rate Limit 0% 부하로 실시간 현재가 및 수급 조회
-            from pykrx import stock
-            from datetime import datetime
+            from src.data_collection.pykrx_compat import stock
+            from datetime import datetime, timedelta
             today_str = datetime.now().strftime('%Y%m%d')
+            start_str = (datetime.now() - timedelta(days=30)).strftime('%Y%m%d')
             
             for ticker in candidates:
                 if ticker in held_tickers:
-                    # ── [Phase 88-C WIRING] MathematicalAddOnFilter: 기보유 종목 동적 2차 불타기 평가 ──
-                    try:
-                        if not hasattr(self, '_addon_filter'):
-                            from src.execution.mathematical_add_on_filter import MathematicalAddOnFilter
-                            self._addon_filter = MathematicalAddOnFilter()
-
-                        df = stock.get_market_ohlcv_by_date(today_str, today_str, ticker)
-                        if df.empty:
-                            continue
-                        curr_p = float(df['종가'].iloc[-1])
-                        vol = float(df['거래량'].iloc[-1])
-                        trading_val = float(df['거래대금'].iloc[-1]) if '거래대금' in df.columns else (vol * curr_p)
-                        
-                        vwap_15m = (trading_val / max(1.0, vol)) if vol > 0 else curr_p
-                        vol_ma_dyn = max(1.0, vol * 0.85)
-
-                        is_ok, addon_reason, addon_metrics = self._addon_filter.evaluate_add_on(
-                            ticker=ticker,
-                            live_price=curr_p,
-                            vwap_15m=vwap_15m,
-                            current_volume=vol,
-                            volume_ma15=vol_ma_dyn
-                        )
-                        if is_ok:
-                            logger.info(f"  🚀 [AddOn Approved] {ticker} 2차 불타기 시그널 생성: {addon_reason}")
-                            signals.append({
-                                'ticker': ticker,
-                                'stream_id': 'S10_MEGA_TREND',
-                                'stream': 'S10_MEGA_TREND',
-                                'action': 'ADD_ON',
-                                'price': curr_p,
-                                'direction': 'long',
-                                'confidence': 0.90,
-                                'score': 2.0,
-                                'reason': addon_reason,
-                                'metrics': addon_metrics,
-                                'timestamp': time.time()
-                            })
-                    except Exception as _addon_err:
-                        logger.debug(f"Add-on eval error for {ticker}: {_addon_err}")
                     continue
 
                 try:
-                    df = stock.get_market_ohlcv_by_date(today_str, today_str, ticker)
-                    if df.empty:
+                    df = stock.get_market_ohlcv_by_date(start_str, today_str, ticker)
+                    if df.empty or len(df) < 5:
                         continue
                     curr_p = float(df['종가'].iloc[-1])
                     open_p = float(df['시가'].iloc[-1])
@@ -231,9 +198,10 @@ class RealtimeEntryMonitor:
                         continue
                     
                     vol = float(df['거래량'].iloc[-1])
-                    # 100% 동적 Volume Z-Score (고정 500,000주 하드코딩 제거)
-                    avg_vol = float(df['거래량'].mean()) if len(df) > 1 else max(1000.0, vol * 0.5)
-                    vol_zscore = min(3.0, (vol - avg_vol) / max(1.0, avg_vol)) if vol > avg_vol else 0.0
+                    hist_vols = df['거래량'].iloc[:-1].astype(float)
+                    avg_vol = float(hist_vols.mean()) if len(hist_vols) > 0 else vol
+                    std_vol = float(hist_vols.std()) if len(hist_vols) > 1 else max(1.0, avg_vol * 0.5)
+                    vol_zscore = min(3.0, (vol - avg_vol) / max(1.0, std_vol)) if vol > avg_vol else 0.0
                     trading_val = float(df['거래대금'].iloc[-1]) if '거래대금' in df.columns else (vol * curr_p)
 
                     sig = self.evaluate_ticker_breakout(ticker, curr_p, open_p, vol_zscore, trading_value=trading_val)
@@ -246,3 +214,4 @@ class RealtimeEntryMonitor:
             logger.error(f"  ❌ [EntryMonitor] 장중 동적 스캔 예외: {e}")
 
         return signals
+

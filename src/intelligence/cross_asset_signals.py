@@ -193,29 +193,35 @@ class CrossAssetSignalEngine:
                 logger.warning('[SILENT_BYPASS] Suppressed exception at cross_asset_signals.py:269', exc_info=True)
         oi = sc.get('overnight_intel', {})
         if 'SPY' not in result:
-            sp_chg = oi.get('sp500_change_pct', 0)
+            sp_chg = oi.get('sp500_change_pct', sc.get('sp500_change_1d', 0))
             if sp_chg == 0 and sc.get('sp500_change_1m'):
                 sp_chg = float(sc['sp500_change_1m']) / 21
             if sp_chg != 0:
-                result['SPY'] = {'change_pct': sp_chg, 'close': sc.get('sp500', 0)}
+                result['SPY'] = {'change_pct': float(sp_chg), 'close': sc.get('sp500', 0)}
         if 'QQQ' not in result:
-            nq_chg = oi.get('nasdaq_change_pct', 0)
+            nq_chg = oi.get('nasdaq_change_pct', sc.get('nasdaq_change_1d', 0))
             if nq_chg == 0 and sc.get('nasdaq_change_1m'):
                 nq_chg = float(sc['nasdaq_change_1m']) / 21
             if nq_chg != 0:
-                result['QQQ'] = {'change_pct': nq_chg, 'close': sc.get('nasdaq', 0)}
+                result['QQQ'] = {'change_pct': float(nq_chg), 'close': sc.get('nasdaq', 0)}
         if 'SOXX' not in result:
-            sox_chg = oi.get('sox_change_pct', sc.get('sox_change', 0))
+            sox_chg = oi.get('sox_change_pct', sc.get('sox_change_1d', sc.get('sox_change', 0)))
             if sox_chg != 0:
                 result['SOXX'] = {'change_pct': float(sox_chg)}
-        if 'GLD' not in result and sc.get('gold_us_change_1m') is not None:
-            gold_chg = float(sc['gold_us_change_1m']) / 21
-            result['GLD'] = {'change_pct': gold_chg, 'close': sc.get('gold_us', 0)}
-        if 'USO' not in result and sc.get('wti_change_1m') is not None:
-            wti_chg = float(sc['wti_change_1m']) / 21
+        if 'GLD' not in result:
+            gold_chg = sc.get('gold_change_1d', sc.get('gold_us_change_1d'))
+            if gold_chg is None and sc.get('gold_us_change_1m') is not None:
+                gold_chg = float(sc['gold_us_change_1m']) / 21
+            if gold_chg is not None:
+                result['GLD'] = {'change_pct': float(gold_chg), 'close': sc.get('gold_us', sc.get('gold', 0))}
+        if 'USO' not in result and (sc.get('wti_change_1d') is not None or sc.get('wti_change_1m') is not None):
+            wti_chg = float(sc['wti_change_1d']) if sc.get('wti_change_1d') is not None else float(sc['wti_change_1m']) / 21
             result['USO'] = {'change_pct': wti_chg, 'close': sc.get('wti', 0)}
-        if 'TLT' not in result and sc.get('us10y_change_1m') is not None:
-            tlt_chg = float(sc['us10y_change_1m']) / 21
+        if 'TLT' not in result and (sc.get('us10y_change_1d') is not None or sc.get('us10y_change_1m') is not None):
+            if sc.get('us10y_change_1d') is not None:
+                tlt_chg = -round(float(sc['us10y_change_1d']), 2)
+            else:
+                tlt_chg = -round(float(sc['us10y_change_1m']) / 21, 2)
             result['TLT'] = {'change_pct': tlt_chg, 'close': sc.get('us10y', 0)}
         if 'HYG' not in result and sc.get('vix'):
             vix = float(sc['vix'])
@@ -223,9 +229,13 @@ class CrossAssetSignalEngine:
             hyg_chg = -vix_1m / 21 * 0.3
             result['HYG'] = {'change_pct': hyg_chg, 'vix': vix}
         if 'EWY' not in result:
-            ewy_ret = oi.get('ewy_return', 0)
+            ewy_ret = oi.get('ewy_return', sc.get('ewy_change_1d', 0))
             if ewy_ret == 0:
-                usdkrw_chg = float(sc.get('usdkrw_change_1m', 0)) / 21
+                usdkrw_chg = sc.get('usdkrw_change_1d')
+                if usdkrw_chg is None:
+                    usdkrw_chg = float(sc.get('usdkrw_change_1m', 0)) / 21
+                else:
+                    usdkrw_chg = float(usdkrw_chg)
                 if usdkrw_chg != 0:
                     ewy_ret = -usdkrw_chg * 0.5
             if ewy_ret != 0:
@@ -253,14 +263,21 @@ class CrossAssetSignalEngine:
                 return 0.0
             signals = []
             weights = []
+            hy_raw = macro.get('fred_hy_spread_raw')
             hy = macro.get('fred_hy_spread')
-            if hy is not None:
+            if hy_raw is not None or hy is not None:
                 from config.dynamic_config import DynamicConfig as _DC
                 _cfg = _DC()
-                hy_raw = float(hy)
                 hy_mean = _cfg.get('cross_asset.hy_spread_long_term_mean', 5.0)
                 hy_std = _cfg.get('cross_asset.hy_spread_long_term_std', 2.0)
-                hy_zscore = (hy_raw - hy_mean) / max(hy_std, 0.01)
+                if hy_raw is not None:
+                    hy_zscore = (float(hy_raw) - hy_mean) / max(float(hy_std), 0.01)
+                else:
+                    hy_val = float(hy)
+                    if -1.0 <= hy_val <= 1.0:
+                        hy_zscore = -hy_val * 2.0
+                    else:
+                        hy_zscore = (hy_val - hy_mean) / max(float(hy_std), 0.01)
                 hy_signal = float(np.clip(-hy_zscore / 2.0, -1.0, 1.0))
                 signals.append(hy_signal)
                 weights.append(0.25)

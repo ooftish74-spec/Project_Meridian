@@ -42,6 +42,7 @@ class HMMRegimeLayer:
         self._n = n_states
         self._mdl = None
         self._ok = False
+        self._state_map = dict(self._STATE_NAMES)
         self._log = logging.getLogger(self.__class__.__name__)
 
     def fit(self, obs_df) -> bool:
@@ -55,8 +56,14 @@ class HMMRegimeLayer:
                 _hmm_rs = int(cfg.get('regime.hmm_random_state', 42))
                 m = _GaussianHMM(n_components=self._n, covariance_type='diag', n_iter=_hmm_n_iter, random_state=_hmm_rs)
                 m.fit(X)
+                ordered_names = ['bull', 'correction', 'whipsaw', 'crash']
+                vol_order = np.argsort(m.means_[:, 1])
+                self._state_map = {
+                    int(state_idx): ordered_names[min(rank, len(ordered_names) - 1)]
+                    for rank, state_idx in enumerate(vol_order)
+                }
                 self._mdl, self._ok = (m, True)
-                self._log.info(f"[Phase 74 HMM] 학습 완료: {self._n}상태 {len(X)}샘플")
+                self._log.info(f"[Phase 74 HMM] 학습 완료: {self._n}상태 {len(X)}샘플 (map={self._state_map})")
                 return True
             except Exception as e:
                 self._log.warning(f"[Phase 74 HMM] 학습 실패: {e}")
@@ -72,7 +79,8 @@ class HMMRegimeLayer:
             r = float(obs.get('kospi_return', 0.0))
             v = float(obs.get('kospi_volatility', 15.0)) / 100.0
             pp = self._mdl.predict_proba(np.array([[r, v]]))[0]
-            return {self._STATE_NAMES[i]: round(float(p), 4) for i, p in enumerate(pp)}
+            state_map = getattr(self, '_state_map', None) or self._STATE_NAMES
+            return {state_map[i]: round(float(p), 4) for i, p in enumerate(pp)}
         except Exception as e:
             self._log.debug(f"[Phase 74 HMM] predict_proba 실패: {e}")
             return default
@@ -171,23 +179,46 @@ class RegimeEngine:
             ma20 = kospi.rolling(_ma_short).mean().iloc[-1]
             ma60 = kospi.rolling(_ma_long).mean().iloc[-1]
             cur = kospi.iloc[-1]
-            m['kospi_trend'] = 'up' if cur > ma20 > ma60 else 'down' if cur < ma20 < ma60 else 'sideways'
-            m['kospi_ma20_dist'] = round((cur / ma20 - 1) * 100, 2)
-            m['kospi_ma60_dist'] = round((cur / ma60 - 1) * 100, 2)
+            ma20_dist = round((cur / ma20 - 1) * 100, 2)
+            ma60_dist = round((cur / ma60 - 1) * 100, 2)
+            if (cur > ma20 > ma60) or (cur > ma20 and cur > ma60 and ma20_dist >= 2.0):
+                m['kospi_trend'] = 'up'
+            elif (cur < ma20 < ma60) or (cur < ma20 and cur < ma60 and ma20_dist <= -2.0):
+                m['kospi_trend'] = 'down'
+            else:
+                m['kospi_trend'] = 'sideways'
+            m['kospi_ma20_dist'] = ma20_dist
+            m['kospi_ma60_dist'] = ma60_dist
         else:
             m['kospi_trend'] = 'sideways'
             m['kospi_ma20_dist'] = 0.0
             m['kospi_ma60_dist'] = 0.0
         if kospi is not None and len(kospi) >= int(cfg.get('regime.vol_min_bars', 25)):
-            ret = kospi.pct_change().dropna()
-            m['kospi_volatility'] = round(ret.tail(20).std() * np.sqrt(252) * 100, 2)
+            ret = kospi.pct_change().dropna().tail(20)
+            r_arr = ret.to_numpy(dtype=float)
+            med = float(np.median(r_arr))
+            mad_sigma = float(np.median(np.abs(r_arr - med))) * 1.4826
+            clipped_r = np.clip(r_arr, med - 2.5 * max(mad_sigma, 0.005), med + 2.5 * max(mad_sigma, 0.005))
+            ewma_var = float(clipped_r[0] ** 2)
+            for _rv in clipped_r[1:]:
+                ewma_var = 0.88 * ewma_var + 0.12 * float(_rv ** 2)
+            ewma_vol = float(np.sqrt(ewma_var) * np.sqrt(252) * 100.0)
+            mad_vol = float(mad_sigma * np.sqrt(252) * 100.0)
+            m['kospi_volatility'] = round(0.55 * mad_vol + 0.45 * ewma_vol, 2)
         else:
             m['kospi_volatility'] = 15.0
+        if kospi is not None and len(kospi) >= 2:
+            m['kospi_return'] = round(float(kospi.iloc[-1] / kospi.iloc[-2] - 1.0), 6)
+        else:
+            m['kospi_return'] = 0.0
         sc = self._load_signal_cache()
+        if m['kospi_return'] == 0.0 and sc.get('kospi_change_1d') is not None:
+            m['kospi_return'] = round(float(sc.get('kospi_change_1d', 0.0)) / 100.0, 6)
         m['usdkrw'] = float(sc.get('usdkrw', 1350))
         m['usdkrw_prev'] = float(sc.get('usdkrw_prev', m['usdkrw']))
         m['vkospi'] = float(sc.get('vkospi', 18))
         m['ois'] = float(sc.get('ois', 50))
+        m['program_net_buy'] = float(sc.get('program_net_buy', sc.get('macro_features', {}).get('program_net_buy', 0.0)) or 0.0)
         m['macro_composite'] = self._compute_macro_composite(sc)
         return m
 
@@ -257,10 +288,10 @@ class RegimeEngine:
         if macro:
             hy = macro.get('fred_hy_spread', 0)
             hy_hist = self._read_macro_history('fred_hy_spread', default_val=0.0)
-            if VolatilityScaledThreshold.is_extreme(-hy, [-h for h in hy_hist], z_score_limit=z_ext, percentile_limit=p_ext):
+            if VolatilityScaledThreshold.is_extreme(hy, hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
                 _w_hy_bull = cfg.get('regime.w_hy_bull', 0.3)
                 scores['bull'] += w_macro * _w_hy_bull
-            elif VolatilityScaledThreshold.is_extreme(hy, hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
+            elif VolatilityScaledThreshold.is_extreme(-hy, [-h for h in hy_hist], z_score_limit=z_ext, percentile_limit=p_ext):
                 _w_hy_bear = cfg.get('regime.w_hy_bear', 0.4)
                 _w_hy_crash = cfg.get('regime.w_hy_crash', 0.2)
                 scores['bear'] += w_macro * _w_hy_bear
@@ -558,14 +589,21 @@ class RegimeEngine:
         scores.append(vix_z)
         weights.append(cfg.get('regime.weight_vix_comp', 0.2))
         macro = sc.get('macro_features', {})
-        hy = macro.get('fred_hy_spread', 0)
+        hy_raw = macro.get('fred_hy_spread_raw')
+        hy = macro.get('fred_hy_spread')
         credit_stress = macro.get('credit_stress', 0)
         hy_baseline = cfg.get('regime.hy_baseline', 5.0)
         hy_std_val = cfg.get('regime.hy_baseline_std', 2.0)
-        if hy_baseline and hy_std_val:
-            hy_z = (hy - hy_baseline) / max(hy_std_val, 0.1)
+        if hy_raw is not None:
+            hy_z = (float(hy_raw) - hy_baseline) / max(float(hy_std_val), 0.01)
+        elif hy is not None:
+            hy_val = float(hy)
+            if -1.0 <= hy_val <= 1.0:
+                hy_z = -hy_val * 2.0
+            else:
+                hy_z = (hy_val - hy_baseline) / max(float(hy_std_val), 0.01)
         else:
-            hy_z = hy * 2.0
+            hy_z = 0.0
         credit_z = np.clip(hy_z + credit_stress * 3.0, -3, 3)
         scores.append(credit_z)
         weights.append(cfg.get('regime.weight_credit_comp', 0.15))
@@ -578,7 +616,7 @@ class RegimeEngine:
         scores.append(ois_z)
         weights.append(cfg.get('regime.weight_ois_comp', 0.1))
         event_adj = float(sc.get('event_confidence_adj', 0))
-        event_z = event_adj * 3.0
+        event_z = max(-3.0, min(3.0, -event_adj * 3.0))
         scores.append(event_z)
         weights.append(cfg.get('regime.weight_event_comp', 0.1))
         vkospi = float(sc.get('vkospi', 18))

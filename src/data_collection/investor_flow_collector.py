@@ -183,13 +183,19 @@ class InvestorFlowCollector:
         """
         df = None
         try:
-            parquet_path = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
-            if parquet_path.exists():
-                _df = pd.read_parquet(parquet_path)
-                if len(_df) >= 20:
-                    if 'close' in _df.columns and 'volume' in _df.columns:
-                        _df = _df.rename(columns={'close': 'Close', 'volume': 'Volume', 'open': 'Open', 'high': 'High', 'low': 'Low'})
-                        df = _df
+            parquet_candidates = [
+                _PROJECT_ROOT / 'data' / 'korea_stocks' / 'prices' / f'{ticker}.parquet',
+                _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
+            ]
+            for parquet_path in parquet_candidates:
+                if parquet_path.exists():
+                    _df = pd.read_parquet(parquet_path)
+                    if len(_df) >= 20:
+                        col_map = {c: c.capitalize() for c in _df.columns if c.lower() in ('close', 'volume', 'open', 'high', 'low')}
+                        _df = _df.rename(columns=col_map)
+                        if 'Close' in _df.columns and 'Volume' in _df.columns:
+                            df = _df
+                            break
             if df is None:
                 csv_paths = sorted((_PROJECT_ROOT / 'data' / 'versions').glob(f"*/historical/korea_stocks/{ticker}.csv"), reverse=True)
                 if not csv_paths:
@@ -200,7 +206,7 @@ class InvestorFlowCollector:
                         break
             if df is None:
                 return None
-            KR = {'종가': 'Close', '거래량': 'Volume', '시가': 'Open', '고가': 'High', '저가': 'Low'}
+            KR = {'종가': 'Close', '거래량': 'Volume', '시가': 'Open', '고가': 'High', '저가': 'Low', 'close': 'Close', 'volume': 'Volume', 'open': 'Open', 'high': 'High', 'low': 'Low'}
             df.rename(columns=KR, inplace=True)
             if 'Close' not in df.columns or 'Volume' not in df.columns:
                 return None

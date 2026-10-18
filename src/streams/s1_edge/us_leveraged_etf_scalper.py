@@ -99,8 +99,8 @@ class USLeveragedETFScalper:
 
             if regime_lower in ('bull', 'bull_strong') and ticker_upper in bull_tickers:
                 return False, f"🟢 [Bull Regime] {ticker_upper} Long ETP 오버나이트 보유 허용 (Chandelier Exit 추적)"
-            elif regime_lower in ('bear', 'bear_strong') and ticker_upper in bear_tickers:
-                return False, f"🔴 [Bear Regime] {ticker_upper} Short ETP 오버나이트 보유 허용 (Inverse Chandelier Exit 추적)"
+            elif regime_lower in ('bear', 'bear_strong', 'crash') and ticker_upper in bear_tickers:
+                return False, f"🔴 [Bear/Crash Regime] {ticker_upper} Short ETP 오버나이트 보유 허용 (Inverse Chandelier Exit 추적)"
             elif regime_lower in ('caution', 'sideways') and exemption_enabled and ticker_upper in bull_tickers:
                 if confidence >= min_conf and vix <= vix_max:
                     return False, f"⚡ [Caution Exemption Auto-Calibrated] {ticker_upper} High-Conviction (Conf={confidence:.2f}>={min_conf:.2f}, VIX={vix:.1f}<={vix_max:.1f}) Long ETP 부분 오버나이트 허용"
@@ -145,8 +145,8 @@ class USLeveragedETFScalper:
                 regime_ok = False
             regime_fail_msg = "Bull/Caution Exemption 레짐 미달 또는 VIX > 18.5"
         else:
-            regime_ok = regime.lower() in ('bear', 'bear_strong') and vix >= 20.0
-            regime_fail_msg = "Bear 레짐 미달 또는 VIX < 20.0"
+            regime_ok = regime.lower() in ('bear', 'bear_strong', 'crash') and vix >= 20.0
+            regime_fail_msg = "Bear/Crash 레짐 미달 또는 VIX < 20.0"
 
         vwap_ok = live_price >= vwap_15m if is_bull_target else live_price <= vwap_15m
         vp_ok = volume_power >= self.min_volume_power

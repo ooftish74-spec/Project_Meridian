@@ -85,7 +85,7 @@ class TransactionCostFilter:
                     total_turnover += abs(delta)
                     trades[sid] = {'delta': round(delta, 4), 'trade_value': round(trade_value, 0), 'reason': 'execute'}
         total = sum(adjusted.values())
-        if total > 0:
+        if total > 1.0:
             adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
         trade_cost = total_turnover * portfolio_value * tx_cost_rate
         should = total_turnover > 0
@@ -93,7 +93,7 @@ class TransactionCostFilter:
 
         # ETP Dynamic Friction Multiplier Check
         is_etp_trade = any(
-            sid in ['S1', 'S2', 'S5', 'S10', 'S11', 'TQQQ', 'SQQQ', '233740', '252670', 'SOXL', 'SOXS']
+            sid in ['S0', 'S1', 'S2', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA', 'TQQQ', 'SQQQ', '233740', '252670', 'SOXL', 'SOXS', 'SH']
             for sid in current_weights.keys() | target_weights.keys()
         )
         if is_etp_trade:
@@ -148,6 +148,8 @@ class TurnoverLimiter:
         if disable_static_cap:
             return {'allowed': True, 'reason': 'ok (pure_dynamic_alpha_friction_mode)', 'daily_count': daily_count, 'monthly_count': monthly_count, 'limit_reached': False}
 
+        limit_reached = False
+        reason = 'ok'
         if daily_count >= max_daily:
             limit_reached = True
             reason = f"daily_limit ({daily_count}/{max_daily})"
@@ -234,7 +236,7 @@ class PortfolioOptimizer:
 
     def __init__(self):
         from config.dynamic_config import DynamicConfig as _DC
-        self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
         self._tx_filter = TransactionCostFilter()
         self._turnover = TurnoverLimiter()
 
@@ -360,12 +362,19 @@ class PortfolioOptimizer:
         if cash_pct and 'S4' in result:
             result['S4'] = round(result['S4'] + remaining, 4)
         total = sum(result.values())
-        if total > 0:
+        if total > 1.0:
             result = {k: round(v / total, 4) for k, v in result.items()}
         return result
 
+    def load_aligned_returns(self, tickers: List[str], lookback_days: int = 60):
+        """[L3-14] Load and date-align returns across KR (`data/kr_markets/`) and US (`data/us_stocks/prices/`) parquet files."""
+        from src.allocation.qp_portfolio_optimizer import QPortfolioOptimizer
+        return QPortfolioOptimizer(lookback_days=lookback_days).load_aligned_returns(tickers, lookback_days=lookback_days)
+
     def _check_cvar(self, stream_metrics: Dict, weights: Dict[str, float]) -> Dict:
         """CVaR 제약 검증."""
+        import numpy as np
+        import pandas as pd
         max_cvar = cfg.get('optimizer.max_cvar_pct', cfg.get('risk.target_cvar_pct', -0.03))
         returns_list = []
         weight_list = []
@@ -374,12 +383,20 @@ class PortfolioOptimizer:
             sm = stream_metrics.get(sid, {})
             daily_r = sm.get('daily_returns', [])
             if daily_r:
-                returns_list.append(daily_r)
+                clean_r = np.nan_to_num(np.asarray(daily_r, dtype=float), nan=0.0, posinf=0.0, neginf=0.0).tolist()
+                returns_list.append(clean_r)
                 weight_list.append(weights.get(sid, 0))
                 stream_order.append(sid)
         if len(returns_list) < 2:
             logger.warning(f"  [CVaR검사] 데이터 부족 (stream {len(returns_list)}개 — 최소 2개 필요): CVaR 제약 무력화. 주의 필요.")
             return {'violated': False, 'reason': 'insufficient_data', 'warning': 'cvar_check_skipped_no_data'}
+        # [L3-14] Align mismatched return series lengths via DataFrame / common window before column_stack
+        min_len = min(len(r) for r in returns_list)
+        if min_len > 0:
+            returns_list = [r[-min_len:] for r in returns_list]
+        else:
+            df_aligned = pd.DataFrame({i: pd.Series(r) for i, r in enumerate(returns_list)}).ffill().fillna(0.0)
+            returns_list = [df_aligned[i].tolist() for i in range(len(returns_list))]
         try:
             from src.risk.cvar_optimizer import CVaROptimizer
             cvar_opt = CVaROptimizer()
@@ -396,7 +413,7 @@ class PortfolioOptimizer:
                     if sid not in adjusted:
                         adjusted[sid] = weights.get(sid, 0)
                 total = sum(adjusted.values())
-                if total > 0:
+                if total > 1.0:
                     adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
                 return {'violated': True, 'cvar_pct': cvar_pct, 'max_cvar': max_cvar, 'adjusted_weights': adjusted, 'improvement': opt_result.get('improvement_pct', 0)}
             return {'violated': False, 'cvar_pct': cvar_pct, 'max_cvar': max_cvar}
@@ -498,7 +515,7 @@ class PortfolioOptimizer:
         ic_scale = cfg.get('m6.ic_conviction_scale', 5.0)
         max_passive = cfg.get('m6.max_passive_pct', 0.3)
         min_passive = cfg.get('m6.min_passive_pct', 0.0)
-        benchmark_etf = cfg.get('m6.benchmark_etf", "069500')
+        benchmark_etf = cfg.get('m6.benchmark_etf', '069500')
         ic_values = []
         try:
             me_file = _RESULTS / 'measurement_engine.json'
@@ -549,7 +566,7 @@ class PortfolioOptimizer:
                         deploy_to.append({'target': None, 'stream': sid, 'amount': round(per_stream), 'type': 'active_excess_cash'})
                 cash_drag_action = 'deploy'
                 logger.info(f"  💰 M6 Cash Drag: excess=₩{excess_cash:,.0f}, deploy=₩{deployable:,.0f} (passive={passive_pct:.0%}, active={active_pct:.0%})")
-        result = {'passive_pct': round(passive_pct, 4), 'active_pct': round(active_pct, 4), 'conviction': round(active_conviction, 4), 'ic_mean': round(sum(ic_values) / len(ic_values), 4) if ic_values else None, 'benchmark_etf": benchmark_etf, "cash_drag_action': cash_drag_action, 'excess_cash': round(excess_cash), 'deploy_to': deploy_to}
+        result = {'passive_pct': round(passive_pct, 4), 'active_pct': round(active_pct, 4), 'conviction': round(active_conviction, 4), 'ic_mean': round(sum(ic_values) / len(ic_values), 4) if ic_values else None, 'benchmark_etf': benchmark_etf, 'cash_drag_action': cash_drag_action, 'excess_cash': round(excess_cash), 'deploy_to': deploy_to}
         try:
             out = _RESULTS / 'passive_allocation.json'
             atomic_write_json(out, result, indent=2, ensure_ascii=False, default=str)

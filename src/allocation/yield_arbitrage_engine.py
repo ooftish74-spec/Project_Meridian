@@ -62,7 +62,7 @@ class MultiAssetYieldArbitrageEngine:
             'SGOV': 'iShares 0-3 Month Treasury Bond ETF (US)'
         }
 
-        logger.info(
+        logger.debug(
             f"  💵 [Yield Arbitrage] 최적 무위험 파킹 자산: {asset_names[optimal_asset]} ({optimal_asset}) "
             f"-> 기대 연 수익률 {optimal_yield:.2f}% (Idle Cash 0% 보존)"
         )

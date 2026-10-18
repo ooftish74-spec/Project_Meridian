@@ -85,7 +85,7 @@ class TransitionSignalDetector:
             result = detector.detect(market_data)
             v_signal = {}
             trans_probs = {}
-            if 'hmm_regime' in result and result.get('method') == 'ensemble':
+            if result.get('hmm_regime') is not None:
                 trans_probs = detector.get_transition_probs()
                 v_signal = {'regime': result.get('hmm_regime'), 'transition_probs': trans_probs}
             signal_type = 'none'
@@ -217,15 +217,39 @@ class TransitionSignalDetector:
         """파일에서 시장 데이터 로드."""
         data = {'signal_cache': {}, 'kospi_returns': [], 'vix_history': []}
         try:
+            scalar_vix = 20.0
             cache_f = _RESULTS / 'signal_cache.json'
             if cache_f.exists():
                 cache = json.loads(cache_f.read_text())
                 data['signal_cache'] = cache
                 from src.utils.metric_parser import parse_vix; vix = parse_vix(cache, 20.0)
                 if isinstance(vix, list):
-                    data['vix_history'] = vix
+                    data['vix_history'] = [float(x) for x in vix]
                 else:
-                    data['vix_history'] = [float(vix)] * 60
+                    scalar_vix = float(vix)
+                    if isinstance(cache.get('vix_history'), list) and len(cache['vix_history']) >= 30:
+                        data['vix_history'] = [float(x) for x in cache['vix_history']]
+                if isinstance(cache.get('kospi_returns'), list) and len(cache['kospi_returns']) > 0:
+                    data['kospi_returns'] = [float(x) for x in cache['kospi_returns']]
+            if len(data['vix_history']) < 30:
+                import pandas as pd
+                vix_pq = _PROJECT_ROOT / 'data' / 'signals' / 'signal_vix.parquet'
+                if vix_pq.exists():
+                    vix_df = pd.read_parquet(vix_pq)
+                    col = 'Close' if 'Close' in vix_df.columns else ('close' if 'close' in vix_df.columns else vix_df.columns[0])
+                    data['vix_history'] = vix_df[col].dropna().astype(float).tail(252).tolist()
+                elif not data['vix_history']:
+                    data['vix_history'] = [scalar_vix]
+            if len(data['kospi_returns']) < 30:
+                import pandas as pd
+                for pq_rel in ('data/historical_10y/kr_069500.parquet', 'data/kr_markets/kr_069500.parquet', 'data/signals/signal_kospi200.parquet'):
+                    pq_f = _PROJECT_ROOT / pq_rel
+                    if pq_f.exists():
+                        k_df = pd.read_parquet(pq_f)
+                        col = 'Close' if 'Close' in k_df.columns else ('close' if 'close' in k_df.columns else None)
+                        if col and len(k_df) > 30:
+                            data['kospi_returns'] = k_df[col].astype(float).pct_change().dropna().tail(252).tolist()
+                            break
         except Exception as _e_ts:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_e_ts}", exc_info=True)

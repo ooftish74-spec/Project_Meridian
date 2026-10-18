@@ -34,7 +34,7 @@ def _get_etf_universe() -> List[str]:
         try:
             raw = json.loads(cache_file.read_text(encoding='utf-8'))
             universe = raw.get('universe', raw if isinstance(raw, dict) else {})
-            _etf_types = {'etf", "bond_etf", "index_etf", "inverse_etf", "leveraged_etf", "ETF', 'KR_ETF'}
+            _etf_types = {'etf', 'bond_etf', 'index_etf', 'inverse_etf', 'leveraged_etf', 'ETF', 'KR_ETF'}
             for ticker, info in universe.items():
                 if isinstance(info, dict):
                     asset_type = info.get('type', info.get('asset_type', ''))

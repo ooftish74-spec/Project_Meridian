@@ -15,7 +15,7 @@ class BOKEcosCollector:
         from src.utils.credential_manager import CredentialManager
         self.api_key = CredentialManager().read_from_env('BOK_API_KEY')
         if not self.api_key:
-            logger.warning("BOK_API_KEY가 존재하지 않습니다. ECOS API 호출이 실패할 수 있습니다.")
+            logger.debug("BOK_API_KEY 미설정 — ECOS API 직접 호출 스킵 (대체 소스 사용).")
         self.base_url = "http://ecos.bok.or.kr/api/StatisticSearch"
 
     def _call_api(self, stat_code: str, freq: str, start_date: str, end_date: str, item_code1: str = "?", item_code2: str = "?", item_code3: str = "?", limit: int = 1000) -> Optional[List[Dict]]:

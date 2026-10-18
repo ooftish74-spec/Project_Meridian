@@ -56,14 +56,21 @@ class IntradayCapitalRouter:
         return round(ev_adj, 4)
 
     def rank_signals_by_ev_adj(self, signals: List[Dict[str, Any]], market_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """[Step 1] EV_adj 실시간 랭킹 산출."""
+        """[Step 1] EV_adj 실시간 랭킹 산출 (무하드코딩 동적 장벽 연동)."""
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
         ranked = []
         for sig in signals:
+            ticker = str(sig.get('ticker', '')).strip()
+            _barriers = _dqe.compute_dynamic_exit_barriers(ticker) if ticker else {}
             win_rate = float(sig.get('win_rate', sig.get('confidence', 0.55)))
-            tp = float(sig.get('tp_pct', 2.0))
-            sl = float(sig.get('sl_pct', 1.0))
-            ticker = sig.get('ticker', '')
-            atr_pct = float(market_data.get('ticker_atr_pct', {}).get(ticker, market_data.get('atr_pct', 1.5)))
+            tp = float(sig.get('tp_pct', _barriers.get('take_profit_pct', 2.0)))
+            sl = abs(float(sig.get('sl_pct', abs(_barriers.get('stop_loss_pct', 1.0)))))
+            atr_pct = float(
+                market_data.get('ticker_atr_pct', {}).get(
+                    ticker, market_data.get('atr_pct', _barriers.get('sigma_daily_pct', 1.5))
+                )
+            )
 
             ev_adj = self.compute_ev_adj(win_rate, tp, sl, atr_pct)
             sig_copy = dict(sig)
@@ -111,6 +118,9 @@ class IntradayCapitalRouter:
         if not signals:
             return []
 
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+
         # 작업용 복사본 생성
         working_signals = [dict(s) for s in signals]
         cancelled_indices = set()
@@ -140,10 +150,31 @@ class IntradayCapitalRouter:
                 # 조건 1: 동일 종목 상충 (Long vs Short)
                 same_ticker_conflict = (t1 == t2) and (side1 != side2)
 
-                # 조건 2: 역방향 ETF 상충 (예: KODEX 200 롱 vs KODEX 인버스 롱)
-                inverse_conflict = (self.INVERSE_PAIR_MAP.get(t1) == t2) and (side1 == 'buy' and side2 == 'buy')
+                # 조건 2: 역방향 ETF 상충 (정적 매핑 + 경험적 베타 부호 반대 β1 * β2 <= -0.75)
+                _m1 = _dqe.get_asset_metrics(t1)
+                _m2 = _dqe.get_asset_metrics(t2)
+                _same_mkt = (t1.isalpha() == t2.isalpha())
+                _beta_conflict = (
+                    _same_mkt
+                    and (_m1.get('beta', 1.0) * _m2.get('beta', 1.0) <= -0.75)
+                    and (_m1.get('corr', 0.5) * _m2.get('corr', 0.5) <= -0.45)
+                )
+                inverse_conflict = ((self.INVERSE_PAIR_MAP.get(t1) == t2) or _beta_conflict) and (side1 == 'buy' and side2 == 'buy')
 
                 if same_ticker_conflict or inverse_conflict:
+                    # 마켓-뉴트럴 페어 전략의 인버스 헤지 레그가 방향성 롱 신호를 죽이지 않도록 방어
+                    _strat1 = str(s1.get('strategy', '')).lower()
+                    _strat2 = str(s2.get('strategy', '')).lower()
+                    if inverse_conflict and ('pair' in _strat1 or 'pair' in _strat2):
+                        _is_inv1 = (_m1.get('beta', 1.0) < 0) or (t1 in ('114800', '252670', '251340'))
+                        _is_inv2 = (_m2.get('beta', 1.0) < 0) or (t2 in ('114800', '252670', '251340'))
+                        if _is_inv1 and 'pair' in _strat1 and not _is_inv2:
+                            cancelled_indices.add(i)
+                            break
+                        if _is_inv2 and 'pair' in _strat2 and not _is_inv1:
+                            cancelled_indices.add(j)
+                            continue
+
                     # 확신도 및 요청 자본에 기반한 유효 노출(Exposure) 연산
                     has_amt1 = 'amount_krw' in s1 or 'target_amount' in s1
                     has_amt2 = 'amount_krw' in s2 or 'target_amount' in s2
@@ -376,6 +407,18 @@ class IntradayCapitalRouter:
             market_data['holdings_ev'] = holdings_ev
 
         routed_signals = []
+        rem_cash_krw = float(total_cash_krw)
+        _existing_held = set()
+        if portfolio and isinstance(portfolio, dict):
+            for _src_k in ('holdings', 'positions'):
+                _src_d = portfolio.get(_src_k) or {}
+                if isinstance(_src_d, dict):
+                    for _hk, _hv in _src_d.items():
+                        _ht = (_hv.get('ticker') if isinstance(_hv, dict) else None) or str(_hk).split(':')[-1]
+                        _hq = int((_hv.get('qty', _hv.get('quantity', 0)) if isinstance(_hv, dict) else 0) or 0)
+                        if _ht and _hq > 0:
+                            _existing_held.add(str(_ht).upper())
+
         from src.data_collection.central_data_gateway import CentralDataGateway
         dyn_fx = CentralDataGateway().get_usdkrw_rate()
         for sig in ranked_signals:
@@ -384,6 +427,34 @@ class IntradayCapitalRouter:
             _raw_tk = str(sig.get('ticker', '')).strip()
             _ALIAS = {'430740': '423160', '357330': '357870'}
             ticker = _ALIAS.get(_raw_tk, _raw_tk)
+
+            if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and str(ticker).upper() in _existing_held:
+                logger.info(f"  🛡️ [Router Position Guard] {ticker}: 이미 보유 중인 종목 ➔ 중복 추가 매수 스킵")
+                continue
+
+            # [Cross-Market Inverse Bridge] KRX 휴장 + US 개장 시간대에 발생한 KRX 인버스/곱버스 신호를 US 인버스 ETF(SQQQ/SOXS/SH)로 자동 전환
+            if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and str(ticker).isdigit():
+                from src.utils.market_calendar import is_ticker_tradable_now
+                _kr_ok, _ = is_ticker_tradable_now(ticker)
+                if not _kr_ok:
+                    _us_ok, _ = is_ticker_tradable_now('SQQQ')
+                    if _us_ok:
+                        _KR_TO_US_INVERSE_MAP = {
+                            '252670': ('SQQQ', 'ProShares UltraPro Short QQQ'),
+                            '251340': ('SQQQ', 'ProShares UltraPro Short QQQ'),
+                            '114800': ('SH', 'ProShares Short S&P500'),
+                        }
+                        if ticker == '390390' and ('SHORT' in tactic or 'INVERSE' in tactic or '인버스' in str(sig.get('name', ''))):
+                            _mapped_us = ('SOXS', 'Direxion Daily Semiconductor Bear 3X Shares')
+                        else:
+                            _mapped_us = _KR_TO_US_INVERSE_MAP.get(ticker)
+                        if _mapped_us:
+                            logger.info(f"  🌐 [Cross-Market Inverse Bridge] KRX 휴장 & US 개장 감지: {ticker} ➔ {_mapped_us[0]} ({_mapped_us[1]}) 자동 전환")
+                            ticker = _mapped_us[0]
+                            sig['name'] = _mapped_us[1]
+                            sig['market'] = 'US'
+                            sig['price'] = 0.0  # US 실시간 현재가 재조회 강제
+
             sig['ticker'] = ticker
 
             # [Pure Dynamic Math] 연속 로지스틱 시그모이드 자본 할당 비율
@@ -397,9 +468,12 @@ class IntradayCapitalRouter:
 
             alloc_ratio = round(1.0 / (1.0 + math.exp(-(sig_ev_score - 0.5 + factor_drive))), 4)
             alloc_ratio = max(0.15, min(0.85, alloc_ratio))
+            if enforce_session_gate or market_data.get('enforce_session_gate', False):
+                _sig_sz = float(sig.get('size_pct', 0.15) or 0.15)
+                alloc_ratio = min(alloc_ratio, max(0.05, min(0.20, _sig_sz)))
 
             alloc_ratio *= synergy_mult
-            alloc_cash = min(total_cash_krw, total_cash_krw * alloc_ratio)
+            alloc_cash = min(rem_cash_krw, total_cash_krw * alloc_ratio)
             price = float(sig.get('price', 0.0) or 0.0)
             if price <= 1.0:
                 # 1. market_data 실시간 가격 우선 조회
@@ -491,6 +565,7 @@ class IntradayCapitalRouter:
                 sig['direction'] = 'long'
                 sig['amount_krw'] = capped_qty * eff_price_krw
                 sig['allocated_cash'] = capped_qty * eff_price_krw
+                rem_cash_krw = max(0.0, rem_cash_krw - capped_qty * eff_price_krw)
                 routed_signals.append(sig)
             else:
                 sig_ev = float(sig.get('ev_adj', 0.5))

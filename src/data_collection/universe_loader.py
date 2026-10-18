@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_KR_TICKER_RE = re.compile('^\\d{5}[0-9KLM]$')
+_KR_TICKER_RE = re.compile('^\\d{4}[0-9A-Z]{2}$')
 _FALLBACK_TICKERS = ['005930', '000660', '035420', '005380', '051910']
 _cache = {'tickers': None, 'names': None, 'stocks': None, 'etfs': None, 'us': None, 'meta': {}}
 
@@ -133,14 +133,54 @@ def _ensure_loaded():
     try:
         from config.universe import Universe
         univ = Universe()
-        for t, item in list(univ.A1_DIRECTIONAL.items()) + list(univ.A2_SECTORS.items()):
-            tickers.append(t)
-            names[t] = getattr(item, 'name', t)
-            stocks.append(t)
-            if tickers:
-                logger.debug(f'  유니버스: investable_universe.json ({len(tickers)}종목)')
-                _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                return
+        etf_items = (
+            list(univ.A1_DIRECTIONAL.values())
+            + list(univ.A2_SECTORS.values())
+            + list(univ.ASSET_ALLOCATION.values())
+            + list(univ.SLEEVE_B_ETFS.values())
+        )
+        for item in etf_items:
+            tk = str(getattr(item, 'ticker', '')).strip()
+            if tk and tk not in etfs:
+                etfs.append(tk)
+                if tk not in tickers:
+                    tickers.append(tk)
+                names[tk] = getattr(item, 'name', tk)
+                meta[tk] = {'market': 'KRX', 'type': 'etf'}
+
+        res_dyn = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
+        if res_dyn.exists():
+            raw_list = json.loads(res_dyn.read_text())
+            if isinstance(raw_list, list):
+                for tk in raw_list:
+                    tk_str = str(tk).strip()
+                    if not tk_str:
+                        continue
+                    if _KR_TICKER_RE.match(tk_str):
+                        if tk_str not in etfs and tk_str not in stocks:
+                            stocks.append(tk_str)
+                        if tk_str not in tickers:
+                            tickers.append(tk_str)
+                    elif tk_str.isalpha():
+                        if tk_str not in us:
+                            us.append(tk_str)
+                        if tk_str not in tickers:
+                            tickers.append(tk_str)
+
+        kr_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+        if kr_dir.exists():
+            for pf in sorted(kr_dir.glob('kr_*.parquet')):
+                tk_str = pf.stem.replace('kr_', '')
+                if _KR_TICKER_RE.match(tk_str):
+                    if tk_str not in etfs and tk_str not in stocks:
+                        stocks.append(tk_str)
+                    if tk_str not in tickers:
+                        tickers.append(tk_str)
+
+        if stocks and etfs:
+            logger.debug(f'  유니버스 (merged): KR {len(stocks)} + ETF {len(etfs)} + US {len(us)}종목')
+            _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
+            return
     except Exception as _e:
         logger.warning(f'  suppressed: {_e}', exc_info=True)
     path0 = _PROJECT_ROOT / 'results' / 'kospi200_universe.json'
@@ -231,3 +271,26 @@ def reload():
     """캐시 초기화 → 다음 호출 시 재로딩."""
     for k in _cache:
         _cache[k] = None if k != 'meta' else {}
+
+
+def load_universe() -> Dict:
+    """하위 호환용 유니버스 딕셔너리 반환 (etf_categories 포함)."""
+    _ensure_loaded()
+    etf_tickers = {tk: {'name': get_ticker_name(tk) or tk} for tk in (_cache.get('etfs') or [])}
+    return {
+        'tickers': list(_cache.get('tickers') or []),
+        'stocks': list(_cache.get('stocks') or []),
+        'etfs': list(_cache.get('etfs') or []),
+        'us': list(_cache.get('us') or []),
+        'etf_categories': {'kr_etfs': {'tickers': etf_tickers}},
+    }
+
+
+class UniverseLoader:
+    """유니버스 로더 객체 인터페이스."""
+
+    def get_universe_tickers(self, stocks_only: bool=False, include_etf: bool=True, market: str='ALL') -> List[str]:
+        return get_universe_tickers(stocks_only=stocks_only, include_etf=include_etf, market=market)
+
+    def load_universe(self) -> Dict:
+        return load_universe()

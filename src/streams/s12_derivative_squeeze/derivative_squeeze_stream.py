@@ -93,13 +93,21 @@ class S12DerivativeSqueezeStream(BaseStream):
             )
             logger.info(f"  {reason}")
 
+            _raw_sl = float(cfg.get('s12.sl_pct', 3.0))
+            _raw_tp = float(cfg.get('s12.tp_pct', 6.0))
+            norm_sl_pct = abs(_raw_sl) * 100.0 if 0 < abs(_raw_sl) < 0.5 else abs(_raw_sl)
+            norm_tp_pct = _raw_tp * 100.0 if 0 < _raw_tp < 0.5 else _raw_tp
+
             signal = {
                 'stream_id': self.stream_id,
                 'ticker': target_ticker,
                 'name': f"S12 파생 스퀴즈 숏 알파 ({target_ticker})",
                 'direction': 'long',
+                'size_pct': float(cfg.get('s12.default_size_pct', 0.25)),
                 'confidence': round(confidence, 3),
                 'strategy': 'derivative_squeeze_short_alpha',
+                'sl_pct': norm_sl_pct,
+                'tp_pct': norm_tp_pct,
                 'target_price': None,
                 'stop_loss_price': None,
                 'reason': reason,
@@ -118,17 +126,23 @@ class S12DerivativeSqueezeStream(BaseStream):
         return getattr(self, '_positions', [])
 
     def get_performance(self) -> Dict:
-        """성과 지표 반환."""
+        """성과 지표 반환 (실측 수익률 기반 동적 승률 산출, 거래 기록 부재 시 중립 사전확률 0.50)."""
         daily_pnl = getattr(self, '_daily_pnl', [])
         signals = getattr(self, '_signals', [])
         positions = getattr(self, '_positions', [])
+        n_obs = len(daily_pnl)
+        if n_obs > 0:
+            wins = sum(1 for r in daily_pnl if r > 0)
+            emp_win_rate = (wins + 2.5) / (n_obs + 5.0)
+        else:
+            emp_win_rate = 0.50
         return {
             'stream_id': self.stream_id,
             'daily_returns': daily_pnl,
             'cumulative_return_pct': sum(daily_pnl) if daily_pnl else 0.0,
             'sharpe': 1.5 if daily_pnl else None,
             'max_drawdown_pct': 0.0,
-            'win_rate': 1.0,
+            'win_rate': round(emp_win_rate, 4),
             'total_trades': len(signals),
             'active_positions': len(positions),
         }

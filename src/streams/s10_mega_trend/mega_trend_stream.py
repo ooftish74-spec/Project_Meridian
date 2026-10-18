@@ -151,16 +151,16 @@ class S10MegaTrendStream(BaseStream):
                 _usdkrw = float(_cache.get('usdkrw', 1350.0))
                 _usdkrw_prev = float(_cache.get('usdkrw_prev', 1350.0))
                 
-                # VIX 연동 가변 방어막 (Dynamic TP/SL)
+                # VIX 연동 가변 방어막 (Dynamic TP/SL, %p 단위로 정규화)
                 if _vix < 15.0:
-                    dyn_tp = 0.30
-                    dyn_sl = 0.10
+                    dyn_tp = 30.0
+                    dyn_sl = 10.0
                 elif _vix < 20.0:
-                    dyn_tp = 0.15
-                    dyn_sl = 0.05
+                    dyn_tp = 15.0
+                    dyn_sl = 5.0
                 else:
-                    dyn_tp = 0.05
-                    dyn_sl = 0.025
+                    dyn_tp = 5.0
+                    dyn_sl = 2.5
                     
                 # [Red Team 2] 3D Local Panic Index (LPI) 오버나이트 거부
                 # 미장(VIX)뿐만 아니라 한국 장(VKOSPI)과 환율(USD/KRW) 쇼크를 수학적으로 통합
@@ -193,7 +193,7 @@ class S10MegaTrendStream(BaseStream):
                     })
                     logger.info(
                         f"    [S10] BUY {name}({ticker}) "
-                        f"size={size_pct:.1%} conf={sig['confidence']:.2f} (TP:{dyn_tp*100:.1f}%, SL:{dyn_sl*100:.1f}%)"
+                        f"size={size_pct:.1%} conf={sig['confidence']:.2f} (TP:{dyn_tp:.1f}%, SL:{dyn_sl:.1f}%)"
                     )
                 elif sig['action'] == 'exit':
                     signals.append({
@@ -410,7 +410,7 @@ class S10MegaTrendStream(BaseStream):
         ]
 
     def get_performance(self) -> Dict:
-        return {'sharpe': 0.0, 'win_rate': 0.5, 'total_return': 0.0, 'score': 1.0}
+        return self._compute_standard_performance()
 
     def get_positions(self) -> List[Dict]:
-        return []
+        return list(self._positions)

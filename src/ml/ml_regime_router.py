@@ -194,7 +194,7 @@ class MLRegimeRouter:
         info['val_auc'] = self._meta.get(f"{regime_key}_val_auc", 0.0)
         info['val_acc'] = self._meta.get(f"{regime_key}_val_acc", 0.0)
         info['train_samples'] = self._meta.get(f"{regime_key}_train_samples", 0)
-        info['trained_at'] = self._meta.get(f"{regime_key}_trained_at', 'N/A")
+        info['trained_at'] = self._meta.get(f"{regime_key}_trained_at", 'N/A')
         return info
 
     def clear_cache(self):

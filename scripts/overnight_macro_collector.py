@@ -308,21 +308,29 @@ def compute_kospi_gap_estimate(overnight: dict, sgx_proxy: dict,
       순야간정보 = EWY변화 - 전일KOSPI변화
       KOSPI 갭 ≈ 순야간정보 × 0.5 + 미국선물 × 0.3 + VIX보정
     """
-    ewy_chg = 0
+    ewy_chg = 0.0
+    try:
+        ewy_pq = PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / 'EWY.parquet'
+        if ewy_pq.exists():
+            df_ewy = pd.read_parquet(ewy_pq)
+            df_ewy.columns = [str(c).lower() for c in df_ewy.columns]
+            if 'close' in df_ewy.columns and len(df_ewy) >= 2:
+                ewy_chg = (float(df_ewy['close'].iloc[-1]) / float(df_ewy['close'].iloc[-2]) - 1) * 100
+    except Exception as _e_ewy:
+        logger.debug(f"  EWY parquet load note: {_e_ewy}")
     
     us_changes = [v['change_pct'] for v in us_futures.values() if 'change_pct' in v]
     us_avg = sum(us_changes) / len(us_changes) if us_changes else 0
     
     # ★ 전일 KOSPI 변화 로드 (이미 반영된 정보 차감)
-    prev_kospi_chg = 0
+    prev_kospi_chg = 0.0
     try:
-        from pykrx import stock as pykrx_stock
-        from datetime import datetime as _dt, timedelta as _td
-        _end = _dt.now().strftime('%Y%m%d')
-        _start = (_dt.now() - _td(days=10)).strftime('%Y%m%d')
-        df = pykrx_stock.get_market_ohlcv_by_date(_start, _end, '069500')  # KODEX200
-        if len(df) >= 2:
-            prev_kospi_chg = (float(df['종가'].iloc[-1]) / float(df['종가'].iloc[-2]) - 1) * 100
+        k200_pq = PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
+        if k200_pq.exists():
+            df = pd.read_parquet(k200_pq)
+            df.columns = [str(c).lower() for c in df.columns]
+            if 'close' in df.columns and len(df) >= 2:
+                prev_kospi_chg = (float(df['close'].iloc[-1]) / float(df['close'].iloc[-2]) - 1) * 100
     except Exception as _e:
         logger.warning(f"  suppressed: {_e}")
     

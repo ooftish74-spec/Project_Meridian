@@ -50,11 +50,15 @@ class S11HighBetaSniperStream(BaseStream):
         global_signals = market_data.get('global_signals', {}) if market_data else {}
 
         # ── Level 1. [Direction]: 르네상스 Lead-Lag 시차 알파 (동적 리스크 패리티 가중치 적용) ──
-        # Fallback to macro_cache / macro_realtime_refresher if global_signals empty
+        # Fallback to macro_cache / signal_cache (night futures + premarket leaders + US indices) if global_signals empty
         macro_cache = market_data.get('macro_cache', {}) if market_data else {}
-        tsm_change = float(global_signals.get('TSM', {}).get('change_pct', macro_cache.get('TSM', {}).get('change_pct', market_data.get('macro_proxy', {}).get('tsm_chg_1d_pct', 0.8))))
-        nvda_change = float(global_signals.get('NVDA', {}).get('change_pct', macro_cache.get('NVDA', {}).get('change_pct', market_data.get('macro_proxy', {}).get('nvda_chg_1d_pct', 0.76))))
-        nq_change = float(global_signals.get('NQ=F', {}).get('change_pct', macro_cache.get('NQ=F', {}).get('change_pct', market_data.get('macro_proxy', {}).get('nq_chg_1d_pct', 1.21))))
+        _ois_comp = signal_cache.get('ois_details', {}).get('components', {}) if isinstance(signal_cache.get('ois_details'), dict) else {}
+        _premarket_gap = float(_ois_comp.get('nxt_premarket', {}).get('gap_pct', 0.0) or 0.0)
+        _night_fut_chg = float(signal_cache.get('night_futures_change_1d', _ois_comp.get('krx_night_futures', {}).get('raw', {}).get('change_pct', 0.0)) or 0.0)
+        _nq_cache_chg = float(signal_cache.get('nasdaq_change_1d', signal_cache.get('sp500_change_1d', 0.0)) or 0.0)
+        tsm_change = float(global_signals.get('TSM', {}).get('change_pct', macro_cache.get('TSM', {}).get('change_pct', market_data.get('macro_proxy', {}).get('tsm_chg_1d_pct', _night_fut_chg))))
+        nvda_change = float(global_signals.get('NVDA', {}).get('change_pct', macro_cache.get('NVDA', {}).get('change_pct', market_data.get('macro_proxy', {}).get('nvda_chg_1d_pct', _premarket_gap))))
+        nq_change = float(global_signals.get('NQ=F', {}).get('change_pct', macro_cache.get('NQ=F', {}).get('change_pct', market_data.get('macro_proxy', {}).get('nq_chg_1d_pct', _nq_cache_chg))))
         kospi_indicative = float(signal_cache.get('KOSPI_INDICATIVE_PCT', signal_cache.get('kospi_indicative_pct', 0.0)))
 
         # [Dynamic Mathematical Model] 자산별 변동성 역수 가중치 (Inverse Volatility Risk Parity)
@@ -70,7 +74,7 @@ class S11HighBetaSniperStream(BaseStream):
         lead_lag_score = (w_tsm * tsm_change) + (w_nvda * nvda_change) + (w_nq * nq_change) - kospi_indicative
 
         # [Institutional Benchmark] 르네상스/시타델 스타일 문턱 유연화 (Dynamic Threshold Relaxation)
-        vkospi_val = float(signal_cache.get('VKOSPI', signal_cache.get('vkospi', 18.0)))
+        vkospi_val = max(1.0, float(signal_cache.get('VKOSPI', signal_cache.get('vkospi', 18.0)) or 18.0))
         dynamic_threshold = max(0.20, min(0.50, 0.015 * vkospi_val))  # 기존 0.50% -> 0.25% 수준으로 완화!
 
         direction = "neutral"
@@ -156,13 +160,18 @@ class S11HighBetaSniperStream(BaseStream):
         # [Red Team Guardrail] 손실 방지 비대칭 손익비 & 극소 손절 수식 (Tight -0.8% SL / 2.0x TP)
         tight_sl_pct = float(_cfg.get('offensive.tight_sl_pct', -0.008))
         target_tp_pct = float(_cfg.get('offensive.target_tp_pct', 0.016))
+        norm_sl_pct = abs(tight_sl_pct) * 100.0 if 0 < abs(tight_sl_pct) < 0.5 else abs(tight_sl_pct)
+        norm_tp_pct = target_tp_pct * 100.0 if 0 < target_tp_pct < 0.5 else target_tp_pct
+        norm_conf = round(max(0.0, min(1.0, position_scale / max_pos_scale if max_pos_scale > 1.0 and position_scale > 1.0 else position_scale)), 2)
+        default_size_pct = round(max(0.05, min(1.0, position_scale / max_pos_scale if max_pos_scale > 0 else 0.25)), 4)
 
         signal = {
             'stream_id': self.stream_id,
             'ticker': target_ticker,
             'name': target_name,
             'direction': 'long',  # ETF 구매 방향 (곱버스 매수도 long으로 표현)
-            'confidence': round(position_scale, 2),
+            'size_pct': default_size_pct,
+            'confidence': norm_conf,
             'expected_value': round(base_ev, 5),
             'strategy': 'orthogonal_leadlag_ofi_voltarget',
             'lead_lag_score': round(lead_lag_score, 2),
@@ -173,6 +182,8 @@ class S11HighBetaSniperStream(BaseStream):
             'call_skew_boost_mult': round(skew_boost_mult, 2),
             'pyramid_mult': round(pyramid_mult, 2),
             'option_b_swap_required': True,  # 옵션 B: S0 KOFR 동적 차출 및 스왑 요청
+            'sl_pct': norm_sl_pct,
+            'tp_pct': norm_tp_pct,
             'redteam_tight_sl_pct': tight_sl_pct,
             'redteam_target_tp_pct': target_tp_pct,
             'asymmetric_rr_ratio': round(abs(target_tp_pct / tight_sl_pct), 2),
@@ -191,8 +202,11 @@ class S11HighBetaSniperStream(BaseStream):
                 'ticker': vol_etn_ticker,
                 'name': '신한 블룸버그 2X 천연가스/변동성 ETN',
                 'direction': 'long',
+                'size_pct': float(_s11_cfg.get('s11.track_c_size_pct', 0.25)),
                 'confidence': 0.90,
                 'expected_value': 0.025,
+                'sl_pct': norm_sl_pct,
+                'tp_pct': norm_tp_pct,
                 'strategy': 's11_track_c_vkospi_mean_reversion',
                 'reason': f"VKOSPI Panic Extremum Reversion (Z={vkospi_zscore:.2f}σ)"
             })
@@ -204,14 +218,21 @@ class S11HighBetaSniperStream(BaseStream):
         return self._positions
 
     def get_performance(self) -> Dict:
-        """성과 지표 반환."""
+        """성과 지표 반환 (실측 수익률 기반 동적 승률 산출, 거래 기록 부재 시 중립 사전확률 0.50)."""
+        n_obs = len(self._daily_pnl)
+        if n_obs > 0:
+            wins = sum(1 for r in self._daily_pnl if r > 0)
+            # Laplace-Beta(2.5, 2.5) 경험적 베이즈 수축으로 소표본 과적합(100% 승률 독점) 방지
+            emp_win_rate = (wins + 2.5) / (n_obs + 5.0)
+        else:
+            emp_win_rate = 0.50
         return {
             'stream_id': self.stream_id,
             'daily_returns': self._daily_pnl,
             'cumulative_return_pct': sum(self._daily_pnl) if self._daily_pnl else 0.0,
             'sharpe': 1.5 if self._daily_pnl else None,
             'max_drawdown_pct': 0.0,
-            'win_rate': 1.0,
+            'win_rate': round(emp_win_rate, 4),
             'total_trades': len(self._signals),
             'active_positions': len(self._positions),
         }

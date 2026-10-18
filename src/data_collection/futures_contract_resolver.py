@@ -53,20 +53,36 @@ class DynamicFuturesContractResolver:
         2030: 'Z',
     }
 
+    MONTH_CODE_MAP = {
+        1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6',
+        7: '7', 8: '8', 9: '9', 10: 'A', 11: 'B', 12: 'C',
+    }
+
     @classmethod
-    def to_kis_code(cls, code: str) -> str:
-        """F202612 / f202612 형식의 코드를 KIS OpenAPI 선물 종목코드(101V12 또는 10100000)로 변환."""
+    def to_kis_code(cls, code: str, short: bool = True, krx_standard: bool = False) -> str:
+        """F202609 / F202612 형식의 코드를 KIS OpenAPI 선물 종목코드(101V09 / 101V12) 또는 KRX 표준 코드(101V9 / 101VC000)로 변환."""
         if not code:
             return '10100000'
         code_upper = str(code).strip().upper()
         if code_upper.startswith('101'):
+            if code_upper == '10100000':
+                return code_upper
+            if krx_standard and len(code_upper) == 6 and code_upper[4:6].isdigit():
+                m_int = int(code_upper[4:6])
+                m_char = cls.MONTH_CODE_MAP.get(m_int, str(m_int))
+                base = f"{code_upper[:4]}{m_char}"
+                return base if short else f"{base}000"
             return code_upper
         if code_upper.startswith('F') and len(code_upper) >= 7:
             try:
                 year = int(code_upper[1:5])
-                month = code_upper[5:7]
+                month_int = int(code_upper[5:7])
                 letter = cls.YEAR_LETTER_MAP.get(year, 'V')
-                return f"101{letter}{month}"
+                if krx_standard:
+                    m_code = cls.MONTH_CODE_MAP.get(month_int, str(month_int))
+                    base = f"101{letter}{m_code}"
+                    return base if short else f"{base}000"
+                return f"101{letter}{month_int:02d}"
             except Exception:
                 pass
         return '10100000'

@@ -80,20 +80,22 @@ class S5S10PromotionEngine:
             return val * 2.0 # Default scaling
 
         z_futures = get_z(night_futures_chg, hist_futures)
-        z_vix = get_z(-vix_afterhours_chg, hist_vix_chg) # VIX drop is bullish
+        z_vix = -get_z(vix_afterhours_chg, hist_vix_chg) # VIX drop is bullish
         z_us = get_z(us_momentum_chg, hist_us_mom)
 
         ois_z = float((z_futures + z_vix + z_us) / math.sqrt(3.0))
         p_ois = float(norm_cdf(ois_z))
+        p_ois_bear = float(norm_cdf(-ois_z))
 
-        # Dynamic Threshold calculation from config CDF (default 0.70)
+        # Dynamic Threshold calculation from config CDF (default 0.70, i.e., ois_z >= ~0.524)
         p_threshold = float(self._get_cfg('s5.ois_entry_probability_threshold', 0.70))
         is_entry_approved = bool(p_ois >= p_threshold)
+        is_inverse_entry_approved = bool(p_ois_bear >= p_threshold)
 
         # Dynamic Square-Root Volatility Position Sizing
         vix_baseline = float(self._get_cfg('s5.vix_baseline', 18.0))
         vol_scale = float(math.sqrt(max(0.1, vix_baseline / max(current_vix, 1.0))))
-        final_size_multiplier = float(p_ois * vol_scale)
+        final_size_multiplier = float(max(p_ois, p_ois_bear) * vol_scale)
 
         # Globex Premarket Early Exit Calibration Trigger (06:00 AM KST)
         globex_chg = float(market_snapshot.get('globex_futures_chg_pct', 0.0))
@@ -106,6 +108,7 @@ class S5S10PromotionEngine:
             'ois_zscore': ois_z,
             'p_ois_probability': p_ois,
             'is_entry_approved': is_entry_approved,
+            'is_inverse_entry_approved': is_inverse_entry_approved,
             'volatility_scale': vol_scale,
             'final_size_multiplier': final_size_multiplier,
             'globex_zscore': z_globex,
