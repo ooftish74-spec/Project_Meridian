@@ -48,7 +48,7 @@ RSYNC_EXCLUDES=(
 )
 
 GIT_SHA="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-GIT_DIRTY="$(git -C "$PROJECT_DIR" status --porcelain -- src scripts config tests dashboard 2>/dev/null | grep -v 'kis_token' | wc -l | tr -d ' ')"
+GIT_DIRTY="$(git -C "$PROJECT_DIR" status --porcelain -- src scripts config tests dashboard 2>/dev/null | { grep -v 'kis_token' || true; } | wc -l | tr -d ' ')"
 TS="$(date +%Y%m%d_%H%M%S)"
 
 echo "=================================================="
@@ -100,8 +100,14 @@ echo "[3/6] Stopping live trader daemon..."
 
 # ── [5] Upload code only ──────────────────────────────────────────────
 echo "[4/6] Uploading code..."
-rsync -az --itemize-changes "${RSYNC_EXCLUDES[@]}" -e "ssh -i $KEY_PATH -o BatchMode=yes" \
-  "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/" | grep -E '^[<>c]f' || true
+RSYNC_LOG="$(mktemp)"
+if ! rsync -az --itemize-changes "${RSYNC_EXCLUDES[@]}" -e "ssh -i $KEY_PATH -o BatchMode=yes" \
+  "$PROJECT_DIR/" "$EC2_USER@$EC2_IP:$REMOTE_DIR/" > "$RSYNC_LOG"; then
+  echo "❌ Upload failed — rolling back to $BACKUP_FILE"
+  "$PROJECT_DIR/scripts/rollback_aws.sh" "$BACKUP_FILE"
+  exit 1
+fi
+grep -E '^[<>c]f' "$RSYNC_LOG" || true
 "${SSH[@]}" "cd '$REMOTE_DIR' && find . -name '__pycache__' -type d -prune -exec rm -rf {} + ; \
   echo '{\"commit\": \"$GIT_SHA\", \"deployed_at\": \"$TS\", \"backup\": \"$BACKUP_FILE\"}' > DEPLOYED_VERSION"
 
