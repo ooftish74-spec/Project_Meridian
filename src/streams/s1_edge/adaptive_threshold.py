@@ -34,6 +34,11 @@ Academic References:
     - Mandelbrot (1963): Fat tails — 정규분포 가정의 한계
     - Ang & Chen (2002): Asymmetric correlations — 비대칭 상관
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -135,15 +140,15 @@ class AdaptiveThreshold:
         ois_short = ois_thresholds['short'] + base_short_shift * tanh_scale
         ois_long = max(self.OIS_LONG_FLOOR, min(self.OIS_LONG_CEILING, ois_long))
         ois_short = max(self.OIS_SHORT_FLOOR, min(self.OIS_SHORT_CEILING, ois_short))
-        min_friction = _cfg.get('adaptive_threshold.min_friction_cost', 0.1)
+        min_friction = pget('adaptive_threshold.min_friction_cost', 0.1)
         gap_threshold = max(min_friction, min(self.GAP_CEILING, gap_threshold))
         band_width = ois_long - ois_short
         if band_width < self.MIN_NEUTRAL_BAND:
             deficit = (self.MIN_NEUTRAL_BAND - band_width) / 2.0
             ois_long = min(self.OIS_LONG_CEILING, ois_long + deficit)
             ois_short = max(self.OIS_SHORT_FLOOR, ois_short - deficit)
-        kelly_shrinkage = float(_cfg.get('adaptive_threshold.single_stock.kelly_shrinkage', 0.5))
-        beta = float(_cfg.get('adaptive_threshold.single_stock.beta_floor', 0.8))
+        kelly_shrinkage = float(pget('adaptive_threshold.single_stock.kelly_shrinkage', 0.5))
+        beta = float(pget('adaptive_threshold.single_stock.beta_floor', 0.8))
         idio_vol = vix_scale * (1.0 - 1.0 / (1.0 + beta))
         single_min = max(0.52, min(0.68, 0.5 + kelly_shrinkage * idio_vol))
         single_max_inv = max(0.25, min(0.45, 0.5 - kelly_shrinkage * idio_vol))
@@ -189,7 +194,7 @@ class AdaptiveThreshold:
         except Exception:
             _dqe_vix_base = 18.0
         vix_baseline = float(_cfg.get('adaptive_threshold.vix_baseline', _dqe_vix_base))
-        elasticity = float(_cfg.get('adaptive_threshold.vix_log_elasticity', 0.5))
+        elasticity = float(pget('adaptive_threshold.vix_log_elasticity', 0.5))
         log_ratio = math.log(vix / max(vix_baseline, 1.0))
         raw_scale = 1.0 + max(0.0, log_ratio) * elasticity
         return max(1.0, raw_scale)
@@ -241,7 +246,7 @@ class AdaptiveThreshold:
           adaptive_threshold.min_friction_cost  (default 0.10)
         """
         n = len(self._us_change_history)
-        min_friction = float(_cfg.get('adaptive_threshold.min_friction_cost', 0.1))
+        min_friction = float(pget('adaptive_threshold.min_friction_cost', 0.1))
         if n >= 20:
             window = self._us_change_history[-self.PERCENTILE_WINDOW:]
             abs_changes = sorted((abs(x) for x in window))
@@ -311,7 +316,7 @@ class AdaptiveThreshold:
         if us_change is None:
             us_change = self._us_change_history[-1] if self._us_change_history else 0.0
         if vix is None or vix <= 0:
-            vix = self._vix_history[-1] if self._vix_history else float(_cfg.get('adaptive_threshold.vix_baseline', 18.0))
+            vix = self._vix_history[-1] if self._vix_history else float(pget('adaptive_threshold.vix_baseline', 18.0))
         if pcr is None or pcr <= 0:
             pcr = self._pcr_history[-1] if self._pcr_history else 1.0
         if sentiment is None:

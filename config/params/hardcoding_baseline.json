@@ -1,0 +1,1764 @@
+{
+ "version": 1,
+ "generated_at": "2026-10-18T23:20:38+00:00",
+ "roots": [
+  "src",
+  "scripts"
+ ],
+ "ratchet": "current totals must be <= baseline totals for every category (see --check)",
+ "totals": {
+  "kr_ticker_literals": 731,
+  "us_ticker_literals": 473,
+  "threshold_literals": 1853,
+  "fallback_literals": 703
+ },
+ "total_all": 3760,
+ "allowed_pragmas": 48,
+ "n_files_scanned": 323,
+ "parse_errors": [],
+ "files": {
+  "scripts/stream_orchestrator.py": {
+   "kr_ticker_literals": 47,
+   "us_ticker_literals": 47,
+   "threshold_literals": 30,
+   "fallback_literals": 35,
+   "allowed": 0
+  },
+  "src/utils/dynamic_quant_engine.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 135,
+   "fallback_literals": 16,
+   "allowed": 0
+  },
+  "scripts/train_ensemble.py": {
+   "kr_ticker_literals": 10,
+   "us_ticker_literals": 27,
+   "threshold_literals": 48,
+   "fallback_literals": 60,
+   "allowed": 0
+  },
+  "src/execution/_kis_adapter.py": {
+   "kr_ticker_literals": 16,
+   "us_ticker_literals": 76,
+   "threshold_literals": 40,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/data/market_data_bridge.py": {
+   "kr_ticker_literals": 31,
+   "us_ticker_literals": 16,
+   "threshold_literals": 65,
+   "fallback_literals": 15,
+   "allowed": 0
+  },
+  "src/portfolio/shadow_manager.py": {
+   "kr_ticker_literals": 45,
+   "us_ticker_literals": 0,
+   "threshold_literals": 30,
+   "fallback_literals": 46,
+   "allowed": 0
+  },
+  "src/execution/intraday_capital_router.py": {
+   "kr_ticker_literals": 45,
+   "us_ticker_literals": 19,
+   "threshold_literals": 25,
+   "fallback_literals": 16,
+   "allowed": 0
+  },
+  "src/allocation/alpha_allocator.py": {
+   "kr_ticker_literals": 21,
+   "us_ticker_literals": 0,
+   "threshold_literals": 28,
+   "fallback_literals": 29,
+   "allowed": 0
+  },
+  "src/data_collection/krx_api_client.py": {
+   "kr_ticker_literals": 69,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s3_active_macro/qvm_scorer.py": {
+   "kr_ticker_literals": 22,
+   "us_ticker_literals": 0,
+   "threshold_literals": 30,
+   "fallback_literals": 9,
+   "allowed": 0
+  },
+  "src/execution/us_night_engine.py": {
+   "kr_ticker_literals": 19,
+   "us_ticker_literals": 32,
+   "threshold_literals": 6,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/regime/regime_detector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 2,
+   "threshold_literals": 51,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/intelligence/regime_engine.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 34,
+   "fallback_literals": 20,
+   "allowed": 0
+  },
+  "src/data_collection/realtime_constants.py": {
+   "kr_ticker_literals": 50,
+   "us_ticker_literals": 2,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/etf_sniper_stream.py": {
+   "kr_ticker_literals": 18,
+   "us_ticker_literals": 4,
+   "threshold_literals": 23,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/streams/s4_advisory/advisory_stream.py": {
+   "kr_ticker_literals": 22,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 20,
+   "allowed": 0
+  },
+  "scripts/pipeline/sub_phases.py": {
+   "kr_ticker_literals": 21,
+   "us_ticker_literals": 0,
+   "threshold_literals": 16,
+   "fallback_literals": 12,
+   "allowed": 0
+  },
+  "scripts/run_live_trader_daemon.py": {
+   "kr_ticker_literals": 8,
+   "us_ticker_literals": 3,
+   "threshold_literals": 30,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/data_collection/kis_data_collector.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 13,
+   "threshold_literals": 27,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/streams/s3_active_macro/active_macro_stream.py": {
+   "kr_ticker_literals": 8,
+   "us_ticker_literals": 0,
+   "threshold_literals": 30,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/allocation/sector_pair_alpha_engine.py": {
+   "kr_ticker_literals": 17,
+   "us_ticker_literals": 17,
+   "threshold_literals": 7,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/streams/s11_high_beta/high_beta_sniper_stream.py": {
+   "kr_ticker_literals": 8,
+   "us_ticker_literals": 6,
+   "threshold_literals": 17,
+   "fallback_literals": 10,
+   "allowed": 0
+  },
+  "scripts/daily_pipeline.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 0,
+   "threshold_literals": 26,
+   "fallback_literals": 12,
+   "allowed": 0
+  },
+  "src/intelligence/cross_asset_signals.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 31,
+   "threshold_literals": 7,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/measurement/measurement_engine.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 0,
+   "threshold_literals": 31,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/measurement/live_diagnostics.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 17,
+   "fallback_literals": 21,
+   "allowed": 0
+  },
+  "src/streams/s0_beta/beta_stream.py": {
+   "kr_ticker_literals": 6,
+   "us_ticker_literals": 0,
+   "threshold_literals": 24,
+   "fallback_literals": 8,
+   "allowed": 0
+  },
+  "src/data_collection/market_breadth_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 31,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "scripts/update_user_template_report.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 27,
+   "threshold_literals": 2,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/streams/s2_ml_alpha/ml_stream.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 0,
+   "threshold_literals": 17,
+   "fallback_literals": 11,
+   "allowed": 0
+  },
+  "src/risk/universal_exit_engine.py": {
+   "kr_ticker_literals": 12,
+   "us_ticker_literals": 15,
+   "threshold_literals": 3,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/streams/s14_pair_alpha/sector_pair_stream.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 12,
+   "threshold_literals": 9,
+   "fallback_literals": 9,
+   "allowed": 0
+  },
+  "src/utils/market_calendar.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 32,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/macro_realtime_refresher.py": {
+   "kr_ticker_literals": 6,
+   "us_ticker_literals": 0,
+   "threshold_literals": 25,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/unified_sentiment_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 1,
+   "threshold_literals": 25,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/intelligence/overnight_intelligence.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 0,
+   "threshold_literals": 27,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/exposure_orchestrator.py": {
+   "kr_ticker_literals": 7,
+   "us_ticker_literals": 0,
+   "threshold_literals": 15,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/intelligence/morning_intelligence_fusion.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 20,
+   "fallback_literals": 8,
+   "allowed": 0
+  },
+  "src/utils/adaptive_thresholds.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 20,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/data_collection/central_data_gateway.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 5,
+   "threshold_literals": 14,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/risk/medallion_orchestrator.py": {
+   "kr_ticker_literals": 17,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "scripts/collect_analyst_consensus.py": {
+   "kr_ticker_literals": 14,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/rebalance_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 13,
+   "allowed": 0
+  },
+  "src/risk/liquidity_monitor.py": {
+   "kr_ticker_literals": 9,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/intelligence/performance_feedback.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 12,
+   "allowed": 0
+  },
+  "src/utils/vendor_multiplexer.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 14,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/qp_portfolio_optimizer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 6,
+   "threshold_literals": 13,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/execution/realtime_entry_monitor.py": {
+   "kr_ticker_literals": 9,
+   "us_ticker_literals": 5,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/smart_router.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 12,
+   "allowed": 0
+  },
+  "src/strategy/hyper_qvm_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 17,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/streams/s2_ml_alpha/etf_basket_decomposer.py": {
+   "kr_ticker_literals": 19,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "scripts/generate_s4_advisory.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 11,
+   "fallback_literals": 9,
+   "allowed": 0
+  },
+  "src/data_collection/us_stock_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 4,
+   "threshold_literals": 15,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/us_leveraged_etf_scalper.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 12,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/strategy/stealth_qvm_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 13,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/streams/s4_advisory/account_tracker.py": {
+   "kr_ticker_literals": 18,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/gap_analysis.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 13,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/interface/report_generator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 14,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/ml/confidence_calibrator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 14,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/shadow_sandbox/active_inference_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 11,
+   "allowed": 0
+  },
+  "src/streams/s3_active_macro/qvm_strategic_sleeve.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/streams/s5_overnight/overnight_stream.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/alpha_factory/alpha_miner.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/streams/s10_mega_trend/mega_trend_stream.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/execution/execution_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 12,
+   "allowed": 0
+  },
+  "src/intelligence/flawless_quant_invariance_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/intelligence/naver_news_sentiment.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 7,
+   "threshold_literals": 7,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/risk/realtime_var.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 0,
+   "threshold_literals": 13,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/strategy/s5_s10_promotion_engine.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 3,
+   "threshold_literals": 5,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/strategy/unconventional_alpha_engine.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 2,
+   "threshold_literals": 9,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/allocation/yield_arbitrage_engine.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 6,
+   "threshold_literals": 0,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/intelligence/us_market_regime.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/learning/online_learner.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 13,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/risk/dynamic_half_life_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 11,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/risk/leverage_judge.py": {
+   "kr_ticker_literals": 6,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "scripts/export_corporate_ledger.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 13,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/three_country_dynamic_allocator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/adaptive_threshold.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 11,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "scripts/premarket_calibration.py": {
+   "kr_ticker_literals": 6,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/intelligence/v4_features.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/utils/google_finance_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 8,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/kis_websocket.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/risk/beta_hedge.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/master_scenario_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/streams/s3_active_macro/cross_asset_sleeve.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 8,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/generate_ultimate_report.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/analysis/auto_calibrator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 10,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/cross_market_collector.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 3,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/realtime_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 4,
+   "threshold_literals": 4,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/intelligence/market_shock_detector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/streams/s4_advisory/dynamic_exit.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "scripts/rebuild_stream_metrics.py": {
+   "kr_ticker_literals": 9,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/run_red_team_audit.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 4,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/capital_allocator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 7,
+   "allowed": 0
+  },
+  "src/allocation/dynamic_orthogonal_portfolio_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 9,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/portfolio_optimizer.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 5,
+   "threshold_literals": 0,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/data_collection/macro_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 2,
+   "threshold_literals": 1,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/execution/kis_price_service.py": {
+   "kr_ticker_literals": 5,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "src/regime/online_bayesian_filter.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/streams/s13_japan_alpha/japan_stream.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 8,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "scripts/overnight_macro_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/execution/capital_velocity_recycler.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/intelligence/event_calendar.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/intelligence/event_market_filter.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 3,
+   "allowed": 0
+  },
+  "scripts/walk_forward_validator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 6,
+   "allowed": 0
+  },
+  "src/analysis/algorithmic_footprint_tracker.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/analysis/automl_feature_generator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/analysis/fundamental_filter.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/bok_economic_updater.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/ticker_master.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 48
+  },
+  "src/data_collection/unified_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 1,
+   "threshold_literals": 5,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/execution/mathematical_add_on_filter.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/tca.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/intelligence/stat_arb_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/orchestration/intent_schema.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 7,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s12_derivative_squeeze/derivative_squeeze_stream.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/allocation/synthetic_futures_overlay.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/alpha_vantage_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 1,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/market_data_prefetch.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/pykrx_compat.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 4,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/sector_batch_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/ss_etf_liquidity_collector.py": {
+   "kr_ticker_literals": 6,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/smart_order_router.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/intelligence/aux_data_loader.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/intelligence/conformal_predictor.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/intelligence/macro_feature_integrator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/perf_stats.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/regime/transition_signal.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/correlation_decay.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/drift_guard.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/intraday_regime_fast_switch.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/kill_switch.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/stream_correlation.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/non_parametric_ecdf.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 6,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/gap_feedback.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "scripts/inspect_live_truth.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 2,
+   "threshold_literals": 0,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/allocation/bayesian_bl_meta_upgrader.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/analysis/factor_decay_tracker.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/analysis/genetic_feature_generator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/data_collection/realtime_data_bus.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/evolution/soliton_causal_diversity_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/algo_executor.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/api_resilience.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 5,
+   "allowed": 0
+  },
+  "src/execution/call_auction_manager.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/intelligence/kr_market_factor.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/regime/conformal_regime_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/crash_defense.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/risk/volatility_decay_shield.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/base_stream.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 5,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/resilient_market_data.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/allocation/alpha_incubator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/macro_attacker.py": {
+   "kr_ticker_literals": 3,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/risk_parity.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/investor_flow_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/kosis_collector_enhanced.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/meta_netting_router.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 4,
+   "allowed": 0
+  },
+  "src/execution/slippage_model.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/interface/telegram_notifier.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/learning/rl_adaptive_position_sizer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/learning/self_learning.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/learning/walk_forward_guard.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/ticker_canonical.py": {
+   "kr_ticker_literals": 4,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/macro_proxy_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 3,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/run_s1_market_open.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/data_collection/bok_ecos_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/customs_api.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/feature_store.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/naver_news_sentiment.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 1,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/position_sizer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/learning/genetic_rule_evolver.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/measurement/gap_feedback.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/ml/hmm_regime_model.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/ml/purged_cv.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/params/estimators.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/cvar_optimizer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/drawdown_guard.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/evt_cvar_calculator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/factor_risk.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/telegram_notifier.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 3,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/allocation/pnl_attribution.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/alpha_factory/edges/stat_arb.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/alpha_factory/factor_orthogonalizer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/analysis/ic_analyzer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/analysis/shap_temporal.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/alt_data_pipeline.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/alt_sources/naver_argus_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/data_collection/data_qa_gate.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/export_macro_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/futures_contract_resolver.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/intraday_flow_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/execution/account_reconciler.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/futures_overlay_manager.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/realtime_exit_monitor.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/infra/self_healing_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/intelligence/corporate_action_proxy_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/intelligence/overnight_ssot_manager.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/beta_tracker.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/measurement/hmm_regime.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/params/dynamic_parameter_service.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "src/report/data_aggregator.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/cro_final_gate.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/dynamic_regime_leverage_engine.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/garch_volatility_forecaster.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/intraday_regime.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/kelly_criterion.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/ofi_velocity_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/s1_intraday_breakout.py": {
+   "kr_ticker_literals": 2,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/streams/s1_edge/s1_validator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/tax/tax_loss_harvesting_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/api_health_check.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/fetch_night_futures.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 2,
+   "allowed": 0
+  },
+  "scripts/ops/hardcoding_scan.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/ops/import_broker_fills.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/run_frontier_laboratory.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/run_live_corporate_10y_monte_carlo.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 2,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/alpha_factory/symbolic_alpha_generator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/dart_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/feature_store_v2.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/ss_etf_feature_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/data_collection/usa_collector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/cross_venue_netting.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/execution/self_healing_audit_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/infra/data_freshness_validator.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/infra/pipeline_checkpoint.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/intelligence/ood_drift_self_healer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/conflict_audit_ledger.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/data_nogo_store.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/pnl_attribution.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/shadow_recorder.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/measurement/tax_loss_harvester.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/ml/ml_regime_router.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/ml/oos_metrics.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/ml/purged_wf_validation.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/regime/hmm_regime_model.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/time_decay_exit.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/unknown_black_swan_detector.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/whipsaw_defense_engine.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/risk/zero_cost_skew_collar.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/strategy/tactic_e_event_squeeze.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/credential_manager.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/data_health_monitor.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "src/utils/data_imputer.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/distributed_lock.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "src/utils/emergency_pager.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/build_universe.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/comprehensive_data_audit.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/ops/verify_kis_readonly.py": {
+   "kr_ticker_literals": 1,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
+  "scripts/run_automated_audit_pipeline.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 0,
+   "fallback_literals": 1,
+   "allowed": 0
+  },
+  "scripts/update_user_gdrive_report.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
+   "allowed": 0
+  }
+ }
+}

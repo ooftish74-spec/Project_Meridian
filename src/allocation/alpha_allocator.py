@@ -22,6 +22,11 @@ Usage:
     alloc = AlphaAllocator()
     weights = alloc.allocate(stream_metrics, regime='bull')
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -69,7 +74,7 @@ class AlphaAllocator:
             self.STREAMS = [s for s in dict.fromkeys(list(_cfg_streams) + [s for s in _default_streams if s not in _cfg_streams]) if s != 'S4']
         else:
             self.STREAMS = list(_default_streams)
-        self.us_night_cap = cfg.get('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
+        self.us_night_cap = pget('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
 
     def compute_entry_score(self, signal: Dict, stream_id: str='unknown') -> Dict:
         """진입 필터 점수 계산 (병렬 가중합 구조).
@@ -123,7 +128,7 @@ class AlphaAllocator:
                 _nav = _sp_data.get('total_nav', cfg.get('portfolio.initial_capital', 0))
                 dd_result = dg.check(_nav)
                 dd_stage = dd_result.get('dd_stage', 0)
-                hard_stop_stage = int(cfg.get('filter.hard_stop_dd_stage', 5))
+                hard_stop_stage = int(pget('filter.hard_stop_dd_stage', 5))
                 if dd_stage >= hard_stop_stage:
                     result['hard_stop'] = True
                     result['hard_stop_reason'] = f"DrawdownGuard Stage {dd_stage}"
@@ -132,26 +137,26 @@ class AlphaAllocator:
         except Exception as _dg_e:
             logger.critical(f'  [EntryScore] DrawdownGuard 로드 실패: {_dg_e}', exc_info=True)
         ic_raw = float(signal.get('oos_ic', signal.get('ic', 0.0)))
-        ic_min = float(cfg.get('filter.ic_score_min', 0.02))
-        ic_good = float(cfg.get('filter.ic_score_good', 0.1))
+        ic_min = float(pget('filter.ic_score_min', 0.02))
+        ic_good = float(pget('filter.ic_score_good', 0.1))
         ic_score = min(1.0, max(0.0, (ic_raw - ic_min) / max(ic_good - ic_min, 1e-09)))
         confidence = float(signal.get('confidence', signal.get('predict_proba', 0.5)))
-        conf_min = float(cfg.get('filter.conf_min', 0.5))
-        conf_good = float(cfg.get('filter.conf_good', 0.75))
+        conf_min = float(pget('filter.conf_min', 0.5))
+        conf_good = float(pget('filter.conf_good', 0.75))
         conf_score = min(1.0, max(0.0, (confidence - conf_min) / max(conf_good - conf_min, 1e-09)))
         regime = signal.get('regime', 'caution')
         strategy = signal.get('strategy', '')
         regime_score = float(cfg.get(f'filter.regime_score.{regime}.{strategy}', cfg.get(f'filter.regime_score.{regime}', 0.5)))
         exp_ret = float(signal.get('expected_return', 0.0))
-        exp_ret_min = float(cfg.get('filter.exp_ret_min', 0.005))
-        exp_ret_good = float(cfg.get('filter.exp_ret_good', 0.03))
+        exp_ret_min = float(pget('filter.exp_ret_min', 0.005))
+        exp_ret_good = float(pget('filter.exp_ret_good', 0.03))
         exp_ret_score = min(1.0, max(0.0, (exp_ret - exp_ret_min) / max(exp_ret_good - exp_ret_min, 1e-09)))
         soft_scores = {'ic_score': round(ic_score, 4), 'conf_score': round(conf_score, 4), 'regime_score': round(regime_score, 4), 'exp_ret_score': round(exp_ret_score, 4)}
         result['soft_scores'] = soft_scores
-        w_ic = float(cfg.get('filter.w_ic', 0.3))
-        w_conf = float(cfg.get('filter.w_conf', 0.35))
-        w_regime = float(cfg.get('filter.w_regime', 0.2))
-        w_exp_ret = float(cfg.get('filter.w_exp_ret', 0.15))
+        w_ic = float(pget('filter.w_ic', 0.3))
+        w_conf = float(pget('filter.w_conf', 0.35))
+        w_regime = float(pget('filter.w_regime', 0.2))
+        w_exp_ret = float(pget('filter.w_exp_ret', 0.15))
         total_w = w_ic + w_conf + w_regime + w_exp_ret
         if total_w > 1e-09:
             w_ic /= total_w
@@ -160,7 +165,7 @@ class AlphaAllocator:
             w_exp_ret /= total_w
         entry_score = w_ic * ic_score + w_conf * conf_score + w_regime * regime_score + w_exp_ret * exp_ret_score
         result['entry_score'] = round(entry_score, 4)
-        threshold = float(cfg.get('filter.entry_threshold', 0.4))
+        threshold = float(pget('filter.entry_threshold', 0.4))
         result['entry_allowed'] = entry_score >= threshold
         if result['entry_allowed']:
             scale_max = float(cfg.get('filter.position_scale_max', 1.0))
@@ -249,8 +254,8 @@ class AlphaAllocator:
         vix_val = float((market_data or {}).get('signal_cache', {}).get('vix', 18.0) or 18.0)
         vix_neutral = float((market_data or {}).get('vix_neutral', 18.0) or 18.0)
         if regime == 'bull' and vix_val < vix_neutral and vix_val > 0:
-            max_boost = float(cfg.get('allocator.golden_bull.max_boost', 0.30))
-            scale_factor = float(cfg.get('allocator.golden_bull.scale_factor', 0.5))
+            max_boost = float(pget('allocator.golden_bull.max_boost', 0.30))
+            scale_factor = float(pget('allocator.golden_bull.scale_factor', 0.5))
             golden_bull_mult = round(1.0 + min(max_boost, max(0.0, (vix_neutral - vix_val) / vix_neutral * scale_factor)), 4)
             logger.info(f"  🚀 [Golden Bull Offense Multiplier] Regime={regime}, VIX={vix_val:.1f} < {vix_neutral:.1f} ➔ {golden_bull_mult}x 동적 자본 승수 적용!")
         else:
@@ -258,7 +263,7 @@ class AlphaAllocator:
 
         if use_softmax:
             import math
-            temp = max(float(cfg.get('allocator.softmax_temperature', 0.005)), 1e-4)
+            temp = max(float(pget('allocator.softmax_temperature', 0.005)), 1e-4)
             max_ev = max(ev_scores.values()) if ev_scores else 0.0
             exp_evs = {k: math.exp((v - max_ev) / temp) for k, v in ev_scores.items()}
             total_exp = max(sum(exp_evs.values()), 1e-9)
@@ -396,7 +401,7 @@ class AlphaAllocator:
             target_sum = golden_bull_mult if golden_bull_mult > 1.0 else 1.0
             final_weights = {k: round((v / _tot_w) * target_sum, 4) for k, v in final_weights.items()}
 
-        threshold = cfg.get('allocator.rebalance_threshold', 0.05)
+        threshold = pget('allocator.rebalance_threshold', 0.01)
         needs_rebalance = self._needs_rebalance(final_weights, threshold)
         if needs_rebalance:
             self._last_weights = final_weights
@@ -430,8 +435,8 @@ class AlphaAllocator:
                 from src.risk.intraday_micro_guard import IntradayMicroGuard
                 _guard = IntradayMicroGuard()
                 _micro_ok, _micro_reason = _guard.check()
-                _cut_bc = float(cfg.get('allocator.macro_cut.bear_crash', 0.6))
-                _cut_ca = float(cfg.get('allocator.macro_cut.caution', 0.3))
+                _cut_bc = float(pget('allocator.macro_cut.bear_crash', 0.6))
+                _cut_ca = float(pget('allocator.macro_cut.caution', 0.3))
                 _macro_cut = _cut_bc if regime in ('bear', 'crash') else _cut_ca
                 _freed = 0.0
                 for _sid in list(_macro_bound):
@@ -440,7 +445,7 @@ class AlphaAllocator:
                         final_weights[_sid] = round(final_weights[_sid] - _cut, 4)
                         _freed += _cut
                 if _micro_ok:
-                    _micro_boost = _freed * float(cfg.get('allocator.micro_boost_ratio', 0.3))
+                    _micro_boost = _freed * float(pget('allocator.micro_boost_ratio', 0.3))
                     for _sid in _micro_bound:
                         if _sid in final_weights:
                             final_weights[_sid] = round(final_weights[_sid] + _micro_boost / max(1, len(_micro_bound)), 4)
@@ -461,8 +466,8 @@ class AlphaAllocator:
         except Exception as _tt_err:
             logger.critical(f'  [Phase 76 TwoTrack] 실패, fallback: {_tt_err}', exc_info=True)
         try:
-            _corr_alert = float(cfg.get('risk.stream_corr_alert', 0.8))
-            _corr_scale = float(cfg.get('risk.corr_breakdown_scale', 0.7))
+            _corr_alert = float(pget('risk.stream_corr_alert', 0.8))
+            _corr_scale = float(pget('risk.corr_breakdown_scale', 0.7))
             _monitor_streams = ['S1', 'S2', 'S3']
             _directions = []
             for _sid in _monitor_streams:
@@ -485,7 +490,7 @@ class AlphaAllocator:
         try:
             _aum = float(cfg.get('portfolio.aum_krw', 3000000000))
             _s1_cap_thr = float(cfg.get('portfolio.s1_capacity_threshold_krw', 5000000000))
-            _s1_cap_scale = float(cfg.get('portfolio.s1_capacity_scale_rate', 0.5))
+            _s1_cap_scale = float(pget('portfolio.s1_capacity_scale_rate', 0.5))
             if _aum > _s1_cap_thr and 'S1' in final_weights:
                 _s1_orig = final_weights['S1']
                 _s1_reduced = round(_s1_orig * _s1_cap_scale, 4)
@@ -521,11 +526,11 @@ class AlphaAllocator:
             조정된 weights dict
         """
         _cfg = DynamicConfig()
-        penalty_ratio = float(_cfg.get('s2.penalty_ratio', 0.2))
-        s3a_ratio = float(_cfg.get('s2.fallback_target_s3a', 0.6))
-        s3b_ratio = float(_cfg.get('s2.fallback_target_s3b', 0.4))
-        wr_threshold = float(_cfg.get('s2.wr_threshold', 0.4))
-        ic_threshold = float(_cfg.get('s2.ic_threshold', -0.02))
+        penalty_ratio = float(pget('s2.penalty_ratio', 0.2))
+        s3a_ratio = float(pget('s2.fallback_target_s3a', 0.6))
+        s3b_ratio = float(pget('s2.fallback_target_s3b', 0.4))
+        wr_threshold = float(pget('s2.wr_threshold', 0.4))
+        ic_threshold = float(pget('s2.ic_threshold', -0.02))
         try:
             s2_rolling = stream_metrics.get('_s2_rolling', {})
             penalty_triggered = bool(s2_rolling.get('penalty_triggered', False))
@@ -579,14 +584,14 @@ class AlphaAllocator:
                 s2_rolling = stream_metrics.get('_s2_rolling', {})
                 wr_5d = s2_rolling.get('wr_5d')
                 n_trades = int(s2_rolling.get('n_trades_5d', 0) or 0)
-                _min_wr = float(_cfg.get('allocation.kelly.min_wr', 0.6))
-                _min_trades = int(_cfg.get('allocation.kelly.min_trades', 3))
-                _score_floor = _cfg.get('allocation.macro_score_floor', 40.0)
+                _min_wr = float(pget('allocation.kelly.min_wr', 0.6))
+                _min_trades = int(pget('allocation.kelly.min_trades', 3))
+                _score_floor = pget('allocation.macro_score_floor', 40.0)
                 if wr_5d is not None and float(wr_5d) >= _min_wr and (n_trades >= _min_trades):
                     weights = dict(weights)
                     s2_keys = [k for k in weights if k.upper().startswith('S2')]
                     if s2_keys:
-                        upscale_ratio = _cfg.get('allocation.s2_upscale_ratio', 0.5)
+                        upscale_ratio = pget('allocation.s2_upscale_ratio', 0.4)
                         current_s2 = sum((weights.get(k, 0.0) for k in s2_keys))
                         if current_s2 < upscale_ratio:
                             diff = upscale_ratio - current_s2
@@ -594,7 +599,7 @@ class AlphaAllocator:
                             defense_keys = [k for k in weights if k in _defense_pool]
                             total_defense = sum((weights.get(k, 0.0) for k in defense_keys))
                             if total_defense > 0:
-                                _take_cap = float(cfg.get('allocator.kelly_defense_take_cap', 0.8))
+                                _take_cap = float(pget('allocator.kelly_defense_take_cap', 0.8))
                                 take_ratio = min(diff, total_defense * _take_cap)
                                 for dk in defense_keys:
                                     take_amt = weights[dk] / total_defense * take_ratio
@@ -644,7 +649,7 @@ class AlphaAllocator:
             if target_sweep_ratio <= 0:
                 return weights
             exempt_streams = set(_cfg.get('allocator.exempt_streams', ['S4']))
-            friction_buffer = float(_cfg.get('allocator.sweep_friction_buffer', 0.003))
+            friction_buffer = float(pget('allocator.sweep_friction_buffer', 0.003))
             current_total_sweep = 0.0
             needed_sweep = target_sweep_ratio
             if 'S5' in weights and weights['S5'] > 0:
@@ -701,8 +706,8 @@ class AlphaAllocator:
     def _compute_volatility(self, returns: List[float], window: int=None) -> float:
         """일간 수익률에서 연율 변동성 계산."""
         if window is None:
-            window = cfg.get('allocator.vol_window', 60)
-        _min_data = cfg.get('allocator.vol_min_data', 5)
+            window = pget('allocator.vol_window', 60)
+        _min_data = pget('allocator.vol_min_data', 5)
         if len(returns) < _min_data:
             return 0.0
         data = returns[-window:]
@@ -710,7 +715,7 @@ class AlphaAllocator:
         mean = sum(data) / n
         var = sum(((r - mean) ** 2 for r in data)) / n
         daily_vol = math.sqrt(var)
-        return daily_vol * math.sqrt(cfg.get('common.trading_days_per_year', 252))
+        return daily_vol * math.sqrt(pget('common.trading_days_per_year', 252))
 
     def _get_base_weights(self, regime: str, market_data: Dict=None) -> Dict[str, float]:
         from config.dynamic_config import DynamicConfig
@@ -759,7 +764,7 @@ class AlphaAllocator:
                     base['S5'] = base.get('S5', 0.0) + lr_cash_alloc
                 uncertainty = 1.0 - max(prob_fc, prob_rec, prob_lr, prob_recovery, 0.0)
                 if uncertainty > 0.4:
-                    _uncertainty_add = float(_cfg.get('allocator.prob_uncertainty_cash_add', 0.1))
+                    _uncertainty_add = float(pget('allocator.prob_uncertainty_cash_add', 0.1))
                     logger.info(f"  [AlphaAllocator] High Uncertainty (U={uncertainty:.2f}) 🌫️ 국면 불확실, 현금 비중 {_uncertainty_add * 100:.0f}% 추가 확보")
                     base['S5'] = base.get('S5', 0.0) + _uncertainty_add
             else:
@@ -771,7 +776,7 @@ class AlphaAllocator:
                     if 'S7' in base:
                         base['S7'] = max(0.0, base['S7'] - 0.1)
                 elif divergence_state == 'liquidity_rally':
-                    _legacy_lr_adj = float(_cfg.get('allocator.legacy_lr_adjustment', 0.15))
+                    _legacy_lr_adj = float(pget('allocator.legacy_lr_adjustment', 0.15))
                     if 'S2' in base:
                         base['S2'] = max(0.0, base['S2'] - _legacy_lr_adj)
                     base['S5'] = base.get('S5', 0.0) + _legacy_lr_adj
@@ -807,7 +812,7 @@ class AlphaAllocator:
     def _calc_correlation(self, x: List[float], y: List[float]) -> float:
         """피어슨 상관계수 계산."""
         n = min(len(x), len(y))
-        _corr_min = cfg.get('allocator.corr_min_data', 5)
+        _corr_min = pget('allocator.corr_min_data', 5)
         if n < _corr_min:
             return 0.0
         x = x[-n:]
@@ -840,7 +845,7 @@ class AlphaAllocator:
 
     def get_allocation_history(self) -> List[Dict]:
         """배분 이력."""
-        return self._allocation_history[-cfg.get('allocator.max_history', 30):]
+        return self._allocation_history[-pget('allocator.max_history', 30):]
 
     def get_risk_contribution(self, stream_metrics: Dict) -> Dict[str, float]:
         """스트림별 리스크 기여도 계산.
@@ -1098,7 +1103,7 @@ class AlphaAllocator:
                     logger.warning(f"  🔻 감성 악화 (Sentiment={sentiment:.2f}): {ticker} 편입 제외")
                     continue
                 elif sentiment < 0.4:
-                    penalty_ratio = cfg.get('allocation.penalty_ratio', 0.5)
+                    penalty_ratio = pget('allocation.penalty_ratio', 0.5)
                     sig['size_pct'] = sig.get('size_pct', 0) * penalty_ratio
                     if sig['size_pct'] > 0:
                         logger.info(f"  ⚠️ 감성 주의 (Sentiment={sentiment:.2f}): {ticker} 비중 50% 축소")
@@ -1119,7 +1124,7 @@ class AlphaAllocator:
             ev_krx = float(krx_metrics.get('expected_return', 0.01)) / max(0.001, float(krx_metrics.get('volatility', 0.015)))
             ev_us = float(us_metrics.get('expected_return', 0.02)) / max(0.001, float(us_metrics.get('volatility', 0.015)))
 
-            tau = cfg.get('allocator.global_softmax_temperature', 0.5)
+            tau = pget('allocator.global_softmax_temperature', 0.5)
             exp_krx = math.exp(min(10.0, max(-10.0, ev_krx / tau)))
             exp_us  = math.exp(min(10.0, max(-10.0, ev_us / tau)))
 
@@ -1127,8 +1132,8 @@ class AlphaAllocator:
             w_us = 1.0 - w_krx
 
             # 레짐별 캡 제약 (DynamicConfig에서 로드)
-            max_single_mkt = cfg.get('allocator.global_max_single_market_weight', 0.85)
-            min_single_mkt = cfg.get('allocator.global_min_single_market_weight', 0.15)
+            max_single_mkt = pget('allocator.global_max_single_market_weight', 0.85)
+            min_single_mkt = pget('allocator.global_min_single_market_weight', 0.15)
 
             w_krx = max(min_single_mkt, min(max_single_mkt, w_krx))
             w_us = 1.0 - w_krx
@@ -1151,10 +1156,10 @@ class AlphaAllocator:
         if market_data is None:
             market_data = signal.get('market_data', {}) or {}
             
-        w_qvm = cfg.get('allocator.weight_qvm', 0.40) or 0.40
-        w_skew = cfg.get('allocator.weight_option_skew', 0.20) or 0.20
-        w_flow = cfg.get('allocator.weight_flow_imbalance', 0.20) or 0.20
-        w_earn = cfg.get('allocator.weight_earnings_surprise', 0.20) or 0.20
+        w_qvm = pget('allocator.weight_qvm', 0.40) or 0.40
+        w_skew = pget('allocator.weight_option_skew', 0.20) or 0.20
+        w_flow = pget('allocator.weight_flow_imbalance', 0.20) or 0.20
+        w_earn = pget('allocator.weight_earnings_surprise', 0.20) or 0.20
         
         # 1. Base Factor Quality Score (QVM / ML score)
         base_q = float(signal.get('confidence', signal.get('qvm_score', 0.50)))

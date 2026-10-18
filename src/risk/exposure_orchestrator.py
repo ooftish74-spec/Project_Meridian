@@ -25,6 +25,11 @@ try:
 except ImportError as e:
     _cfg = None
 try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
+try:
     from src.risk.intraday_regime import IntradayRegimeDetector
     _INTRADAY_AVAILABLE = True
 except ImportError as e:
@@ -59,9 +64,9 @@ def _compute_joint_risk_matrix(nav_histories: dict, lookback: int=None) -> dict:
             return _jcfg.get(key, default) if _jcfg else default
         except Exception:
             return default
-    _lookback = lookback or int(_jget('risk.joint_matrix_lookback', 60))
-    _corr_warn = float(_jget('risk.joint_corr_warn_threshold', 0.7))
-    _adj_scale = float(_jget('risk.joint_adj_scale', 0.15))
+    _lookback = lookback or int(pget('risk.joint_matrix_lookback', 60))
+    _corr_warn = float(pget('risk.joint_corr_warn_threshold', 0.7))
+    _adj_scale = float(pget('risk.joint_adj_scale', 0.15))
     rets = {}
     for sid, navs in nav_histories.items():
         nav_arr = navs[-_lookback:] if len(navs) >= _lookback else navs
@@ -103,18 +108,18 @@ def _compute_joint_risk_matrix(nav_histories: dict, lookback: int=None) -> dict:
     total_pairs = max(n * (n - 1) / 2, 1)
     concentration_risk = len(high_corr_pairs) / total_pairs
     joint_adj = 1.0 - _adj_scale * concentration_risk
-    joint_adj = max(float(_jget('risk.joint_adj_min', 0.7)), joint_adj)
+    joint_adj = max(float(pget('risk.joint_adj_min', 0.7)), joint_adj)
     return {'corr_matrix': corr_matrix, 'avg_pairwise_corr': round(avg_corr, 4), 'high_corr_pairs': high_corr_pairs, 'concentration_risk': round(concentration_risk, 4), 'joint_adj': round(joint_adj, 4)}
 
 class ExposureOrchestrator:
     """다층 노출 제어 엔진."""
 
     def __init__(self):
-        self.W_REGIME = _cfg.get('exposure.w_regime', 0.3) if _cfg else 0.3
-        self.W_VIX = _cfg.get('exposure.w_vix', 0.25) if _cfg else 0.25
-        self.W_FNG = _cfg.get('exposure.w_fng', 0.25) if _cfg else 0.25
-        self.W_VKOSPI = _cfg.get('exposure.w_vkospi', 0.1) if _cfg else 0.1
-        self.W_TREND = _cfg.get('exposure.w_trend', 0.1) if _cfg else 0.1
+        self.W_REGIME = pget('exposure.w_regime', 0.3)
+        self.W_VIX = pget('exposure.w_vix', 0.25)
+        self.W_FNG = pget('exposure.w_fng', 0.25)
+        self.W_VKOSPI = pget('exposure.w_vkospi', 0.1)
+        self.W_TREND = pget('exposure.w_trend', 0.1)
         self._intraday = IntradayRegimeDetector() if _INTRADAY_AVAILABLE else None
 
     def calculate(self, sentiment: Optional[Dict]=None, data_penalty: float=1.0) -> Dict:
@@ -144,8 +149,8 @@ class ExposureOrchestrator:
             logger.critical(f'  ExposureOrchestrator: TransitionSignalDetector 실패: {e}', exc_info=True)
         _cfg_get = (lambda key, default=None: _cfg.get(key, default)) if _cfg else lambda key, default=None: default
         regime = sentiment.get('regime', 'caution')
-        regime_map = {'bull': _cfg_get('exposure.regime_score.bull', 1.0), 'caution': _cfg_get('exposure.regime_score.caution', 0.65), 'bear': _cfg_get('exposure.regime_score.bear', 0.3), 'crash': _cfg_get('exposure.regime_score.crash', 0.0)}
-        regime_score = regime_map.get(regime, _cfg_get('exposure.regime_score.caution', 0.65))
+        regime_map = {'bull': pget('exposure.regime_score.bull', 1.0), 'caution': pget('exposure.regime_score.caution', 0.85), 'bear': pget('exposure.regime_score.bear', 0.3), 'crash': pget('exposure.regime_score.crash', 0.0)}
+        regime_score = regime_map.get(regime, pget('exposure.regime_score.caution', 0.85))
         if regime == 'crash':
             flash_score = self._compute_flash_crash_gate(regime_score, sentiment, _cfg_get, is_v_recovery)
             if flash_score > regime_score:
@@ -157,27 +162,30 @@ class ExposureOrchestrator:
         elif regime == 'bear':
             reasons.append(f"Regime={regime}")
         components['regime'] = {'score': regime_score, 'value': regime}
-        vix = float(sentiment.get('vix', 20) or 20)
+        _vix_d = pget('exposure.vix_missing_default', 20.0)
+        _ois_d = pget('exposure.ois_missing_default', 50.0)
+        vix = float(sentiment.get('vix', _vix_d) or _vix_d)
         options_skew = float(sentiment.get('options_skew', 0.0) or 0.0)
-        raw_ois = float(sentiment.get('ois', 50.0) or 50.0)
+        raw_ois = float(sentiment.get('ois', _ois_d) or _ois_d)
         
         # [Pure Dynamic Math] OIS (0~100 스케일) 연속 [0.0, 1.0] 정규화
         ois_norm = raw_ois / 100.0 if raw_ois > 1.0 else max(0.0, min(1.0, raw_ois))
         
         # [Pure Dynamic Math] 불연속 하드스탑(Hard Stop) 제거 및 다차원 연속 로지스틱 시그모이드 감쇄
-        k_vix, x0_vix = (0.18, 30.0)
+        # x0_vix: L2 = trailing 252d q95 VIX (tighten_only: can only lower the midpoint; quality-gated)
+        k_vix, x0_vix = (pget('exposure.vix_sigmoid_k', 0.18), pget('exposure.vix_sigmoid_x0', 30.0))
         vix_score = 1.0 / (1.0 + np.exp(k_vix * (vix - x0_vix)))
         
-        k_skew, x0_skew = (1.5, 1.5)
+        k_skew, x0_skew = (pget('exposure.skew_sigmoid_k', 1.5), pget('exposure.skew_sigmoid_x0', 1.5))
         skew_score = 1.0 / (1.0 + np.exp(k_skew * (options_skew - x0_skew)))
         
         # OIS: 0~100 야간 센티먼트 연속 시그모이드 (x0=0.35, k=8.0)
         # OIS=50일 때 ~0.77, OIS=30일 때 ~0.40, OIS=18.8일 때 ~0.21로 스무스 감쇄 (절대 0% 절벽 중단 없음)
-        k_ois, x0_ois = (8.0, 0.35)
+        k_ois, x0_ois = (pget('exposure.ois_sigmoid_k', 8.0), pget('exposure.ois_sigmoid_x0', 0.35))
         ois_score = 1.0 / (1.0 + np.exp(-k_ois * (ois_norm - x0_ois)))
         
         raw_multiplier = min(vix_score, skew_score, ois_score)
-        vol_surface_score = round(float(np.clip(raw_multiplier, 0.05, 1.0)), 4)
+        vol_surface_score = round(float(np.clip(raw_multiplier, pget('exposure.vol_surface_floor', 0.05), 1.0)), 4)
         target = round(float(np.clip(vol_surface_score * regime_score, 0.0, 1.0)), 3)
         
         reasons.append(f"Vol-Surface Dynamic (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> raw={vol_surface_score:.2f}, target={target:.2f}")
@@ -198,12 +206,12 @@ class ExposureOrchestrator:
             _var_calc = RealtimeVaR()
             _positions = _var_calc._load_positions()
             if _positions and len(_positions) > 0:
-                _returns = _var_calc._load_returns(list(_positions.keys()), _cfg.get('risk.sigma_lookback', 60) if _cfg else 60)
+                _returns = _var_calc._load_returns(list(_positions.keys()), pget('risk.sigma_lookback', 60))
                 if _returns is not None and _returns.shape[1] > 0:
                     _weights = np.array([_positions[t].get('weight', 1.0 / len(_positions)) for t in list(_positions.keys())[:_returns.shape[1]]])
                     _weights = _weights / _weights.sum() if _weights.sum() > 0 else _weights
                     _port_rets = _returns @ _weights
-                    _ewma_lambda = _cfg.get('risk.ewma_lambda', 0.94) if _cfg else 0.94
+                    _ewma_lambda = pget('risk.ewma_lambda', 0.94)
                     _ewma_var = _var_calc._ewma_variance(_port_rets, _ewma_lambda)
                     _realized_vol = float(np.sqrt(_ewma_var)) * np.sqrt(252)
                 else:
@@ -211,10 +219,10 @@ class ExposureOrchestrator:
             else:
                 _realized_vol = None
             if _realized_vol and _realized_vol > 0:
-                _sigma_target = _cfg.get('risk.sigma_target_annual', 0.15) if _cfg else 0.15
+                _sigma_target = pget('risk.sigma_target_annual', 0.35)
                 _raw_ratio = _sigma_target / _realized_vol
-                _sigma_floor = _cfg.get('risk.sigma_scale_floor', 0.4) if _cfg else 0.4
-                _sigma_cap = _cfg.get('risk.sigma_scale_cap', 1.3) if _cfg else 1.3
+                _sigma_floor = pget('risk.sigma_scale_floor', 0.4)
+                _sigma_cap = pget('risk.sigma_scale_cap', 1.3)
                 sigma_adj = max(_sigma_floor, min(_sigma_cap, _raw_ratio))
                 if sigma_adj < 0.9:
                     reasons.append(f"σ-target={_sigma_target:.0%}/realized={_realized_vol:.0%}→{sigma_adj:.2f}")
@@ -228,12 +236,12 @@ class ExposureOrchestrator:
             _jrm = {'joint_adj': 1.0, 'avg_pairwise_corr': 0.0, 'high_corr_pairs': []}
         _jrm_adj = _jrm.get('joint_adj', 1.0)
         deadlock_mode = _cfg_get('risk.deadlock_resolution_mode', 'linear')
-        max_combined = _cfg_get('risk.max_combined_hedge_ratio', 0.8)
+        max_combined = pget('risk.max_combined_hedge_ratio', 0.8)
         is_v_recovery = locals().get('is_v_recovery', False)
         if is_v_recovery:
-            v_penalty = _cfg_get('exposure.v_recovery_conf_adj_penalty', 0.2)
+            v_penalty = pget('exposure.v_recovery_conf_adj_penalty', 0.2)
             max_combined = min(max_combined, v_penalty)
-            v_min = _cfg_get('exposure.v_recovery_min_exposure', 0.5)
+            v_min = pget('exposure.v_recovery_min_exposure', 0.5)
             if target < v_min:
                 target = v_min
                 reasons.append('V-Recovery Override')
@@ -247,13 +255,13 @@ class ExposureOrchestrator:
                 joint_adj *= transition_adj
             floor_adj = 1.0 - max_combined
             final_adj = max(floor_adj, joint_adj * _jrm_adj)
-            target = round(max(0, min(_cfg_get('exposure.max_leveraged_exposure', 1.3), target * final_adj)), 3)
+            target = round(max(0, min(pget('exposure.max_leveraged_exposure', 2.5), target * final_adj)), 3)
             components['joint_risk'] = {'final_adj': final_adj, 'defense': joint_defense, 'jrm_adj': _jrm_adj, 'avg_pairwise_corr': _jrm.get('avg_pairwise_corr', 0.0), 'high_corr_pairs': _jrm.get('high_corr_pairs', [])}
             if final_adj < intraday_adj * transition_adj * sigma_adj:
                 reasons.append(f"JointRisk(adj={final_adj:.2f})")
         else:
             combined_adj = intraday_adj * transition_adj * sigma_adj * _jrm_adj
-            target = round(max(0, min(_cfg_get('exposure.max_leveraged_exposure', 1.3), target * combined_adj)), 3)
+            target = round(max(0, min(pget('exposure.max_leveraged_exposure', 2.5), target * combined_adj)), 3)
         if data_penalty < 1.0:
             _pre_penalty = target
             target = round(target * data_penalty, 4)
@@ -290,32 +298,32 @@ class ExposureOrchestrator:
         cross_stress = float(sentiment.get('cross_asset_stress', 1.0))
         vkospi = float(sentiment.get('vkospi', 99.0))
         s3_conf = float(sentiment.get('s3_avg_confidence', 0.0))
-        gate_open = is_v_recovery and cross_stress < float(_get('flash_crash_gate.stress_gate', 0.3)) and (vkospi < float(_get('flash_crash_gate.vkospi_gate', 23.0))) and (s3_conf >= float(_get('flash_crash_gate.v_recovery_conf_discount', 0.35)))
+        gate_open = is_v_recovery and cross_stress < float(pget('flash_crash_gate.stress_gate', 0.3)) and (vkospi < float(pget('flash_crash_gate.vkospi_gate', 23.0))) and (s3_conf >= float(pget('flash_crash_gate.v_recovery_conf_discount', 0.35)))
         if not gate_open:
-            if cross_stress < float(_get('flash_crash_gate.stress_gate', 0.3)) and (not is_v_recovery):
+            if cross_stress < float(pget('flash_crash_gate.stress_gate', 0.3)) and (not is_v_recovery):
                 logger.debug(f"  ⚡ [FlashCrashGate] 거시 평온(stress={cross_stress:.3f}) 충족되나 V-Recovery 부재로 게이트 차단.")
             return default_score
-        stress_cap = float(_get('flash_crash_gate.stress_normalization_cap', 0.5))
-        vkospi_floor = float(_get('flash_crash_gate.vkospi_floor', 10.0))
-        vkospi_cap = float(_get('flash_crash_gate.vkospi_cap', 23.0))
-        oversold_ref = float(_get('flash_crash_gate.oversold_reference_pct', 5.0))
-        oversold_sat = float(_get('flash_crash_gate.oversold_saturation_pct', 15.0))
-        conf_floor = float(_get('flash_crash_gate.signal_conf_floor', 0.45))
+        stress_cap = float(pget('flash_crash_gate.stress_normalization_cap', 0.5))
+        vkospi_floor = float(pget('flash_crash_gate.vkospi_floor', 10.0))
+        vkospi_cap = float(pget('flash_crash_gate.vkospi_cap', 23.0))
+        oversold_ref = float(pget('flash_crash_gate.oversold_reference_pct', 5.0))
+        oversold_sat = float(pget('flash_crash_gate.oversold_saturation_pct', 15.0))
+        conf_floor = float(pget('flash_crash_gate.signal_conf_floor', 0.45))
         ma20_dist = float(sentiment.get('kospi_ma20_dist', 0.0))
         f_stress = max(0.0, 1.0 - cross_stress / max(stress_cap, 1e-09))
         f_vkospi = min(1.0, max(0.0, (vkospi - vkospi_floor) / max(vkospi_cap - vkospi_floor, 1e-09)))
         f_oversold = min(1.0, max(0.0, (-ma20_dist - oversold_ref) / max(oversold_sat - oversold_ref, 1e-09)))
         f_signal = max(0.0, (s3_conf - conf_floor) / max(1.0 - conf_floor, 1e-09))
-        w_stress = float(_get('flash_crash_gate.w_stress', 0.35))
-        w_vkospi = float(_get('flash_crash_gate.w_vkospi', 0.25))
-        w_oversold = float(_get('flash_crash_gate.w_oversold', 0.2))
-        w_signal = float(_get('flash_crash_gate.w_signal', 0.2))
+        w_stress = float(pget('flash_crash_gate.w_stress', 0.35))
+        w_vkospi = float(pget('flash_crash_gate.w_vkospi', 0.25))
+        w_oversold = float(pget('flash_crash_gate.w_oversold', 0.2))
+        w_signal = float(pget('flash_crash_gate.w_signal', 0.2))
         w_total = w_stress + w_vkospi + w_oversold + w_signal
         if w_total <= 0:
             return default_score
         gate_score = w_stress / w_total * f_stress + w_vkospi / w_total * f_vkospi + w_oversold / w_total * f_oversold + w_signal / w_total * f_signal
-        scale_floor = float(_get('flash_crash_gate.regime_score_floor', 0.15))
-        scale_cap = float(_get('flash_crash_gate.regime_score_cap', 0.45))
+        scale_floor = float(pget('flash_crash_gate.regime_score_floor', 0.15))
+        scale_cap = float(pget('flash_crash_gate.regime_score_cap', 0.45))
         flash_score = scale_floor + gate_score * (scale_cap - scale_floor)
         flash_score = round(min(scale_cap, max(scale_floor, flash_score)), 4)
         logger.info(f"  ⚡ [FlashCrashGate] type={crash_type} | stress={cross_stress:.3f} vkospi={vkospi:.1f} ma20={ma20_dist:.1f}% s3_conf={s3_conf:.3f} | f=({f_stress:.2f},{f_vkospi:.2f},{f_oversold:.2f},{f_signal:.2f}) | gate={gate_score:.3f} → score {default_score:.3f}→{flash_score:.4f}")
@@ -438,7 +446,7 @@ class ExposureOrchestrator:
                 portfolio_beta = float(_beta_result['portfolio_beta'])
         except Exception as _beta_err:
             logger.critical(f'  BetaHedge 계산 실패, β=1.0 가정: {_beta_err}', exc_info=True)
-        min_amount = _cfg.get('hedge.min_amount', 500000) if _cfg else 500000
+        min_amount = pget('hedge.min_amount', 10000) if _cfg else 500000
         if target_beta > 1.0:
             inst = dict(self.ATTACKER_INSTRUMENTS.get('leverage', self._ATTACKER_INSTRUMENTS_DEFAULT['leverage']))
             inst['ticker'] = str(_cfg.get('exposure.instrument.leverage.ticker', inst['ticker']) if _cfg else inst['ticker'])
@@ -451,7 +459,7 @@ class ExposureOrchestrator:
                 logger.warning(f"  ⚠️ [수퍼부스트] 현금 부족 — 필요 ₩{buy_amount / 1000000.0:.1f}M, 가용 ₩{available_cash / 1000000.0:.1f}M → 현금 한도로 조정")
                 buy_amount = available_cash
             diff = buy_amount - current_hedge_amount
-            tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
+            tolerance = pget('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
             if current_hedge_amount > 0 and abs(diff) / max(current_hedge_amount, 1) < tolerance:
                 action = 'HOLD'
             else:
@@ -488,7 +496,7 @@ class ExposureOrchestrator:
                 logger.warning(f"  🔢 [동시 방정식] 현금 부족 ₩{available_cash / 1000000.0:.1f}M < 필요 ₩{hedge_amount / 1000000.0:.1f}M → 현물 매도 X=₩{final_equity_sell / 1000000.0:.1f}M, 숏 매수 Y=₩{final_short_buy / 1000000.0:.1f}M 재계산 완료")
                 hedge_amount = final_short_buy
             diff = hedge_amount - current_hedge_amount
-            tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
+            tolerance = pget('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
             if current_hedge_amount > 0 and abs(diff) / max(current_hedge_amount, 1) < tolerance:
                 action = 'HOLD'
             else:
@@ -500,7 +508,7 @@ class ExposureOrchestrator:
             logger.warning(f"  🚨 [어태커 넷숏] β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M ({action})")
             return result
         hedge_needed = long_exposure * max(0.0, portfolio_beta - target_beta)
-        max_ratio = _cfg.get('hedge.max_hedge_ratio', 0.5) if _cfg else 0.5
+        max_ratio = pget('hedge.max_hedge_ratio', 0.5) if _cfg else 0.5
         max_hedge = long_exposure * max_ratio
         hedge_needed = min(hedge_needed, max_hedge)
         if hedge_needed < min_amount:
@@ -516,7 +524,7 @@ class ExposureOrchestrator:
         inst_beta_abs = abs(inst.get('beta', inst.get('leverage', 1)))
         position_amount = hedge_needed / inst_beta_abs
         diff = position_amount - current_hedge_amount
-        tolerance = _cfg.get('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
+        tolerance = pget('hedge.rebalance_tolerance', 0.1) if _cfg else 0.1
         if current_hedge_amount > 0 and abs(diff) / max(current_hedge_amount, 1) < tolerance:
             return self._build_hedge_result('HOLD', ticker, position_amount, 0, target_beta, long_exposure, hedge_needed, current_hedge_amount, regime, reason=f"변동 {abs(diff) / max(current_hedge_amount, 1) * 100:.0f}% < 허용 {tolerance * 100:.0f}%")
         if current_hedge_amount == 0:
@@ -573,22 +581,22 @@ class ExposureOrchestrator:
         4. 포트폴리오 변동성 → 고변동이면 β 축소
         """
         cfg = _cfg
-        default_base = {'bull': float(cfg.get('hedge.base_beta.bull', 0.75)) if cfg else 0.75, 'caution': float(cfg.get('hedge.base_beta.caution', 0.55)) if cfg else 0.55, 'bear': float(cfg.get('hedge.base_beta.bear', 0.35)) if cfg else 0.35, 'crash': float(cfg.get('hedge.base_beta.crash', 0.15)) if cfg else 0.15}
+        default_base = {'bull': float(pget('hedge.base_beta.bull', 0.75)) if cfg else 0.75, 'caution': float(pget('hedge.base_beta.caution', 0.55)) if cfg else 0.55, 'bear': float(pget('hedge.base_beta.bear', 0.35)) if cfg else 0.35, 'crash': float(pget('hedge.base_beta.crash', 0.15)) if cfg else 0.15}
         base = cfg.get(f'hedge.base_beta.{regime}', default_base.get(regime, 0.5)) if cfg else default_base.get(regime, 0.5)
         signal_cache = self._load_signal_cache()
         vix = signal_cache.get('vix', 18.0)
-        vix_neutral = cfg.get('hedge.vix_neutral', 18.0) if cfg else 18.0
-        vix_scale = cfg.get('hedge.vix_beta_scale', 0.005) if cfg else 0.005
+        vix_neutral = pget('hedge.vix_neutral', 18.0) if cfg else 18.0
+        vix_scale = pget('hedge.vix_beta_scale', 0.005) if cfg else 0.005
         vix_adj = -(vix - vix_neutral) * vix_scale
         sp = self._load_shadow_portfolio()
         current_dd = self._get_current_drawdown(sp)
-        dd_threshold = cfg.get('hedge.dd_beta_threshold', -3.0) if cfg else -3.0
-        dd_scale = cfg.get('hedge.dd_beta_scale', 0.05) if cfg else 0.05
+        dd_threshold = pget('hedge.dd_beta_threshold', -3.0) if cfg else -3.0
+        dd_scale = pget('hedge.dd_beta_scale', 0.05) if cfg else 0.05
         dd_adj = 0.0
         if current_dd < dd_threshold:
             dd_adj = (current_dd - dd_threshold) * dd_scale
         port_vol = self._get_portfolio_volatility(sp)
-        vol_neutral = cfg.get('hedge.vol_neutral', 0.015) if cfg else 0.015
+        vol_neutral = pget('hedge.vol_neutral', 0.015) if cfg else 0.015
         vol_scale = cfg.get('hedge.vol_beta_scale', 2.0) if cfg else 2.0
         vol_adj = -(port_vol - vol_neutral) * vol_scale if port_vol > vol_neutral else 0.0
         target = base + vix_adj + dd_adj + vol_adj
@@ -614,10 +622,10 @@ class ExposureOrchestrator:
                 logger.warning(f"  🛑 [VIX Trailing Stop 발동] vix_momentum={vix_momentum:.4f} < 0 (공포 완화) → target_beta {prior_target:.3f} → {target:.3f} (넷숏 강제 청산)")
                 attacker_mode = False
         if not attacker_mode and regime == 'bull':
-            stress_threshold = float(cfg.get('exposure.super_boost_stress_threshold', 0.2) if cfg else 0.2)
+            stress_threshold = float(pget('exposure.super_boost_stress_threshold', 0.2) if cfg else 0.2)
             cross_stress = float(signal_cache.get('cross_asset_stress', 1.0))
             if cross_stress < stress_threshold:
-                max_lev = float(cfg.get('exposure.max_leveraged_exposure', 2.5) if cfg else 2.5)
+                max_lev = float(pget('exposure.max_leveraged_exposure', 2.5) if cfg else 2.5)
                 stress_ratio = 1.0 - cross_stress / stress_threshold
                 boost_beta = 1.0 + (max_lev - 1.0) * stress_ratio
                 boost_beta = round(min(max_lev, boost_beta), 3)
@@ -625,13 +633,13 @@ class ExposureOrchestrator:
                 target = boost_beta
         if attacker_mode or target < 0 or target > 1.0:
             floor = float(cfg.get('exposure.min_target_beta', -1.0) if cfg else -1.0)
-            ceiling = float(cfg.get('exposure.max_leveraged_exposure', 2.5) if cfg else 2.5)
+            ceiling = float(pget('exposure.max_leveraged_exposure', 2.5) if cfg else 2.5)
         else:
-            floor = cfg.get('hedge.beta_floor', 0.1) if cfg else 0.1
-            ceiling = cfg.get('hedge.beta_ceiling', 0.9) if cfg else 0.9
+            floor = pget('hedge.beta_floor', 0.1) if cfg else 0.1
+            ceiling = pget('hedge.beta_ceiling', 0.9) if cfg else 0.9
         result = round(max(floor, min(ceiling, target)), 3)
         try:
-            _s0_brake = float(cfg.get('risk.s0_drawdown_brake', 0.1) if cfg else 0.1)
+            _s0_brake = float(pget('risk.s0_drawdown_brake', 0.1) if cfg else 0.1)
             _s0_sp = self._load_shadow_portfolio()
             _s0_dd = self._get_current_drawdown(_s0_sp)
             if _s0_dd != 0.0 and abs(_s0_dd) >= _s0_brake * 100:
@@ -734,7 +742,7 @@ class ExposureOrchestrator:
             일별 수익률 표준편차. 데이터 부족 시 0.0.
         """
         try:
-            lookback = _cfg.get('hedge.vol_lookback_days', 20) if _cfg else 20
+            lookback = pget('hedge.vol_lookback_days', 20) if _cfg else 20
             snapshots = sp.get('daily_snapshots', [])
             if len(snapshots) < 3:
                 return 0.0
@@ -796,10 +804,10 @@ class ExposureOrchestrator:
             }
         """
         cfg_get = (lambda k, d=None: _cfg.get(k, d)) if _cfg else lambda k, d=None: d
-        extreme_threshold = cfg_get('hedge.bear_score.extreme_threshold', 0.8)
-        moderate_threshold = cfg_get('hedge.bear_score.moderate_threshold', 0.6)
-        max_hedge_ratio = cfg_get('hedge.bear_score.max_size_pct', 0.3)
-        vix_neutral = cfg_get('s2.vix_neutral_level', 18.0) or 18.0
+        extreme_threshold = pget('hedge.bear_score.extreme_threshold', 0.8)
+        moderate_threshold = pget('hedge.bear_score.moderate_threshold', 0.6)
+        max_hedge_ratio = pget('hedge.bear_score.max_size_pct', 0.3)
+        vix_neutral = pget('s2.vix_neutral_level', 18.0) or 18.0
         vix_amp = max(1.0, min(cfg_get('hedge.bear_score.vix_amp_cap', 2.0) or 2.0, vix / max(vix_neutral, 1.0)))
         base_size = bear_score * max_hedge_ratio
         final_size = min(max_hedge_ratio, base_size * vix_amp)

@@ -14,6 +14,11 @@ Usage:
     frd = FactorRiskDecomposer()
     result = frd.decompose()
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -61,7 +66,7 @@ class FactorRiskDecomposer:
                 'total_risk_annual': 0.18,
             }
         """
-        lookback = _get('risk.factor_lookback_days', 120)
+        lookback = pget('risk.factor_lookback_days', 120)
         factor_list = _get('risk.factor_list', ['market', 'size', 'value', 'momentum', 'volatility'])
         port_returns = self._load_portfolio_returns(lookback)
         if port_returns is None or len(port_returns) < 20:

@@ -291,14 +291,22 @@ class DynamicConfig:
         logger.info("  DynamicConfig: reloaded")
 
     def save_overrides(self):
-        """현재 오버라이드를 디스크에 저장."""
+        """현재 오버라이드를 디스크에 저장.
+
+        ★ Wave 1: 무잠금 전체 덮어쓰기 → strict 락 병합. 다른 프로세스(GapFeedback, self-learning 등)가
+          그사이 기록한 키를 보존한다(디스크 ∪ 이 프로세스의 overrides/runtime). 손상 파일은 덮어쓰지 않는다.
+        """
         try:
-            _OVERRIDES_FILE.parent.mkdir(parents=True, exist_ok=True)
-            merged = {**self._overrides, **self._runtime}
-            _OVERRIDES_FILE.write_text(
-                json.dumps(merged, indent=2, ensure_ascii=False, default=str)
-            )
-            logger.info(f"  DynamicConfig: {len(merged)}개 오버라이드 저장")
+            from src.utils.file_ops import safe_json_update
+            # 이 프로세스가 set()으로 바꾼 키만 기록 — 시작 시 로드한 overrides(낡았을 수 있음)를 되쓰지 않음
+            mine = json.loads(json.dumps(dict(self._runtime), default=str, ensure_ascii=False))
+
+            def _merge(disk):
+                base = disk if isinstance(disk, dict) else {}
+                base.update(mine)
+                return base
+            merged = safe_json_update(_OVERRIDES_FILE, _merge, default={}, ensure_ascii=False)
+            logger.info(f"  DynamicConfig: {len(merged)}개 오버라이드 저장 (병합)")
         except Exception as e:
             logger.warning(f"  DynamicConfig 저장 실패: {e}")
 

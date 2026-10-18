@@ -222,15 +222,26 @@ class OvernightSSoTManager:
                 atomic_write_json(_PROJECT_ROOT / "results" / "krx_futures_overnight.json", legacy_nf, indent=2)
 
             # Sync signal_cache.json (관측값만)
+            # ★ Wave 1 Track A: 락 보유 merge-update (파일이 있을 때만 — 기존 의미 유지, 손상 파일 덮어쓰기 금지)
             if sc_path.exists():
-                with open(sc_path, "r", encoding="utf-8") as f:
-                    sc_data = json.load(f)
-                for _k_sc, _v_sc in (("night_futures", record.night_futures_close),
-                                     ("night_futures_change_1d", record.night_futures_change_pct),
-                                     ("vix", record.vix), ("usdkrw", record.usdkrw)):
-                    if _v_sc is not None:
-                        sc_data[_k_sc] = _v_sc
-                atomic_write_json(sc_path, sc_data, indent=2)
+                from src.utils.file_ops import safe_json_update
+                _sc_upd = {_k_sc: _v_sc for _k_sc, _v_sc in (("night_futures", record.night_futures_close),
+                                                           ("night_futures_change_1d", record.night_futures_change_pct),
+                                                           ("vix", record.vix), ("usdkrw", record.usdkrw))
+                           if _v_sc is not None}
+
+                class _NoFile(Exception):
+                    pass
+
+                def _mutate_sc(sc_data):
+                    if not isinstance(sc_data, dict):
+                        raise _NoFile()   # 그 사이 삭제됨/비정상 루트 → 생성·덮어쓰기 하지 않음
+                    sc_data.update(_sc_upd)
+                    return sc_data
+                try:
+                    safe_json_update(sc_path, _mutate_sc, default=None, indent=2)
+                except _NoFile:
+                    pass
         except Exception as e:
             logger.warning(f"  ⚠️ 레거시 미러링 갱신 예외: {e}")
 

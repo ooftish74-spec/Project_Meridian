@@ -18,6 +18,11 @@ S5 LargeCapScorer + ValueTrapGuard 로직을 S3에 직접 흡수.
 
 Author: Project Meridian S3 (absorbed from S4/S5)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import pandas as pd
 import json
 import logging
@@ -67,7 +72,7 @@ class QVMScorer:
             governance_score = self._score_governance(stock)
             qvm_total = value_score + quality_score + momentum_score + governance_score
             _mom_boost_enabled = cfg.get('s3.momentum_boost_enabled', True)
-            _mom_boost_weight = cfg.get('s3.momentum_boost_weight', 0.1)
+            _mom_boost_weight = pget('s3.momentum_boost_weight', 0.1)
             momentum_factor = 0.0
             if _mom_boost_enabled:
                 momentum_factor = self._compute_momentum_factor(ticker)
@@ -137,10 +142,10 @@ class QVMScorer:
         """
         if not scored:
             return scored
-        max_bonus = float(cfg.get('s3.ff3_max_bonus', 20.0))
-        smb_w = float(cfg.get('s3.ff3_smb_weight', 0.3))
-        hml_w = float(cfg.get('s3.ff3_hml_weight', 0.4))
-        wml_w = float(cfg.get('s3.ff3_wml_weight', 0.3))
+        max_bonus = float(pget('s3.ff3_max_bonus', 20.0))
+        smb_w = float(pget('s3.ff3_smb_weight', 0.3))
+        hml_w = float(pget('s3.ff3_hml_weight', 0.4))
+        wml_w = float(pget('s3.ff3_wml_weight', 0.3))
         mcaps = [float(s.get('market_cap', s.get('mcap', 0)) or 0) for s in scored]
         mcap_valid = [m for m in mcaps if m > 0]
         if len(mcap_valid) >= 2:
@@ -149,7 +154,7 @@ class QVMScorer:
             smb_z = [-(m - mu_m) / max(sd_m, 1e-06) if m > 0 else 0.0 for m in mcaps]
         else:
             smb_z = [0.0] * len(scored)
-        mcap_min = float(cfg.get('s3.ff3_smb_mcap_min', 50000000000))
+        mcap_min = float(pget('s3.ff3_smb_mcap_min', 50000000000))
         smb_z = [z if mcaps[i] >= mcap_min or mcaps[i] == 0 else z * 0.3 for i, z in enumerate(smb_z)]
         pbrs = []
         for s in scored:
@@ -291,13 +296,13 @@ class QVMScorer:
         all_roe = [v.get('roe_2yr', 0) for v in all_vals]
         if all_roe:
             mean_roe = sum(all_roe) / len(all_roe)
-            max_roe_adj = max(cfg.get('s3.quality_max_roe', 15.0), mean_roe * 1.5)
+            max_roe_adj = max(pget('s3.quality_max_roe', 15.0), mean_roe * 1.5)
             score += 10.0 * min(1.0, max(0, (roe - min(0, mean_roe)) / max_roe_adj))
         else:
-            max_roe = cfg.get('s3.quality_max_roe', 15.0)
+            max_roe = pget('s3.quality_max_roe', 15.0)
             score += 10.0 * min(1.0, max(0, roe / max_roe))
         gpa = m.get('gp_assets', 0)
-        max_gpa = cfg.get('s3.quality_max_gp_assets', 30.0)
+        max_gpa = pget('s3.quality_max_gp_assets', 30.0)
         score += 8.0 * min(1.0, max(0, gpa / max_gpa))
         f_score = self._compute_fscore(stock)
         if f_score is not None:
@@ -440,7 +445,7 @@ class QVMScorer:
         """
         if not scored_universe:
             return []
-        trap_threshold = cfg.get('s3.trap_risk_threshold', 0.6)
+        trap_threshold = pget('s3.trap_risk_threshold', 0.6)
         safe = []
         trapped = []
         for stock in scored_universe:
@@ -468,10 +473,10 @@ class QVMScorer:
           - 발생액 품질: 20%
           - 현금흐름 괴리: 15%
         """
-        w_mom = cfg.get('s3.trap_w_momentum', 0.4)
-        w_earn = cfg.get('s3.trap_w_earnings', 0.25)
-        w_accrual = cfg.get('s3.trap_w_accrual', 0.2)
-        w_cf = cfg.get('s3.trap_w_cashflow', 0.15)
+        w_mom = pget('s3.trap_w_momentum', 0.4)
+        w_earn = pget('s3.trap_w_earnings', 0.25)
+        w_accrual = pget('s3.trap_w_accrual', 0.2)
+        w_cf = pget('s3.trap_w_cashflow', 0.15)
         risk = 0.0
         mom_pass, _ = self._check_momentum_filter(ticker)
         if not mom_pass:
@@ -500,7 +505,7 @@ class QVMScorer:
             df = pd.read_parquet(pf)
             if df.empty or len(df) < 20:
                 return (True, 'insufficient_data')
-            min_return = cfg.get('s3.trap_min_6m_return', -0.2)
+            min_return = pget('s3.trap_min_6m_return', -0.2)
             ret_6m_fail = False
             if len(df) >= 126:
                 price_now = float(df.iloc[-1].get('close', 0) or 0)
@@ -559,7 +564,7 @@ class QVMScorer:
         if ta <= 0:
             return (True, 'no_total_assets')
         sloan = (ni - cfo) / ta
-        threshold = cfg.get('s3.trap_sloan_threshold', 0.1)
+        threshold = pget('s3.trap_sloan_threshold', 0.1)
         if sloan > threshold:
             return (False, f"sloan_ratio={sloan:.1%}_above_{threshold:.0%}")
         return (True, f"sloan_ok={sloan:.1%}")
@@ -682,10 +687,10 @@ class QVMScorer:
                 price_6m = float(df.iloc[-126].get('close', df.iloc[-126].get('adj_close', 0)) or 0)
                 if price_6m > 0:
                     ret_6m = (price_now - price_6m) / price_6m
-            w_12m = cfg.get('s3.momentum_factor_w_12m', 0.6)
-            w_6m = cfg.get('s3.momentum_factor_w_6m', 0.4)
+            w_12m = pget('s3.momentum_factor_w_12m', 0.6)
+            w_6m = pget('s3.momentum_factor_w_6m', 0.4)
             raw = w_12m * ret_12m + w_6m * ret_6m
-            _clamp_range = cfg.get('s3.momentum_factor_clamp', 0.5)
+            _clamp_range = pget('s3.momentum_factor_clamp', 0.5)
             factor = max(-1.0, min(1.0, raw / _clamp_range))
             return factor
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
@@ -738,7 +743,7 @@ class QVMScorer:
                     r = realized_returns[ticker]
                     factor_scores.append(fs)
                     returns.append(r)
-            if len(factor_scores) < cfg.get('s3.icir_min_samples', 10):
+            if len(factor_scores) < pget('s3.icir_min_samples', 10):
                 results[factor] = {'ic': None, 'icir': None, 'valid': None, 'reason': 'insufficient_samples', 'n_samples': len(factor_scores)}
                 continue
             ic = self._spearman_rank_ic(factor_scores, returns)
@@ -748,8 +753,8 @@ class QVMScorer:
                 icir = abs(t_stat) / math.sqrt(n)
             else:
                 icir = 0
-            icir_strong = cfg.get('s3.icir_strong_threshold', 0.5)
-            icir_weak = cfg.get('s3.icir_weak_threshold', 0.3)
+            icir_strong = pget('s3.icir_strong_threshold', 0.5)
+            icir_weak = pget('s3.icir_weak_threshold', 0.3)
             if icir >= icir_strong:
                 valid = 'strong'
             elif icir >= icir_weak:
@@ -792,8 +797,8 @@ class QVMScorer:
         약한 팩터(ICIR<0.3) → 가중치 축소 권고
         """
         adjustments = {}
-        boost = cfg.get('s3.icir_strong_boost', 1.1)
-        cut = cfg.get('s3.icir_weak_cut', 0.7)
+        boost = pget('s3.icir_strong_boost', 1.1)
+        cut = pget('s3.icir_weak_cut', 0.7)
         for factor, r in results.items():
             valid = r.get('valid')
             if valid == 'strong':
@@ -813,7 +818,7 @@ class QVMScorer:
             import pandas as pd
         except ImportError as e:
             return returns
-        forward_days = cfg.get('s3.icir_forward_days', 5)
+        forward_days = pget('s3.icir_forward_days', 5)
         for stock in scored_universe:
             ticker = stock['ticker']
             pf = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'

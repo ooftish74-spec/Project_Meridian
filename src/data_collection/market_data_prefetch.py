@@ -1,3 +1,13 @@
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import pandas as pd
 '\n★ Market Data Pre-fetch — 거래 시간 전 데이터 사전 적재 [Bias-Fix Root Cause]\n===========================================================================\n근원적 해결:\n  - 거래 시간 중 on-demand yfinance 호출 → 실패 가능 (급락 시 부하)\n  - 대신 morning pipeline(06:00~08:30)에서 미리 로컬 캐시 생성\n  - 거래 로직은 캐시에서만 읽음 → 네트워크 실패와 완전 분리\n\n적재 데이터:\n  - ATR(14일) per ETF ticker  → results/atr_cache.json\n  - VIX 252일 이력            → data/cache/vix_daily.json\n\nAuthor: Project-A | Date: 2026-04-18\n'
 import json
@@ -12,7 +22,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ATR_CACHE = PROJECT_ROOT / 'results' / 'atr_cache.json'
 VIX_CACHE = PROJECT_ROOT / 'data' / 'cache' / 'vix_daily.json'
-_DEFAULT_ETF_TICKERS = ['069500', '122630', '252670', '114800', '229200', '233740', '251340', '102110', '278540', '091160', '091180', '139290', '308620', '143850', '133690']
+_DEFAULT_ETF_TICKERS = load_table('src.data_collection.market_data_prefetch._DEFAULT_ETF_TICKERS', [])
 
 def _get_etf_universe() -> List[str]:
     """

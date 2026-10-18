@@ -17,6 +17,11 @@ Usage:
     attr = PnLAttributor()
     report = attr.compute(stream_metrics, portfolio_value)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -84,7 +89,7 @@ class PnLAttributor:
         daily_returns = metrics.get('daily_returns', [])
         n = len(daily_returns)
         if n > 0:
-            recent_window = cfg.get('allocation.attribution_window', 20)
+            recent_window = pget('allocation.attribution_window', 20)
             recent = daily_returns[-recent_window:]
             stream_return = sum(recent)
             daily_avg = sum(recent) / len(recent)
@@ -94,11 +99,11 @@ class PnLAttributor:
         weighted_return = stream_return * weight
         holding_pnl = weighted_return * portfolio_value
         trade_count = metrics.get('total_trades', 0)
-        tx_cost_rate = cfg.get('allocation.attribution_tx_cost', 0.0025)
+        tx_cost_rate = pget('allocation.attribution_tx_cost', 0.0015)
         avg_trade_size = weight * portfolio_value / max(trade_count, 1)
         trading_cost = trade_count * avg_trade_size * tx_cost_rate
         risk_events = metrics.get('risk_cut_count', 0)
-        risk_cut_impact = cfg.get('allocation.risk_cut_avg_impact', 0.005)
+        risk_cut_impact = pget('allocation.risk_cut_avg_impact', 0.005)
         risk_pnl = -risk_events * risk_cut_impact * weight * portfolio_value
         total_pnl = holding_pnl - trading_cost + risk_pnl
         sharpe = metrics.get('sharpe')
@@ -108,7 +113,7 @@ class PnLAttributor:
             sharpe_contribution = 0
         if n >= 5:
             var = sum(((r - daily_avg) ** 2 for r in daily_returns[-20:])) / min(n, 20)
-            vol = math.sqrt(var) * math.sqrt(cfg.get('common.annualization_factor', 252))
+            vol = math.sqrt(var) * math.sqrt(pget('common.annualization_factor', 252))
         else:
             vol = 0
         return {'weight': round(weight, 4), 'stream_return': round(stream_return, 6), 'weighted_return': round(weighted_return, 6), 'holding_pnl': round(holding_pnl, 0), 'trading_cost': round(trading_cost, 0), 'risk_pnl': round(risk_pnl, 0), 'total_pnl': round(total_pnl, 0), 'contribution_pct': 0, 'sharpe_contribution': round(sharpe_contribution, 4), 'volatility': round(vol, 4), 'trade_count': trade_count, 'n_days': n}
@@ -125,7 +130,7 @@ class PnLAttributor:
         returns = {}
         for sid in self.STREAMS:
             daily_r = stream_metrics.get(sid, {}).get('daily_returns', [])
-            window = cfg.get('allocation.attribution_window', 20)
+            window = pget('allocation.attribution_window', 20)
             if daily_r:
                 recent = daily_r[-window:]
                 returns[sid] = sum(recent)
@@ -178,7 +183,7 @@ class PnLAttributor:
                     return w
         except Exception as _e2:
             logger.critical(f'  [pnl_attribution] PnL attribution 섹션 3: {_e2}', exc_info=True)
-        return {'S1': cfg.get('allocator.s1_base_weight', 0.08), 'S2': cfg.get('allocator.s2_base_weight', 0.3), 'S3': cfg.get('allocator.s3_base_weight', 0.25), 'S4': cfg.get('allocator.s4_base_weight', 0.3)}
+        return {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S4': pget('allocator.s4_base_weight', 0.25)}
 
     def _save_result(self, result: Dict) -> None:
         try:

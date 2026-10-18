@@ -12,6 +12,11 @@ Project Meridian — Dynamic Regime Leverage Engine
   3. 모든 파라미터는 DynamicConfig(defaults.json 및 dynamic_overrides.json)에서 100% 동적 로드 (Zero Hardcoding).
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, Any, Optional
@@ -25,10 +30,10 @@ class DynamicRegimeLeverageEngine:
     """KRX 레짐 & 추세 강도 기반 KODEX 레버리지 동적 승격 제어 엔진."""
 
     def __init__(self):
-        self.ois_min = float(cfg.get("regime.leverage.ois_min", 55.0))
-        self.slope_min = float(cfg.get("regime.leverage.slope_min", 0.005))
+        self.ois_min = float(pget('regime.leverage.ois_min', 55.0))
+        self.slope_min = float(pget('regime.leverage.slope_min', 0.005))
         self.bull_strong_ratio = float(cfg.get("regime.leverage.bull_strong_ratio", 1.0))
-        self.bull_ratio = float(cfg.get("regime.leverage.bull_ratio", 0.5))
+        self.bull_ratio = float(pget('regime.leverage.bull_ratio', 0.5))
         self.caution_ratio = float(cfg.get("regime.leverage.caution_ratio", 0.0))
         self.target_ticker = str(cfg.get("regime.leverage.target_ticker", "122630"))
         self.base_ticker = "069500"

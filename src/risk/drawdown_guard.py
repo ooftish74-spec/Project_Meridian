@@ -22,6 +22,11 @@ Usage:
     # result['measurement'] → 객관적 수치
     # result['judgment']    → 정책 기반 결정
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -68,7 +73,7 @@ class DrawdownGuard:
             except Exception as _dd_e:
                 logger.critical(f'  DrawdownGuard: shadow_portfolio 로드 실패: {_dd_e}', exc_info=True)
         if sleeve_a_nav is None:
-            _default_ratio = float(cfg.get('portfolio.sleeve_a_ratio', 0.6))
+            _default_ratio = float(pget('portfolio.sleeve_a_ratio', 0.6))
             sleeve_a_nav = total_nav * _default_ratio
             logger.debug(f"  DrawdownGuard: sleeve_a_nav fallback 추정 사용 ({_default_ratio * 100:.0f}% of NAV={sleeve_a_nav:,.0f}) — shadow_portfolio 데이터 확인 권장")
         if sleeve_a_hwm is None:
@@ -125,14 +130,14 @@ class DrawdownGuard:
             actions.append({'level': current_stage, 'action': overlay_action, 'target_exposure': target_exposure, 'reason': f"DD Stage {current_stage}: {dd:.1f}%"})
         elif current_stage == 2:
             overlay_action = 'tail_risk_hedge'
-            scale_multiplier = cfg.get('dd_guard.stage2_scale', 0.4)
+            scale_multiplier = pget('dd_guard.stage2_scale', 0.4)
             actions.append({'level': 2, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f"DD Stage 2: {dd:.1f}%"})
         elif current_stage == 1:
             overlay_action = 'force_sell_bottom_20'
-            scale_multiplier = cfg.get('dd_guard.stage1_scale', 0.7)
+            scale_multiplier = pget('dd_guard.stage1_scale', 0.7)
             actions.append({'level': 1, 'action': overlay_action, 'target_exposure': scale_multiplier, 'reason': f"DD Stage 1: {dd:.1f}%"})
         if regime == 'crash' and current_stage == 0:
-            crash_exposure = cfg.get('risk.crash_cash_ratio', 0.8)
+            crash_exposure = pget('risk.crash_cash_ratio', 0.8)
             target_exposure = min(target_exposure, 1.0 - crash_exposure)
             actions.append({'level': 'crash', 'action': 'crash_protocol', 'target_exposure': target_exposure, 'reason': 'CRASH 레짐 프로토콜'})
         return {'dd_stage': current_stage, 'target_exposure': target_exposure, 'scale_multiplier': scale_multiplier, 'action_required': overlay_action, 'actions': actions, 'safe': len(actions) == 0, 'regime': regime}

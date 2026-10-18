@@ -186,8 +186,42 @@ class WalkForwardValidator:
             logger.debug(f"  Walk-Forward 저장 실패: {e}")
 
 
+    def validate_purged_panel(self, window_days=None, max_tickers=None, n_splits=None,
+                              model_name=None, out_dir=None, compare_naive=False,
+                              save_candidate=False, **kwargs) -> Dict:
+        """[WAVE3 Track D] 과거 패널 기반 Date-major Purged Walk-Forward OOS 검증.
+
+        ``validate()`` 는 signal_cache 스냅샷(단일 시점) 실시간 모니터링이고,
+        이 메서드는 학습 데이터 패널을 날짜 단위 purge(h 거래일)+embargo(≥5 거래일)
+        walk-forward 로 재학습/예측하여 per-date IC(t), hit rate, decile spread 를
+        results/ml_validation/purged_wf_<ts>.json 에 기록한다.
+        운영 모델/레지스트리는 변경하지 않는다 (후보는 models_candidate/ 에만).
+        """
+        from scripts.train_ensemble import run_purged_validation
+        return run_purged_validation(
+            window_days=window_days, max_tickers=max_tickers, n_splits=n_splits,
+            model_name=model_name, out_dir=out_dir, compare_naive=compare_naive,
+            save_candidate=save_candidate, **kwargs)
+
+
 if __name__ == '__main__':
+    import argparse
     logging.basicConfig(level=logging.INFO, format='%(message)s')
+    _p = argparse.ArgumentParser(description='Walk-Forward Validator')
+    _p.add_argument('--purged-panel', action='store_true',
+                    help='[WAVE3] 날짜 단위 Purged WF OOS 검증 (기본: 일일 live 스냅샷 검증)')
+    _p.add_argument('--window', type=int, default=None)
+    _p.add_argument('--max-tickers', type=int, default=None)
+    _p.add_argument('--n-splits', type=int, default=None)
+    _p.add_argument('--out-dir', default=None)
+    _p.add_argument('--compare-naive', action='store_true')
+    _args = _p.parse_args()
     wfv = WalkForwardValidator()
-    result = wfv.validate()
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if _args.purged_panel:
+        result = wfv.validate_purged_panel(
+            window_days=_args.window, max_tickers=_args.max_tickers,
+            n_splits=_args.n_splits, out_dir=_args.out_dir,
+            compare_naive=_args.compare_naive)
+    else:
+        result = wfv.validate()
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))

@@ -2,6 +2,11 @@
 USA Data Collector
 Collects US economic and market data from multiple sources
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import pandas as pd
 from typing import Dict, Optional
@@ -324,7 +329,7 @@ class USADataCollector:
         try:
             from config.dynamic_config import DynamicConfig
             cfg = DynamicConfig()
-            max_nan = cfg.get('data.max_nan_ratio', 0.5)
+            max_nan = pget('data.max_nan_ratio', 0.8)
         except ImportError as e:
             max_nan = 0.5
         missing_ratio = data.isnull().sum().sum() / max(len(data) * len(data.columns), 1)

@@ -16,6 +16,12 @@
   python3 scripts/daily_pipeline.py market         # 파이프라인 market phase
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import sys
@@ -161,8 +167,8 @@ def main():
         # 4. 매수 주문 생성
         logger.info("\n📋 매수 주문 생성")
 
-        s1_budget = cfg.get('allocation.s1_budget', 30_000_000)
-        s1_min_trade = cfg.get('allocation.s1_min_trade', 500_000)
+        s1_budget = pget('allocation.s1_budget', 200000)
+        s1_min_trade = pget('allocation.s1_min_trade', 100000)
 
         # S1 기존 투자액 차감
         s1_invested = 0
@@ -214,6 +220,10 @@ def main():
             if is_us:
                 from src.execution.execution_engine import ExecutionEngine
                 fx_rate = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                if fx_rate <= 0:
+                    # ★ Wave 1: 환율 미상 → 해외 매수 생략 (날조 환율 금지)
+                    logger.warning(f"  🛑 {ticker}: USD/KRW 미상 → 해외 매수 생략")
+                    continue
                 eff_price_krw = price * fx_rate
             else:
                 eff_price_krw = price

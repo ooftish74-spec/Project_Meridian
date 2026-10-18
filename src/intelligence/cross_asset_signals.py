@@ -13,6 +13,21 @@ Cross-Asset Signal Engine — V5 개선사항 #11 구현
 Author: Project-A
 Date: 2026-05-01
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import numpy as np
@@ -23,7 +38,7 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent.parent
 RESULTS = ROOT / 'results'
 DATA = ROOT / 'data'
-GLOBAL_ASSETS = {'SPY': {'name': 'S&P 500', 'kr_impact': ['KOSPI', 'tech', 'large_cap']}, 'QQQ': {'name': 'NASDAQ-100', 'kr_impact': ['IT', 'semiconductor']}, 'SOXX': {'name': 'Semiconductor', 'kr_impact': ['semiconductor']}, 'TLT': {'name': 'US 20Y Treasury', 'kr_impact': ['growth', 'utilities']}, 'HYG': {'name': 'High Yield Bond', 'kr_impact': ['risk_sentiment']}, 'EWY': {'name': 'Korea ETF', 'kr_impact': ['KOSPI', 'foreign_flow']}, 'GLD': {'name': 'Gold', 'kr_impact': ['safe_haven']}, 'USO': {'name': 'Oil', 'kr_impact': ['energy', 'chemical']}, 'EWJ': {'name': 'Japan ETF', 'kr_impact': ['asia_sentiment']}, 'FXI': {'name': 'China Large Cap', 'kr_impact': ['china_exposure']}}
+GLOBAL_ASSETS = load_table('src.intelligence.cross_asset_signals.GLOBAL_ASSETS', {})
 
 class CrossAssetSignalEngine:
     """
@@ -70,7 +85,7 @@ class CrossAssetSignalEngine:
         regime_adj = 'neutral'
         try:
             from config.dynamic_config import DynamicConfig
-            z_ext = DynamicConfig().get('adaptive.z_score_extreme', 1.5)
+            z_ext = pget('adaptive.z_score_extreme', 1.5)
             hist_file = RESULTS / 'cross_asset_signals_history.json'
             comp_hist = []
             if hist_file.exists():

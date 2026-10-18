@@ -18,6 +18,11 @@ Zero-Hardcoding Policy:
   모든 임계치, 롤링 윈도우, 수치 파라미터는 DynamicConfig ('black_swan.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, List, Any
@@ -82,9 +87,9 @@ class UnknownBlackSwanDetector:
         signal_cache = market_data.get('signal_cache', {})
 
         # Zero-Hardcoding 파라미터 지연 로드
-        entropy_floor = float(cfg.get('black_swan.entropy_floor_ecdf_5pct', 0.25))
-        mahalanobis_threshold = float(cfg.get('black_swan.mahalanobis_threshold_sigma', 3.0))
-        tda_betti_threshold = float(cfg.get('black_swan.tda_betti_loop_threshold', 0.85))
+        entropy_floor = float(pget('black_swan.entropy_floor_ecdf_5pct', 0.25))
+        mahalanobis_threshold = float(pget('black_swan.mahalanobis_threshold_sigma', 3.0))
+        tda_betti_threshold = float(pget('black_swan.tda_betti_loop_threshold', 0.85))
 
         # 1. Shannon Entropy 계산
         probs = market_data.get('order_distribution', [0.2, 0.2, 0.2, 0.2, 0.2])

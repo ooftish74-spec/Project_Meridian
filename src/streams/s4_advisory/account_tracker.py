@@ -295,6 +295,12 @@ class S4AccountTracker:
     # ──────────────────────────────────────────
 
     def backfill_account_fields(self):
+        # ★ Wave 1: shadow_portfolio.json RMW를 ShadowPortfolioManager와 동일한 strict 교차 프로세스 락 안에서 수행
+        from src.utils.file_ops import file_lock_transaction
+        with file_lock_transaction(_RESULTS / 'shadow_portfolio.json', timeout=30, strict=True):
+            return self._backfill_account_fields_locked()
+
+    def _backfill_account_fields_locked(self):
         """shadow_portfolio의 S4 포지션/거래에 account 필드를 보정.
 
         position.account가 없는 S4 포지션에 ETF_ACCOUNT_MAP 기반으로 채움.

@@ -37,6 +37,9 @@ _PROTECTED_DIRS = [
     _PROJECT_ROOT / "results",
     _PROJECT_ROOT / "data" / "macro",
 ]
+# Live-growing / non-SSOT subtrees of results/ that must NOT be rolled back (logs ~GBs, ML validation reports
+# written by concurrent local jobs). They are excluded from the snapshot and carried over untouched on restore.
+_UNPROTECTED_SUBDIRS = {"results": ("logs", "ml_validation")}
 _PROTECTED_FILE_GLOBS = [
     (_PROJECT_ROOT / "config", "*.json"),
     (_PROJECT_ROOT / "config", ".kis_token*"),
@@ -99,7 +102,9 @@ def _snapshot(dst_root: Path) -> list[tuple[Path, Path]]:
         if d.exists():
             target = dst_root / "dirs" / d.relative_to(_PROJECT_ROOT)
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(d, target, symlinks=True)
+            _skip = set(_UNPROTECTED_SUBDIRS.get(str(d.relative_to(_PROJECT_ROOT)), ()))
+            shutil.copytree(d, target, symlinks=True,
+                            ignore=(lambda _dir, _names, _d=d, _s=_skip: [n for n in _names if Path(_dir) == _d and n in _s]))
             pairs.append((d, target))
     for base, pattern in _PROTECTED_FILE_GLOBS:
         for f in base.glob(pattern):
@@ -122,6 +127,11 @@ def _restore(pairs: list[tuple[Path, Path]], trash_root: Path) -> None:
                 trash.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(original, trash)
             shutil.copytree(saved, original, symlinks=True)
+            # carry over unprotected live subtrees (not snapshotted) from the moved-aside tree
+            for _sub in _UNPROTECTED_SUBDIRS.get(str(original.relative_to(_PROJECT_ROOT)), ()):
+                _src = call_trash / original.relative_to(_PROJECT_ROOT) / _sub
+                if _src.exists() and not (original / _sub).exists():
+                    os.replace(_src, original / _sub)
         else:
             original.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(saved, original)

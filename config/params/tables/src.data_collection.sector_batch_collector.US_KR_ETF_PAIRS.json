@@ -1,0 +1,70 @@
+{
+ "Semiconductor": {
+  "us": "SOXX",
+  "kr": "091160"
+ },
+ "AI": {
+  "us": "BOTZ",
+  "kr": null
+ },
+ "Software": {
+  "us": "IGV",
+  "kr": null
+ },
+ "Finance": {
+  "us": "XLF",
+  "kr": "091170"
+ },
+ "Healthcare": {
+  "us": "XLV",
+  "kr": "266420"
+ },
+ "Energy": {
+  "us": "XLE",
+  "kr": "117460"
+ },
+ "Materials": {
+  "us": "XLB",
+  "kr": "117460"
+ },
+ "Consumer": {
+  "us": "XLP",
+  "kr": "228810"
+ },
+ "Utilities": {
+  "us": "XLU",
+  "kr": null
+ },
+ "Telecom": {
+  "us": "XLC",
+  "kr": null
+ },
+ "Defense": {
+  "us": "ITA",
+  "kr": "364690"
+ },
+ "RealEstate": {
+  "us": "VNQ",
+  "kr": null
+ },
+ "Shipbuilding": {
+  "us": null,
+  "kr": "139230"
+ },
+ "Automotive": {
+  "us": null,
+  "kr": "091180"
+ },
+ "Battery": {
+  "us": "LIT",
+  "kr": "305720"
+ },
+ "Robotics": {
+  "us": "ROBO",
+  "kr": null
+ },
+ "QuantumComputing": {
+  "us": "QTUM",
+  "kr": null
+ }
+}

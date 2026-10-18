@@ -10,6 +10,11 @@ Usage:
     result = cp.predict_interval(y_pred_new)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import numpy as np
 from collections import deque
@@ -37,8 +42,8 @@ class AdaptiveConformalPredictor:
         self.target_coverage = target_coverage
         self.adaptation_rate = adaptation_rate
         self.window_size = window_size
-        self.conf_high_threshold = _cfg.get('conformal.width_high', 0.15) if _cfg else 0.15
-        self.conf_low_threshold = _cfg.get('conformal.width_low', 0.30) if _cfg else 0.30
+        self.conf_high_threshold = pget('conformal.width_high', 0.15) if _cfg else 0.15
+        self.conf_low_threshold = pget('conformal.width_low', 0.30) if _cfg else 0.30
 
         self.calibration_scores = []
         self.quantile_level = target_coverage

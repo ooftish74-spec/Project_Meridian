@@ -335,22 +335,22 @@ class MacroFeatureIntegrator:
 
     def _save_to_signal_cache(self, features: Dict):
         """signal_cache.json에 macro_features 적재."""
+        # ★ Wave 1 Track A: signal_cache.json 다중 writer → 락 보유 merge-update(safe_json_update).
+        #   과거: 무잠금 읽기→쓰기 사이 다른 writer 키 유실, 손상 시 {}로 전체 덮어쓰기(다른 키 전부 소실).
         try:
+            from src.utils.file_ops import safe_json_update
             sc_file = _RESULTS / 'signal_cache.json'
-            existing = {}
-            if sc_file.exists():
-                try:
-                    existing = json.loads(sc_file.read_text())
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                    logger.warning('[SILENT_BYPASS] Suppressed exception at macro_feature_integrator.py:493', exc_info=True)
-            existing['macro_features'] = features
-            for _top_k in ('fred_hy_spread', 'fred_hy_spread_raw', 'credit_stress'):
-                if _top_k in features:
-                    existing[_top_k] = features[_top_k]
-            existing['macro_features_ts'] = datetime.now().isoformat()
-            atomic_write_json(sc_file, existing, indent=2, ensure_ascii=False, default=str)
+            _feat = json.loads(json.dumps(features, ensure_ascii=False, default=str))   # 직렬화 불가 값 사전 정규화
+
+            def _mutate(existing):
+                existing = existing if isinstance(existing, dict) else {}
+                existing['macro_features'] = _feat
+                for _top_k in ('fred_hy_spread', 'fred_hy_spread_raw', 'credit_stress'):
+                    if _top_k in _feat:
+                        existing[_top_k] = _feat[_top_k]
+                existing['macro_features_ts'] = datetime.now().isoformat()
+                return existing
+            safe_json_update(sc_file, _mutate, default={}, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f'  signal_cache 적재 실패: {e}', exc_info=True)
 

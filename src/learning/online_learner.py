@@ -18,6 +18,11 @@ Medallion Upgrade Phase 3-A-1.
 모든 파라미터 DynamicConfig 동적 로드.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 import json
@@ -50,7 +55,7 @@ class ForgettingCurve:
         Returns:
             가중치 리스트 (최신이 가장 높음)
         """
-        lam = cfg.get('online.forgetting_lambda', 0.995)
+        lam = pget('online.forgetting_lambda', 0.995)
         if reference_date_idx is None:
             reference_date_idx = n_observations - 1
 
@@ -122,13 +127,13 @@ class OnlineLearner:
         })
 
         # 최근 N건 유지
-        max_buffer = cfg.get('online.max_buffer_size', 500)
+        max_buffer = pget('online.max_buffer_size', 500)
         if len(self._observation_buffer[stream_id]) > max_buffer:
             self._observation_buffer[stream_id] = \
                 self._observation_buffer[stream_id][-max_buffer:]
 
         # 최소 관측치 도달 시 학습
-        min_obs = cfg.get('online.min_observations_per_update', 10)
+        min_obs = pget('online.min_observations_per_update', 10)
         if len(self._observation_buffer[stream_id]) >= min_obs:
             return self._update_params(stream_id)
 
@@ -140,8 +145,8 @@ class OnlineLearner:
         θ_new = α × θ_observed + (1-α) × θ_old
         Safety: |θ_new - θ_old| < max_step × |θ_old|
         """
-        alpha = cfg.get('online.learning_rate', 0.05)
-        max_step = cfg.get('online.max_step', 0.10)
+        alpha = pget('online.learning_rate', 0.05)
+        max_step = pget('online.max_step', 0.10)
 
         observations = self._observation_buffer[stream_id]
         changes = {}
@@ -292,8 +297,8 @@ class OnlineLearner:
                 sid: len(buf)
                 for sid, buf in self._observation_buffer.items()
             },
-            'learning_rate': cfg.get('online.learning_rate', 0.05),
-            'forgetting_lambda': cfg.get('online.forgetting_lambda', 0.995),
+            'learning_rate': pget('online.learning_rate', 0.05),
+            'forgetting_lambda': pget('online.forgetting_lambda', 0.995),
         }
 
     def _save_state(self) -> None:

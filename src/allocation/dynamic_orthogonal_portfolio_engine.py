@@ -19,6 +19,11 @@ Date: 2026-10-10
 """
 
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 from typing import Dict, List, Optional, Tuple, Any
@@ -209,8 +214,8 @@ class DynamicConstrainedPortfolioOptimizer:
         except Exception:
             _cfg = None
 
-        default_fee = float(_cfg.get('execution.broker_fee_rate', 0.00015)) if _cfg else 0.00015
-        default_tax = float(_cfg.get('tax.krx_stock_transaction_tax', 0.0018)) if _cfg else 0.0018
+        default_fee = float(pget('execution.broker_fee_rate', 0.00015)) if _cfg else 0.00015
+        default_tax = float(pget('tax.krx_stock_transaction_tax', 0.0018)) if _cfg else 0.0018
 
         w_curr = np.zeros(N) if current_weights is None else np.asarray(current_weights, dtype=float).flatten()
         c_friction = np.zeros(N)

@@ -12,6 +12,11 @@ Key Features:
 5. Capital Allocation Interface: Supports Absolute Fixed Amount (KRW) Allocation
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -265,7 +270,7 @@ class StrategicQVMCompoundingSleeve:
         mos_vals = np.array([s['mos_pct'] for s in universe], dtype=float)
         median_mos = float(np.median(mos_vals)) if len(mos_vals) > 0 else 20.0
         
-        entry_z_threshold = float(self.cfg_get('s3.strategic_entry_z_threshold', 0.5))
+        entry_z_threshold = float(pget('s3.strategic_entry_z_threshold', 0.5))
 
         candidates = []
         for s in universe:

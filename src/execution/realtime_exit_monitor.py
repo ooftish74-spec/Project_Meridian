@@ -36,6 +36,12 @@ try:
 except ImportError as e:
     DynamicConfig = None
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
+
 def _cfg_get(key: str, default):
     """DynamicConfig 동적 로드 헬퍼."""
     try:
@@ -57,12 +63,13 @@ class AlertZone:
         self.avg_price = avg_price
         
         # [Solution 2: ATR Noise Buffer for Group 1 Leveraged/Short Tickers]
-        group1_tickers = {'252670', '233740', 'TQQQ', 'SOXL', 'SQQQ'}
+        # [Wave2 TrackF] 리터럴 세트는 ticker_master.EXIT_GROUP1_ETPS 로 중앙화 (master 확장 금지: SL 확대 = 리스크 완화)
+        from src.data_collection.ticker_master import EXIT_GROUP1_ETPS as group1_tickers
         group1_streams = {'S3', 'S5', 'S11', 'S11_HIGHBETA_SNIPER'}
         self.is_group1 = (ticker in group1_tickers) or (stream_id in group1_streams)
         
         if self.is_group1:
-            atr_mult = float(_cfg_get('monitor.group1_atr_sl_mult', 1.45))
+            atr_mult = float(pget('monitor.group1_atr_sl_mult', 1.45))
             sl_pct = sl_pct * atr_mult  # e.g. -1.8% * 1.45 = -2.61% dynamic expansion
             
         self.sl_pct = sl_pct
@@ -91,7 +98,7 @@ class AlertZone:
         now = time.time()
         if current_price <= self.sl_price:
             if self.is_group1:
-                delay_sec = float(_cfg_get('monitor.group1_sl_delay_sec', 180.0))  # 3분 검증 필터
+                delay_sec = float(pget('monitor.group1_sl_delay_sec', 180.0))  # 3분 검증 필터
                 if self.sl_breach_start_ts == 0.0:
                     self.sl_breach_start_ts = now
                     logger.info(f"  ⏱️ [Time-Filter] {self.ticker} ({self.stream_id}) SL 침범 포착 → {delay_sec:.0f}초 노이즈 지연 검증 시작")
@@ -170,7 +177,7 @@ class RealtimeExitMonitor:
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True, name='exit-monitor-heartbeat')
         self._heartbeat_thread.start()
         tickers = {az.ticker for az in self._alert_zones.values()}
-        logger.info(f"  🟢 RealtimeExitMonitor 시작: {len(self._alert_zones)}포지션, {len(tickers)}종목 모니터링 (WS={('ON' if self._ws_client else 'OFF')}, HB={_cfg_get('monitor.heartbeat_interval_sec', 300)}초)")
+        logger.info(f"  🟢 RealtimeExitMonitor 시작: {len(self._alert_zones)}포지션, {len(tickers)}종목 모니터링 (WS={('ON' if self._ws_client else 'OFF')}, HB={pget('monitor.heartbeat_interval_sec', 300)}초)")
         self._save_status()
         return True
 
@@ -226,7 +233,7 @@ class RealtimeExitMonitor:
             from src.data_collection.kis_websocket import get_websocket_client
             self._ws_client = get_websocket_client()
             tickers = list({az.ticker for az in self._alert_zones.values()})
-            max_sub = _cfg_get('ws.max_subscription_tickers', 40)
+            max_sub = pget('ws.max_subscription_tickers', 40)
             tickers = tickers[:max_sub]
             self._ws_client.subscribe_price(tickers)
             self._ws_client.on_price(self._on_price_update)
@@ -269,8 +276,8 @@ class RealtimeExitMonitor:
             price: 현재가
         """
         now = time.time()
-        alert_interval = _cfg_get('monitor.alert_check_interval_sec', 30)
-        normal_interval = _cfg_get('monitor.heartbeat_interval_sec', 300)
+        alert_interval = pget('monitor.alert_check_interval_sec', 30)
+        normal_interval = pget('monitor.heartbeat_interval_sec', 300)
         with self._alert_zones_lock:
             for az in self._alert_zones.values():
                 if az.ticker != ticker:
@@ -309,7 +316,7 @@ class RealtimeExitMonitor:
             self._exit_in_progress = True
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
-            initial_capital = _cfg_get('portfolio.initial_capital', 20_000_000)
+            initial_capital = pget('portfolio.initial_capital', 19600000.0)
             with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
                 with self._prices_lock:
                     prices = dict(self._latest_prices)
@@ -347,7 +354,7 @@ class RealtimeExitMonitor:
                     except Exception as ee_err:
                         logger.critical(f"  ❌ ExecutionEngine (Shadow TCA) 연동 실패: {ee_err}", exc_info=True)
                         send_emergency_page(f"🚨 [FATAL] {ee_err} at realtime_exit_monitor.py", exc_info=ee_err)
-                    etf_comm = _cfg_get('execution.etf_commission_rate', 0.00015)
+                    etf_comm = pget('execution.etf_commission_rate', 0.00015)
                     s1_sells = [s for s in sell_orders if s.get('stream_id') == 'S1']
                     other_sells = [s for s in sell_orders if s.get('stream_id') != 'S1']
                     if s1_sells:
@@ -387,11 +394,11 @@ class RealtimeExitMonitor:
         """
         logger.info('  💓 Heartbeat 루프 시작')
         while self._running:
-            interval = _cfg_get('monitor.heartbeat_interval_sec', 300)
+            interval = pget('monitor.heartbeat_interval_sec', 300)
             now = datetime.now()
-            close_h = _cfg_get('s1.exit.close_time_hour', 15)
-            close_m = _cfg_get('s1.exit.close_time_minute', 10)
-            market_start_h = _cfg_get('monitor.market_start_hour', 9)
+            close_h = pget('s1.exit.close_time_hour', 15)
+            close_m = pget('s1.exit.close_time_minute', 10)
+            market_start_h = pget('monitor.market_start_hour', 9)
             market_start_m = _cfg_get('monitor.market_start_minute', 0)
             current_t = now.time()
             market_start = dtime(market_start_h, market_start_m)
@@ -416,14 +423,14 @@ class RealtimeExitMonitor:
                         self._stats['last_heartbeat'] = now.isoformat()
                     ws_ok = self._ws_client and self._ws_client.is_running and self._stats.get('ws_connected', False)
                     if not ws_ok:
-                        fallback_interval = _cfg_get('monitor.ws_fallback_interval_sec', 60)
+                        fallback_interval = pget('monitor.ws_fallback_interval_sec', 60)
                         logger.debug(f"  💓 Heartbeat (WS 장애 fallback): {len(rest_prices)}종목 조회, 다음 {fallback_interval}초 후")
                         interval = fallback_interval
                     else:
                         logger.debug(f"  💓 Heartbeat: {len(rest_prices)}종목 조회 완료")
                     any_alert = any((az.in_alert_zone for az in self._alert_zones.values()))
                     if any_alert:
-                        alert_interval = _cfg_get('monitor.alert_check_interval_sec', 30)
+                        alert_interval = pget('monitor.alert_check_interval_sec', 30)
                         interval = min(interval, alert_interval)
                         logger.info(f"  ⚠️ Alert Zone 활성 → 체크 주기 {interval}초")
                     self._trigger_exit_check('heartbeat')
@@ -441,9 +448,9 @@ class RealtimeExitMonitor:
         """
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
-            initial_capital = _cfg_get('portfolio.initial_capital', 20_000_000)
+            initial_capital = pget('portfolio.initial_capital', 19600000.0)
             with ShadowPortfolioManager(initial_capital=initial_capital).transaction() as mgr:
-                alert_margin = _cfg_get('monitor.alert_margin_pct', 10)
+                alert_margin = pget('monitor.alert_margin_pct', 10)
                 cfg = DynamicConfig() if DynamicConfig else None
                 new_zones = {}
                 for pos_key, pos in mgr.positions.items():
@@ -481,8 +488,8 @@ class RealtimeExitMonitor:
                     # 🚀 [Whipsaw Guard] 개장 15분간 동적 ATR 손절 마진 확장 (-1.8% / ATR 1.5x)
                     from datetime import datetime as _dt
                     _now_dt = _dt.now()
-                    _opening_margin_min = float(cfg.get('execution.opening_dynamic_sl_margin_min', 15))
-                    _atr_mult = float(cfg.get('execution.opening_dynamic_sl_atr_mult', 1.5))
+                    _opening_margin_min = float(pget('execution.opening_dynamic_sl_margin_min', 30))
+                    _atr_mult = float(pget('execution.opening_dynamic_sl_atr_mult', 2.0))
                     _entry_time_str = str(pos.get('entry_time', pos.get('timestamp', '')))
                     if _entry_time_str:
                         try:
@@ -531,7 +538,7 @@ class RealtimeExitMonitor:
             {ticker: price} 딕셔너리
         """
         prices = {}
-        batch_size = _cfg_get('monitor.rest_batch_size', 20)
+        batch_size = pget('monitor.rest_batch_size', 20)
         missing = tickers[:batch_size]
         if missing:
             try:
@@ -591,7 +598,7 @@ def _is_kelly_booster_active_monitor(regime: str) -> bool:
         ois_history = [float(v) for v in sc.get('ois_history', []) if v is not None]
         if not ois_history:
             return False
-        ois_lookback = int(_cfg_get('kelly.ois_lookback_days', 60))
+        ois_lookback = int(pget('kelly.ois_lookback_days', 60))
         ois_median = statistics.median(ois_history[-ois_lookback:])
         return ois_today > ois_median
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:

@@ -21,6 +21,11 @@ Usage:
     judge = LeverageJudge()
     result = judge.assess(portfolio, stream_metrics, regime='bull')
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from datetime import datetime
@@ -89,16 +94,16 @@ class LeverageJudge:
         leverage = 1
         reasons = []
         min_sharpe_3x = cfg.get('leverage.3x_min_sharpe', 2.0)
-        max_mdd_3x = cfg.get('leverage.3x_max_mdd_pct', -3.0)
-        max_corr_3x = cfg.get('leverage.3x_max_correlation', 0.3)
+        max_mdd_3x = pget('leverage.3x_max_mdd_pct', -3.0)
+        max_corr_3x = pget('leverage.3x_max_correlation', 0.3)
         if measurement['sharpe_30d'] >= min_sharpe_3x and measurement['mdd_30d_pct'] > max_mdd_3x and (measurement['max_inter_stream_corr'] < max_corr_3x) and (regime == 'bull'):
             leverage = 3
             reasons.append(f"3X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_3x}, MDD={measurement['mdd_30d_pct']:.1f}%>{max_mdd_3x}%, ρ={measurement['max_inter_stream_corr']:.2f}<{max_corr_3x}")
         elif leverage < 2:
-            min_sharpe_2x = cfg.get('leverage.2x_min_sharpe', 1.5)
-            min_confidence = cfg.get('leverage.2x_min_confidence', 0.7)
-            min_wins = cfg.get('leverage.2x_min_consecutive_wins', 5)
-            max_var = cfg.get('leverage.2x_max_var_pct', 1.5)
+            min_sharpe_2x = pget('leverage.2x_min_sharpe', 1.5)
+            min_confidence = pget('leverage.2x_min_confidence', 0.7)
+            min_wins = pget('leverage.2x_min_consecutive_wins', 5)
+            max_var = pget('leverage.2x_max_var_pct', 1.5)
             if measurement['sharpe_30d'] >= min_sharpe_2x and measurement['regime_confidence'] >= min_confidence and (measurement['consecutive_wins'] >= min_wins) and (measurement['var_95_pct'] < max_var) and (regime in ('bull', 'caution')):
                 leverage = 2
                 reasons.append(f"2X: Sharpe={measurement['sharpe_30d']:.2f}≥{min_sharpe_2x}, 승연속={measurement['consecutive_wins']}≥{min_wins}")
@@ -106,7 +111,7 @@ class LeverageJudge:
             reasons.append('1X: 레버리지 조건 미충족')
         inverse_allowed = False
         inverse_reason = ''
-        vix_threshold = cfg.get('regime.vix_caution_threshold', 25)
+        vix_threshold = pget('regime.vix_caution_threshold', 25)
         if regime in ('bear', 'crash'):
             if measurement['vix'] > vix_threshold:
                 inverse_allowed = True
@@ -114,11 +119,28 @@ class LeverageJudge:
             elif regime == 'crash':
                 inverse_allowed = True
                 inverse_reason = f'인버스 허용: CRASH 레짐'
-        return {'leverage_level': leverage, 'inverse_allowed': inverse_allowed, 'inverse_max_pct': cfg.get('leverage.inverse_max_pct', 0.2) if inverse_allowed else 0, 'etf_ticker': self._get_etf_ticker(leverage), 'inverse_ticker': cfg.get('leverage.inverse_ticker', '114800') if inverse_allowed else None, 'reasons': reasons, 'inverse_reason': inverse_reason, 'regime': regime}
+        _etf = self._get_etf_ticker(leverage)
+        _etf_factor = self._etf_leverage_factor(_etf, leverage)
+        if _etf_factor is not None and abs(_etf_factor - leverage) > 1e-9 and leverage > 1:
+            logger.warning(f"  [LeverageJudge] leverage_level={leverage}X 이지만 매핑 ETF {_etf} 의 실제 배수는 {_etf_factor:g}X "
+                           f"(ticker_master) — 노출 계산은 etf_leverage_factor 사용 권장")
+        return {'etf_leverage_factor': _etf_factor, 'leverage_level': leverage, 'inverse_allowed': inverse_allowed, 'inverse_max_pct': pget('leverage.inverse_max_pct', 0.5) if inverse_allowed else 0, 'etf_ticker': self._get_etf_ticker(leverage), 'inverse_ticker': cfg.get('leverage.inverse_ticker', '114800') if inverse_allowed else None, 'reasons': reasons, 'inverse_reason': inverse_reason, 'regime': regime}
+
+    @staticmethod
+    def _etf_leverage_factor(etf_ticker: str, level: int):
+        """[Wave2 TrackF] 매핑 ETF 의 '진짜' 배수 (ticker_master → STRUCTURAL_ETP). 미상이면 level."""
+        try:
+            from src.data_collection.ticker_master import get_ticker_master
+            lev = get_ticker_master().leverage(etf_ticker)
+            return float(lev) if lev is not None else float(level)
+        except Exception:
+            return float(level)
 
     def _get_etf_ticker(self, leverage: int) -> str:
         """레버리지 수준에 맞는 ETF 티커."""
         if leverage >= 3:
+            # NOTE(Wave2 TrackF): 키 이름은 'etf_3x' 이지만 233740(KODEX 코스닥150레버리지)은 실제 2X 상품
+            # (KIS 마스터 실측). KRX 에는 3X ETF 가 없음. 실제 배수는 judge() 의 etf_leverage_factor 참조.
             return cfg.get('leverage.etf_3x', '233740')
         elif leverage >= 2:
             return cfg.get('leverage.etf_2x', '122630')
@@ -133,9 +155,9 @@ class LeverageJudge:
         if holding_days <= 1:
             return 1.0
         if regime in ('bull', 'bear', 'crash'):
-            return max(0.60, 1.0 - 0.10 * (holding_days - 1))
+            return max(pget('leverage_judge.trend_haircut_floor', 0.6), 1.0 - pget('leverage_judge.trend_haircut_slope', 0.1) * (holding_days - 1))
         # 횡보장 (caution/range)
-        haircut = max(0.20, 1.0 - 0.35 * (holding_days - 1))
+        haircut = max(pget('leverage_judge.range_haircut_floor', 0.2), 1.0 - pget('leverage_judge.range_haircut_slope', 0.35) * (holding_days - 1))
         logger.warning(f"📉 [LeverageJudge] Phase 6 횡보장 보유 감쇄 발화 (보유일={holding_days}일, 감쇄비율={haircut:.2f})")
         return haircut
 
@@ -167,10 +189,10 @@ class LeverageJudge:
         exit_orders = []
         etf_tickers_str = cfg.get('leverage_judge.etf_tickers', '114800,252670,122630,233740,0195R0,0195S0')
         etf_tickers = [t.strip() for t in etf_tickers_str.split(',')]
-        base_max_hold = int(cfg.get('leverage_judge.max_hold_days', 5))
-        macro_vix_threshold = float(cfg.get('leverage_judge.macro_vix_threshold', 22.0))
+        base_max_hold = int(pget('leverage_judge.max_hold_days', 5))
+        macro_vix_threshold = float(pget('leverage_judge.macro_vix_threshold', 22.0))
         atr_sl_mult = float(cfg.get('leverage_judge.atr_sl_mult', 2.0))
-        atr_trail_mult = float(cfg.get('leverage_judge.atr_trail_mult', 1.5))
+        atr_trail_mult = float(pget('leverage_judge.atr_trail_mult', 1.5))
         current_date = market_data.get('date', datetime.now().strftime('%Y-%m-%d')) if market_data else datetime.now().strftime('%Y-%m-%d')
         vix_raw = market_data.get('signal_cache', {}).get('vix', 20.0) if market_data else 20.0
         try:
@@ -179,7 +201,7 @@ class LeverageJudge:
                 vix = 20.0
         except (ValueError, TypeError):
             vix = 20.0
-        dynamic_max_hold = max(1, int(base_max_hold * (10.0 / max(vix, 10.0))))
+        dynamic_max_hold = max(1, int(base_max_hold * (pget('leverage_judge.vix_hold_ref', 10.0) / max(vix, pget('leverage_judge.vix_hold_floor', 10.0)))))
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1])
             stream_id = pos_key.split(':')[0] if ':' in pos_key else pos.get('stream_id', '')
@@ -214,11 +236,11 @@ class LeverageJudge:
                 atr_pct = _estimate_atr_pct(ticker, market_data)
             except Exception:
                 vix_val = float(market_data.get('signal_cache', {}).get('vix', market_data.get('signal_cache', {}).get('vkospi', 18.0))) if market_data else 18.0
-                atr_pct = max(0.01, vix_val / (100.0 * 15.87))
+                atr_pct = max(pget('leverage_judge.atr_proxy_floor', 0.01), vix_val / (100.0 * 15.87))
             dynamic_hard_sl = -abs(atr_pct * 100 * atr_sl_mult)
-            dynamic_hard_sl = min(dynamic_hard_sl, -2.0)
+            dynamic_hard_sl = min(dynamic_hard_sl, pget('leverage_judge.hard_sl_cap_pct', -2.0))
             dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)
-            dynamic_trail_stop = max(dynamic_trail_stop, 1.5)
+            dynamic_trail_stop = max(dynamic_trail_stop, pget('leverage_judge.trail_stop_floor_pct', 1.5))
             if pnl_pct <= dynamic_hard_sl:
                 reason = f'[ETF Stop] Hard SL (ATR 기반): 손실률 {pnl_pct:.2f}% (<= {dynamic_hard_sl:.2f}%)'
                 urgency = 3

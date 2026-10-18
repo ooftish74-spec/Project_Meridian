@@ -10,6 +10,11 @@ US Leveraged ETF Intraday Scalper (TQQQ / SQQQ / SOXL / SOXS)
   3. 14일 ATR 기반 동적 변동성 손절 (Dynamic ATR Stop-Loss).
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, Any, List, Optional, Tuple
@@ -25,11 +30,11 @@ class USLeveragedETFScalper:
     """인공적 시간 제한 없는 100% 당일 청산 & 상방 오픈 샹들리에 3배수 레버리지 스나이퍼."""
 
     def __init__(self):
-        raw_vp = float(cfg.get('execution.us_3x_min_vp', 1.30))
+        raw_vp = float(pget('execution.us_3x_min_vp', 1.30))
         self.min_volume_power = raw_vp / 100.0 if raw_vp > 5.0 else raw_vp           # 체결강도 130%
         self.min_momentum_z = float(cfg.get('execution.us_3x_min_z', 2.0))              # Z-Score +2.0
-        self.atr_sl_mult = float(cfg.get('execution.us_3x_atr_sl_mult', 1.2))         # ATR 1.2배 동적 손절
-        self.chandelier_atr_mult = float(cfg.get('execution.us_3x_chandelier_mult', 1.5)) # ATR 1.5배 샹들리에 트레일링
+        self.atr_sl_mult = float(pget('execution.us_3x_atr_sl_mult', 1.2))         # ATR 1.2배 동적 손절
+        self.chandelier_atr_mult = float(pget('execution.us_3x_chandelier_mult', 1.5)) # ATR 1.5배 샹들리에 트레일링
 
     def compute_dynamic_exit_thresholds(
         self,
@@ -37,8 +42,8 @@ class USLeveragedETFScalper:
         atr_pct: float,
         is_bull_target: bool
     ) -> Tuple[float, float]:
-        sl_floor = float(cfg.get('execution.us_3x_sl_floor', 0.015))
-        chandelier_floor = float(cfg.get('execution.us_3x_chandelier_floor', 0.020))
+        sl_floor = float(pget('execution.us_3x_sl_floor', 0.015))
+        chandelier_floor = float(pget('execution.us_3x_chandelier_floor', 0.020))
         dynamic_sl_pct = max(sl_floor, self.atr_sl_mult * atr_pct)
         chandelier_gap_pct = max(chandelier_floor, self.chandelier_atr_mult * atr_pct)
         if is_bull_target:
@@ -57,7 +62,7 @@ class USLeveragedETFScalper:
         atr_pct: float,
         is_bull_target: bool
     ) -> Tuple[bool, float, str]:
-        chandelier_floor = float(cfg.get('execution.us_3x_chandelier_floor', 0.020))
+        chandelier_floor = float(pget('execution.us_3x_chandelier_floor', 0.020))
         chandelier_gap_pct = max(chandelier_floor, self.chandelier_atr_mult * atr_pct)
 
         if is_bull_target:

@@ -133,25 +133,44 @@ def fetch_and_save_night_futures(
 
     # Also update signal_cache.json for premarket calibration
     sc_path = PROJECT_ROOT / "results" / "signal_cache.json"
+    # ★ Wave 1 Track A: 락 보유 merge-update 2단계 (파일이 있을 때만 — 기존 의미 유지)
+    #   1) 야간선물 키 기록 → 2) OIS 재계산(디스크의 '새' 야간선물을 읽도록 — 과거엔 쓰기 전에 계산해
+    #   직전 값으로 OIS를 계산하던 순서 버그) → 3) OIS 키 기록. 손상 파일은 덮어쓰지 않는다.
     if sc_path.exists():
         try:
-            with open(sc_path, "r", encoding="utf-8") as f:
-                sc = json.load(f)
-            sc["night_futures"] = night_data["close"]
-            sc["daytime_futures"] = night_data.get("daytime_close", night_data["close"])
-            sc["night_futures_change_1d"] = night_data["change_pct"]
-            
-            # Recalculate OIS with true night futures
-            try:
-                from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
-                ois_calc = OvernightIntelligenceScore()
-                ois_res = ois_calc.calculate(include_premarket=True)
-                sc["ois"] = ois_res.get("ois", 50.0)
-                sc["ois_details"] = ois_res
-            except Exception as _oe:
-                logger.warning(f"  ⚠️ OIS 재계산 예외: {_oe}")
+            from src.utils.file_ops import safe_json_update
 
-            atomic_write_json(sc_path, sc, indent=2)
+            class _NoFile(Exception):
+                pass
+
+            def _apply(upd):
+                def _m(sc):
+                    if not isinstance(sc, dict):
+                        raise _NoFile()
+                    sc.update(upd)
+                    return sc
+                return _m
+
+            _nf_upd = {
+                "night_futures": night_data["close"],
+                "daytime_futures": night_data.get("daytime_close", night_data["close"]),
+                "night_futures_change_1d": night_data["change_pct"],
+            }
+            try:
+                safe_json_update(sc_path, _apply(_nf_upd), default=None, indent=2)
+
+                # Recalculate OIS with true night futures
+                try:
+                    from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
+                    ois_calc = OvernightIntelligenceScore()
+                    ois_res = ois_calc.calculate(include_premarket=True)
+                    _ois_upd = json.loads(json.dumps({"ois": ois_res.get("ois", 50.0), "ois_details": ois_res},
+                                                     ensure_ascii=False, default=str))
+                    safe_json_update(sc_path, _apply(_ois_upd), default=None, indent=2)
+                except Exception as _oe:
+                    logger.warning(f"  ⚠️ OIS 재계산 예외: {_oe}")
+            except _NoFile:
+                pass
         except Exception as e:
             logger.warning(f"  ⚠️ signal_cache 갱신 예외: {e}")
 

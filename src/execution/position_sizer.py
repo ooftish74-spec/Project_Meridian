@@ -40,6 +40,11 @@ try:
 except Exception as _rpe:
     _RISK_PARAMS_AVAILABLE = False
     logging.getLogger(__name__).debug(f"  [PositionSizer] risk_params 로드 실패 (하드코딩 Fallback): {_rpe}")
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 class PositionSizer:
@@ -87,22 +92,23 @@ class PositionSizer:
         market_data = signal.get('market_data')
         if market_data is None:
             market_data = {}
-        kelly_size = float(signal.get('kelly_size', signal.get('size_pct', 0.1)))
+        kelly_size = float(signal.get('kelly_size', signal.get('size_pct', pget('sizer.default_kelly_size', 0.1))))
         if _RISK_PARAMS_AVAILABLE and ticker:
             try:
                 sl_pct, tp_pct = compute_dynamic_sl_tp(ticker=ticker, regime=regime, market_data=market_data)
             except Exception as _ssot_e:
                 logger.error(f"  [PositionSizer] SSOT compute_dynamic_sl_tp 실패, Fallback 적용: {_ssot_e}", exc_info=True)
-                tp_pct = float(signal.get('tp_pct', self._cfg_get('s2.exit.tp.caution', 12.0) or 12.0))
-                sl_pct = abs(float(signal.get('sl_pct', self._cfg_get('s2.exit.sl.caution', 5.0) or 5.0)))
+                tp_pct = float(signal.get('tp_pct', pget('s2.exit.tp.caution', 12.0)))
+                sl_pct = abs(float(signal.get('sl_pct', pget('s2.exit.sl.caution', -5))))
         else:
-            vix_val = float(market_data.get('vix', 20.0))
+            vix_val = float(market_data.get('vix', pget('sizer.fallback_vix', 20.0)))
             daily_vol_pct = vix_val / math.sqrt(252)
-            tp_pct = float(signal.get('tp_pct', daily_vol_pct * 3.0))
-            sl_pct = abs(float(signal.get('sl_pct', daily_vol_pct * 1.5)))
+            tp_pct = float(signal.get('tp_pct', daily_vol_pct * pget('sizer.fallback_tp_vol_mult', 3.0)))
+            sl_pct = abs(float(signal.get('sl_pct', daily_vol_pct * pget('sizer.fallback_sl_vol_mult', 1.5))))
         mu_pct = self._compute_ev(signal, conf, tp_pct, sl_pct)
         # [Dynamic Non-Linear Volatility Neutral Base] 롤링 252일 VIX 중간값(Median) 동적 연산 (15.5 고정 상수 100% 제거)
-        vix_neutral = float(market_data.get('vix_rolling_median_252', market_data.get('vix_ma_252', 17.5)) or 17.5)
+        _vix_neutral_param = pget('sizer.vix_neutral', 17.5)  # L2: trailing 252d median VIX (tighten_only, quality-gated)
+        vix_neutral = float(market_data.get('vix_rolling_median_252', market_data.get('vix_ma_252', _vix_neutral_param)) or _vix_neutral_param)
         vix_raw = market_data.get('vix', vix_neutral) if market_data else vix_neutral
         try:
             vix_val = float(vix_raw)
@@ -110,7 +116,7 @@ class PositionSizer:
                 vix_val = vix_neutral
         except (ValueError, TypeError):
             vix_val = vix_neutral
-        market_var = (max(vix_val, 10.0) / vix_neutral) ** 2
+        market_var = (max(vix_val, pget('sizer.vix_floor', 10.0)) / vix_neutral) ** 2
         sigma_pct = max(0.01, sl_pct)
         friction_pct = self._compute_friction(signal=signal, kelly_size=kelly_size, portfolio_value=portfolio_value, regime=regime, adv=adv, market_cap=market_cap, ticker=ticker)
         ev_margin = mu_pct - friction_pct
@@ -119,8 +125,8 @@ class PositionSizer:
             if vix <= 0 or math.isnan(vix):
                 logger.warning(f"  [PositionSizer] {ticker}: VIX 데이터 누락. 진입 차단 (Stale-Halt 방어)")
                 return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': 'VIX 데이터 누락', 'drop_reason': 'missing_vix_stale_halt'}
-        regime_min_ev = self._cfg_get(f"allocator.min_net_ev_pct.{regime}", 0.35) or 0.35
-        vix_margin_sc = 0.002
+        regime_min_ev = pget('allocator.min_net_ev_pct', 0.35, ctx={'regime': regime})
+        vix_margin_sc = pget('sizer.vix_extra_margin_slope', 0.002)
         extra_margin = max(0.0, (vix - vix_neutral) * vix_margin_sc)
         effective_min = max(regime_min_ev, extra_margin)
         if ev_margin < effective_min:
@@ -131,20 +137,22 @@ class PositionSizer:
         snr_threshold = base_snr_threshold * math.exp((vix_val - vix_neutral) / 20.0)
         
         # [Dynamic Cornish-Fisher Non-Linear Kelly] 실시간 수익률 왜도/첨도 롤링 분포 동적 적용
-        S_skew = float(market_data.get('skewness', market_data.get('rolling_skew_20', -0.2)) or -0.2)
-        K_kurt = float(market_data.get('kurtosis', market_data.get('rolling_kurt_20', 3.0)) or 3.0)
+        _skew_d = pget('sizer.default_skew', -0.2)
+        _kurt_d = pget('sizer.default_kurtosis', 3.0)
+        S_skew = float(market_data.get('skewness', market_data.get('rolling_skew_20', _skew_d)) or _skew_d)
+        K_kurt = float(market_data.get('kurtosis', market_data.get('rolling_kurt_20', _kurt_d)) or _kurt_d)
         raw_size = kelly_size
         mu_dec = mu_pct / 100.0
         sigma_dec = max(0.005, sigma_pct / 100.0)
         cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - K_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
-        half_kelly_factor = 0.5
+        half_kelly_factor = pget('sizer.half_kelly_factor', 0.5)
         vix_scale = 1.0 / market_var
-        final_size = raw_size * vix_scale * max(0.1, min(1.0, cf_penalty)) * half_kelly_factor
+        final_size = raw_size * vix_scale * max(pget('sizer.cf_penalty_floor', 0.1), min(1.0, cf_penalty)) * half_kelly_factor
         
         # ★ 대표님 지시 반영: 횡보장(caution) 미세 정찰대(Probe Sizing = 3% NAV) 공격적 투입!
         is_probe = False
         if regime in ('caution', 'neutral'):
-            probe_cap = self._cfg_get('sizer.probe_sizing_pct.caution', 0.03) or 0.03
+            probe_cap = pget('sizer.probe_sizing_pct.caution', 0.03)
             final_size = min(final_size, probe_cap)
             is_probe = True
             logger.info(f"  🎯 [Probe Sizing] {ticker}: 횡보장 미세 정찰대({final_size:.2%} NAV) 공격적 투입 확정")
@@ -197,14 +205,14 @@ class PositionSizer:
         dividend_tax_streams = ('S0', 'S_YIELD', 'S5')
         effective_tp_pct = tp_pct
         if stream_id in dividend_tax_streams:
-            effective_tp_pct = tp_pct * 0.846
+            effective_tp_pct = tp_pct * pget('tax.kr_dividend_net_factor', 0.846)
         mu = conf * effective_tp_pct - (1.0 - conf) * sl_pct
         return round(mu, 6)
 
     def _compute_friction(self, signal: Dict, kelly_size: float, portfolio_value: float, regime: str, adv: float, market_cap: float, ticker: str) -> float:
         """총 마찰비용(%) = 매수(슬리피지+수수료) + 매도(슬리피지+수수료+증권거래세).
         """
-        commission_bps = self._cfg_get('sizer.commission_bps', 1.5) or 1.5
+        commission_bps = pget('sizer.commission_bps', 1.5)
         stream_id = signal.get('stream_id', signal.get('stream', ''))
         asset_type = str(signal.get('asset_type', '')).lower()
         t_str = str(ticker)
@@ -215,7 +223,7 @@ class PositionSizer:
             any(t_str.startswith(prefix) for prefix in ('0695', '1226', '2526', '1148', '4491', '4595', '3811', '2527')) or
             'etf' in t_str.lower() or 'etn' in t_str.lower() or 'kodex' in name_str or 'tiger' in name_str or 'ace' in name_str
         )
-        tax_bps = 0.0 if is_etf else 18.0
+        tax_bps = 0.0 if is_etf else pget('tax.kr_sell_tax_bps', 18.0)
         if self._slippage and portfolio_value > 0 and (kelly_size > 0):
             try:
                 order_size = portfolio_value * kelly_size
@@ -223,9 +231,9 @@ class PositionSizer:
                 slip_bps = slip_result.get('slippage_bps', 0.0)
             except Exception as _se:
                 logger.critical(f"  [PositionSizer] 슬리피지 추정 실패: {_se}", exc_info=True)
-                slip_bps = self._cfg_get('sizer.default_slippage_bps', 5.0) or 5.0
+                slip_bps = pget('sizer.default_slippage_bps', 5.0)
         else:
-            slip_bps = self._cfg_get('sizer.default_slippage_bps', 5.0) or 5.0
+            slip_bps = pget('sizer.default_slippage_bps', 5.0)
         # Total bps = slip_bps * 2 + commission_bps * 2 + tax_bps
         # In percentage points (%): 31.0 bps / 100 = 0.31% friction
         total_bps = (slip_bps * 2.0) + (commission_bps * 2.0) + tax_bps

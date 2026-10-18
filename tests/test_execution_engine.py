@@ -164,12 +164,16 @@ class TestExecutionEngineEdgeCases:
 class TestExecutionEngineLiveMethod:
     """ExecutionEngine _execute_live 및 환율 추정 검증."""
 
-    def test_get_dynamic_usdkrw_rate(self):
+    def test_get_dynamic_usdkrw_rate(self, monkeypatch):
+        # ★ Wave 1: 날조 폴백(1450.0) 제거 — 관측값은 그대로, 미상이면 0.0 (호출자는 해외 매수 생략)
+        import src.data_collection.central_data_gateway as cdg
         from src.execution.execution_engine import ExecutionEngine
         engine = ExecutionEngine(mode='shadow')
+        monkeypatch.setattr(cdg.CentralDataGateway, 'get_usdkrw_rate', lambda self: 1334.3, raising=False)
         rate = engine._get_dynamic_usdkrw_rate()
-        assert isinstance(rate, float)
-        assert 1000.0 <= rate <= 2500.0
+        assert isinstance(rate, float) and rate == 1334.3
+        monkeypatch.setattr(cdg.CentralDataGateway, 'get_usdkrw_rate', lambda self: None, raising=False)
+        assert engine._get_dynamic_usdkrw_rate() == 0.0
 
     def test_execute_live_empty_orders(self):
         from src.execution.execution_engine import ExecutionEngine, ExecutionResult

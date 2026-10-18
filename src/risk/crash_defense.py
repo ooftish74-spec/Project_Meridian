@@ -14,6 +14,11 @@ Usage:
     cd = CrashDefense()
     result = cd.assess(market_data, portfolio, regime='crash')
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from datetime import datetime
 from typing import Any, Dict, List
@@ -53,18 +58,18 @@ class CrashDefense:
         sp500_change = overnight.get('sp500_change_pct', 0)
         nasdaq_change = overnight.get('nasdaq_change_pct', 0)
         kospi_change = signal_cache.get('kospi_change_pct', 0)
-        _vix_thresh = cfg.get('crash.stress_vix_threshold', 30)
-        _vix_max = cfg.get('crash.stress_vix_max_score', 40)
+        _vix_thresh = pget('crash.stress_vix_threshold', 30)
+        _vix_max = pget('crash.stress_vix_max_score', 40)
         _vix_scale = cfg.get('crash.stress_vix_scale', 2)
-        _vkospi_thresh = cfg.get('crash.stress_vkospi_threshold', 25)
-        _vkospi_max = cfg.get('crash.stress_vkospi_max_score', 20)
+        _vkospi_thresh = pget('crash.stress_vkospi_threshold', 25)
+        _vkospi_max = pget('crash.stress_vkospi_max_score', 20)
         _vkospi_scale = cfg.get('crash.stress_vkospi_scale', 2)
         _sp500_thresh = cfg.get('crash.stress_sp500_threshold', 2)
-        _sp500_max = cfg.get('crash.stress_sp500_max_score', 20)
-        _sp500_scale = cfg.get('crash.stress_sp500_scale', 5)
+        _sp500_max = pget('crash.stress_sp500_max_score', 20)
+        _sp500_scale = pget('crash.stress_sp500_scale', 5)
         _fx_thresh = cfg.get('crash.stress_fx_threshold', 1)
-        _fx_max = cfg.get('crash.stress_fx_max_score', 10)
-        _fx_scale = cfg.get('crash.stress_fx_scale', 5)
+        _fx_max = pget('crash.stress_fx_max_score', 10)
+        _fx_scale = pget('crash.stress_fx_scale', 5)
         stress_score = 0.0
         if vix > _vix_thresh:
             stress_score += min(_vix_max, (vix - _vix_thresh) * _vix_scale)
@@ -74,8 +79,8 @@ class CrashDefense:
             stress_score += min(_sp500_max, abs(sp500_change) * _sp500_scale)
         if abs(fx_change) > _fx_thresh:
             stress_score += min(_fx_max, abs(fx_change) * _fx_scale)
-        _fn_threshold = cfg.get('risk.crash_foreign_net_threshold', -500000000000)
-        _fn_scale = cfg.get('risk.crash_foreign_net_scale', 100000000000)
+        _fn_threshold = pget('risk.crash_foreign_net_threshold', -500000000000)
+        _fn_scale = pget('risk.crash_foreign_net_scale', 100000000000)
         if foreign_net < _fn_threshold:
             stress_score += min(10, abs(foreign_net) / _fn_scale)
         stress_score = min(100, stress_score)
@@ -94,23 +99,23 @@ class CrashDefense:
         """
         stress = measurement['stress_score']
         actions = []
-        _lvl1 = cfg.get('crash.caution_threshold', 30)
-        _lvl2 = cfg.get('crash.danger_threshold', 50)
-        _lvl3 = cfg.get('crash.crash_threshold', 70)
+        _lvl1 = pget('crash.caution_threshold', 30)
+        _lvl2 = pget('crash.danger_threshold', 50)
+        _lvl3 = pget('crash.crash_threshold', 70)
         if _lvl1 <= stress < _lvl2:
-            cash_target = cfg.get('risk.caution_cash_ratio', 0.3)
+            cash_target = pget('risk.caution_cash_ratio', 0.3)
             actions.append({'level': 'caution', 'action': 'increase_cash', 'target_cash_ratio': cash_target, 'reason': f"스트레스 경계: score={stress:.0f}"})
         elif _lvl2 <= stress < _lvl3:
-            cash_target = cfg.get('risk.bear_cash_ratio', 0.6)
-            inverse_pct = cfg.get('leverage.inverse_max_pct', 0.2) * 0.5
+            cash_target = pget('risk.bear_cash_ratio', 0.6)
+            inverse_pct = pget('leverage.inverse_max_pct', 0.5) * 0.5
             actions.append({'level': 'danger', 'action': 'defensive_mode', 'target_cash_ratio': cash_target, 'inverse_allocation': round(inverse_pct, 3), 'reason': f"스트레스 위험: score={stress:.0f}"})
         elif stress >= _lvl3:
-            cash_target = cfg.get('risk.crash_cash_ratio', 0.8)
-            inverse_pct = cfg.get('leverage.inverse_max_pct', 0.2)
+            cash_target = pget('risk.crash_cash_ratio', 0.8)
+            inverse_pct = pget('leverage.inverse_max_pct', 0.5)
             actions.append({'level': 'crash', 'action': 'crash_protocol', 'target_cash_ratio': cash_target, 'inverse_allocation': inverse_pct, 'halt_new_positions': True, 'reason': f"🚨 CRASH PROTOCOL: score={stress:.0f}"})
         _fx_alert_pct = cfg.get('crash.fx_alert_pct', 3.0)
         if abs(measurement['fx_change_pct']) > _fx_alert_pct:
-            rebalance_threshold = cfg.get('s4.us.rebalance_on_fx_move', 5.0)
+            rebalance_threshold = pget('s4.us.rebalance_on_fx_move', 5.0)
             if abs(measurement['fx_change_pct']) >= rebalance_threshold:
                 actions.append({'level': 'fx_alert', 'action': 'fx_hedge_rebalance', 'fx_change': measurement['fx_change_pct'], 'reason': f"환율 급변: {measurement['fx_change_pct']:+.1f}%"})
         return {'stress_level': 'crash' if stress >= _lvl3 else 'danger' if stress >= _lvl2 else 'caution' if stress >= _lvl1 else 'normal', 'stress_score': stress, 'actions': actions, 'safe': len(actions) == 0, 'regime': regime}

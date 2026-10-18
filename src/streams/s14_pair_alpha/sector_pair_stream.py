@@ -14,6 +14,11 @@ S14 Market-Neutral Sector Pair & Stat-Arb Stream
   5. Single Source of Truth: SectorPairAlphaEngine 및 StatArbEngine과 직접 직결.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import json
 import logging
@@ -41,8 +46,8 @@ class S14SectorPairStream(BaseStream):
         self.sector_engine = SectorPairAlphaEngine()
         self.stat_arb_engine = StatArbEngine()
         self.whipsaw_defense = AntiWhipsawDefenseEngine()
-        self.ker_chop_threshold = float(cfg.get('pair.ker_chop_threshold', 0.40))
-        self.min_spread_z = float(cfg.get('pair.min_spread_z', 1.20))
+        self.ker_chop_threshold = float(pget('pair.ker_chop_threshold', 0.40))
+        self.min_spread_z = float(pget('pair.min_spread_z', 1.20))
 
     def _extract_returns_and_volatility(self, ticker: str, market: str = 'US', days: int = 20) -> Tuple[float, float]:
         """종목별 최근 N일 모멘텀 수익률 및 연율화 변동성(σ) 100% 동적 산출."""

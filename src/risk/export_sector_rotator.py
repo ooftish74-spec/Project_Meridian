@@ -4,28 +4,22 @@
 YoY +20% 이상 서프라이즈 섹터 ETF 비중을 1.5배 오버웨이트.
 """
 from __future__ import annotations
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import logging
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
-EXPORT_ETF_MAP: Dict[str, List[str]] = {
-    'auto':      ['091180', '139270'],
-    'ship':      ['139260', '900260'],
-    'battery':   ['305720', '371460'],
-    'steel':     ['139230', '117460'],
-    'petrochem': ['117680', '139250'],
-    'beauty':    ['228800', '143460'],
-    'semi':      ['091160', '091230'],
-}
-EXPORT_ETF_NAMES: Dict[str, str] = {
-    '091180': 'KODEX 자동차', '139270': 'TIGER 자동차',
-    '091230': 'TIGER 반도체',
-    '139260': 'KODEX 조선',  '139230': 'KODEX 철강',
-    '305720': 'KODEX 2차전지','371460': 'TIGER 2차전지테마',
-    '117680': 'KODEX 에너지화학','228800': 'KODEX 화장품',
-    '091160': 'KODEX 반도체', '117460': 'TIGER 소재',
-    '143460': 'TIGER 화장품소비',
-}
+EXPORT_ETF_MAP: Dict[str, List[str]] = load_table('src.risk.export_sector_rotator.EXPORT_ETF_MAP', {})
+EXPORT_ETF_NAMES: Dict[str, str] = load_table('src.risk.export_sector_rotator.EXPORT_ETF_NAMES', {})
 _DEFAULT_OW, _DEFAULT_THR = 1.5, 20.0
 
 

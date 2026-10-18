@@ -12,6 +12,11 @@ Usage:
     result = detector.detect_drift()
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 from typing import Dict, List
@@ -37,8 +42,8 @@ class ModelDriftDetector:
         """
         self._predictions: List[float] = []
         self._actuals: List[float] = []
-        self._window = window or cfg.get('s2.drift_window', 20)
-        self._threshold = threshold if threshold is not None else cfg.get('s2.drift_threshold', 0.15)  # max tolerable accuracy degradation
+        self._window = window or pget('s2.drift_window', 20)
+        self._threshold = threshold if threshold is not None else pget('s2.drift_threshold', 0.15)  # max tolerable accuracy degradation
         self._drift_history: List[Dict] = []
 
     def update(self, predicted: float, actual: float):
@@ -93,17 +98,17 @@ class ModelDriftDetector:
         calibration_error = abs(mean_pred - mean_actual)
 
         # 드리프트 판정
-        cal_err_threshold = cfg.get('s2.drift_calibration_threshold', 0.05)
+        cal_err_threshold = pget('s2.drift_calibration_threshold', 0.05)
         drifted = (accuracy < (0.5 + self._threshold)
                    or calibration_error > cal_err_threshold)
 
         # confidence 감쇄 정도 결정 (DynamicConfig 기반)
         if drifted:
-            severe_threshold = cfg.get('s2.drift_severe_accuracy', 0.45)
-            moderate_threshold = cfg.get('s2.drift_moderate_accuracy', 0.55)
-            severe_mult = cfg.get('s2.drift_severe_multiplier', 0.3)
-            moderate_mult = cfg.get('s2.drift_moderate_multiplier', 0.5)
-            mild_mult = cfg.get('s2.drift_mild_multiplier', 0.7)
+            severe_threshold = pget('s2.drift_severe_accuracy', 0.45)
+            moderate_threshold = pget('s2.drift_moderate_accuracy', 0.55)
+            severe_mult = pget('s2.drift_severe_multiplier', 0.3)
+            moderate_mult = pget('s2.drift_moderate_multiplier', 0.5)
+            mild_mult = pget('s2.drift_mild_multiplier', 0.7)
 
             if accuracy < severe_threshold:
                 multiplier = severe_mult

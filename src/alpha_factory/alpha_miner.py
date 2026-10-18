@@ -33,6 +33,11 @@ Usage:
     expr = t.translate('add(mul(X0, X1), X2)')
 """
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 from src.utils.file_ops import atomic_write_json
 
@@ -240,10 +245,10 @@ class ICEvaluator:
     """
 
     def __init__(self):
-        self.ic_threshold = _dc('alpha_factory.ic_threshold', 0.05)
-        self.test_ratio = _dc('alpha_factory.oos_test_ratio', 0.3)
-        self.n_splits = _dc('alpha_factory.oos_n_splits', 3)
-        self._ic_thresholds_by_regime = {'bull': float(_dc('alpha_factory.ic_threshold_bull', 0.04)), 'bear': float(_dc('alpha_factory.ic_threshold_bear', 0.02)), 'neutral': float(_dc('alpha_factory.ic_threshold_neutral', 0.05)), 'crash': float(_dc('alpha_factory.ic_threshold_crash', 0.03)), 'caution': float(_dc('alpha_factory.ic_threshold_neutral', 0.05)), 'momentum_surge': float(_dc('alpha_factory.ic_threshold_bull', 0.04))}
+        self.ic_threshold = pget('alpha_factory.ic_threshold', 0.05)
+        self.test_ratio = pget('alpha_factory.oos_test_ratio', 0.3)
+        self.n_splits = pget('alpha_factory.oos_n_splits', 3)
+        self._ic_thresholds_by_regime = {'bull': float(pget('alpha_factory.ic_threshold_bull', 0.04)), 'bear': float(pget('alpha_factory.ic_threshold_bear', 0.02)), 'neutral': float(pget('alpha_factory.ic_threshold_neutral', 0.05)), 'crash': float(pget('alpha_factory.ic_threshold_crash', 0.03)), 'caution': float(pget('alpha_factory.ic_threshold_neutral', 0.05)), 'momentum_surge': float(pget('alpha_factory.ic_threshold_bull', 0.04))}
         self._dynamic_threshold: Optional[float] = None
         self._update_dynamic_threshold()
 
@@ -267,7 +272,7 @@ class ICEvaluator:
             df = pd.read_csv(ic_file)
             if df.empty or 'mean_ic' not in df.columns:
                 return
-            window_days = int(_dc('alpha_factory.ic_window_days', 30))
+            window_days = int(pget('alpha_factory.ic_window_days', 30))
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'])
                 cutoff = df['date'].max() - pd.Timedelta(days=window_days)
@@ -276,13 +281,13 @@ class ICEvaluator:
                 return
             all_ic = df['mean_ic'].dropna().values
             pos_ic = all_ic[all_ic > 0]
-            if len(pos_ic) < int(_dc('alpha_factory.ic_min_positive_samples', 10)):
+            if len(pos_ic) < int(pget('alpha_factory.ic_min_positive_samples', 10)):
                 logger.debug(f"  ICEvaluator: 양수 IC 샘플 부족 ({len(pos_ic)}) → 기본 임계치")
                 return
-            pct = float(_dc('alpha_factory.ic_dynamic_percentile', 25.0))
+            pct = float(pget('alpha_factory.ic_dynamic_percentile', 25.0))
             dynamic_thr = float(np.percentile(pos_ic, pct))
-            min_thr = float(_dc('alpha_factory.ic_dynamic_min', 0.005))
-            max_thr = float(_dc('alpha_factory.ic_dynamic_max', 0.15))
+            min_thr = float(pget('alpha_factory.ic_dynamic_min', 0.005))
+            max_thr = float(pget('alpha_factory.ic_dynamic_max', 0.15))
             dynamic_thr = float(np.clip(dynamic_thr, min_thr, max_thr))
             old = self._dynamic_threshold
             self._dynamic_threshold = dynamic_thr
@@ -427,7 +432,7 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
     feats: dict = {}
     if len(close) < 30:
         return feats
-    rev_window = int(_dc('alpha_factory.contrarian_reversion_window', 5))
+    rev_window = int(pget('alpha_factory.contrarian_reversion_window', 5))
     ret_n = close.pct_change(rev_window)
     feats['reversion_5d'] = (-ret_n).fillna(0.0)
     try:
@@ -436,8 +441,8 @@ def _build_contrarian_features(close: 'pd.Series', volume: 'pd.Series | None'=No
         loss = (-delta.clip(upper=0)).rolling(14).mean()
         rs = gain / loss.replace(0, np.nan)
         rsi = 100 - 100 / (1 + rs)
-        oversold = float(_dc('alpha_factory.contrarian_rsi_oversold', 30.0))
-        overbought = float(_dc('alpha_factory.contrarian_rsi_overbought', 70.0))
+        oversold = float(pget('alpha_factory.contrarian_rsi_oversold', 30.0))
+        overbought = float(pget('alpha_factory.contrarian_rsi_overbought', 70.0))
         rsi_sig = np.where(rsi < oversold, (oversold - rsi) / max(oversold, 1e-06), np.where(rsi > overbought, (overbought - rsi) / max(100 - overbought, 1e-06), 0.0))
         feats['rsi_signal'] = pd.Series(rsi_sig, index=close.index).fillna(0.0)
     except Exception as _rsi_e:
@@ -472,7 +477,7 @@ class OrthogonalityFilter:
     """
 
     def __init__(self):
-        self.corr_threshold = _dc('alpha_factory.corr_threshold', 0.7)
+        self.corr_threshold = pget('alpha_factory.corr_threshold', 0.7)
 
     def is_orthogonal(self, alpha_signal: np.ndarray, existing_features: np.ndarray, feature_names: Optional[List[str]]=None) -> Tuple[bool, Dict]:
         """알파 신호가 기존 피처들과 직교하는지 검사.
@@ -594,17 +599,17 @@ class AlphaMiner:
     def __init__(self):
         _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         self.output_file = _DISCOVERED_ALPHAS_FILE
-        self.pop_size = _dc('alpha_factory.population_size', 500)
-        self.generations = _dc('alpha_factory.generations', 20)
-        self.p_crossover = _dc('alpha_factory.p_crossover', 0.7)
-        self.p_subtree = _dc('alpha_factory.p_subtree_mutation', 0.1)
-        self.p_hoist = _dc('alpha_factory.p_hoist_mutation', 0.05)
-        self.p_point = _dc('alpha_factory.p_point_mutation', 0.1)
-        self.max_samples = _dc('alpha_factory.max_samples', 0.9)
-        self.parsimony = _dc('alpha_factory.parsimony_coefficient', 0.01)
-        self.stopping = _dc('alpha_factory.stopping_criteria', 0.01)
-        self.random_state = _dc('alpha_factory.random_state', 42)
-        self.top_k = _dc('alpha_factory.top_k_programs', 5)
+        self.pop_size = pget('alpha_factory.population_size', 500)
+        self.generations = pget('alpha_factory.generations', 20)
+        self.p_crossover = pget('alpha_factory.p_crossover', 0.7)
+        self.p_subtree = pget('alpha_factory.p_subtree_mutation', 0.1)
+        self.p_hoist = pget('alpha_factory.p_hoist_mutation', 0.05)
+        self.p_point = pget('alpha_factory.p_point_mutation', 0.1)
+        self.max_samples = pget('alpha_factory.max_samples', 0.9)
+        self.parsimony = pget('alpha_factory.parsimony_coefficient', 0.01)
+        self.stopping = pget('alpha_factory.stopping_criteria', 0.01)
+        self.random_state = pget('alpha_factory.random_state', 42)
+        self.top_k = pget('alpha_factory.top_k_programs', 5)
         self.function_set = _dc('alpha_factory.function_set', ['add', 'sub', 'mul', 'div', 'sqrt', 'log', 'abs', 'neg', 'inv', 'max', 'min'])
         self.ic_evaluator = ICEvaluator()
         self.ortho_filter = OrthogonalityFilter()
@@ -675,7 +680,7 @@ class AlphaMiner:
         if configured:
             use_cols = [c for c in configured if c in num_cols] + ['target']
         else:
-            max_feats = _dc('alpha_factory.max_features_per_ticker', 30)
+            max_feats = pget('alpha_factory.max_features_per_ticker', 30)
             use_cols = [c for c in num_cols if c != 'target'][:max_feats] + ['target']
         df = df[use_cols].replace([np.inf, -np.inf], np.nan).dropna()
         return df if len(df) >= 100 else None
@@ -709,7 +714,7 @@ class AlphaMiner:
         X = data[features].values.astype(float)
         y = data['target'].values.astype(float)
         logger.info(f"  학습 데이터: X={X.shape}, y={y.shape}")
-        est_gp = SymbolicTransformer(population_size=pop, generations=gens, stopping_criteria=self.stopping, p_crossover=self.p_crossover, p_subtree_mutation=self.p_subtree, p_hoist_mutation=self.p_hoist, p_point_mutation=self.p_point, max_samples=self.max_samples, verbose=1, parsimony_coefficient=self.parsimony, random_state=self.random_state, function_set=self.function_set, n_jobs=_dc('alpha_factory.n_jobs', -1), hall_of_fame=_dc('alpha_factory.hall_of_fame', 20), n_components=self.top_k)
+        est_gp = SymbolicTransformer(population_size=pop, generations=gens, stopping_criteria=self.stopping, p_crossover=self.p_crossover, p_subtree_mutation=self.p_subtree, p_hoist_mutation=self.p_hoist, p_point_mutation=self.p_point, max_samples=self.max_samples, verbose=1, parsimony_coefficient=self.parsimony, random_state=self.random_state, function_set=self.function_set, n_jobs=_dc('alpha_factory.n_jobs', -1), hall_of_fame=pget('alpha_factory.hall_of_fame', 20), n_components=self.top_k)
         try:
             est_gp.fit(X, y)
         except Exception as e:
@@ -922,7 +927,7 @@ class AlphaMemoryStore:
             return base_threshold
         relevant_penalties = [penalty_features.get(f, 0.0) for f in features_used]
         avg_penalty = float(np.mean(relevant_penalties)) if relevant_penalties else 0.0
-        max_penalty_scale = _dc('alpha_factory.memory_ic_penalty_scale', 0.05)
+        max_penalty_scale = pget('alpha_factory.memory_ic_penalty_scale', 0.05)
         adjusted = base_threshold + avg_penalty * max_penalty_scale
         if adjusted > base_threshold:
             logger.debug(f"  AlphaMemoryStore: IC 임계치 조정 {base_threshold:.4f} → {adjusted:.4f} (패널티={avg_penalty:.3f})")
@@ -967,8 +972,8 @@ class FactorPruner:
     """
 
     def __init__(self):
-        self.decay_window = _dc('alpha.rolling_window', 60)
-        self.decay_threshold = _dc('alpha.prune_rolling_ic_threshold', 0.01)
+        self.decay_window = pget('alpha.rolling_window', 60)
+        self.decay_threshold = pget('alpha.prune_rolling_ic_threshold', 0.01)
         self.miner = AlphaMiner()
         self.memory_store = AlphaMemoryStore()
 
@@ -1049,7 +1054,7 @@ def inject_auto_alphas(df: pd.DataFrame, alpha_file: Optional[Path]=None, max_al
         실패 시 원본 DataFrame 그대로 반환
     """
     alpha_file = alpha_file or _DISCOVERED_ALPHAS_FILE
-    max_n = max_alphas or _dc('alpha_factory.max_inject_alphas', 10)
+    max_n = max_alphas or pget('alpha_factory.max_inject_alphas', 10)
     if not alpha_file.exists():
         return df
     try:
@@ -1111,7 +1116,7 @@ def get_active_alpha_names(alpha_file: Optional[Path]=None, max_alphas: Optional
         FEATURE_NAMES_V8 = FEATURE_NAMES_V7 + get_active_alpha_names()
     """
     alpha_file = alpha_file or _DISCOVERED_ALPHAS_FILE
-    max_n = max_alphas or _dc('alpha_factory.max_inject_alphas', 10)
+    max_n = max_alphas or pget('alpha_factory.max_inject_alphas', 10)
     if not alpha_file.exists():
         return []
     try:

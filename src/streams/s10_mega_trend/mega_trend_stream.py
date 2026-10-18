@@ -21,6 +21,21 @@ S10 Mega-Trend Alpha Stream — 섹터별 주도주 사이클 추적
 모든 파라미터: DynamicConfig `s10.*` 관리 (하드코딩 없음)
 """
 
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -47,52 +62,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # 섹터→대장주 기본 매핑 (YAML `s10.sector_stock_map` SSoT로 오버라이드)
 # ══════════════════════════════════════════════════════════════════════════
 
-_DEFAULT_SECTOR_STOCK_MAP: Dict[str, List[Dict]] = {
-    "semiconductor": [
-        {"ticker": "005930", "name": "삼성전자",   "weight": 0.60},
-        {"ticker": "000660", "name": "SK하이닉스", "weight": 0.40},
-    ],
-    "battery": [
-        {"ticker": "373220", "name": "LG에너지솔루션", "weight": 0.55},
-        {"ticker": "006400", "name": "삼성SDI",        "weight": 0.45},
-    ],
-    "bio": [
-        {"ticker": "207940", "name": "삼성바이오로직스", "weight": 0.60},
-        {"ticker": "068270", "name": "셀트리온",         "weight": 0.40},
-    ],
-    "healthcare": [
-        {"ticker": "207940", "name": "삼성바이오로직스", "weight": 0.60},
-        {"ticker": "068270", "name": "셀트리온",         "weight": 0.40},
-    ],
-    "defense": [
-        {"ticker": "012450", "name": "한화에어로스페이스", "weight": 0.60},
-        {"ticker": "047810", "name": "한국항공우주",       "weight": 0.40},
-    ],
-    "auto": [
-        {"ticker": "005380", "name": "현대차", "weight": 0.60},
-        {"ticker": "000270", "name": "기아",   "weight": 0.40},
-    ],
-    "it": [
-        {"ticker": "035420", "name": "NAVER",  "weight": 0.60},
-        {"ticker": "035720", "name": "카카오", "weight": 0.40},
-    ],
-    "finance": [
-        {"ticker": "105560", "name": "KB금융",   "weight": 0.55},
-        {"ticker": "055550", "name": "신한지주", "weight": 0.45},
-    ],
-    "industrial": [
-        {"ticker": "012450", "name": "한화에어로스페이스", "weight": 0.60},
-        {"ticker": "047810", "name": "한국항공우주",       "weight": 0.40},
-    ],
-    "us_semiconductor": [
-        {"ticker": "005930", "name": "삼성전자",   "weight": 0.60},
-        {"ticker": "000660", "name": "SK하이닉스", "weight": 0.40},
-    ],
-    "us_tech": [
-        {"ticker": "035420", "name": "NAVER",  "weight": 0.60},
-        {"ticker": "035720", "name": "카카오", "weight": 0.40},
-    ],
-}
+_DEFAULT_SECTOR_STOCK_MAP: Dict[str, List[Dict]] = load_table('src.streams.s10_mega_trend.mega_trend_stream._DEFAULT_SECTOR_STOCK_MAP', {})
 
 
 class S10MegaTrendStream(BaseStream):
@@ -176,7 +146,7 @@ class S10MegaTrendStream(BaseStream):
                     kelly_frac = self._compute_kelly(sig)
                     size_pct   = min(
                         round(kelly_frac * sector_weight, 4),
-                        float(cfg.get('s10.max_single_stock_pct', 0.30)),
+                        float(pget('s10.max_single_stock_pct', 0.30)),
                     )
                     signals.append({
                         'ticker':        ticker,
@@ -281,7 +251,7 @@ class S10MegaTrendStream(BaseStream):
         streak_col  = str(cfg.get('s10.feature_streak',  'flow_foreign_streak'))
         netbuy_col  = str(cfg.get('s10.feature_net_buy', 'flow_foreign_net_buy'))
         accel_col   = str(cfg.get('s10.feature_accel',   'flow_foreign_accel'))
-        ma_window   = int(cfg.get('s10.ma_window', 120))
+        ma_window   = int(pget('s10.ma_window', 120))
 
         if isinstance(f_data, pd.DataFrame) and not f_data.empty:
             if 'close' in f_data.columns:
@@ -335,9 +305,9 @@ class S10MegaTrendStream(BaseStream):
         def tnorm(x: float, scale: float = 1.0) -> float:
             return math.tanh(x / max(abs(scale), 1e-6))
 
-        w_s = float(cfg.get('s10.weight_streak',  0.45))
-        w_n = float(cfg.get('s10.weight_net_buy', 0.35))
-        w_a = float(cfg.get('s10.weight_accel',   0.20))
+        w_s = float(pget('s10.weight_streak', 0.45))
+        w_n = float(pget('s10.weight_net_buy', 0.35))
+        w_a = float(pget('s10.weight_accel', 0.20))
 
         foreign_score = (
             w_s * tnorm(streak,  1.0)  +
@@ -350,27 +320,27 @@ class S10MegaTrendStream(BaseStream):
         if ma120 > 0:
             gap = (price - ma120) / ma120
             bonus_thr  = float(cfg.get('s10.ma120_bonus_threshold', 0.0))
-            exit_gap   = float(cfg.get('s10.ma120_exit_gap', 0.05))
+            exit_gap   = float(pget('s10.ma120_exit_gap', 0.05))
             if gap > bonus_thr:
-                ma120_bonus = float(cfg.get('s10.ma120_bonus', 0.15))
+                ma120_bonus = float(pget('s10.ma120_bonus', 0.15))
             elif gap < -exit_gap:
-                ma120_bonus = float(cfg.get('s10.ma120_penalty', -0.10))
+                ma120_bonus = float(pget('s10.ma120_penalty', -0.10))
 
         # 레짐 멀티플라이어
         regime_mult = {
-            'bull':           float(cfg.get('s10.regime_mult_bull',    1.20)),
+            'bull':           float(pget('s10.regime_mult_bull', 1.20)),
             'neutral':        float(cfg.get('s10.regime_mult_neutral',  1.00)),
-            'caution':        float(cfg.get('s10.regime_mult_caution',  0.80)),
-            'bear':           float(cfg.get('s10.regime_mult_bear',     0.50)),
+            'caution':        float(pget('s10.regime_mult_caution', 0.80)),
+            'bear':           float(pget('s10.regime_mult_bear', 0.50)),
             'crash':          float(cfg.get('s10.regime_mult_crash',    0.00)),
-            'momentum_surge': float(cfg.get('s10.regime_mult_bull',    1.20)),
+            'momentum_surge': float(pget('s10.regime_mult_bull', 1.20)),
         }.get(str(regime).lower(), 1.0)
 
         total = (foreign_score + ma120_bonus) * regime_mult
         confidence = float(np.clip(total, 0.0, 1.0))
 
-        entry_thr = float(cfg.get('s10.entry_score_threshold', 0.10))
-        exit_thr  = float(cfg.get('s10.exit_score_threshold', -0.05))
+        entry_thr = float(pget('s10.entry_score_threshold', 0.10))
+        exit_thr  = float(pget('s10.exit_score_threshold', -0.05))
 
         reasons = []
         if tnorm(streak,  1.0) > 0.2:  reasons.append(f"외국인연속매수(streak={streak:.2f})")
@@ -393,12 +363,12 @@ class S10MegaTrendStream(BaseStream):
     def _compute_kelly(self, sig: Dict) -> float:
         """Kelly Criterion 포지션 사이징."""
         p  = float(sig.get('confidence', 0.5))
-        tp = float(cfg.get('s10.default_tp_pct', 0.30))
-        sl = float(cfg.get('s10.default_sl_pct', 0.10))
+        tp = float(pget('s10.default_tp_pct', 0.30))
+        sl = float(pget('s10.default_sl_pct', 0.10))
         b  = tp / max(sl, 1e-4)
         q  = 1.0 - p
         kelly_f = float(np.clip((p * b - q) / max(b, 1e-4), 0, 1))
-        return round(kelly_f * float(cfg.get('s10.kelly_fraction', 0.25)), 4)
+        return round(kelly_f * float(pget('s10.kelly_fraction', 0.25)), 4)
 
     def _exit_all_signal(self, reason: str) -> List[Dict]:
         """모든 섹터 대장주 청산 신호."""

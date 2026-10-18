@@ -23,6 +23,16 @@
 Author: Project-A
 Date: 2026-03-21
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import json
 from src.infra.safe_io import atomic_write_dataframe
 import logging
@@ -44,7 +54,7 @@ NEGATIVE_KEYWORDS = {'어닝쇼크': -2.0, '실적 악화': -1.5, '영업 적자
 class NaverNewsSentiment:
     """네이버 뉴스 기반 종목 감성 분석 + ML 피처."""
     NAVER_SEARCH_URL = 'https://openapi.naver.com/v1/search/news.json'
-    _FALLBACK_TICKERS = ['005930', '000660', '035420', '005380', '051910']
+    _FALLBACK_TICKERS = load_table('src.data_collection.naver_news_sentiment.NaverNewsSentiment._FALLBACK_TICKERS', [])
 
     def __init__(self):
         from src.utils.credential_manager import CredentialManager

@@ -18,6 +18,11 @@ Zero-Hardcoding Policy:
   모든 임계치, 롤링 윈도우, 가중치, 비중은 DynamicConfig ('scenarios.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import Dict, List, Any, Optional
 import numpy as np
@@ -46,13 +51,13 @@ class MasterScenarioEngine:
 
         # Zero-Hardcoding 파라미터 지연 로드
         s1_usdkrw_thresh = float(cfg.get('scenarios.s1.usdkrw_threshold', 1450.0))
-        s2_futures_sell_thresh = float(cfg.get('scenarios.s2.futures_net_sell', -1500000000000)) # -1.5조
-        s3_vkospi_thresh = float(cfg.get('scenarios.s3.vkospi_threshold', 35.0))
+        s2_futures_sell_thresh = float(pget('scenarios.s2.futures_net_sell', -1500000000000)) # -1.5조
+        s3_vkospi_thresh = float(pget('scenarios.s3.vkospi_threshold', 35.0))
         s4_usdjpy_z_thresh = float(cfg.get('scenarios.s4.usdjpy_z_threshold', -2.5))
-        s5_corr_z_thresh = float(cfg.get('scenarios.s5.corr_z_threshold', 0.95))
-        s6_wti_z_thresh = float(cfg.get('scenarios.s6.wti_z_threshold', 3.0))
-        s7_vpin_thresh = float(cfg.get('scenarios.s7.vpin_threshold', 0.92))
-        s8_ted_z_thresh = float(cfg.get('scenarios.s8.ted_z_threshold', 2.5))
+        s5_corr_z_thresh = float(pget('scenarios.s5.corr_z_threshold', 0.95))
+        s6_wti_z_thresh = float(pget('scenarios.s6.wti_z_threshold', 3.0))
+        s7_vpin_thresh = float(pget('scenarios.s7.vpin_threshold', 0.92))
+        s8_ted_z_thresh = float(pget('scenarios.s8.ted_z_threshold', 2.5))
 
         # --- Scenario 1: FX Liquidity & Yield Spike ---
         usdkrw = float(signal_cache.get('usdkrw', 1350.0))

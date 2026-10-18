@@ -1,0 +1,20 @@
+{
+ "000660": {
+  "name": "SK하이닉스",
+  "proxy_etfs": [
+   "091160",
+   "069500"
+  ],
+  "sector": "semiconductor",
+  "weight_in_sector": 0.35
+ },
+ "005930": {
+  "name": "삼성전자",
+  "proxy_etfs": [
+   "091160",
+   "069500"
+  ],
+  "sector": "semiconductor",
+  "weight_in_sector": 0.45
+ }
+}

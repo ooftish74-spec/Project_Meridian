@@ -22,6 +22,11 @@ Usage:
     kc = KellyCriterion()
     result = kc.calculate_all()
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -112,14 +117,14 @@ class KellyCriterion:
         avg_win = stats.get('avg_win', 0)
         avg_loss = stats.get('avg_loss', 0)
         n_trades = stats.get('n_trades', 0)
-        min_trades = _get('risk.kelly_min_trades', 10)
+        min_trades = pget('risk.kelly_min_trades', 10)
         sufficient_data = n_trades >= min_trades
         if not sufficient_data or avg_loss == 0 or win_rate <= 0:
-            default_pct = _get(f'risk.kelly_default.{stream_id}', _get('risk.kelly_default_pct', 0.05))
+            default_pct = _get(f'risk.kelly_default.{stream_id}', pget('risk.kelly_default_pct', 0.05))
             return {'stream_id': stream_id, 'full_kelly': 0.0, 'adjusted_kelly': default_pct, 'max_position_pct': default_pct, 'win_rate': win_rate, 'profit_loss_ratio': 0.0, 'n_trades': n_trades, 'sufficient_data': False, 'regime_adj': 1.0, 'note': f"데이터 부족 ({n_trades}/{min_trades}건) → 기본값 {default_pct * 100:.0f}%"}
         pl_ratio = abs(avg_win / avg_loss) if avg_loss != 0 else 0
         full_kelly = self.kelly_fraction(win_rate, pl_ratio)
-        fraction = _get('risk.kelly_fraction', 0.5)
+        fraction = pget('risk.kelly_fraction', 0.5)
         fractional_kelly = full_kelly * fraction
         
         # Bayesian Uncertainty Penalty (VIX 기반)
@@ -150,8 +155,8 @@ class KellyCriterion:
                 'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades,
                 'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction
             }
-        max_pos = _get('risk.kelly_max_position_pct', 0.15)
-        min_pos = _get('risk.kelly_min_position_pct', 0.01)
+        max_pos = pget('risk.kelly_max_position_pct', 0.15)
+        min_pos = pget('risk.kelly_min_position_pct', 0.01)
         final_kelly = max(min_pos, min(max_pos, adjusted_kelly))
         return {'stream_id': stream_id, 'full_kelly': round(full_kelly, 6), 'fractional_kelly': round(fractional_kelly, 6), 'adjusted_kelly': round(adjusted_kelly, 6), 'max_position_pct': round(final_kelly, 6), 'win_rate': round(win_rate, 4), 'profit_loss_ratio': round(pl_ratio, 4), 'avg_win_pct': round(avg_win * 100, 2), 'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades, 'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction}
 
@@ -180,7 +185,7 @@ class KellyCriterion:
                 weighted_kelly += result['max_position_pct'] * w
                 total_weight += w
         portfolio_kelly = weighted_kelly / total_weight if total_weight > 0 else 0
-        output = {'timestamp': datetime.now().isoformat(), 'regime': regime, 'fraction': _get('risk.kelly_fraction', 0.5), 'streams': results, 'portfolio_kelly': round(portfolio_kelly, 6)}
+        output = {'timestamp': datetime.now().isoformat(), 'regime': regime, 'fraction': pget('risk.kelly_fraction', 0.5), 'streams': results, 'portfolio_kelly': round(portfolio_kelly, 6)}
         self._save_results(output)
         return output
 

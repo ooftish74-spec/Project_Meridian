@@ -11,6 +11,11 @@ Market Shock Detector — 시장 급변 실시간 감지 + 방향성 조정
   파이프라인 Phase 0.9.1 → Regime Detection 후 실행
   overnight_predictor → bias 보정에 shock 신호 반영
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import json
 from datetime import datetime
@@ -43,7 +48,7 @@ class MarketShockDetector:
 
     @property
     def THRESHOLDS(self) -> Dict:
-        return {'us_sp500_moderate': _cfg_get('shock.threshold.us_sp500_moderate', -0.02), 'us_sp500_severe': _cfg_get('shock.threshold.us_sp500_severe', -0.04), 'us_nasdaq_moderate': _cfg_get('shock.threshold.us_nasdaq_moderate', -0.025), 'us_nasdaq_severe': _cfg_get('shock.threshold.us_nasdaq_severe', -0.05), 'vix_moderate': _cfg_get('shock.threshold.vix_moderate', 25.0), 'vix_severe': _cfg_get('shock.threshold.vix_severe', 35.0), 'futures_moderate': _cfg_get('shock.threshold.futures_moderate', -0.015), 'futures_severe': _cfg_get('shock.threshold.futures_severe', -0.03), 'usdkrw_moderate': _cfg_get('shock.threshold.usdkrw_moderate', 0.01), 'usdkrw_severe': _cfg_get('shock.threshold.usdkrw_severe', 0.02)}
+        return {'us_sp500_moderate': pget('shock.threshold.us_sp500_moderate', -0.02), 'us_sp500_severe': pget('shock.threshold.us_sp500_severe', -0.04), 'us_nasdaq_moderate': pget('shock.threshold.us_nasdaq_moderate', -0.025), 'us_nasdaq_severe': pget('shock.threshold.us_nasdaq_severe', -0.05), 'vix_moderate': pget('shock.threshold.vix_moderate', 25.0), 'vix_severe': pget('shock.threshold.vix_severe', 35.0), 'futures_moderate': pget('shock.threshold.futures_moderate', -0.015), 'futures_severe': pget('shock.threshold.futures_severe', -0.03), 'usdkrw_moderate': _cfg_get('shock.threshold.usdkrw_moderate', 0.01), 'usdkrw_severe': _cfg_get('shock.threshold.usdkrw_severe', 0.02)}
     YF_TIMEOUT = 10
 
     def __init__(self):

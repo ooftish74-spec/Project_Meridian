@@ -30,6 +30,11 @@ Usage:
     from src.intelligence.v4_features import inject_auto_alphas
     df = inject_auto_alphas(df)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import numpy as np
 from typing import Dict, List, Optional, Any
@@ -149,7 +154,7 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     if feat is None:
         return None
     n = len(close)
-    _warmup = int(_cfg.get('ml.warmup_bars', 60)) if _cfg else 60
+    _warmup = int(pget('ml.warmup_bars', 60)) if _cfg else 60
     if idx < _warmup or idx >= n:
         return None
     c = close[:idx + 1]
@@ -162,9 +167,9 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     log_ret = np.diff(np.log(c[-21:])) if len(c) >= 21 else np.zeros(1)
     feat['log_return_skew_20d'] = float(_safe_skew(log_ret))
     feat['log_return_kurtosis_20d'] = float(_safe_kurtosis(log_ret))
-    w_fast = _cfg.get('ml.feature_window_fast', 5) if _cfg else 5
-    w_mid = _cfg.get('ml.feature_window_mid', 20) if _cfg else 20
-    w_slow = _cfg.get('ml.feature_window_slow', 60) if _cfg else 60
+    w_fast = pget('ml.feature_window_fast', 5) if _cfg else 5
+    w_mid = pget('ml.feature_window_mid', 20) if _cfg else 20
+    w_slow = pget('ml.feature_window_slow', 60) if _cfg else 60
     ma5 = np.mean(c[-w_fast:]) if len(c) >= w_fast else c[-1]
     ma20 = np.mean(c[-w_mid:]) if len(c) >= w_mid else c[-1]
     ma60 = np.mean(c[-w_slow:]) if len(c) >= w_slow else c[-1]
@@ -221,7 +226,7 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
 def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False, alpha_model=None):
     """V3 피처 독립 추출 (train_ensemble import 불가 시 fallback)."""
     n = len(close)
-    _warmup_v3 = int(_cfg.get('ml.warmup_bars_v3', 260)) if _cfg else 260
+    _warmup_v3 = int(pget('ml.warmup_bars_v3', 260)) if _cfg else 260
     if idx < _warmup_v3 or idx >= n:
         return None
     c = close[:idx + 1]
@@ -240,8 +245,8 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False, alp
     ma20 = np.mean(c[-20:])
     std20 = np.std(c[-20:])
     bb = (c[-1] - (ma20 - 2 * std20)) / (4 * std20) if std20 > 0 else 0.5
-    _macd_fast = int(_cfg.get('ml.macd_fast', 12)) if _cfg else 12
-    _macd_slow = int(_cfg.get('ml.macd_slow', 26)) if _cfg else 26
+    _macd_fast = int(pget('ml.macd_fast', 12)) if _cfg else 12
+    _macd_slow = int(pget('ml.macd_slow', 26)) if _cfg else 26
     ema_fast = np.mean(c[-_macd_fast:])
     ema_slow = np.mean(c[-_macd_slow:])
     macd_val = ema_fast - ema_slow
@@ -254,9 +259,9 @@ def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False, alp
         np.abs(l[-19:] - c[-20:-1]),
     ])
     atr_pct = np.mean(tr[-14:]) / c[-1] * 100 if c[-1] > 0 else 0
-    w_fast = _cfg.get('ml.feature_window_fast', 5) if _cfg else 5
-    w_mid = _cfg.get('ml.feature_window_mid', 20) if _cfg else 20
-    w_slow = _cfg.get('ml.feature_window_slow', 60) if _cfg else 60
+    w_fast = pget('ml.feature_window_fast', 5) if _cfg else 5
+    w_mid = pget('ml.feature_window_mid', 20) if _cfg else 20
+    w_slow = pget('ml.feature_window_slow', 60) if _cfg else 60
     ma5 = np.mean(c[-w_fast:])
     ma60 = np.mean(c[-w_slow:])
     ret_1d = (c[-1] / c[-2] - 1) * 100 if len(c) >= 2 and c[-2] > 0 else 0

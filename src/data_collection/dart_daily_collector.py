@@ -26,6 +26,11 @@ DART 일별 증분 수집기 — Daily Pipeline 연동용
 Author: Project-A
 Date: 2026-03-21
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 from src.utils.file_ops import atomic_write_json
 from src.infra.safe_io import atomic_write_dataframe
 
@@ -382,7 +387,7 @@ class DARTDailyCollector:
             if df.empty:
                 return None
             features = df.reindex(target_index).ffill()
-            max_nan = cfg.get('data.max_nan_ratio', 0.8)
+            max_nan = pget('data.max_nan_ratio', 0.8)
             nan_ratio = features.isna().mean().mean()
             if nan_ratio > max_nan:
                 return None

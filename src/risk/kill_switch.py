@@ -33,7 +33,7 @@ import json as _json
 import logging
 import math
 from datetime import datetime, timedelta
-from src.utils.file_ops import atomic_write_json
+from src.utils.file_ops import atomic_write_json, safe_json_update, CorruptJSONError
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -47,6 +47,11 @@ except ImportError as e:
         return datetime.now(timezone.utc)
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 _RESULTS = Path(__file__).resolve().parent.parent.parent / 'results'
 _STATE_FILE = _RESULTS / 'kill_switch_state.json'
 
@@ -90,11 +95,54 @@ class KillSwitch:
             logger.critical(f"  [KillSwitch] 상태 파일 로드 실패 (초기 상태 사용): {e}", exc_info=True)
 
     def _save_state(self, triggered: bool, trigger_types: set) -> None:
-        """현재 상태를 kill_switch_state.json에 저장."""
+        """현재 상태를 kill_switch_state.json에 저장.
+
+        ★ Wave 1 Track A: 락 보유 merge-update (safe_json_update).
+          - 여러 프로세스(파이프라인/데몬)의 KillSwitch 인스턴스가 각자 __init__ 시점 상태로
+            전체 덮어쓰기하던 lost-update 제거: last_alert_times/last_clear_alert_time 은
+            디스크 값과 '더 최근 값'으로 병합(쿨다운 유실 → 중복 알림 방지).
+          - triggered/trigger_types 는 이번 판정 결과(기존 의미 유지).
+          - reset() 경로는 _reset_pending 으로 알림 시각까지 초기화(병합하지 않음).
+          - 손상된 상태 파일은 덮어쓰지 않는다(CorruptJSONError → CRITICAL 로그).
+        """
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            _state = {'triggered': triggered, 'trigger_types': list(trigger_types), 'last_alert_times': {k: v.isoformat() for k, v in self._last_alert_times.items()}, 'last_clear_alert_time': getattr(self, '_last_clear_alert_time', 0), 'updated_at': now_kst().isoformat()}
-            atomic_write_json(_STATE_FILE, _state, ensure_ascii=False, indent=2)
+            _mine = {k: v.isoformat() for k, v in self._last_alert_times.items()}
+            _my_clear = getattr(self, '_last_clear_alert_time', 0)
+            _reset = bool(getattr(self, '_reset_pending', False))
+
+            def _mutate(cur):
+                cur = cur if isinstance(cur, dict) else {}
+                merged_times = {} if _reset else dict(cur.get('last_alert_times') or {})
+                for k, v in _mine.items():
+                    old = merged_times.get(k)
+                    try:
+                        if old is None or datetime.fromisoformat(v) >= datetime.fromisoformat(old):
+                            merged_times[k] = v
+                    except Exception:
+                        merged_times[k] = v
+                clear_t = _my_clear
+                if not _reset:
+                    try:
+                        clear_t = max(float(cur.get('last_clear_alert_time', 0) or 0), float(_my_clear or 0))
+                    except (TypeError, ValueError):
+                        clear_t = _my_clear
+                out = dict(cur)   # 다른 writer가 추가한 키 보존
+                out.update({'triggered': triggered, 'trigger_types': list(trigger_types),
+                            'last_alert_times': merged_times, 'last_clear_alert_time': clear_t,
+                            'updated_at': now_kst().isoformat()})
+                return out
+
+            new_state = safe_json_update(_STATE_FILE, _mutate, default={}, ensure_ascii=False, indent=2)
+            # 다른 프로세스가 기록한 더 최근 알림 시각을 메모리에도 반영 (쿨다운 일관성)
+            for k, v in (new_state.get('last_alert_times') or {}).items():
+                try:
+                    self._last_alert_times[k] = datetime.fromisoformat(v)
+                except Exception:
+                    pass
+            self._reset_pending = False
+        except CorruptJSONError as e:
+            logger.critical(f"  [KillSwitch] 상태 파일 손상 — 덮어쓰지 않음(수동 점검 필요): {e}")
         except Exception as e:
             logger.critical(f"  [KillSwitch] 상태 저장 실패: {e}", exc_info=True)
 
@@ -112,7 +160,7 @@ class KillSwitch:
         """
         if not daily_returns:
             return daily_returns
-        max_gap_days = cfg.get('kill_switch.system_gap_max_days', 3)
+        max_gap_days = pget('kill_switch.system_gap_max_days', 3)
         try:
             _sp_file = _RESULTS / 'shadow_portfolio.json'
             if not _sp_file.exists():
@@ -180,7 +228,7 @@ class KillSwitch:
         """
         if not current_triggered:
             return (False, '')
-        cooldown_hours = cfg.get('kill_switch.alert_cooldown_hours', 4.0)
+        cooldown_hours = pget('kill_switch.alert_cooldown_hours', 4.0)
         cooldown = timedelta(hours=cooldown_hours)
         last_sent = self._last_alert_times.get(trigger_type)
         now = now_kst().replace(tzinfo=None)
@@ -281,8 +329,8 @@ class KillSwitch:
         """
         out = {'consistent': None, 'components_nav': None, 'rel_gap': None, 'reason': ''}
         try:
-            tol = float(cfg.get('kill_switch.nav_crosscheck_tol', 0.10))
-            max_age_min = float(cfg.get('kill_switch.nav_crosscheck_max_age_min', 30))
+            tol = float(pget('kill_switch.nav_crosscheck_tol', 0.10))
+            max_age_min = float(pget('kill_switch.nav_crosscheck_max_age_min', 30))
             kp = _RESULTS / 'kis_portfolio.json'
             if not kp.exists() or not total_nav or total_nav <= 0:
                 out['reason'] = 'no_component_data'
@@ -348,7 +396,7 @@ class KillSwitch:
             _ps = _RESULTS / 'pipeline_state.json'
             if _ps.exists():
                 _d = _fj.loads(_ps.read_text())
-                forward['ois_score'] = _d.get('ois', 50.0)
+                forward['ois_score'] = _d.get('ois', pget('kill_switch.ois_missing_default', 50.0))
             _me = _RESULTS / 'measurement_engine.json'
             if _me.exists():
                 _d = _fj.loads(_me.read_text())
@@ -375,13 +423,13 @@ class KillSwitch:
         import numpy as np
         if len(daily_returns) >= 5:
             recent = np.array(daily_returns[-60:])
-            ewma_lambda = 0.94
+            ewma_lambda = pget('kill_switch.ewma_lambda', 0.94)
             var_t = float(np.var(recent[:5]))
             for r in recent[5:]:
                 var_t = ewma_lambda * var_t + (1 - ewma_lambda) * r * r
             return float(np.sqrt(var_t))
         else:
-            vix = forward.get('forward_vix', 20.0)
+            vix = forward.get('forward_vix', pget('kill_switch.forward_vix_default', 20.0))
             try:
                 import json as _fj
                 _sc = _RESULTS / 'signal_cache.json'
@@ -409,17 +457,17 @@ class KillSwitch:
         """
         triggers = []
         forward = metrics.get('forward', {})
-        max_daily = metrics.get('dynamic_daily_limit_pct', -5.0)
+        max_daily = metrics.get('dynamic_daily_limit_pct', pget('kill_switch.daily_loss_limit_fallback_pct', -5.0))
         if metrics['today_return_pct'] <= max_daily:
             _tr_pct = metrics.get('today_return_pct', 0)
             triggers.append({'type': 'daily_loss', 'value': _tr_pct, 'threshold': max_daily, 'reason': f"일간 손실 {_tr_pct:.2f}% ≤ 동적 한도 {max_daily:.2f}% (3-Sigma)", 'overridable': False})
-        base_dd_kill_pct = cfg.get('dd_guard.stage5_pct', -0.25)
+        base_dd_kill_pct = pget('dd_guard.stage5_pct', -0.25)
         # ★ Wave 0 E8: crash 레짐에서 한도를 -40%로 '완화'하던 방향 오류 수정 → 완화는 bull에서만
         regime_factor = 1.0 if regime == 'bull' else 0.0
-        max_relaxation = 0.15
+        max_relaxation = pget('kill_switch.dd_bull_relaxation', 0.15)
         dynamic_dd_kill_pct = base_dd_kill_pct - max_relaxation * regime_factor
         dd_kill_pct = dynamic_dd_kill_pct * 100
-        ABSOLUTE_MDD_KILL = -5.0
+        ABSOLUTE_MDD_KILL = pget('kill_switch.absolute_mdd_kill_pct', -5.0)
         _nav_unverified = metrics.get('nav_consistent') is False
         if _nav_unverified and (metrics['dd_pct'] <= ABSOLUTE_MDD_KILL or metrics['dd_pct'] <= dd_kill_pct):
             _nc = metrics.get('nav_check', {})
@@ -433,17 +481,17 @@ class KillSwitch:
             _dd_p2 = metrics.get('dd_pct', 0)
             triggers.append({'type': 'dd_critical', 'value': _dd_p2, 'threshold': dd_kill_pct, 'reason': f"DD {_dd_p2:.1f}% ≤ {dd_kill_pct:.0f}% (Dynamic Stage 5+)", 'overridable': False})
         if regime == 'crash':
-            max_weekly = metrics.get('dynamic_weekly_limit_pct', -10.0)
+            max_weekly = metrics.get('dynamic_weekly_limit_pct', pget('kill_switch.weekly_loss_limit_fallback_pct', -10.0))
             _wr_pct = metrics.get('weekly_return_pct', 0)
             if _wr_pct <= max_weekly:
                 triggers.append({'type': 'crash_weekly', 'value': _wr_pct, 'threshold': max_weekly, 'reason': f"CRASH 주간 손실 {_wr_pct:.1f}% ≤ 동적 한도 {max_weekly:.2f}%", 'overridable': False})
-        max_consec = cfg.get('kill_switch.max_consecutive_loss_days', 7)
+        max_consec = pget('kill_switch.max_consecutive_loss_days', 7)
         if metrics['consecutive_loss_days'] >= max_consec:
             _cld = metrics.get('consecutive_loss_days', 0)
             triggers.append({'type': 'consecutive_loss', 'value': _cld, 'threshold': max_consec, 'reason': f"연속 손실 {_cld}일 ≥ {max_consec}일", 'overridable': True})
         monthly_ret = metrics.get('monthly_return_pct', 0)
-        monthly_limit = metrics.get('monthly_dynamic_limit_pct', -5.0)
-        if monthly_ret <= monthly_limit and metrics.get('monthly_trading_days', 0) >= 3:
+        monthly_limit = metrics.get('monthly_dynamic_limit_pct', pget('kill_switch.monthly_loss_limit_fallback_pct', -5.0))
+        if monthly_ret <= monthly_limit and metrics.get('monthly_trading_days', 0) >= pget('kill_switch.monthly_min_trading_days', 3):
             triggers.append({'type': 'monthly_loss', 'value': monthly_ret, 'threshold': monthly_limit, 'reason': f"월 누적 손실 {monthly_ret:.2f}% ≤ 동적 한도 {monthly_limit:.2f}%", 'overridable': True})
         forward_override = self._evaluate_forward_override(triggers, forward, regime)
         overridden = []
@@ -481,21 +529,22 @@ class KillSwitch:
         scores['alpha'] = 1.0 / (1.0 + math.exp(-alpha * 100.0))
         sentiment = forward.get('news_sentiment', 0)
         scores['news'] = min(1.0, max(0.0, sentiment + 0.5))
-        ois = forward.get('ois_score', 50)
+        ois = forward.get('ois_score', pget('kill_switch.ois_missing_default', 50.0))
         scores['ois'] = min(1.0, max(0.0, (ois - 30) / 40.0))
         total = sum(scores.values())
         max_score = len(scores)
-        threshold = cfg.get('kill_switch.forward_override_threshold', 0.6)
+        threshold = pget('kill_switch.forward_override_threshold', 0.6)
+        _good_cut = pget('kill_switch.forward_component_good', 0.6)
         normalized = total / max_score if max_score > 0 else 0
         override = normalized >= threshold
         reason = ''
         if override:
-            good = [k for k, v in scores.items() if v >= 0.6]
+            good = [k for k, v in scores.items() if v >= _good_cut]
             _g_str = ', '.join(good)
             reason = f"전방 지표 양호 ({normalized:.0%}): {_g_str}"
             logger.info(f"  🟢 Kill Switch Override: {reason}")
         else:
-            weak = [k for k, v in scores.items() if v < 0.6]
+            weak = [k for k, v in scores.items() if v < _good_cut]
             _w_str = ', '.join(weak)
             logger.info(f"  🔴 Kill Switch Override 불가 ({normalized:.0%}): 약한 지표={_w_str}")
         return {'override': override, 'reason': reason, 'score': round(normalized, 3), 'threshold': threshold, 'details': {k: round(v, 2) for k, v in scores.items()}}
@@ -511,7 +560,7 @@ class KillSwitch:
         monthly_days = len(month_returns)
         monthly_return = sum(month_returns) if month_returns else 0.0
         monthly_vol = daily_vol * np.sqrt(month_trading_days)
-        Z = 2.0537
+        Z = pget('kill_switch.monthly_cvar_z', 2.0537)
         if len(daily_returns) >= 30:
             try:
                 arr = np.array(daily_returns[-60:])
@@ -528,9 +577,9 @@ class KillSwitch:
         else:
             S, K = (-0.5, 3.0)
         Z_cf = Z + (Z ** 2 - 1) * S / 6.0 + (Z ** 3 - 3 * Z) * K / 24.0 - (2 * Z ** 3 - 5 * Z) * S ** 2 / 36.0
-        cvar_multiplier = max(1.5, Z_cf)
+        cvar_multiplier = max(pget('kill_switch.cvar_mult_floor', 1.5), Z_cf)
         dynamic_limit = -(monthly_vol * cvar_multiplier)
-        dynamic_limit = max(-0.25, min(-0.01, dynamic_limit))
+        dynamic_limit = max(pget('kill_switch.monthly_limit_floor', -0.25), min(pget('kill_switch.monthly_limit_cap', -0.01), dynamic_limit))
         return (monthly_return, monthly_days, dynamic_limit)
 
     def assess(self, portfolio: Dict, regime: str='caution') -> Dict:
@@ -591,6 +640,7 @@ class KillSwitch:
         self._prev_triggered = False
         self._prev_trigger_types = set()
         self._last_alert_times = {}
+        self._reset_pending = True   # ★ Wave 1: 수동 리셋은 디스크 알림 시각까지 초기화(병합 생략)
         self._save_state(False, set())
         logger.info('  🔄 Kill Switch 리셋')
 
@@ -735,18 +785,19 @@ class KillSwitch:
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
             record_file = _RESULTS / 'hard_liquidation.json'
-            history = []
-            if record_file.exists():
-                try:
-                    history = _json.loads(record_file.read_text())
-                except (FileNotFoundError, json.JSONDecodeError):
-                    history = []
-                except Exception as e:
-                    logger.critical(f"  KillSwitch 기록 저장 중 에러 (빈 히스토리로 재초기화): {e}", exc_info=True)
-                    history = []
-            history.append(result)
-            history = history[-100:]
-            atomic_write_json(record_file, history, ensure_ascii=False, indent=2, default=str)
+            _rec = _json.loads(_json.dumps(result, ensure_ascii=False, default=str))   # 직렬화 불가 값 사전 정규화
+
+            def _append(history):
+                history = history if isinstance(history, list) else []
+                history.append(_rec)
+                return history[-100:]
+            try:
+                safe_json_update(record_file, _append, default=[], ensure_ascii=False, indent=2)
+            except CorruptJSONError as _ce:
+                # ★ Wave 1: 손상된 이력을 빈 리스트로 덮어쓰지 않는다 — 이번 기록은 별도 파일로 보존
+                side = _RESULTS / f"hard_liquidation.{now_kst().strftime('%Y%m%d_%H%M%S')}.json"
+                logger.critical(f"  [HardLiquidate] 이력 파일 손상({_ce}) — 덮어쓰지 않고 {side.name}에 기록")
+                atomic_write_json(side, [result], ensure_ascii=False, indent=2, default=str)
         except Exception as _save_err:
             logger.critical(f"  [HardLiquidate] 기록 저장 실패: {_save_err}", exc_info=True)
         try:

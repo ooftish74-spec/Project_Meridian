@@ -59,8 +59,9 @@ class Universe:
         'sp500_1x':   ETFInfo('360200', 'KODEX 미국S&P500', 'global', 1.0, 0.0009),
         'nasdaq_2x':  ETFInfo('453010', 'TIGER 미국나스닥100레버리지', 'global', 2.0, 0.0045),
         # 단일 종목 인버스 (S1 Tactic C용)
-        'sec_inv':    ETFInfo('0193L0', 'PLUS 삼성전자선물단일종목인버스2X', 'directional', -1.0),
-        'hynix_inv':  ETFInfo('0197X0', 'SOL SK하이닉스선물단일종목인버스2X', 'directional', -1.0),
+        # [Wave2 TrackF] KIS 마스터 실측(2026-10-19): 두 종목 모두 '단일종목인버스2X' → 진짜 배수 -2.0 (기존 -1.0 오기 수정)
+        'sec_inv':    ETFInfo('0193L0', 'PLUS 삼성전자선물단일종목인버스2X', 'directional', -2.0),
+        'hynix_inv':  ETFInfo('0197X0', 'SOL SK하이닉스선물단일종목인버스2X', 'directional', -2.0),
     }
 
     # ═══════════════════════════════════════════════════════

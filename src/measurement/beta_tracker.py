@@ -16,6 +16,11 @@ Beta Tracker — 포트폴리오 롤링 베타 & 순수 알파 분해
 
 measurement_engine.run() 내부에서 자동 호출됨.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime
@@ -68,7 +73,7 @@ class BetaTracker:
         """히스토리 저장 (최대 보관 기간 적용)."""
         try:
             _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-            max_days = int(_dc('beta_tracker.max_history_days', 756))
+            max_days = int(pget('beta_tracker.max_history_days', 756))
             if len(self._history) > max_days:
                 self._history = self._history[-max_days:]
             atomic_write_json(_BETA_HISTORY_FILE, self._history, indent=2, ensure_ascii=False, default=str)
@@ -89,7 +94,7 @@ class BetaTracker:
         """
         rec: Dict = {'date': date_str, 'portfolio_ret_pct': round(float(portfolio_return_pct), 4), 'benchmark_ret_pct': round(float(benchmark_return_pct), 4), 'regime': str(regime), 'recorded_at': datetime.now().isoformat()}
         self._history.append(rec)
-        windows = {'beta_30d': int(_dc('beta_tracker.window_short', 30)), 'beta_60d': int(_dc('beta_tracker.window_mid', 60)), 'beta_120d': int(_dc('beta_tracker.window_long', 120))}
+        windows = {'beta_30d': int(pget('beta_tracker.window_short', 30)), 'beta_60d': int(pget('beta_tracker.window_mid', 60)), 'beta_120d': int(pget('beta_tracker.window_long', 120))}
         for key, window in windows.items():
             beta = self._rolling_beta(window)
             rec[key] = round(float(beta), 4) if beta is not None else None
@@ -108,7 +113,7 @@ class BetaTracker:
 
     def _rolling_beta(self, window: int) -> Optional[float]:
         """직전 N일 수익률로 OLS 베타 계산."""
-        min_obs = int(_dc('beta_tracker.min_obs', 10))
+        min_obs = int(pget('beta_tracker.min_obs', 10))
         if len(self._history) < max(window, min_obs):
             return None
         recent = self._history[-window:]
@@ -150,20 +155,20 @@ class BetaTracker:
             if a is not None:
                 regime_alphas.setdefault(rg, []).append(a)
         avg_by_regime = {rg: round(float(np.mean(bs)), 4) for rg, bs in regime_betas.items()}
-        tdy = int(_dc('beta_tracker.trading_days_year', 252))
+        tdy = int(pget('beta_tracker.trading_days_year', 252))
         alpha_d = float(np.mean(alphas)) if alphas else None
         alpha_a = round(alpha_d * tdy, 2) if alpha_d is not None else None
         all_betas = [r['beta_60d'] for r in self._history if r.get('beta_60d') is not None]
         current_regime = self._history[-1].get('regime', 'unknown') if self._history else 'unknown'
-        regime_warn_pct = {'bull': float(_dc('beta_tracker.bull_beta_warn_pct', 80.0)), 'neutral': float(_dc('beta_tracker.neutral_beta_warn_pct', 70.0)), 'caution': float(_dc('beta_tracker.caution_beta_warn_pct', 65.0)), 'bear': float(_dc('beta_tracker.bear_beta_warn_pct', 60.0)), 'crash': float(_dc('beta_tracker.crash_beta_warn_pct', 50.0)), 'momentum_surge': float(_dc('beta_tracker.bull_beta_warn_pct', 80.0))}
+        regime_warn_pct = {'bull': float(pget('beta_tracker.bull_beta_warn_pct', 80.0)), 'neutral': float(pget('beta_tracker.neutral_beta_warn_pct', 70.0)), 'caution': float(pget('beta_tracker.caution_beta_warn_pct', 65.0)), 'bear': float(pget('beta_tracker.bear_beta_warn_pct', 60.0)), 'crash': float(pget('beta_tracker.crash_beta_warn_pct', 50.0)), 'momentum_surge': float(pget('beta_tracker.bull_beta_warn_pct', 80.0))}
         pct_key = regime_warn_pct.get(current_regime.lower(), 70.0)
-        if len(all_betas) >= int(_dc('beta_tracker.min_obs_for_dynamic', 20)):
+        if len(all_betas) >= int(pget('beta_tracker.min_obs_for_dynamic', 20)):
             dynamic_beta_warn = float(np.percentile(all_betas, pct_key))
             dynamic_beta_warn = max(dynamic_beta_warn, float(_dc('beta_tracker.beta_warn_floor', 1.0)))
         else:
-            dynamic_beta_warn = float(_dc('beta_tracker.high_beta_warning_threshold', 1.3))
+            dynamic_beta_warn = float(pget('beta_tracker.high_beta_warning_threshold', 1.3))
         bull_betas = regime_betas.get('bull', [])
-        high_beta_warn = len(bull_betas) >= int(_dc('beta_tracker.min_regime_obs', 5)) and float(np.mean(bull_betas)) > dynamic_beta_warn
+        high_beta_warn = len(bull_betas) >= int(pget('beta_tracker.min_regime_obs', 5)) and float(np.mean(bull_betas)) > dynamic_beta_warn
         regime_alpha_ann = {rg: round(float(np.mean(als)) * tdy, 2) for rg, als in regime_alphas.items() if als}
         return {'avg_beta_60d': round(float(np.mean(betas)), 4) if betas else None, 'avg_pure_alpha_daily_pct': round(alpha_d, 4) if alpha_d is not None else None, 'pure_alpha_annualized_pct': alpha_a, 'regime_pure_alpha_ann_pct': regime_alpha_ann, 'beta_by_regime': avg_by_regime, 'n_records': len(self._history), 'last_updated': self._history[-1]['date'] if self._history else None, 'high_beta_warning': high_beta_warn, 'dynamic_beta_warn_threshold': round(dynamic_beta_warn, 4), 'current_regime': current_regime}
 

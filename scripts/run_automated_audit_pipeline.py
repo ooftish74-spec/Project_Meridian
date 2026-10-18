@@ -15,6 +15,12 @@ Usage:
   python3 scripts/run_automated_audit_pipeline.py
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import sys
 import gc
 import json
@@ -48,7 +54,7 @@ class AutomatedAuditPipeline:
         """1. Shadow Mode vs Live Slippage 감사 (0.05% 오차 범위)."""
         logger.info("[1/5] Shadow Mode 슬리피지 괴리율 감사 중...")
         shadow_report_file = _PROJECT_ROOT / 'results' / 'shadow_trade_report.json'
-        max_allowed_slippage = float(cfg.get('audit.max_allowed_slippage_pct', 0.05))
+        max_allowed_slippage = float(pget('audit.max_allowed_slippage_pct', 0.05))
 
         if shadow_report_file.exists():
             try:
@@ -65,7 +71,7 @@ class AutomatedAuditPipeline:
     def audit_data_freshness_heartbeat(self) -> Dict[str, Any]:
         """2. Data Freshness & Heartbeat Guard 감사 (3초 지연 한도)."""
         logger.info("[2/5] 시세 지연 하트비트 가드 상태 점검 중...")
-        stale_threshold = float(cfg.get('audit.stale_data_threshold_sec', 3.0))
+        stale_threshold = float(pget('audit.stale_data_threshold_sec', 3.0))
         # 파이프라인 신선도 엔진 정상 로드 점검
         try:
             from src.infra.dynamic_data_freshness_engine import DynamicDataFreshnessEngine
@@ -97,7 +103,7 @@ class AutomatedAuditPipeline:
         """5. NAV vs MeasurementEngine PnL 무결점 정산 감사 (0.05% 오차 범위)."""
         logger.info("[5/5] NAV vs MeasurementEngine PnL 무결점 정산 감사 중...")
         me_file = _PROJECT_ROOT / 'results' / 'measurement_engine.json'
-        max_disparity = float(cfg.get('audit.max_nav_disparity_pct', 0.05))
+        max_disparity = float(pget('audit.max_nav_disparity_pct', 0.05))
 
         if me_file.exists():
             try:

@@ -21,6 +21,16 @@
     tickers = get_universe_tickers(market='ETF')        # KRX 상장 ETF만
     name = get_ticker_name('005930')                    # '삼성전자'
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import json
 import logging
 import re
@@ -29,7 +39,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _KR_TICKER_RE = re.compile('^\\d{4}[0-9A-Z]{2}$')
-_FALLBACK_TICKERS = ['005930', '000660', '035420', '005380', '051910']
+_FALLBACK_TICKERS = load_table('src.data_collection.universe_loader._FALLBACK_TICKERS', [])
 _cache = {'tickers': None, 'names': None, 'stocks': None, 'etfs': None, 'us': None, 'meta': {}}
 
 def get_universe_tickers(stocks_only: bool=False, include_etf: bool=True, market: str='ALL') -> List[str]:

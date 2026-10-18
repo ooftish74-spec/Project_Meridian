@@ -17,6 +17,11 @@ Usage:
     evaluation = engine.evaluate(market_snapshot, portfolio_state)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -95,7 +100,7 @@ class ModularHyperQVMEngine:
             'z_imbalance': float(z_imbalance),
             'entropy_ratio': float(entropy_ratio),
             'phase_signal': float(phase_signal),
-            'is_vacuum_risk': bool(phase_signal < float(self._get_cfg('hyper_qvm.vacuum_threshold', 0.15)))
+            'is_vacuum_risk': bool(phase_signal < float(pget('hyper_qvm.vacuum_threshold', 0.15)))
         }
 
     # --------------------------------------------------------------------------
@@ -228,7 +233,7 @@ class ModularHyperQVMEngine:
         ldi = float((vix_zscore + imbalance_delta_zscore - dealer_gamma_zscore) / math.sqrt(3.0))
         distress_confidence = float(norm_cdf(ldi))
 
-        threshold_conf = float(self._get_cfg('hyper_qvm.dislocation_trigger_cdf', 0.84)) # ~1 StdDev
+        threshold_conf = float(pget('hyper_qvm.dislocation_trigger_cdf', 0.84)) # ~1 StdDev
 
         return {
             'liquidity_distress_index': ldi,
@@ -268,7 +273,7 @@ class ModularHyperQVMEngine:
             std_e = float(max(np.std(hist_arr), 1e-6))
             z_energy = (graph_energy - mean_e) / std_e
 
-        min_scale = float(self._get_cfg('hyper_qvm.tda_min_scale', 0.20))
+        min_scale = float(pget('hyper_qvm.tda_min_scale', 0.20))
         tda_risk_scale = float(1.0 - norm_cdf(z_energy) * (1.0 - min_scale))
 
         return {
@@ -294,7 +299,7 @@ class ModularHyperQVMEngine:
         valuation_factor = norm_cdf(-float(s3_valuation_zscore)) # Low valuation -> Higher ratio
 
         reinvest_ratio = float(sharpe_factor * valuation_factor)
-        max_ratio = float(self._get_cfg('hyper_qvm.max_reinvest_ratio', 0.60))
+        max_ratio = float(pget('hyper_qvm.max_reinvest_ratio', 0.60))
         final_ratio = float(min(max_ratio, max(0.0, reinvest_ratio)))
 
         return {

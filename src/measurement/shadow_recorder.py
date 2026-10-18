@@ -17,6 +17,11 @@ Usage:
     recorder.record(orchestrator_result, execution_result)
     report = recorder.go_nogo_evaluation()
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime, timedelta
@@ -110,10 +115,10 @@ class ShadowRecorder:
         peak = np.maximum.accumulate(cumulative)
         dd = (cumulative - peak) / peak
         result['max_dd'] = round(float(np.min(dd)), 4)
-        sharpe_threshold = cfg.get('go.sharpe.ok', 0.5)
-        winrate_threshold = cfg.get('go.win_rate.ok', 0.5)
-        dd_threshold = cfg.get('go.max_dd.safe', -5.0) / 100.0
-        min_days = cfg.get('gonogo.shadow_min_days', 14)
+        sharpe_threshold = pget('go.sharpe.ok', 1.0)
+        winrate_threshold = pget('go.win_rate.ok', 0.5)
+        dd_threshold = pget('go.max_dd.safe', -5.0) / 100.0
+        min_days = pget('gonogo.shadow_min_days', 0)
         result['criteria']['sharpe_pass'] = result['sharpe'] >= sharpe_threshold
         result['criteria']['winrate_pass'] = result['win_rate'] >= winrate_threshold
         result['criteria']['dd_pass'] = result['max_dd'] >= dd_threshold

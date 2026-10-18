@@ -31,6 +31,93 @@ _DEFAULTS['news_sentiment_mean'] = 0.5
 _DEFAULTS['news_pos_ratio'] = 0.5
 _DEFAULTS['foreign_ratio_feat'] = 0.0
 
+# ═══════════════════════════════════════════════════════════════════════
+# [WAVE3 Track D] Point-in-Time(PIT) 공시 시차 규칙
+# ═══════════════════════════════════════════════════════════════════════
+# 실제 공시일 컬럼이 있으면 우선 사용, 없으면 법정 제출 기한 기반 보수적 시차:
+#   * 분기(Q1~Q3) 보고서: 분기말 + 45일
+#   * Q4 / 연간 사업보고서: 회계연도말 + 90일  (회계연도말 = 12월 가정)
+QUARTERLY_DISCLOSURE_LAG_DAYS = 45
+ANNUAL_DISCLOSURE_LAG_DAYS = 90
+FISCAL_YEAR_END_MONTH = 12
+_DISCLOSURE_DATE_KEYS = ('disclosure_date', 'rcept_dt', 'report_date', 'filing_date',
+                         'disclosed_at', 'announce_date')
+_QUARTER_END_MD = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
+
+
+def _parse_disclosure_date(r) -> Optional[pd.Timestamp]:
+    if r is None:
+        return None
+    for k in _DISCLOSURE_DATE_KEYS:
+        try:
+            v = r.get(k) if hasattr(r, 'get') else None
+        except Exception:
+            v = None
+        if v is None or (isinstance(v, float) and np.isnan(v)) or str(v).strip() == '':
+            continue
+        try:
+            s = str(v).strip()
+            ts = pd.Timestamp(s if not (s.isdigit() and len(s) == 8) else f'{s[:4]}-{s[4:6]}-{s[6:]}')
+            return ts.tz_localize(None).normalize() if ts.tzinfo else ts.normalize()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def quarterly_available_from(year=None, quarter=None, r=None) -> Optional[pd.Timestamp]:
+    """분기 실적이 시장에 공개되어 사용 가능해지는 날짜 (PIT)."""
+    dd = _parse_disclosure_date(r)
+    if dd is not None:
+        return dd
+    try:
+        y = int(year if year is not None else r.get('year'))
+        q_raw = str(quarter if quarter is not None else r.get('quarter', ''))
+        q = int(''.join(ch for ch in q_raw if ch.isdigit())[:1])
+        m, d = _QUARTER_END_MD[q]
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return None
+    lag = ANNUAL_DISCLOSURE_LAG_DAYS if q == 4 else QUARTERLY_DISCLOSURE_LAG_DAYS
+    return pd.Timestamp(year=y, month=m, day=d) + pd.Timedelta(days=lag)
+
+
+def annual_available_from(year=None, r=None) -> Optional[pd.Timestamp]:
+    """연간 재무(사업보고서) 사용 가능일 (PIT): 공시일 또는 회계연도말 + 90일."""
+    dd = _parse_disclosure_date(r)
+    if dd is not None:
+        return dd
+    try:
+        y = int(year if year is not None else r.get('year'))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    fy_end = pd.Timestamp(year=y, month=FISCAL_YEAR_END_MONTH, day=1) + pd.offsets.MonthEnd(0)
+    return fy_end + pd.Timedelta(days=ANNUAL_DISCLOSURE_LAG_DAYS)
+
+
+def _computed_summary_available(computed: Dict, annual, as_of: pd.Timestamp) -> bool:
+    """financials_history 'computed' (현재 시점 집계) 를 as_of 에 써도 되는지.
+
+    집계에 포함된 마지막 연도(year_range 'YYYY~YYYY' 또는 annual 최대 연도)의
+    공시 가능일이 as_of 이전일 때만 True (그 외에는 미래 정보 포함 가능 → 미사용).
+    """
+    if not computed:
+        return False
+    last_year = None
+    yr = str(computed.get('year_range', '') or '')
+    if '~' in yr:
+        try:
+            last_year = int(yr.split('~')[-1].strip()[:4])
+        except ValueError:
+            last_year = None
+    if last_year is None and annual:
+        try:
+            last_year = max(int(a.get('year', 0) or 0) for a in annual)
+        except ValueError:
+            last_year = None
+    if not last_year:
+        return False
+    avail = annual_available_from(year=last_year)
+    return avail is not None and avail <= as_of
+
 class AuxDataLoader:
     """보조 데이터 통합 로더.
 
@@ -343,7 +430,7 @@ class AuxDataLoader:
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:470', exc_info=True)
 
     def _fill_fundamentals(self, feat: Dict, ticker: str, date_str: str):
-        """재무/실적 피처 채우기.
+        """재무/실적 피처 채우기 — [WAVE3 Track D] Point-in-Time(PIT).
 
         Dynamically computes:
         - earnings_surprise = (latest_q_income - prev_q_income) / |prev_q_income|
@@ -352,21 +439,25 @@ class AuxDataLoader:
         - debt_ratio_latest from annual data
 
         Falls back to pre-computed values when raw data is insufficient.
+
+        PIT 규칙 (date_str 시점에 '공시되어 사용 가능한' 데이터만 사용):
+          * 분기 실적: 실제 공시일 컬럼(disclosure_date/rcept_dt/...)이 있으면 그 날짜,
+            없으면 분기말 + 45일 (Q4 는 사업보고서 기한인 분기말 + 90일).
+          * 연간 재무: 실제 공시일이 있으면 그 날짜, 없으면 회계연도말(12월 가정) + 90일.
+          * financials_history 'computed' 요약값은 '현재 시점' 집계이므로, 그 집계에
+            포함된 마지막 연도의 공시 가능일 이후에만 fallback 으로 사용.
+          (기존: 연간 roe/debt_ratio 를 날짜와 무관하게 annual[-2:]/annual[-1] 사용 → look-ahead,
+           분기 공시월 1일부터 사용 → 최대 ~2주 look-ahead)
         """
+        try:
+            as_of = pd.Timestamp(date_str).normalize()
+        except (ValueError, TypeError):
+            return
         edf = self._earnings.get(ticker)
         if edf is not None and len(edf) > 0:
             try:
-                dt_year = int(date_str[:4])
-                dt_month = int(date_str[5:7])
-                quarter_months = {'Q1': 5, 'Q2': 8, 'Q3': 11, 'Q4': 2}
-                valid = []
-                for _, row in edf.iterrows():
-                    yr = int(row.get('year', 0))
-                    q = str(row.get('quarter', ''))
-                    pub_month = quarter_months.get(q, 0)
-                    pub_year = yr if q != 'Q4' else yr + 1
-                    if pub_year < dt_year or (pub_year == dt_year and pub_month <= dt_month):
-                        valid.append(row)
+                edf = self._earnings_with_availability(ticker, edf)
+                valid = [row for _, row in edf[edf['_pit_available'] <= as_of].iterrows()]
                 if valid:
                     latest = valid[-1]
                     income_col = 'single_q_income' if 'single_q_income' in latest.index else 'operating_income'
@@ -410,39 +501,54 @@ class AuxDataLoader:
         fh = self._financials.get(ticker)
         if fh is not None:
             try:
-                annual = fh.get('annual', [])
-                computed = fh.get('computed', {})
-                if annual and len(annual) >= 1:
+                annual = fh.get('annual', []) or []
+                computed = fh.get('computed', {}) or {}
+                avail_annual = [a for a in sorted(annual, key=lambda r: int(r.get('year', 0) or 0))
+                                if (annual_available_from(r=a) is not None
+                                    and annual_available_from(r=a) <= as_of)]
+                computed_ok = _computed_summary_available(computed, annual, as_of)
+                if avail_annual:
                     roe_values = []
-                    for entry in annual[-2:]:
+                    for entry in avail_annual[-2:]:
                         roe_val = entry.get('roe')
                         if roe_val is not None and (not (isinstance(roe_val, float) and np.isnan(roe_val))):
                             roe_values.append(float(roe_val))
                     if roe_values:
                         roe_avg = sum(roe_values) / len(roe_values)
                         feat['roe_2yr_avg'] = float(np.clip(roe_avg / 100.0, -1.0, 1.0))
-                    else:
+                    elif computed_ok:
                         roe = computed.get('roe_2yr_avg')
                         if roe is not None and roe != 0.0 and (not (isinstance(roe, float) and np.isnan(roe))):
                             feat['roe_2yr_avg'] = float(np.clip(float(roe) / 100.0, -1.0, 1.0))
-                else:
-                    roe = computed.get('roe_2yr_avg')
-                    if roe is not None and roe != 0.0 and (not (isinstance(roe, float) and np.isnan(roe))):
-                        feat['roe_2yr_avg'] = float(np.clip(float(roe) / 100.0, -1.0, 1.0))
-                if annual and len(annual) >= 1:
-                    dr_val = annual[-1].get('debt_ratio')
+                    dr_val = avail_annual[-1].get('debt_ratio')
                     if dr_val is not None and (not (isinstance(dr_val, float) and np.isnan(dr_val))):
                         feat['debt_ratio_latest'] = float(np.clip(float(dr_val) / 500.0, 0.0, 1.0))
-                    else:
+                    elif computed_ok:
                         dr = computed.get('debt_ratio_latest')
                         if dr is not None and (not (isinstance(dr, float) and np.isnan(dr))):
                             feat['debt_ratio_latest'] = float(np.clip(float(dr) / 500.0, 0.0, 1.0))
-                else:
+                elif computed_ok:
+                    roe = computed.get('roe_2yr_avg')
+                    if roe is not None and roe != 0.0 and (not (isinstance(roe, float) and np.isnan(roe))):
+                        feat['roe_2yr_avg'] = float(np.clip(float(roe) / 100.0, -1.0, 1.0))
                     dr = computed.get('debt_ratio_latest')
                     if dr is not None and (not (isinstance(dr, float) and np.isnan(dr))):
                         feat['debt_ratio_latest'] = float(np.clip(float(dr) / 500.0, 0.0, 1.0))
             except Exception as e:
                 logger.error(f'financials feature computation error ({ticker}): {e}', exc_info=True)
+
+    def _earnings_with_availability(self, ticker: str, edf: pd.DataFrame) -> pd.DataFrame:
+        """분기 실적에 PIT 사용가능일(_pit_available) 컬럼을 추가하고 (year, quarter) 정렬 (캐시)."""
+        if '_pit_available' in edf.columns:
+            return edf
+        out = edf.copy()
+        out['_pit_available'] = [quarterly_available_from(r=r) for _, r in out.iterrows()]
+        out['_pit_available'] = pd.to_datetime(out['_pit_available'])
+        out['_q_ord'] = out['quarter'].astype(str).str.extract(r'(\d)')[0].astype(float) \
+            if 'quarter' in out.columns else 0.0
+        out = out.sort_values(['year', '_q_ord'], kind='stable').reset_index(drop=True)
+        self._earnings[ticker] = out
+        return out
 
     @staticmethod
     def _find_row(df: pd.DataFrame, date_str: str, max_lookback: int=3):

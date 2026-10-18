@@ -8,6 +8,11 @@
 """
 from __future__ import annotations
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from pathlib import Path
@@ -123,7 +128,7 @@ class IntradayMicroGuard:
         ob_imbal  = float(market_data.get('orderbook_imbalance', 0.0))
 
         # 거래량 폭등 + 강한 매도 우세이면 Halt
-        _ob_thr = float(_cfg_get('micro_guard.orderbook_imbalance_threshold', -0.60))
+        _ob_thr = float(pget('micro_guard.orderbook_imbalance_threshold', -0.60))
         if vol_ratio >= self._vol_spike and ob_imbal < _ob_thr:
             return False, f'PANIC_SELL vol_ratio={vol_ratio:.1f}x ob_imbal={ob_imbal:.2f}'
         return True, 'vol_ok'

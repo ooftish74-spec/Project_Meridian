@@ -12,6 +12,11 @@ Usage:
     s4 = S4AdvisoryStream()
     signals = s4.generate_signals(regime='bull', market_data={})
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import glob
 import json
 import logging
@@ -37,7 +42,7 @@ class S4AdvisoryStream(BaseStream):
       IRP     → 채권+금 방어 + 위험자산 동적 스위칭 (법적 한도 70%) [Phase 67]
       PENSION → 성장 ETF 100% 가능 (법적 제한 없음, 과세이연 복리) [Phase 67]
     """
-    ACCOUNTS = {'ISA': {'risk_asset_limit': 1.0, 'tax_free_limit': cfg.get('s4.isa_tax_free_limit', 2000000), 'tax_rate_excess': cfg.get('s4.isa_tax_rate_excess', 0.099)}, 'IRP': {'risk_asset_limit': cfg.get('s4.irp.risk_asset_limit', 0.7), 'tax_credit_limit': cfg.get('s4.irp_tax_credit_limit', 7000000), 'tax_credit_rate': cfg.get('s4.irp_tax_credit_rate', 0.165)}, 'PENSION': {'risk_asset_limit': cfg.get('s4.pension.risk_asset_limit', 1.0), 'tax_credit_limit': cfg.get('s4.pension_tax_credit_limit', 6000000), 'tax_credit_rate': cfg.get('s4.pension_tax_credit_rate', 0.165)}}
+    ACCOUNTS = {'ISA': {'risk_asset_limit': 1.0, 'tax_free_limit': pget('s4.isa_tax_free_limit', 2000000), 'tax_rate_excess': pget('s4.isa_tax_rate_excess', 0.099)}, 'IRP': {'risk_asset_limit': pget('s4.irp.risk_asset_limit', 0.3), 'tax_credit_limit': pget('s4.irp_tax_credit_limit', 7000000), 'tax_credit_rate': pget('s4.irp_tax_credit_rate', 0.165)}, 'PENSION': {'risk_asset_limit': cfg.get('s4.pension.risk_asset_limit', 1.0), 'tax_credit_limit': pget('s4.pension_tax_credit_limit', 6000000), 'tax_credit_rate': pget('s4.pension_tax_credit_rate', 0.165)}}
 
     def __init__(self):
         super().__init__('S4', 'Advisory/Tax-Optimized')
@@ -59,13 +64,13 @@ class S4AdvisoryStream(BaseStream):
                 return []
         signals = []
         _conf = market_data.get('regime_confidence', 0.5)
-        base_defense = float(cfg.get('s4.base_defense', 0.5))
+        base_defense = float(pget('s4.base_defense', 0.5))
         defense_ratio = min(1.0, max(0.0, base_defense * _conf * 2.0))
         _kofr_ticker = cfg.get('s4.kofr_ticker', '423160')
         _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR금리액티브(합성)')
         if defense_ratio > 0:
             for _acct in self.ACCOUNTS.keys():
-                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': cfg.get('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})
+                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': pget('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})
         market_data = dict(market_data)
         market_data['s4_defense_ratio'] = defense_ratio
         try:
@@ -81,10 +86,10 @@ class S4AdvisoryStream(BaseStream):
         for acct_name, acct_cfg in self.ACCOUNTS.items():
             acct_signals = self._generate_account_advisory(acct_name, acct_cfg, regime, market_data)
             filtered_signals = []
-            _tax_shield_rate = float(cfg.get('s4.tax_shield_rate', 0.154))
-            _expected_friction = float(cfg.get('s4.expected_friction', 0.003))
+            _tax_shield_rate = float(pget('s4.tax_shield_rate', 0.154))
+            _expected_friction = float(pget('s4.expected_friction', 0.003))
             for sig in acct_signals:
-                _expected_profit = sig.get('confidence', 0.5) * float(cfg.get('s4.expected_return_per_trade', 0.02))
+                _expected_profit = sig.get('confidence', 0.5) * float(pget('s4.expected_return_per_trade', 0.02))
                 _tax_alpha = _expected_profit * _tax_shield_rate
                 if _tax_alpha > _expected_friction:
                     filtered_signals.append(sig)
@@ -182,7 +187,7 @@ class S4AdvisoryStream(BaseStream):
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f"  Alpha Factory 신호 로드 실패: {e}")
         is_retirement_acct = account in ('IRP', 'PENSION')
-        max_bond_ratio = cfg.get('s4.max_bond_ratio', 0.3)
+        max_bond_ratio = pget('s4.max_bond_ratio', 0.3)
         bond_total = 0.0
         for etf_key, sub_weight in etf_list:
             etf_info = ETF_UNIVERSE.get(etf_key, {})
@@ -212,15 +217,15 @@ class S4AdvisoryStream(BaseStream):
                         continue
                     sub_weight = remaining_bond
                 bond_total += sub_weight
-            _base_conf = cfg.get('s4.etf_base_confidence', 0.6)
+            _base_conf = pget('s4.etf_base_confidence', 0.6)
             if cfg.get('s4.etf_confidence_dynamic', True):
-                _momentum_w = cfg.get('s4.etf_momentum_weight', 0.2)
+                _momentum_w = pget('s4.etf_momentum_weight', 0.2)
                 _regime_adj = {'bull': 0.15, 'caution': 0.05, 'bear': -0.05, 'crash': -0.15}.get(regime, 0.0)
                 _div_pct = etf_info.get('div_pct', 0)
                 _momentum_score = min(1.0, _div_pct / 10.0)
                 _etf_confidence = _base_conf + _regime_adj + _momentum_w * _momentum_score
                 if is_contagion:
-                    dynamic_shift = min(0.35, cfg.get('s4.contagion_base_shift', 0.1) * contagion_severity)
+                    dynamic_shift = min(0.35, pget('s4.contagion_base_shift', 0.1) * contagion_severity)
                     _etf_nm4 = etf_info.get('name', etf_key)
                     if etf_info.get('type') in ('BOND', 'SAFE'):
                         _etf_confidence += dynamic_shift
@@ -281,15 +286,15 @@ class S4AdvisoryStream(BaseStream):
         if _r not in ('bull', 'caution'):
             _r = 'caution'
         if _r == 'bear':
-            return [('kr_bond', cfg.get('s4.brok_fb.bear.kr_bond', 0.3)), ('gold', cfg.get('s4.brok_fb.bear.gold', 0.2)), ('us_bond_futures', cfg.get('s4.brok_fb.bear.us_bond', 0.15)), ('kodex_dividend', cfg.get('s4.brok_fb.bear.kodex_dividend', 0.15)), ('tiger_us_dividend', cfg.get('s4.brok_fb.bear.tiger_us_dividend', 0.1)), ('tiger_covered_call', cfg.get('s4.brok_fb.bear.tiger_covered_call', 0.1))]
+            return [('kr_bond', pget('s4.brok_fb.bear.kr_bond', 0.3)), ('gold', pget('s4.brok_fb.bear.gold', 0.2)), ('us_bond_futures', pget('s4.brok_fb.bear.us_bond', 0.15)), ('kodex_dividend', pget('s4.brok_fb.bear.kodex_dividend', 0.15)), ('tiger_us_dividend', pget('s4.brok_fb.bear.tiger_us_dividend', 0.1)), ('tiger_covered_call', pget('s4.brok_fb.bear.tiger_covered_call', 0.1))]
         else:
             return [('tiger_nasdaq', cfg.get(f"s4.brok_fb.{_r}.tiger_nasdaq", 0.2 if _r == 'bull' else 0.15)), ('kodex_sp500', cfg.get(f"s4.brok_fb.{_r}.kodex_sp500", 0.15 if _r == 'bull' else 0.1)), ('kodex_dividend', cfg.get(f"s4.brok_fb.{_r}.kodex_dividend", 0.1)), ('kr_bond', cfg.get(f"s4.brok_fb.{_r}.kr_bond", 0.2 if _r == 'bull' else 0.25)), ('us_bond_futures', cfg.get(f"s4.brok_fb.{_r}.us_bond", 0.15)), ('gold', cfg.get(f"s4.brok_fb.{_r}.gold", 0.1 if _r == 'bull' else 0.15)), ('tiger_covered_call', cfg.get(f"s4.brok_fb.{_r}.tiger_covered_call", 0.1))]
 
     def _estimate_drip(self) -> Dict:
         """DRIP 복리 추정 (10/20/30년) — DynamicConfig 동적 파라미터."""
-        capital = cfg.get('s4.drip.base_capital', 10000000)
-        total_div = cfg.get('s4.drip.assumed_div_yield', 0.04)
-        total_growth = cfg.get('s4.drip.assumed_growth_rate', 0.08)
+        capital = pget('s4.drip.base_capital', 10000000)
+        total_div = pget('s4.drip.assumed_div_yield', 0.04)
+        total_growth = pget('s4.drip.assumed_growth_rate', 0.08)
         total_return = total_div + total_growth
 
         def compound(years):
@@ -298,11 +303,11 @@ class S4AdvisoryStream(BaseStream):
 
     def get_tax_savings_estimate(self) -> Dict:
         """연간 절세 효과 추정 (DynamicConfig 동적 파라미터)."""
-        tax_rate = cfg.get('s4.tax.credit_rate', 0.165)
-        isa_cap = cfg.get('s4.tax.isa_savings_cap', 330000)
-        isa_savings = min(cfg.get('s4.tax.isa_tax_free_limit', 2000000) * tax_rate, isa_cap)
-        irp_credit = min(cfg.get('s4.irp.annual_contribution', 7000000), 7000000) * tax_rate
-        pension_credit = min(cfg.get('s4.pension.annual_contribution', 6000000), 6000000) * tax_rate
+        tax_rate = pget('s4.tax.credit_rate', 0.165)
+        isa_cap = pget('s4.tax.isa_savings_cap', 330000)
+        isa_savings = min(pget('s4.tax.isa_tax_free_limit', 2000000) * tax_rate, isa_cap)
+        irp_credit = min(pget('s4.irp.annual_contribution', 7000000), 7000000) * tax_rate
+        pension_credit = min(pget('s4.pension.annual_contribution', 6000000), 6000000) * tax_rate
         total = round(isa_savings + irp_credit + pension_credit)
         return {'isa_savings_krw': round(isa_savings), 'irp_credit_krw': round(irp_credit), 'pension_credit_krw': round(pension_credit), 'total_annual_savings_krw': total, 'equivalent_return_pct': round(total / cfg.get('portfolio.initial_capital') * 100, 2)}
 
@@ -331,8 +336,8 @@ class S4AdvisoryStream(BaseStream):
             try:
                 _mc = market_data.get('alpha_macro_cycle', '') if market_data else ''
                 if _mc in ('Recession', 'Downturn'):
-                    _recession_qv_mult = cfg.get('s4.alpha_factory.recession_qv_decay_multiplier', 0.7)
-                    _base_qv = cfg.get('s4.qv_decay_threshold', cfg.get('dynamic_exit.qv_score_decay_threshold', 0.6))
+                    _recession_qv_mult = pget('s4.alpha_factory.recession_qv_decay_multiplier', 0.7)
+                    _base_qv = cfg.get('s4.qv_decay_threshold', pget('dynamic_exit.qv_score_decay_threshold', 0.6))
                     _strict_qv = round(_base_qv * _recession_qv_mult, 3)
                     if hasattr(evaluator, 'override_qv_decay_threshold'):
                         evaluator.override_qv_decay_threshold(_strict_qv)

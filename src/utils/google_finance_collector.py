@@ -82,7 +82,8 @@ class GoogleFinanceCollector:
             'DXY': 'DXY:INDEXCBOE', 'DX-Y.NYB': 'DXY:INDEXCBOE',
             'WTI': 'CLW00:NYMEX', 'CL=F': 'CLW00:NYMEX',
             'GOLD': 'GCW00:COMEX', 'GC=F': 'GCW00:COMEX',
-            'USDKRW': 'USD-KRW', 'USDKRW=X': 'USD-KRW', 'KRW=X': 'USD-KRW'
+            'USDKRW': 'USD-KRW', 'USDKRW=X': 'USD-KRW', 'KRW=X': 'USD-KRW',
+            'SKEW': 'SKEW:INDEXCBOE', '^SKEW': 'SKEW:INDEXCBOE',
         }
         target_sym = TICKER_MAP.get(ticker_u, GoogleFinanceCollector.TICKER_MAP.get(ticker_u, f"{ticker_u}:{exchange}" if exchange else f"{ticker_u}:NASDAQ"))
         if isinstance(target_sym, tuple):
@@ -99,6 +100,7 @@ class GoogleFinanceCollector:
             'WTI': (20.0, 200.0), 'CL=F': (20.0, 200.0),
             'GOLD': (1000.0, 6000.0), 'GC=F': (1000.0, 6000.0),
             'USDKRW': (1000.0, 2000.0), 'USDKRW=X': (1000.0, 2000.0), 'KRW=X': (1000.0, 2000.0),
+            'SKEW': (90.0, 200.0), '^SKEW': (90.0, 200.0),
         }
         valid_bounds = SANITY_RANGES.get(ticker_u)
 
@@ -111,7 +113,7 @@ class GoogleFinanceCollector:
             res = requests.get(url, headers=headers, timeout=3.5)
             if res.status_code == 200:
                 html = res.text
-                symbol_code = target_sym.split(':')[0].replace('.', r'\.')
+                symbol_code = re.escape(target_sym.split(':')[0])   # ★ Wave 1: 전체 이스케이프 ('^','-','.' 등)
                 
                 # Primary callback pattern matching ticker symbol array
                 p1 = r'\[\"' + symbol_code + r'\"\,\"[^\"]*\"\]\,[^\,]*\,[^\,]*\,[^\,]*\,\[([0-9\.]+)\,([+-]?[0-9\.]+)\,([+-]?[0-9\.]+)'

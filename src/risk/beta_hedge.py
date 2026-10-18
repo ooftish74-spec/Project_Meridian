@@ -9,6 +9,11 @@ Alpha = Portfolio Return - Beta × Market Return
 
 Author: Project_First
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -173,7 +178,7 @@ class BetaHedge:
                 alert = alpha_data.get('S1_signal', {}).get('contagion_alert', 'NORMAL')
                 if alert == 'CRITICAL':
                     is_contagion = True
-                    beta_multiplier = DynamicConfig().get('beta_hedge.contagion_multiplier', 1.5)
+                    beta_multiplier = pget('beta_hedge.contagion_multiplier', 1.5)
                     min_beta = -1.0
                     beta = max(beta, 0.2) * beta_multiplier
                     target_beta = -0.5

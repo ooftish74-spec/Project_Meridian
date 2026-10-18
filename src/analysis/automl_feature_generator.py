@@ -6,6 +6,64 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# ═══════════════════════════════════════════════════════════════════════
+# [WAVE3 Track D] Macro 발표 시차 (Point-in-Time)
+# ═══════════════════════════════════════════════════════════════════════
+# 값의 '기준일(index)' 이후 실제로 사용 가능해지기까지의 지연. KR 장(D일) 기준으로
+# 미국 시장 종가성 데이터는 D+1 영업일부터 사용 가능하다 (미국 D일 마감 = KST D+1 새벽).
+#   high_yield_spread : ICE BofA HY OAS (FRED BAMLH0A0HYM2), 일간, 익영업일 공개 → 1 영업일
+#   copper_gold_ratio : 구리/금 선물 종가 비율, 일간 (미국 종가) → 1 영업일
+#   cboe_skew         : CBOE SKEW 지수, 일간 (미국 종가) → 1 영업일
+#   gscpi             : NY Fed GSCPI, 월간, 익월 4번째 영업일경 발표. 기준일 표기(월초/월말)
+#                       불확실 → 보수적으로 기준일 + 35일
+# 미등록 시리즈: 관측 간격 중앙값 ≥ 20일(월간 이상)이면 1개월(31일), 그 외 1 영업일.
+MACRO_PUBLICATION_LAGS = {
+    'high_yield_spread': ('bday', 1),
+    'copper_gold_ratio': ('bday', 1),
+    'cboe_skew': ('bday', 1),
+    'gscpi': ('days', 35),
+}
+DEFAULT_MONTHLY_LAG_DAYS = 31
+DEFAULT_DAILY_LAG_BDAYS = 1
+
+
+def macro_publication_lag(col: str, series: pd.Series):
+    """시리즈별 발표 시차 (kind, n). kind ∈ {'bday','days'}."""
+    if col in MACRO_PUBLICATION_LAGS:
+        return MACRO_PUBLICATION_LAGS[col]
+    s = series.dropna()
+    if len(s) >= 3:
+        gaps = np.diff(s.index.values).astype('timedelta64[D]').astype(int)
+        if np.median(gaps) >= 20:
+            return ('days', DEFAULT_MONTHLY_LAG_DAYS)
+    return ('bday', DEFAULT_DAILY_LAG_BDAYS)
+
+
+def align_macro_point_in_time(macro_df: pd.DataFrame, target_index) -> pd.DataFrame:
+    """각 macro 시리즈를 발표 시차만큼 뒤로 민 뒤 target_index 에 ffill 정렬.
+
+    값 v(기준일 t) 는 t + lag 부터 사용 가능 → index 를 t + lag 로 이동 후 ffill.
+    ffill 허용 범위: 일간 30일, 월간 45일 (월 간격 31일 대응).
+    """
+    target_index = pd.DatetimeIndex(target_index)
+    out = pd.DataFrame(index=target_index)
+    for col in macro_df.columns:
+        s = macro_df[col].dropna()
+        if s.empty:
+            out[col] = np.nan
+            continue
+        kind, n = macro_publication_lag(col, s)
+        if kind == 'bday':
+            shifted_idx = s.index + pd.offsets.BDay(n)
+            tol = pd.Timedelta(days=30)
+        else:
+            shifted_idx = s.index + pd.Timedelta(days=n)
+            tol = pd.Timedelta(days=45 if n >= 20 else 30)
+        s2 = pd.Series(s.values, index=shifted_idx).sort_index()
+        s2 = s2[~s2.index.duplicated(keep='last')]
+        out[col] = s2.reindex(target_index, method='ffill', tolerance=tol).values
+    return out
+
 class AutoMLFeatureGenerator:
     """
     AutoML Feature Generator
@@ -103,8 +161,9 @@ class AutoMLFeatureGenerator:
 
         # 2. Merge Macro Data
         if not self.macro_df.empty:
-            # Reindex macro to match ticker dates (forward fill up to 30 days)
-            macro_aligned = self.macro_df.reindex(df.index, method='ffill', tolerance=pd.Timedelta(days=30))
+            # [WAVE3 Track D] 발표 시차(publication lag)를 반영한 PIT 정렬 후 ffill.
+            # (기존: 기준일 그대로 reindex(ffill) → 발표 전 값을 사용하는 look-ahead)
+            macro_aligned = align_macro_point_in_time(self.macro_df, df.index)
             
             # Create derived macro features
             for col in macro_aligned.columns:

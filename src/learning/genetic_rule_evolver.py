@@ -11,6 +11,11 @@ Project Meridian — Genetic Rule Evolver Engine
   5. Zero Hardcoding: 모든 파라미터 DynamicConfig(defaults.json) 키 연동.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import random
@@ -38,10 +43,10 @@ class GeneticRuleEvolver:
     }
 
     def __init__(self):
-        self.pop_size = int(cfg.get("learning.genetic.population_size", 50))
-        self.mutation_rate = float(cfg.get("learning.genetic.mutation_rate", 0.10))
-        self.generations = int(cfg.get("learning.genetic.generations", 10))
-        self.min_ic = float(cfg.get("learning.genetic.min_ic_threshold", 0.05))
+        self.pop_size = int(pget('learning.genetic.population_size', 50))
+        self.mutation_rate = float(pget('learning.genetic.mutation_rate', 0.10))
+        self.generations = int(pget('learning.genetic.generations', 10))
+        self.min_ic = float(pget('learning.genetic.min_ic_threshold', 0.05))
 
     def _generate_initial_chromosome(self) -> Dict[str, float]:
         """초기 파라미터 염색체 생성."""

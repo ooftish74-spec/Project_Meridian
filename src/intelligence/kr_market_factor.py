@@ -13,6 +13,11 @@ Usage:
     result = engine.compute()
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime
@@ -66,9 +71,9 @@ class KRMarketFactorEngine:
         large_cap_momentum = self._compute_large_cap_momentum(signal_cache)
 
         # 4. 종합 스코어 (가중 합산)
-        w_foreign = _cfg.get('kr_factor.w_foreign', 0.40) if _cfg else 0.40
-        w_inst = _cfg.get('kr_factor.w_inst', 0.25) if _cfg else 0.25
-        w_lcap = _cfg.get('kr_factor.w_large_cap', 0.35) if _cfg else 0.35
+        w_foreign = pget('kr_factor.w_foreign', 0.40) if _cfg else 0.40
+        w_inst = pget('kr_factor.w_inst', 0.25) if _cfg else 0.25
+        w_lcap = pget('kr_factor.w_large_cap', 0.35) if _cfg else 0.35
 
         composite = (
             w_foreign * foreign_score +
@@ -124,9 +129,9 @@ class KRMarketFactorEngine:
             flow_momentum = flow_data.get('flow_momentum', 0)
 
         # z-score 기반 → -1~+1 clamp
-        w_5d = _cfg.get('kr_factor.foreign_5d_weight', 0.4) if _cfg else 0.4
-        w_20d = _cfg.get('kr_factor.foreign_20d_weight', 0.3) if _cfg else 0.3
-        w_mom = _cfg.get('kr_factor.foreign_momentum_weight', 0.3) if _cfg else 0.3
+        w_5d = pget('kr_factor.foreign_5d_weight', 0.4) if _cfg else 0.4
+        w_20d = pget('kr_factor.foreign_20d_weight', 0.3) if _cfg else 0.3
+        w_mom = pget('kr_factor.foreign_momentum_weight', 0.3) if _cfg else 0.3
 
         raw = w_5d * foreign_5d + w_20d * foreign_20d + w_mom * flow_momentum
         return max(-1.0, min(1.0, raw))
@@ -156,15 +161,15 @@ class KRMarketFactorEngine:
             vol_ratio = tech.get('volume_ratio', 1.0)
 
             # RSI 기반 모멘텀: 동적 중심/스케일
-            _rsi_center = (_cfg.get('kr_factor.rsi_center', 50) if _cfg else 50)
-            _rsi_scale = (_cfg.get('kr_factor.rsi_scale', 50) if _cfg else 50)
+            _rsi_center = (pget('kr_factor.rsi_center', 50) if _cfg else 50)
+            _rsi_scale = (pget('kr_factor.rsi_scale', 50) if _cfg else 50)
             rsi_score = (rsi - _rsi_center) / _rsi_scale  # -1 ~ +1
 
             # 거래량 비율 가중 (거래량 급증 = 모멘텀 강화)
             vol_boost_threshold = (
-                _cfg.get('kr_factor.vol_boost_threshold', 1.5)
+                pget('kr_factor.vol_boost_threshold', 1.5)
                 if _cfg else 1.5)
-            _vol_mult_cap = (_cfg.get('kr_factor.vol_mult_cap', 1.5) if _cfg else 1.5)
+            _vol_mult_cap = (pget('kr_factor.vol_mult_cap', 1.5) if _cfg else 1.5)
             vol_mult = min(_vol_mult_cap, vol_ratio / vol_boost_threshold) if vol_ratio > vol_boost_threshold else 1.0
 
             scores.append(rsi_score * vol_mult)
@@ -186,20 +191,20 @@ class KRMarketFactorEngine:
         1.0 = 변동 없음, >1.0 = 확대, <1.0 = 축소.
         """
         # S1: 방향성에 민감 (외국인 방향에 따라 레버리지/인버스 결정 보강)
-        s1_adj = 1.0 + composite * (_cfg.get('kr_factor.s1_sensitivity', 0.15) if _cfg else 0.15)
+        s1_adj = 1.0 + composite * (pget('kr_factor.s1_sensitivity', 0.15) if _cfg else 0.15)
 
         # S2: ML 시그널 위에 수급 보정
-        s2_adj = 1.0 + foreign * (_cfg.get('kr_factor.s2_sensitivity', 0.10) if _cfg else 0.10)
+        s2_adj = 1.0 + foreign * (pget('kr_factor.s2_sensitivity', 0.10) if _cfg else 0.10)
 
         # S3: 섹터 로테이션은 기관 수급에 민감
-        s3_adj = 1.0 + inst * (_cfg.get('kr_factor.s3_sensitivity', 0.08) if _cfg else 0.08)
+        s3_adj = 1.0 + inst * (pget('kr_factor.s3_sensitivity', 0.08) if _cfg else 0.08)
 
         # S4: 대형주 모멘텀에 민감 (시총가중 배분이므로)
-        s4_adj = 1.0 + lcap_mom * (_cfg.get('kr_factor.s4_sensitivity', 0.10) if _cfg else 0.10)
+        s4_adj = 1.0 + lcap_mom * (pget('kr_factor.s4_sensitivity', 0.10) if _cfg else 0.10)
 
         # 바운딩
-        _floor = _cfg.get('kr_factor.adj_floor', 0.7) if _cfg else 0.7
-        _cap = _cfg.get('kr_factor.adj_cap', 1.3) if _cfg else 1.3
+        _floor = pget('kr_factor.adj_floor', 0.7) if _cfg else 0.7
+        _cap = pget('kr_factor.adj_cap', 1.3) if _cfg else 1.3
 
         return {
             'S1': round(max(_floor, min(_cap, s1_adj)), 3),

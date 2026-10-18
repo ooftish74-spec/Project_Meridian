@@ -1,0 +1,106 @@
+{
+ "Semiconductor": [
+  "MU",
+  "NVDA",
+  "AVGO",
+  "AMD",
+  "INTC",
+  "TSM"
+ ],
+ "AI": [
+  "NVDA",
+  "MSFT",
+  "GOOGL",
+  "META",
+  "AMZN"
+ ],
+ "QuantumComputing": [
+  "IONQ",
+  "RGTI",
+  "QBTS"
+ ],
+ "Robotics": [
+  "ISRG",
+  "ROK",
+  "FANUY"
+ ],
+ "Software": [
+  "CRM",
+  "ORCL",
+  "ADBE",
+  "NOW",
+  "PLTR"
+ ],
+ "Finance": [
+  "JPM",
+  "BAC",
+  "WFC",
+  "GS",
+  "MS"
+ ],
+ "Healthcare": [
+  "UNH",
+  "JNJ",
+  "LLY",
+  "PFE",
+  "ABBV"
+ ],
+ "Energy": [
+  "XOM",
+  "CVX",
+  "COP",
+  "SLB"
+ ],
+ "Materials": [
+  "LIN",
+  "APD",
+  "FCX",
+  "NEM"
+ ],
+ "Consumer": [
+  "PG",
+  "KO",
+  "PEP",
+  "COST",
+  "WMT"
+ ],
+ "Utilities": [
+  "NEE",
+  "SO",
+  "DUK",
+  "AEP",
+  "D"
+ ],
+ "Telecom": [
+  "META",
+  "GOOGL",
+  "DIS",
+  "NFLX",
+  "T"
+ ],
+ "Defense": [
+  "LMT",
+  "RTX",
+  "NOC",
+  "GD"
+ ],
+ "RealEstate": [
+  "PLD",
+  "AMT",
+  "EQIX",
+  "SPG",
+  "O"
+ ],
+ "Shipbuilding": [],
+ "Automotive": [
+  "TSLA",
+  "GM",
+  "F",
+  "TM"
+ ],
+ "Battery": [
+  "ALB",
+  "ENPH",
+  "FSLR"
+ ]
+}

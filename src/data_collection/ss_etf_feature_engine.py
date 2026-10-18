@@ -1,4 +1,9 @@
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 """
 SS-ETF Feature Engine — 단일종목 ETF 유동성 팩터 계산기
 ========================================================
@@ -53,7 +58,7 @@ _LISTING_DATE = datetime.strptime(_LISTING_DATE_STR, '%Y%m%d').date()
 _FEAT_VOL_RATIO = _dcfg('ss_etf.feature.vol_ratio_name', 'ss_etf_vol_ratio')
 _FEAT_LP_PRESSURE = _dcfg('ss_etf.feature.lp_pressure_name', 'lp_delta_pressure')
 _FEAT_VOL_ANOMALY = _dcfg('ss_etf.feature.vol_anomaly_name', 'intraday_vol_anomaly')
-_VOL_ANOMALY_WINDOW = _dcfg('ss_etf.vol_anomaly_window_days', 14)
+_VOL_ANOMALY_WINDOW = pget('ss_etf.vol_anomaly_window_days', 14)
 SS_ETF_FEATURE_NAMES: List[str] = [_FEAT_VOL_RATIO, _FEAT_LP_PRESSURE, _FEAT_VOL_ANOMALY]
 
 def _is_before_listing(target_date_str: str) -> bool:
@@ -258,7 +263,7 @@ class SSETFFeatureEngine:
             else:
                 lev_retail = float(row.get('lev_retail_net', 0) or 0)
                 inv_retail = float(row.get('inv_retail_net', 0) or 0)
-                scale = _dcfg('ss_etf.lp_pressure_scale', 1000000)
+                scale = pget('ss_etf.lp_pressure_scale', 1000000)
                 lp_pressure = (lev_retail - inv_retail) / scale
                 results[_FEAT_LP_PRESSURE] = round(lp_pressure, 4)
         except Exception as e:
@@ -283,7 +288,7 @@ class SSETFFeatureEngine:
         if pykrx is None:
             return 0.0
         try:
-            window = _dcfg('ss_etf.vol_anomaly_window_days', 14)
+            window = pget('ss_etf.vol_anomaly_window_days', 14)
             end_dt = datetime.strptime(target_date, '%Y%m%d').date()
             start_dt = end_dt - timedelta(days=window * 2)
             df = _pykrx_safe(pykrx.get_market_ohlcv_by_date, start_dt.strftime('%Y%m%d'), target_date, ticker)

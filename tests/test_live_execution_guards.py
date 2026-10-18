@@ -131,9 +131,18 @@ def test_inverse_defaults_use_114800():
     assert ExposureOrchestrator.ATTACKER_INSTRUMENTS['inverse']['ticker'] == '114800'
     assert ExposureOrchestrator.ATTACKER_INSTRUMENTS['inverse']['beta'] == -1.0
 
-def test_etf_sniper_vix_shock_uses_1x_inverse():
+def test_etf_sniper_vix_shock_uses_1x_inverse(monkeypatch):
+    """VIX 3σ 쇼크 → 1배 인버스(114800).
+
+    ★ Wave 1 (Track B) 격리: S1은 SSETFFeatureEngine.compute()로 로컬 장중 데이터(삼성/하이닉스 SS-ETF 거래량)를
+    읽는다. 로컬 데이터에 따라 Tactic C(하이닉스 웩더독)가 elif 체인에서 VIX 쇼크보다 먼저 선택되고, 해당 인버스
+    가격이 signal_cache에 없으면 시그널이 0개가 되어 실패했다(환경 의존). 피처 엔진을 '이상 없음'({})으로 고정해
+    VIX 쇼크 분기 자체를 검증한다. (운영 리스크 메모: Tactic C 가 가격 부재로 무산돼도 VIX 쇼크로 폴백하지 않음.)
+    """
     from src.streams.s1_edge.etf_sniper_stream import S1ETFSniperStream
     s1 = S1ETFSniperStream()
+    monkeypatch.setattr(s1.ss_engine, 'compute', lambda *a, **k: {})
+    monkeypatch.setattr(s1.unconventional_engine, 'evaluate_all', lambda *a, **k: {})
     assert '114800' in s1.universe
     assert s1.universe['114800']['type'] == 'index_inv'
     
@@ -152,6 +161,9 @@ def test_etf_sniper_vix_shock_uses_1x_inverse():
     assert len(vix_shock_sigs) > 0
     assert vix_shock_sigs[0]['ticker'] == '114800'
     assert vix_shock_sigs[0]['name'] == 'KODEX 인버스'
+    assert vix_shock_sigs[0]['price'] == 4800.0
+    # 레버리지 인버스(2X)로 승격되지 않아야 함
+    assert all(s.get('ticker') != '252670' for s in vix_shock_sigs)
 
 def test_stream_orchestrator_domestic_isolation_and_friction_guard():
     # Test that US buy orders do not trigger liquidation of domestic parking asset

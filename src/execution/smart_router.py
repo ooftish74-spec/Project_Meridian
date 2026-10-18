@@ -17,6 +17,11 @@ Medallion Upgrade Phase 2-C-2.
 
 모든 파라미터 DynamicConfig 동적 로드.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -171,7 +176,7 @@ class SmartOrderRouter:
         else:
             default_adv = cfg.get(f"router.default_adv.{venue.lower()}", {'KRX': 5000000000.0, 'NXT': 1000000000.0, 'SOR': 5000000000.0}.get(venue, 5000000000.0))
             participation = order_amount / default_adv
-        impact_coeff = cfg.get('router.impact_coefficient', 10.0)
+        impact_coeff = pget('router.impact_coefficient', 0.1)
         dynamic_impact_coeff = impact_coeff * getattr(self, '_tca_impact_modifier', 1.0)
         impact_bps = dynamic_impact_coeff * math.sqrt(max(0, participation))
         return commission_bps + half_spread + impact_bps
@@ -193,36 +198,36 @@ class SmartOrderRouter:
             종합 점수 (0~1, 높을수록 좋음)
         """
         if urgency == 'high':
-            w_cost = cfg.get('router.weight_cost_high', 0.2)
-            w_liq = cfg.get('router.weight_liquidity_high', 0.3)
-            w_speed = cfg.get('router.weight_speed_high', 0.35)
-            w_rel = cfg.get('router.weight_reliability_high', 0.15)
+            w_cost = pget('router.weight_cost_high', 0.2)
+            w_liq = pget('router.weight_liquidity_high', 0.3)
+            w_speed = pget('router.weight_speed_high', 0.35)
+            w_rel = pget('router.weight_reliability_high', 0.15)
         elif urgency == 'low':
-            w_cost = cfg.get('router.weight_cost_low', 0.5)
-            w_liq = cfg.get('router.weight_liquidity_low', 0.2)
-            w_speed = cfg.get('router.weight_speed_low', 0.1)
-            w_rel = cfg.get('router.weight_reliability_low', 0.2)
+            w_cost = pget('router.weight_cost_low', 0.5)
+            w_liq = pget('router.weight_liquidity_low', 0.2)
+            w_speed = pget('router.weight_speed_low', 0.1)
+            w_rel = pget('router.weight_reliability_low', 0.2)
         else:
-            w_cost = cfg.get('router.weight_cost_normal', 0.35)
-            w_liq = cfg.get('router.weight_liquidity_normal', 0.25)
-            w_speed = cfg.get('router.weight_speed_normal', 0.2)
-            w_rel = cfg.get('router.weight_reliability_normal', 0.2)
-        max_cost = cfg.get('router.max_cost_bps', 20)
+            w_cost = pget('router.weight_cost_normal', 0.35)
+            w_liq = pget('router.weight_liquidity_normal', 0.25)
+            w_speed = pget('router.weight_speed_normal', 0.2)
+            w_rel = pget('router.weight_reliability_normal', 0.2)
+        max_cost = pget('router.max_cost_bps', 20)
         cost_score = max(0, 1 - estimated_cost / max_cost)
         liq_scores = cfg.get('router.liquidity_scores', {'KRX': 0.95, 'NXT': 0.5, 'SOR': 0.9})
         liq_score = liq_scores.get(venue, 0.5) if isinstance(liq_scores, dict) else 0.5
-        large_threshold = cfg.get('router.large_order_threshold', 50000000)
+        large_threshold = pget('router.large_order_threshold', 50000000)
         if order_amount > large_threshold:
-            liq_score *= cfg.get('router.large_order_liq_boost', 1.2)
+            liq_score *= pget('router.large_order_liq_boost', 1.2)
             liq_score = min(1.0, liq_score)
         speed_scores = cfg.get('router.speed_scores', {'KRX': 0.9, 'NXT': 0.85, 'SOR': 0.95})
         speed_score = speed_scores.get(venue, 0.85) if isinstance(speed_scores, dict) else 0.85
         vix = market_data.get('vix', 0)
-        vix_threshold = cfg.get('router.vix_instability_threshold', 30)
+        vix_threshold = pget('router.vix_instability_threshold', 30)
         rel_scores = cfg.get('router.reliability_scores', {'KRX': 0.98, 'NXT': 0.8, 'SOR': 0.92})
         rel_score = rel_scores.get(venue, 0.85) if isinstance(rel_scores, dict) else 0.85
         if vix > vix_threshold and venue == 'NXT':
-            penalty = cfg.get('router.nxt_vix_penalty', 0.15)
+            penalty = pget('router.nxt_vix_penalty', 0.15)
             rel_score = max(0.3, rel_score - penalty)
         total = w_cost * cost_score + w_liq * liq_score + w_speed * speed_score + w_rel * rel_score
         return total
@@ -232,7 +237,7 @@ class SmartOrderRouter:
 
         ADV의 일정 비율 이상이면 멀티-벤뉴 분할 권고.
         """
-        split_threshold = cfg.get('router.split_threshold_amount', 100000000)
+        split_threshold = pget('router.split_threshold_amount', 100000000)
         if order_amount < split_threshold:
             return None
         if len(available_venues) < 2:
@@ -253,7 +258,7 @@ class SmartOrderRouter:
     def _build_reason(self, venue: str, session: str, order_amount: float, scores: Dict, costs: Dict) -> str:
         """선택 이유 생성."""
         parts = [f"{session}세션"]
-        if order_amount > cfg.get('router.large_order_threshold', 50000000):
+        if order_amount > pget('router.large_order_threshold', 50000000):
             parts.append(f"대형주문(₩{order_amount:,.0f})")
         sorted_venues = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         if len(sorted_venues) >= 2:

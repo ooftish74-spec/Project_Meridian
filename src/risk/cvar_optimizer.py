@@ -18,6 +18,11 @@ CVaR (Expected Shortfall):
 모든 파라미터 DynamicConfig 동적 로드.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 import random
@@ -46,7 +51,7 @@ class CVaROptimizer:
             VaR, CVaR, 꼬리 비율 등
         """
         if confidence is None:
-            confidence = cfg.get('risk.var_confidence', 0.95)
+            confidence = pget('risk.var_confidence', 0.95)
 
         # 포트폴리오 수익률 계산
         port_returns = self._portfolio_returns(returns, weights)
@@ -95,12 +100,12 @@ class CVaROptimizer:
             최적화된 비중 + CVaR 비교
         """
         if target_cvar is None:
-            target_cvar = cfg.get('risk.target_cvar_pct', -0.03)
+            target_cvar = pget('risk.target_cvar_pct', -0.03)
 
         n_assets = len(current_weights)
-        n_iter = cfg.get('risk.cvar_optimization_iterations', 1000)
-        min_w = cfg.get('risk.cvar_min_weight', 0.02)
-        max_w = cfg.get('risk.cvar_max_weight', 0.40)
+        n_iter = pget('risk.cvar_optimization_iterations', 1000)
+        min_w = pget('risk.cvar_min_weight', 0.02)
+        max_w = pget('risk.cvar_max_weight', 0.40)
 
         # 현재 CVaR
         current_cvar = self.compute_cvar(returns, current_weights)

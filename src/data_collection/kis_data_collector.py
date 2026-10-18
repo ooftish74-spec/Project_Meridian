@@ -22,6 +22,16 @@ KIS API 통합 데이터 수집기
 Author: Project-A
 Date: 2026-03-27
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import json
 from src.infra.safe_io import atomic_write_dataframe
 import logging
@@ -169,14 +179,7 @@ class KISDataCollector:
     """KIS Open API 기반 통합 데이터 수집기."""
     _MIN_INTERVAL = 0.12
     SECTOR_CODES = {'KOSPI': '0001', 'KOSDAQ': '1001', '음식료품': '0002', '섬유의복': '0003', '종이목재': '0004', '화학': '0005', '의약품': '0006', '비금속광물': '0007', '철강금속': '0008', '기계': '0009', '전기전자': '0010', '의료정밀': '0011', '운수장비': '0012', '유통업': '0013', '전기가스업': '0014', '건설업': '0015', '운수창고': '0016', '통신업': '0017', '금융업': '0018', '은행': '0019', '증권': '0020', '보험': '0021', '서비스업': '0022', '제조업': '0023'}
-    US_EXCHANGE_MAP = {
-        'AAPL': 'NAS', 'MSFT': 'NAS', 'NVDA': 'NAS', 'GOOGL': 'NAS', 'AMZN': 'NAS', 
-        'META': 'NAS', 'TSLA': 'NAS', 'QQQ': 'NAS', 'SPY': 'AMS', 'EWY': 'AMS', 
-        'IWM': 'AMS', 'SOXX': 'NAS', 'LIT': 'AMS', 'SLX': 'AMS', 'BDRY': 'AMS', 
-        'URA': 'AMS', 'MU': 'NAS', 'SGOV': 'AMS', 'BIL': 'AMS', 'SHV': 'NAS',
-        'XLK': 'AMS', 'XLE': 'AMS', 'XLF': 'AMS', 'XLV': 'AMS', 'XLI': 'AMS', 
-        'XLY': 'AMS', 'XLU': 'AMS', 'XLB': 'AMS', 'VNQ': 'AMS'
-    }
+    US_EXCHANGE_MAP = load_table('src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP', {})
 
     _shared_trader = None
     _shared_base_url = None

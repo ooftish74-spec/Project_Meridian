@@ -19,6 +19,11 @@ MeasurementEngine — DA/Alpha/IC/Sharpe의 유일한 계산 지점 (SSoT)
 
 Author: Project_First
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -34,9 +39,8 @@ RESULTS = PROJECT_ROOT / 'results'
 def _get_launch_date():
     """시스템 시작일 동적 조회 — SSoT: shadow_portfolio.json → config → fallback"""
     import json
-    from pathlib import Path
     from datetime import date
-    _RESULTS = Path(__file__).resolve().parent.parent.parent / 'results'
+    _RESULTS = RESULTS  # ★ Track E: 모듈 단일 경로 (테스트 격리 가능)
     try:
         sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
         s = sp.get('shadow_start_date') or sp.get('start_date')
@@ -103,6 +107,48 @@ def _resolve_initial_capital(sp: Optional[dict], cfg_obj=None) -> float:
     raise ValueError("initial_capital을 결정할 수 없습니다 (shadow/config/snapshot/broker 모두 결측)")
 
 
+def _resolve_risk_free(cfg_obj=None) -> tuple:
+    """★ Track E: 무위험수익률(연, 소수) + 출처.
+
+    우선순위: diagnostics.risk_free_rate_pct → measurement.risk_free_rate (둘 다 % 단위) → 3.5% 기본.
+    KR 단기금리(KOFR/CD91)의 라이브 피드는 signal_cache 에 없으므로 config 값을 사용하고 출처를 기록한다.
+    """
+    for key in ('diagnostics.risk_free_rate_pct', 'measurement.risk_free_rate'):
+        try:
+            v = cfg_obj.get(key) if cfg_obj is not None else None
+            if v is not None and float(v) == float(v):
+                return float(v) / 100.0, f'config:{key}'
+        except Exception:
+            continue
+    return 0.035, 'default:3.5%'
+
+
+def _resolve_n_trials(cfg_obj=None) -> int:
+    """★ Track E: DSR 시행 수 N — measurement.dsr_n_trials → 활성 전략 수 → 1."""
+    try:
+        v = cfg_obj.get('measurement.dsr_n_trials') if cfg_obj is not None else None
+        if v is not None and int(v) >= 1:
+            return int(v)
+        streams = cfg_obj.get('system.active_streams') if cfg_obj is not None else None
+        if isinstance(streams, (list, tuple)) and streams:
+            return len(streams)
+    except Exception:
+        pass
+    return 1
+
+
+def _nav_records_from_shadow(sp: Optional[dict]) -> tuple:
+    """shadow_portfolio → (records, source). daily_snapshots 우선, 없으면 daily_records."""
+    sp = sp or {}
+    snaps = [s for s in (sp.get('daily_snapshots') or []) if isinstance(s, dict)]
+    if snaps:
+        return snaps, 'shadow.daily_snapshots'
+    recs = [r for r in (sp.get('daily_records') or []) if isinstance(r, dict)]
+    if recs:
+        return recs, 'shadow.daily_records'
+    return [], 'none'
+
+
 class MeasurementEngine:
     """단일 측정 파이프라인.
 
@@ -149,7 +195,7 @@ class MeasurementEngine:
         s2_rolling = self._compute_s2_rolling_metrics(sp, target_date=target_date)
         quant = self._compute_quant_metrics(sp, risk)
         ic_ensemble = self._compute_ic_ensemble_view(sp)
-        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': self._compute_verdict(risk, portfolio, quant), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict)}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
+        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict)}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
         self._save()
         self._log_summary()
         return self.result
@@ -170,9 +216,9 @@ class MeasurementEngine:
         """
         from config.dynamic_config import DynamicConfig
         _cfg = DynamicConfig()
-        lookback = int(_cfg.get('s2.ic_lookback_days', 5))
-        wr_threshold = float(_cfg.get('s2.wr_threshold', 0.4))
-        ic_threshold = float(_cfg.get('s2.ic_threshold', -0.02))
+        lookback = int(pget('s2.ic_lookback_days', 5))
+        wr_threshold = float(pget('s2.wr_threshold', 0.4))
+        ic_threshold = float(pget('s2.ic_threshold', -0.02))
         _default = {'wr_5d': None, 'ic_5d': None, 'n_trades_5d': 0, 'penalty_triggered': False, 'lookback_days': lookback}
         try:
             from datetime import date as _date, timedelta
@@ -235,7 +281,7 @@ class MeasurementEngine:
                     held_hit += 1
                 elif _dir == 'short' and _cur < _avg:
                     held_hit += 1
-        _min_pos_for_da = cfg.get('measurement.da_min_positions', 5)
+        _min_pos_for_da = pget('measurement.da_min_positions', 5)
         _valid_records = [r for r in records if r.get('n_positions', 0) >= _min_pos_for_da]
         record_hits = sum((r.get('hit_count', 0) for r in _valid_records))
         record_total = sum((r.get('total_count', 0) for r in _valid_records))
@@ -299,13 +345,11 @@ class MeasurementEngine:
                 _last_close = _bdf.iloc[-1]['종가']
                 if _base_close > 0:
                     bench_pct = round((_last_close / _base_close - 1) * 100, 4)
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            pass
+        except Exception as e:  # ★ Track E: 네트워크 예외(requests.ConnectionError 등)가 compute() 전체를 중단시키던 버그
+            logger.warning(f"  벤치마크(pykrx) 조회 실패 → cumulative_bench_pct 폴백: {type(e).__name__}: {e}")
         if bench_pct == 0:
             bench_pct = cum.get('cumulative_bench_pct', 0)
-        _rf_annual = cfg.get('measurement.risk_free_rate', 3.5)
+        _rf_annual = pget('measurement.risk_free_rate', 3.5)
         _total_days = max(len(records), 1)
         _rf_period = _rf_annual / 252 * _total_days
         _invested_days = [r for r in records if r.get('n_positions', 0) >= 1]
@@ -352,7 +396,7 @@ class MeasurementEngine:
             if conf is not None and isinstance(pnl, (int, float)):
                 conf_return_pairs.append((conf, float(pnl)))
         if cfg.get('measurement.ic_exclude_fixed_conf', True) and conf_return_pairs:
-            _threshold = cfg.get('measurement.ic_fixed_conf_threshold', 0.01)
+            _threshold = pget('measurement.ic_fixed_conf_threshold', 0.01)
             _total = len(conf_return_pairs)
             _conf_groups: dict = {}
             for _c, _r in conf_return_pairs:
@@ -375,7 +419,7 @@ class MeasurementEngine:
             if _excluded_count > 0:
                 logger.info(f"  🔧 IC: 고정 confidence 필터 적용 ({_total}→{len(_filtered)}종목)")
                 conf_return_pairs = _filtered
-        min_ic = cfg.get('measurement.ic_min_positions', 5)
+        min_ic = pget('measurement.ic_min_positions', 5)
         if len(conf_return_pairs) >= min_ic:
             try:
                 from scipy.stats import spearmanr
@@ -408,7 +452,7 @@ class MeasurementEngine:
         realized_wins = sum((1 for t in exits if t.get('realized_pnl', 0) > 0))
         realized_total = len(exits)
         realized_pnl = sum((t.get('realized_pnl', 0) for t in exits))
-        rolling_window = cfg.get('measurement.rolling_window', 20)
+        rolling_window = pget('measurement.rolling_window', 20)
         recent = records[-rolling_window:] if records else []
         _valid_recent = [r for r in recent if r.get('n_positions', 0) >= _min_pos_for_da]
         rolling_hits = sum((r.get('hit_count', 0) for r in _valid_recent))
@@ -430,71 +474,49 @@ class MeasurementEngine:
             3) total_count 필터 제거 (모든 거래일 포함)
             4) MDD: NAV 시계열 기반 High Water Mark 추적
         """
-        records = sp.get('daily_records', [])
-        snapshots = sp.get('daily_snapshots', [])
+        # ★ Track E (Wave 3): perf_stats 단일 수식 + 거래일 전용 NAV 시계열.
+        #   이전 구현의 버그: (1) 첫 수익률을 initial_capital 대비로 계산(입금/기준차를 수익으로 오인)
+        #   (2) 0 수익률 거래일을 시계열에서 삭제(표본 축소·Sharpe 상향 편향) (3) 휴장일 스냅샷이 0 수익률로 삽입
+        #   (4) Sortino 하방편차를 음수 관측만으로 평균 (5) Calmar 를 산술합 연율화로 계산
+        #   (6) n<2 / 분산 0 에서 0.0 반환(값 위장) → 이제 None + reason.
         from config.dynamic_config import DynamicConfig
+        from src.measurement import perf_stats as _ps
         cfg = DynamicConfig()
         initial_capital = _resolve_initial_capital(sp, cfg)  # ★ Wave 0 M1
-        daily_returns = []
-        nav_series = []
-        if snapshots:
-            prev_nav = initial_capital
-            for snap in snapshots:
-                nav_val = snap.get('nav', initial_capital)
-                nav_series.append(nav_val)
-                ret_pct = snap.get('daily_return_pct', 0)
-                if abs(ret_pct) < 1e-06 and prev_nav > 0:
-                    calc_ret = nav_val / prev_nav - 1
-                    if abs(calc_ret) > 1e-08:
-                        daily_returns.append(calc_ret)
-                else:
-                    daily_returns.append(ret_pct / 100.0)
-                prev_nav = nav_val
-        else:
-            prev_nav = initial_capital
-            for r in records:
-                nav_val = r.get('nav', prev_nav)
-                nav_series.append(nav_val)
-                if prev_nav > 0:
-                    day_ret = nav_val / prev_nav - 1.0
-                    daily_returns.append(day_ret)
-                prev_nav = nav_val
-        sharpe = 0.0
-        volatility = 0.0
-        sharpe_confidence = 'reliable' if len(daily_returns) >= 20 else 'low'
-        if len(daily_returns) >= 1:
-            mean_ret = sum(daily_returns) / len(daily_returns)
-            var = sum(((r - mean_ret) ** 2 for r in daily_returns)) / len(daily_returns)
-            std = math.sqrt(var) if var > 0 else 0
-            volatility = round(std * math.sqrt(252) * 100, 2)
-            sharpe = round(mean_ret / std * math.sqrt(252), 3) if std > 0 else 0.0
-        sortino = 0.0
-        if len(daily_returns) >= 1:
-            downside_returns = [r for r in daily_returns if r < 0]
-            if downside_returns:
-                downside_std = math.sqrt(sum((r ** 2 for r in downside_returns)) / len(downside_returns))
-                sortino = round(mean_ret / downside_std * math.sqrt(252), 3) if downside_std > 0 else 0.0
-            else:
-                sortino = 0.0
-        max_dd = 0.0
-        hwm = initial_capital
-        current_nav = initial_capital
-        for nav_val in nav_series:
-            hwm = max(hwm, nav_val)
-            dd = (nav_val / hwm - 1) * 100 if hwm > 0 else 0
-            if dd < max_dd:
-                max_dd = dd
-            current_nav = nav_val
-        calmar = 0.0
-        if len(daily_returns) >= 1 and max_dd < 0:
-            total_return_dec = sum(daily_returns)
-            ann_return = total_return_dec * (252 / max(len(daily_returns), 1))
-            calmar = round(ann_return / abs(max_dd / 100), 3)
-        if not nav_series:
+        rf_annual, rf_source = _resolve_risk_free(cfg)
+        n_trials = _resolve_n_trials(cfg)
+        raw_records, nav_source = _nav_records_from_shadow(sp)
+        series = _ps.build_nav_series(raw_records, market=cfg.get('measurement.nav_calendar', 'ANY'))
+        navs, flows = series['navs'], series['flows']
+        daily_returns = _ps.simple_returns(navs, flows)
+        stats = _ps.summarize_returns(navs, flows, rf_annual=rf_annual, n_trials=n_trials,
+                                      bootstrap=False) if navs else None
+
+        def _v(key, scale=1.0, nd=3):
+            if not stats:
+                return None
+            val = stats[key]['value']
+            return round(val * scale, nd) if val is not None else None
+
+        def _why(key):
+            if not stats:
+                return f'no_nav_series({nav_source})'
+            return stats[key]['reason']
+
+        sharpe = _v('sharpe')
+        sortino = _v('sortino')
+        calmar = _v('calmar')
+        volatility = round(stats['ann_vol'] * 100, 2) if stats and stats['ann_vol'] is not None else None
+        mdd_val = stats['max_drawdown']['value'] if stats else None
+        max_dd = round(mdd_val * 100, 2) if mdd_val is not None else 0.0
+        current_nav = raw_records[-1].get('nav', navs[-1]) if raw_records and navs else (navs[-1] if navs else initial_capital)
+        hwm = max(navs) if navs else initial_capital
+        if not navs:
+            # 관측 NAV 시계열이 없을 때: 현재 NAV vs 기준자본 2점 비교 (기존 동작 유지, reason 명시)
             cum = sp.get('cumulative', {})
-            current_nav = cum.get('virtual_nav', initial_capital)
+            current_nav = sp.get('virtual_nav') or cum.get('virtual_nav', initial_capital)
             hwm = max(current_nav, initial_capital)
-            max_dd = (current_nav / hwm - 1) * 100 if hwm > 0 else 0
+            max_dd = round((current_nav / hwm - 1) * 100, 2) if hwm > 0 else 0.0
         consecutive_loss = 0
         for ret in reversed(daily_returns):
             if ret < 0:
@@ -502,7 +524,26 @@ class MeasurementEngine:
             else:
                 break
         self._daily_returns = daily_returns
-        return {'sharpe': sharpe, 'sharpe_confidence': sharpe_confidence, 'annualized_vol_pct': volatility, 'max_drawdown_pct': round(max_dd, 2), 'nav': current_nav, 'hwm': hwm, 'consecutive_loss_days': consecutive_loss, 'n_return_days': len(daily_returns), 'sortino': sortino, 'calmar': calmar}
+        mtrl = stats['min_trl'] if stats else None
+        return {'sharpe': sharpe, 'sharpe_reason': _why('sharpe'),
+                'sharpe_confidence': 'reliable' if len(daily_returns) >= 20 else 'low',
+                'annualized_vol_pct': volatility, 'max_drawdown_pct': max_dd, 'nav': current_nav, 'hwm': hwm,
+                'consecutive_loss_days': consecutive_loss, 'n_return_days': len(daily_returns),
+                'sortino': sortino, 'sortino_reason': _why('sortino'),
+                'calmar': calmar, 'calmar_reason': _why('calmar'),
+                'cagr_pct': _v('cagr', 100, 3),
+                'psr': _v('psr_sr0', 1, 4), 'psr_reason': _why('psr_sr0'),
+                'dsr': _v('dsr', 1, 4), 'dsr_reason': _why('dsr'), 'dsr_n_trials': n_trials,
+                'min_trl_days': (round(mtrl['value'], 1) if mtrl and mtrl['value'] is not None else None),
+                'min_trl_more_days_needed': (mtrl.get('more_days_needed') if mtrl else None),
+                'min_trl_reason': _why('min_trl'),
+                'sharpe_ci95': (stats['sharpe_ci_analytic']['value'] if stats else None),
+                'rf_annual_pct': round(rf_annual * 100, 4), 'rf_source': rf_source,
+                'nav_source': nav_source, 'nav_dropped': series['dropped'],
+                'nav_first_date': series['dates'][0] if series['dates'] else None,
+                'nav_last_date': series['dates'][-1] if series['dates'] else None,
+                'diagnostic_only': True,
+                'metric_definitions': _ps.METRIC_DEFINITIONS}
 
     def _compute_sleeve_views(self, sp: dict) -> dict:
         """Stream View: S1~S4별 성과 분해 + 7대 지표 계산.
@@ -558,8 +599,8 @@ class MeasurementEngine:
         core_streams = cfg.get('dashboard.core_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10_MEGA_TREND'])
         all_streams = set(list(stream_stats.keys()) + list(realized_by_stream.keys()) + [k for k in raw_data.keys() if raw_data[k].get('daily_returns')] + core_streams)
         all_streams = {s for s in all_streams if s is not None}
-        sharpe_min_days = cfg.get('measurement.sharpe_min_days', 5)
-        ic_min_positions = cfg.get('measurement.ic_min_positions', 5)
+        sharpe_min_days = pget('measurement.sharpe_min_days', 5)
+        ic_min_positions = pget('measurement.ic_min_positions', 5)
         for sid in sorted(all_streams):
             stats = stream_stats.get(sid, {})
             n_trades = trades_by_stream.get(sid, 0)
@@ -571,29 +612,18 @@ class MeasurementEngine:
             stream_profiles = cfg.get('measurement.stream_profile', {})
             profile = stream_profiles.get(sid, {})
             _sharpe_min = profile.get('sharpe_min_days', sharpe_min_days)
-            _alpha_min = profile.get('alpha_min_days', cfg.get('go.alpha.min_days', 5))
+            _alpha_min = profile.get('alpha_min_days', pget('go.alpha.min_days', 20))
             _alpha_eval_window = profile.get('alpha_eval_window', n_days)
             _alpha_method = profile.get('alpha_method', 'cumulative_excess')
-            _annualize_factor = profile.get('annualize_factor', cfg.get('common.annualization_factor', 252))
+            _annualize_factor = profile.get('annualize_factor', pget('common.annualization_factor', 252))
             _expected_hold = profile.get('expected_holding_days', 10)
-            sharpe = None
-            mean_ret = 0.0
-            if n_days >= _sharpe_min:
-                mean_ret = sum(rets) / n_days
-                var = sum(((r - mean_ret) ** 2 for r in rets)) / n_days
-                std = math.sqrt(var) if var > 0 else 0
-                if std > 0:
-                    sharpe = round(mean_ret / std * math.sqrt(_annualize_factor), 3)
-                else:
-                    sharpe = 0.0
-            elif n_days >= 1:
-                mean_ret = sum(rets) / n_days
-                var = sum(((r - mean_ret) ** 2 for r in rets)) / n_days
-                std = math.sqrt(var) if var > 0 else 0
-                if std > 0:
-                    sharpe = round(mean_ret / std * math.sqrt(_annualize_factor), 3)
-                else:
-                    sharpe = 0.0
+            # ★ Track E: perf_stats 단일 수식 (excess over rf, ddof=1, n<2/분산0 → None + reason)
+            from src.measurement import perf_stats as _ps
+            _rf_s, _ = _resolve_risk_free(cfg)
+            _sh = _ps.sharpe_ratio(rets, _rf_s, int(_annualize_factor))
+            sharpe = round(_sh['value'], 3) if _sh['value'] is not None else None
+            sleeve['sharpe_reason'] = _sh['reason']
+            if 1 <= n_days < _sharpe_min:
                 sleeve['sharpe_status'] = f"PENDING (D{n_days}/{_sharpe_min})"
             sleeve['sharpe'] = sharpe
             sleeve['deflated_sharpe'] = None
@@ -606,6 +636,9 @@ class MeasurementEngine:
                     import logging
                     logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                     pass
+            _psr = _ps.probabilistic_sharpe_ratio(rets, 0.0, _rf_s, int(_annualize_factor))
+            sleeve['psr'] = round(_psr['value'], 4) if _psr['value'] is not None else None
+            sleeve['psr_reason'] = _psr['reason']
             mdd = None
             if n_days >= 1:
                 nav = 1.0
@@ -619,31 +652,11 @@ class MeasurementEngine:
                         max_dd = dd
                 mdd = round(max_dd, 2)
             sleeve['mdd'] = mdd
-            sortino = None
-            if n_days >= _sharpe_min:
-                if mean_ret == 0 and n_days > 0:
-                    mean_ret = sum(rets) / n_days
-                downside_rets = [r for r in rets if r < 0]
-                if downside_rets:
-                    downside_std = math.sqrt(sum((r ** 2 for r in downside_rets)) / len(downside_rets))
-                    if downside_std > 0:
-                        sortino = round(mean_ret / downside_std * math.sqrt(_annualize_factor), 3)
-                    else:
-                        sortino = 0.0
-                else:
-                    sortino = 0.0
-            elif n_days >= 1:
-                if mean_ret == 0:
-                    mean_ret = sum(rets) / n_days
-                downside_rets = [r for r in rets if r < 0]
-                if downside_rets:
-                    downside_std = math.sqrt(sum((r ** 2 for r in downside_rets)) / len(downside_rets))
-                    if downside_std > 0:
-                        sortino = round(mean_ret / downside_std * math.sqrt(_annualize_factor), 3)
-                    else:
-                        sortino = 0.0
-                else:
-                    sortino = 0.0
+            # ★ Track E: Sortino 하방편차 = sqrt(mean(min(r - T, 0)^2)) 전체 관측 기준 (T = rf_d)
+            _so = _ps.sortino_ratio(rets, _rf_s, int(_annualize_factor))
+            sortino = round(_so['value'], 3) if _so['value'] is not None else None
+            sleeve['sortino_reason'] = _so['reason']
+            if 1 <= n_days < _sharpe_min:
                 sleeve['sortino_status'] = f"PENDING (D{n_days}/{_sharpe_min})"
             sleeve['sortino'] = sortino
             alpha = None
@@ -805,10 +818,8 @@ class MeasurementEngine:
                     for i in range(1, len(closes)):
                         if closes[i - 1] > 0:
                             bench_returns.append(closes[i] / closes[i - 1] - 1)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
+            except Exception as e:  # ★ Track E: 네트워크 예외(ConnectionError 등)도 비치명 처리
+                logger.warning(f"  벤치마크 일별수익률(pykrx) 조회 실패 (비치명): {type(e).__name__}: {e}")
         return bench_returns
 
     @staticmethod
@@ -1225,10 +1236,8 @@ class MeasurementEngine:
                     for i in range(offset, len(closes)):
                         if closes[i - 1] > 0:
                             bench_returns.append(closes[i] / closes[i - 1] - 1)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
+            except Exception as e:  # ★ Track E: 네트워크 예외(ConnectionError 등)도 비치명 처리
+                logger.warning(f"  벤치마크 일별수익률(pykrx) 조회 실패 (비치명): {type(e).__name__}: {e}")
         min_len = min(len(daily_returns), len(bench_returns))
         if min_len < 1:
             return 1.0
@@ -1355,8 +1364,8 @@ class MeasurementEngine:
                 if _std > 0:
                     stream_icir['aggregate'] = round(_mean / _std, 4)
                 stream_ic_series['aggregate'] = ic_values
-        _ic_decay_window = cfg.get('measurement.ic_decay_window', 7)
-        _ic_decay_threshold = cfg.get('measurement.ic_decay_alert_threshold', -0.01)
+        _ic_decay_window = pget('measurement.ic_decay_window', 7)
+        _ic_decay_threshold = pget('measurement.ic_decay_alert_threshold', -0.01)
         ic_decay_alerts = {}
         for s, ic_vals in stream_ic_series.items():
             if len(ic_vals) >= _ic_decay_window:
@@ -1404,18 +1413,11 @@ class MeasurementEngine:
             ic_var = sum(((v - ic_mean) ** 2 for v in ic_values)) / len(ic_values)
             ic_std = math.sqrt(ic_var) if ic_var > 0 else 0
             icir = round(ic_mean / ic_std, 3) if ic_std > 0 else None
+        # ★ Track E: Calmar 단일 정의 (risk view 의 CAGR/|MDD|, 거래일 NAV 기준) — 이전의 선형 연율화
+        #   (total_return*252/len(records)) 이중 정의 제거. 최소 관측 5일 게이트는 유지.
         calmar = None
-        snapshots = sp.get('daily_snapshots', [])
-        if snapshots:
-            nav = snapshots[-1].get('nav', sp.get('virtual_nav', initial_capital))
-        else:
-            nav = sp.get('virtual_nav', initial_capital)
-        shadow_initial = sp.get('initial_capital', initial_capital)
-        total_days = max(len(records), len(snapshots))
-        if total_days >= 5 and risk.get('max_drawdown_pct', 0) < 0:
-            total_return = nav / shadow_initial - 1
-            ann_return = total_return * (252 / total_days)
-            calmar = round(ann_return / abs(risk['max_drawdown_pct'] / 100), 3)
+        if (risk.get('n_return_days') or 0) >= 5 and risk.get('calmar') is not None:
+            calmar = risk.get('calmar')
         wins = [t for t in exits if t.get('pnl_pct', 0) > 0 or t.get('price', 0) > t.get('avg_price', t.get('price', 0))]
         losses = [t for t in exits if t not in wins]
         avg_win = 0.0
@@ -1535,9 +1537,9 @@ class MeasurementEngine:
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
         base_sharpe = cfg.get('go.sharpe.ok', 1.0)
-        base_wr = cfg.get('go.win_rate.ok', 0.5)
-        base_mdd = cfg.get('go.max_dd.safe', -5.0)
-        min_days = cfg.get('gonogo.shadow_min_days', 14)
+        base_wr = pget('go.win_rate.ok', 0.5)
+        base_mdd = pget('go.max_dd.safe', -5.0)
+        min_days = pget('gonogo.shadow_min_days', 0)
         score = 0
         if sharpe > base_sharpe * 1.5:
             score += 15
@@ -1574,7 +1576,7 @@ class MeasurementEngine:
         return 'F'
 
     def _compute_verdict(self, risk: dict, portfolio: dict, quant: dict) -> str:
-        """Go/No-Go Verdict 계산 (SSoT).
+        """Go/No-Go Verdict 계산 (SSoT) — ★ Track E: 정보용 legacy_verdict 전용 (차단 판정 아님).
 
         DynamicConfig 기반 동적 판정:
           GO: Sharpe > target AND WR > min AND MDD > floor AND n_days >= min_days
@@ -1595,15 +1597,15 @@ class MeasurementEngine:
         n_trades = portfolio.get('realized_trades', 0) or 0
         if not n_trades and 'trade_history' in portfolio:
             n_trades = len([t for t in portfolio['trade_history'] if t.get('action') == 'SELL'])
-        min_days = cfg.get('gonogo.shadow_min_days', 14)
-        min_trades = cfg.get('gonogo.min_realized_trades', 10)
+        min_days = pget('gonogo.shadow_min_days', 0)
+        min_trades = pget('gonogo.min_realized_trades', 10)
         logger.debug(f"DEBUG: n_days={n_days}, min_days={min_days}, n_trades={n_trades}, min_trades={min_trades}")
         if n_days < min_days or n_trades < min_trades:
             return 'EARLY_STAGE_CONDITIONAL'
         go_sharpe = cfg.get('go.sharpe.ok', 1.0)
-        go_wr = cfg.get('go.win_rate.ok', 0.5)
-        go_mdd = cfg.get('go.max_dd.safe', -5.0)
-        go_pf = cfg.get('go.profit_factor.ok', 1.5)
+        go_wr = pget('go.win_rate.ok', 0.5)
+        go_mdd = pget('go.max_dd.safe', -5.0)
+        go_pf = pget('go.profit_factor.ok', 1.5)
         checks = {'sharpe': sharpe >= go_sharpe, 'win_rate': wr >= go_wr, 'mdd': mdd > go_mdd, 'profit_factor': pf >= go_pf}
         passed = sum((1 for v in checks.values() if v))
         if passed == 4:
@@ -1637,14 +1639,14 @@ class MeasurementEngine:
         alpha = portfolio.get('alpha_pct', 0) or 0
         cum_ret = portfolio.get('cumulative_return_pct', 0) or 0
         pf = quant.get('profit_factor', 0) or 0
-        min_days = cfg.get('gonogo.shadow_min_days', 14)
+        min_days = pget('gonogo.shadow_min_days', 0)
         target_sharpe = cfg.get('go.sharpe.ok', 1.0)
-        target_wr = cfg.get('go.win_rate.ok', 0.5)
-        target_mdd = cfg.get('go.max_dd.safe', -5.0)
-        target_da = cfg.get('go.da.ok', 0.5)
-        target_ic = cfg.get('go.ic.ok', 0.02)
+        target_wr = pget('go.win_rate.ok', 0.5)
+        target_mdd = pget('go.max_dd.safe', -5.0)
+        target_da = pget('go.da.ok', 0.55)
+        target_ic = pget('go.ic.ok', 0.05)
         target_alpha = cfg.get('go.alpha.ok', 0)
-        target_pf = cfg.get('go.profit_factor.ok', 1.5)
+        target_pf = pget('go.profit_factor.ok', 1.5)
         criteria = {
             'shadow_days': {'value': n_days, 'threshold': min_days, 'pass': n_days >= min_days, 'detail': f"{n_days}일 / {min_days}일"},
             'total_return': {'value': round(cum_ret, 2), 'threshold': 0, 'pass': cum_ret >= 0, 'detail': f"{cum_ret:+.2f}%"},
@@ -1659,18 +1661,27 @@ class MeasurementEngine:
             'winrate_pass': wr >= target_wr,
             'dd_pass': mdd >= target_mdd,
         }
-        daily_returns = []
-        try:
-            daily_records = sp.get('daily_records') or sp.get('daily_snapshots', [])
-            for rec in daily_records:
-                dr = rec.get('daily_return_pct', rec.get('return_pct', 0))
-                if dr is not None:
-                    daily_returns.append(dr / 100)
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            pass
-        return {'verdict': verdict, 'sharpe': sharpe, 'win_rate': wr, 'max_dd': mdd, 'profit_factor': pf, 'n_days': n_days, 'grade': grade, 'da': da, 'ic': ic, 'alpha_pct': alpha, 'criteria': criteria, 'daily_returns': daily_returns}
+        # ★ Track E: risk view 의 거래일 NAV 수익률 재사용 (이전: daily_records 의 누적 return_pct 를
+        #   일간 수익률로 혼용 + 휴장일 행 포함 버그). risk view 미실행 시에만 레거시 경로.
+        daily_returns = list(getattr(self, '_daily_returns', None) or [])
+        if not daily_returns and not hasattr(self, '_daily_returns'):
+            try:
+                daily_records = sp.get('daily_snapshots') or sp.get('daily_records', [])
+                for rec in daily_records:
+                    dr = rec.get('daily_return_pct')
+                    if dr is not None:
+                        daily_returns.append(dr / 100)
+            except (ValueError, KeyError, TypeError) as e:
+                logger.debug(f"Targeted fallback: {e}")
+        # ★ Track E (Wave 3): Go/No-Go 게이트 폐지 — 판정은 정보용(legacy_verdict)으로만 보존하고
+        #   verdict 는 항상 비차단 'DIAGNOSE_CONTINUE'. 통계는 진단 정보이며 매매 차단에 사용 금지.
+        return {'verdict': 'DIAGNOSE_CONTINUE', 'decision': 'DIAGNOSE_CONTINUE', 'blocking': False,
+                'legacy_verdict': verdict, 'semantics': 'informational_only',
+                'sharpe': sharpe, 'win_rate': wr, 'max_dd': mdd, 'profit_factor': pf, 'n_days': n_days,
+                'grade': grade, 'da': da, 'ic': ic, 'alpha_pct': alpha, 'criteria': criteria,
+                'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'),
+                'min_trl_more_days_needed': risk.get('min_trl_more_days_needed'),
+                'daily_returns': daily_returns}
 
     def get_official(self) -> dict:
         """공식 지표 (Go/No-Go, 보고용)."""

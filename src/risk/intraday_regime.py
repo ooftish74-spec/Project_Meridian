@@ -13,6 +13,11 @@ Usage:
     detector = IntradayRegimeDetector()
     result = detector.update(price_change_pct=-0.5, volume=1500000)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -47,13 +52,13 @@ class IntradayRegimeDetector:
             vol_window: 변동성 윈도우 (12 × 5min = 1시간)
             surge_threshold: 거래량 서지 배수
         """
-        self._vol_window = vol_window or (_cfg.get('regime.intraday_vol_window', 12) if _cfg else 12)
-        self._surge_threshold = surge_threshold or (_cfg.get('regime.intraday_surge_threshold', 3.0) if _cfg else 3.0)
+        self._vol_window = vol_window or (pget('regime.intraday_vol_window', 12) if _cfg else 12)
+        self._surge_threshold = surge_threshold or (pget('regime.intraday_surge_threshold', 3.0) if _cfg else 3.0)
         self._returns_buffer: deque = deque(maxlen=100)
         self._volume_buffer: deque = deque(maxlen=100)
         self._cusum_pos: float = 0.0
         self._cusum_neg: float = 0.0
-        self._cusum_threshold = _cfg.get('regime.cusum_threshold', 0.03) if _cfg else 0.03
+        self._cusum_threshold = pget('regime.cusum_threshold', 0.03) if _cfg else 0.03
         self._baseline_vol: float = 0.01
         self._current_regime: str = 'normal'
         self._regime_history: List[Dict] = []
@@ -115,12 +120,12 @@ class IntradayRegimeDetector:
         vol_surge = measurement.get('volume_surge', False)
         recovery = self._detect_recovery(measurement)
         trigger = ''
-        crisis_threshold = _cfg.get('regime.intraday_crisis_cum_ret', -0.02) if _cfg else -0.02
-        stress_threshold = _cfg.get('regime.intraday_stress_cum_ret', -0.01) if _cfg else -0.01
+        crisis_threshold = pget('regime.intraday_crisis_cum_ret', -0.02) if _cfg else -0.02
+        stress_threshold = pget('regime.intraday_stress_cum_ret', -0.01) if _cfg else -0.01
         if cum_ret < crisis_threshold and (cusum or vol_surge):
             regime = 'crisis'
             trigger = f'cum_ret={cum_ret:.3f}, cusum={cusum}, vol_surge={vol_surge}'
-        elif vol > (_cfg.get('regime.intraday_high_vol', 0.3) if _cfg else 0.3) or cusum:
+        elif vol > (pget('regime.intraday_high_vol', 0.3) if _cfg else 0.3) or cusum:
             regime = 'high_vol'
             trigger = f'vol={vol:.2f}, cusum={cusum}'
         elif cum_ret < stress_threshold:
@@ -128,7 +133,7 @@ class IntradayRegimeDetector:
             trigger = f'cum_ret={cum_ret:.3f}'
         else:
             regime = 'normal'
-        exposure_adj_map = {'normal': 1.0, 'recovery': _cfg.get('regime.intraday_recovery_exposure', 1.15) if _cfg else 1.15, 'stress': _cfg.get('regime.intraday_stress_exposure', 0.7) if _cfg else 0.7, 'high_vol': _cfg.get('regime.intraday_highvol_exposure', 0.5) if _cfg else 0.5, 'crisis': _cfg.get('regime.intraday_crisis_exposure', 0.2) if _cfg else 0.2}
+        exposure_adj_map = {'normal': 1.0, 'recovery': pget('regime.intraday_recovery_exposure', 1.15) if _cfg else 1.15, 'stress': pget('regime.intraday_stress_exposure', 0.7) if _cfg else 0.7, 'high_vol': pget('regime.intraday_highvol_exposure', 0.5) if _cfg else 0.5, 'crisis': pget('regime.intraday_crisis_exposure', 0.2) if _cfg else 0.2}
         exposure_adj = exposure_adj_map.get(regime, 1.0)
         # Continuous Volatility-Normalized De-risking & Program Basket OFI Penalty
         basket_ofi = measurement.get('basket_ofi', 0.0)
@@ -174,10 +179,10 @@ class IntradayRegimeDetector:
         reversal = early_sum < 0 and late_sum > 0
         positive_ratio = sum((1 for r in late if r > 0)) / max(len(late), 1)
         vol_surge = measurement.get('volume_surge', False)
-        w_reversal = _cfg.get('regime.recovery_w_reversal', 0.4) if _cfg else 0.4
-        w_positive = _cfg.get('regime.recovery_w_positive', 0.3) if _cfg else 0.3
-        positive_threshold = _cfg.get('regime.recovery_positive_threshold', 0.6) if _cfg else 0.6
-        w_volume = _cfg.get('regime.recovery_w_volume', 0.2) if _cfg else 0.2
+        w_reversal = pget('regime.recovery_w_reversal', 0.4) if _cfg else 0.4
+        w_positive = pget('regime.recovery_w_positive', 0.3) if _cfg else 0.3
+        positive_threshold = pget('regime.recovery_positive_threshold', 0.6) if _cfg else 0.6
+        w_volume = pget('regime.recovery_w_volume', 0.2) if _cfg else 0.2
         strength = 0.0
         if reversal:
             strength += w_reversal
@@ -185,7 +190,7 @@ class IntradayRegimeDetector:
             strength += w_positive * positive_ratio
         if vol_surge:
             strength += w_volume
-        threshold = _cfg.get('regime.recovery_strength_threshold', 0.5) if _cfg else 0.5
+        threshold = pget('regime.recovery_strength_threshold', 0.5) if _cfg else 0.5
         return {'detected': strength >= threshold, 'strength': round(strength, 3), 'early_sum': round(early_sum, 6), 'late_sum': round(late_sum, 6), 'positive_ratio': round(positive_ratio, 3), 'reversal': reversal}
 
     def reset(self):

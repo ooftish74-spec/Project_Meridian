@@ -1,0 +1,68 @@
+{
+ "SPY": {
+  "name": "S&P 500",
+  "kr_impact": [
+   "KOSPI",
+   "tech",
+   "large_cap"
+  ]
+ },
+ "QQQ": {
+  "name": "NASDAQ-100",
+  "kr_impact": [
+   "IT",
+   "semiconductor"
+  ]
+ },
+ "SOXX": {
+  "name": "Semiconductor",
+  "kr_impact": [
+   "semiconductor"
+  ]
+ },
+ "TLT": {
+  "name": "US 20Y Treasury",
+  "kr_impact": [
+   "growth",
+   "utilities"
+  ]
+ },
+ "HYG": {
+  "name": "High Yield Bond",
+  "kr_impact": [
+   "risk_sentiment"
+  ]
+ },
+ "EWY": {
+  "name": "Korea ETF",
+  "kr_impact": [
+   "KOSPI",
+   "foreign_flow"
+  ]
+ },
+ "GLD": {
+  "name": "Gold",
+  "kr_impact": [
+   "safe_haven"
+  ]
+ },
+ "USO": {
+  "name": "Oil",
+  "kr_impact": [
+   "energy",
+   "chemical"
+  ]
+ },
+ "EWJ": {
+  "name": "Japan ETF",
+  "kr_impact": [
+   "asia_sentiment"
+  ]
+ },
+ "FXI": {
+  "name": "China Large Cap",
+  "kr_impact": [
+   "china_exposure"
+  ]
+ }
+}

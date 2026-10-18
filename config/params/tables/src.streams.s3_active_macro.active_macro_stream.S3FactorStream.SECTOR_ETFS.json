@@ -1,0 +1,37 @@
+{
+ "SOXX": {
+  "name": "iShares Semiconductor ETF",
+  "sector": "semiconductor",
+  "market": "US"
+ },
+ "XLK": {
+  "name": "Technology Select Sector SPDR",
+  "sector": "us_tech",
+  "market": "US"
+ },
+ "XLE": {
+  "name": "Energy Select Sector SPDR",
+  "sector": "energy",
+  "market": "US"
+ },
+ "XLF": {
+  "name": "Financial Select Sector SPDR",
+  "sector": "finance",
+  "market": "US"
+ },
+ "XLI": {
+  "name": "Industrial Select Sector SPDR",
+  "sector": "industrial",
+  "market": "US"
+ },
+ "XBI": {
+  "name": "SPDR S&P Biotech ETF",
+  "sector": "bio",
+  "market": "US"
+ },
+ "ITA": {
+  "name": "iShares U.S. Aerospace & Defense",
+  "sector": "defense",
+  "market": "US"
+ }
+}

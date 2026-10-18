@@ -1,3 +1,8 @@
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 _INDEX_ETF_PROXY = {'KOSPI': '069500', 'KOSDAQ': '229200'}
 _INDEX_YF_MAP = {'KOSPI': '^KS11', 'KOSDAQ': '^KQ11'}
 '\nProject Meridian — Market Data Bridge\n======================================\nMeridian 자체 data/ 디렉토리에서 시장 데이터를 읽어\nOrchestrator가 사용하는 포맷으로 변환.\n\n데이터 소스 우선순위:\n  1. OIS JSON (data/raw/overnight_intel/)\n  2. Historical parquet (data/kr_markets/)\n  3. KRX daily CSV (data/raw/krx_stock_daily/)\n  4. fdr 폴백 (VIX, S&P500, 환율)\n\nUsage:\n    from src.data.market_data_bridge import MarketDataBridge\n    bridge = MarketDataBridge()\n    signal = bridge.build_signal_cache()\n'
@@ -103,8 +108,8 @@ class DataSourceCircuitBreaker:
         HALF_OPEN/CLOSED 상태이면 func 실행 후 성공/실패 카운트.
         """
         enabled = bool(self._get('data.cb.data_api.enabled', True))
-        trip_count = int(self._get('data.cb.data_api.trip_count', 3))
-        reset_min = int(self._get('data.cb.data_api.reset_minutes', 60))
+        trip_count = int(pget('data.cb.data_api.trip_count', 3))
+        reset_min = int(pget('data.cb.data_api.reset_minutes', 60))
         if not enabled:
             return func(*args, **kwargs)
         if self._state == 'OPEN':
@@ -332,7 +337,7 @@ class MarketDataBridge:
         if use_async:
             signal['vix'] = fetched_data.get('vix') or self._cache.get('vix', 20.0)
             signal['vkospi'] = fetched_data.get('vkospi') or self._cache.get('vkospi', 20.0)
-            usdkrw = fetched_data.get('usdkrw') or {'current': 1300.0, 'prev': 1300.0}
+            usdkrw = fetched_data.get('usdkrw') or {'current': 0.0, 'prev': 0.0}   # ★ Wave 1: 1300.0 날조 제거
             signal['usdkrw'] = usdkrw.get('current', 0)
             signal['usdkrw_prev'] = usdkrw.get('prev', signal['usdkrw'])
             cached_kospi = self._cache.get('kospi', 0)
@@ -947,9 +952,20 @@ class MarketDataBridge:
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_live}", exc_info=True)
             logger.debug(f"  [Data Janitor] USDKRW 실시간 수집 예외: {e_live}")
 
-        logger.warning('  [Data Janitor] 모든 USDKRW 소스 실패. 최신 시장 환율(1415.7) 임시 적용.')
-        self._field_quality['usdkrw'] = 0.5
-        return {'current': 1415.7, 'prev': 1415.7}
+        # ★ Wave 1: 날조 상수(1415.7) 제거 → 게이트웨이의 '실관측 last-good'(≤ fx.max_stale_hours) 또는 미수집(0.0).
+        #   0.0은 signal_cache 저장 시 sanity bounds(900~2000)에 걸려 기존 값을 덮어쓰지 않으며, 소비자는 0을 '모름'으로 처리.
+        try:
+            from src.data_collection.central_data_gateway import CentralDataGateway
+            _lg = CentralDataGateway().get_usdkrw_rate()
+            if _lg and 900.0 <= float(_lg) <= 2000.0:
+                logger.warning(f'  [Data Janitor] USDKRW 실시간 소스 실패 → 게이트웨이 실관측 last-good {float(_lg):.2f} 사용')
+                self._field_quality['usdkrw'] = 0.5
+                return {'current': round(float(_lg), 2), 'prev': round(float(_lg), 2)}
+        except Exception as _e_lg:
+            logger.debug(f"  [Data Janitor] gateway last-good 조회 실패: {_e_lg}")
+        logger.error('  [Data Janitor] 모든 USDKRW 소스 실패 — 환율 미수집(0.0, 날조 금지)')
+        self._field_quality['usdkrw'] = 0.0
+        return {'current': 0.0, 'prev': 0.0}
 
     def _get_kospi(self) -> Dict:
         """KOSPI 지수 + MA20.
@@ -1445,6 +1461,21 @@ class MarketDataBridge:
     }
 
     def _save_cache(self, data: Dict) -> None:
+        """★ Wave 1 Track A: signal_cache.json 락(strict)을 read→merge→write 전 구간에 보유.
+
+        signal_cache.json은 MacroRealtimeRefresher/UnifiedCollector(safe_json_update),
+        파이프라인 _update_signal_cache 등 다중 writer 파일이다. 과거엔 무잠금 읽기 후 병합·쓰기 사이에
+        다른 writer가 추가한 키가 유실될 수 있었다. 락 획득 실패 시 무잠금 쓰기 대신 이번 저장을 건너뛴다.
+        """
+        from src.utils.file_ops import file_lock_transaction, FileLockTimeout
+        primary_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+        try:
+            with file_lock_transaction(primary_path, timeout=30, strict=True):
+                self._save_cache_locked(data)
+        except FileLockTimeout as e:
+            logger.error(f"  [Cache] signal_cache.json 락 획득 실패 — 이번 저장 생략(무잠금 쓰기 금지): {e}")
+
+    def _save_cache_locked(self, data: Dict) -> None:
         """버전화 캐시 + 3중 저장 구조 (Atomic) + 기존 글로벌/매크로/센서 전 필드 보존 및 ETF 오염 정화."""
         import shutil
         from src.utils.file_ops import atomic_write_json as _atomic_write
@@ -1456,7 +1487,16 @@ class MarketDataBridge:
             if primary_path.exists():
                 try:
                     existing = json.loads(primary_path.read_text(encoding='utf-8'))
-                except Exception:
+                except Exception as _ce:
+                    # ★ Wave 1: 손상 파일은 덮어쓰기 전에 포렌식 격리 (백업 회전으로 정상 backup이 오염되지 않게 이동)
+                    try:
+                        from datetime import datetime as _dt
+                        _q = primary_path.with_name(f"signal_cache.corrupt_{_dt.now().strftime('%Y%m%d_%H%M%S')}.json")
+                        os.replace(primary_path, _q)
+                        logger.critical(f"  🚨 [Cache] signal_cache.json 손상({_ce}) — {_q.name}로 격리 후 재생성")
+                    except Exception as _qe:
+                        logger.critical(f"  🚨 [Cache] signal_cache.json 손상 격리 실패({_qe}) — 저장 중단")
+                        return
                     existing = self._cache if isinstance(self._cache, dict) else {}
             if not isinstance(existing, dict):
                 existing = {}

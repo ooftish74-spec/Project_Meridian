@@ -91,7 +91,8 @@ class VendorMultiplexer:
                 from src.data_collection.kis_data_collector import KISDataCollector
                 kis = KISDataCollector()
                 kis_ticker_map = {
-                    'CL=F': 'USO', 'GC=F': 'GLD', 'DX-Y.NYB': 'UUP', '^TNX': 'IEF',
+                    # ★ Wave 1: ^TNX→IEF 매핑 제거 — 금리(수익률) ≠ 채권 ETF 가격(역상관)
+                    'CL=F': 'USO', 'GC=F': 'GLD', 'DX-Y.NYB': 'UUP',
                     'EWY': 'EWY', 'FLKR': 'FLKR',
                 }
                 mapped = kis_ticker_map.get(ticker, ticker)
@@ -194,7 +195,12 @@ class VendorMultiplexer:
                 if not key:
                     logger.debug('[Vendor] ALPHA_VANTAGE_API_KEY 없음 — 스킵')
                     return None
-                av_ticker_map = {'VIX': 'VIXY', '^VIX': 'VIXY', 'ES=F': 'SPY', 'NQ=F': 'QQQ', 'YM=F': 'DIA', 'CL=F': 'USO', 'GC=F': 'GLD', 'HG=F': 'CPER', 'DX-Y.NYB': 'UUP', '^TNX': 'IEF', '^SKEW': 'VIXY'}
+                # ★ Wave 1: 의미가 다른 프록시 제거 — VIX 레벨≠VIXY 가격(선물 롤 ETF), ^TNX(금리)≠IEF(가격, 역상관),
+                #   ^SKEW≠VIXY. 잘못된 시계열을 원래 티커 이름으로 반환하느니 None → 다음 소스/fail-closed.
+                if ticker in ('VIX', '^VIX', '^TNX', '^SKEW'):
+                    logger.debug(f"[Vendor] Alpha Vantage: {ticker}는 동등 프록시 없음 → 스킵")
+                    return None
+                av_ticker_map = {'ES=F': 'SPY', 'NQ=F': 'QQQ', 'YM=F': 'DIA', 'CL=F': 'USO', 'GC=F': 'GLD', 'HG=F': 'CPER', 'DX-Y.NYB': 'UUP'}
                 mapped_ticker = av_ticker_map.get(ticker, ticker)
                 if ('KRW' in ticker and 'USD' in ticker) or ticker in ['USDKRW', 'USDKRW=X', 'DEXKOUS']:
                     from alpha_vantage.foreignexchange import ForeignExchange
@@ -219,6 +225,11 @@ class VendorMultiplexer:
                 if av_field not in data.columns:
                     return None
                 _raw = data[av_field].dropna().rename(ticker)
+                if mapped_ticker != ticker:
+                    # 레벨은 원 상품과 다름(수익률만 근사) — 소비자가 구분할 수 있게 표시
+                    _raw.attrs['proxy_for'] = ticker
+                    _raw.attrs['proxy_ticker'] = mapped_ticker
+                    _raw.attrs['level_comparable'] = False
                 logger.info(f"[Vendor] Alpha Vantage 수집 성공: {ticker} (AV Ticker: {mapped_ticker})")
                 return _raw
             except Exception as e:

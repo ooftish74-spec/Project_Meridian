@@ -21,6 +21,11 @@ Zero-Hardcoding Policy:
   모든 임계치 및 유니버스 설정은 DynamicConfig ('s3.track_c.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import Dict, List, Any
 from config.dynamic_config import DynamicConfig
@@ -47,8 +52,8 @@ class S3CrossAssetSleeve:
         # Zero-Hardcoding 파라미터 지연 로드 + 수리적 동적 보정
         from src.utils.dynamic_quant_engine import get_quant_engine
         _dqe = get_quant_engine()
-        spread_threshold = float(cfg.get('s3.track_c.spread_threshold', 0.005))
-        min_confidence = float(cfg.get('s3.track_c.min_confidence', 0.75))
+        spread_threshold = float(pget('s3.track_c.spread_threshold', 0.005))
+        min_confidence = float(pget('s3.track_c.min_confidence', 0.75))
 
         cross_universe = dict(cfg.get('s3.track_c.universe', {
             'GLD': {'name': 'SPDR Gold Shares', 'category': 'gold'},

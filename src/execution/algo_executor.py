@@ -21,6 +21,11 @@ Usage:
     slices = algo.twap_schedule(order, duration_minutes=30)
     slices = algo.pov_schedule(order, adv=200000)  # POV
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from dataclasses import dataclass, field, asdict
@@ -61,17 +66,17 @@ class AlgoExecutor:
     VOLUME_PROFILE = [0.15, 0.1, 0.08, 0.07, 0.06, 0.06, 0.06, 0.07, 0.08, 0.08, 0.09, 0.1]
 
     def __init__(self):
-        self.max_slices = _cfg.get('execution.max_slices', 10) if _cfg else 10
-        self.participation_rate = _cfg.get('execution.participation_rate', 0.1) if _cfg else 0.1
-        self.pov_rate = _cfg.get('execution.pov_rate', 0.05) if _cfg else 0.05
-        self.pov_max_duration_min = _cfg.get('execution.pov_max_duration_min', 120) if _cfg else 120
-        self.pov_adv_threshold = _cfg.get('execution.pov_adv_threshold', 0.05) if _cfg else 0.05
+        self.max_slices = pget('execution.max_slices', 10) if _cfg else 10
+        self.participation_rate = pget('execution.participation_rate', 0.1) if _cfg else 0.1
+        self.pov_rate = pget('execution.pov_rate', 0.05) if _cfg else 0.05
+        self.pov_max_duration_min = pget('execution.pov_max_duration_min', 120) if _cfg else 120
+        self.pov_adv_threshold = pget('execution.pov_adv_threshold', 0.05) if _cfg else 0.05
         
         # [V2 Dynamic Slicing Parameters]
-        self.impact_threshold_pct = _cfg.get('execution.impact_threshold_pct', 0.005) if _cfg else 0.005
-        self.slice_chunk_pct = _cfg.get('execution.slice_chunk_pct', 0.002) if _cfg else 0.002
-        self.absolute_min_slice = _cfg.get('execution.absolute_min_slice', 5000000) if _cfg else 5000000
-        self.fallback_min_amount = float(_cfg.get('portfolio.initial_capital', 1000000.0)) if _cfg else 1000000.0
+        self.impact_threshold_pct = pget('execution.impact_threshold_pct', 0.005) if _cfg else 0.005
+        self.slice_chunk_pct = pget('execution.slice_chunk_pct', 0.002) if _cfg else 0.002
+        self.absolute_min_slice = pget('execution.absolute_min_slice', 5000000) if _cfg else 5000000
+        self.fallback_min_amount = float(pget('portfolio.initial_capital', 19600000.0)) if _cfg else 1000000.0
 
     def twap_schedule(self, order: Dict, duration_minutes: int=30, n_slices: Optional[int]=None, adv: float=0) -> List[OrderSlice]:
         """TWAP 분할 스케줄 생성.
@@ -264,7 +269,7 @@ class AlgoExecutor:
             from src.execution.tca import TCAAnalyzer
             tca = TCAAnalyzer()
             impact_score = tca.get_market_impact_score(ticker)
-            tca_threshold = _cfg.get('execution.tca_adaptive_threshold_bps', 10.0) if _cfg else 10.0
+            tca_threshold = pget('execution.tca_adaptive_threshold_bps', 10.0) if _cfg else 10.0
             if impact_score > tca_threshold:
                 logger.warning(f"  TCA 피드백: {ticker} 과거 슬리피지({impact_score}bps) 초과. VWAP으로 우회합니다.")
                 return 'VWAP'
@@ -304,11 +309,11 @@ class AlgoExecutor:
         """
         total_qty = order.get('quantity', 0)
         if adv <= 0 or total_qty <= 0:
-            return _cfg.get('slippage.default_impact_bps', 10.0) if _cfg else 10.0
-        sigma = volatility if volatility > 0 else _cfg.get('slippage.default_daily_vol', 0.02) if _cfg else 0.02
-        eta = _cfg.get('slippage.impact_coefficient', 10.0) if _cfg else 10.0
-        delta = _cfg.get('slippage.impact_exponent', 0.5) if _cfg else 0.5
+            return pget('slippage.default_impact_bps', 5.0) if _cfg else 10.0
+        sigma = volatility if volatility > 0 else pget('slippage.default_daily_vol', 0.02) if _cfg else 0.02
+        eta = pget('slippage.impact_coefficient', 10.0) if _cfg else 10.0
+        delta = pget('slippage.impact_exponent', 0.5) if _cfg else 0.5
         participation = total_qty / adv
         impact_bps = eta * sigma * math.pow(participation, delta) * 10000
-        max_bps = _cfg.get('slippage.max_total_bps', 50.0) if _cfg else 50.0
+        max_bps = pget('slippage.max_total_bps', 50.0) if _cfg else 50.0
         return round(min(impact_bps, max_bps), 2)

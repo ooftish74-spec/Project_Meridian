@@ -31,6 +31,12 @@ Usage:
     python scripts/daily_pipeline.py collect,morning  # 복수 phase
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json, logging, os, sys, time
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -197,9 +203,9 @@ def _check_data_gates(signal_cache: dict, phase_name: str, cfg=None) -> str:
 
     # ── Gate 2: DQS ──────────────────────────────────────────────────────
     _dqs       = float(signal_cache.get('_data_quality_score', 1.0))
-    _tier_full = float(_g('data.quality.dqs_tier_full',     0.70))
-    _tier_deg  = float(_g('data.quality.dqs_tier_degraded', 0.50))
-    _tier_halt = float(_g('data.quality.dqs_tier_halt',     0.30))
+    _tier_full = float(pget('data.quality.dqs_tier_full', 0.70))
+    _tier_deg  = float(pget('data.quality.dqs_tier_degraded', 0.50))
+    _tier_halt = float(pget('data.quality.dqs_tier_halt', 0.30))
 
     if _dqs >= _tier_full:
         return 'ok'
@@ -268,7 +274,7 @@ def _phase_premarket():
         from src.execution.call_auction_manager import CallAuctionManager
         cam = CallAuctionManager()
         # 오늘 필요 자금 계산 (예시: S2 타겟 배정액)
-        _target_buy = _cfg.get('portfolio.target_buy_amount', 5000000.0)
+        _target_buy = pget('portfolio.target_buy_amount', 5000000.0)
         sell_qty = cam.calculate_kodex_sell_qty(_target_buy)
         if sell_qty > 0:
             cam.place_premarket_sell_order(sell_qty)
@@ -656,14 +662,17 @@ def _phase_aftermarket():
     except Exception as e:
         logger.error(f"  Stream Metrics 재생성 실패: {e}", exc_info=True)
 
-    # 3. Go/No-Go 판정
+    # 3. ★ Track E (Wave 3): Go/No-Go 게이트 폐지 → 소액 실전 연속 진단 (비차단)
+    #    통계(PSR/DSR/MinTRL/CI)는 진단 정보일 뿐이며 어떤 결과도 매매를 막지 않는다.
     try:
-        from scripts.go_nogo import GoNoGoEngine
-        gng = GoNoGoEngine()
-        result = gng.evaluate()
-        logger.info(f"  ✅ Go/No-Go: {result.get('verdict', '?')}")
+        from src.measurement.live_diagnostics import run_live_diagnostics
+        _diag = run_live_diagnostics()
+        _iss = _diag.get('issues', [])
+        logger.info(f"  ✅ Live Diagnostics: decision={_diag.get('decision')} (blocking=False), "
+                    f"issues={len(_iss)} "
+                    f"(critical/high={sum(1 for i in _iss if i.get('severity') in ('critical', 'high'))})")
     except Exception as e:
-        logger.error(f"  Go/No-Go 실패: {e}", exc_info=True)
+        logger.error(f"  Live Diagnostics 실패 (비차단): {e}", exc_info=True)
 
     # ═══ SSoT 동기화 ═══
     sync_ssot_from_me()
@@ -696,6 +705,11 @@ def _phase_aftermarket():
                 _trade_history = _sp.get('trade_history', [])
                 _today = datetime.now().strftime('%Y-%m-%d')
                 _executed = 0
+                # ★ Wave 1: 저장 시 '변경분(delta)'만 디스크 최신본에 병합하기 위한 기준 스냅샷
+                import copy as _copy_s4
+                _s4_pos0 = _copy_s4.deepcopy(_positions)
+                _s4_hist_len0 = len(_trade_history)
+                _s4_cash0 = float(_sp.get('cash', 0) or 0)
 
                 for _item in _brk_auto:
                     if not _item.get('auto_execute', False):
@@ -788,10 +802,21 @@ def _phase_aftermarket():
                                    f"PnL ₩{_pnl:+,.0f} ({_pnl_pct:+.1f}%)")
 
                 if _executed > 0:
-                    _sp['positions'] = _positions
-                    _sp['trade_history'] = _trade_history
-                    atomic_write_json(_sp_path, 
-                        _sp, indent=2)
+                    # ★ Wave 1: ShadowPortfolioManager와 동일한 strict 락 안에서 디스크 최신본을 다시 읽고
+                    #   이 블록의 변경분(포지션 키 단위, 신규 거래, 현금 증감)만 병합 → 다른 writer 변경 보존
+                    from src.utils.file_ops import file_lock_transaction as _flt_s4
+                    with _flt_s4(_sp_path, timeout=30, strict=True):
+                        _disk = json.loads(_sp_path.read_text()) if _sp_path.exists() else {}
+                        _dpos = _disk.setdefault('positions', {})
+                        for _k in set(_s4_pos0) | set(_positions):
+                            if _s4_pos0.get(_k) != _positions.get(_k):
+                                if _k in _positions:
+                                    _dpos[_k] = _positions[_k]
+                                else:
+                                    _dpos.pop(_k, None)
+                        _disk.setdefault('trade_history', []).extend(_trade_history[_s4_hist_len0:])
+                        _disk['cash'] = float(_disk.get('cash', 0) or 0) + (float(_sp.get('cash', 0) or 0) - _s4_cash0)
+                        atomic_write_json(_sp_path, _disk, indent=2)
                     logger.info(f"  ✅ S4 Advisory BROKERAGE 자동 체결: {_executed}건")
                 else:
                     logger.info("  ℹ️ S4 Advisory BROKERAGE: 체결 대상 없음")
@@ -842,8 +867,8 @@ def _phase_aftermarket():
     try:
         from scripts.build_universe import build_universe
         universe = build_universe(
-            min_turnover_억=cfg.get('universe.min_turnover', 10.0),
-            lookback_days=cfg.get('universe.lookback_days', 20))
+            min_turnover_억=pget('universe.min_turnover', 10.0),
+            lookback_days=pget('universe.lookback_days', 20))
         uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
         with open(uni_file, 'w') as f:
             json.dump(universe, f, indent=2)
@@ -1377,6 +1402,14 @@ def _phase_collect_data():
             if isinstance(_mc_e, _DataNoGoException):
                 _nogo_col = getattr(_mc_e, 'column', 'macro_unknown')
                 _data_nogo_assets.append(_nogo_col)
+                # ★ Track E (W1_2): 모듈 변수는 다른 프로세스(장중 phase)/다른 모듈(daily_pipeline)과
+                #   공유되지 않음 → 영속 저장소(results/data_nogo.json, 날짜+TTL)에 기록
+                try:
+                    from src.measurement.data_nogo_store import record_data_nogo
+                    record_data_nogo(_nogo_col, reason=str(_mc_e), kind='macro',
+                                     source='sub_phases._phase_collect_data')
+                except Exception as _dn_e:
+                    logger.error(f'  [Phase 70 DATA_NOGO] 영속 기록 실패: {_dn_e}', exc_info=True)
                 logger.error(
                     f'  [Phase 70 DATA_NOGO] 매크로 {_nogo_col}: '
                     f'PCA R² 미달 — 해당 지표 0% 격리'
@@ -1494,11 +1527,18 @@ def _update_signal_cache(updates: dict):
                 }
         return base
 
+    from src.utils.file_ops import file_lock_transaction, FileLockTimeout
+    cache_file = _PROJECT_ROOT / 'results' / 'signal_cache.json'
     try:
-        cache_file = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+      # ★ Wave 1: read→merge→write 전 구간 strict 교차 프로세스 락 (다른 writer 키 유실 방지)
+      with file_lock_transaction(cache_file, timeout=30, strict=True):
         existing = {}
         if cache_file.exists():
-            existing = json.loads(cache_file.read_text())
+            try:
+                existing = json.loads(cache_file.read_text())
+            except json.JSONDecodeError as _je:
+                logger.error(f"  signal_cache.json 손상 — 덮어쓰기 금지, 이번 업데이트 생략: {_je}")
+                return
         _deep_merge(existing, updates)
 
         # SSOT Root Meta Fields (Regime, Exposure, QQQ KER) Fallback
@@ -1602,7 +1642,7 @@ def _phase_intraday():
                 _ws_core_etfs = cfg.get('ws.core_etf_tickers',
                                         ['069500', '122630', '252670', '114800'])
                 ws_tickers.update(_ws_core_etfs)
-                _ws_max = cfg.get('ws.max_subscription_tickers', 40)
+                _ws_max = pget('ws.max_subscription_tickers', 40)
                 ws_tickers = list(ws_tickers)[:_ws_max]
                 ws = start_realtime_streaming(ws_tickers)
                 if ws.is_running:
@@ -1626,7 +1666,7 @@ def _phase_intraday():
             _ws_core_etfs = cfg.get('ws.core_etf_tickers',
                                     ['069500', '122630', '252670', '114800'])
             ws_tickers.update(_ws_core_etfs)
-            _ws_max = cfg.get('ws.max_subscription_tickers', 40)
+            _ws_max = pget('ws.max_subscription_tickers', 40)
             ws_tickers = list(ws_tickers)[:_ws_max]
             ws = start_realtime_streaming(ws_tickers)
             if ws.is_running:
@@ -1691,7 +1731,7 @@ def _phase_intraday():
             
             _RESULTS_DIR = _PROJECT_ROOT / 'results'
             # 스로틀링: 마지막 수집 이후 interval 이상 경과 시에만 API 호출
-            _flow_interval_sec = cfg.get("intraday.flow_fetch_interval_min", 10) * 60
+            _flow_interval_sec = pget('intraday.flow_fetch_interval_min', 10) * 60
             _last_flow_ts_file = _RESULTS_DIR / ".intraday_flow_last_ts"
             _now_ts = _time_mod.time()
             _last_ts = 0.0
@@ -1719,7 +1759,7 @@ def _phase_intraday():
                 _default_tickers = cfg.get("intraday.default_watch_tickers", [])
                 _flow_tickers.update(_default_tickers)
                 # 최대 종목 수: config 기반 동적 제한 (하드코딩 제거)
-                _max_flow_tickers = int(cfg.get("intraday.max_batch_tickers", 20))
+                _max_flow_tickers = int(pget('intraday.max_batch_tickers', 20))
                 _flow_tickers = list(_flow_tickers)[:_max_flow_tickers]
 
                 _intraday_flow_data = _flow_collector.fetch(_flow_tickers)
@@ -1828,7 +1868,7 @@ def _phase_intraday():
                                            if s.get('stream_id') != 'S1']
 
                             if s1_sells:
-                                _etf_comm = cfg.get('execution.etf_commission_rate', 0.00015)
+                                _etf_comm = pget('execution.etf_commission_rate', 0.00015)
                                 _mgr.execute_sells(s1_sells, rt_prices,
                                                    commission_rate=_etf_comm)
                                 logger.info(f"  🔴 S1 장중 긴급 청산: {len(s1_sells)}건")
@@ -1905,7 +1945,7 @@ def _phase_collect_flow():
         # 주요 ETF 추가 (DynamicConfig)
         _core_flow_etfs = cfg.get('flow.core_etf_tickers', ['069500', '122630', '252670', '133690'])
         tickers.update(_core_flow_etfs)
-        _max_batch = cfg.get('flow.max_batch_tickers', 20)
+        _max_batch = pget('flow.max_batch_tickers', 20)
         tickers = list(tickers)[:_max_batch]
 
         results = collector.collect_batch_features(tickers)

@@ -1740,7 +1740,8 @@
     "revenue_yoy",
     "earnings_qoq",
     "earnings_momentum",
-    "roe_2yr_avg"
+    "roe_2yr_avg",
+    "debt_ratio_latest"
   ],
   "ml.auto_exclude_zero_features": true,
   "ml.ic_negative_threshold": -0.1,

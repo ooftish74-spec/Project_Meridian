@@ -12,6 +12,11 @@ Dynamic Cap Engine (Pure Quantitative Volatility & Alpha-Scaled Capital Realloca
   3. 내일 아침 KRX 2배 레버리지(122630) 또는 미국주 동시 진입 시 KODEX 200 매도 수량 동적 확장 (Scale-Up).
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, Any, Tuple
@@ -25,9 +30,9 @@ class DynamicCapEngine:
     """하드코딩 없는 순수 수학적 앵커 자산 캡사이징 & 동적 자본 해제 엔진."""
 
     def __init__(self):
-        self.w_base = float(cfg.get('allocation.anchor_base_weight', 0.50))     # 기저 비중 50%
-        self.gamma = float(cfg.get('allocation.alpha_scaling_gamma', 2.5))     # 알파 반응 감도
-        self.friction_bps = float(cfg.get('allocation.friction_bps', 28.0))    # 0.28% 마찰비용
+        self.w_base = float(pget('allocation.anchor_base_weight', 0.50))     # 기저 비중 50%
+        self.gamma = float(pget('allocation.alpha_scaling_gamma', 2.5))     # 알파 반응 감도
+        self.friction_bps = float(pget('allocation.friction_bps', 28.0))    # 0.28% 마찰비용
 
     def compute_dynamic_anchor_cap(self, active_ev_pct: float, market_trend_positive: bool = True) -> float:
         """액티브 알파 기대값(EV%) 및 시장 추세에 따른 069500 허용 비중 상한선(W_cap) 100% 동적 산출.

@@ -18,6 +18,11 @@ Zero-Hardcoding Policy:
   DynamicConfig ('s2.etf_basket.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import Dict, List, Any
 import numpy as np
@@ -47,8 +52,8 @@ class S2ETFBasketDecomposer:
             return []
 
         # Zero-Hardcoding 파라미터 지연 로드
-        min_sector_score = float(cfg.get('s2.etf_basket.min_sector_score', 0.60))
-        top_k_sectors = int(cfg.get('s2.etf_basket.top_k_sectors', 3))
+        min_sector_score = float(pget('s2.etf_basket.min_sector_score', 0.60))
+        top_k_sectors = int(pget('s2.etf_basket.top_k_sectors', 3))
 
         # 기본 섹터 ➔ 대표 ETF 매핑 맵 (DynamicConfig override 지원)
         default_sector_etf_map = {

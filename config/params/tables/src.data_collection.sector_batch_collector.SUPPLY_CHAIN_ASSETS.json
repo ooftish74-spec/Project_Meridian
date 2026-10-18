@@ -1,0 +1,95 @@
+{
+ "MU": {
+  "name": "Micron (DRAM 프록시)",
+  "sectors": [
+   "Semiconductor"
+  ],
+  "correlation": "positive"
+ },
+ "SOXX": {
+  "name": "PHLX Semiconductor Index",
+  "sectors": [
+   "Semiconductor"
+  ],
+  "correlation": "positive"
+ },
+ "LIT": {
+  "name": "Lithium ETF",
+  "sectors": [
+   "Battery",
+   "Automotive"
+  ],
+  "correlation": "positive"
+ },
+ "HG=F": {
+  "name": "Copper Futures",
+  "sectors": [
+   "Materials",
+   "Battery"
+  ],
+  "correlation": "positive"
+ },
+ "CL=F": {
+  "name": "WTI Crude Oil",
+  "sectors": [
+   "Energy"
+  ],
+  "correlation": "positive"
+ },
+ "NG=F": {
+  "name": "Natural Gas",
+  "sectors": [
+   "Energy",
+   "Utilities"
+  ],
+  "correlation": "positive"
+ },
+ "SLX": {
+  "name": "Steel ETF",
+  "sectors": [
+   "Materials",
+   "Shipbuilding"
+  ],
+  "correlation": "positive"
+ },
+ "BDRY": {
+  "name": "Baltic Dry Index ETN",
+  "sectors": [
+   "Shipbuilding"
+  ],
+  "correlation": "positive"
+ },
+ "URA": {
+  "name": "Uranium ETF",
+  "sectors": [
+   "Utilities",
+   "Energy"
+  ],
+  "correlation": "positive"
+ },
+ "GC=F": {
+  "name": "Gold",
+  "sectors": [
+   "Finance"
+  ],
+  "correlation": "negative"
+ },
+ "JPY=X": {
+  "name": "USD/JPY (엔캐리 proxy)",
+  "sectors": [
+   "Semiconductor",
+   "AI",
+   "Battery"
+  ],
+  "correlation": "positive"
+ },
+ "KRW=X": {
+  "name": "USD/KRW (환율)",
+  "sectors": [
+   "Semiconductor",
+   "Automotive",
+   "Shipbuilding"
+  ],
+  "correlation": "negative"
+ }
+}

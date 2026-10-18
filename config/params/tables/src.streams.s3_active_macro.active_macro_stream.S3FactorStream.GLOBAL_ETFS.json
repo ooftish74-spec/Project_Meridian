@@ -1,0 +1,27 @@
+{
+ "QQQ": {
+  "name": "Invesco QQQ Trust",
+  "sector": "us_tech",
+  "market": "US"
+ },
+ "SPY": {
+  "name": "SPDR S&P 500 ETF Trust",
+  "sector": "us_broad",
+  "market": "US"
+ },
+ "NVDA": {
+  "name": "NVIDIA Corporation",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "TSLA": {
+  "name": "Tesla Inc",
+  "sector": "us_auto",
+  "market": "US"
+ },
+ "TMUS": {
+  "name": "T-Mobile US Inc",
+  "sector": "us_telecom",
+  "market": "US"
+ }
+}

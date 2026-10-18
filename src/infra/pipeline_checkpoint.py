@@ -16,6 +16,11 @@ Usage:
         logger.info('collect 이미 완료 → skip')
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime, date
@@ -85,7 +90,7 @@ class PipelineCheckpoint:
             return False  # 이미 완료
 
         if status == 'failed':
-            max_retries = (_cfg.get('checkpoint.max_retries', 5)
+            max_retries = (pget('checkpoint.max_retries', 2)
                              if _cfg else 5)
             retries = phase_info.get('retries', 0)
             if retries >= max_retries:

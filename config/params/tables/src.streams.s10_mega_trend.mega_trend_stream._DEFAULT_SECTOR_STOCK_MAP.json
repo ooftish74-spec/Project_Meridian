@@ -1,0 +1,134 @@
+{
+ "semiconductor": [
+  {
+   "ticker": "005930",
+   "name": "삼성전자",
+   "weight": 0.6
+  },
+  {
+   "ticker": "000660",
+   "name": "SK하이닉스",
+   "weight": 0.4
+  }
+ ],
+ "battery": [
+  {
+   "ticker": "373220",
+   "name": "LG에너지솔루션",
+   "weight": 0.55
+  },
+  {
+   "ticker": "006400",
+   "name": "삼성SDI",
+   "weight": 0.45
+  }
+ ],
+ "bio": [
+  {
+   "ticker": "207940",
+   "name": "삼성바이오로직스",
+   "weight": 0.6
+  },
+  {
+   "ticker": "068270",
+   "name": "셀트리온",
+   "weight": 0.4
+  }
+ ],
+ "healthcare": [
+  {
+   "ticker": "207940",
+   "name": "삼성바이오로직스",
+   "weight": 0.6
+  },
+  {
+   "ticker": "068270",
+   "name": "셀트리온",
+   "weight": 0.4
+  }
+ ],
+ "defense": [
+  {
+   "ticker": "012450",
+   "name": "한화에어로스페이스",
+   "weight": 0.6
+  },
+  {
+   "ticker": "047810",
+   "name": "한국항공우주",
+   "weight": 0.4
+  }
+ ],
+ "auto": [
+  {
+   "ticker": "005380",
+   "name": "현대차",
+   "weight": 0.6
+  },
+  {
+   "ticker": "000270",
+   "name": "기아",
+   "weight": 0.4
+  }
+ ],
+ "it": [
+  {
+   "ticker": "035420",
+   "name": "NAVER",
+   "weight": 0.6
+  },
+  {
+   "ticker": "035720",
+   "name": "카카오",
+   "weight": 0.4
+  }
+ ],
+ "finance": [
+  {
+   "ticker": "105560",
+   "name": "KB금융",
+   "weight": 0.55
+  },
+  {
+   "ticker": "055550",
+   "name": "신한지주",
+   "weight": 0.45
+  }
+ ],
+ "industrial": [
+  {
+   "ticker": "012450",
+   "name": "한화에어로스페이스",
+   "weight": 0.6
+  },
+  {
+   "ticker": "047810",
+   "name": "한국항공우주",
+   "weight": 0.4
+  }
+ ],
+ "us_semiconductor": [
+  {
+   "ticker": "005930",
+   "name": "삼성전자",
+   "weight": 0.6
+  },
+  {
+   "ticker": "000660",
+   "name": "SK하이닉스",
+   "weight": 0.4
+  }
+ ],
+ "us_tech": [
+  {
+   "ticker": "035420",
+   "name": "NAVER",
+   "weight": 0.6
+  },
+  {
+   "ticker": "035720",
+   "name": "카카오",
+   "weight": 0.4
+  }
+ ]
+}

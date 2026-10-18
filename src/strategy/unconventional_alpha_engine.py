@@ -17,6 +17,11 @@ Usage:
     results = engine.evaluate_all(market_data, account_equity=150000000)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -78,7 +83,7 @@ class PureMathematicalUnconventionalEngine:
         decay_daily = 1.0 - math.exp(-decay_factor)
         
         # 연간화 마모율 (252 영업일 기준)
-        ann_factor = float(self._get('common.annualization_factor', 252))
+        ann_factor = float(pget('common.annualization_factor', 252))
         decay_annual = 1.0 - math.exp(-decay_factor * ann_factor)
 
         # 2. 통계적 이격도 (Z-Score) 계산 - price_history가 존재할 경우
@@ -93,7 +98,7 @@ class PureMathematicalUnconventionalEngine:
         confidence = norm_cdf(abs(z_score)) if z_score != 0.0 else norm_cdf(sigma * 10.0)
 
         # 마모 수확 임계치 (DynamicConfig에서 로드)
-        threshold_decay_daily = float(self._get('unconventional.etf_decay_min_daily', 0.0003)) # 기본 0.03%
+        threshold_decay_daily = float(pget('unconventional.etf_decay_min_daily', 0.0003)) # 기본 0.03%
         
         if decay_daily >= threshold_decay_daily:
             action = 'HARVEST_DECAY'
@@ -168,7 +173,7 @@ class PureMathematicalUnconventionalEngine:
         # Gaussian CDF를 통한 연속 스퀴즈 확률 계산
         squeeze_prob = norm_cdf(combined_squeeze_metric - 1.0) # Mean centered around 1 std dev
 
-        prob_threshold = float(self._get('unconventional.liquidity_squeeze_prob_th', 0.65))
+        prob_threshold = float(pget('unconventional.liquidity_squeeze_prob_th', 0.65))
         is_trap = squeeze_prob >= prob_threshold
 
         if is_trap:
@@ -219,19 +224,19 @@ class PureMathematicalUnconventionalEngine:
                 'reason': str
             }
         """
-        vix_std = float(self._get('unconventional.vix_historical_std', 5.0))
+        vix_std = float(pget('unconventional.vix_historical_std', 5.0))
         z_vix = (vix_current - vix_historical_mean) / max(vix_std, 1e-6)
 
         # 1. 연속적 옵션 매수 예산 비율 연산
-        max_option_weight = float(self._get('unconventional.max_option_weight_pct', 0.015)) # 최대 1.5%
-        min_option_weight = float(self._get('unconventional.min_option_weight_pct', 0.005)) # 최소 0.5%
+        max_option_weight = float(pget('unconventional.max_option_weight_pct', 0.015)) # 최대 1.5%
+        min_option_weight = float(pget('unconventional.min_option_weight_pct', 0.005)) # 최소 0.5%
         
         # VIX Z-Score에 따른 연속 할당 비중 w_option
         option_weight = min_option_weight + (max_option_weight - min_option_weight) * norm_cdf(z_vix)
         option_budget = account_equity * option_weight
 
         # 2. 테일 리스크 헤지 커버리지 연산
-        expected_option_payoff_mult = float(self._get('unconventional.expected_option_payoff_mult', 15.0)) # 15배 스파이크
+        expected_option_payoff_mult = float(pget('unconventional.expected_option_payoff_mult', 15.0)) # 15배 스파이크
         portfolio_var_amount = account_equity * (abs(var_99_pct) / 100.0)
         theoretical_coverage = (option_budget * expected_option_payoff_mult) / max(1.0, portfolio_var_amount)
 
@@ -241,7 +246,7 @@ class PureMathematicalUnconventionalEngine:
 
         # 3. 연속 레버리지 승수 연산 (L_min = 1.0, L_max = 2.5)
         l_min = float(self._get('unconventional.l_min', 1.0))
-        l_max = float(self._get('unconventional.l_max', 2.5))
+        l_max = float(pget('unconventional.l_max', 2.5))
         
         dynamic_leverage = l_min + (l_max - l_min) * min(1.0, coverage_ratio) if effective_hedge > 0.0 else l_min
         is_tail_hedged = bool(effective_hedge > 0.0 and coverage_ratio >= 0.8)
@@ -270,10 +275,10 @@ class PureMathematicalUnconventionalEngine:
             account_equity = float(
                 market_data.get('account_equity')
                 or signal_cache.get('total_asset')
-                or self._get('portfolio.initial_capital', 20_000_000.0)
+                or pget('portfolio.initial_capital', 19600000.0)
             )
         vix_now = float(signal_cache.get('vix', 18.0))
-        vix_mean = float(self._get('unconventional.vix_mean', 18.0))
+        vix_mean = float(pget('unconventional.vix_mean', 18.0))
         var_99 = float(signal_cache.get('var_99_pct', 3.0))
         actual_hedge = float(
             market_data.get('actual_option_hedge_notional', signal_cache.get('actual_option_hedge_notional', 0.0)) or 0.0

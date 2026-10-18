@@ -245,11 +245,11 @@ class ReportGenerator:
             f"금일 자본 시장은 **{regime.upper()}** 체제이며, Project Meridian은 치명적 오류 없이 전체 파이프라인을 성공적으로 완수했습니다. "
             f"현재 운용 {n_days}일 차로, 누적 수익률은 **{cum_return:+.2f}%** 를 기록 중입니다. "
             f"핵심 방어 지표인 최대 낙폭(MDD)은 **{max_dd:+.2f}%** 로 설정된 방어 임계치 이내에서 안전하게 통제되고 있습니다. "
-            f"Go/No-Go 최종 심사 상태는 현재 **{verdict}** 입니다."
+            f"Go/No-Go 게이트는 폐지되었고, 소액 라이브 연속 진단(results/live_diagnostics_report.md)으로 운영 상태를 판단합니다. (레거시 판정: {verdict}, 비차단)"
         )
 
         report = f"""# 🔭 Project Meridian Daily Report
-**{today}** | Regime: {regime_icons.get(regime, '📊')} {regime.upper()} | Go/No-Go: {verdict_icon} {verdict}
+**{today}** | Regime: {regime_icons.get(regime, '📊')} {regime.upper()} | Live Diagnostics: 비차단 (레거시 {verdict})
 
 ---
 

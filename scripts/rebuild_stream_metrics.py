@@ -500,6 +500,13 @@ def rebuild():
 
 
 def assign_s4_accounts():
+    # ★ Wave 1: shadow RMW를 매니저와 동일한 strict 락 안에서 수행
+    from src.utils.file_ops import file_lock_transaction
+    with file_lock_transaction(_RESULTS / 'shadow_portfolio.json', timeout=30, strict=True):
+        return _assign_s4_accounts_locked()
+
+
+def _assign_s4_accounts_locked():
     """S4 포지션에 계좌(account) 정보 자동 배정.
 
     S4 Advisory의 ETF 유형에 따라:
@@ -581,6 +588,13 @@ def assign_s4_accounts():
 
 
 def migrate_position_keys():
+    # ★ Wave 1: shadow RMW를 매니저와 동일한 strict 락 안에서 수행
+    from src.utils.file_ops import file_lock_transaction
+    with file_lock_transaction(_RESULTS / 'shadow_portfolio.json', timeout=30, strict=True):
+        return _migrate_position_keys_locked()
+
+
+def _migrate_position_keys_locked():
     """레거시 포지션 키(plain ticker) → stream:ticker 마이그레이션.
 
     동일 종목이 여러 스트림에 속할 경우 분할.

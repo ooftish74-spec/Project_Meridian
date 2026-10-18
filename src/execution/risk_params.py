@@ -34,6 +34,12 @@ try:
 except ImportError as e:
     _cfg = None
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
+
 def _cfg_get(key: str, default: float) -> float:
     """DynamicConfig에서 float 값 취득 (Fail-Safe)."""
     try:
@@ -64,13 +70,13 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
     if market_data:
         tech = market_data.get('stock_technicals', {}).get(ticker, {})
         atr_pct = tech.get('atr_pct')
-        _atr_min = _cfg_get('risk_params.atr_min_pct', 0.005)
-        _atr_max = _cfg_get('risk_params.atr_max_pct', 0.15)
+        _atr_min = pget('risk_params.atr_min_pct', 0.005)
+        _atr_max = pget('risk_params.atr_max_pct', 0.15)
         if atr_pct and isinstance(atr_pct, (int, float)) and (_atr_min <= atr_pct <= _atr_max):
             logger.debug(f"  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (signal_cache)")
             return float(atr_pct)
     atr_pct: Optional[float] = None
-    atr_period = int(_cfg_get('exit.atr_period', 14))
+    atr_period = int(pget('exit.atr_period', 20))
     try:
         import numpy as np
         import pandas as pd
@@ -112,7 +118,7 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
     if atr_pct is None:
         vix = (market_data or {}).get('vix') or (market_data or {}).get('signal_cache', {}).get('vix')
         if vix is None or float(vix) <= 0:
-            vix = float(_cfg_get('risk.vix_fallback', 18.0))
+            vix = float(pget('risk.vix_fallback', 18.0))
             logger.warning(f"  ⚠️ [risk_params] ATR proxy 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})")
         else:
             vix = float(vix)
@@ -122,10 +128,10 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            vol_proxy = 0.01
-        atr_pct = vol_proxy * _cfg_get('exit.atr_vol_proxy_factor', 1.5)
+            vol_proxy = pget('risk_params.vol_proxy_fallback', 0.01)
+        atr_pct = vol_proxy * pget('exit.atr_vol_proxy_factor', 1.5)
         logger.debug(f"  [risk_params] ATR[{ticker}]: {atr_pct * 100:.2f}% (vix_proxy, VIX={vix})")
-    return max(_cfg_get('risk_params.atr_min_pct', 0.005), min(_cfg_get('risk_params.atr_max_pct', 0.15), atr_pct))
+    return max(pget('risk_params.atr_min_pct', 0.005), min(pget('risk_params.atr_max_pct', 0.15), atr_pct))
 
 def _compute_chandelier_mult(regime: str, vix: float=None) -> float:
     """레짐 + VIX 기반 동적 ATR 배수 계산 (DynamicExit와 동일 로직).
@@ -138,12 +144,12 @@ def _compute_chandelier_mult(regime: str, vix: float=None) -> float:
         chandelier multiplier (float)
     """
     if vix is None or vix <= 0:
-        vix = float(_cfg_get('risk.vix_fallback', 18.0))
-    regime_mults = {'bull': _cfg_get('exit.chandelier_mult.bull', 3.0), 'caution': _cfg_get('exit.chandelier_mult.caution', 2.5), 'bear': _cfg_get('exit.chandelier_mult.bear', 2.0), 'crash': _cfg_get('exit.chandelier_mult.crash', 1.5)}
-    mult = regime_mults.get(regime, _cfg_get('exit.chandelier_mult.default', 2.5))
-    vix_threshold = _cfg_get('exit.chandelier_vix_tighten', 25.0)
+        vix = float(pget('risk.vix_fallback', 18.0))
+    regime_mults = {'bull': pget('exit.chandelier_mult.bull', 3.0), 'caution': pget('exit.chandelier_mult.caution', 2.5), 'bear': pget('exit.chandelier_mult.bear', 2.0), 'crash': pget('exit.chandelier_mult.crash', 1.5)}
+    mult = regime_mults.get(regime, pget('exit.chandelier_mult.default', 2.5))
+    vix_threshold = pget('exit.chandelier_vix_tighten', 25.0)
     if vix > vix_threshold:
-        mult *= _cfg_get('exit.chandelier_vix_factor', 0.8)
+        mult *= pget('exit.chandelier_vix_factor', 0.8)
     return round(mult, 3)
 
 def compute_dynamic_sl_tp(ticker: str, regime: str='caution', market_data: Optional[Dict]=None) -> Tuple[float, float]:
@@ -165,22 +171,24 @@ def compute_dynamic_sl_tp(ticker: str, regime: str='caution', market_data: Optio
         (sl_pct, tp_pct) — 절댓값 %, 예: (2.5, 7.0)
         실패 시 config 기본값 반환
     """
-    _DEFAULT_SL = _cfg_get('s2.exit.sl.caution', 5.0)
-    _DEFAULT_TP = _cfg_get('s2.exit.tp.caution', 12.0)
+    # [Wave2 TrackF] 부호 무관 정규화: defaults.json 은 음수 규약(-5, ml_stream), 본 함수는 '절댓값 %' 계약.
+    # 예외 경로에서 -5 가 반환되면 PositionSizer EV = conf·tp + (1-conf)·5 로 부풀려지던 버그 차단.
+    _DEFAULT_SL = abs(float(pget('s2.exit.sl.caution', -5)))
+    _DEFAULT_TP = pget('s2.exit.tp.caution', 12.0)
     try:
         vix = (market_data or {}).get('vix') or (market_data or {}).get('signal_cache', {}).get('vix')
         if vix is None or float(vix) <= 0:
-            vix = float(_cfg_get('risk.vix_fallback', 18.0))
+            vix = float(pget('risk.vix_fallback', 18.0))
             logger.warning(f"  ⚠️ [risk_params] {ticker} SSOT 계산 중 VIX 누락. 중립 방어 모드 돌입(VIX={vix})")
         else:
             vix = float(vix)
         atr_pct = _estimate_atr_pct(ticker, market_data)
         chan_mult = _compute_chandelier_mult(regime, vix)
-        tp_mult = _cfg_get('exit.tp_atr_mult', 5.0)
+        tp_mult = pget('exit.tp_atr_mult', 5.0)
         sl_pct = atr_pct * chan_mult * 100
         tp_pct = atr_pct * tp_mult * 100
-        sl_pct = max(_cfg_get('risk_params.sl_min_pct', 1.5), min(_cfg_get('risk_params.sl_max_pct', 20.0), sl_pct))
-        tp_pct = max(_cfg_get('risk_params.tp_min_pct', 3.0), min(_cfg_get('risk_params.tp_max_pct', 40.0), tp_pct))
+        sl_pct = max(pget('risk_params.sl_min_pct', 1.5), min(pget('risk_params.sl_max_pct', 20.0), sl_pct))
+        tp_pct = max(pget('risk_params.tp_min_pct', 3.0), min(pget('risk_params.tp_max_pct', 40.0), tp_pct))
         logger.debug(f"  [risk_params] {ticker} SSOT: ATR={atr_pct * 100:.2f}%, chandelier×{chan_mult:.2f} → SL={sl_pct:.2f}%, TP={tp_pct:.2f}% (regime={regime}, VIX={vix:.1f})")
         return (round(sl_pct, 3), round(tp_pct, 3))
     except Exception as e:

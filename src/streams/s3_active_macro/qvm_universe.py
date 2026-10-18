@@ -16,6 +16,11 @@ ISA QVAL + BROKERAGE QV Core에서 사용하는 개별주 유니버스 구축.
   - 2년 연속 적자 종목 제외
   - 시총 기준 상위 N 선정
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from pathlib import Path
@@ -51,7 +56,7 @@ class QVMUniverse:
             정렬된 종목 리스트 (시총 내림차순, 섹터 대표주 포함)
         """
         if top_n is None:
-            top_n = cfg.get('s3.universe_size', 50)
+            top_n = pget('s3.universe_size', 50)
         logger.info(f"  S3 QVM 유니버스 구축 시작 (TOP {top_n})")
         market_caps = self._load_market_caps()
         stock_info = self._load_stock_info()
@@ -129,7 +134,7 @@ class QVMUniverse:
         """
         if not candidates:
             return []
-        leader_min_rank = cfg.get('s3.sector_leader_min_mcap_rank', 30)
+        leader_min_rank = pget('s3.sector_leader_min_mcap_rank', 30)
         sector_stocks: Dict[str, List[Dict]] = {}
         for i, stock in enumerate(candidates):
             sector = stock.get('sector', 'unknown')
@@ -152,7 +157,7 @@ class QVMUniverse:
         """섹터별 비중 계산 (25% 상한 적용)."""
         if not universe:
             return {}
-        max_sector = cfg.get('s3.max_sector_weight', 0.25)
+        max_sector = pget('s3.max_sector_weight', 0.25)
         total_mcap = sum((s['market_cap'] for s in universe))
         if total_mcap <= 0:
             return {}

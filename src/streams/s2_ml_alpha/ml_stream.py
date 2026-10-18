@@ -16,6 +16,11 @@ Usage:
     s2 = S2MLAlphaStream()
     signals = s2.generate_signals(regime='bull', market_data={})
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import pandas as pd
 import logging
@@ -74,7 +79,7 @@ class S2MLAlphaStream(BaseStream):
         self._fundamental_filter = MeridianFundamentalFilter()
         self._sector_map = self._load_sector_map()
         self.MAX_PER_SECTOR = cfg.get('s2.max_per_sector', 2)
-        self._drift_detector = ModelDriftDetector(window=cfg.get('s2.drift_window', 20), threshold=cfg.get('s2.drift_threshold', 0.15))
+        self._drift_detector = ModelDriftDetector(window=pget('s2.drift_window', 20), threshold=pget('s2.drift_threshold', 0.15))
         self._load_ensemble()
 
     def _load_ensemble(self):
@@ -264,8 +269,8 @@ class S2MLAlphaStream(BaseStream):
         if current_time is None:
             current_time = now_kst()
         t = current_time.time()
-        pre_market_open = time(cfg.get('s2.pre_market_hour', 8), 0)
-        after_market_close = time(cfg.get('s2.after_market_hour', 20), 0)
+        pre_market_open = time(pget('s2.pre_market_hour', 8), 0)
+        after_market_close = time(pget('s2.after_market_hour', 20), 0)
         return pre_market_open <= t <= after_market_close
 
     def generate_signals(self, regime: str, market_data: Dict) -> List[Dict]:
@@ -312,8 +317,8 @@ class S2MLAlphaStream(BaseStream):
             logger.warning(f"  ⚠️ S2 Drift 감지: conf×{drift_mult:.2f} 적용 (accuracy={drift_result.get('accuracy', 0):.3f})")
             for s in scored:
                 s['up_prob'] = round(s['up_prob'] * drift_mult, 4)
-                expected_win = cfg.get('ml.expected_win_pct', 0.05)
-                expected_loss = cfg.get('ml.expected_loss_pct', 0.03)
+                expected_win = pget('ml.expected_win_pct', 0.05)
+                expected_loss = pget('ml.expected_loss_pct', 0.03)
                 s['expected_value'] = round(s['up_prob'] * expected_win - (1 - s['up_prob']) * expected_loss, 4)
                 s['drift_adjusted'] = True
         ic_decay_applied = False
@@ -328,9 +333,9 @@ class S2MLAlphaStream(BaseStream):
                     ic_value = me_data.get('official', {}).get('ic')
                     if ic_value is None:
                         ic_value = me_data.get('views', {}).get('portfolio', {}).get('ic')
-                ic_neg_threshold = cfg.get('ml.ic_negative_threshold', -0.1)
-                ic_neg_days = cfg.get('ml.ic_negative_days', 3)
-                ic_neg_decay = cfg.get('ml.ic_negative_decay', 0.5)
+                ic_neg_threshold = pget('ml.ic_negative_threshold', -0.1)
+                ic_neg_days = pget('ml.ic_negative_days', 3)
+                ic_neg_decay = pget('ml.ic_negative_decay', 0.5)
                 if ic_value is not None and isinstance(ic_value, (int, float)):
                     sq = me_data.get('views', {}).get('signal_quality', {})
                     ic_rolling = sq.get('ic_rolling_7d', ic_value)
@@ -359,7 +364,7 @@ class S2MLAlphaStream(BaseStream):
             logger.debug(f'  S2: IC 모니터링 실패 (무시): {e}')
         scored = self._filter_ensemble_disagreement(scored)
         signal_cache_ref = market_data.get('signal_cache', {})
-        _p11_vix = signal_cache_ref.get('vix', cfg.get('s2.vix_fallback_default', 18.0))
+        _p11_vix = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
         _p11_vkospi = signal_cache_ref.get('vkospi', _p11_vix)
         _s2_target_date = None
         try:
@@ -380,13 +385,13 @@ class S2MLAlphaStream(BaseStream):
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_pit_e}", exc_info=True)
             logger.debug(f'  [Task 1 PIT] target_date 추출 실패 (live 모드): {_pit_e}')
-        _p11_vix_neutral = cfg.get('s2.vix_neutral_level', 18.0)
-        _p11_vix_scale = cfg.get('s2.vix_prob_scale', 20.0)
-        _p11_prob_floor = cfg.get('s2.prob_floor_abs', 0.51)
-        _p11_prob_ceil = cfg.get('s2.prob_floor_vix_cap', 0.72)
+        _p11_vix_neutral = pget('s2.vix_neutral_level', 18.0)
+        _p11_vix_scale = pget('s2.vix_prob_scale', 20.0)
+        _p11_prob_floor = pget('s2.prob_floor_abs', 0.51)
+        _p11_prob_ceil = pget('s2.prob_floor_vix_cap', 0.72)
         _p11_vix_adj = (_p11_vix - _p11_vix_neutral) / max(_p11_vix_scale, 1.0)
         min_prob = min(_p11_prob_ceil, _p11_prob_floor + max(0.0, _p11_vix_adj))
-        max_positions = cfg.get(f'a3.regime.{regime}.max_positions', cfg.get('a3.max_positions', 12))
+        max_positions = cfg.get(f'a3.regime.{regime}.max_positions', pget('a3.max_positions', 12))
         logger.info(f'  [Phase 11] S2 신뢰도 동적 바닥: min_prob={min_prob:.3f} (VIX={_p11_vix:.1f}, vix_adj={_p11_vix_adj:+.3f})')
         qualified = [s for s in scored if s['up_prob'] >= min_prob]
         qualified.sort(key=lambda x: x['up_prob'], reverse=True)
@@ -397,7 +402,7 @@ class S2MLAlphaStream(BaseStream):
                 _clean_t = str(s.get('ticker', '')).replace('.KS', '').replace('.KQ', '').zfill(6)
                 if self._sector_map and _clean_t in self._sector_map:
                     s['sector'] = self._sector_map[_clean_t]
-        vix_ref = signal_cache_ref.get('vix', cfg.get('s2.vix_fallback_default', 18.0))
+        vix_ref = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
         vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
         use_etf_basket = cfg.get('s2.etf_basket.enabled', True)
         if use_etf_basket and (qualified or scored):
@@ -419,8 +424,8 @@ class S2MLAlphaStream(BaseStream):
                 size = self._kelly_size(stock, regime, tp_pct=tp_pct_val, sl_pct=sl_pct_val)
                 if size <= 0:
                     continue
-                _p11_vix_scale_w = max(cfg.get('s2.vix_weight_scale_floor', 0.4), min(1.2, _p11_vix_neutral / max(_p11_vix, 1.0)))
-                _p11_vkospi_scale = max(cfg.get('s2.vkospi_weight_scale_floor', 0.5), min(1.0, _p11_vix_neutral / max(_p11_vkospi, 1.0)))
+                _p11_vix_scale_w = max(pget('s2.vix_weight_scale_floor', 0.4), min(1.2, _p11_vix_neutral / max(_p11_vix, 1.0)))
+                _p11_vkospi_scale = max(pget('s2.vkospi_weight_scale_floor', 0.5), min(1.0, _p11_vix_neutral / max(_p11_vkospi, 1.0)))
                 import math as _math11
                 _p11_combined_scale = _math11.sqrt(_p11_vix_scale_w * _p11_vkospi_scale)
                 suggested_weight = round(size * _p11_combined_scale, 4)
@@ -718,7 +723,7 @@ class S2MLAlphaStream(BaseStream):
                 else:
                     up_prob = float(np.mean(preds))
                 if _regime_up_prob is not None:
-                    _blend = cfg.get('s2.regime_router_blend', 0.5)
+                    _blend = pget('s2.regime_router_blend', 0.5)
                     _blended = _regime_up_prob * _blend + up_prob * (1 - _blend)
                     logger.debug(f"  [Phase 10] S2 Blended: {stock['ticker']} router={_regime_up_prob:.4f}, ensemble={up_prob:.4f} → {_blended:.4f} (blend={_blend:.0%})")
                     up_prob = _blended
@@ -733,8 +738,8 @@ class S2MLAlphaStream(BaseStream):
                         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                         logger.debug(f'  ⚠️ FastCorrector 추론 에러: {e}')
                 ood_score = self._detect_ood(X)
-                if ood_score > cfg.get('s2.ood_threshold', 0.7):
-                    ood_discount = cfg.get('s2.ood_discount', 0.5)
+                if ood_score > pget('s2.ood_threshold', 0.7):
+                    ood_discount = pget('s2.ood_discount', 0.5)
                     logger.debug(f"  S2: OOD 감지 {stock['ticker']} (score={ood_score:.3f}) → conf×{ood_discount}")
                     up_prob *= ood_discount
                     stock['ood_score'] = round(ood_score, 4)
@@ -787,7 +792,7 @@ class S2MLAlphaStream(BaseStream):
         filtered = []
         for stock in scored:
             ensemble_std = stock.get('ensemble_std', 0)
-            if ensemble_std > cfg.get('s2.ensemble_disagreement_max', 0.15):
+            if ensemble_std > pget('s2.ensemble_disagreement_max', 0.15):
                 logger.debug(f"  S2: 앙상블 불일치 제거 {stock['ticker']} (std={ensemble_std:.3f})")
                 continue
             filtered.append(stock)
@@ -802,10 +807,10 @@ class S2MLAlphaStream(BaseStream):
         개선: feature_store의 avg_win/avg_loss 실제 데이터 사용.
         """
         features = stock.get('features', {})
-        avg_win = features.get('avg_win_5d', cfg.get('s2.default_win_pct', 0.05))
-        avg_loss = features.get('avg_loss_5d', cfg.get('s2.default_loss_pct', 0.03))
-        avg_win = max(cfg.get('s2.ev_clamp_win_min', 0.005), min(cfg.get('s2.ev_clamp_win_max', 0.2), abs(float(avg_win))))
-        avg_loss = max(cfg.get('s2.ev_clamp_loss_min', 0.005), min(cfg.get('s2.ev_clamp_loss_max', 0.15), abs(float(avg_loss))))
+        avg_win = features.get('avg_win_5d', pget('s2.default_win_pct', 0.05))
+        avg_loss = features.get('avg_loss_5d', pget('s2.default_loss_pct', 0.03))
+        avg_win = max(pget('s2.ev_clamp_win_min', 0.005), min(pget('s2.ev_clamp_win_max', 0.2), abs(float(avg_win))))
+        avg_loss = max(pget('s2.ev_clamp_loss_min', 0.005), min(pget('s2.ev_clamp_loss_max', 0.15), abs(float(avg_loss))))
         ev = up_prob * avg_win - (1 - up_prob) * avg_loss
         return round(ev, 6)
 
@@ -836,35 +841,35 @@ class S2MLAlphaStream(BaseStream):
 
     def _fallback_score_single(self, stock: Dict, market_data: Dict) -> Dict:
         """단일 종목 Fallback 스코어링."""
-        score = cfg.get('a3.fb.base_score', 0.5)
+        score = pget('a3.fb.base_score', 0.5)
         rsi = stock.get('rsi', 50)
-        if rsi < cfg.get('a3.fb.rsi_oversold_threshold', 30):
-            score += cfg.get('a3.fb.rsi_oversold_bonus', 0.1)
-        elif rsi > cfg.get('a3.fb.rsi_overbought_threshold', 70):
-            score += cfg.get('a3.fb.rsi_overbought_penalty', -0.05)
+        if rsi < pget('a3.fb.rsi_oversold_threshold', 30):
+            score += pget('a3.fb.rsi_oversold_bonus', 0.1)
+        elif rsi > pget('a3.fb.rsi_overbought_threshold', 70):
+            score += pget('a3.fb.rsi_overbought_penalty', -0.05)
         bb = stock.get('bb_position', 0.5)
-        if bb < cfg.get('a3.fb.bb_low_threshold', 0.2):
-            score += cfg.get('a3.fb.bb_low_bonus', 0.08)
-        elif bb > cfg.get('a3.fb.bb_high_threshold', 0.8):
-            score += cfg.get('a3.fb.bb_high_penalty', -0.03)
+        if bb < pget('a3.fb.bb_low_threshold', 0.2):
+            score += pget('a3.fb.bb_low_bonus', 0.08)
+        elif bb > pget('a3.fb.bb_high_threshold', 0.8):
+            score += pget('a3.fb.bb_high_penalty', -0.03)
         macd = stock.get('macd_signal', 0)
         score += max(-0.1, min(0.1, macd * cfg.get('a3.fb.macd_scale', 2.0)))
         vol_ratio = stock.get('volume_ratio', 1.0)
         if vol_ratio > cfg.get('a3.fb.volume_spike_threshold', 2.0):
-            score += cfg.get('a3.fb.volume_spike_bonus', 0.05)
+            score += pget('a3.fb.volume_spike_bonus', 0.05)
         mom = stock.get('momentum_5d', 0)
-        score += max(-0.1, min(0.1, mom * cfg.get('a3.fb.momentum_scale', 0.005)))
+        score += max(-0.1, min(0.1, mom * pget('a3.fb.momentum_scale', 0.005)))
         foreign_5d = stock.get('foreign_net_5d', 0)
-        _fb_threshold = cfg.get('s2.flow.foreign_boost_threshold', 0.3)
-        _fb_penalty_threshold = cfg.get('s2.flow.foreign_penalty_threshold', -0.3)
+        _fb_threshold = pget('s2.flow.foreign_boost_threshold', 0.3)
+        _fb_penalty_threshold = pget('s2.flow.foreign_penalty_threshold', -0.3)
         if isinstance(foreign_5d, (int, float)):
             if foreign_5d > _fb_threshold:
-                score += cfg.get('s2.flow.foreign_boost', 0.08)
+                score += pget('s2.flow.foreign_boost', 0.08)
             elif foreign_5d < _fb_penalty_threshold:
-                score += cfg.get('s2.flow.foreign_penalty', -0.05)
+                score += pget('s2.flow.foreign_penalty', -0.05)
         inst_5d = stock.get('inst_net_5d', 0)
         if isinstance(inst_5d, (int, float)) and inst_5d > _fb_threshold:
-            score += cfg.get('s2.flow.inst_boost', 0.04)
+            score += pget('s2.flow.inst_boost', 0.04)
         score = max(0.0, min(1.0, score))
         stock['up_prob'] = round(score, 4)
         stock['expected_value'] = round(self._dynamic_ev(stock, score), 4)
@@ -890,17 +895,17 @@ class S2MLAlphaStream(BaseStream):
         Returns:
             {'tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'tp_sl_source'}
         """
-        vol_baseline = cfg.get('s2.exit.vol_baseline', 18.0)
-        vol_scale = max(cfg.get('s2.tp_sl.vol_scale_min', 0.5), min(cfg.get('s2.tp_sl.vol_scale_max', 2.0), (vix + vkospi) / 2 / max(vol_baseline, 1.0)))
-        regime_tp = {'bull': cfg.get('s2.exit.tp.bull', 15), 'caution': cfg.get('s2.exit.tp.caution', 12), 'bear': cfg.get('s2.exit.tp.bear', 8), 'crash': cfg.get('s2.exit.tp.crash', 5)}
-        tp = regime_tp.get(regime, cfg.get('s2.exit.tp.caution', 12)) / vol_scale
-        tp = max(cfg.get('s2.exit.tp_floor', 5), tp)
-        regime_sl = {'bull': cfg.get('s2.exit.sl.bull', -5), 'caution': cfg.get('s2.exit.sl.caution', -5), 'bear': cfg.get('s2.exit.sl.bear', -4), 'crash': cfg.get('s2.exit.sl.crash', -3)}
-        sl = regime_sl.get(regime, cfg.get('s2.exit.sl.caution', -5)) * vol_scale
-        sl = min(cfg.get('s2.exit.sl_ceiling', -2), sl)
-        trailing_trigger = cfg.get('s2.exit.trailing_trigger', 5)
-        trailing_pct_raw = cfg.get('s2.exit.trailing_pct', 3) * vol_scale
-        trail_distance = round(max(cfg.get('s2.trail.min_distance_pct', 1.0), min(cfg.get('s2.trail.max_distance_pct', 8.0), trailing_pct_raw)), 3)
+        vol_baseline = pget('s2.exit.vol_baseline', 18.0)
+        vol_scale = max(pget('s2.tp_sl.vol_scale_min', 0.5), min(cfg.get('s2.tp_sl.vol_scale_max', 2.0), (vix + vkospi) / 2 / max(vol_baseline, 1.0)))
+        regime_tp = {'bull': pget('s2.exit.tp.bull', 15), 'caution': pget('s2.exit.tp.caution', 12), 'bear': pget('s2.exit.tp.bear', 8), 'crash': pget('s2.exit.tp.crash', 5)}
+        tp = regime_tp.get(regime, pget('s2.exit.tp.caution', 12)) / vol_scale
+        tp = max(pget('s2.exit.tp_floor', 5), tp)
+        regime_sl = {'bull': pget('s2.exit.sl.bull', -5), 'caution': pget('s2.exit.sl.caution', -5), 'bear': pget('s2.exit.sl.bear', -4), 'crash': pget('s2.exit.sl.crash', -3)}
+        sl = regime_sl.get(regime, pget('s2.exit.sl.caution', -5)) * vol_scale
+        sl = min(pget('s2.exit.sl_ceiling', -2), sl)
+        trailing_trigger = pget('s2.exit.trailing_trigger', 5)
+        trailing_pct_raw = pget('s2.exit.trailing_pct', 3) * vol_scale
+        trail_distance = round(max(cfg.get('s2.trail.min_distance_pct', 1.0), min(pget('s2.trail.max_distance_pct', 8.0), trailing_pct_raw)), 3)
         return {'tp_pct': round(tp, 2), 'sl_pct': round(abs(sl), 2), 'sl_pct_signed': round(sl, 2), 'trail_activate_pct': round(float(trailing_trigger), 2), 'trail_distance_pct': trail_distance, 'tp_sl_source': 'vix_vkospi_regime'}
 
     def _kelly_size(self, stock: Dict, regime: str, tp_pct: float=None, sl_pct: float=None) -> float:
@@ -923,25 +928,25 @@ class S2MLAlphaStream(BaseStream):
         """
         p = stock['up_prob']
         q = 1 - p
-        cost = cfg.get('a3.roundtrip_cost_pct', 0.36) / 100
-        min_ev = cfg.get('a3.kelly_ev_min_pct', 0.5) / 100
+        cost = pget('a3.roundtrip_cost_pct', 0.36) / 100
+        min_ev = pget('a3.kelly_ev_min_pct', 0.5) / 100
         ev = stock.get('expected_value', 0) - cost
         if ev < min_ev:
             return 0.0
         if tp_pct is None:
-            tp_pct = cfg.get('s2.exit.tp.caution', 12.0)
+            tp_pct = pget('s2.exit.tp.caution', 12.0)
         if sl_pct is None:
-            sl_pct = abs(cfg.get('s2.exit.sl.caution', -5.0))
-        sl_safe = max(sl_pct, cfg.get('s2.kelly.sl_min_pct', 0.1))
+            sl_pct = abs(pget('s2.exit.sl.caution', -5.0))
+        sl_safe = max(sl_pct, pget('s2.kelly.sl_min_pct', 0.1))
         b = tp_pct / sl_safe
         kelly_raw = (p * b - q) / b
         try:
             _adtv = float(stock.get('adtv', stock.get('avg_volume_value', 0.0)))
-            _order = abs(kelly_raw) * float(cfg.get('s2.tca.portfolio_base', cfg.get('portfolio.initial_capital', 20_000_000)))
-            _coeff = float(cfg.get('s2.tca.sqrt_impact_coeff', 0.1))
+            _order = abs(kelly_raw) * float(cfg.get('s2.tca.portfolio_base', pget('portfolio.initial_capital', 19600000.0)))
+            _coeff = float(pget('s2.tca.sqrt_impact_coeff', 0.1))
             if _adtv > 0 and _order > 0:
                 _tca_cost = _coeff * (_order / _adtv) ** 0.5
-                _tca_cost = min(_tca_cost, float(cfg.get('s2.tca.max_cost_pct', 0.05)))
+                _tca_cost = min(_tca_cost, float(pget('s2.tca.max_cost_pct', 0.05)))
                 kelly_raw = kelly_raw * max(0.0, 1.0 - _tca_cost / max(abs(kelly_raw), 1e-06))
                 logger.debug(f"  [Phase80 TCA] {stock.get('ticker', '?')} ADTV={_adtv / 100000000.0:.1f}억 cost={_tca_cost:.4f} kelly->{kelly_raw:.4f}")
         except Exception as _te:
@@ -952,18 +957,18 @@ class S2MLAlphaStream(BaseStream):
             logger.debug(f'  S2 Kelly: p={p:.3f}, b={b:.2f}(TP={tp_pct:.1f}%/SL={sl_safe:.1f}%) → kelly_raw={kelly_raw:.4f} (음수) → size=0')
             return 0.0
         kelly_fraction = self._recalibrate_kelly()
-        max_single = cfg.get('sizer.max_single_position_pct', 0.15)
+        max_single = pget('sizer.max_single_position_pct', 0.15)
         size = kelly_raw * kelly_fraction
         size = max(0, min(max_single, size))
         if stock.get('conformal_lower') is not None:
             width = stock.get('conformal_upper', 1) - stock.get('conformal_lower', 0)
-            conformal_wide_threshold = cfg.get('s2.kelly.conformal_wide_threshold', 0.5)
-            conformal_medium_threshold = cfg.get('s2.kelly.conformal_medium_threshold', 0.3)
+            conformal_wide_threshold = pget('s2.kelly.conformal_wide_threshold', 0.5)
+            conformal_medium_threshold = pget('s2.kelly.conformal_medium_threshold', 0.3)
             if width > conformal_wide_threshold:
-                size *= cfg.get('s2.kelly.conformal_wide_discount', 0.5)
+                size *= pget('s2.kelly.conformal_wide_discount', 0.5)
             elif width > conformal_medium_threshold:
-                size *= cfg.get('s2.kelly.conformal_medium_discount', 0.7)
-        min_amount = cfg.get('a3.min_trade_amount', 200000)
+                size *= pget('s2.kelly.conformal_medium_discount', 0.7)
+        min_amount = pget('a3.min_trade_amount', 10000)
         initial_capital = cfg.get('portfolio.initial_capital')
         if size * initial_capital < min_amount:
             return 0.0
@@ -1022,9 +1027,9 @@ class S2MLAlphaStream(BaseStream):
         """
         exits = []
         signal_cache = market_data.get('signal_cache', {})
-        vix = signal_cache.get('vix', cfg.get('s2.vix_fallback_default', 18.0))
-        vkospi = signal_cache.get('vkospi', cfg.get('s2.vix_fallback_default', 18.0))
-        vol_baseline = cfg.get('s2.exit.vol_baseline', 18.0)
+        vix = signal_cache.get('vix', pget('s2.vix_fallback_default', 18.0))
+        vkospi = signal_cache.get('vkospi', pget('s2.vix_fallback_default', 18.0))
+        vol_baseline = pget('s2.exit.vol_baseline', 18.0)
         vol_scale = max(0.5, min(2.0, (vix + vkospi) / 2 / vol_baseline))
         for key, pos in positions.items():
             if pos.get('stream') != 'S2' and pos.get('strategy') != 'ml_alpha':
@@ -1032,16 +1037,16 @@ class S2MLAlphaStream(BaseStream):
             pnl_pct = pos.get('pnl_pct', 0)
             days_held = pos.get('days_held', 0)
             peak_pnl = pos.get('peak_pnl_pct', pnl_pct)
-            regime_tp = {'bull': cfg.get('s2.exit.tp.bull', 15), 'caution': cfg.get('s2.exit.tp.caution', 12), 'bear': cfg.get('s2.exit.tp.bear', 8), 'crash': cfg.get('s2.exit.tp.crash', 5)}
+            regime_tp = {'bull': pget('s2.exit.tp.bull', 15), 'caution': pget('s2.exit.tp.caution', 12), 'bear': pget('s2.exit.tp.bear', 8), 'crash': pget('s2.exit.tp.crash', 5)}
             tp = regime_tp.get(regime, 12) / vol_scale
-            tp = max(cfg.get('s2.exit.tp_floor', 5), tp)
-            regime_sl = {'bull': cfg.get('s2.exit.sl.bull', -5), 'caution': cfg.get('s2.exit.sl.caution', -5), 'bear': cfg.get('s2.exit.sl.bear', -4), 'crash': cfg.get('s2.exit.sl.crash', -3)}
+            tp = max(pget('s2.exit.tp_floor', 5), tp)
+            regime_sl = {'bull': pget('s2.exit.sl.bull', -5), 'caution': pget('s2.exit.sl.caution', -5), 'bear': pget('s2.exit.sl.bear', -4), 'crash': pget('s2.exit.sl.crash', -3)}
             sl = regime_sl.get(regime, -5) * vol_scale
-            sl = min(cfg.get('s2.exit.sl_ceiling', -2), sl)
-            trailing_trigger = cfg.get('s2.exit.trailing_trigger', 5)
-            trailing_pct = cfg.get('s2.exit.trailing_pct', 3) * vol_scale
-            max_hold = cfg.get(f's2.exit.max_hold.{regime}', cfg.get('s2.exit.max_hold.caution', 15))
-            max_loss = cfg.get('s2.exit.max_loss_pct', -10.0)
+            sl = min(pget('s2.exit.sl_ceiling', -2), sl)
+            trailing_trigger = pget('s2.exit.trailing_trigger', 5)
+            trailing_pct = pget('s2.exit.trailing_pct', 3) * vol_scale
+            max_hold = cfg.get(f's2.exit.max_hold.{regime}', pget('s2.exit.max_hold.caution', 15))
+            max_loss = pget('s2.exit.max_loss_pct', -10.0)
             reason = None
             urgency = 0
             if pnl_pct <= max_loss:
@@ -1059,7 +1064,7 @@ class S2MLAlphaStream(BaseStream):
             _expire_days = cfg.get('s2.exit.signal_expire_days', cfg.get('exit.s2.signal_expire_days', 0))
             _expire_days = int(_expire_days) if _expire_days else 0
             if _expire_days > 0 and days_held >= _expire_days:
-                _expire_profit_keep = float(cfg.get('s2.exit.expire_profit_keep_pct', 3.0))
+                _expire_profit_keep = float(pget('s2.exit.expire_profit_keep_pct', 3.0))
                 if pnl_pct < _expire_profit_keep:
                     reason = f'signal_expire: {days_held}일 >= {_expire_days}일 (수익 {pnl_pct:+.1f}% < 유지기준 +{_expire_profit_keep:.1f}%)'
                     urgency = 1
@@ -1077,9 +1082,9 @@ class S2MLAlphaStream(BaseStream):
         모든 임계값 DynamicConfig 동적 로드.
         """
         add_ons = []
-        add_threshold = cfg.get('s2.pyramid.pnl_threshold', 3)
+        add_threshold = pget('s2.pyramid.pnl_threshold', 3)
         max_adds = cfg.get('s2.pyramid.max_add_ons', 2)
-        add_size_ratio = cfg.get('s2.pyramid.add_size_ratio', 0.5)
+        add_size_ratio = pget('s2.pyramid.add_size_ratio', 0.5)
         for key, pos in positions.items():
             if pos.get('stream') != 'S2' and pos.get('strategy') != 'ml_alpha':
                 continue
@@ -1098,7 +1103,7 @@ class S2MLAlphaStream(BaseStream):
             mean_r = sum(self._daily_returns) / n
             var = sum(((r - mean_r) ** 2 for r in self._daily_returns)) / n
             std = math.sqrt(var) if var > 0 else 0
-            ann = cfg.get('common.annualization_factor', 252)
+            ann = pget('common.annualization_factor', 252)
             sharpe = round(mean_r / std * math.sqrt(ann), 3) if std > 0 else 0
         peak = 0
         max_dd = 0
@@ -1119,7 +1124,7 @@ class S2MLAlphaStream(BaseStream):
 
         IC가 축적되지 않은 초기에는 학습 시 저장된 가중치 사용.
         """
-        ic_window = cfg.get('s2.ic_weight_window', 30)
+        ic_window = pget('s2.ic_weight_window', 30)
         if self._ic_history:
             has_enough = all((len(self._ic_history.get(n, [])) >= ic_window for n in model_names))
             if has_enough:
@@ -1134,8 +1139,8 @@ class S2MLAlphaStream(BaseStream):
         IC = Pearson correlation(predicted, actual) over rolling window.
         Weight = softmax(IC × temperature)
         """
-        temperature = cfg.get('s2.ic_temperature', 5.0)
-        min_ic_weight = cfg.get('s2.ic_min_weight', 0.05)
+        temperature = pget('s2.ic_temperature', 5.0)
+        min_ic_weight = pget('s2.ic_min_weight', 0.05)
         ics = []
         for name in model_names:
             ic_vals = self._ic_history.get(name, [])[-window:]
@@ -1169,7 +1174,7 @@ class S2MLAlphaStream(BaseStream):
             self._ic_history[model_name] = []
         ic_point = 1.0 if (predicted > 0.5) == (actual > 0) else -1.0
         self._ic_history[model_name].append(ic_point)
-        max_history = cfg.get('s2.ic_max_history', 200)
+        max_history = pget('s2.ic_max_history', 200)
         if len(self._ic_history[model_name]) > max_history:
             self._ic_history[model_name] = self._ic_history[model_name][-max_history:]
 
@@ -1182,7 +1187,7 @@ class S2MLAlphaStream(BaseStream):
         import json
         from pathlib import Path
         accuracy = drift_result.get('accuracy', 1.0)
-        retrain_threshold = cfg.get('s2.retrain_accuracy_threshold', 0.45)
+        retrain_threshold = pget('s2.retrain_accuracy_threshold', 0.45)
         if accuracy >= retrain_threshold:
             return
         retrain_file = _PROJECT_ROOT / 'results' / 'retrain_request.json'
@@ -1195,7 +1200,7 @@ class S2MLAlphaStream(BaseStream):
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 pass
-        request = {'date': now_kst().strftime('%Y-%m-%d'), 'timestamp': now_kst().isoformat(), 'reason': 'drift_detected', 'accuracy': accuracy, 'calibration_error': drift_result.get('calibration_error', 0), 'confidence_multiplier': drift_result.get('confidence_multiplier', 1.0), 'priority': 'high' if accuracy < cfg.get('s2.retrain_critical_threshold', 0.4) else 'normal', 'requested_by': 'S2MLAlphaStream.drift_detector'}
+        request = {'date': now_kst().strftime('%Y-%m-%d'), 'timestamp': now_kst().isoformat(), 'reason': 'drift_detected', 'accuracy': accuracy, 'calibration_error': drift_result.get('calibration_error', 0), 'confidence_multiplier': drift_result.get('confidence_multiplier', 1.0), 'priority': 'high' if accuracy < pget('s2.retrain_critical_threshold', 0.4) else 'normal', 'requested_by': 'S2MLAlphaStream.drift_detector'}
         try:
             atomic_write_json(retrain_file, request, indent=2, ensure_ascii=False)
             logger.warning(f"  🔄 S2: 자동 재학습 요청 생성 (accuracy={accuracy:.3f}, priority={request['priority']})")
@@ -1210,35 +1215,35 @@ class S2MLAlphaStream(BaseStream):
         안전 범위: 10~50% Kelly.
         """
         if not cfg.get('a3.kelly_recal_enabled', True):
-            return cfg.get('sizer.kelly_fraction', 0.25)
+            return pget('sizer.kelly_fraction', 0.65)
         try:
             import json
             pf_path = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
             if not pf_path.exists():
-                return cfg.get('sizer.kelly_fraction', 0.25)
+                return pget('sizer.kelly_fraction', 0.65)
             pf = json.loads(pf_path.read_text())
             trades = pf.get('trade_history', [])
             s2_sells = [t for t in trades if t.get('action') == 'SELL' and t.get('stream_id', t.get('stream', '')) == 'S2']
-            min_trades = cfg.get('a3.kelly_recal_min_trades', 50)
+            min_trades = pget('a3.kelly_recal_min_trades', 50)
             if len(s2_sells) < min_trades:
-                return cfg.get('sizer.kelly_fraction', 0.25)
+                return pget('sizer.kelly_fraction', 0.65)
             recent = s2_sells[-min_trades:]
             wins = [t for t in recent if t.get('realized_pnl', 0) > 0]
             losses = [t for t in recent if t.get('realized_pnl', 0) <= 0]
             if not wins or not losses:
-                return cfg.get('sizer.kelly_fraction', 0.25)
+                return pget('sizer.kelly_fraction', 0.65)
             win_rate = len(wins) / len(recent)
             avg_win = sum((abs(t.get('pnl_pct', 0)) for t in wins)) / len(wins)
             avg_loss = sum((abs(t.get('pnl_pct', 0)) for t in losses)) / len(losses)
             if avg_loss <= 0:
-                return cfg.get('sizer.kelly_fraction', 0.25)
+                return pget('sizer.kelly_fraction', 0.65)
             R = avg_win / avg_loss
             kelly_full = win_rate - (1 - win_rate) / R
-            kelly_min = cfg.get('a3.kelly_min_fraction', 0.1)
-            kelly_max = cfg.get('a3.kelly_max_fraction', 0.5)
+            kelly_min = pget('a3.kelly_min_fraction', 0.1)
+            kelly_max = pget('a3.kelly_max_fraction', 0.5)
             kelly_frac = max(kelly_min, min(kelly_max, kelly_full))
             logger.info(f'  ★ Kelly 재보정: W={win_rate:.1%}, R={R:.2f}, f*={kelly_full:.3f} → {kelly_frac:.0%} Kelly ({len(recent)} trades)')
             return round(kelly_frac, 3)
         except Exception as e:
             logger.debug(f'  Kelly 재보정 실패: {e}')
-            return cfg.get('sizer.kelly_fraction', 0.25)
+            return pget('sizer.kelly_fraction', 0.65)

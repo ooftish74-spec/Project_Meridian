@@ -7,25 +7,22 @@ from mega-cap sector leaders (SK Hynix 000660, Samsung Electronics 005930) to pr
 Prevents idle KOFR cash parking when high-impact corporate actions create sector-wide tailwinds.
 """
 
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import logging
 from typing import Dict, Any, List
 
 logger = logging.getLogger("corporate_action_proxy")
 
-SECTOR_LEADER_PROXY_MAP = {
-    "000660": {  # SK Hynix
-        "name": "SK하이닉스",
-        "proxy_etfs": ["091160", "069500"],  # KODEX 반도체, KODEX 200
-        "sector": "semiconductor",
-        "weight_in_sector": 0.35,
-    },
-    "005930": {  # Samsung Electronics
-        "name": "삼성전자",
-        "proxy_etfs": ["091160", "069500"],
-        "sector": "semiconductor",
-        "weight_in_sector": 0.45,
-    },
-}
+SECTOR_LEADER_PROXY_MAP = load_table('src.intelligence.corporate_action_proxy_engine.SECTOR_LEADER_PROXY_MAP', {})
 
 class CorporateActionProxyEngine:
     """공시 알파 교차 전파 엔진 (Corporate Action Proxy Engine)."""

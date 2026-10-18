@@ -9,6 +9,11 @@ Tax-Loss Harvester — 분기별 자동화 이월결손금 & 손실실현 과세
   3. 실질 법인세율 절감분을 복리 재투자로 전환 (+1.8% ~ +2.5%p 세후 알파 증폭)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -22,8 +27,8 @@ class TaxLossHarvester:
 
     def __init__(self):
         self.enabled = bool(cfg.get('tax.tlh_enabled', True))
-        self.loss_threshold_pct = float(cfg.get('tax.tlh_loss_threshold_pct', -1.5))
-        self.min_harvest_amount = float(cfg.get('tax.tlh_min_harvest_amount', 100000.0))
+        self.loss_threshold_pct = float(pget('tax.tlh_loss_threshold_pct', -1.5))
+        self.min_harvest_amount = float(pget('tax.tlh_min_harvest_amount', 100000.0))
 
     def evaluate_tax_loss_harvesting(
         self,

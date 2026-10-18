@@ -16,6 +16,11 @@ Usage:
     engine = RebalanceEngine()
     trades = engine.rebalance('S3', positions, signals, market_data)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -234,7 +239,7 @@ class RebalanceEngine:
             for candidate in remaining_entry:
                 if current_count >= max_positions:
                     break
-                if slot_budget <= _cfg_get('execution.min_order_value', 100000):
+                if slot_budget <= pget('execution.min_order_value', 100000):
                     break
                 _c_score = candidate.get('alpha_score', 0)
                 _c_name = candidate.get('name', '')
@@ -260,10 +265,10 @@ class RebalanceEngine:
 
         모든 가중치와 lookback은 DynamicConfig에서 로드.
         """
-        w_mom = _cfg_get('rebalance.score.momentum_weight', 0.4)
-        w_qual = _cfg_get('rebalance.score.quality_weight', 0.25)
-        w_conf = _cfg_get('rebalance.score.confidence_weight', 0.25)
-        w_vol = _cfg_get('rebalance.score.volatility_weight', 0.1)
+        w_mom = pget('rebalance.score.momentum_weight', 0.4)
+        w_qual = pget('rebalance.score.quality_weight', 0.25)
+        w_conf = pget('rebalance.score.confidence_weight', 0.25)
+        w_vol = pget('rebalance.score.volatility_weight', 0.1)
         mom_score = self._compute_momentum_score(ticker)
         qual_score = self._compute_quality_score(ticker)
         conf_score = (confidence - 0.5) * 2
@@ -273,11 +278,11 @@ class RebalanceEngine:
             total_weight = 1.0
         raw_score = (w_mom * mom_score + w_qual * qual_score + w_conf * conf_score + w_vol * vol_score) / total_weight
         if is_large_cap and tgat_score != 0:
-            tgat_weight = _cfg_get('rebalance.score.tgat_weight', 0.15)
+            tgat_weight = pget('rebalance.score.tgat_weight', 0.15)
             macro_boost = max(-1.0, min(1.0, tgat_score)) * tgat_weight
             raw_score += macro_boost
         if is_held:
-            bonus_ratio = _cfg_get('rebalance.score.held_bonus_ratio', 0.5)
+            bonus_ratio = pget('rebalance.score.held_bonus_ratio', 0.5)
             raw_score += cost_hurdle * bonus_ratio
         return raw_score
 
@@ -289,9 +294,9 @@ class RebalanceEngine:
         returns = self._get_returns(ticker)
         if not returns or len(returns) < 5:
             return 0.0
-        long_lookback = _cfg_get('rebalance.score.momentum_lookback_days', 60)
-        short_lookback = _cfg_get('rebalance.score.momentum_short_lookback', 20)
-        long_ratio = _cfg_get('rebalance.score.momentum_long_ratio', 0.6)
+        long_lookback = pget('rebalance.score.momentum_lookback_days', 60)
+        short_lookback = pget('rebalance.score.momentum_short_lookback', 20)
+        long_ratio = pget('rebalance.score.momentum_long_ratio', 0.6)
         long_returns = returns[-long_lookback:]
         if long_returns:
             cum_long = 1.0
@@ -325,7 +330,7 @@ class RebalanceEngine:
         returns = self._get_returns(ticker)
         if not returns or len(returns) < 10:
             return 0.0
-        lookback = _cfg_get('rebalance.score.momentum_lookback_days', 60)
+        lookback = pget('rebalance.score.momentum_lookback_days', 60)
         recent = returns[-lookback:]
         mean_r = np.mean(recent)
         std_r = np.std(recent)
@@ -343,10 +348,10 @@ class RebalanceEngine:
         returns = self._get_returns(ticker)
         if not returns or len(returns) < 5:
             return 0.0
-        lookback = _cfg_get('rebalance.score.volatility_lookback_days', 20)
+        lookback = pget('rebalance.score.volatility_lookback_days', 20)
         recent = returns[-lookback:]
         vol = np.std(recent) * math.sqrt(252)
-        avg_vol = _cfg_get('rebalance.score.avg_vol_baseline', 0.25)
+        avg_vol = pget('rebalance.score.avg_vol_baseline', 0.25)
         if len(self._returns_cache) > 3:
             all_vols = []
             for _, rets in self._returns_cache.items():
@@ -375,7 +380,7 @@ class RebalanceEngine:
         """pykrx 또는 parquet에서 수익률 로드."""
         try:
             from pykrx import stock as pykrx
-            lookback = _cfg_get('rebalance.score.momentum_lookback_days', 60)
+            lookback = pget('rebalance.score.momentum_lookback_days', 60)
             end = date.today().strftime('%Y%m%d')
             start = (date.today() - timedelta(days=lookback * 2)).strftime('%Y%m%d')
             df = pykrx.get_market_ohlcv_by_date(start, end, ticker)

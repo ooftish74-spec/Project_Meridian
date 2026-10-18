@@ -13,6 +13,21 @@ Usage:
     s3 = S3FactorStream()
     signals = s3.generate_signals(regime='bull', market_data={})
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import pandas as pd
 import json as _json
@@ -53,30 +68,9 @@ class S3FactorStream(BaseStream):
       - QVM: Quality + Value + Moat (강방천 K-PER)
     """
     # 🎯 [S3 Stream Boundary Isolation] 100% 미국 직투 (USD) 자산 전담으로 재정립
-    SECTOR_ETFS = {
-        'SOXX': {'name': 'iShares Semiconductor ETF', 'sector': 'semiconductor', 'market': 'US'},
-        'XLK': {'name': 'Technology Select Sector SPDR', 'sector': 'us_tech', 'market': 'US'},
-        'XLE': {'name': 'Energy Select Sector SPDR', 'sector': 'energy', 'market': 'US'},
-        'XLF': {'name': 'Financial Select Sector SPDR', 'sector': 'finance', 'market': 'US'},
-        'XLI': {'name': 'Industrial Select Sector SPDR', 'sector': 'industrial', 'market': 'US'},
-        'XBI': {'name': 'SPDR S&P Biotech ETF', 'sector': 'bio', 'market': 'US'},
-        'ITA': {'name': 'iShares U.S. Aerospace & Defense', 'sector': 'defense', 'market': 'US'}
-    }
-    GLOBAL_ETFS = {
-        'QQQ': {'name': 'Invesco QQQ Trust', 'sector': 'us_tech', 'market': 'US'},
-        'SPY': {'name': 'SPDR S&P 500 ETF Trust', 'sector': 'us_broad', 'market': 'US'},
-        'NVDA': {'name': 'NVIDIA Corporation', 'sector': 'us_semiconductor', 'market': 'US'},
-        'TSLA': {'name': 'Tesla Inc', 'sector': 'us_auto', 'market': 'US'},
-        'TMUS': {'name': 'T-Mobile US Inc', 'sector': 'us_telecom', 'market': 'US'}
-    }
-    DEFENSIVE_ETFS = {
-        'TLT': {'name': 'iShares 20+ Year Treasury Bond ETF', 'sector': 'bond', 'market': 'US'},
-        'GLD': {'name': 'SPDR Gold Shares', 'sector': 'commodity', 'market': 'US'},
-        'UUP': {'name': 'Invesco DB US Dollar Index Bullish', 'sector': 'currency', 'market': 'US'},
-        'SQQQ': {'name': 'ProShares UltraPro Short QQQ', 'sector': 'us_inverse_tech', 'market': 'US'},
-        'SOXS': {'name': 'Direxion Daily Semiconductor Bear 3X Shares', 'sector': 'us_inverse_semi', 'market': 'US'},
-        'SH': {'name': 'ProShares Short S&P500', 'sector': 'us_inverse_broad', 'market': 'US'},
-    }
+    SECTOR_ETFS = load_table('src.streams.s3_active_macro.active_macro_stream.S3FactorStream.SECTOR_ETFS', {})
+    GLOBAL_ETFS = load_table('src.streams.s3_active_macro.active_macro_stream.S3FactorStream.GLOBAL_ETFS', {})
+    DEFENSIVE_ETFS = load_table('src.streams.s3_active_macro.active_macro_stream.S3FactorStream.DEFENSIVE_ETFS', {})
     DIVIDEND_BLACKLIST = {'279530', '211560', '289480', '458730', '441640', '458760', '211900', '494330'}
 
     def __init__(self):
@@ -150,15 +144,15 @@ class S3FactorStream(BaseStream):
         _dqe_vix_base = get_quant_engine().get_vix_regime_quantiles().get('baseline', 18.0)
         vix_base = float(_g('s3.dynamic_sl.vix_baseline', _dqe_vix_base))
         vix_scale = max(0.5, min(3.0, vix / max(vix_base, 1e-06)))
-        regime_atr_mult = {'bull': float(_g('s3.dynamic_sl.atr_mult.bull', 2.0)), 'caution': float(_g('s3.dynamic_sl.atr_mult.caution', 2.5)), 'bear': float(_g('s3.dynamic_sl.atr_mult.bear', 3.0)), 'crash': float(_g('s3.dynamic_sl.atr_mult.crash', 4.0))}.get(regime, 2.5)
-        tp_atr_mult = float(_g('s3.dynamic_sl.tp_atr_mult', 4.0))
+        regime_atr_mult = {'bull': float(_g('s3.dynamic_sl.atr_mult.bull', 2.0)), 'caution': float(pget('s3.dynamic_sl.atr_mult.caution', 2.5)), 'bear': float(pget('s3.dynamic_sl.atr_mult.bear', 3.0)), 'crash': float(pget('s3.dynamic_sl.atr_mult.crash', 4.0))}.get(regime, 2.5)
+        tp_atr_mult = float(pget('s3.dynamic_sl.tp_atr_mult', 4.0))
         _atr = atr_pct if atr_pct > 0 else float(_g('s3.dynamic_sl.atr_fallback_pct', 2.0))
         sl_raw = -abs(_atr * regime_atr_mult * vix_scale)
         tp_raw = abs(_atr * tp_atr_mult)
-        sl_floor = float(_g('s3.dynamic_sl.sl_floor', -20.0))
+        sl_floor = float(pget('s3.dynamic_sl.sl_floor', -20.0))
         sl_ceiling = float(_g('s3.dynamic_sl.sl_ceiling', -1.0))
         tp_floor = float(_g('s3.dynamic_sl.tp_floor', 2.0))
-        tp_ceiling = float(_g('s3.dynamic_sl.tp_ceiling', 50.0))
+        tp_ceiling = float(pget('s3.dynamic_sl.tp_ceiling', 50.0))
         sl_pct = max(sl_floor, min(sl_ceiling, sl_raw))
         tp_pct = max(tp_floor, min(tp_ceiling, tp_raw))
         return (sl_pct, tp_pct)
@@ -198,8 +192,8 @@ class S3FactorStream(BaseStream):
             _af_s3 = market_data.get('alpha_signals', {}).get('S3_signal', {})
             _sector_forecast = _af_s3.get('sector_forecast', {})
             if _sector_forecast and isinstance(_sector_forecast, dict):
-                _boost_scale = cfg.get('s3.alpha_factory_boost_scale', 0.15)
-                _boost_cap = cfg.get('s3.alpha_factory_boost_cap', 0.3)
+                _boost_scale = pget('s3.alpha_factory_boost_scale', 0.15)
+                _boost_cap = pget('s3.alpha_factory_boost_cap', 0.3)
                 _boosted = []
                 for _score_item in sector_scores + global_scores:
                     _ticker = _score_item.get('ticker', '')
@@ -222,7 +216,7 @@ class S3FactorStream(BaseStream):
             logger.debug(f'  [Alpha Factory] S3 sector_forecast 가점 실패 (무시): {_s3_af_e}')
         sector_scores.sort(key=lambda x: x['score'], reverse=True)
         global_scores.sort(key=lambda x: x['score'], reverse=True)
-        top_n_etf = cfg.get('s3.max_positions', 5)
+        top_n_etf = pget('s3.max_positions', 5)
         min_global = cfg.get('s3.min_global_slots', 1)
         guaranteed_global = global_scores[:min_global]
         remaining_pool = sector_scores + global_scores[min_global:]
@@ -241,7 +235,7 @@ class S3FactorStream(BaseStream):
         for pick in etf_selected:
             pick['_type'] = 'ETF'
         qvm_safe = []
-        top_n_qvm = cfg.get('s3.qvm_max_positions', 5)
+        top_n_qvm = pget('s3.qvm_max_positions', 5)
         allow_kr_qvm = bool(cfg.get('s3.qvm.allow_kr_stocks', False))
         if not allow_kr_qvm:
             qvm_selected = []
@@ -293,12 +287,12 @@ class S3FactorStream(BaseStream):
         if not qvm_selected:
             target_qvm_weight = 0.0
         else:
-            target_qvm_weight = cfg.get('s3.allocation.qvm_base_weight', 0.5)
+            target_qvm_weight = pget('s3.allocation.qvm_base_weight', 0.5)
             if len(new_qvm_picks) >= top_n_qvm and all((s.get('margin_of_safety_pct', 0) > 50 for s in new_qvm_picks)):
-                target_qvm_weight = cfg.get('s3.allocation.qvm_max_weight', 0.7)
+                target_qvm_weight = pget('s3.allocation.qvm_max_weight', 0.7)
                 logger.info('  [하이브리드] 딥 밸류장 감지: QVM 비중 70%로 확대')
             elif regime in ['bear', 'crash']:
-                target_qvm_weight = cfg.get('s3.allocation.qvm_min_weight', 0.3)
+                target_qvm_weight = pget('s3.allocation.qvm_min_weight', 0.3)
                 logger.info(f'  [하이브리드] {regime} 레짐 감지: QVM 방어적 축소 (30%)')
         target_etf_weight = 1.0 - target_qvm_weight
         etf_sum = sum((max(0.01, p['score']) for p in etf_selected))
@@ -308,21 +302,21 @@ class S3FactorStream(BaseStream):
         for pick in qvm_selected:
             pick['_weight'] = target_qvm_weight / max(1, qvm_count)
         combined_selected = etf_selected + qvm_selected
-        invest_ratio = cfg.get(f's3.regime_invest_ratio.{regime}', cfg.get('s3.regime_invest_ratio.caution', 0.8))
+        invest_ratio = cfg.get(f's3.regime_invest_ratio.{regime}', pget('s3.regime_invest_ratio.caution', 0.8))
         signal_cache_ref = market_data.get('signal_cache', {})
-        vix_ref = signal_cache_ref.get('vix', cfg.get('s3.vix_fallback_default', 18.0))
-        vol_baseline_ref = cfg.get('s3.exit.vol_baseline', 18.0)
-        vol_scale_ref = max(cfg.get('s3.tp_sl.vol_scale_min', 0.5), min(cfg.get('s3.tp_sl.vol_scale_max', 2.0), vix_ref / max(vol_baseline_ref, 1.0)))
+        vix_ref = signal_cache_ref.get('vix', pget('s3.vix_fallback_default', 18.0))
+        vol_baseline_ref = pget('s3.exit.vol_baseline', 18.0)
+        vol_scale_ref = max(pget('s3.tp_sl.vol_scale_min', 0.5), min(cfg.get('s3.tp_sl.vol_scale_max', 2.0), vix_ref / max(vol_baseline_ref, 1.0)))
         for pick in combined_selected:
             adj_weight = pick['_weight'] * invest_ratio
             strategy = 'qvm_value' if pick['_type'] == 'QVM' else pick.get('strategy', 'multifactor_rotation')
             if pick['_type'] == 'ETF':
-                regime_tp_ref = {'bull': cfg.get('s3.exit.tp.bull', 18), 'caution': cfg.get('s3.exit.tp.caution', 15), 'bear': cfg.get('s3.exit.tp.bear', 10), 'crash': cfg.get('s3.exit.tp.crash', 7)}
-                tp_val = regime_tp_ref.get(regime, cfg.get('s3.exit.tp.caution', 15)) / vol_scale_ref
-                tp_val = max(cfg.get('s3.exit.tp_floor', 5), tp_val)
-                regime_sl_ref = {'bull': cfg.get('s3.exit.sl.bull', -7), 'caution': cfg.get('s3.exit.sl.caution', -7), 'bear': cfg.get('s3.exit.sl.bear', -5), 'crash': cfg.get('s3.exit.sl.crash', -4)}
-                sl_signed = regime_sl_ref.get(regime, cfg.get('s3.exit.sl.caution', -7)) * vol_scale_ref
-                sl_signed = min(cfg.get('s3.exit.sl_ceiling', -3), sl_signed)
+                regime_tp_ref = {'bull': pget('s3.exit.tp.bull', 18), 'caution': pget('s3.exit.tp.caution', 15), 'bear': pget('s3.exit.tp.bear', 10), 'crash': pget('s3.exit.tp.crash', 7)}
+                tp_val = regime_tp_ref.get(regime, pget('s3.exit.tp.caution', 15)) / vol_scale_ref
+                tp_val = max(pget('s3.exit.tp_floor', 5), tp_val)
+                regime_sl_ref = {'bull': pget('s3.exit.sl.bull', -7), 'caution': pget('s3.exit.sl.caution', -7), 'bear': pget('s3.exit.sl.bear', -5), 'crash': pget('s3.exit.sl.crash', -4)}
+                sl_signed = regime_sl_ref.get(regime, pget('s3.exit.sl.caution', -7)) * vol_scale_ref
+                sl_signed = min(pget('s3.exit.sl_ceiling', -3), sl_signed)
                 sl_val = abs(sl_signed)
                 _atr_pct = float(pick.get('atr_pct', pick.get('atr', 0.0)))
                 if _atr_pct > 0:
@@ -335,7 +329,7 @@ class S3FactorStream(BaseStream):
                         sl_val = abs(sl_signed)
             else:
                 tp_val = cfg.get('s3.exit.qvm_tp_placeholder', 100.0)
-                sl_val = abs(cfg.get('s3.exit.qvm_disaster_sl', -30.0))
+                sl_val = abs(pget('s3.exit.qvm_disaster_sl', -30.0))
             _type_str = pick['_type']
             _score_val = pick['score']
             _reason_str = pick.get('reason', f"{_type_str} Score={_score_val:.3f}")
@@ -351,8 +345,8 @@ class S3FactorStream(BaseStream):
             track_c_signals = track_c_engine.generate_track_c_signals(regime, market_data)
             for c_sig in track_c_signals:
                 c_sig['_type'] = 'TRACK_C'
-                c_sig['tp_pct'] = float(cfg.get('s3.track_c.tp_pct', 5.0))
-                c_sig['sl_pct'] = float(cfg.get('s3.track_c.sl_pct', 2.5))
+                c_sig['tp_pct'] = float(pget('s3.track_c.tp_pct', 5.0))
+                c_sig['sl_pct'] = float(pget('s3.track_c.sl_pct', 2.5))
                 signals.append(c_sig)
         except Exception as _tc_e:
             logger.warning(f"  ⚠️ [Alpha 4 Track C] 대체자산 슬리 발화 예외 (무시): {_tc_e}")
@@ -381,10 +375,10 @@ class S3FactorStream(BaseStream):
         sector_data = market_data.get('sector_momentum', {})
         global_data = market_data.get('global_momentum', {})
         overnight = market_data.get('overnight_intel', {})
-        w_mom = cfg.get('s3.factor_weight_momentum', 0.4)
-        w_val = cfg.get('s3.factor_weight_value', 0.25)
-        w_carry = cfg.get('s3.factor_weight_carry', 0.15)
-        w_vol = cfg.get('s3.factor_weight_volatility', 0.2)
+        w_mom = pget('s3.factor_weight_momentum', 0.4)
+        w_val = pget('s3.factor_weight_value', 0.25)
+        w_carry = pget('s3.factor_weight_carry', 0.15)
+        w_vol = pget('s3.factor_weight_volatility', 0.2)
         _regime_weights_enabled = cfg.get('s3.regime_factor_weights_enabled', True)
         if _regime_weights_enabled:
             _current_regime = self._detect_current_regime(market_data)
@@ -414,7 +408,7 @@ class S3FactorStream(BaseStream):
                     if timing_multipliers:
                         base_weights = {'momentum': w_mom, 'value': w_val, 'carry': w_carry, 'volatility': w_vol}
                         logger.info(f'  ★ 매크로 타이밍 전: mom={w_mom:.3f}/val={w_val:.3f}/carry={w_carry:.3f}/vol={w_vol:.3f}')
-                        strength = cfg.get('s3.macro_timing_strength', 0.3)
+                        strength = pget('s3.macro_timing_strength', 0.3)
                         adjusted = {}
                         for k, base_w in base_weights.items():
                             mult = timing_multipliers.get(k, 1.0)
@@ -497,7 +491,7 @@ class S3FactorStream(BaseStream):
         norm_value = self._cross_sectional_zscore(raw_value)
         norm_carry = self._cross_sectional_zscore(raw_carry)
         norm_volatility = self._cross_sectional_zscore(raw_volatility)
-        w_macro = cfg.get('s3.factor_weight_macro', 0.1)
+        w_macro = pget('s3.factor_weight_macro', 0.1)
         macro_adj = self._load_sector_macro_adjustments()
         if macro_adj and w_macro > 0:
             scale = 1.0 - w_macro
@@ -542,9 +536,9 @@ class S3FactorStream(BaseStream):
         if not self._current_holdings:
             self._last_turnover_pct = 1.0
             return new_picks
-        max_turnover = cfg.get('s3.max_turnover_pct', 0.5)
-        inertia_bonus = cfg.get('s3.inertia_bonus', 0.03)
-        cost_threshold = cfg.get('s3.transaction_cost_threshold', 0.005)
+        max_turnover = pget('s3.max_turnover_pct', 0.5)
+        inertia_bonus = pget('s3.inertia_bonus', 0.03)
+        cost_threshold = pget('s3.transaction_cost_threshold', 0.005)
         held_tickers = {h['ticker']: h.get('score', 0.5) for h in self._current_holdings}
         new_ticker_map = {p['ticker']: p for p in new_picks}
         for ticker, old_score in held_tickers.items():
@@ -555,7 +549,7 @@ class S3FactorStream(BaseStream):
             else:
                 new_ticker_map[ticker]['score'] = round(new_ticker_map[ticker]['score'] + inertia_bonus, 4)
         new_picks.sort(key=lambda x: x['score'], reverse=True)
-        top_n = cfg.get('a2.top_n_sectors', 6)
+        top_n = pget('a2.top_n_sectors', 3)
         final_picks = new_picks[:top_n]
         final_tickers = set((p['ticker'] for p in final_picks))
         new_entries = final_tickers - set(held_tickers.keys())
@@ -661,7 +655,7 @@ class S3FactorStream(BaseStream):
             if not forecasts:
                 return None
             adjustments = {}
-            k = cfg.get('s3.alpha_forecast_sigmoid_k', 0.5)
+            k = pget('s3.alpha_forecast_sigmoid_k', 0.5)
             for sector, raw_score in forecasts.items():
                 if isinstance(raw_score, (int, float)):
                     prob = 1.0 / (1.0 + _math.exp(-k * float(raw_score)))
@@ -679,7 +673,7 @@ class S3FactorStream(BaseStream):
                 from scripts.macro_proxy_collector import get_macro_sector_scores
                 _macro_sector_scores = get_macro_sector_scores()
                 if _macro_sector_scores:
-                    _macro_weight = cfg.get('s3.macro_proxy_blend_weight', 0.3)
+                    _macro_weight = pget('s3.macro_proxy_blend_weight', 0.3)
                     for _sec, _ms in _macro_sector_scores.items():
                         if _sec in adjustments:
                             adjustments[_sec] = (1 - _macro_weight) * adjustments[_sec] + _macro_weight * _ms
@@ -717,8 +711,8 @@ class S3FactorStream(BaseStream):
         """
         exits = []
         signal_cache = market_data.get('signal_cache', {})
-        vix = signal_cache.get('vix', cfg.get('s3.vix_fallback_default', 18.0))
-        vol_baseline = cfg.get('s3.exit.vol_baseline', 18.0)
+        vix = signal_cache.get('vix', pget('s3.vix_fallback_default', 18.0))
+        vol_baseline = pget('s3.exit.vol_baseline', 18.0)
         vol_scale = max(0.5, min(2.0, vix / vol_baseline))
         for key, pos in positions.items():
             if pos.get('stream') not in ('S3', 'S3_A', 'S3_B'):
@@ -729,18 +723,18 @@ class S3FactorStream(BaseStream):
             reason = None
             urgency = 0
             if strategy == 'qvm_value':
-                qvm_disaster_sl = cfg.get('s3.exit.qvm_disaster_sl', -30.0)
+                qvm_disaster_sl = pget('s3.exit.qvm_disaster_sl', -30.0)
                 if pnl_pct <= qvm_disaster_sl:
                     reason = f'QVM 재난 SL: {pnl_pct:+.1f}% <= {qvm_disaster_sl}%'
                     urgency = 3
             else:
-                regime_tp = {'bull': cfg.get('s3.exit.tp.bull', 18), 'caution': cfg.get('s3.exit.tp.caution', 15), 'bear': cfg.get('s3.exit.tp.bear', 10), 'crash': cfg.get('s3.exit.tp.crash', 7)}
+                regime_tp = {'bull': pget('s3.exit.tp.bull', 18), 'caution': pget('s3.exit.tp.caution', 15), 'bear': pget('s3.exit.tp.bear', 10), 'crash': pget('s3.exit.tp.crash', 7)}
                 tp = regime_tp.get(regime, 15) / vol_scale
-                tp = max(cfg.get('s3.exit.tp_floor', 5), tp)
-                regime_sl = {'bull': cfg.get('s3.exit.sl.bull', -7), 'caution': cfg.get('s3.exit.sl.caution', -7), 'bear': cfg.get('s3.exit.sl.bear', -5), 'crash': cfg.get('s3.exit.sl.crash', -4)}
+                tp = max(pget('s3.exit.tp_floor', 5), tp)
+                regime_sl = {'bull': pget('s3.exit.sl.bull', -7), 'caution': pget('s3.exit.sl.caution', -7), 'bear': pget('s3.exit.sl.bear', -5), 'crash': pget('s3.exit.sl.crash', -4)}
                 sl = regime_sl.get(regime, -7) * vol_scale
-                sl = min(cfg.get('s3.exit.sl_ceiling', -3), sl)
-                early_trigger = cfg.get('s3.exit.early_rebalance_pct', -5)
+                sl = min(pget('s3.exit.sl_ceiling', -3), sl)
+                early_trigger = pget('s3.exit.early_rebalance_pct', -5)
                 if pnl_pct >= tp:
                     reason = f'TP: {pnl_pct:+.1f}% >= {tp:.1f}%'
                     urgency = 2
@@ -763,7 +757,7 @@ class S3FactorStream(BaseStream):
             mean_r = sum(self._daily_returns) / n
             var = sum(((r - mean_r) ** 2 for r in self._daily_returns)) / n
             std = math.sqrt(var) if var > 0 else 0
-            ann = cfg.get('common.annualization_factor', 252)
+            ann = pget('common.annualization_factor', 252)
             sharpe = round(mean_r / std * math.sqrt(ann), 3) if std > 0 else 0
         peak = 0
         max_dd = 0
@@ -793,9 +787,9 @@ class S3FactorStream(BaseStream):
              'volatility': 1.3, ...} — 각 팩터별 배수
         """
         try:
-            vix_high = cfg.get('s3.vix_threshold_high', 25.0)
-            vix_low = cfg.get('s3.vix_threshold_low', 15.0)
-            rate_threshold = cfg.get('s3.rate_change_threshold', 0.5)
+            vix_high = pget('s3.vix_threshold_high', 25.0)
+            vix_low = pget('s3.vix_threshold_low', 15.0)
+            rate_threshold = pget('s3.rate_change_threshold', 0.5)
             fx_threshold = cfg.get('s3.fx_change_threshold', 2.0)
             mult = {'momentum': 1.0, 'value': 1.0, 'carry': 1.0, 'volatility': 1.0}
             nowcast_score = signal_cache.get('macro_nowcast', 0.0)
@@ -933,7 +927,7 @@ class S3FactorStream(BaseStream):
                     crash_prob = hmm_transition.get('crash', 0.0)
                     bear_prob = hmm_transition.get('bear', 0.0)
                     down_prob = crash_prob + bear_prob
-                    if down_prob > cfg.get('s3.hmm_crash_threshold', 0.15):
+                    if down_prob > pget('s3.hmm_crash_threshold', 0.15):
                         logger.warning(f'  ⚠️ S3 [Phase 90]: HMM 하락 위험 감지 (Crash/Bear Prob={down_prob:.1%}) → Low Vol/Value 비중 대폭 확대')
                         w_vol *= 2.0
                         w_val *= 1.5
@@ -953,9 +947,9 @@ class S3FactorStream(BaseStream):
             sleeve_views = me_data.get('views', {}).get('sleeve', {})
             s3_view = sleeve_views.get('S3', {})
             avg_pnl = s3_view.get('avg_pnl_pct', 0) or 0
-            timing_mult = cfg.get('s3.factor_timing.momentum_mult', 1.2)
-            timing_damp = cfg.get('s3.factor_timing.dampening_mult', 0.8)
-            min_trigger = cfg.get('s3.factor_timing.min_pnl_trigger', 0.5)
+            timing_mult = pget('s3.factor_timing.momentum_mult', 1.2)
+            timing_damp = pget('s3.factor_timing.dampening_mult', 0.8)
+            min_trigger = pget('s3.factor_timing.min_pnl_trigger', 0.5)
             orig_total = w_mom + w_val + w_carry + w_vol
             if abs(avg_pnl) < min_trigger:
                 return (w_mom, w_val, w_carry, w_vol)
@@ -1003,7 +997,7 @@ class S3FactorStream(BaseStream):
                     return None
                 latest_file = pred_files[0]
             predictions: Dict[str, Dict] = {}
-            min_prob = cfg.get('s3.ml_rank_min_prob', 0.45)
+            min_prob = pget('s3.ml_rank_min_prob', 0.45)
             with open(latest_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
@@ -1046,7 +1040,7 @@ class S3FactorStream(BaseStream):
         Returns:
             ML 부스트 적용된 스코어 리스트
         """
-        ml_weight = cfg.get('s3.ml_rank_weight', 0.1)
+        ml_weight = pget('s3.ml_rank_weight', 0.1)
         predictions = self._load_predictions()
         if not predictions:
             return etf_scores
@@ -1064,8 +1058,8 @@ class S3FactorStream(BaseStream):
                 momentum_norm = factor_scores.get('momentum', 0.5)
                 ml_bullish = ml_prob > 0.5
                 momentum_bullish = momentum_norm > 0.5
-                divergence_adj = cfg.get('s3.ml_rank_divergence_penalty', 0.02)
-                convergence_adj = cfg.get('s3.ml_rank_convergence_bonus', 0.01)
+                divergence_adj = pget('s3.ml_rank_divergence_penalty', 0.02)
+                convergence_adj = pget('s3.ml_rank_convergence_bonus', 0.01)
                 if ml_bullish == momentum_bullish:
                     new_score += convergence_adj
                     boost_type = 'convergence'

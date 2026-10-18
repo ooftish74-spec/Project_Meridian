@@ -7,6 +7,12 @@ KRX 개장(08:30~15:30 KST) 및 US 개장(22:00~05:00 KST) 시간 동안
 시그널 발화 즉시 KIS OpenAPI 실계좌 매수/매도 TR을 1초 만에 자동 직송하는 전용 데몬 스케줄러.
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import os
 import sys
 import time
@@ -82,7 +88,7 @@ def main():
                 try:
                     import resource
                     mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-                    max_mem = cfg.get('system.memory_guard_limit_mb', 800)
+                    max_mem = pget('system.memory_guard_limit_mb', 800)
                     if mem_mb > max_mem:
                         logger.warning(f"🧹 [5-Year Memory Guard] 메모리 사용량 {mem_mb:.1f}MB > {max_mem}MB 감지 — systemd 자가 리사이클링 집행")
                         sys.exit(0)

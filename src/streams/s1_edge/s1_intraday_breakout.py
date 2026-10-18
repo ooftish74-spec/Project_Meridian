@@ -12,6 +12,11 @@ s1_intraday_breakout.py — S1 장중 거래량 돌파 시그널 (S1-B)
 모든 파라미터는 DynamicConfig를 통해 관리됩니다.
 """
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 from src.utils.file_ops import atomic_write_json
 
@@ -83,7 +88,7 @@ class S1IntradayBreakout:
         if not (vol_spike and frgn_inflow):
             logger.debug('[S1-B] %s 미충족 — 거래량비=%0.fx(조건≥%0.f) 외인=%+.0f백만(조건≥%.0f)', ticker, vol_ratio, volume_spike_thr, frgn_krw, min_foreign_krw_m)
             return None
-        signal = {'ticker': ticker, 'signal': 'BREAKOUT_LONG', 'size_pct': self._cfg('s1_breakout.breakout_size_pct', 0.05), 'detected_at': datetime.now().isoformat(), 'volume_ratio': vol_ratio, 'today_volume': today_vol, 'prev_volume': prev_vol, 'foreign_net_krw_m': frgn_krw, 'current_price': cur_px, 'trigger_conditions': [f'거래량 {vol_ratio:.1f}x (임계: {volume_spike_thr:.1f}x)', f'외국인 순매수 {frgn_krw:+.0f} (임계: {min_foreign_krw_m:.0f})'], 'regime_override': bool(self._cfg('s1_breakout.regime_override_enabled', True))}
+        signal = {'ticker': ticker, 'signal': 'BREAKOUT_LONG', 'size_pct': pget('s1_breakout.breakout_size_pct', 0.05), 'detected_at': datetime.now().isoformat(), 'volume_ratio': vol_ratio, 'today_volume': today_vol, 'prev_volume': prev_vol, 'foreign_net_krw_m': frgn_krw, 'current_price': cur_px, 'trigger_conditions': [f'거래량 {vol_ratio:.1f}x (임계: {volume_spike_thr:.1f}x)', f'외국인 순매수 {frgn_krw:+.0f} (임계: {min_foreign_krw_m:.0f})'], 'regime_override': bool(self._cfg('s1_breakout.regime_override_enabled', True))}
         logger.info('[S1-B] 🚀 BREAKOUT 포착 %s — 거래량×%.1f 외인+%.0f백만원 비중=%.0f%%', ticker, vol_ratio, frgn_krw, signal['size_pct'] * 100)
         return signal
 
@@ -105,7 +110,7 @@ class S1IntradayBreakout:
         if not flow_data or not flow_data.get('tickers'):
             logger.warning('[S1-B] flow_data 없음 — 스캔 불가')
             return []
-        volume_spike_thr = float(self._cfg('s1_breakout.volume_spike_threshold', 3.0))
+        volume_spike_thr = float(pget('s1_breakout.volume_spike_threshold', 3.0))
         min_frgn_raw = float(self._cfg('s1_breakout.min_foreign_flow_krw', 5000000000))
         flow_unit = float(flow_data.get('flow_unit_krw') or self._cfg('intraday.flow_unit_krw', 1000000))
         min_frgn_m = min_frgn_raw / flow_unit

@@ -12,6 +12,11 @@ Usage:
     s5 = S5OvernightStream()
     signals = s5.generate_signals(regime='bull', market_data={})
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -62,9 +67,9 @@ class S5OvernightStream(BaseStream):
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 return d
         import math
-        vix_base = float(_g('s5.kelly.vix_baseline', 18.0))
-        w_nq = float(_g('s5.kelly.nq_vol_weight', 0.3))
-        decay_k = float(_g('s5.kelly.decay_k', 3.0))
+        vix_base = float(pget('s5.kelly.vix_baseline', 18.0))
+        w_nq = float(pget('s5.kelly.nq_vol_weight', 0.3))
+        decay_k = float(pget('s5.kelly.decay_k', 3.0))
         base_var = (vix_base / 100) ** 2 / 252
         ov_var = (vix / 100) ** 2 / 252 + w_nq * (nq_vol_pct / 100) ** 2
         excess_var_ratio = max(0.0, (ov_var / max(base_var, 1e-12)) - 1.0)
@@ -97,9 +102,9 @@ class S5OvernightStream(BaseStream):
             if 'chg_1d_pct' not in _nq_data or str(_nq_data.get('source', '')).lower() == 'fallback':
                 raise ValueError(f"NQ data unavailable/placeholder (source={_nq_data.get('source')!r})")
             _nq_chg = float(_nq_data.get('chg_1d_pct', 0.0))
-            _base_block = cfg.get('s5.nq_block_threshold_pct', -0.5)
-            _base_hedge = cfg.get('s5.nq_hedge_threshold_pct', -1.5)
-            _vix_neutral = cfg.get('risk.vix_fallback', 18.0) or 18.0
+            _base_block = pget('s5.nq_block_threshold_pct', -0.5)
+            _base_hedge = pget('s5.nq_hedge_threshold_pct', -1.5)
+            _vix_neutral = pget('risk.vix_fallback', 18.0) or 18.0
             _max_exp = cfg.get('s5.nq_elastic_max_expansion', 2.0) or 2.0
             _vix_ratio = max(1.0, min(_max_exp, vix / max(_vix_neutral, 1.0)))
             _nq_threshold = round(_base_block * _vix_ratio, 4)
@@ -114,7 +119,7 @@ class S5OvernightStream(BaseStream):
                 _nq_conf = round(float(1.0 / (1.0 + math.exp(-(abs(_nq_chg) - abs(_nq_hedge_threshold) + 1.0)))), 4)
                 _nq_bars = _dqe_s5.compute_dynamic_exit_barriers(S5OvernightStream.inv_ticker, regime=regime, vix_level=vix)
                 logger.warning(f"  ⚡ [Phase 10: Alpha Breakthrough] S5 NQ 선물 급락: {_nq_chg:+.2f}% ≤ {_nq_hedge_threshold}% → 인버스 헷지 전환")
-                signals.append({'stream_id': 'S5', 'ticker': S5OvernightStream.inv_ticker, 'name': 'KODEX 200선물인버스2X (NQ급락헷지)', 'direction': 'long', 'confidence': _nq_conf, 'size_pct': cfg.get('s5.nq_hedge_size_pct', 0.2), 'strategy': 'nq_inverse_hedge', 'reason': f"NQ 선물 급락({_nq_chg:+.2f}%) 인버스 헷지 [Phase 11 elastic: hedge_th={_nq_hedge_threshold:.2f}%, VIX_ratio={_vix_ratio:.2f}]", 'tp_pct': cfg.get('s5.nq_hedge_tp_pct', _nq_bars.get('take_profit_pct', 2.0)), 'sl_pct': cfg.get('s5.nq_hedge_sl_pct', _nq_bars.get('stop_loss_pct', -1.0)), 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
+                signals.append({'stream_id': 'S5', 'ticker': S5OvernightStream.inv_ticker, 'name': 'KODEX 200선물인버스2X (NQ급락헷지)', 'direction': 'long', 'confidence': _nq_conf, 'size_pct': pget('s5.nq_hedge_size_pct', 0.2), 'strategy': 'nq_inverse_hedge', 'reason': f"NQ 선물 급락({_nq_chg:+.2f}%) 인버스 헷지 [Phase 11 elastic: hedge_th={_nq_hedge_threshold:.2f}%, VIX_ratio={_vix_ratio:.2f}]", 'tp_pct': cfg.get('s5.nq_hedge_tp_pct', _nq_bars.get('take_profit_pct', 2.0)), 'sl_pct': cfg.get('s5.nq_hedge_sl_pct', _nq_bars.get('stop_loss_pct', -1.0)), 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
             elif _nq_chg <= _nq_threshold:
                 _nq_blocked = True
                 logger.warning(f"  🚫 [Phase 10: Alpha Breakthrough] S5 NQ 선물 필터: {_nq_chg:+.2f}% ≤ {_nq_threshold}% → 오버나이트 매수 취소")
@@ -125,7 +130,7 @@ class S5OvernightStream(BaseStream):
         vix_spike_flag = market_data.get('alpha_signals', {}).get('S5_signal', {}).get('vix_spike', False)
         _nq_vol = float(market_data.get('nq_vol_pct', market_data.get('nq_1d_vol', 0.0)))
         _kelly_scale = self._compute_overnight_kelly_scale(vix, nq_vol_pct=_nq_vol, max_alloc=float(cfg.get('s5.max_alloc_ratio', 1.0)))
-        vix_blocked = _kelly_scale <= float(cfg.get('s5.kelly.min_scale_threshold', 0.005)) or vix_spike_flag
+        vix_blocked = _kelly_scale <= float(pget('s5.kelly.min_scale_threshold', 0.005)) or vix_spike_flag
         self._last_kelly_scale = _kelly_scale
         logger.info(f"  [Phase80 S5] VIX={vix:.1f} NQ={_nq_vol:.2f}% → KellyScale={_kelly_scale:.4f} blocked={vix_blocked}")
         ah_volume_surge = signal_cache.get('us_ah_volume_surge', False)
@@ -169,13 +174,13 @@ class S5OvernightStream(BaseStream):
             direction = 'neutral'
         if direction in ('long', 'short') and not (vix_blocked or _nq_blocked):
             ticker = S5OvernightStream.lev_ticker if direction == 'long' else S5OvernightStream.inv_ticker
-            min_conf = cfg.get('s5.overlay_min_confidence', 0.55)
-            max_conf = cfg.get('s5.overlay_max_confidence', 0.85)
-            max_alloc = cfg.get('s5.max_allocation_pct', 0.4)
-            _alpha_max_boost = cfg.get('s5.alpha_max_alloc_boost', 0.3)
+            min_conf = pget('s5.overlay_min_confidence', 0.55)
+            max_conf = pget('s5.overlay_max_confidence', 0.85)
+            max_alloc = pget('s5.max_allocation_pct', 1.0)
+            _alpha_max_boost = pget('s5.alpha_max_alloc_boost', 1.0)
             if regime == 'bull' and direction == 'long':
-                max_alloc = cfg.get('s5.bull_max_alloc', 0.6)
-                _alpha_max_boost = cfg.get('s5.bull_alpha_boost', 0.75)
+                max_alloc = pget('s5.bull_max_alloc', 1.0)
+                _alpha_max_boost = pget('s5.bull_alpha_boost', 1.0)
                 logger.info(f"  [S5 Bull Boost] 상승장 롱 비중 확장: max_alloc={max_alloc:.0%}, alpha_boost={_alpha_max_boost:.0%}")
             _alpha_score_abs = abs(overnight_alpha) if overnight_alpha != 0.0 else 0.0
             _alpha_score_th = cfg.get('s5.alpha_score_boost_threshold', 1.0)
@@ -193,7 +198,7 @@ class S5OvernightStream(BaseStream):
                 overlay_size_pct = round(overlay_size_pct * (_vk / max(max_alloc, 1e-06)), 3)
                 overlay_size_pct = max(0.0, min(max_alloc, overlay_size_pct))
                 if overlay_size_pct > 0.0:
-                    signals.append({'stream_id': 'S5', 'ticker': ticker, 'name': self.ETF_UNIVERSE.get(ticker, {}).get('name', ticker), 'direction': 'long', 'confidence': round(confidence, 3), 'size_pct': overlay_size_pct, 'strategy': 'overnight_overlay', 'reason': reason, 'tp_pct': cfg.get('s5.tp_pct', 1.5), 'sl_pct': cfg.get('s5.sl_pct', -1.5), 'trail_activate_pct': 0.3, 'trail_distance_pct': 0.3, 'max_hold_minutes': 60, 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
+                    signals.append({'stream_id': 'S5', 'ticker': ticker, 'name': self.ETF_UNIVERSE.get(ticker, {}).get('name', ticker), 'direction': 'long', 'confidence': round(confidence, 3), 'size_pct': overlay_size_pct, 'strategy': 'overnight_overlay', 'reason': reason, 'tp_pct': pget('s5.tp_pct', 1.0), 'sl_pct': pget('s5.sl_pct', -1.5), 'trail_activate_pct': 0.3, 'trail_distance_pct': 0.3, 'max_hold_minutes': 60, 'max_hold_days': 1, 'timestamp': now_kst().isoformat()})
                     logger.info(f"  🌙 S5 오버레이: {ticker} (conf={confidence:.2f}, 비중={overlay_size_pct:.1%}) - {reason}")
         parking_etfs = None
         _dynamic_cache = None
@@ -229,13 +234,13 @@ class S5OvernightStream(BaseStream):
         # 왕복 거래 수수료(0.028%) 대비 KOFR 이자 수익(3.55% p.a.)이 확실한 플러스(+)일 때만 파킹 매입 허용
         # 한국증시 ↔ 미국증시 교차 세션 간 48시간 미만 단기 유휴 시 수수료 마찰 손실 방지를 위해 현금 보충 유지
         expected_idle_hours = float(market_data.get('expected_idle_hours', 72.0))
-        min_parking_hours = float(cfg.get('s5.min_parking_hours', 48.0))
+        min_parking_hours = float(pget('s5.min_parking_hours', 48.0))
         if expected_idle_hours < min_parking_hours:
             logger.info(f"  🛑 [Friction Guard] 유휴 예정 시간({expected_idle_hours:.1f}h) < 최소 이자 파킹 기준({min_parking_hours}h) → 수수료 마찰(0.028%) 손실 방지를 위해 현금 파킹 보류")
             return signals
 
         best_parking = parking_etfs[0]
-        signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': 1.0, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': 99.0, 'sl_pct': -99.0, 'max_hold_minutes': cfg.get('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
+        signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': 1.0, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': 99.0, 'sl_pct': -99.0, 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
         _bp_nm = best_parking.get('name', '')
         logger.info(f"  🌙 S5 파킹 스윕: {_bp_nm} 순수익 검증 완수 후 잔여 자본 배정")
         return signals

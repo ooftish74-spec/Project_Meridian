@@ -28,6 +28,11 @@ Usage:
     scale = fb.get_stream_scale('S2')
     blacklisted = fb.is_blacklisted('005930', 'S2')
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -205,18 +210,18 @@ class PerformanceFeedback:
         rolling_wr = metrics.get('rolling_wr', 0.5)
         rolling_pf = metrics.get('rolling_pf', 1.0)
         n_trades = metrics.get('n_trades', 0)
-        min_samples = cfg.get('feedback.rolling_window', 20) // 2
+        min_samples = pget('feedback.rolling_window', 20) // 2
         if n_trades < min_samples:
             reason = f'데이터 부족 ({n_trades} < {min_samples}), 기본 scale=1.0'
             logger.debug('PerformanceFeedback %s: %s', stream_id, reason)
             return {'active': True, 'scale': 1.0, 'rolling_wr': rolling_wr, 'rolling_pf': rolling_pf, 'kelly_fstar': 0.0, 'reason': reason}
         kelly_max = float(cfg.get('feedback.kelly_max_scale', 2.0))
-        kelly_frac = float(cfg.get('feedback.kelly_fraction', 0.25))
+        kelly_frac = float(pget('feedback.kelly_fraction', 0.25))
         f_star = self.compute_dynamic_kelly(stream_id)
         _s3_exempt = str(stream_id).upper().startswith('S3') or str(stream_id).upper() in cfg.get('feedback.kelly_exempt_streams', ['S3', 'S3_A', 'S3_B'])
         _softfall_base = float(cfg.get('feedback.kelly_softfall_base', 1.0))
-        _softfall_cap = float(cfg.get('feedback.kelly_softfall_cap', 0.1))
-        _s3_floor = float(cfg.get('feedback.s3_min_kelly_scale', 0.1))
+        _softfall_cap = float(pget('feedback.kelly_softfall_cap', 0.1))
+        _s3_floor = float(pget('feedback.s3_min_kelly_scale', 0.1))
         if f_star <= 0.0 and (not _s3_exempt):
             scale = max(0.0, _softfall_cap * (1.0 + f_star / max(_softfall_base, 1e-6)))
             scale = round(min(scale, _softfall_cap), 4)

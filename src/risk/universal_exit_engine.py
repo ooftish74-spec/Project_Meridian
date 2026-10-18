@@ -11,6 +11,11 @@ Universal Exit Engine (V3 단일 SSOT 전사 공통 Exit & 3중 손절 뼈대 �
 5. 50% Scale-Out Runner: ATR×8 달성 시 50% 차익실현 후 잔여 50% 무한 트레일링
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import math
 import numpy as np
@@ -53,7 +58,7 @@ class UniversalExitEngine:
                     tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
                     atr14 = float(np.mean(tr[-14:]) / close[-1])
                     if not math.isnan(atr14) and atr14 > 0:
-                        clipped_atr = float(np.clip(atr14, 0.015, 0.080))
+                        clipped_atr = float(np.clip(atr14, pget('exit.atr_clip_min', 0.015), pget('exit.atr_clip_max', 0.08)))
                         self._atr_cache[ticker] = clipped_atr
                         return clipped_atr
         except Exception:
@@ -65,7 +70,7 @@ class UniversalExitEngine:
             _dqe = get_quant_engine()
             _m = _dqe.get_asset_metrics(ticker)
             if _m and _m.get('vol_daily', 0) > 0 and _m.get('vol_daily') != 0.02:
-                atr_pct = float(np.clip(float(_m['vol_daily']) * 1.2533, 0.003, 0.080))
+                atr_pct = float(np.clip(float(_m['vol_daily']) * 1.2533, pget('exit.vol_atr_clip_min', 0.003), pget('exit.atr_clip_max', 0.08)))
                 self._atr_cache[ticker] = atr_pct
                 return atr_pct
         except Exception:
@@ -97,7 +102,7 @@ class UniversalExitEngine:
         Returns:
             (is_exit, inverse_trail_price, chandelier_gap_pct)
         """
-        chandelier_gap_pct = max(0.020, chandelier_mult * atr_pct)
+        chandelier_gap_pct = max(pget('exit.inverse_chandelier_gap_floor', 0.02), chandelier_mult * atr_pct)
         inverse_trail_price = trough_price * (1.0 + chandelier_gap_pct)
         is_exit = current_price >= inverse_trail_price
         return is_exit, inverse_trail_price, chandelier_gap_pct
@@ -138,7 +143,14 @@ class UniversalExitEngine:
                     _sc_dict = json.loads(_sc_p.read_text(encoding='utf-8'))
             except Exception:
                 _sc_dict = {}
-        _fx_rate = float((market_data or {}).get('usdkrw') or _sc_dict.get('usdkrw') or 1334.3)
+        # ★ Wave 1 Track C: 리터럴 1334.3 제거. 환율은 청산 판단 자체가 아니라 Almgren-Chriss 주문규모 입력에만 쓰임 →
+        #   미확보 시 해외 종목은 기존 하한(500,000원) 주문규모로 평가(충격비용 최소 → 장벽 가장 타이트 = 청산 우선).
+        #   청산 경로 지연 방지를 위해 네트워크 조회는 추가하지 않음.
+        _fx_raw = (market_data or {}).get('usdkrw') or _sc_dict.get('usdkrw')
+        try:
+            _fx_rate = float(_fx_raw) if _fx_raw is not None and float(_fx_raw) > 0 else None
+        except (TypeError, ValueError):
+            _fx_rate = None
         _dyn_cash_eq = _dqe.get_cash_equivalent_tickers()
         _PARKING_EXEMPT = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'} | _dyn_cash_eq
 
@@ -172,7 +184,7 @@ class UniversalExitEngine:
 
             # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
             is_kr_tk = str(ticker).isdigit()
-            order_val_krw = qty * price * (1.0 if is_kr_tk else _fx_rate)
+            order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
             _opt = _dqe.compute_optimal_stopping_params(
                 ticker=str(ticker),
                 regime=regime,

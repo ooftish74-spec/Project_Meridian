@@ -15,6 +15,11 @@ S1 가상거래 이력을 분석하여 편입 여부 판정에 필요한 지표�
 결과: results/s1_validation.json
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -38,13 +43,13 @@ class S1InclusionValidator:
 
     def __init__(self):
         # 편입 기준 (DynamicConfig)
-        self.min_win_rate = cfg.get('s1.validation.min_win_rate', 0.53)
-        self.min_sharpe = cfg.get('s1.validation.min_sharpe', 0.5)
-        self.max_slippage = cfg.get('s1.validation.max_slippage', 0.0020)
-        self.min_ev_pass_rate = cfg.get('s1.validation.min_ev_pass_rate', 0.30)
-        self.min_trades = cfg.get('s1.validation.min_trades', 15)
-        self.min_days = cfg.get('s1.validation.min_days', 20)
-        self.annualization = cfg.get('s1.validation.annualization_factor', 252)
+        self.min_win_rate = pget('s1.validation.min_win_rate', 0.53)
+        self.min_sharpe = pget('s1.validation.min_sharpe', 0.5)
+        self.max_slippage = pget('s1.validation.max_slippage', 0.0020)
+        self.min_ev_pass_rate = pget('s1.validation.min_ev_pass_rate', 0.30)
+        self.min_trades = pget('s1.validation.min_trades', 15)
+        self.min_days = pget('s1.validation.min_days', 20)
+        self.annualization = pget('s1.validation.annualization_factor', 252)
 
     def analyze(self) -> Dict:
         """S1 가상거래 전체 분석."""
@@ -217,8 +222,8 @@ class S1InclusionValidator:
 
         # ── 부트스트랩 모드: 데이터 없을 때 소규모 진입 허용 ──
         bootstrap_enabled = cfg.get('s1.validation.bootstrap_enabled', True)
-        bootstrap_scale = cfg.get('s1.validation.bootstrap_scale', 0.5)
-        bootstrap_max_days = cfg.get('s1.validation.bootstrap_max_days', 20)
+        bootstrap_scale = pget('s1.validation.bootstrap_scale', 0.5)
+        bootstrap_max_days = pget('s1.validation.bootstrap_max_days', 20)
 
         if not data.get('data_ready', False):
             # 부트스트랩 조건: EV 통과율 + 슬리피지 OK → 축소 진입 허용

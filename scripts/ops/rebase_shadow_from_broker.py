@@ -138,11 +138,13 @@ def main() -> int:
     if not args.apply:
         print("DRY RUN — nothing written. Re-run with --apply (daemon stopped).")
         return 0
-    if SHADOW.exists():
-        bk = SHADOW.with_name(f"shadow_portfolio.json.pre_rebase_{now.strftime('%Y%m%d_%H%M%S')}")
-        shutil.copy2(SHADOW, bk)
-        print(f"backup: {bk}")
-    atomic_write_json(SHADOW, new, indent=2, ensure_ascii=False, default=str)
+    from src.utils.file_ops import file_lock_transaction
+    with file_lock_transaction(SHADOW, timeout=30, strict=True):   # ★ Wave 1: 매니저와 동일 락 (의도적 전체 교체)
+        if SHADOW.exists():
+            bk = SHADOW.with_name(f"shadow_portfolio.json.pre_rebase_{now.strftime('%Y%m%d_%H%M%S')}")
+            shutil.copy2(SHADOW, bk)
+            print(f"backup: {bk}")
+        atomic_write_json(SHADOW, new, indent=2, ensure_ascii=False, default=str)
     print("✅ shadow_portfolio.json rebased on broker snapshot")
     return 0
 

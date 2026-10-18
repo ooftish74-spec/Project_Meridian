@@ -30,6 +30,11 @@ Alternative Data Pipeline — 대체 데이터 통합 수집·적재 파이프�
 
 모든 파라미터 DynamicConfig 동적 로드.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import importlib
 import logging
@@ -82,9 +87,9 @@ class AsianMarketSignals:
         sh_chg = features.get('asian_shanghai_comp_change_1d', 0)
         hs_chg = features.get('asian_hang_seng_change_1d', 0)
         if nk_chg != 0 or sh_chg != 0 or hs_chg != 0:
-            w_nk = cfg.get('altdata.weight_nikkei', 0.4)
-            w_sh = cfg.get('altdata.weight_shanghai', 0.3)
-            w_hs = cfg.get('altdata.weight_hangseng', 0.3)
+            w_nk = pget('altdata.weight_nikkei', 0.4)
+            w_sh = pget('altdata.weight_shanghai', 0.3)
+            w_hs = pget('altdata.weight_hangseng', 0.3)
             composite = w_nk * nk_chg + w_sh * sh_chg + w_hs * hs_chg
             features['asian_composite_signal'] = round(composite, 6)
         if features:
@@ -123,9 +128,9 @@ class DerivativesCollector:
                 if vkospi is not None and len(vkospi) > 0:
                     latest_vk = float(vkospi.iloc[-1]['종가'])
                     features['vkospi_close'] = latest_vk
-                    low_vol = cfg.get('altdata.vkospi_low', 15)
-                    high_vol = cfg.get('altdata.vkospi_high', 25)
-                    extreme_vol = cfg.get('altdata.vkospi_extreme', 35)
+                    low_vol = pget('altdata.vkospi_low', 15)
+                    high_vol = pget('altdata.vkospi_high', 25)
+                    extreme_vol = pget('altdata.vkospi_extreme', 35)
                     if latest_vk < low_vol:
                         features['vol_regime'] = 0
                     elif latest_vk < high_vol:
@@ -238,7 +243,7 @@ class TrendsCollector:
             if gtc.pytrends is not None:
                 kr_keywords = cfg.get('altdata.trends_keywords_kr', ['삼성전자', '코스피', '금리', '환율', '반도체'])
                 end = datetime.now().strftime('%Y-%m-%d')
-                start = (datetime.now() - timedelta(days=cfg.get('altdata.trends_lookback_days', 90))).strftime('%Y-%m-%d')
+                start = (datetime.now() - timedelta(days=pget('altdata.trends_lookback_days', 90))).strftime('%Y-%m-%d')
                 df = gtc.collect_trends(kr_keywords[:5], start, end, geo='KR')
                 if df is not None and len(df) > 0:
                     for col in df.columns:
@@ -358,7 +363,7 @@ class EconomicIndicatorCollector:
             kosis = KOSISCollectorEnhanced()
             if kosis.api_key:
                 end = datetime.now().strftime('%Y-%m-%d')
-                start = (datetime.now() - timedelta(days=cfg.get('altdata.kosis_lookback_days', 365))).strftime('%Y-%m-%d')
+                start = (datetime.now() - timedelta(days=pget('altdata.kosis_lookback_days', 365))).strftime('%Y-%m-%d')
                 indicators = kosis.collect_all_indicators(start, end)
                 for name, df in indicators.items():
                     if df is not None and len(df) > 0:
@@ -415,7 +420,7 @@ class AltDataValidator:
                 valid += 1
         total = valid + invalid
         quality = valid / max(total, 1)
-        min_quality = cfg.get('altdata.min_quality_score', 0.5)
+        min_quality = pget('altdata.min_quality_score', 0.5)
         if quality < min_quality:
             logger.warning(f"  ⚠️ {source} 품질 저하: {quality:.1%} ({invalid}건 이상)")
         return {'valid_count': valid, 'invalid_count': invalid, 'quality_score': round(quality, 3), 'source': source, 'issues': issues[:5]}
@@ -536,7 +541,7 @@ class AlternativeDataPipeline:
                 if latest_file.exists():
                     prev_data = json.loads(latest_file.read_text())
                     prev_features = prev_data.get('features', {})
-                    decay_factor = cfg.get('altdata.decay_factor', 0.95)
+                    decay_factor = pget('altdata.decay_factor', 0.95)
                     for k, v in prev_features.items():
                         if k not in all_features and isinstance(v, (int, float)):
                             all_features[k] = v * decay_factor

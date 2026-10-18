@@ -31,6 +31,12 @@ Usage:
     python scripts/daily_pipeline.py collect,morning  # 복수 phase
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json, logging, os, sys, time
 from datetime import datetime, date, timedelta
 from pathlib import Path
@@ -291,7 +297,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         from src.risk.crash_defense import CrashDefense
         _crash = CrashDefense().run()
         if _crash.get('crash_mode'):
-            _crash_scale = cfg.get('risk.crash_defense_scale', 0.2)
+            _crash_scale = pget('risk.crash_defense_scale', 0.2)
             _kill_switch_result['position_scale'] *= _crash_scale
             logger.warning(f"  🚨 Crash Defense: CRASH 모드 → scale={_crash_scale}")
         for alert in _crash.get('alerts', []):
@@ -351,7 +357,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             _kill_switch_result['position_scale'], _conc_scale)
         _ortho = _conc.get('orthogonality_score', 1.0)
         _n_high = _conc.get('high_corr_count', 0)
-        _conc_warn_th = cfg.get('risk.corr_warn_threshold', 0.85)
+        _conc_warn_th = pget('risk.corr_warn_threshold', 0.85)
         if _conc_scale < _conc_warn_th:
             logger.warning(
                 f"  ⚠️ 집중 리스크: 직교성={_ortho:.2f}, "
@@ -520,7 +526,11 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     'timestamp': datetime.now().isoformat(),
                     'data_source': 'daily_pipeline_morning'
                 }
-                atomic_write_json(_regime_file, _regime_out, indent=2, ensure_ascii=False, default=str)
+                # ★ Wave 1: 다른 writer(RegimeEngine 섀도 등) 키 보존 — strict 락 병합 갱신
+                from src.utils.file_ops import safe_json_update as _sju_cr
+                _regime_out_js = json.loads(json.dumps(_regime_out, default=str, ensure_ascii=False))   # 직렬화 정규화
+                _sju_cr(_regime_file, lambda _c: {**(_c if isinstance(_c, dict) else {}), **_regime_out_js},
+                        default={}, ensure_ascii=False)
                 _update_signal_cache({'regime': regime, 'current_regime': regime, 'regime_confidence': float(confidence)})
             except Exception as _cr_err:
                 logger.warning(f"  current_regime.json 동기화 경고: {_cr_err}")
@@ -759,14 +769,27 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             _api_timeout_sec = 600  # 10분 = 600초
 
             # [Phase 70-Integration] DATA_NOGO 플래그를 orch 컨텍스트로 전달
-            if _data_nogo_assets:
+            # ★ Track E (W1_2): 이 모듈의 _data_nogo_assets 는 sub_phases 의 리스트와 별개 객체라 항상
+            #   비어 있었다(단절). 영속 저장소 + sub_phases 리스트를 합쳐 읽는다. 오케스트레이터는
+            #   저장소를 직접 다시 읽으므로 여기는 사유 전달/로깅용(중복 안전).
+            try:
+                from src.measurement.data_nogo_store import load_active_data_nogo
+                from scripts.pipeline import sub_phases as _sp_mod
+                _dn = load_active_data_nogo()
+                _nogo_assets = sorted(set(list(_data_nogo_assets)
+                                          + list(getattr(_sp_mod, '_data_nogo_assets', []))
+                                          + _dn.get('macro', [])))
+            except Exception as _dn_e:
+                logger.error(f'  [Phase 70] DATA_NOGO 저장소 조회 실패: {_dn_e}', exc_info=True)
+                _nogo_assets = list(_data_nogo_assets)
+            if _nogo_assets:
                 orch.data_nogo = True
                 orch.data_nogo_reason = (
-                    f'{_data_nogo_assets} PCA R² 미달 — 비중 0% 강제'
+                    f'{_nogo_assets} PCA R² 미달 — 비중 0% 강제'
                 )
                 logger.warning(
-                    f'  [Phase 70] DATA_NOGO 전파: {_data_nogo_assets} → '
-                    f'StreamOrchestrator Circuit Breaker 발동'
+                    f'  [Phase 70] DATA_NOGO 전파: {_nogo_assets} → '
+                    f'StreamOrchestrator Exit-Only (신규 진입 차단, 청산 허용)'
                 )
 
             result = orch.run()
@@ -937,6 +960,9 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     'win_rate': _gn.get('win_rate', 0),
                     'max_dd': _gn.get('max_dd', 0),
                     'timestamp': datetime.now().isoformat(),
+                    # ★ Track E: Go/No-Go 게이트 폐지 — 정보용 표시, 매매 차단에 사용 금지
+                    'blocking': False,
+                    'semantics': 'informational_only',
                 })
                 atomic_write_json(_gn_path, 
                     _gn_existing, indent=2)
@@ -1288,10 +1314,10 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as e:
             logger.error(f"  OnlineLearner 실패: {e}", exc_info=True)
 
-        # ── 3. Go/No-Go 판정 ──
+        # ── 3. (정보용) 섀도 성과 요약 — ★ Track E: Go/No-Go 게이트 폐지, 비차단 ──
         try:
             go_nogo = orch.shadow_recorder.go_nogo_evaluation()
-            logger.info(f"  ✅ Go/No-Go: {go_nogo.get('verdict', '?')}")
+            logger.info(f"  ℹ️ Shadow 성과 요약(비차단): {go_nogo.get('verdict', '?')}")
         except Exception as e:
             logger.error(f"  Go/No-Go 실패: {e}", exc_info=True)
 

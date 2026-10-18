@@ -8,6 +8,11 @@ Mathematical Formulation:
 - Zero static hardcoded constants; dynamic config & rolling non-parametric lag estimation.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import time
@@ -38,7 +43,7 @@ class KISWebSocketStreamingManager:
             if mode == 'shadow':
                 mode = 'live'
         self.mode = mode
-        self.max_subscriptions = _get_cfg('websocket.max_subscriptions', 40)
+        self.max_subscriptions = pget('websocket.max_subscriptions', 40)
         self._tick_buffer: Dict[str, Dict[str, Any]] = {}
         self._orderbook_buffer: Dict[str, Dict[str, Any]] = {}
         self._lag_estimates_ms: Dict[str, float] = {}

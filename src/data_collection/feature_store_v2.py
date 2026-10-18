@@ -14,6 +14,11 @@ Medallion Upgrade Phase 2-D-1.
 기존 FeatureStore(V1)을 확장하며, 하위 호환 유지.
 모든 파라미터 DynamicConfig 동적 로드.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -47,7 +52,7 @@ class FeatureRegistry:
             description: 설명
         """
         if ttl_hours is None:
-            default_ttl = cfg.get(f'feature_store.ttl.{category}', cfg.get('feature_store.default_ttl_hours', 24))
+            default_ttl = cfg.get(f'feature_store.ttl.{category}', pget('feature_store.default_ttl_hours', 24))
             ttl_hours = default_ttl
         self._registry[name] = {'category': category, 'ttl_hours': ttl_hours, 'source': source, 'depends_on': depends_on or [], 'description': description, 'registered_at': datetime.now().isoformat()}
         if depends_on:
@@ -61,7 +66,7 @@ class FeatureRegistry:
     def get_ttl_hours(self, name: str) -> int:
         """피처 TTL 조회."""
         info = self._registry.get(name, {})
-        return info.get('ttl_hours', cfg.get('feature_store.default_ttl_hours', 24))
+        return info.get('ttl_hours', pget('feature_store.default_ttl_hours', 24))
 
     def get_dependents(self, name: str) -> List[str]:
         """해당 피처에 의존하는 파생피처 목록."""
@@ -109,7 +114,7 @@ class FeatureRegistry:
         for f in ['volume', 'adv_20', 'volume_ratio']:
             self.register(f, 'volume', source='pykrx')
         for f in ['per', 'pbr', 'eps', 'div_yield']:
-            self.register(f, 'fundamental', ttl_hours=cfg.get('feature_store.ttl.fundamental', 168), source='dart')
+            self.register(f, 'fundamental', ttl_hours=pget('feature_store.ttl.fundamental', 168), source='dart')
         for f in ['vix', 'dxy', 'us10y', 'usdkrw']:
             self.register(f, 'macro', source='global_collector')
         for f in ['news_score', 'foreign_net_buy', 'inst_net_buy']:
@@ -304,13 +309,13 @@ class FeaturePipeline:
         derived = {}
         if history is None:
             history = []
-        window = cfg.get('feature_store.zscore_window', 60)
+        window = pget('feature_store.zscore_window', 60)
         if len(history) >= window:
             for key, value in raw_features.items():
                 if not isinstance(value, (int, float)):
                     continue
                 hist_values = [h.get(key) for h in history[-window:] if h.get(key) is not None and isinstance(h.get(key), (int, float))]
-                if len(hist_values) >= cfg.get('feature_store.zscore_min_obs', 20):
+                if len(hist_values) >= pget('feature_store.zscore_min_obs', 20):
                     z = self._compute_zscore(value, hist_values)
                     if z is not None:
                         derived[f'{key}_zscore'] = round(z, 4)
@@ -322,7 +327,7 @@ class FeaturePipeline:
                 if curr is not None and prev_val is not None and isinstance(curr, (int, float)) and isinstance(prev_val, (int, float)) and (prev_val != 0):
                     change = curr / prev_val - 1
                     derived[f'{key}_change_1d'] = round(change, 6)
-        rolling_window = cfg.get('feature_store.rolling_window', 20)
+        rolling_window = pget('feature_store.rolling_window', 20)
         if len(history) >= rolling_window:
             close_hist = [h.get('close') for h in history[-rolling_window:] if h.get('close') is not None]
             if len(close_hist) >= rolling_window:
@@ -526,7 +531,7 @@ class FeatureStoreV2:
     def _load_history(self, ticker: str, n_days: int=None) -> List[Dict[str, float]]:
         """피처 히스토리 로드 (파생피처 생성용)."""
         if n_days is None:
-            n_days = cfg.get('feature_store.history_days', 90)
+            n_days = pget('feature_store.history_days', 90)
         try:
             df = self._fs.get_features(ticker, start=(datetime.now() - timedelta(days=n_days + 5)).strftime('%Y-%m-%d'), end=datetime.now().strftime('%Y-%m-%d'))
             if df is not None and len(df) > 0:

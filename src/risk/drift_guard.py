@@ -8,6 +8,11 @@ Usage:
     guard = DriftGuard()
     result = guard.check(current_features, reference_features)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json, logging
 import numpy as np
 from datetime import datetime
@@ -34,12 +39,12 @@ class DriftGuard:
     """
 
     def __init__(self):
-        self.PSI_WARNING = _cfg.get('drift.psi_warning', 0.1) if _cfg else 0.1
-        self.PSI_CRITICAL = _cfg.get('drift.psi_critical', 0.25) if _cfg else 0.25
+        self.PSI_WARNING = pget('drift.psi_warning', 0.1) if _cfg else 0.1
+        self.PSI_CRITICAL = pget('drift.psi_critical', 0.25) if _cfg else 0.25
         self.state_path = _RESULTS / 'drift_guard_state.json'
         self.reference_path = _RESULTS / 'models' / 'feature_reference.json'
-        self.SPARSE_ZERO_PCT = _cfg.get('drift.sparse_zero_pct', 0.4) if _cfg else 0.4
-        self.SPARSE_PSI_MULT = _cfg.get('drift.sparse_psi_mult', 3.0) if _cfg else 3.0
+        self.SPARSE_ZERO_PCT = pget('drift.sparse_zero_pct', 0.4) if _cfg else 0.4
+        self.SPARSE_PSI_MULT = pget('drift.sparse_psi_mult', 3.0) if _cfg else 3.0
 
     def _detect_sparse_features(self, reference_features: np.ndarray, feature_names: List[str]) -> Dict[str, float]:
         """참조 데이터에서 희소 피처를 자동 감지.

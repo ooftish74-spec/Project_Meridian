@@ -14,6 +14,11 @@ Data Sources (우선순위):
 
 Author: Project Meridian
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -270,8 +275,8 @@ class MeridianFundamentalFilter:
             return True
         regime_criteria = cfg.get('fundamental.regime_criteria') or {}
         rc = regime_criteria.get(regime, {})
-        min_qv = rc.get('min_qv', cfg.get('fundamental.min_qv_score', 30))
-        min_fscore = rc.get('min_fscore', cfg.get('fundamental.min_fscore', 4))
+        min_qv = rc.get('min_qv', pget('fundamental.min_qv_score', 30))
+        min_fscore = rc.get('min_fscore', pget('fundamental.min_fscore', 4))
         min_roe = rc.get('min_roe', cfg.get('fundamental.min_roe', 0))
         min_opm = rc.get('min_opm', cfg.get('fundamental.min_opm', 0))
         if result.get('hard_fail'):
@@ -281,12 +286,12 @@ class MeridianFundamentalFilter:
         oscore_enabled = cfg.get('fundamental.oscore_enabled', True)
         if oscore_enabled:
             p_default = result.get('p_default')
-            oscore_high = cfg.get('fundamental.oscore_threshold_high', 0.8)
+            oscore_high = pget('fundamental.oscore_threshold_high', 0.8)
             if p_default is not None and p_default > oscore_high:
                 logger.info(f"  ❌ {ticker} O-Score P={p_default:.1%} > {oscore_high:.0%}")
                 return False
         beneish_enabled = cfg.get('fundamental.beneish_enabled', True)
-        beneish_threshold = cfg.get('fundamental.beneish_threshold', -1.78)
+        beneish_threshold = pget('fundamental.beneish_threshold', -1.78)
         beneish_strict = cfg.get('fundamental.beneish_regime_strict') or {}
         if beneish_enabled and beneish_strict.get(regime, True):
             m_score = result.get('m_score')

@@ -12,6 +12,16 @@ Module 1 데이터 파이프라인에 포함되어 실행됨.
   data/raw/supply_chain/
   data/raw/sector_valuation/kr_relative_per_band.json
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 from src.utils.file_ops import atomic_write_json
 from src.infra.safe_io import atomic_write_dataframe
 
@@ -24,9 +34,9 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / 'data' / 'raw'
-SUPPLY_CHAIN_ASSETS = {'MU': {'name': 'Micron (DRAM 프록시)', 'sectors': ['Semiconductor'], 'correlation': 'positive'}, 'SOXX': {'name': 'PHLX Semiconductor Index', 'sectors': ['Semiconductor'], 'correlation': 'positive'}, 'LIT': {'name': 'Lithium ETF', 'sectors': ['Battery', 'Automotive'], 'correlation': 'positive'}, 'HG=F': {'name': 'Copper Futures', 'sectors': ['Materials', 'Battery'], 'correlation': 'positive'}, 'CL=F': {'name': 'WTI Crude Oil', 'sectors': ['Energy'], 'correlation': 'positive'}, 'NG=F': {'name': 'Natural Gas', 'sectors': ['Energy', 'Utilities'], 'correlation': 'positive'}, 'SLX': {'name': 'Steel ETF', 'sectors': ['Materials', 'Shipbuilding'], 'correlation': 'positive'}, 'BDRY': {'name': 'Baltic Dry Index ETN', 'sectors': ['Shipbuilding'], 'correlation': 'positive'}, 'URA': {'name': 'Uranium ETF', 'sectors': ['Utilities', 'Energy'], 'correlation': 'positive'}, 'GC=F': {'name': 'Gold', 'sectors': ['Finance'], 'correlation': 'negative'}, 'JPY=X': {'name': 'USD/JPY (엔캐리 proxy)', 'sectors': ['Semiconductor', 'AI', 'Battery'], 'correlation': 'positive'}, 'KRW=X': {'name': 'USD/KRW (환율)', 'sectors': ['Semiconductor', 'Automotive', 'Shipbuilding'], 'correlation': 'negative'}}
-KR_PER_BAND_STOCKS = {'Semiconductor': {'005930': '삼성전자', '000660': 'SK하이닉스'}, 'Software': {'035420': '네이버', '035720': '카카오'}, 'Finance': {'105560': 'KB금융', '055550': '신한지주', '086790': '하나금융지주'}, 'Healthcare': {'207940': '삼성바이오로직스', '068270': '셀트리온'}, 'Energy': {'010950': 'S-Oil'}, 'Materials': {'005490': 'POSCO홀딩스', '051910': 'LG화학'}, 'Consumer': {'051900': 'LG생활건강', '097950': 'CJ제일제당'}, 'Utilities': {'015760': '한국전력'}, 'Telecom': {'017670': 'SK텔레콤', '030200': 'KT'}, 'Defense': {'047810': '한국항공우주', '012450': '한화에어로스페이스'}, 'Shipbuilding': {'009540': 'HD한국조선해양', '010140': '삼성중공업', '042660': '한화오션'}, 'Automotive': {'005380': '현대자동차', '000270': '기아'}, 'Battery': {'006400': '삼성SDI', '051910': 'LG화학'}}
-US_KR_ETF_PAIRS = {'Semiconductor': {'us': 'SOXX', 'kr': '091160'}, 'AI': {'us': 'BOTZ', 'kr': None}, 'Software': {'us': 'IGV', 'kr': None}, 'Finance': {'us': 'XLF', 'kr': '091170'}, 'Healthcare': {'us': 'XLV', 'kr': '266420'}, 'Energy': {'us': 'XLE', 'kr': '117460'}, 'Materials': {'us': 'XLB', 'kr': '117460'}, 'Consumer': {'us': 'XLP', 'kr': '228810'}, 'Utilities': {'us': 'XLU', 'kr': None}, 'Telecom': {'us': 'XLC', 'kr': None}, 'Defense': {'us': 'ITA', 'kr': '364690'}, 'RealEstate': {'us': 'VNQ', 'kr': None}, 'Shipbuilding': {'us': None, 'kr': '139230'}, 'Automotive': {'us': None, 'kr': '091180'}, 'Battery': {'us': 'LIT', 'kr': '305720'}, 'Robotics': {'us': 'ROBO', 'kr': None}, 'QuantumComputing': {'us': 'QTUM', 'kr': None}}
+SUPPLY_CHAIN_ASSETS = load_table('src.data_collection.sector_batch_collector.SUPPLY_CHAIN_ASSETS', {})
+KR_PER_BAND_STOCKS = load_table('src.data_collection.sector_batch_collector.KR_PER_BAND_STOCKS', {})
+US_KR_ETF_PAIRS = load_table('src.data_collection.sector_batch_collector.US_KR_ETF_PAIRS', {})
 
 class SectorBatchCollector:
     """Module 1 배치 수집기 — 일 1회 실행"""

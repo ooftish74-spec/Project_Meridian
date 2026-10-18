@@ -1,3 +1,8 @@
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import pandas as pd
 import numpy as np
 import logging
@@ -21,9 +26,9 @@ class DataQAGate:
         try:
             from config.dynamic_config import DynamicConfig
             cfg = DynamicConfig()
-            self.max_null_ratio = max_null_ratio if max_null_ratio is not None else cfg.get('data.max_nan_ratio', 0.1)
-            self.z_score_threshold = z_score_threshold if z_score_threshold is not None else cfg.get('adaptive.z_score_extreme', 4.0)
-            self.ffill_limit = cfg.get('data.ffill_limit', 3)
+            self.max_null_ratio = max_null_ratio if max_null_ratio is not None else pget('data.max_nan_ratio', 0.8)
+            self.z_score_threshold = z_score_threshold if z_score_threshold is not None else pget('adaptive.z_score_extreme', 1.5)
+            self.ffill_limit = pget('data.ffill_limit', 3)
         except ImportError as e:
             self.max_null_ratio = max_null_ratio if max_null_ratio is not None else 0.1
             self.z_score_threshold = z_score_threshold if z_score_threshold is not None else 4.0

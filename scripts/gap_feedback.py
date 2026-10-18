@@ -15,7 +15,18 @@ Project Meridian — Gap Feedback Engine
   4. regime_mismatch → 해당 레짐 invest_ratio 축소
   5. large_loss_cluster → SL ATR multiplier 축소
 
-모든 조정은 config_overrides.json에 기록.
+★ Track E (W1_2) 배선 수정:
+  - 수정 전: config/config_overrides.json 에 기록 → DynamicConfig 는 이 파일을 읽지 않음(results/
+    dynamic_overrides.json 만 읽음) → 피드백이 **한 번도 적용된 적 없음**.
+  - 수정 후: results/dynamic_overrides.json 에 safe_json_update(교차 프로세스 락)로 적용.
+  - 안전 정책 (PARAM_POLICY 화이트리스트):
+      · 파라미터별 하드 경계 [hard_min, hard_max] 클램프
+      · 1일 최대 상대 변화율(max_rel_change_per_day) — 당일 첫 적용 전 값을 기준선으로 누적 제한
+      · risk/signal 종류 파라미터는 **tighten-only** (자동 완화 금지; 완화는 사람만)
+      · execution 종류만 경계 내 양방향 조정 허용
+      · 화이트리스트 외 키는 거부
+      · 모든 제안/적용/거부를 results/gap_feedback_audit.jsonl 에 1행씩 감사 기록
+      · gap_feedback.dry_run=true 면 감사 기록만 하고 적용하지 않음
 재학습 트리거 필요 시 retrain_request.json 생성.
 
 Usage:
@@ -28,6 +39,12 @@ DynamicConfig 키:
     gap_feedback.cooldown_hours (default: 12)
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import sys
@@ -47,6 +64,62 @@ _RESULTS = _PROJECT_ROOT / 'results'
 _GAP_FILE = _RESULTS / 'gap_analysis.json'
 _FEEDBACK_LOG = _RESULTS / 'gap_feedback_log.json'
 _RETRAIN_REQUEST = _RESULTS / 'retrain_request.json'
+_OVERRIDES_FILE = _RESULTS / 'dynamic_overrides.json'   # ★ DynamicConfig 가 실제로 읽는 파일
+_AUDIT_FILE = _RESULTS / 'gap_feedback_audit.jsonl'
+
+# ★ Track E: 파라미터 정책 화이트리스트.
+#   kind: 'risk' | 'signal' → tighten-only, 'execution' → 경계 내 양방향.
+#   tighten: 'down' = 값을 낮추는 것이 보수화, 'up' = 높이는 것이 보수화.
+PARAM_POLICY = {
+    's2.min_confidence':            {'kind': 'signal', 'tighten': 'up',   'hard_min': 0.50, 'hard_max': 0.70, 'max_rel_change_per_day': 0.05},
+    'exit.sl_atr_multiplier':       {'kind': 'risk',   'tighten': 'down', 'hard_min': 1.20, 'hard_max': 3.00, 'max_rel_change_per_day': 0.10},
+    'sizer.stream_scale.*':         {'kind': 'risk',   'tighten': 'down', 'hard_min': 0.50, 'hard_max': 1.00, 'max_rel_change_per_day': 0.10},
+    'sizer.regime_invest_ratio.*':  {'kind': 'risk',   'tighten': 'down', 'hard_min': 0.20, 'hard_max': 1.00, 'max_rel_change_per_day': 0.15},
+}
+
+
+def _policy_for(key: str) -> Optional[Dict[str, Any]]:
+    if key in PARAM_POLICY:
+        return PARAM_POLICY[key]
+    for pat, pol in PARAM_POLICY.items():
+        if pat.endswith('.*') and key.startswith(pat[:-1]) and len(key) > len(pat) - 1:
+            return pol
+    return None
+
+
+def bound_adjustment(key: str, old: float, requested: float, baseline: Optional[float] = None) -> Dict[str, Any]:
+    """제안된 조정을 정책에 따라 검증/클램프 (순수 함수).
+
+    Returns: {'status': applied|clamped|noop|rejected_loosen|rejected_unknown_key|rejected_invalid,
+              'new': 적용값(or None), 'policy': ...}
+    baseline: 당일 첫 적용 전 값 (일일 누적 변화 제한 기준). None 이면 old.
+    """
+    pol = _policy_for(key)
+    if pol is None:
+        return {'status': 'rejected_unknown_key', 'new': None, 'policy': None}
+    try:
+        old = float(old)
+        requested = float(requested)
+    except (TypeError, ValueError):
+        return {'status': 'rejected_invalid', 'new': None, 'policy': pol}
+    if not (old == old and requested == requested):
+        return {'status': 'rejected_invalid', 'new': None, 'policy': pol}
+    base = float(baseline) if baseline is not None else old
+    tighten_down = pol['tighten'] == 'down'
+    loosening = (requested > old) if tighten_down else (requested < old)
+    if pol['kind'] in ('risk', 'signal') and loosening:
+        return {'status': 'rejected_loosen', 'new': None, 'policy': pol}
+    lo, hi = pol['hard_min'], pol['hard_max']
+    rel = pol['max_rel_change_per_day']
+    day_lo, day_hi = base * (1 - rel), base * (1 + rel)
+    new = min(max(requested, lo, day_lo), hi, day_hi)
+    # 이미 경계 밖(외부 설정)인 값에서 출발했다면 보수화 방향 이동만 허용 — 클램프가 완화로 뒤집히지 않게
+    if pol['kind'] in ('risk', 'signal'):
+        new = min(new, old) if tighten_down else max(new, old)
+    new = round(new, 6)
+    if abs(new - old) < 1e-9:
+        return {'status': 'noop', 'new': old, 'policy': pol}
+    return {'status': 'applied' if abs(new - requested) < 1e-9 else 'clamped', 'new': new, 'policy': pol}
 
 
 class GapFeedbackEngine:
@@ -58,11 +131,21 @@ class GapFeedbackEngine:
 
     def __init__(self):
         self.enabled = cfg.get('gap_feedback.enabled', True)
-        self.max_adjustments = cfg.get('gap_feedback.max_adjust_per_day', 3)
-        self.cooldown_hours = cfg.get('gap_feedback.cooldown_hours', 12)
+        self.max_adjustments = pget('gap_feedback.max_adjust_per_day', 3)
+        self.cooldown_hours = pget('gap_feedback.cooldown_hours', 12)
         self.adjustments_made: List[Dict] = []
         self.retrain_needed = False
         self.retrain_trigger = ''
+        self.dry_run = bool(cfg.get('gap_feedback.dry_run', False))
+        self.apply_report: List[Dict] = []
+
+    def _current(self, key: str, default: float) -> float:
+        """★ Track E: 같은 실행 내 선행 규칙의 제안값을 반영 (규칙 3·5 가 같은 키를 덮어쓰던 버그 수정)."""
+        for adj in reversed(self.adjustments_made):
+            if adj['key'] == key:
+                return adj['new']
+        v = cfg.get(key, default)
+        return default if v is None else v
 
     def run(self) -> Dict[str, Any]:
         """피드백 엔진 실행.
@@ -132,9 +215,11 @@ class GapFeedbackEngine:
         result['retrain_needed'] = self.retrain_needed
         result['retrain_trigger'] = self.retrain_trigger
 
-        # 조정사항 적용
+        # 조정사항 적용 (★ Track E: 경계/일일한도/tighten-only 검증 후 dynamic_overrides.json)
         if self.adjustments_made:
             self._apply_adjustments()
+        result['apply_report'] = self.apply_report
+        result['dry_run'] = self.dry_run
 
         # 재학습 요청 생성
         if self.retrain_needed:
@@ -161,14 +246,16 @@ class GapFeedbackEngine:
             if p.get('type') != 'high_confidence_miss':
                 continue
             ratio = p.get('ratio', 0)
-            threshold = cfg.get('gap_feedback.high_conf_miss_ratio', 0.30)
+            threshold = pget('gap_feedback.high_conf_miss_ratio', 0.30)
             if ratio <= threshold:
                 continue
 
+            if len(self.adjustments_made) >= self.max_adjustments:
+                return
             # confidence 임계값 상향
-            current_min = cfg.get('s2.min_confidence', 0.55)
-            adjust_step = cfg.get('gap_feedback.conf_adjust_step', 0.02)
-            max_conf = cfg.get('gap_feedback.conf_adjust_max', 0.70)
+            current_min = pget('s2.min_confidence', 0.55)
+            adjust_step = pget('gap_feedback.conf_adjust_step', 0.02)
+            max_conf = pget('gap_feedback.conf_adjust_max', 0.70)
             new_min = min(max_conf, current_min + adjust_step)
 
             self.adjustments_made.append({
@@ -194,10 +281,12 @@ class GapFeedbackEngine:
             if not stream or fail_rate <= 0.50:
                 continue
 
+            if len(self.adjustments_made) >= self.max_adjustments:
+                return
             key = f'sizer.stream_scale.{stream}'
-            current = cfg.get(key, 1.0)
-            reduction = cfg.get('gap_feedback.stream_scale_reduction', 0.10)
-            floor = cfg.get('gap_feedback.stream_scale_floor', 0.50)
+            current = self._current(key, 1.0)
+            reduction = pget('gap_feedback.stream_scale_reduction', 0.10)
+            floor = pget('gap_feedback.stream_scale_floor', 0.50)
             new_val = max(floor, current - reduction)
 
             self.adjustments_made.append({
@@ -219,15 +308,17 @@ class GapFeedbackEngine:
             if p.get('type') != 'consecutive_losses':
                 continue
             streak = p.get('max_streak', 0)
-            sl_trigger = cfg.get('gap_feedback.consecutive_loss_sl_trigger', 4)
+            sl_trigger = pget('gap_feedback.consecutive_loss_sl_trigger', 4)
             if streak < sl_trigger:
                 continue
 
+            if len(self.adjustments_made) >= self.max_adjustments:
+                return
             # SL multiplier 축소
             key = 'exit.sl_atr_multiplier'
-            current = cfg.get(key, 2.0)
-            step = cfg.get('gap_feedback.sl_tighten_step', 0.1)
-            floor = cfg.get('gap_feedback.sl_atr_floor', 1.2)
+            current = self._current(key, 2.0)
+            step = pget('gap_feedback.sl_tighten_step', 0.1)
+            floor = pget('gap_feedback.sl_atr_floor', 1.2)
             new_val = max(floor, current - step)
 
             self.adjustments_made.append({
@@ -260,10 +351,12 @@ class GapFeedbackEngine:
             if not regime or da >= 0.40:
                 continue
 
+            if len(self.adjustments_made) >= self.max_adjustments:
+                return
             key = f'sizer.regime_invest_ratio.{regime}'
-            current = cfg.get(key, 0.50)
-            reduction = cfg.get('gap_feedback.regime_ratio_reduction', 0.10)
-            floor = cfg.get('gap_feedback.regime_ratio_floor', 0.20)
+            current = self._current(key, 0.50)
+            reduction = pget('gap_feedback.regime_ratio_reduction', 0.10)
+            floor = pget('gap_feedback.regime_ratio_floor', 0.20)
             new_val = max(floor, current - reduction)
 
             self.adjustments_made.append({
@@ -291,13 +384,15 @@ class GapFeedbackEngine:
 
             avg_loss = abs(p.get('avg_loss_pct', 0))
 
+            if len(self.adjustments_made) >= self.max_adjustments:
+                return
             # SL multiplier 축소 (큰 손실에 비례)
             key = 'exit.sl_atr_multiplier'
-            current = cfg.get(key, 2.0)
+            current = self._current(key, 2.0)
             # 평균 손실이 클수록 더 많이 축소
-            scale = cfg.get('gap_feedback.large_loss_sl_scale', 0.05)
+            scale = pget('gap_feedback.large_loss_sl_scale', 0.05)
             step = min(0.3, avg_loss * scale)
-            floor = cfg.get('gap_feedback.sl_atr_floor', 1.2)
+            floor = pget('gap_feedback.sl_atr_floor', 1.2)
             new_val = max(floor, current - step)
 
             if new_val < current:
@@ -316,8 +411,8 @@ class GapFeedbackEngine:
         """규칙 6: 전체 DA < 50% → 재학습 트리거."""
         da = summary.get('overall_da', 1.0)
         n = summary.get('n_trades', 0)
-        da_threshold = cfg.get('gap_feedback.da_retrain_threshold', 0.50)
-        min_trades = cfg.get('gap_feedback.da_retrain_min_trades', 15)
+        da_threshold = pget('gap_feedback.da_retrain_threshold', 0.50)
+        min_trades = pget('gap_feedback.da_retrain_min_trades', 15)
 
         if n >= min_trades and da < da_threshold:
             self.retrain_needed = True
@@ -330,7 +425,7 @@ class GapFeedbackEngine:
         """규칙 7: IC < 0 → 재학습 트리거."""
         ic = summary.get('overall_ic', 0)
         n = summary.get('n_trades', 0)
-        min_trades = cfg.get('gap_feedback.ic_retrain_min_trades', 20)
+        min_trades = pget('gap_feedback.ic_retrain_min_trades', 20)
 
         if n >= min_trades and ic < 0:
             self.retrain_needed = True
@@ -354,7 +449,7 @@ class GapFeedbackEngine:
             if ts:
                 gap_time = datetime.fromisoformat(ts)
                 age_hours = (datetime.now() - gap_time).total_seconds() / 3600
-                max_age = cfg.get('gap_feedback.max_gap_age_hours', 24)
+                max_age = pget('gap_feedback.max_gap_age_hours', 24)
                 if age_hours > max_age:
                     logger.info(
                         f"  ⏭️ Gap Feedback: gap_analysis {age_hours:.0f}h 경과 > {max_age}h")
@@ -381,31 +476,88 @@ class GapFeedbackEngine:
             pass
         return False
 
-    def _apply_adjustments(self):
-        """조정 사항을 config_overrides.json에 적용."""
-        overrides_file = _PROJECT_ROOT / 'config' / 'config_overrides.json'
+    def _today_baselines(self) -> Dict[str, float]:
+        """감사 로그에서 키별 '당일 첫 적용 전 값' (일일 누적 변화 제한 기준선)."""
+        base: Dict[str, float] = {}
+        if not _AUDIT_FILE.exists():
+            return base
+        today = datetime.now().date().isoformat()
         try:
-            overrides = {}
-            if overrides_file.exists():
-                overrides = json.loads(overrides_file.read_text())
+            with open(_AUDIT_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                    except ValueError:
+                        continue
+                    if str(rec.get('ts', ''))[:10] != today:
+                        continue
+                    if rec.get('status') in ('applied', 'clamped') and rec.get('key') not in base:
+                        base[rec['key']] = rec.get('baseline', rec.get('old'))
+        except OSError as e:
+            logger.warning(f"  gap_feedback 감사 로그 읽기 실패: {e}")
+        return base
 
-            for adj in self.adjustments_made:
-                key = adj['key']
-                overrides[key] = adj['new']
-
-            # 원자적 쓰기
-            import tempfile, os
-            fd, tmp = tempfile.mkstemp(
-                dir=str(overrides_file.parent), suffix='.tmp')
-            with os.fdopen(fd, 'w') as f:
-                json.dump(overrides, f, indent=2, ensure_ascii=False)
-            os.replace(tmp, str(overrides_file))
-
-            logger.info(
-                f"    💾 {len(self.adjustments_made)}건 조정 → "
-                f"config_overrides.json 적용 완료")
+    def _audit(self, records: List[Dict]):
+        if not records:
+            return
+        try:
+            from src.utils.file_ops import file_lock_transaction
+            _AUDIT_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with file_lock_transaction(_AUDIT_FILE, timeout=10, strict=True):
+                with open(_AUDIT_FILE, 'a', encoding='utf-8') as f:
+                    for r in records:
+                        f.write(json.dumps(r, ensure_ascii=False, default=str) + '\n')
         except Exception as e:
-            logger.warning(f"  config_overrides 적용 실패: {e}")
+            logger.error(f"  gap_feedback 감사 로그 기록 실패: {e}", exc_info=True)
+
+    def _apply_adjustments(self):
+        """★ Track E: 조정 사항을 정책 검증 후 results/dynamic_overrides.json 에 적용.
+
+        수정 전: config/config_overrides.json(어떤 로더도 읽지 않는 파일)에 비잠금 쓰기 → 무효.
+        """
+        ts = datetime.now().isoformat()
+        baselines = self._today_baselines()
+        decided: Dict[str, float] = {}
+        audit: List[Dict] = []
+        for adj in self.adjustments_made:
+            key = adj['key']
+            # 같은 실행에서 같은 키를 여러 규칙이 조정하면: 직전 '적용값'에서 출발, 기준선은 당일 최초값 유지
+            old_eff = decided.get(key, adj['old'])
+            base = baselines.setdefault(key, adj['old'])
+            chk = bound_adjustment(key, old_eff, adj['new'], base)
+            rec = {'ts': ts, 'rule': adj.get('rule'), 'key': key, 'old': old_eff,
+                   'requested': adj['new'], 'applied': chk['new'], 'status': chk['status'],
+                   'baseline': base, 'reason': adj.get('reason'),
+                   'policy': chk['policy'], 'dry_run': self.dry_run, 'target': str(_OVERRIDES_FILE.name)}
+            if chk['status'] in ('applied', 'clamped'):
+                decided[key] = chk['new']
+            audit.append(rec)
+        self.apply_report = audit
+        if decided and not self.dry_run:
+            try:
+                from src.utils.file_ops import safe_json_update
+
+                def _mut(obj):
+                    if not isinstance(obj, dict):
+                        obj = {}
+                    for k, v in decided.items():
+                        obj[k] = v
+                    obj['_last_updated'] = ts
+                    obj['_updated_by'] = 'gap_feedback'
+                    return obj
+                safe_json_update(_OVERRIDES_FILE, _mut, default={})
+                logger.info(f"    💾 {len(decided)}건 조정 → dynamic_overrides.json 적용 완료 "
+                            f"(경계/일일한도/tighten-only 검증)")
+            except Exception as e:
+                # fail-closed: 적용 실패 시 감사 기록에 실패 상태 남김 (값 변경 없음)
+                logger.error(f"  dynamic_overrides 적용 실패 (변경 없음): {e}", exc_info=True)
+                for rec in audit:
+                    if rec['status'] in ('applied', 'clamped'):
+                        rec['status'] = 'apply_failed'
+                        rec['error'] = f"{type(e).__name__}: {e}"
+        elif decided and self.dry_run:
+            logger.info(f"    🧪 dry_run: {len(decided)}건 조정 제안 (미적용)")
+        self._audit(audit)
 
     def _create_retrain_request(self):
         """retrain_request.json 생성 → should_retrain()이 읽어감."""

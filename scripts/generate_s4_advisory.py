@@ -20,6 +20,12 @@ Usage:
     python3 scripts/generate_s4_advisory.py
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import sys
@@ -650,7 +656,7 @@ def generate_advisory() -> dict:
             invest_amount = min(suggested_amount, max_per_stock, remaining)
 
             # 최소 거래 금액 체크
-            min_trade = cfg.get('a3.min_trade_amount', 200_000)
+            min_trade = pget('a3.min_trade_amount', 10000)
             if invest_amount < min_trade:
                 logger.info(f"  🚫 {acct}:{ticker}: 투자액 ₩{invest_amount:,.0f} < "
                             f"최소 ₩{min_trade:,.0f}")
@@ -663,6 +669,10 @@ def generate_advisory() -> dict:
                 if is_us:
                     from src.execution.execution_engine import ExecutionEngine
                     fx_rate = ExecutionEngine()._get_dynamic_usdkrw_rate()
+                    if fx_rate <= 0:
+                        # ★ Wave 1: 환율 미상 → 해외 매수 권고 생략 (날조 환율 금지)
+                        logger.warning(f"  🛑 {acct}:{ticker}: USD/KRW 미상 → 해외 매수 권고 생략")
+                        continue
                     eff_price_krw = price * fx_rate
                     quantity = int(invest_amount / eff_price_krw)
                     actual_amount = quantity * eff_price_krw

@@ -7,6 +7,16 @@ Includes sector-stock mappings, news keywords, sentiment dictionaries,
 RSS feed URLs, and API key loading.
 """
 
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import logging
 import os
 from pathlib import Path
@@ -61,25 +71,7 @@ TARGET_THEMES = cfg.get('universe.target_themes', {
 })
 
 # ── 미국 종목 (밸류에이션 스냅샷용) ──
-US_SECTOR_STOCKS = {
-    'Semiconductor': ['MU', 'NVDA', 'AVGO', 'AMD', 'INTC', 'TSM'],
-    'AI':            ['NVDA', 'MSFT', 'GOOGL', 'META', 'AMZN'],
-    'QuantumComputing': ['IONQ', 'RGTI', 'QBTS'],
-    'Robotics':      ['ISRG', 'ROK', 'FANUY'],
-    'Software':      ['CRM', 'ORCL', 'ADBE', 'NOW', 'PLTR'],
-    'Finance':       ['JPM', 'BAC', 'WFC', 'GS', 'MS'],
-    'Healthcare':    ['UNH', 'JNJ', 'LLY', 'PFE', 'ABBV'],
-    'Energy':        ['XOM', 'CVX', 'COP', 'SLB'],
-    'Materials':     ['LIN', 'APD', 'FCX', 'NEM'],
-    'Consumer':      ['PG', 'KO', 'PEP', 'COST', 'WMT'],
-    'Utilities':     ['NEE', 'SO', 'DUK', 'AEP', 'D'],
-    'Telecom':       ['META', 'GOOGL', 'DIS', 'NFLX', 'T'],
-    'Defense':       ['LMT', 'RTX', 'NOC', 'GD'],
-    'RealEstate':    ['PLD', 'AMT', 'EQIX', 'SPG', 'O'],
-    'Shipbuilding':  [],
-    'Automotive':    ['TSLA', 'GM', 'F', 'TM'],
-    'Battery':       ['ALB', 'ENPH', 'FSLR'],
-}
+US_SECTOR_STOCKS = load_table('src.data_collection.realtime_constants.US_SECTOR_STOCKS', {})
 
 # ── 뉴스 키워드 (영어 + 한국어) ──
 NEWS_KEYWORDS_EN = {

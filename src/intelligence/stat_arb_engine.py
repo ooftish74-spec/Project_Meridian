@@ -5,6 +5,11 @@ KOSPI 200 전체 유니버스의 가격 시계열을 바탕으로
 공적분(Cointegration) 검정을 수행하고, 
 스프레드가 임계치를 이탈한 Long-Short 페어 시그널을 추출합니다.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import List, Dict, Tuple
 import numpy as np
@@ -65,7 +70,7 @@ class StatArbEngine:
         """
         if current_aum is None:
             from config.dynamic_config import DynamicConfig
-            current_aum = float(DynamicConfig().get('portfolio.initial_capital', 1000000.0))
+            current_aum = float(pget('portfolio.initial_capital', 19600000.0))
             
         is_large_cap = current_aum > 10000000000.0
         routing_algo = 'PASSIVE_TWAP' if is_large_cap else 'ACTIVE_LIMIT'

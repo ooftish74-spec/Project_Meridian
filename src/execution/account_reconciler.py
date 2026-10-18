@@ -41,8 +41,12 @@ class AccountReconciler:
             cash_krw = float(getattr(adapter.account, 'cash', 0.0) or 0.0)
             cash_usd = float(getattr(adapter, 'us_cash_usd', 0.0) or 0.0)
             fx_rate = adapter._get_live_fx_rate()
-            if fx_rate <= 0:
-                fx_rate = 1353.63
+            # ★ Wave 1: 1353.63 날조 제거. 환율 미상 + 해외 익스포저 존재 → 교정 불가(fail-closed, 호출자는 직전 상태 유지)
+            _has_us = cash_usd > 0 or any(not str(t).isdigit() for t in (adapter.positions or {}).keys())
+            if not fx_rate or fx_rate <= 0:
+                if _has_us:
+                    raise ValueError("FX_UNKNOWN: USD/KRW unavailable — reconcile refused (no fabricated rate)")
+                fx_rate = 0.0
 
             # SSoT: KIS OpenAPI API에서 조회된 실질 us_cash_usd와 cash_krw를 왜곡 없이 그대로 사용
             pass

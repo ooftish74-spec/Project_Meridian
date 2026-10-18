@@ -8,6 +8,11 @@ Project Meridian: US Night Execution Engine (us_night_engine.py)
   3. 트레일링 스탑 (Trailing Stop: 고점 대비 -2.5% 이탈 시 익절/손절) 다일 스윙 매매 적용
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime
@@ -71,8 +76,8 @@ class USNightExecutionEngine:
     def __init__(self):
         self.max_exposure_pct = self._compute_dynamic_exposure_cap()
         self.trailing_stop_pct = self._compute_dynamic_trailing_stop()
-        self.trail_activation_pct = float(cfg.get('us_night.trail_activation_pct', 0.015))
-        self.hard_stop_pct = float(cfg.get('us_night.hard_stop_pct', 0.05))
+        self.trail_activation_pct = float(pget('us_night.trail_activation_pct', 0.015))
+        self.hard_stop_pct = float(pget('us_night.hard_stop_pct', 0.05))
         self._load_holdings()
 
     def _compute_dynamic_exposure_cap(self) -> float:
@@ -94,7 +99,7 @@ class USNightExecutionEngine:
         """[Mathematical Dynamic Model] 종목별 실현 변동성/ATR 기반 동적 트레일링 스탑 비율."""
         if atr > 0:
             return max(0.015, min(0.060, atr * 2.0))
-        default_pct = cfg.get('us_night.trailing_stop_pct', 0.025)
+        default_pct = pget('us_night.trailing_stop_pct', 0.025)
         return float(default_pct)
 
     def _get_live_fx_rate(self) -> float:
@@ -114,7 +119,15 @@ class USNightExecutionEngine:
                 return px
         except Exception:
             pass
-        return float(cfg.get('macro.usdkrw_rate', 1353.63))
+        # ★ Wave 1: 1353.63 리터럴 기본값 제거 → 게이트웨이 실관측 last-good(≤ fx.max_stale_hours) 또는 0.0(미상)
+        try:
+            from src.data_collection.central_data_gateway import CentralDataGateway
+            _lg = CentralDataGateway().get_usdkrw_rate()
+            if _lg and float(_lg) > 0:
+                return float(_lg)
+        except Exception:
+            pass
+        return 0.0
 
     def _load_holdings(self):
         """미국 장 야간 보유 포지션 로드 (KIS 실계좌 SSOT 및 HWM 연동)."""
@@ -209,6 +222,9 @@ class USNightExecutionEngine:
             return orders
 
         fx_rate = self._get_live_fx_rate()
+        if fx_rate <= 0:
+            logger.warning("🇺🇸 [USNightEngine] USD/KRW 미상 → 신규 미국 매수 전면 생략 (fail-closed)")
+            return orders
         us_budget = account_nav * self.max_exposure_pct
         current_invested_krw = sum(h.get('amount', 0) * fx_rate for h in self.holdings)
         available_us_cash_krw = max(0.0, us_budget - current_invested_krw)

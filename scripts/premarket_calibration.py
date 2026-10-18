@@ -5,6 +5,12 @@ Premarket Calibration Script (08:50 AM)
 비정상적인 갭(Fake Gap-Up / Sudden Crash)이 발생할 경우 시그널(Kelly Fraction)을 강제로 삭감합니다.
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import sys
 import json
 import logging
@@ -114,7 +120,7 @@ def run_calibration():
                 cache = json.load(f)
             _nf_raw = cache.get('change_pct', cache.get('final_pct'))
             _nf_ts = cache.get('timestamp') or cache.get('updated_at')
-            _max_age_h = float(cfg.get('premarket.night_futures_max_age_hours', 16) or 16)
+            _max_age_h = float(pget('premarket.night_futures_max_age_hours', 16) or 16)
             _age_h = None
             if _nf_ts:
                 _age_h = (datetime.now() - datetime.fromisoformat(str(_nf_ts)).replace(tzinfo=None)).total_seconds() / 3600.0

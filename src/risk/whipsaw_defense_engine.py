@@ -9,6 +9,11 @@ Project Meridian — Anti-Whipsaw Defense Engine
   is_whipsaw_active = (KER < ker_floor) or (cooldown_until > current_time)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import time
 import math
 import logging
@@ -74,7 +79,7 @@ class AntiWhipsawDefenseEngine:
             self._loss_history_timestamps.append(now)
 
             # 2시간 이내 2회 이상 연속 휩소 손절 시 쿨다운 발동
-            whipsaw_window = float(cfg.get('whipsaw.window_seconds', 7200.0))
+            whipsaw_window = float(pget('whipsaw.window_seconds', 7200.0))
             max_consec = int(cfg.get('whipsaw.max_consecutive_losses', 2))
             recent_losses = [t for t in self._loss_history_timestamps if now - t <= whipsaw_window]
             if len(recent_losses) >= max_consec:
@@ -104,9 +109,9 @@ class AntiWhipsawDefenseEngine:
         Returns:
             승상된 Z-Score 임계치
         """
-        ker_floor = float(cfg.get('whipsaw.ker_floor', 0.30))
-        ker_mid = float(cfg.get('whipsaw.ker_mid_threshold', 0.50))
-        max_boost_z = float(cfg.get('whipsaw.max_boost_z', 2.5))
+        ker_floor = float(pget('whipsaw.ker_floor', 0.30))
+        ker_mid = float(pget('whipsaw.ker_mid_threshold', 0.50))
+        max_boost_z = float(pget('whipsaw.max_boost_z', 2.5))
 
         if ker_value >= ker_mid:
             return base_z
@@ -133,7 +138,7 @@ class AntiWhipsawDefenseEngine:
             }
         """
         now = time.time()
-        ker_floor = float(cfg.get('whipsaw.ker_floor', 0.30))
+        ker_floor = float(pget('whipsaw.ker_floor', 0.30))
         ker_val = self.compute_kaufman_efficiency_ratio(prices)
         cooldown_active = now < self._cooldown_until_timestamp
         scaled_z = self.get_dynamic_z_threshold(ker_val)

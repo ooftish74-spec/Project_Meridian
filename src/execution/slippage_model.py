@@ -34,6 +34,11 @@ Usage:
     # 변동성 명시 (백테스트 등)
     cost = model.estimate(order_size=5_000_000, adv=100_000_000_000, volatility=0.025)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from datetime import datetime, time
@@ -92,9 +97,9 @@ class AdvancedSlippageModel:
         """
         if ticker and ticker in self._vol_cache:
             return self._vol_cache[ticker]
-        lookback = cfg.get('slippage.vol_lookback_days', 20)
+        lookback = pget('slippage.vol_lookback_days', 20)
         # [Dynamic Mathematical Model] Dynamic Market Baseline Volatility
-        fallback_vol = max(0.01, cfg.get('slippage.default_daily_vol', 0.018))
+        fallback_vol = max(0.01, pget('slippage.default_daily_vol', 0.02))
         if not ticker:
             return fallback_vol
         try:
@@ -181,19 +186,19 @@ class AdvancedSlippageModel:
             sigma = self._compute_realized_vol(ticker)
             vol_source = 'realized'
         else:
-            sigma = cfg.get('slippage.default_daily_vol', 0.02)
+            sigma = pget('slippage.default_daily_vol', 0.02)
             vol_source = 'default'
-        base_bps = cfg.get('slippage.base_bps', 3.0)
-        eta = cfg.get('slippage.impact_coefficient', 10.0)
-        delta = cfg.get('slippage.impact_exponent', 0.5)
+        base_bps = pget('slippage.base_bps', 3.0)
+        eta = pget('slippage.impact_coefficient', 10.0)
+        delta = pget('slippage.impact_exponent', 0.5)
         if adv > 0:
             participation = order_size / adv
             market_impact_bps = eta * sigma * math.pow(participation, delta) * 10000
         else:
-            market_impact_bps = eta * sigma * cfg.get('slippage.default_impact_bps', 5.0)
+            market_impact_bps = eta * sigma * pget('slippage.default_impact_bps', 5.0)
         liquidity_premium = 0.0
-        mcap_threshold = cfg.get('slippage.small_cap_threshold', 500000000000)
-        small_cap_premium = cfg.get('slippage.small_cap_premium_bps', 3.0)
+        mcap_threshold = pget('slippage.small_cap_threshold', 500000000000)
+        small_cap_premium = pget('slippage.small_cap_premium_bps', 3.0)
         if market_cap > 0 and market_cap < mcap_threshold:
             ratio = mcap_threshold / max(market_cap, 1)
             liquidity_premium = small_cap_premium * min(3.0, math.log(ratio))
@@ -218,16 +223,16 @@ class AdvancedSlippageModel:
         close_start = _parse_time(cfg.get('slippage.volatile_close_start', '15:15'), datetime.strptime('15:15', '%H:%M').time())
         close_end = _parse_time(cfg.get('slippage.volatile_close_end', '15:30'), datetime.strptime('15:30', '%H:%M').time())
         if open_start <= t <= open_end:
-            time_adj = cfg.get('slippage.open_multiplier', 1.5)
+            time_adj = pget('slippage.open_multiplier', 1.5)
         elif close_start <= t <= close_end:
-            time_adj = cfg.get('slippage.close_multiplier', 1.3)
+            time_adj = pget('slippage.close_multiplier', 1.3)
         else:
             time_adj = cfg.get('slippage.midday_multiplier', 1.0)
         regime_mult = cfg.get(f'slippage.regime_multiplier.{regime}', cfg.get('slippage.regime_multiplier.caution', 1.0))
         total_bps = (base_bps + market_impact_bps + liquidity_premium) * time_adj * regime_mult
         
         # [Almgren-Chriss Flash Crash Defense] 폭락/위기 레짐 시 50bps 인공 상한선 해제 (최대 500bps까지 비선형 반영)
-        stress_max_bps = float(cfg.get('slippage.max_stress_bps', 500.0) if regime in ('crash', 'bear') else cfg.get('slippage.max_total_bps', 150.0))
+        stress_max_bps = float(pget('slippage.max_stress_bps', 500.0) if regime in ('crash', 'bear') else pget('slippage.max_total_bps', 50.0))
         total_bps = min(total_bps, stress_max_bps)
         total_cost = order_size * total_bps / 10000
         return {'slippage_bps': round(total_bps, 2), 'total_cost': round(total_cost, 0), 'components': {'base_bps': round(base_bps, 2), 'market_impact_bps': round(market_impact_bps, 2), 'sigma': round(sigma, 6), 'sigma_source': vol_source, 'eta': round(eta, 4), 'delta': round(delta, 4), 'liquidity_premium_bps': round(liquidity_premium, 2), 'time_adjustment': round(time_adj, 2), 'regime_multiplier': round(regime_mult, 2), 'participation_rate': round(order_size / adv, 6) if adv > 0 else None}}

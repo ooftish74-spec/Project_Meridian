@@ -17,6 +17,21 @@ Usage:
     # CLI
     python -m src.data_collection.macro_realtime_refresher
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import json
 import logging
 import time
@@ -48,17 +63,17 @@ class MacroRealtimeRefresher:
     모든 주기/대상 종목/장 시간은 DynamicConfig에서 동적 로드.
     """
     _DEFAULT_TIER1 = {'^VIX': 'vix', '^GSPC': 'sp500', '^IXIC': 'nasdaq', '^SOX': 'sox', '^DJI': 'dji', 'KRW=X': 'usdkrw', 'USDJPY=X': 'usdjpy', 'EURUSD=X': 'eurusd', 'DX-Y.NYB': 'dxy'}
-    _DEFAULT_TIER2 = {'CL=F': 'wti', 'GC=F': 'gold_us', 'SI=F': 'silver', 'HG=F': 'copper', '^TNX': 'us10y', '^FVX': 'us5y', '^TYX': 'us30y', 'EWY': 'ewy', 'FLKR': 'flkr', 'FXI': 'fxi', '^TWII': 'taiex', '^N225': 'nikkei', '^HSI': 'hangseng'}
+    _DEFAULT_TIER2 = load_table('src.data_collection.macro_realtime_refresher.MacroRealtimeRefresher._DEFAULT_TIER2', {})
 
     def __init__(self):
         self._cfg = _load_config()
         self._cache = self._load_signal_cache()
-        self._tier1_interval = self._get_cfg('macro_refresh.tier1_interval_sec', 300)
-        self._tier2_interval = self._get_cfg('macro_refresh.tier2_interval_sec', 1800)
-        self._market_open_hour = self._get_cfg('macro_refresh.market_open_hour', 9)
+        self._tier1_interval = pget('macro_refresh.tier1_interval_sec', 300)
+        self._tier2_interval = pget('macro_refresh.tier2_interval_sec', 1800)
+        self._market_open_hour = pget('macro_refresh.market_open_hour', 9)
         self._market_open_min = self._get_cfg('macro_refresh.market_open_min', 0)
-        self._market_close_hour = self._get_cfg('macro_refresh.market_close_hour', 15)
-        self._market_close_min = self._get_cfg('macro_refresh.market_close_min', 30)
+        self._market_close_hour = pget('macro_refresh.market_close_hour', 15)
+        self._market_close_min = pget('macro_refresh.market_close_min', 30)
         self._tier1_tickers = self._load_tier_tickers('tier1', self._DEFAULT_TIER1)
         self._tier2_tickers = self._load_tier_tickers('tier2', self._DEFAULT_TIER2)
 
@@ -143,7 +158,7 @@ class MacroRealtimeRefresher:
                 import pandas as _pd
                 from pathlib import Path
                 
-                vix_window = int(self._get_cfg('s1.vix_rolling_window', 20))
+                vix_window = int(pget('s1.vix_rolling_window', 20))
                 
                 # VIX 폴백 1: 기존 캐시값(전일값) Forward Fill
                 fallback_vix = self._cache.get('vix')
@@ -457,7 +472,7 @@ class MacroRealtimeRefresher:
         import math as _math
         updates: Dict = {}
         try:
-            lp_window = int(self._get_cfg('s1.lp_pressure_rolling_window', 20))
+            lp_window = int(pget('s1.lp_pressure_rolling_window', 20))
             lp_hist = self._cache.get('lp_pressure_history', [])
             if not isinstance(lp_hist, list):
                 lp_hist = []
@@ -495,7 +510,7 @@ class MacroRealtimeRefresher:
         except Exception as _e:
             logger.error(f'  [S1 Support] LP Pressure rolling 계산 실패: {_e}', exc_info=True)
         try:
-            atr_5m_window = int(self._get_cfg('s1.atr_5m_window', 5))
+            atr_5m_window = int(pget('s1.atr_5m_window', 5))
             import numpy as _np
             import pandas as _pd
             df_daily = None
@@ -826,7 +841,7 @@ class MacroRealtimeRefresher:
             from src.data_collection.kis_data_collector import KISDataCollector
             collector = KISDataCollector()
             kospi200 = float(self._cache.get('kospi200', 0)) or None
-            option_data = collector.get_kospi200_option_oi(underlying_price=kospi200, n_strikes=int(self._get_cfg('gex.n_strikes', 5)))
+            option_data = collector.get_kospi200_option_oi(underlying_price=kospi200, n_strikes=int(pget('gex.n_strikes', 5)))
             if not option_data:
                 logger.debug('GEX 파이프라인: 옵션 데이터 없음 → 스킵')
                 return
@@ -839,7 +854,7 @@ class MacroRealtimeRefresher:
                 gex_history[-1] = gex
             else:
                 gex_history.append(gex)
-            max_hist = int(self._get_cfg('gex.history_length', 20))
+            max_hist = int(pget('gex.history_length', 20))
             gex_history = gex_history[-max_hist:]
             crash_warning = False
             crash_severity = 0.0
@@ -847,7 +862,7 @@ class MacroRealtimeRefresher:
                 import statistics
                 gex_mean = statistics.mean(gex_history)
                 gex_std = statistics.stdev(gex_history) if len(gex_history) > 1 else 1e-09
-                gex_threshold = float(self._get_cfg('gex.crash_z_score_threshold', -2.0))
+                gex_threshold = float(pget('gex.crash_z_score_threshold', -2.0))
                 if gex_std > 0:
                     z_score = (gex - gex_mean) / gex_std
                     if z_score < gex_threshold:
@@ -886,7 +901,7 @@ class MacroRealtimeRefresher:
                 from src.utils.credential_manager import CredentialManager
                 av_key = CredentialManager().read_from_env('ALPHA_VANTAGE_API_KEY') or ''
                 if av_key:
-                    av_timeout = int(self._get_cfg('macro_refresh.av_timeout_sec', 10))
+                    av_timeout = int(pget('macro_refresh.av_timeout_sec', 10))
                     av_fx_url = f'https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=KRW&apikey={av_key}'
                     r_fx = _req.get(av_fx_url, timeout=av_timeout)
                     if r_fx.status_code == 200:
@@ -955,8 +970,8 @@ class MacroRealtimeRefresher:
             macro_spike = False
             spike_z_max = 0.0
             import statistics
-            spike_window = int(self._get_cfg('macro_spike.history_length', 20))
-            spike_z_threshold = float(self._get_cfg('macro_spike.z_threshold', 2.5))
+            spike_window = int(pget('macro_spike.history_length', 20))
+            spike_z_threshold = float(pget('macro_spike.z_threshold', 2.5))
             today_date_str = datetime.now().strftime('%Y-%m-%d')
             for metric_key in ('us10y', 'dxy', 'usdkrw'):
                 current_val = updates_macro.get(metric_key, self._cache.get(metric_key))
@@ -1017,7 +1032,7 @@ class MacroRealtimeRefresher:
                 updates_vix.update({'wag_the_dog_active': wtd_data['wag_the_dog_active'], 'wag_the_dog_severity': wtd_data['wag_the_dog_severity'], 'frgn_fut_net_buy': wtd_data['frgn_fut_net_buy'], 'frgn_spot_net_buy': wtd_data['frgn_spot_net_buy']})
                 if wtd_data['wag_the_dog_active']:
                     logger.warning(f"  🐕 웩더독 발동! severity={wtd_data['wag_the_dog_severity']:.3f}")
-            ema_period = int(self._get_cfg('vix_trailing.ema_period', 10))
+            ema_period = int(pget('vix_trailing.ema_period', 10))
             vkospi_closes = kis.get_vkospi_1min(n_candles=max(ema_period * 3, 30))
             if vkospi_closes and len(vkospi_closes) >= 2:
                 multiplier = 2.0 / (ema_period + 1)

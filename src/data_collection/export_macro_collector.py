@@ -1,4 +1,9 @@
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 """[Phase 78] 고해상도 수출입 매크로 수집기.
 
 관세청 10/20일 속보 + 산업부 MOTIE 6개 핵심 섹터 + 3개 지역별 데이터.
@@ -52,7 +57,7 @@ def _news_yoy(query: str) -> Optional[float]:
     try:
         r = requests.get('https://openapi.naver.com/v1/search/news.json',
             headers={'X-Naver-Client-Id': cid, 'X-Naver-Client-Secret': sec},
-            params={'query': query, 'display': 5, 'sort': 'date'}, timeout=int(cfg.get('data.http_timeout', 20)))
+            params={'query': query, 'display': 5, 'sort': 'date'}, timeout=int(pget('data.http_timeout', 20)))
         r.raise_for_status()
         vals = []
         for it in r.json().get('items', []):
@@ -108,7 +113,7 @@ class ExportMacroCollector:
             out['export_20d_yoy'] = _news_yoy('관세청 20일 수출 전년대비')
 
             # 섹터
-            _surp_thr = float(cfg.get('export.surprise_threshold', 20.0))
+            _surp_thr = float(pget('export.surprise_threshold', 20.0))
             for sec, kws in _SECTOR_KW.items():
                 v = _news_yoy(f"{kws[0]} 수출 전년 대비 증감")
                 out['sector'][sec] = v if v is not None else 0.0
@@ -156,8 +161,8 @@ def compute_export_macro_features(snapshot: dict) -> dict:
     us_yoy    = float(reg.get('us_export_yoy',    0))
     china_yoy = float(reg.get('china_export_yoy', 0))
     semi_yoy  = float(sector.get('semi', 0))
-    _w_china = float(cfg.get('export.china_rebound_china_w', 0.6))
-    _w_semi  = float(cfg.get('export.china_rebound_semi_w',  0.4))
+    _w_china = float(pget('export.china_rebound_china_w', 0.6))
+    _w_semi  = float(pget('export.china_rebound_semi_w', 0.4))
     china_rebound_index = max(0.0, china_yoy * _w_china + semi_yoy * _w_semi)
     return {
         'export_total_yoy':    float(snapshot.get('export_total_yoy') or 0),

@@ -16,6 +16,16 @@ US Stock Data Collector — KIS API / Alpha Vantage 기반 미국 주식 일봉 
 Author: Project-A
 Date: 2026-05-14
 """
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 from src.utils.file_ops import atomic_write_json
 from src.utils.retry_utils import with_retry
 
@@ -32,7 +42,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 logger = logging.getLogger(__name__)
-US_L2_UNIVERSE = {'AAPL': {'sector': 'Technology', 'exchange': 'NASD'}, 'MSFT': {'sector': 'Technology', 'exchange': 'NASD'}, 'GOOGL': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMZN': {'sector': 'Technology', 'exchange': 'NASD'}, 'NVDA': {'sector': 'Technology', 'exchange': 'NASD'}, 'META': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSLA': {'sector': 'Consumer Cyclical', 'exchange': 'NASD'}, 'AVGO': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMD': {'sector': 'Technology', 'exchange': 'NASD'}, 'CRM': {'sector': 'Technology', 'exchange': 'NYSE'}, 'ORCL': {'sector': 'Technology', 'exchange': 'NYSE'}, 'ADBE': {'sector': 'Technology', 'exchange': 'NASD'}, 'NFLX': {'sector': 'Communication', 'exchange': 'NASD'}, 'INTC': {'sector': 'Technology', 'exchange': 'NASD'}, 'QCOM': {'sector': 'Technology', 'exchange': 'NASD'}, 'AMAT': {'sector': 'Technology', 'exchange': 'NASD'}, 'MU': {'sector': 'Technology', 'exchange': 'NASD'}, 'LRCX': {'sector': 'Technology', 'exchange': 'NASD'}, 'KLAC': {'sector': 'Technology', 'exchange': 'NASD'}, 'MRVL': {'sector': 'Technology', 'exchange': 'NASD'}, 'TSM': {'sector': 'Technology', 'exchange': 'NYSE'}, 'TMUS': {'sector': 'Communication', 'exchange': 'NASD'}, 'JPM': {'sector': 'Financial', 'exchange': 'NYSE'}, 'V': {'sector': 'Financial', 'exchange': 'NYSE'}, 'MA': {'sector': 'Financial', 'exchange': 'NYSE'}, 'BAC': {'sector': 'Financial', 'exchange': 'NYSE'}, 'GS': {'sector': 'Financial', 'exchange': 'NYSE'}, 'UNH': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'JNJ': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'LLY': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'ABBV': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'MRK': {'sector': 'Healthcare', 'exchange': 'NYSE'}, 'PG': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'KO': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'COST': {'sector': 'Consumer Staples', 'exchange': 'NASD'}, 'WMT': {'sector': 'Consumer Staples', 'exchange': 'NYSE'}, 'HD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'MCD': {'sector': 'Consumer Cyclical', 'exchange': 'NYSE'}, 'CAT': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'DE': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'BA': {'sector': 'Industrials', 'exchange': 'NYSE'}, 'XOM': {'sector': 'Energy', 'exchange': 'NYSE'}, 'CVX': {'sector': 'Energy', 'exchange': 'NYSE'}, 'SPY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'QQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'DIA': {'sector': 'ETF', 'exchange': 'AMEX'}, 'IWM': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SOXX': {'sector': 'ETF', 'exchange': 'NASD'}, 'TQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SQQQ': {'sector': 'ETF', 'exchange': 'NASD'}, 'SOXL': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SOXS': {'sector': 'ETF', 'exchange': 'AMEX'}, 'SH': {'sector': 'ETF', 'exchange': 'AMEX'}, 'TLT': {'sector': 'ETF', 'exchange': 'NASD'}, 'SHV': {'sector': 'ETF', 'exchange': 'NASD'}, 'SGOV': {'sector': 'ETF', 'exchange': 'AMEX'}, 'GLD': {'sector': 'ETF', 'exchange': 'AMEX'}, 'UUP': {'sector': 'ETF', 'exchange': 'AMEX'}, 'USO': {'sector': 'ETF', 'exchange': 'AMEX'}, 'CPER': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLK': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLE': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLV': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLF': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XLI': {'sector': 'ETF', 'exchange': 'AMEX'}, 'XBI': {'sector': 'ETF', 'exchange': 'AMEX'}, 'ITA': {'sector': 'ETF', 'exchange': 'AMEX'}, 'EWY': {'sector': 'ETF', 'exchange': 'AMEX'}, 'FXI': {'sector': 'ETF', 'exchange': 'AMEX'}, '^VIX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'KRW=X': {'sector': 'Macro', 'exchange': 'FOREX'}, '^TNX': {'sector': 'Macro', 'exchange': 'INDEX'}, 'CL=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'GC=F': {'sector': 'Macro', 'exchange': 'COMMODITY'}, 'DX-Y.NYB': {'sector': 'Macro', 'exchange': 'INDEX'}}
+US_L2_UNIVERSE = load_table('src.data_collection.us_stock_collector.US_L2_UNIVERSE', {})
 
 class USStockCollector:
     """미국 주식 일봉 + 피처 수집기."""

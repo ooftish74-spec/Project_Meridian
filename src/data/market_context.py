@@ -1,3 +1,13 @@
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import logging
 from typing import Dict, List
 
@@ -11,42 +21,7 @@ class MarketContextManager:
     """
     
     # 핵심 종목 섹터 매핑 (Static Fallback)
-    STATIC_SECTOR_MAP = {
-        '005930': 'IT',       # 삼성전자
-        '000660': 'IT',       # SK하이닉스
-        '035420': 'IT',       # NAVER
-        '035720': 'IT',       # 카카오
-        
-        '373220': 'Energy/Chem', # LG에너지솔루션
-        '051910': 'Energy/Chem', # LG화학
-        '096770': 'Energy/Chem', # SK이노베이션
-        
-        '005380': 'Auto',     # 현대차
-        '000270': 'Auto',     # 기아
-        '012330': 'Auto',     # 현대모비스
-        
-        '105560': 'Finance',  # KB금융
-        '055550': 'Finance',  # 신한지주
-        '086790': 'Finance',  # 하나금융지주
-        '316140': 'Finance',  # 우리금융지주
-        
-        '207940': 'Health',   # 삼성바이오로직스
-        '068270': 'Health',   # 셀트리온
-        
-        '005490': 'Materials',# POSCO홀딩스
-        '010140': 'Materials',# 삼성중공업
-        
-        '015760': 'Utility',  # 한국전력
-
-        # Sector / Index ETFs & US Equities
-        '091160': 'Semiconductor',  # KODEX 반도체
-        'SOXX':   'Semiconductor',  # iShares Semiconductor ETF
-        'NVDA':   'Semiconductor',  # NVIDIA Corporation
-        '069500': 'Market_Index',   # KODEX 200
-        'QQQ':    'Market_Index',   # Invesco QQQ Trust
-        'XLK':    'IT',             # Technology Select Sector SPDR
-        '459580': 'Cash_Equivalent',# KODEX CD금리액티브
-    }
+    STATIC_SECTOR_MAP = load_table('src.data.market_context.MarketContextManager.STATIC_SECTOR_MAP', {})
 
     def __init__(self):
         self.sector_map = self.STATIC_SECTOR_MAP.copy()

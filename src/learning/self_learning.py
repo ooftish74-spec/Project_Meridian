@@ -20,6 +20,11 @@ Usage:
     sl = SelfLearning()
     changes = sl.update(measurement_results)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime
@@ -86,10 +91,10 @@ class SelfLearning:
             regime_factor = 1.0
 
         base_lr = raw_base_lr * regime_factor
-        min_lr = float(cfg.get('self_learning.min_lr', 0.01))
-        max_lr = float(cfg.get('self_learning.max_lr', 0.3))
-        momentum_boost = float(cfg.get('self_learning.momentum_boost', 0.05))
-        max_momentum = int(cfg.get('self_learning.max_momentum_steps', 5))
+        min_lr = float(pget('self_learning.min_lr', 0.01))
+        max_lr = float(pget('self_learning.max_lr', 0.3))
+        momentum_boost = float(pget('self_learning.momentum_boost', 0.05))
+        max_momentum = int(pget('self_learning.max_momentum_steps', 5))
         stability_scale = float(cfg.get('self_learning.stability_scale', 1.0))
         if ic_std > 1e-09:
             stability_factor = max(0.5, min(1.5, stability_scale / (1.0 + ic_std * 2.0)))
@@ -106,7 +111,7 @@ class SelfLearning:
                 momentum_factor = 1.0 + momentum_boost * direction_count
             else:
                 direction_count = 0
-                momentum_factor = float(cfg.get('self_learning.direction_change_lr_factor', 0.7))
+                momentum_factor = float(pget('self_learning.direction_change_lr_factor', 0.7))
         else:
             direction_count = 0
             momentum_factor = 1.0
@@ -197,10 +202,10 @@ class SelfLearning:
             동일 구조, value가 절사된 딕셔너리
         """
         winsor_enabled = bool(cfg.get('self_learning.winsorize_enabled', True))
-        winsor_pct = float(cfg.get('self_learning.winsorize_pct', 95.0))
-        winsor_min_hist = int(cfg.get('self_learning.winsorize_min_history', 20))
-        max_abs_ic = float(cfg.get('self_learning.winsorize_max_abs_ic', 0.3))
-        max_abs_sharpe = float(cfg.get('self_learning.winsorize_max_abs_sharpe', 3.0))
+        winsor_pct = float(pget('self_learning.winsorize_pct', 95.0))
+        winsor_min_hist = int(pget('self_learning.winsorize_min_history', 20))
+        max_abs_ic = float(pget('self_learning.winsorize_max_abs_ic', 0.3))
+        max_abs_sharpe = float(pget('self_learning.winsorize_max_abs_sharpe', 3.0))
         if not winsor_enabled:
             return ic_values
         ic_hist_file = self._overrides_file.parent / 'self_learning_ic_history.json'
@@ -235,7 +240,7 @@ class SelfLearning:
             new_data['direction'] = 'positive' if clipped_val > 0 else 'negative'
             new_data['raw_value'] = raw_val
             clipped_values[ic_key] = new_data
-            max_hist_size = int(cfg.get('self_learning.winsorize_history_size', 252))
+            max_hist_size = int(pget('self_learning.winsorize_history_size', 252))
             ic_history[ic_key] = (hist + [raw_val])[-max_hist_size:]
         try:
             atomic_write_json(ic_hist_file, ic_history, indent=2, ensure_ascii=False, default=str)
@@ -254,13 +259,13 @@ class SelfLearning:
         """
         adaptive_lr = self._compute_adaptive_lr(param_key, sharpe, ic_std)
         if sharpe > float(cfg.get('self_learning.sharpe_strong_bull', 1.0)):
-            factor = 1 + adaptive_lr * float(cfg.get('self_learning.sharpe_strong_factor', 0.5))
+            factor = 1 + adaptive_lr * float(pget('self_learning.sharpe_strong_factor', 0.5))
         elif sharpe > 0:
-            factor = 1 + adaptive_lr * float(cfg.get('self_learning.sharpe_mild_factor', 0.2))
-        elif sharpe > float(cfg.get('self_learning.sharpe_mild_bear', -0.5)):
-            factor = 1 - adaptive_lr * float(cfg.get('self_learning.sharpe_mild_bear_factor', 0.2))
+            factor = 1 + adaptive_lr * float(pget('self_learning.sharpe_mild_factor', 0.2))
+        elif sharpe > float(pget('self_learning.sharpe_mild_bear', -0.5)):
+            factor = 1 - adaptive_lr * float(pget('self_learning.sharpe_mild_bear_factor', 0.2))
         else:
-            factor = 1 - adaptive_lr * float(cfg.get('self_learning.sharpe_strong_bear_factor', 0.5))
+            factor = 1 - adaptive_lr * float(pget('self_learning.sharpe_strong_bear_factor', 0.5))
         return current_val * factor
 
     def update(self, measurement_results: Dict) -> Dict:
@@ -279,7 +284,7 @@ class SelfLearning:
         if not cfg.get('fallback.auto_update_enabled', True):
             return {'measurement': {}, 'judgment': {'changes': [], 'n_changes': 0}, 'applied': False, 'reason': 'auto_update 비활성화'}
         qa_enabled = bool(cfg.get('self_learning.data_qa_enabled', True))
-        qa_min_score = float(cfg.get('self_learning.data_qa_min_score', 90.0))
+        qa_min_score = float(pget('self_learning.data_qa_min_score', 90.0))
         qa_freeze_log = bool(cfg.get('self_learning.data_qa_log_freeze', True))
         if qa_enabled:
             data_confidence = float(measurement_results.get('data_confidence_score', 100.0))

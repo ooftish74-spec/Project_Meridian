@@ -13,6 +13,11 @@ Medallion Upgrade Phase 2-C-1.
 
 모든 파라미터 DynamicConfig 동적 로드.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -104,8 +109,8 @@ class TCAAnalyzer:
 
         DynamicConfig에서 목표 슬리피지를 읽어 비교.
         """
-        target_is = cfg.get('execution.target_is_bps', 5.0)
-        target_vwap = cfg.get('execution.target_vwap_bps', 3.0)
+        target_is = pget('execution.target_is_bps', 5.0)
+        target_vwap = pget('execution.target_vwap_bps', 3.0)
         batch = self.analyze_batch(trades)
         if batch['n_trades'] == 0:
             return batch
@@ -343,7 +348,7 @@ class TCAAnalyzer:
                 import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 history = {}
-        ewma_days = cfg.get('execution.tca_ewma_days', 10)
+        ewma_days = pget('execution.tca_ewma_days', 10)
         alpha = 2.0 / (ewma_days + 1)
         ticker_impact: dict = {}
         for ti in tca_inputs:

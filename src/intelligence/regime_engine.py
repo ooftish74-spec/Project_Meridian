@@ -10,6 +10,11 @@ Usage:
     result = engine.detect()
     # {'regime': 'caution', 'confidence': 0.65, 'transitions': {...}}
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import numpy as np
@@ -53,7 +58,7 @@ class HMMRegimeLayer:
         if _HMMLEARN_OK and _GaussianHMM is not None:
             try:
                 _hmm_n_iter = int(cfg.get('regime.hmm_n_iter', 100))
-                _hmm_rs = int(cfg.get('regime.hmm_random_state', 42))
+                _hmm_rs = int(pget('regime.hmm_random_state', 42))
                 m = _GaussianHMM(n_components=self._n, covariance_type='diag', n_iter=_hmm_n_iter, random_state=_hmm_rs)
                 m.fit(X)
                 ordered_names = ['bull', 'correction', 'whipsaw', 'crash']
@@ -110,9 +115,9 @@ class RegimeEngine:
         self._state_file = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
         self._history_file = _PROJECT_ROOT / 'results' / 'regime_history.json'
         from src.ml.hmm_regime_model import PredictiveHMMRegimeModel
-        self._hmm = PredictiveHMMRegimeModel(n_states=int(cfg.get('regime.hmm_states', 4)))
+        self._hmm = PredictiveHMMRegimeModel(n_states=int(pget('regime.hmm_states', 4)))
         self._hmm.load_model()
-        self._hmm_blend = float(cfg.get('regime.hmm_blend_weight', 0.4))
+        self._hmm_blend = float(pget('regime.hmm_blend_weight', 0.4))
 
     def detect(self) -> Dict:
         """현재 레짐 판정.
@@ -173,8 +178,8 @@ class RegimeEngine:
         m = {}
         m['vix'] = self._read_latest_value('vix', default=20.0)
         kospi = self._read_price_series(cfg.get('regime.kospi_benchmark_ticker', '069500'))
-        _ma_short = int(cfg.get('regime.ma_short', 20))
-        _ma_long = int(cfg.get('regime.ma_long', 60))
+        _ma_short = int(pget('regime.ma_short', 20))
+        _ma_long = int(pget('regime.ma_long', 60))
         if kospi is not None and len(kospi) >= _ma_long:
             ma20 = kospi.rolling(_ma_short).mean().iloc[-1]
             ma60 = kospi.rolling(_ma_long).mean().iloc[-1]
@@ -193,7 +198,7 @@ class RegimeEngine:
             m['kospi_trend'] = 'sideways'
             m['kospi_ma20_dist'] = 0.0
             m['kospi_ma60_dist'] = 0.0
-        if kospi is not None and len(kospi) >= int(cfg.get('regime.vol_min_bars', 25)):
+        if kospi is not None and len(kospi) >= int(pget('regime.vol_min_bars', 25)):
             ret = kospi.pct_change().dropna().tail(20)
             r_arr = ret.to_numpy(dtype=float)
             med = float(np.median(r_arr))
@@ -271,12 +276,12 @@ class RegimeEngine:
             scores['bear'] += w_vol
         else:
             scores['crash'] += w_vol
-        w_macro = cfg.get('regime.weight_macro', 0.15)
+        w_macro = pget('regime.weight_macro', 0.15)
         macro = self._load_macro_features()
         try:
             from src.utils.adaptive_thresholds import VolatilityScaledThreshold
-            z_ext = cfg.get('adaptive.z_score_extreme', 1.5)
-            p_ext = cfg.get('adaptive.percentile_extreme', 90.0)
+            z_ext = pget('adaptive.z_score_extreme', 1.5)
+            p_ext = pget('adaptive.percentile_extreme', 90.0)
         except ImportError as e:
             z_ext, p_ext = (1.5, 90.0)
 
@@ -289,26 +294,26 @@ class RegimeEngine:
             hy = macro.get('fred_hy_spread', 0)
             hy_hist = self._read_macro_history('fred_hy_spread', default_val=0.0)
             if VolatilityScaledThreshold.is_extreme(hy, hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_hy_bull = cfg.get('regime.w_hy_bull', 0.3)
+                _w_hy_bull = pget('regime.w_hy_bull', 0.3)
                 scores['bull'] += w_macro * _w_hy_bull
             elif VolatilityScaledThreshold.is_extreme(-hy, [-h for h in hy_hist], z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_hy_bear = cfg.get('regime.w_hy_bear', 0.4)
-                _w_hy_crash = cfg.get('regime.w_hy_crash', 0.2)
+                _w_hy_bear = pget('regime.w_hy_bear', 0.4)
+                _w_hy_crash = pget('regime.w_hy_crash', 0.2)
                 scores['bear'] += w_macro * _w_hy_bear
                 scores['crash'] += w_macro * _w_hy_crash
             yc_inv = macro.get('yield_curve_inverted', 0)
             if yc_inv:
-                _w_yc_caution = cfg.get('regime.w_yc_caution', 0.3)
-                _w_yc_bear = cfg.get('regime.w_yc_bear', 0.2)
+                _w_yc_caution = pget('regime.w_yc_caution', 0.3)
+                _w_yc_bear = pget('regime.w_yc_bear', 0.2)
                 scores['caution'] += w_macro * _w_yc_caution
                 scores['bear'] += w_macro * _w_yc_bear
             ism = macro.get('cross_ism_signal', 0)
             ism_hist = self._read_macro_history('cross_ism_signal', default_val=0.0)
             if VolatilityScaledThreshold.is_extreme(-ism, [-i for i in ism_hist], z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_ism_bear = cfg.get('regime.w_ism_bear', 0.2)
+                _w_ism_bear = pget('regime.w_ism_bear', 0.2)
                 scores['bear'] += w_macro * _w_ism_bear
             elif VolatilityScaledThreshold.is_extreme(ism, ism_hist, z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_ism_bull = cfg.get('regime.w_ism_bull', 0.2)
+                _w_ism_bull = pget('regime.w_ism_bull', 0.2)
                 scores['bull'] += w_macro * _w_ism_bull
             # [Phase 4] 뉴스 센티멘트 완전 폐기 및 수급(Flow)/OIS(야간 매크로) 정량 모델로 100% 이관
             _ois = m.get('ois', 50.0)
@@ -316,21 +321,21 @@ class RegimeEngine:
             
             # 수학적 OIS & 수급 합성(Flow-Macro Risk)
             if _ois < 40 or _prog_net < -5000:
-                _w_quant_bear = cfg.get('regime.w_quant_bear', 0.2)
+                _w_quant_bear = pget('regime.w_quant_bear', 0.2)
                 scores['bear'] += w_macro * _w_quant_bear
                 
                 # 심각한 매크로 하락 + 대규모 기관 매도 = 크래시 징후 (Expected Gap Risk)
                 if _ois < 30 and _prog_net < -10000:
                     scores['crash'] += w_macro * 0.3
             elif _ois > 60 and _prog_net > 5000:
-                _w_quant_bull = cfg.get('regime.w_quant_bull', 0.2)
+                _w_quant_bull = pget('regime.w_quant_bull', 0.2)
                 scores['bull'] += w_macro * _w_quant_bull
         mc = m.get('macro_composite', 0)
-        w_mc = cfg.get('regime.weight_macro_composite', 0.2)
-        _mc_high = cfg.get('regime.mc_high', 1.5)
-        _mc_mid_high = cfg.get('regime.mc_mid_high', 0.5)
-        _mc_mid_low = cfg.get('regime.mc_mid_low', -0.5)
-        _mc_low = cfg.get('regime.mc_low', -1.5)
+        w_mc = pget('regime.weight_macro_composite', 0.2)
+        _mc_high = pget('regime.mc_high', 1.5)
+        _mc_mid_high = pget('regime.mc_mid_high', 0.5)
+        _mc_mid_low = pget('regime.mc_mid_low', -0.5)
+        _mc_low = pget('regime.mc_low', -1.5)
         if mc > _mc_high:
             scores['bear'] += w_mc * min(mc / 3.0, 1.0)
             scores['caution'] += w_mc * 0.3
@@ -344,7 +349,7 @@ class RegimeEngine:
         usdkrw_prev = m.get('usdkrw_prev', usdkrw)
         if usdkrw_prev > 0:
             fx_pct = (usdkrw - usdkrw_prev) / usdkrw_prev * 100
-            w_fx = cfg.get('regime.weight_fx_daily', 0.08)
+            w_fx = pget('regime.weight_fx_daily', 0.08)
             fx_bear_pct = cfg.get('regime.fx_bear_pct', 1.0)
             fx_caution_pct = cfg.get('regime.fx_caution_pct', 0.5)
             fx_bull_pct = cfg.get('regime.fx_bull_pct', -0.5)
@@ -355,7 +360,7 @@ class RegimeEngine:
             elif fx_pct < fx_bull_pct:
                 scores['bull'] += w_fx * 0.5
         vkospi = m.get('vkospi', 18)
-        w_vk = cfg.get('regime.weight_vkospi', 0.05)
+        w_vk = pget('regime.weight_vkospi', 0.05)
         
         try:
             from src.utils.adaptive_thresholds import VolatilityScaledThreshold
@@ -431,33 +436,40 @@ class RegimeEngine:
         return None
 
     def _save_state(self, result: Dict):
-        """★ pipeline_state.json에 kr_regime 필드로 통합 저장."""
+        """★ pipeline_state.json에 kr_regime 필드로 통합 저장.
+
+        ★ Wave 1 Track A: 두 파일 모두 다중 writer → safe_json_update(락 보유 merge-update).
+          손상된 파일은 {}로 초기화해 덮어쓰지 않는다(CorruptJSONError → 경고 후 기록 생략).
+        """
+        from src.utils.file_ops import safe_json_update
+        _clean = json.loads(json.dumps(result, ensure_ascii=False, default=str))   # 직렬화 불가 값 사전 정규화
         try:
             self._state_file.parent.mkdir(parents=True, exist_ok=True)
-            existing = {}
-            if self._state_file.exists():
-                try:
-                    existing = json.loads(self._state_file.read_text())
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                    logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:489', exc_info=True)
-            existing['kr_prev_regime'] = existing.get('kr_regime')
-            existing['kr_regime'] = result['regime']
-            existing['kr_regime_confidence'] = result['confidence']
-            existing['kr_regime_scores'] = result['scores']
-            existing['kr_regime_measurements'] = result.get('measurements', {})
-            existing['kr_regime_updated_at'] = datetime.now().isoformat()
-            existing['kr_regime_updated_by'] = 'regime_engine'
-            existing['operating_regime'] = self._compute_operating_regime(existing)
-            existing['updated_at'] = datetime.now().isoformat()
-            atomic_write_json(self._state_file, existing, indent=2, ensure_ascii=False, default=str)
+
+            def _mutate_state(existing):
+                existing = existing if isinstance(existing, dict) else {}
+                existing['kr_prev_regime'] = existing.get('kr_regime')
+                existing['kr_regime'] = _clean['regime']
+                existing['kr_regime_confidence'] = _clean['confidence']
+                existing['kr_regime_scores'] = _clean['scores']
+                existing['kr_regime_measurements'] = _clean.get('measurements', {})
+                existing['kr_regime_updated_at'] = datetime.now().isoformat()
+                existing['kr_regime_updated_by'] = 'regime_engine'
+                existing['operating_regime'] = self._compute_operating_regime(existing)
+                existing['updated_at'] = datetime.now().isoformat()
+                return existing
+            safe_json_update(self._state_file, _mutate_state, default={}, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f'  레짐 저장 실패: {e}', exc_info=True)
         try:
             regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
-            regime_out = {'regime': result['regime'], 'confidence': result['confidence'], 'scores': result['scores'], 'method': 'regime_engine_ssot', 'measurements': result.get('measurements', {}), 'macro_composite': result.get('measurements', {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
-            atomic_write_json(regime_file, regime_out, indent=2, ensure_ascii=False, default=str)
+            regime_out = {'regime': _clean['regime'], 'confidence': _clean['confidence'], 'scores': _clean['scores'], 'method': 'regime_engine_ssot', 'measurements': _clean.get('measurements', {}), 'macro_composite': (_clean.get('measurements', {}) or {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
+
+            def _mutate_regime(cur):
+                cur = cur if isinstance(cur, dict) else {}
+                cur.update(regime_out)   # 이 엔진 소유 키만 교체, 다른 writer 키 보존
+                return cur
+            safe_json_update(regime_file, _mutate_regime, default={}, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.warning(f'  current_regime.json 기록 실패: {e}', exc_info=True)
 
@@ -570,10 +582,10 @@ class RegimeEngine:
             if fx_std > 0:
                 fx_z = (usdkrw - fx_mean) / fx_std
                 scores.append(fx_z)
-                weights.append(cfg.get('regime.weight_fx_comp', 0.25))
+                weights.append(pget('regime.weight_fx_comp', 0.25))
         vix = float(sc.get('vix', 20))
-        vix_baseline = cfg.get('regime.vix_baseline', 20.0)
-        vix_std = cfg.get('regime.vix_baseline_std', 8.0)
+        vix_baseline = pget('regime.vix_baseline', 20.0)
+        vix_std = pget('regime.vix_baseline_std', 8.0)
         try:
             _vix_hist = self._read_macro_history('vix')
             if _vix_hist and len(_vix_hist) >= 20:
@@ -587,12 +599,12 @@ class RegimeEngine:
             pass
         vix_z = (vix - vix_baseline) / max(vix_std, 0.1)
         scores.append(vix_z)
-        weights.append(cfg.get('regime.weight_vix_comp', 0.2))
+        weights.append(pget('regime.weight_vix_comp', 0.2))
         macro = sc.get('macro_features', {})
         hy_raw = macro.get('fred_hy_spread_raw')
         hy = macro.get('fred_hy_spread')
         credit_stress = macro.get('credit_stress', 0)
-        hy_baseline = cfg.get('regime.hy_baseline', 5.0)
+        hy_baseline = pget('regime.hy_baseline', 5.0)
         hy_std_val = cfg.get('regime.hy_baseline_std', 2.0)
         if hy_raw is not None:
             hy_z = (float(hy_raw) - hy_baseline) / max(float(hy_std_val), 0.01)
@@ -606,25 +618,25 @@ class RegimeEngine:
             hy_z = 0.0
         credit_z = np.clip(hy_z + credit_stress * 3.0, -3, 3)
         scores.append(credit_z)
-        weights.append(cfg.get('regime.weight_credit_comp', 0.15))
+        weights.append(pget('regime.weight_credit_comp', 0.15))
         usjp_change = macro.get('cross_usjp_change', 0)
         usjp_z = -usjp_change * 5.0
         scores.append(usjp_z)
-        weights.append(cfg.get('regime.weight_usjp_comp', 0.1))
+        weights.append(pget('regime.weight_usjp_comp', 0.1))
         ois = float(sc.get('ois', 50))
         ois_z = -(ois - 50) / 20.0
         scores.append(ois_z)
-        weights.append(cfg.get('regime.weight_ois_comp', 0.1))
+        weights.append(pget('regime.weight_ois_comp', 0.1))
         event_adj = float(sc.get('event_confidence_adj', 0))
         event_z = max(-3.0, min(3.0, -event_adj * 3.0))
         scores.append(event_z)
-        weights.append(cfg.get('regime.weight_event_comp', 0.1))
+        weights.append(pget('regime.weight_event_comp', 0.1))
         vkospi = float(sc.get('vkospi', 18))
-        vk_baseline = cfg.get('regime.vkospi_baseline', 18.0)
-        vk_std = cfg.get('regime.vkospi_baseline_std', 6.0)
+        vk_baseline = pget('regime.vkospi_baseline', 18.0)
+        vk_std = pget('regime.vkospi_baseline_std', 6.0)
         vkospi_z = (vkospi - vk_baseline) / max(vk_std, 0.1)
         scores.append(vkospi_z)
-        weights.append(cfg.get('regime.weight_vkospi_comp', 0.1))
+        weights.append(pget('regime.weight_vkospi_comp', 0.1))
         if not scores:
             return 0.0
         composite = sum((s * w for s, w in zip(scores, weights))) / sum(weights)

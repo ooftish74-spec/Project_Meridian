@@ -15,6 +15,16 @@ AWS 서버비/마켓데이터 구독료 등 손금(필요경비) 공제에 따�
   - results/Corporate_Tax_Optimization_Report_YYYY.md
 """
 
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import os
 import json
 import logging
@@ -29,25 +39,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
 EVENTS_DIR = PROJECT_ROOT / "data" / "events"
 
-STREAM_MAP = {
-    "SOXX": "S1 (반도체 섹터 Alpha ETF)",
-    "XLK": "S1 (테크 섹터 Alpha ETF)",
-    "QQQ": "S3 (글로벌 테크 대표 ETF)",
-    "NVDA": "S4 (QVM 가치/펀더멘털 엔진 개별주)",
-    "SHV": "S3/S5 (단기채권 리밸런싱)",
-    "069500": "S2 (KRX 대형주 ETF)",
-    "091160": "S2 (KODEX 반도체 ETF)"
-}
+STREAM_MAP = load_table('scripts.export_corporate_ledger.STREAM_MAP', {})
 
-NAME_MAP = {
-    "SOXX": "iShares Semiconductor ETF",
-    "XLK": "Technology Select Sector SPDR Fund",
-    "QQQ": "Invesco QQQ Trust",
-    "NVDA": "NVIDIA Corp",
-    "SHV": "iShares Short Treasury Bond ETF",
-    "069500": "KODEX 200",
-    "091160": "KODEX 반도체"
-}
+NAME_MAP = load_table('scripts.export_corporate_ledger.NAME_MAP', {})
 
 FX_RATE_USD = 1380.0
 

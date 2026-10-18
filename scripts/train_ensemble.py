@@ -18,7 +18,7 @@ Usage:
     python3 scripts/train_ensemble.py --window 730
 """
 
-import json, logging, pickle, sys, warnings, argparse
+import json, logging, pickle, sys, warnings, argparse, functools
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -128,11 +128,63 @@ try:
 except ImportError as e:
     _PurgedKFold = None
 
+# [WAVE3 Track D] 날짜 단위(date-major) Purged Walk-Forward
+try:
+    from src.ml.purged_cv import DatePurgedWalkForward, date_major_holdout_split
+    from src.ml import purged_wf_validation as _pwf
+except ImportError as e:  # pragma: no cover - 모듈 누락 시 레거시 경로 유지
+    DatePurgedWalkForward = None
+    date_major_holdout_split = None
+    _pwf = None
+
 from src.utils.time_utils import now_kst
 
 DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 MODEL_DIR = _PROJECT_ROOT / 'results' / 'models'
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
+# [WAVE3 Track D] 검증 리포트 / 후보 모델 경로 (운영 모델 경로와 분리)
+ML_VALIDATION_DIR = _PROJECT_ROOT / 'results' / 'ml_validation'
+CANDIDATE_MODEL_ROOT = _PROJECT_ROOT / 'models_candidate'
+
+CV_METHOD_PURGED = 'purged_wf'
+CV_METHOD_LEGACY = 'legacy'
+
+
+def _resolve_cv_method(cfg_obj=None, override: Optional[str] = None) -> str:
+    """CV 방식 결정: override > DynamicConfig('ml.cv_method') > 기본 purged_wf."""
+    method = override
+    if method is None and cfg_obj is not None:
+        try:
+            method = cfg_obj.get('ml.cv_method', CV_METHOD_PURGED)
+        except Exception:
+            method = None
+    method = (method or CV_METHOD_PURGED).lower()
+    if method in ('purged_ts_split', 'purged', 'date_purged_wf', 'date_purged_walk_forward'):
+        method = CV_METHOD_PURGED
+    if method not in (CV_METHOD_PURGED, CV_METHOD_LEGACY):
+        logger.warning(f"  알 수 없는 cv_method={method!r} → {CV_METHOD_PURGED}")
+        method = CV_METHOD_PURGED
+    if method == CV_METHOD_PURGED and DatePurgedWalkForward is None:
+        logger.warning("  DatePurgedWalkForward import 실패 → legacy CV 사용")
+        method = CV_METHOD_LEGACY
+    return method
+
+
+def _purged_wf_params(cfg_obj, forward_days: int) -> Dict:
+    """Purged WF 파라미터 (거래일 기준). embargo 는 최소 5 거래일."""
+    def _g(k, d):
+        try:
+            return cfg_obj.get(k, d)
+        except Exception:
+            return d
+    embargo = max(5, int(_g('ml.purged_wf.embargo_days', _g('ml.embargo_days', 5))))
+    return {
+        'n_splits': int(_g('ml.purged_wf.n_splits', 5)),
+        'label_horizon_days': int(_g('ml.purged_wf.label_horizon_days', forward_days)),
+        'embargo_days': embargo,
+        'min_train_dates': _g('ml.purged_wf.min_train_dates', None),
+        'expanding': bool(_g('ml.purged_wf.expanding', True)),
+    }
 
 # V8 피처 (V7 + Auto-Alpha + 차세대 수동 엣지)
 from src.intelligence.v4_features import extract_v4, FEATURE_NAMES_V4, FEATURE_NAMES_V6, FEATURE_NAMES
@@ -304,20 +356,86 @@ def _load_cross_asset_data() -> Dict:
     return result
 
 
-def _get_cross_asset_for_date(cross_data: Dict, date_str: str) -> Dict:
-    """날짜에 해당하는 cross-asset 데이터 반환."""
-    ca = {}
+@functools.lru_cache(maxsize=8192)
+def _us_session_before_kr_date(date_str: str, max_lookback: int = 10) -> Optional[str]:
+    """KR 날짜 D(YYYY-MM-DD) 개장 전에 '마감된' 마지막 미국 정규장 날짜 (NY 캘린더).
 
-    sp = cross_data.get('sp500', {}).get(date_str)
+    미국 D일 정규장은 KST 기준 D+1 05:00~06:00 에 마감 → KR D일 장중에는 미지(未知).
+    따라서 D 미만(strictly before)의 가장 최근 NYSE 거래일을 반환한다.
+    """
+    try:
+        d = datetime.strptime(date_str[:10], '%Y-%m-%d')
+    except (TypeError, ValueError):
+        return None
+    try:
+        from src.utils.market_calendar import is_us_trading_day as _is_us_td
+    except Exception:  # pragma: no cover - 캘린더 불가 시 주말만 제외
+        def _is_us_td(ds):
+            return datetime.strptime(ds, '%Y%m%d').weekday() < 5
+    for k in range(1, max_lookback + 1):
+        cand = d - timedelta(days=k)
+        try:
+            if _is_us_td(cand.strftime('%Y%m%d')):
+                return cand.strftime('%Y-%m-%d')
+        except Exception:
+            if cand.weekday() < 5:
+                return cand.strftime('%Y-%m-%d')
+    return None
+
+
+def _latest_key_before(series: Dict, date_str: str) -> Optional[str]:
+    """series(dict: 'YYYY-MM-DD' → 값) 에서 date_str 미만의 최신 키 (정렬 키 캐시)."""
+    import bisect
+    if not series:
+        return None
+    keys = series.get('__sorted_keys__') if isinstance(series, dict) else None
+    if keys is None:
+        keys = sorted(k for k in series.keys() if k != '__sorted_keys__')
+        try:
+            series['__sorted_keys__'] = keys
+        except TypeError:
+            pass
+    i = bisect.bisect_left(keys, date_str[:10])
+    return keys[i - 1] if i > 0 else None
+
+
+def _get_cross_asset_for_date(cross_data: Dict, date_str: str) -> Dict:
+    """KR 날짜 D 에 대응하는 cross-asset 데이터 반환 — [WAVE3 Track D] look-ahead 제거.
+
+    기존: 미국 D일 종가(S&P500 수익률·VIX·USD/KRW)를 KR D일 행에 매칭 → 미국 D일 장은
+    KR D일 장 마감 이후(KST D+1 새벽)에 끝나므로 1일 look-ahead.
+    변경: KR D일 개장 전에 마감된 미국 세션(NYSE 캘린더 기준 D 직전 거래일, 보통 D-1)을
+    사용. 해당 날짜 데이터가 없으면 D 미만의 최신 가용 데이터로 대체.
+    (실시간 추론(ml_stream)도 KR 장중에는 직전 미국 세션 값을 쓰므로 train/serve 정합.)
+    """
+    ca = {}
+    us_d = _us_session_before_kr_date(date_str)
+
+    def _pick(key):
+        series = cross_data.get(key, {}) or {}
+        if us_d is not None and us_d in series:
+            return series[us_d]
+        k = _latest_key_before(series, date_str)
+        if not k:
+            return None
+        try:
+            if (datetime.strptime(date_str[:10], '%Y-%m-%d')
+                    - datetime.strptime(k, '%Y-%m-%d')).days > 10:
+                return None  # 너무 오래된 값은 사용하지 않음 (기본값 0 처리)
+        except ValueError:
+            return None
+        return series.get(k)
+
+    sp = _pick('sp500')
     if sp:
         ca['sp500_return'] = sp['return']
 
-    vix = cross_data.get('vix', {}).get(date_str)
+    vix = _pick('vix')
     if vix:
         ca['vix_close'] = vix['close']
         ca['vix_prev'] = vix['prev_close']
 
-    usd = cross_data.get('usdkrw', {}).get(date_str)
+    usd = _pick('usdkrw')
     if usd:
         ca['usdkrw_close'] = usd['close']
         ca['usdkrw_5d_ago'] = usd['close_5d_ago']
@@ -326,19 +444,119 @@ def _get_cross_asset_for_date(cross_data: Dict, date_str: str) -> Dict:
 
 
 # ═══════════════════════════════════════════════════════
+# [WAVE3 Track D] 유니버스/가격 로딩 헬퍼
+# ═══════════════════════════════════════════════════════
+
+# TickerMaster 불가 시 사용하는 레버리지/인버스 ETP 리터럴 목록 (KR + US 주요 종목)
+_LEVERAGED_INVERSE_FALLBACK = frozenset({
+    # KR 레버리지 (KODEX 레버리지, KODEX 코스닥150레버리지, TIGER 레버리지, TIGER 코스닥150레버리지)
+    '122630', '233740', '123320', '233160',
+    # KR 인버스 / 인버스2X (KODEX 인버스, KODEX 200선물인버스2X, KODEX 코스닥150선물인버스,
+    #                       TIGER 인버스, TIGER 200선물인버스2X, KINDEX 인버스)
+    '114800', '252670', '251340', '123310', '252710', '145670',
+    # US 레버리지/인버스
+    'TQQQ', 'SQQQ', 'QLD', 'QID', 'PSQ', 'UPRO', 'SPXU', 'SPXS', 'SPXL', 'SSO', 'SDS',
+    'SH', 'SOXL', 'SOXS', 'TNA', 'TZA', 'LABU', 'LABD', 'FAS', 'FAZ', 'TECL', 'TECS',
+    'UVXY', 'SVXY', 'SVIX', 'UVIX', 'NVDL', 'NVDS', 'TSLL', 'TSLQ', 'TMF', 'TMV', 'TBT',
+    'UDOW', 'SDOW', 'DDM', 'DXD', 'FNGU', 'FNGD', 'BULZ', 'BERZ', 'YINN', 'YANG',
+})
+
+
+def is_leveraged_or_inverse(ticker) -> bool:
+    """레버리지(|k|>1) 또는 인버스(k<0) ETP 여부.
+
+    src/data_collection/ticker_master.TickerMaster.is_leveraged/is_inverse 우선,
+    불가 시 리터럴 fallback 목록.
+    """
+    code = str(ticker or '').strip().upper()
+    if code.isdigit() and len(code) < 6:
+        code = code.zfill(6)
+    try:
+        from src.data_collection.ticker_master import get_ticker_master
+        tm = get_ticker_master()
+        if tm.is_leveraged(code) or tm.is_inverse(code):
+            return True
+    except Exception:
+        pass
+    return code in _LEVERAGED_INVERSE_FALLBACK
+
+
+def _common_sample_dates(calendar, forward_days: int, sample_interval: int):
+    """공통 거래일 캘린더 샘플 날짜 집합.
+
+    캘린더(전 종목 거래일 합집합)의 '마지막 라벨 가능일'(끝 − forward_days)을 앵커로
+    sample_interval 거래일 간격으로 거슬러 올라간 날짜들. 모든 종목이 같은 날짜에 샘플링된다.
+    """
+    cal = pd.DatetimeIndex(sorted(set(pd.DatetimeIndex(list(calendar)).normalize())))
+    anchor = len(cal) - 1 - int(forward_days)
+    if anchor < 0 or int(sample_interval) < 1:
+        return None
+    return set(cal[anchor::-int(sample_interval)])
+
+
+def _load_ticker_ohlcv(ticker: str, min_rows: int = 80):
+    """종목 OHLCV 로드 → (close, high, low, open, volume, dates) numpy 튜플 또는 None.
+
+    OHLCV/date 를 행 단위로 함께 dropna + 날짜 정렬/중복 제거 (컬럼별 dropna 시 시점 어긋남 방지).
+    """
+    candidates = [
+        DATA_DIR / f'kr_{ticker}.parquet',
+        _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
+        _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
+        _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
+        _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
+    ]
+    fp = next((c for c in candidates if c.exists()), None)
+    if fp is None:
+        return None
+    try:
+        df = pd.read_parquet(fp)
+        _ohlcv = pd.DataFrame({
+            'date': pd.to_datetime(df['date'], errors='coerce'),
+            'close': pd.to_numeric(df['close'], errors='coerce'),
+            'high': pd.to_numeric(df['high'], errors='coerce'),
+            'low': pd.to_numeric(df['low'], errors='coerce'),
+            'open': pd.to_numeric(df['open'], errors='coerce'),
+            'volume': pd.to_numeric(df['volume'], errors='coerce'),
+        }).dropna().sort_values('date').drop_duplicates('date', keep='last')
+    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError,
+            pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+        logger.debug(f'Targeted fallback: {e}')
+        return None
+    if len(_ohlcv) < min_rows:
+        return None
+    return (_ohlcv['close'].values, _ohlcv['high'].values, _ohlcv['low'].values,
+            _ohlcv['open'].values, _ohlcv['volume'].values, _ohlcv['date'].values)
+
+
+# ═══════════════════════════════════════════════════════
 # Rolling Window 데이터셋
 # ═══════════════════════════════════════════════════════
 
 def build_rolling_dataset(window_days: int = None, forward_days: int = None,
-                          sample_interval: int = None, alpha_model=None) -> Tuple:  # noqa: C901
+                          sample_interval: int = None, alpha_model=None,
+                          return_meta: bool = False, max_tickers: Optional[int] = None,
+                          cv_method: Optional[str] = None) -> Tuple:  # noqa: C901
     """Rolling Window 데이터셋.
 
     최근 window_days를 Train(80%) + Embargo + Val(20%)로 분할.
     ★ DD-04: Purged TS Split — Train/Val 사이에 embargo 기간 삽입.
     forward_days(라벨 생성 기간)만큼 purge하여 data leakage 방지.
+
+    [WAVE3 Track D]
+      * cv_method='purged_wf'(기본): 달력일 embargo 에 더해, 각 train 샘플의 실제
+        라벨 종료 거래일(dates[idx+forward_days])이 val 시작 이후이면 train 에서 제외
+        (거래일 기준 정확한 label-overlap purge).
+      * OHLCV/date 를 행 단위로 함께 dropna (기존: 컬럼별 dropna → NaN 존재 시 배열 정렬 붕괴).
+      * return_meta=True 이면 6번째 반환값으로 meta(dict) 반환:
+        train_dates/val_dates/train_tickers/val_tickers/train_fwd_ret/val_fwd_ret,
+        panel(DataFrame: date,ticker,label,fwd_ret,split + 전체 피처), panel_features,
+        calendar(거래일 캘린더), forward_days.
+      * max_tickers: 유니버스 상한 (None → ml.max_universe_size).
     """
     from config.dynamic_config import DynamicConfig
     _cfg = DynamicConfig()
+    _cv_method = _resolve_cv_method(_cfg, cv_method)
 
     # ★ 동적 파라미터 로드 (하드코딩 금지)
     if window_days is None:
@@ -371,13 +589,34 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 universe.extend([f.stem.replace('kr_', '') for f in _sd.glob('*.parquet')])
         universe = list(set(universe))
     
-    max_uni = _cfg.get('ml.max_universe_size', 300)
+    # [WAVE3 Track D] 레버리지/인버스 ETP 는 횡단면 학습 유니버스에서 제외
+    # (수익률이 기초지수의 ±k배 → 횡단면 순위/라벨 분포를 왜곡). 상한 적용 전에 제외.
+    n_lev_excluded = 0
+    if bool(_cfg.get('ml.exclude_leveraged_etfs', True)):
+        _before = len(universe)
+        universe = [t for t in universe if not is_leveraged_or_inverse(t)]
+        n_lev_excluded = _before - len(universe)
+        if n_lev_excluded:
+            logger.info(f"  🚫 [WAVE3] 레버리지/인버스 ETP {n_lev_excluded}개 유니버스 제외")
+    _cs_cfg = _cfg.get('train.common_calendar_sampling', None)
+    _common_sampling = (_cv_method == CV_METHOD_PURGED) if _cs_cfg is None else bool(_cs_cfg)
+
+    max_uni = _cfg.get('ml.max_universe_size', 300) if max_tickers is None else int(max_tickers)
     universe = universe[:max_uni]
 
     train_X, train_y, val_X, val_y = [], [], [], []
     cutoff_date = now_kst() - timedelta(days=window_days)
     val_cutoff = now_kst() - timedelta(days=int(window_days * val_ratio))
     train_end = val_cutoff - timedelta(days=embargo_days)
+    # [WAVE3 Track D] 거래일 기준 label-overlap purge 용 tz-naive 경계
+    _val_cutoff_naive = pd.Timestamp(val_cutoff).tz_localize(None)
+    n_label_purged = 0
+    # meta 수집 (return_meta=True 일 때만 사용)
+    _m_train_dates, _m_val_dates = [], []
+    _m_train_tickers, _m_val_tickers = [], []
+    _m_train_fwd, _m_val_fwd = [], []
+    _p_rows, _p_dates, _p_tickers, _p_labels, _p_fwd, _p_split = [], [], [], [], [], []
+    _calendar = set()
 
     cross_data = _load_cross_asset_data()
     logger.info(f"  Cross-asset: S&P500 {len(cross_data.get('sp500', {}))}일, "
@@ -401,42 +640,39 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     else:
         automl_features_dict = {}
 
+    # [WAVE3 Track D] 1단계: 가격 선로딩 (공통 거래일 캘린더 샘플링용)
+    _loaded = []
     for ticker in universe:
-        fp = DATA_DIR / f'kr_{ticker}.parquet'
-        if not fp.exists():
-            fp = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
-        if not fp.exists():
-            fp = _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet'
-        if not fp.exists():
-            fp = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet'
-        if not fp.exists():
-            fp = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
-        if not fp.exists():
+        _arr = _load_ticker_ohlcv(ticker)
+        if _arr is None:
             continue
-        try:
-            df = pd.read_parquet(fp)
-            close = pd.to_numeric(df['close'], errors='coerce').dropna().values
-            high = pd.to_numeric(df['high'], errors='coerce').dropna().values
-            low = pd.to_numeric(df['low'], errors='coerce').dropna().values
-            opn = pd.to_numeric(df['open'], errors='coerce').dropna().values
-            vol = pd.to_numeric(df['volume'], errors='coerce').dropna().values
-            dates = pd.to_datetime(df['date']).values
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-            continue
+        _loaded.append((ticker, _arr))
+        if return_meta or _common_sampling:
+            _calendar.update(pd.DatetimeIndex(_arr[5]).normalize())
 
-        n = min(len(close), len(high), len(low), len(opn), len(vol), len(dates))
-        if n < 80:
-            continue
-        close, high, low, opn, vol, dates = (
-            close[:n], high[:n], low[:n], opn[:n], vol[:n], dates[:n]
-        )
+    # [WAVE3 Track D] 공통 거래일 캘린더 샘플링 — 모든 종목을 같은 날짜에 샘플링.
+    # (기존: 종목별 idx 260 부터 sample_interval 간격 → 상장/이력 길이에 따라 위상이 달라
+    #  날짜별 횡단면이 희소해지고 날짜 단위 IC 검정력이 떨어짐)
+    # 전체 캘린더에서 '마지막 라벨 가능일(끝-forward_days)' 을 앵커로 sample_interval 간격.
+    _sample_dates = None
+    if _common_sampling and _calendar:
+        _sample_dates = _common_sample_dates(_calendar, forward_days, sample_interval)
+        if _sample_dates is not None:
+            logger.info(f"  📅 [WAVE3] 공통 캘린더 샘플링: {len(_sample_dates)}개 날짜 "
+                        f"(간격 {sample_interval} 거래일, 앵커 {max(_sample_dates).date()})")
+
+    for ticker, (close, high, low, opn, vol, dates) in _loaded:
+        n = len(close)
 
         is_etf = ticker.startswith(('069', '091', '114', '122', '305', '244',
                                      '117', '360', '315', '371'))
 
-        for idx in range(260, n - forward_days, sample_interval):
+        if _sample_dates is not None:
+            _dn = pd.DatetimeIndex(dates).normalize()
+            _idx_iter = [i for i in range(260, n - forward_days) if _dn[i] in _sample_dates]
+        else:
+            _idx_iter = range(260, n - forward_days, sample_interval)
+        for idx in _idx_iter:
             dt = pd.Timestamp(dates[idx])
             if dt.tz_localize(None) < pd.Timestamp(cutoff_date).tz_localize(None):
                 continue
@@ -489,16 +725,37 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 label = label_max_high
             row = [feat.get(f, 0) for f in active_features]  # ★ H-21
 
+            # [WAVE3 Track D] 라벨 종료 거래일 (high[idx+1:idx+h+1], close[idx+h] 사용)
+            _dt_naive = dt.tz_localize(None).normalize()
+            _label_end = pd.Timestamp(dates[future_end - 1]).tz_localize(None).normalize()
+
             # ★ DD-04: Purged TS Split
             if dt.tz_localize(None) < pd.Timestamp(train_end).tz_localize(None):
-                # Train 구간
-                train_X.append(row); train_y.append(label)
+                if _cv_method == CV_METHOD_PURGED and _label_end >= _val_cutoff_naive:
+                    # 라벨 구간이 val 구간과 겹침 → purge (거래일 기준)
+                    n_label_purged += 1
+                    _split = 'purged'
+                else:
+                    # Train 구간
+                    train_X.append(row); train_y.append(label)
+                    _split = 'train'
+                    if return_meta:
+                        _m_train_dates.append(_dt_naive); _m_train_tickers.append(ticker)
+                        _m_train_fwd.append(close_return_pct)
             elif dt.tz_localize(None) >= pd.Timestamp(val_cutoff).tz_localize(None):
                 # Val 구간 (embargo 이후)
                 val_X.append(row); val_y.append(label)
+                _split = 'val'
+                if return_meta:
+                    _m_val_dates.append(_dt_naive); _m_val_tickers.append(ticker)
+                    _m_val_fwd.append(close_return_pct)
             else:
                 # Embargo 구간 — 제외 (data leakage 방지)
                 n_purged += 1
+                _split = 'embargo'
+            if return_meta:
+                _p_rows.append(row); _p_dates.append(_dt_naive); _p_tickers.append(ticker)
+                _p_labels.append(label); _p_fwd.append(close_return_pct); _p_split.append(_split)
 
     train_X, train_y = np.array(train_X), np.array(train_y)
     val_X, val_y = np.array(val_X), np.array(val_y)
@@ -509,6 +766,40 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     logger.info(f"  Train: {len(train_X):,} (양성 {train_y.mean():.1%})")
     logger.info(f"  Val:   {len(val_X):,} (양성 {val_y.mean():.1%})")
     logger.info(f"  ★ Purged: {n_purged:,}건 embargo 제외 ({embargo_days}일)")
+    if _cv_method == CV_METHOD_PURGED:
+        logger.info(f"  ★ [WAVE3] Label-overlap purge: {n_label_purged:,}건 "
+                    f"(라벨 종료 ≥ val 시작, h={forward_days} 거래일)")
+
+    # [WAVE3 Track D] meta (DD-11 피처 제외 이전의 전체 피처 패널 보존 →
+    #  purged WF 에서는 fold 내부 VarianceThreshold 로 처리)
+    _meta = None
+    if return_meta:
+        _panel = pd.DataFrame(_p_rows, columns=list(active_features)) if _p_rows else \
+            pd.DataFrame(columns=list(active_features))
+        _panel.insert(0, 'split', _p_split)
+        _panel.insert(0, 'fwd_ret', np.asarray(_p_fwd, dtype=float))
+        _panel.insert(0, 'label', np.asarray(_p_labels, dtype=int))
+        _panel.insert(0, 'ticker', _p_tickers)
+        _panel.insert(0, 'date', pd.DatetimeIndex(_p_dates))
+        _meta = {
+            'cv_method': _cv_method,
+            'forward_days': int(forward_days),
+            'train_dates': np.array(_m_train_dates, dtype='datetime64[ns]'),
+            'val_dates': np.array(_m_val_dates, dtype='datetime64[ns]'),
+            'train_tickers': np.array(_m_train_tickers, dtype=object),
+            'val_tickers': np.array(_m_val_tickers, dtype=object),
+            'train_fwd_ret': np.array(_m_train_fwd, dtype=float),
+            'val_fwd_ret': np.array(_m_val_fwd, dtype=float),
+            'panel': _panel,
+            'panel_features': list(active_features),
+            'calendar': pd.DatetimeIndex(sorted(_calendar)),
+            'n_label_purged': int(n_label_purged),
+            'n_embargo': int(n_purged),
+            'target_type': target_type,
+            'n_leveraged_excluded': int(n_lev_excluded),
+            'common_calendar_sampling': bool(_sample_dates is not None),
+            'n_sample_dates': int(len(_sample_dates)) if _sample_dates is not None else None,
+        }
 
     # ═══ DD-11: All-zero V6 피처 자동 제외 ═══
     auto_exclude = _cfg.get('ml.auto_exclude_zero_features', True)
@@ -542,6 +833,14 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             active_features = [fname for fname, keep in zip(active_features, keep_mask) if keep]
 
     # ★ H-21 FIX: active_features를 함께 반환하여 run_training에서 직접 사용
+    if return_meta:
+        # 운영자가 명시 제외한 피처는 검증 패널에서도 제외 (분산0 제외는 fold 내부에서)
+        if excluded_cfg and _meta is not None:
+            _drop = [c for c in excluded_cfg if c in _meta['panel'].columns]
+            if _drop:
+                _meta['panel'] = _meta['panel'].drop(columns=_drop)
+                _meta['panel_features'] = [f for f in _meta['panel_features'] if f not in _drop]
+        return train_X, train_y, val_X, val_y, active_features, _meta
     return train_X, train_y, val_X, val_y, active_features
 
 
@@ -549,12 +848,22 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
 # 학습
 # ═══════════════════════════════════════════════════════
 
-def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
+def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
+                   train_dates=None, val_dates=None, label_horizon_days: Optional[int] = None,
+                   cv_method: Optional[str] = None, artifact_dir=None, calendar=None):
     """5-모델 앙상블 학습 + 검증 (GBR+XGB+RF+LGB+CatBoost).
 
     ★ P1-4: 모든 하이퍼파라미터를 DynamicConfig에서 로드.
     ★ P1-4: ml.auto_tune_enabled 시 RandomizedSearchCV 자동 튜닝.
     ★ P1-5: ml.ensemble_weighting으로 동적 가중치 적용.
+
+    [WAVE3 Track D] (모두 선택 인자 — 미지정 시 기존 동작)
+      * train_dates/val_dates: 행별 날짜. cv_method='purged_wf' 이면
+        - auto-tune CV → DatePurgedWalkForward (날짜 단위, purge+embargo)
+        - val 의 calibration/eval 분할 → 날짜 단위(앞/뒤) + h 거래일 purge gap
+          (기존: 종목-major 행 순서로 절반 분할 → 같은 날짜가 cal/eval 양쪽에 존재)
+      * artifact_dir: fast_corrector / meta_learner / auto_tune 결과 저장 경로
+        (None → MODEL_DIR, 기존 동작).
     """
     from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
     from sklearn.metrics import accuracy_score, roc_auc_score
@@ -589,6 +898,12 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     from config.dynamic_config import DynamicConfig
     cfg = DynamicConfig()
 
+    # [WAVE3 Track D] CV 방식 / 라벨 horizon / 산출물 경로
+    _cv_method = _resolve_cv_method(cfg, cv_method)
+    _horizon = int(label_horizon_days if label_horizon_days is not None
+                   else cfg.get('train.forward_days', 5))
+    _artifact_dir = Path(artifact_dir) if artifact_dir is not None else MODEL_DIR
+
     # ★ M8: 비대칭 손실 — FP 패널티 sample_weight 계산
     fp_penalty = cfg.get('ml.fp_penalty_ratio', 1.5)
     sample_weights = np.where(train_y == 0, fp_penalty, 1.0)
@@ -619,21 +934,38 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
 
         logger.info(f"    🔍 {model_name} 튜닝: n_iter={n_iter}, "
                     f"cv={cv_folds}, scoring={scoring}")
-        # [PurgedKFold 연결] 시계열 Look-ahead bias 방지
-        _use_purged = cfg_obj.get('ml.use_purged_kfold', True)
-        if _PurgedKFold is not None and _use_purged and hasattr(X, 'index'):
-            cv_splitter = _PurgedKFold(
-                n_splits=int(cfg_obj.get('ml.purged_kfold_splits', cv_folds)),
-                embargo_days=int(cfg_obj.get('ml.embargo_days', 5)),
-            )
-            logger.info(f"    [PurgedKFold] n_splits={cv_splitter.n_splits}, embargo={cv_splitter.embargo_days}일 사용")
-        else:
-            cv_splitter = cv_folds
+        cv_splitter = None
+        # [WAVE3 Track D] 날짜 단위 Purged WF (train_dates 필요)
+        if _cv_method == CV_METHOD_PURGED and train_dates is not None \
+                and len(train_dates) == len(y):
+            try:
+                cv_splitter = build_purged_cv_splits(
+                    train_dates, cfg_obj, label_horizon_days=_horizon,
+                    n_splits=int(cfg_obj.get('ml.purged_wf.tune_n_splits', cv_folds)),
+                    calendar=calendar)
+                logger.info(f"    [DatePurgedWF] {len(cv_splitter)} folds (h={_horizon}, "
+                            f"embargo≥5 거래일, 날짜 단위)")
+            except Exception as _cv_e:
+                logger.warning(f"    [DatePurgedWF] split 구성 실패 → 레거시 CV: {_cv_e}")
+                cv_splitter = None
+        if cv_splitter is None:
+            # [PurgedKFold 연결] 시계열 Look-ahead bias 방지 (레거시)
+            _use_purged = cfg_obj.get('ml.use_purged_kfold', True)
+            if _PurgedKFold is not None and _use_purged and hasattr(X, 'index'):
+                cv_splitter = _PurgedKFold(
+                    n_splits=int(cfg_obj.get('ml.purged_kfold_splits', cv_folds)),
+                    embargo_days=int(cfg_obj.get('ml.embargo_days', 5)),
+                )
+                logger.info(f"    [PurgedKFold] n_splits={cv_splitter.n_splits}, embargo={cv_splitter.embargo_days}일 사용")
+            else:
+                cv_splitter = cv_folds
+                if _cv_method == CV_METHOD_PURGED:
+                    logger.warning("    ⚠️ train_dates 없음 → 행 단위 CV (누수 가능) 사용")
         search = RandomizedSearchCV(
             estimator, param_distributions, n_iter=n_iter,
             cv=cv_splitter, scoring=scoring, random_state=42,
             n_jobs=-1, error_score='raise')
-        search.fit(X, y)
+        search.fit(X, y, sample_weight=sample_weights)
 
         # top-K 결과 수집
         results_df = pd.DataFrame(search.cv_results_)
@@ -721,7 +1053,29 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
     # ★ L2-01: val_X, val_y를 시계열 순으로 cal_X/cal_y(전반 50%)와 eval_X/eval_y(후반 50%)로 분할
     cal_X, cal_y = val_X, val_y
     eval_X, eval_y = val_X, val_y
-    if len(val_X) >= 40:
+    _date_split_done = False
+    # [WAVE3 Track D] val 행은 종목-major 순서이므로 행 절반 분할은 '시계열 순'이 아니다.
+    # → 날짜 단위 앞/뒤 분할 + 라벨 horizon(h 거래일) purge gap.
+    if (_cv_method == CV_METHOD_PURGED and val_dates is not None
+            and date_major_holdout_split is not None and len(val_dates) == len(val_y)
+            and len(val_X) >= 40):
+        try:
+            _ci, _ei, _sinfo = date_major_holdout_split(
+                val_dates, label_horizon_days=_horizon, cal_fraction=0.5, calendar=calendar)
+            if _ci is not None and len(np.unique(val_y[_ci])) >= 2 \
+                    and len(np.unique(val_y[_ei])) >= 2:
+                cal_X, cal_y = val_X[_ci], val_y[_ci]
+                eval_X, eval_y = val_X[_ei], val_y[_ei]
+                _date_split_done = True
+                logger.info(f"  📐 [DatePurged] Val 분할: cal={len(cal_X)}건({_sinfo.get('cal_dates')}일) "
+                            f"| purge {_sinfo.get('purged_dates')}일 | "
+                            f"eval={len(eval_X)}건({_sinfo.get('eval_dates')}일, "
+                            f"{_sinfo.get('eval_start')}~)")
+            else:
+                logger.warning(f"  ⚠️ [DatePurged] Val 날짜 분할 불가 ({_sinfo}) → 레거시 분할")
+        except Exception as _vs_e:
+            logger.warning(f"  ⚠️ [DatePurged] Val 날짜 분할 실패 → 레거시 분할: {_vs_e}")
+    if not _date_split_done and len(val_X) >= 40:
         _mid = len(val_X) // 2
         _c_y, _e_y = val_y[:_mid], val_y[_mid:]
         if len(np.unique(_c_y)) >= 2 and len(np.unique(_e_y)) >= 2:
@@ -903,7 +1257,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
             logger.info(f"  💾 P1-4: 튜닝 결과 DynamicConfig에 저장 "
                         f"({len(tune_results)}개 모델)")
             # 튜닝 결과 상세 파일 저장
-            tune_report_path = MODEL_DIR / 'auto_tune_results.json'
+            tune_report_path = _artifact_dir / 'auto_tune_results.json'
             # tune_results 내 params를 JSON 직렬화 가능하게 변환
             serializable_results = {}
             for mname, top_list in tune_results.items():
@@ -988,7 +1342,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
             cal_ens += w * models[m].predict_proba(cal_X)[:, 1]
         fast_model.fit(cal_X, cal_y, cal_ens)
         # MODEL_DIR 에 바로 저장
-        fast_model.save(MODEL_DIR / 'fast_corrector.joblib')
+        fast_model.save(_artifact_dir / 'fast_corrector.joblib')
     except Exception as e:
         logger.warning(f"  ⚠️ FastCorrector 학습 실패: {e}")
     logger.info(f"  범위: {ens.min():.4f} ~ {ens.max():.4f}")
@@ -1015,7 +1369,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
         meta_model.fit(cal_meta_features, cal_y)
 
         # 메타 모델 저장
-        joblib.dump(meta_model, MODEL_DIR / 'meta_learner.joblib')
+        joblib.dump(meta_model, _artifact_dir / 'meta_learner.joblib')
 
         # 메타 모델 가중치 로깅 — 어떤 모델이 가장 높은 계수를 받는지
         meta_coefs = dict(zip(models.keys(), meta_model.coef_[0]))
@@ -1039,6 +1393,225 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None):
 # (구) Challenger 및 save_models 제거됨 -> ModelRegistryManager 사용
 # ═══════════════════════════════════════════════════════
 
+
+# ═══════════════════════════════════════════════════════
+# [WAVE3 Track D] Date-major Purged Walk-Forward 검증
+# ═══════════════════════════════════════════════════════
+
+def build_purged_cv_splits(train_dates, cfg_obj, label_horizon_days: int,
+                           n_splits: Optional[int] = None, calendar=None) -> list:
+    """train 행 날짜로 DatePurgedWalkForward (train_idx, test_idx) 리스트 생성.
+
+    RandomizedSearchCV(cv=...) 에 그대로 전달 가능 (날짜 단위, purge+embargo).
+    """
+    if DatePurgedWalkForward is None:
+        raise RuntimeError("DatePurgedWalkForward 사용 불가")
+    p = _purged_wf_params(cfg_obj, label_horizon_days)
+    splitter = DatePurgedWalkForward(
+        n_splits=int(n_splits or p['n_splits']),
+        min_train_dates=p['min_train_dates'],
+        label_horizon_days=int(label_horizon_days),
+        embargo_days=p['embargo_days'],
+        expanding=p['expanding'],
+        calendar=calendar,
+    )
+    splits = list(splitter.split(dates=train_dates))
+    if not splits:
+        raise ValueError("purged WF split 0개")
+    return splits
+
+
+def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'gbr'):
+    """fold 별 새 estimator 를 만드는 팩토리 (운영 앙상블과 동일 HP 소스)."""
+    name = (model_name or 'gbr').lower()
+
+    def _gbr():
+        from sklearn.ensemble import GradientBoostingClassifier
+        return GradientBoostingClassifier(
+            n_estimators=int(cfg_obj.get('ml.hp.gbr.n_estimators', 300)),
+            max_depth=int(cfg_obj.get('ml.hp.gbr.max_depth', 4)),
+            learning_rate=float(cfg_obj.get('ml.hp.gbr.learning_rate', 0.03)),
+            subsample=float(cfg_obj.get('ml.hp.gbr.subsample', 0.8)),
+            min_samples_leaf=int(cfg_obj.get('ml.hp.gbr.min_samples_leaf', 100)),
+            random_state=42)
+
+    def _rf():
+        from sklearn.ensemble import RandomForestClassifier
+        return RandomForestClassifier(
+            n_estimators=int(cfg_obj.get('ml.hp.rf.n_estimators', 500)),
+            max_depth=int(cfg_obj.get('ml.hp.rf.max_depth', 8)),
+            min_samples_leaf=int(cfg_obj.get('ml.hp.rf.min_samples_leaf', 100)),
+            random_state=42, n_jobs=-1)
+
+    def _logit():
+        from sklearn.linear_model import LogisticRegression
+        return LogisticRegression(C=float(cfg_obj.get('ml.meta_learner_C', 1.0)), max_iter=1000)
+
+    return {'gbr': _gbr, 'rf': _rf, 'logit': _logit}.get(name, _gbr)
+
+
+def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=None,
+                         forward_days: int = 5, calendar=None, n_splits: Optional[int] = None,
+                         model_name: Optional[str] = None, out_dir=None,
+                         compare_naive: bool = False, save: bool = True,
+                         ts: Optional[str] = None, min_names_per_date: Optional[int] = None,
+                         min_train_rows: Optional[int] = None):
+    """패널(date, ticker, label, fwd_ret, features) → Purged WF OOS 리포트.
+
+    * 전처리(impute/variance/scaler)는 Pipeline 으로 fold train 에서만 fit.
+    * sample_weight 는 운영과 동일한 FP penalty(M8) 를 fold train 에만 적용.
+    * save=True 이면 out_dir(기본 results/ml_validation)/purged_wf_<ts>.json 저장.
+
+    Returns: (report dict, saved path or None)
+    """
+    if _pwf is None or DatePurgedWalkForward is None:
+        raise RuntimeError("purged WF 모듈 사용 불가")
+    if cfg_obj is None:
+        from config.dynamic_config import DynamicConfig
+        cfg_obj = DynamicConfig()
+    panel = panel.sort_values(['date', 'ticker']).reset_index(drop=True)
+    X = panel[feature_cols].to_numpy(dtype=float)
+    y = panel['label'].to_numpy(dtype=int)
+    dates = pd.DatetimeIndex(panel['date'])
+    fwd = panel['fwd_ret'].to_numpy(dtype=float)
+    fp_penalty = float(cfg_obj.get('ml.fp_penalty_ratio', 1.5))
+    sw = np.where(y == 0, fp_penalty, 1.0)
+
+    p = _purged_wf_params(cfg_obj, forward_days)
+    splitter = DatePurgedWalkForward(
+        n_splits=int(n_splits or p['n_splits']), min_train_dates=p['min_train_dates'],
+        label_horizon_days=int(forward_days), embargo_days=p['embargo_days'],
+        expanding=p['expanding'], calendar=calendar)
+    mname = model_name or cfg_obj.get('ml.purged_wf.model', 'gbr')
+    est_factory = _purged_wf_estimator_factory(cfg_obj, mname)
+    pipe_factory = _pwf.make_pipeline_factory(est_factory, impute=True,
+                                              variance_filter=True, scale=True)
+    mnpd = int(min_names_per_date or cfg_obj.get('ml.purged_wf.min_names_per_date', 5))
+    # fold train 행이 너무 적으면(GBR min_samples_leaf=100 등) 상수 예측 → 지표 오염 → 스킵
+    mtr = int(min_train_rows if min_train_rows is not None
+              else cfg_obj.get('ml.purged_wf.min_train_rows', 500))
+    report = _pwf.run_purged_walk_forward(
+        X, y, dates, splitter, pipe_factory, fwd_ret=fwd, sample_weight=sw,
+        task='classification', min_names_per_date=mnpd,
+        horizon_days=int(forward_days), calendar=calendar, min_train_rows=mtr)
+    report['context'] = {
+        'model': mname, 'feature_count': len(feature_cols), 'features': list(feature_cols),
+        'n_tickers': int(panel['ticker'].nunique()),
+        'date_range': [str(dates.min().date()), str(dates.max().date())] if len(dates) else None,
+        'label_positive_rate': float(y.mean()) if len(y) else None,
+        'fp_penalty': fp_penalty, 'forward_days': int(forward_days),
+        'calendar_trading_days': int(len(calendar)) if calendar is not None else None,
+        'ic_definition': 'per-date Spearman(pred, fwd_ret c2c h-day), mean over dates; '
+                         't = mean/sd*sqrt(n_dates); nw_t = Newey-West(lag=ceil(h/spacing)-1)',
+    }
+    if compare_naive:
+        try:
+            naive = _pwf.run_naive_kfold(
+                X, y, dates, pipe_factory, n_splits=int(n_splits or p['n_splits']),
+                fwd_ret=fwd, sample_weight=sw, task='classification',
+                min_names_per_date=mnpd, horizon_days=int(forward_days), calendar=calendar)
+            report['naive_kfold_reference'] = {
+                'note': '행 단위 shuffled KFold (purge/embargo 없음) — 누수 규모 참고용, 의사결정 사용 금지',
+                'oos': naive.get('oos'), 'fold_ic_mean': naive.get('fold_ic_mean'),
+            }
+            try:
+                report['leakage_inflation_ic'] = (
+                    float(naive['oos']['ic']['mean']) - float(report['oos']['ic']['mean']))
+            except (TypeError, KeyError):
+                report['leakage_inflation_ic'] = None
+        except Exception as _ne:
+            report['naive_kfold_reference'] = {'error': str(_ne)}
+    path = None
+    if save:
+        path = _pwf.save_report(report, out_dir or ML_VALIDATION_DIR, ts=ts)
+        logger.info(f"  📋 [PurgedWF] OOS 리포트 저장: {path}")
+    return report, path
+
+
+def run_purged_validation(window_days: Optional[int] = None, max_tickers: Optional[int] = None,
+                          n_splits: Optional[int] = None, model_name: Optional[str] = None,
+                          out_dir=None, save_candidate: bool = False, candidate_root=None,
+                          compare_naive: bool = False, panel: Optional[pd.DataFrame] = None,
+                          feature_cols: Optional[List[str]] = None, calendar=None,
+                          forward_days: Optional[int] = None,
+                          min_train_rows: Optional[int] = None) -> Dict:
+    """검증 전용 경로 (운영 레지스트리/모델 파일을 건드리지 않음).
+
+    1) panel 미지정 시 build_rolling_dataset(return_meta=True) 로 패널 구성
+    2) Date-major Purged WF OOS 리포트 → results/ml_validation/purged_wf_<ts>.json
+    3) save_candidate=True 이면 전체 패널로 재학습한 Pipeline 을
+       models_candidate/<ts>/ 에만 저장 (live 로딩 경로와 무관)
+    """
+    from config.dynamic_config import DynamicConfig
+    cfg = DynamicConfig()
+    ts = now_kst().strftime('%Y%m%d_%H%M%S')
+    if panel is None:
+        out = build_rolling_dataset(window_days=window_days, sample_interval=None,
+                                    return_meta=True, max_tickers=max_tickers,
+                                    cv_method=CV_METHOD_PURGED)
+        meta = out[5]
+        panel = meta['panel']
+        feature_cols = meta['panel_features']
+        calendar = meta['calendar']
+        forward_days = meta['forward_days']
+    if feature_cols is None:
+        feature_cols = [c for c in panel.columns
+                        if c not in ('date', 'ticker', 'label', 'fwd_ret', 'split')]
+    forward_days = int(forward_days or cfg.get('train.forward_days', 5))
+    if panel is None or len(panel) == 0:
+        return {'status': 'skip', 'reason': 'empty_panel'}
+
+    report, path = run_purged_wf_report(
+        panel, feature_cols, cfg_obj=cfg, forward_days=forward_days, calendar=calendar,
+        n_splits=n_splits, model_name=model_name, out_dir=out_dir,
+        compare_naive=compare_naive, save=True, ts=ts, min_train_rows=min_train_rows)
+
+    result = {'status': 'completed', 'report_path': str(path) if path else None,
+              'oos': report.get('oos'), 'fold_ic_mean': report.get('fold_ic_mean'),
+              'n_folds': len(report.get('folds', [])),
+              'leakage_inflation_ic': report.get('leakage_inflation_ic')}
+
+    if save_candidate:
+        mname = model_name or cfg.get('ml.purged_wf.model', 'gbr')
+        pipe = _pwf.make_pipeline_factory(_purged_wf_estimator_factory(cfg, mname))()
+        pdf = panel.sort_values(['date', 'ticker'])
+        Xa = pdf[feature_cols].to_numpy(dtype=float)
+        ya = pdf['label'].to_numpy(dtype=int)
+        swa = np.where(ya == 0, float(cfg.get('ml.fp_penalty_ratio', 1.5)), 1.0)
+        pipe.fit(Xa, ya, model__sample_weight=swa)
+        cand_meta = {
+            'created_at': now_kst().isoformat(), 'model': mname,
+            'feature_names': list(feature_cols), 'forward_days': forward_days,
+            'train_rows': int(len(ya)),
+            'train_date_range': [str(pdf['date'].min().date()), str(pdf['date'].max().date())],
+            'purged_wf_report': str(path) if path else None,
+            'oos_summary': report.get('oos'),
+            'status': 'CANDIDATE_ONLY — live pipeline does not load this artifact',
+        }
+        cdir = _pwf.save_candidate(pipe, cand_meta, candidate_root or CANDIDATE_MODEL_ROOT, ts=ts)
+        result['candidate_dir'] = str(cdir)
+        # 리포트 사본을 후보 디렉토리에도 보존 (results/ 는 테스트 SSOT 가드 복원 대상)
+        try:
+            if path:
+                import shutil
+                shutil.copy2(str(path), str(Path(cdir) / 'purged_wf_report.json'))
+        except Exception as _cp_e:
+            logger.debug(f"  리포트 사본 저장 실패: {_cp_e}")
+        logger.info(f"  💾 [PurgedWF] 후보 모델 저장 (live 미사용): {cdir}")
+    return result
+
+
+def run_validation() -> Dict:
+    """주간 검증 훅 (scripts/pipeline/sub_phases._phase_weekly_validate 가 import).
+
+    Purged WF OOS 리포트만 생성 (모델 저장/승격 없음).
+    ml.purged_wf.weekly_validation_enabled=false 로 비활성화 가능.
+    """
+    from config.dynamic_config import DynamicConfig
+    cfg = DynamicConfig()
+    if not cfg.get('ml.purged_wf.weekly_validation_enabled', True):
+        return {'status': 'skip', 'reason': 'disabled_by_config'}
+    return run_purged_validation(save_candidate=False, compare_naive=False)
 
 # ═══════════════════════════════════════════════════════
 # #8: Walk-Forward Split 진단
@@ -1069,6 +1642,9 @@ def _walk_forward_split_diagnostics(
     result = {
         'status': 'skip',
         'weak_threshold': weak_threshold,
+        # [WAVE3 Track D] 최종 모델을 자기 학습 행(train_X)으로 평가 → 표본내(in-sample) 지표.
+        # OOS 판단에는 results/ml_validation/purged_wf_*.json (purged_wf_oos) 을 사용할 것.
+        'in_sample': True,
         'n_splits': n_splits,
     }
 
@@ -1450,11 +2026,18 @@ def should_retrain() -> Tuple[bool, str]:
 # Main
 # ═══════════════════════════════════════════════════════
 
-def run_training(window_days: int = None, trigger: str = 'manual', enable_automl: bool = True):
-    """학습 실행 (프로그래밍 가능 인터페이스)."""
+def run_training(window_days: int = None, trigger: str = 'manual', enable_automl: bool = True,
+                 cv_method: Optional[str] = None):
+    """학습 실행 (프로그래밍 가능 인터페이스).
+
+    [WAVE3 Track D] cv_method (None → ml.cv_method, 기본 'purged_wf'):
+      purged_wf 이면 train/val 경계 label-overlap purge, auto-tune/cal-eval 날짜 단위
+      분할, 그리고 Date-major Purged WF OOS 리포트(results/ml_validation)를 생성한다.
+    """
     from config.dynamic_config import DynamicConfig
     import joblib
     cfg = DynamicConfig()
+    _cv_method = _resolve_cv_method(cfg, cv_method)
     if window_days is None:
         window_days = cfg.get('train.window_days', 730)
         
@@ -1467,13 +2050,15 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
                 logger.info(f"  🧬 AutoML Alpha Model loaded from {alpha_model_path}")
             except Exception as e:
                 logger.warning(f"  ❌ Failed to load AutoML Model: {e}")
-    logger.info(f"🚀 ML 앙상블 재학습 (trigger={trigger}, window={window_days}일)")
+    logger.info(f"🚀 ML 앙상블 재학습 (trigger={trigger}, window={window_days}일, cv={_cv_method})")
     logger.info(f"  데이터 로드 시작 (window={window_days}d)")
     # ★ H-21 FIX: active_features를 함께 반환받아 이후 참조
-    train_X, train_y, val_X, val_y, active_features = build_rolling_dataset(
+    train_X, train_y, val_X, val_y, active_features, ds_meta = build_rolling_dataset(
         window_days=window_days,
         alpha_model=alpha_model,
-        sample_interval=5)
+        sample_interval=5,
+        return_meta=True,
+        cv_method=_cv_method)
 
     min_train_samples = cfg.get('ml.min_train_samples', 200)
     if len(train_X) < min_train_samples:
@@ -1495,7 +2080,38 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     import numpy as np
     train_X = np.nan_to_num(train_X, nan=0.0)
     val_X = np.nan_to_num(val_X, nan=0.0)
-    models, val_acc, val_auc, per_model_metrics, ensemble_weights, train_X, val_X, active_features = train_ensemble(train_X, train_y, val_X, val_y, active_features)
+    _use_dates = _cv_method == CV_METHOD_PURGED and ds_meta is not None
+    models, val_acc, val_auc, per_model_metrics, ensemble_weights, train_X, val_X, active_features = train_ensemble(
+        train_X, train_y, val_X, val_y, active_features,
+        train_dates=ds_meta['train_dates'] if _use_dates else None,
+        val_dates=ds_meta['val_dates'] if _use_dates else None,
+        label_horizon_days=ds_meta['forward_days'] if ds_meta else None,
+        cv_method=_cv_method,
+        calendar=ds_meta['calendar'] if _use_dates else None)
+
+    # ═══ [WAVE3 Track D] Date-major Purged WF OOS 리포트 (실패해도 학습은 계속) ═══
+    purged_wf_summary = None
+    if _use_dates and cfg.get('ml.purged_wf.enabled', True):
+        try:
+            _rep, _rep_path = run_purged_wf_report(
+                ds_meta['panel'], ds_meta['panel_features'], cfg_obj=cfg,
+                forward_days=ds_meta['forward_days'], calendar=ds_meta['calendar'])
+            _ic = (_rep.get('oos') or {}).get('ic', {})
+            purged_wf_summary = {
+                'report_path': str(_rep_path) if _rep_path else None,
+                'ic_mean': _ic.get('mean'), 'ic_t_stat': _ic.get('t_stat'),
+                'ic_nw_t_stat': _ic.get('nw_t_stat'), 'ic_n_dates': _ic.get('n_dates'),
+                'decile_spread_mean': ((_rep.get('oos') or {}).get('decile_spread') or {}).get('mean'),
+                'auc': (_rep.get('oos') or {}).get('auc'),
+                'fold_ic_mean': _rep.get('fold_ic_mean'),
+                'n_folds': len(_rep.get('folds', [])),
+                'model': (_rep.get('context') or {}).get('model'),
+            }
+            logger.info(f"  🧪 [PurgedWF] OOS IC={_ic.get('mean')} (t={_ic.get('t_stat')}, "
+                        f"NW t={_ic.get('nw_t_stat')}, n_dates={_ic.get('n_dates')})")
+        except Exception as _pwf_e:
+            logger.warning(f"  ⚠️ [PurgedWF] OOS 리포트 실패 (학습 계속): {_pwf_e}")
+            purged_wf_summary = {'error': str(_pwf_e)}
     # ═══════════════════════════════════════════════════════
     # ★ #7: Model CI/CD (Registry Manager)
     # ═══════════════════════════════════════════════════════
@@ -1511,7 +2127,9 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         'trigger': trigger,
         'ensemble_weights': ensemble_weights,
         'train_size': len(train_X),
-        'window_days': window_days
+        'window_days': window_days,
+        'cv_method': _cv_method,               # [WAVE3 Track D]
+        'purged_wf_oos': purged_wf_summary,    # [WAVE3 Track D] OOS 진단 (승격 게이트 아님)
     }
     
     # [Phase 58: Feature Importance Sync] 앙상블 피체 가중치 평균 계산
@@ -1678,7 +2296,9 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
             'models': per_model_metrics,  # ★ P0: 5모델 모두 기록 (pruning 안전)
             'pruned_features': [],
             'challenger': challenger_result,       # ★ #7
-            'wf_diagnostics': wf_diagnostics,      # ★ #8
+            'wf_diagnostics': wf_diagnostics,      # ★ #8 (in-sample)
+            'purged_wf_oos': purged_wf_summary,    # [WAVE3 Track D] date-major purged WF OOS
+            'cv_method': _cv_method,
         }
         import json as _rj
         _rpt_path = Path(__file__).resolve().parent.parent / 'results' / 'training_report.json'
@@ -1987,12 +2607,38 @@ if __name__ == '__main__':
                         help='트리거 체크만 (학습 안 함)')
     parser.add_argument('--regime-split', action='store_true',
                         help='[Phase 10] Bull/Bear 레짐 분리 학습 실행')
+    # [WAVE3 Track D] Date-major Purged Walk-Forward
+    parser.add_argument('--cv-method', choices=[CV_METHOD_PURGED, CV_METHOD_LEGACY], default=None,
+                        help='CV/검증 분할 방식 (기본: ml.cv_method → purged_wf)')
+    parser.add_argument('--purged-wf-only', action='store_true',
+                        help='검증 전용: Purged WF OOS 리포트만 생성 (운영 모델/레지스트리 미변경)')
+    parser.add_argument('--max-tickers', type=int, default=None,
+                        help='[--purged-wf-only] 유니버스 상한 (스모크용)')
+    parser.add_argument('--n-splits', type=int, default=None,
+                        help='[--purged-wf-only] WF fold 수 (기본 ml.purged_wf.n_splits=5)')
+    parser.add_argument('--wf-model', default=None, choices=['gbr', 'rf', 'logit'],
+                        help='[--purged-wf-only] fold 모델 (기본 ml.purged_wf.model=gbr)')
+    parser.add_argument('--out-dir', default=None,
+                        help='[--purged-wf-only] 리포트 디렉토리 (기본 results/ml_validation)')
+    parser.add_argument('--save-candidate', action='store_true',
+                        help='[--purged-wf-only] 후보 모델을 models_candidate/<ts>/ 에 저장')
+    parser.add_argument('--compare-naive', action='store_true',
+                        help='[--purged-wf-only] 행 단위 KFold 와 비교 (누수 규모 참고)')
     args = parser.parse_args()
 
     if args.check_only:
         needed, trigger = should_retrain()
         print(f"재학습 필요: {needed} (trigger={trigger})")
         sys.exit(0 if not needed else 1)
+
+    # [WAVE3 Track D] 검증 전용 모드 — 이후의 운영 부수효과(Gap/FactorPruner) 이전에 종료
+    if args.purged_wf_only:
+        _res = run_purged_validation(
+            window_days=args.window, max_tickers=args.max_tickers, n_splits=args.n_splits,
+            model_name=args.wf_model, out_dir=args.out_dir,
+            save_candidate=args.save_candidate, compare_naive=args.compare_naive)
+        print(json.dumps(_res, indent=2, ensure_ascii=False, default=str))
+        sys.exit(0)
 
     # [Phase 10: Alpha Breakthrough] 레짐 분리 학습 모드
     if getattr(args, 'regime_split', False):
@@ -2015,15 +2661,15 @@ if __name__ == '__main__':
 
     if args.trigger:
         effective_window = 180 if args.trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
-        run_training(window_days=effective_window, trigger=args.trigger)
+        run_training(window_days=effective_window, trigger=args.trigger, cv_method=args.cv_method)
     elif args.force:
-        run_training(window_days=args.window, trigger='manual')
+        run_training(window_days=args.window, trigger='manual', cv_method=args.cv_method)
     else:
         needed, trigger = should_retrain()
         if needed:
             effective_window = 180 if trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
             logger.info(f"  ⚡ Dynamic Retraining Window 적용: trigger={trigger} ➔ window={effective_window}d")
-            run_training(window_days=effective_window, trigger=trigger)
+            run_training(window_days=effective_window, trigger=trigger, cv_method=args.cv_method)
         else:
             logger.info("  ⏭️ 재학습 불필요 (최근 학습 존재, 트리거 없음)")
 

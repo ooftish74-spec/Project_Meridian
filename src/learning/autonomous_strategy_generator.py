@@ -11,6 +11,11 @@ Project Meridian — Autonomous Strategy Generator Engine
   5. Zero Hardcoding: 모든 파라미터 DynamicConfig(defaults.json) 키 연동.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from pathlib import Path
@@ -28,10 +33,10 @@ class AutonomousStrategyGenerator:
     """AI 자율 전략 코드 생성 및 검증 엔진."""
 
     def __init__(self):
-        self.min_sharpe = float(cfg.get("learning.auto_coder.min_sharpe_threshold", 1.50))
-        self.max_corr = float(cfg.get("learning.auto_coder.max_corr_threshold", 0.30))
-        self.sandbox_days = int(cfg.get("learning.auto_coder.sandbox_days", 90))
-        self.max_active_streams = int(cfg.get("learning.auto_coder.max_active_generated_streams", 5))
+        self.min_sharpe = float(pget('learning.auto_coder.min_sharpe_threshold', 1.50))
+        self.max_corr = float(pget('learning.auto_coder.max_corr_threshold', 0.30))
+        self.sandbox_days = int(pget('learning.auto_coder.sandbox_days', 90))
+        self.max_active_streams = int(pget('learning.auto_coder.max_active_generated_streams', 5))
 
     def run_strategy_generation_cycle(self, market_anomalies: Dict[str, Any] = None) -> Dict[str, Any]:
         """이상 패턴 감지 ➔ 자율 전략 코드 도출 ➔ 샌드박스 검증 ➔ 자율 등재 파이프라인."""

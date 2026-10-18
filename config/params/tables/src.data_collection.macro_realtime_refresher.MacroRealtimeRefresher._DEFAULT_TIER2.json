@@ -1,0 +1,15 @@
+{
+ "CL=F": "wti",
+ "GC=F": "gold_us",
+ "SI=F": "silver",
+ "HG=F": "copper",
+ "^TNX": "us10y",
+ "^FVX": "us5y",
+ "^TYX": "us30y",
+ "EWY": "ewy",
+ "FLKR": "flkr",
+ "FXI": "fxi",
+ "^TWII": "taiex",
+ "^N225": "nikkei",
+ "^HSI": "hangseng"
+}

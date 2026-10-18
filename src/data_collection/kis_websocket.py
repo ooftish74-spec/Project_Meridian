@@ -27,6 +27,11 @@ Usage:
     ws.subscribe_price(['005930', '000660'])
     ws.start()  # 백그라운드 수신 시작
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import pandas as pd
 import json
 import logging
@@ -101,7 +106,7 @@ class KISWebSocketClient:
         self._flush_thread: Optional[threading.Thread] = None
         self._stats = {'messages_received': 0, 'price_updates': 0, 'orderbook_updates': 0, 'notices': 0, 'reconnects': 0, 'errors': 0, 'started_at': None}
         self._reconnect_base = _get('websocket.reconnect_base_sec', 1.0)
-        self._reconnect_max = _get('websocket.reconnect_max_sec', 60.0)
+        self._reconnect_max = pget('websocket.reconnect_max_sec', 60.0)
         self._reconnect_attempt = 0
 
     def _load_credentials(self):

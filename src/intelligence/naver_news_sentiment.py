@@ -188,16 +188,25 @@ class NaverNewsSentiment:
 
     def save_to_signal_cache(self, result: Dict):
         """signal_cache.macro_features에 뉴스 감성 저장."""
+        # ★ Wave 1 Track A: 락 보유 merge-update (다른 writer 키 보존, 손상 파일 덮어쓰기 금지)
         try:
-            cache = json.loads(self._cache_file.read_text()) if self._cache_file.exists() else {}
-            macro = cache.get('macro_features', {})
-            macro['news_naver_sentiment'] = result['sentiment']
-            macro['news_naver_label'] = result['label']
-            macro['news_naver_count'] = result['n_articles']
-            macro['news_naver_updated'] = result['timestamp']
-            macro['news_events_count'] = len(result.get('events', []))
-            cache['macro_features'] = macro
-            atomic_write_json(self._cache_file, cache, indent=2, ensure_ascii=False, default=str)
+            from src.utils.file_ops import safe_json_update
+            _upd = json.loads(json.dumps({
+                'news_naver_sentiment': result['sentiment'],
+                'news_naver_label': result['label'],
+                'news_naver_count': result['n_articles'],
+                'news_naver_updated': result['timestamp'],
+                'news_events_count': len(result.get('events', [])),
+            }, ensure_ascii=False, default=str))
+
+            def _mutate(cache):
+                cache = cache if isinstance(cache, dict) else {}
+                macro = cache.get('macro_features')
+                macro = macro if isinstance(macro, dict) else {}
+                macro.update(_upd)
+                cache['macro_features'] = macro
+                return cache
+            safe_json_update(self._cache_file, _mutate, default={}, indent=2, ensure_ascii=False)
             logger.info(f"  💾 뉴스 감성 → signal_cache 저장 완료")
         except Exception as e:
             logger.warning(f"  뉴스 감성 저장 실패: {e}", exc_info=True)

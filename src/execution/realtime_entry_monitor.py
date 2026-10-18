@@ -11,6 +11,11 @@ RealtimeEntryMonitor — 장중 동적 전수 수급 진입 스캐너
   4. 중복 매수 방지 15분 콜다운 및 통합증거금 선(先) 매수-후(後) 교체 매도 라우팅
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import time
 import logging
 import json
@@ -35,10 +40,10 @@ class RealtimeEntryMonitor:
 
     def __init__(self, mode: str = 'live'):
         self.mode = mode
-        self._cooldown_sec = float(_cfg_get('entry_monitor.cooldown_sec', 900.0))  # 15분
+        self._cooldown_sec = float(pget('entry_monitor.cooldown_sec', 900.0))  # 15분
         self._last_signal_ts: Dict[str, float] = {}
-        self._threshold_sigma = float(_cfg_get('entry_monitor.threshold_sigma', 1.8))
-        self._max_top_candidates = int(_cfg_get('entry_monitor.max_candidates', 10))
+        self._threshold_sigma = float(pget('entry_monitor.threshold_sigma', 1.8))
+        self._max_top_candidates = int(pget('entry_monitor.max_candidates', 10))
 
         # 3중 병렬 피드 크로스 합의 엔진 연동
         from src.data_collection.triple_feed_consensus_engine import TripleFeedConsensusEngine
@@ -77,14 +82,21 @@ class RealtimeEntryMonitor:
             min_val = min_value_krw
 
         # 미국 주식(알파벳 티커)은 환율 고려 동적 환산 ($500K ~ $1M USD)
-        if any(c.isalpha() for c in ticker) and not ticker.startswith('0') and not ticker.startswith('2'):
-            _fx_em = 1334.3
+        if (trading_value > 0 and any(c.isalpha() for c in ticker)
+                and not ticker.startswith('0') and not ticker.startswith('2')):
+            # ★ Wave 1 Track C: 리터럴 1334.3 / 무기한 stale signal_cache 제거 → 게이트웨이(신선도 한도 내) 환율.
+            #   하한선이 실제로 적용될 때(trading_value>0)만 환율 필요. 미확보 시 원화 하한선을 USD로 환산할 수 없음
+            #   → 해당 해외 신규 진입 후보 스킵(fail-closed). (해외 신규 매수 자체도 하류 FX Guard가 별도 차단)
+            _fx_em = None
             try:
-                _sc_em = _PROJECT_ROOT / 'results' / 'signal_cache.json'
-                if _sc_em.exists():
-                    _fx_em = float(json.loads(_sc_em.read_text(encoding='utf-8')).get('usdkrw') or 1334.3)
-            except Exception:
-                pass
+                from src.data_collection.central_data_gateway import get_central_data_gateway
+                _r_em = get_central_data_gateway().get_usdkrw_rate()
+                _fx_em = float(_r_em) if _r_em is not None and float(_r_em) > 0 else None
+            except Exception as _fx_em_err:
+                logger.debug(f"  [EntryMonitor] USD/KRW 조회 예외: {_fx_em_err}")
+            if _fx_em is None:
+                logger.warning(f"  ⚠️ [EntryMonitor] {ticker}: USD/KRW 미확보 → 해외 유동성 하한 환산 불가, 신규 진입 후보 스킵")
+                return False
             min_val = min_val / max(_fx_em, 900.0)
 
         if trading_value > 0 and trading_value < min_val:
@@ -92,7 +104,7 @@ class RealtimeEntryMonitor:
             return False
 
         # 2. 동적 Bid-Ask Spread 필터 (고정 0.20% 하드코딩 제거)
-        dyn_max_spread = max_spread_pct if max_spread_pct is not None else float(_cfg_get('execution.max_spread_pct', 0.25))
+        dyn_max_spread = max_spread_pct if max_spread_pct is not None else float(pget('execution.max_spread_pct', 0.25))
         if bid_price is not None and ask_price is not None and bid_price > 0 and ask_price >= bid_price:
             mid_price = (bid_price + ask_price) / 2.0
             spread_pct = ((ask_price - bid_price) / mid_price) * 100.0

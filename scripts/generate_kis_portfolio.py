@@ -15,6 +15,12 @@ Usage:
     python3 scripts/generate_kis_portfolio.py
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import sys
@@ -72,17 +78,60 @@ def _get_tradeable_sessions(stream_id: str) -> list:
     return ['pre', 'regular', 'after']
 
 
+class _SkipWrite(Exception):
+    """safe_json_update 락 내부 재검증에서 쓰기를 포기할 때 사용 (파일 미변경)."""
+
+
+def _is_live_protected(existing_kis: dict, current_exec_mode: str) -> bool:
+    """라이브 잔고 보호 조건 (기존 의미 유지): 파일이 live 모드이거나, 설정이 live이고 계좌 NAV>0."""
+    if not isinstance(existing_kis, dict):
+        return False
+    acct = existing_kis.get('account') if isinstance(existing_kis.get('account'), dict) else {}
+    try:
+        _nav = float(acct.get('nav', 0) or 0)
+    except (TypeError, ValueError):
+        _nav = 0.0
+    return existing_kis.get('kis_mode') == 'live' or (current_exec_mode == 'live' and _nav > 0)
+
+
 def generate():
-    """KIS API 기준 전체 포트폴리오 생성."""
+    """KIS API 기준 전체 포트폴리오 생성.
+
+    ★ Wave 1 Track A (state integrity):
+      - kis_portfolio.json은 다중 writer 파일(_kis_adapter 실잔고, stream_orchestrator 등)이므로
+        safe_json_update(락 보유 merge-update)로 기록 — 이 스크립트가 만든 키만 교체하고 다른 writer의
+        키(holdings, total_nav 등)는 보존. 기존 write_text(비원자·무잠금 전체 덮어쓰기) 제거.
+      - Live 보호 판정을 락 안에서 재검증(TOCTOU 제거): 그 사이 어댑터가 live 잔고를 써도 덮어쓰지 않음.
+      - 기존 파일이 손상(JSON 파싱 불가)이면 shadow 데이터로 덮어쓰지 않고 중단(fail-closed).
+    """
+    from src.utils.file_ops import safe_json_update, CorruptJSONError
+    out_path = _RESULTS / 'kis_portfolio.json'
+
+    # 손상 파일 감지: 과거엔 _load_json이 {}를 돌려줘 live 보호를 우회하고 shadow로 덮어썼다
+    if out_path.exists():
+        try:
+            json.loads(out_path.read_text(encoding='utf-8'))
+        except (ValueError, UnicodeDecodeError) as _ce:
+            logger.critical(f"  🚨 kis_portfolio.json 손상 감지({_ce}) — 덮어쓰지 않고 중단(fail-closed)")
+            return {}
+
     # Live 모드 안전 장치: kis_portfolio.json이 live 모드이거나 시스템 설정이 live일 경우 shadow_portfolio.json 데이터로 덮어쓰지 않음
     existing_kis = _load_json('kis_portfolio.json')
     current_exec_mode = str(cfg.get('execution.current_mode', cfg.get('execution.mode', 'live'))).lower()
-    if existing_kis.get('kis_mode') == 'live' or (current_exec_mode == 'live' and existing_kis.get('account', {}).get('nav', 0) > 0):
+    if _is_live_protected(existing_kis, current_exec_mode):
         if existing_kis.get('kis_mode') != 'live':
-            existing_kis['kis_mode'] = 'live'
-            existing_kis.setdefault('holdings', {})
-            out_path = _RESULTS / 'kis_portfolio.json'
-            out_path.write_text(json.dumps(existing_kis, indent=2, default=str, ensure_ascii=False))
+            def _mark_live(cur):
+                if not isinstance(cur, dict) or not _is_live_protected(cur, current_exec_mode):
+                    raise _SkipWrite()
+                cur['kis_mode'] = 'live'
+                cur.setdefault('holdings', {})
+                return cur
+            try:
+                existing_kis = safe_json_update(out_path, _mark_live, default={}, ensure_ascii=False)
+            except _SkipWrite:
+                pass
+            except CorruptJSONError as _ce:
+                logger.critical(f"  🚨 kis_portfolio.json 손상({_ce}) — 덮어쓰지 않음")
         logger.info("  🔒 Live 모드 감지: shadow_portfolio.json으로 kis_portfolio.json을 덮어쓰지 않고 라이브 잔고를 보존합니다.")
         return existing_kis
 
@@ -94,7 +143,7 @@ def generate():
     positions = sp.get('positions', {})
     trade_history = sp.get('trade_history', [])
     from config.dynamic_config import DynamicConfig
-    initial_capital = sp.get('initial_capital', float(DynamicConfig().get('portfolio.initial_capital', 1000000.0)))
+    initial_capital = sp.get('initial_capital', float(pget('portfolio.initial_capital', 19600000.0)))
     nav = sp.get('virtual_nav', initial_capital)
     cash = sp.get('cash', nav)
 
@@ -292,9 +341,23 @@ def generate():
         'cash_pct': round(cash / max(nav, 1) * 100, 1),
     }
 
-    # ── 저장 ──
-    out_path = _RESULTS / 'kis_portfolio.json'
-    out_path.write_text(json.dumps(portfolio, indent=2, default=str, ensure_ascii=False))
+    # ── 저장 (★ Wave 1: 락 보유 merge-update, 락 안에서 live 보호 재검증) ──
+    _portfolio_json = json.loads(json.dumps(portfolio, default=str, ensure_ascii=False))
+
+    def _merge_shadow(cur):
+        cur = cur if isinstance(cur, dict) else {}
+        if _is_live_protected(cur, current_exec_mode):
+            raise _SkipWrite()
+        cur.update(_portfolio_json)   # 이 스크립트 소유 키만 교체, 다른 writer 키 보존
+        return cur
+    try:
+        safe_json_update(out_path, _merge_shadow, default={}, ensure_ascii=False)
+    except _SkipWrite:
+        logger.info("  🔒 저장 직전 Live 잔고 감지 — kis_portfolio.json 덮어쓰기 취소")
+        return _load_json('kis_portfolio.json')
+    except CorruptJSONError as _ce:
+        logger.critical(f"  🚨 kis_portfolio.json 손상({_ce}) — 덮어쓰지 않고 중단(fail-closed)")
+        return {}
     logger.info(f"✅ kis_portfolio.json 생성 완료")
     _acct_inv = portfolio.get("account", {}).get("invest_pct", 0)
     logger.info(f"   NAV: ₩{nav:,.0f} | Cash: {_acct_inv:.0f}% invested")

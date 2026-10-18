@@ -28,6 +28,12 @@ Usage:
     # 또는 daily_pipeline.py evening phase에서 자동 실행
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import sys
@@ -61,7 +67,7 @@ class GapAnalyzer:
     """
 
     def __init__(self):
-        self.min_trades = cfg.get('gap.min_trades', 10)
+        self.min_trades = pget('gap.min_trades', 10)
         self.confidence_bins = cfg.get('gap.confidence_bins', [0.4, 0.6])
         self.trades: List[Dict] = []
         self.signal_cache: Dict = {}
@@ -461,7 +467,7 @@ class GapAnalyzer:
                 'avg_loss_pct': round(float(np.mean(
                     [t['return_pct'] for t in high_conf_fails])), 4),
             })
-            if ratio > cfg.get('gap.high_conf_fail_ratio', 0.3):
+            if ratio > pget('gap.high_conf_fail_ratio', 0.3):
                 suggestions.append(
                     'Confidence Calibrator 재보정 필요 '
                     '(고신뢰도 구간 과신)')
@@ -473,7 +479,7 @@ class GapAnalyzer:
         worst_stream = max(
             stream_fail_counts, key=stream_fail_counts.get,
             default=None)
-        if worst_stream and stream_fail_counts[worst_stream] >= cfg.get('gap.concentration_fail_count', 3):
+        if worst_stream and stream_fail_counts[worst_stream] >= pget('gap.concentration_fail_count', 3):
             total_in_stream = sum(
                 1 for t in self.trades if t['stream'] == worst_stream)
             fail_rate = (
@@ -503,22 +509,22 @@ class GapAnalyzer:
             else:
                 current_streak = 0
 
-        if max_consecutive_loss >= cfg.get('gap.consecutive_loss_threshold', 3):
+        if max_consecutive_loss >= pget('gap.consecutive_loss_threshold', 3):
             patterns.append({
                 'type': 'consecutive_losses',
                 'description': f'최대 {max_consecutive_loss}건 연속 손실',
                 'max_streak': max_consecutive_loss,
             })
-            if max_consecutive_loss >= cfg.get('gap.consecutive_loss_retrain', 5):
+            if max_consecutive_loss >= pget('gap.consecutive_loss_retrain', 5):
                 suggestions.append(
-                    f'연속 손실 {cfg.get("gap.consecutive_loss_retrain", 5)}건+ → 모델 재학습 또는 '
+                    f'연속 손실 {pget('gap.consecutive_loss_retrain', 5)}건+ → 모델 재학습 또는 '
                     '신호 임계값 상향 검토')
 
         # 패턴 4: 레짐 미스매치 (특정 레짐에서 DA < 40%)
         for regime in ['bull', 'bear', 'caution', 'crash']:
             regime_trades = [
                 t for t in self.trades if t.get('regime') == regime]
-            if len(regime_trades) >= cfg.get('gap.min_sector_trades', 3):
+            if len(regime_trades) >= pget('gap.min_sector_trades', 3):
                 regime_da = (
                     sum(1 for t in regime_trades if t['hit'])
                     / len(regime_trades))

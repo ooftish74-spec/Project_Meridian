@@ -29,6 +29,11 @@ Author: Project-A
 Date: 2026-04-17
 """
 from __future__ import annotations
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 from src.utils.file_ops import atomic_write_json
 
@@ -75,7 +80,7 @@ class USMarketRegimeEngine:
             sys.path.insert(0, str(PROJECT_ROOT))
         from config.dynamic_config import DynamicConfig
         _cfg = DynamicConfig()
-        raw_weights = {'spy_qqq_trend': _cfg.get('regime.us.weights.spy_qqq_trend', 0.25), 'vix': _cfg.get('regime.us.weights.vix', 0.2), 'overnight_mom': _cfg.get('regime.us.weights.overnight_mom', 0.15), 'fear_greed': _cfg.get('regime.us.weights.fear_greed', 0.12), 'streak': _cfg.get('regime.us.weights.streak', 0.08), 'move_index': _cfg.get('regime.us.weights.move_index', 0.12), 'ted_spread': _cfg.get('regime.us.weights.ted_spread', 0.08)}
+        raw_weights = {'spy_qqq_trend': pget('regime.us.weights.spy_qqq_trend', 0.25), 'vix': pget('regime.us.weights.vix', 0.2), 'overnight_mom': pget('regime.us.weights.overnight_mom', 0.15), 'fear_greed': pget('regime.us.weights.fear_greed', 0.12), 'streak': pget('regime.us.weights.streak', 0.08), 'move_index': pget('regime.us.weights.move_index', 0.12), 'ted_spread': pget('regime.us.weights.ted_spread', 0.08)}
         total = sum(raw_weights.values())
         if total == 0:
             return {k: 1.0 / len(raw_weights) for k in raw_weights}

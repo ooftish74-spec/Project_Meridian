@@ -8,6 +8,11 @@ S1 ETF Sniper Stream (리테일 전용 0% 세금 + 유동성 충격 저격)
   - 평소엔 현금 관망하다가 Z-Score 기반 유동성 충격 혹은 웩더독 시 진입
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, List, Any
@@ -135,7 +140,7 @@ class S1ETFSniperStream(BaseStream):
         #        발동 조건: ofi_prob < (1 - ofi_trigger_prob)  ← 방향성 역전 수정
         # 강한 매도 압력(lp_pressure << 0) → ofi_z << 0 → ofi_prob → 0 → 발동
         ofi_k            = float(cfg.get('s1.ofi_sigmoid_k', 2.0))
-        ofi_trigger_prob = float(cfg.get('s1.ofi_trigger_prob', 0.90))
+        ofi_trigger_prob = float(pget('s1.ofi_trigger_prob', 0.90))
         lp_ma            = float(signal_cache.get('lp_pressure_ma', 0.0))
         lp_std           = float(signal_cache.get('lp_pressure_std', 500.0))  # fallback: 원 하드코딩 스케일
         ofi_z            = (lp_pressure - lp_ma) / max(abs(lp_std), 1.0)
@@ -154,13 +159,13 @@ class S1ETFSniperStream(BaseStream):
         #        trigger = (vol_z > z_threshold)  ← 통계적 유의성 확보 시만 진입
         # CLT 기반: H0 = vol_ratio == 1 (정상 거래량), 기각 시 비정상 감지
         vr_z_threshold  = float(cfg.get('s1.variance_ratio.z_threshold', 2.0))
-        vr_hist_window  = float(cfg.get('s1.variance_ratio.vol_history_window', 20))
+        vr_hist_window  = float(pget('s1.variance_ratio.vol_history_window', 20))
         vol_z_score     = (vol_ratio - 1.0) * math.sqrt(vr_hist_window)
 
         # Tactic B: vol_anomaly 기반 climax 감지 (vol_z + anomaly 이중 조건)
         from datetime import datetime
         now = datetime.now()
-        noise_filter_minutes = int(cfg.get('s1.noise_filter_minutes', 30))
+        noise_filter_minutes = int(pget('s1.noise_filter_minutes', 30))
         
         # [Dynamic Session Window] 수능일(10시 개장/16:30 마감) 등 장시간 변경 대응 동적 세션 연산
         # 11월 셋째주 목요일(수능일) 동적 체크
@@ -228,7 +233,7 @@ class S1ETFSniperStream(BaseStream):
         vwap_val = float(market_data.get('vwap', 0.0) or 0.0)
         cur_p = float(market_data.get('current_price', 0.0) or 0.0)
         atr_val = float(market_data.get('atr', 1.0) or 1.0)
-        fibo_factor = float(cfg.get('s1.fibo_dip_factor', 0.618))
+        fibo_factor = float(pget('s1.fibo_dip_factor', 0.618))
         tactic_dip_sniper_trigger = False
         if cur_p > 0 and vwap_val > 0 and cur_p <= (vwap_val - fibo_factor * atr_val) and lp_pressure > 0:
             tactic_dip_sniper_trigger = True
@@ -239,7 +244,7 @@ class S1ETFSniperStream(BaseStream):
             f"vol_z={vol_z_score:.2f}, sam_vol_z={sam_vol_z:.2f}, hyn_vol_z={hyn_vol_z:.2f} "
             f"(threshold={vr_z_threshold:.1f})")
         
-        raw_tp_pct = float(cfg.get('s1.sniper_tp_pct', 0.015))
+        raw_tp_pct = float(pget('s1.sniper_tp_pct', 0.015))
         tp_pct = raw_tp_pct * 100.0 if 0 < raw_tp_pct < 0.5 else raw_tp_pct
 
         # ── Model 4: Chandelier Exit (ATR 기반 동적 손절매) ──
@@ -247,12 +252,12 @@ class S1ETFSniperStream(BaseStream):
         # 5분봉 ATR을 signal_cache에서 주입받아 사용. 미주입 시 sl_min_pct fallback.
         atr_5m            = float(signal_cache.get('atr_5m', 0.0))
         sl_atr_multiplier = float(cfg.get('s1.exit.sl_atr_multiplier', 2.0))
-        sl_min_pct        = float(cfg.get('s1.exit.sl_min_pct', 0.003))
+        sl_min_pct        = float(pget('s1.exit.sl_min_pct', 0.003))
         raw_sl_pct        = max(sl_min_pct, atr_5m * sl_atr_multiplier)
         sl_pct            = abs(raw_sl_pct) * 100.0 if 0 < abs(raw_sl_pct) < 0.5 else abs(raw_sl_pct)
 
         # Tactic B/C 확장 TP: cfg에서 배수 로드 (하드코딩 1.5 제거)
-        tactic_bc_tp_multiplier = float(cfg.get('s1.tactic_bc_tp_multiplier', 1.5))
+        tactic_bc_tp_multiplier = float(pget('s1.tactic_bc_tp_multiplier', 1.5))
 
         if not is_shock and not any([tactic_a_trigger, tactic_b_trigger, tactic_c_sam_trigger, tactic_c_hyn_trigger, tactic_d_trigger, tactic_c_global_trigger, tactic_dip_sniper_trigger]):
             logger.debug("    - 스나이핑 조건 미달 (VIX 충격 및 수급 교란 없음) -> Phase 3/4 및 비정형 알파 점검 진행")
@@ -265,7 +270,17 @@ class S1ETFSniperStream(BaseStream):
 
             # Tactic C 최우선 판별
             # Tactic D 최우선 판별 (Lever 4: LP 호가 불균형 극단값 스케일링)
-            if tactic_d_trigger:
+            # ★ Wave 1: 우선순위 전술이 가격 부재로 무산되면 다음 전술로 낙하(fall-through) — 과거 elif 체인은 시그널 소멸
+            #   단, 첫 발동 전술과 같은 시장 방향(long/short)으로만 낙하 — 상충 신호(예: 인버스 의도 → 레버리지 롱) 금지
+            _n_sig0 = len(signals)
+            _intent = [None]
+
+            def _fall_ok(_d):
+                if _intent[0] is None:
+                    _intent[0] = _d
+                return _intent[0] == _d
+
+            if tactic_d_trigger and _fall_ok('long' if tactic_d_direction == 'long' else 'short'):
                 tactic_d_tp = tp_pct * 1.66 if abs(lp_pressure) > 150.0 else tp_pct  # 극단값 서지 시 TP +2.5% 확여
                 logger.warning(f"    🎯 [Tactic D Lever 4] LP MOC 헤징 압박 감지! 선행매매 진입 (방향: {tactic_d_direction}, Pressure: {lp_pressure:.1f}, Dynamic TP: {tactic_d_tp:.2f}%)")
                 _t_type = 'index_1x' if tactic_d_direction == 'long' else 'index_inv_1x'
@@ -288,7 +303,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': 'MOC',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_c_global_trigger:
+            if len(signals) == _n_sig0 and (tactic_c_global_trigger) and _fall_ok('long'):
                 logger.warning("    🎯 [Tactic C-Global] 글로벌 디커플링/야간선물 급등 감지! 오버나잇 갭상승 베팅.")
                 ticker = cfg.get('s1.global_defense_ticker', self._get_ticker_by_type('index') or '069500')
                 price_data = signal_cache.get(ticker) or signal_cache.get('stock_technicals', {}).get(ticker, {})
@@ -319,7 +334,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': 'OVERNIGHT',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_c_sam_trigger:
+            if len(signals) == _n_sig0 and (tactic_c_sam_trigger) and _fall_ok('short'):
                 logger.warning("    🎯 [Tactic C] 삼성전자 단일종목 웩더독 감지! 삼성전자 인버스 저격.")
                 ticker = cfg.get('ss_etf.samsung.inv_ticker')
                 price_data = signal_cache.get(ticker) if ticker else None
@@ -340,7 +355,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': '5m',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_c_hyn_trigger:
+            if len(signals) == _n_sig0 and (tactic_c_hyn_trigger) and _fall_ok('short'):
                 logger.warning("    🎯 [Tactic C] SK하이닉스 단일종목 웩더독 감지! 하이닉스 인버스 저격.")
                 ticker = cfg.get('ss_etf.hynix.inv_ticker')
                 price_data = signal_cache.get(ticker) if ticker else None
@@ -361,7 +376,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': '5m',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_a_trigger:
+            if len(signals) == _n_sig0 and (tactic_a_trigger) and _fall_ok('short'):
                 _is_extreme = ofi_prob < 0.05
                 _t_type = 'index_inv_2x' if _is_extreme else 'index_inv_1x'
                 ticker = self._get_ticker_by_type(_t_type) or ('252670' if _is_extreme else self._get_ticker_by_type('index_inv'))
@@ -384,7 +399,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': '5m',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_b_trigger:
+            if len(signals) == _n_sig0 and (tactic_b_trigger) and _fall_ok('long'):
                 _is_extreme = vol_z_score > 2.5
                 _t_type = 'index_lev' if _is_extreme else 'index_1x'
                 ticker = self._get_ticker_by_type(_t_type) or ('122630' if _is_extreme else self._get_ticker_by_type('index'))
@@ -407,7 +422,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': '5m',
                         'execution_algo': 'vwap'
                     })
-            elif tactic_dip_sniper_trigger:
+            if len(signals) == _n_sig0 and (tactic_dip_sniper_trigger) and _fall_ok('long'):
                 _t_type = 'index_1x'
                 ticker = self._get_ticker_by_type(_t_type) or '069500'
                 price_data = signal_cache.get(ticker)
@@ -428,7 +443,7 @@ class S1ETFSniperStream(BaseStream):
                         'holding_time': '5m',
                         'execution_algo': 'vwap'
                     })
-            elif is_shock:
+            if len(signals) == _n_sig0 and (is_shock) and _fall_ok('short'):
                 vix_z = (vix - vix_ma20) / max(vix_std20, 1e-9)
                 _t_type = 'index_inv'
                 ticker = self._get_ticker_by_type(_t_type) or cfg.get('leverage.inverse_ticker', '114800')
@@ -454,7 +469,7 @@ class S1ETFSniperStream(BaseStream):
                 
             # ── [V1 Alpha Booster Integration] Option A (Red Team Patched) ──
             if cfg.get('s1_sniper.v1_alpha_boost_enabled', False) and signals:
-                boost_multiplier = float(cfg.get('s1_sniper.boost_multiplier', 1.5))
+                boost_multiplier = float(pget('s1_sniper.boost_multiplier', 1.5))
                 
                 for sig in signals:
                     # Determine if the ETF represents a long or short position on the market
@@ -462,7 +477,7 @@ class S1ETFSniperStream(BaseStream):
                     is_long_market = not is_short_market
                     
                     # [Red Team V4 Zero-Hardcoding] 동적 임계치 로드
-                    lp_pressure_threshold = float(cfg.get('s1_sniper.lp_pressure_threshold', 200.0))
+                    lp_pressure_threshold = float(pget('s1_sniper.lp_pressure_threshold', 200.0))
                     
                     # Boost if Intraday LP Pressure (real-time smart money) strongly aligns with trade direction
                     if (is_long_market and lp_pressure > lp_pressure_threshold) or (is_short_market and lp_pressure < -lp_pressure_threshold):
@@ -473,7 +488,7 @@ class S1ETFSniperStream(BaseStream):
                         sig['confidence'] = min(0.99, original_conf * boost_multiplier)
                         
                         # [Red Team V4 Zero-Hardcoding] 글로벌 리스크 관리자(StreamRiskManager) 설정 연동
-                        dynamic_max_exp = float(cfg.get('risk.stream_limits.S1.max_exposure_pct', 0.3))
+                        dynamic_max_exp = float(pget('risk.stream_limits.S1.max_exposure_pct', 0.3))
                         sig['max_exposure_pct'] = dynamic_max_exp
                         
                         sig['reason'] += f" | 🚀 RT Boost (Cap {dynamic_max_exp*100:.0f}%)"

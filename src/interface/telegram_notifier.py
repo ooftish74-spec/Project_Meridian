@@ -44,6 +44,31 @@ def _load_shadow() -> Dict:
 def _load_signal() -> Dict:
     return _load_json('signal_cache.json')
 
+
+def _live_diag_line() -> str:
+    """★ Wave 3: Go/No-Go 폐지 → 소액 라이브 연속 진단 요약 한 줄 (results/live_diagnostics.json)."""
+    try:
+        import json as _j
+        from pathlib import Path as _P
+        _f = _P(__file__).resolve().parents[2] / 'results' / 'live_diagnostics.json'
+        if not _f.exists():
+            return '🩺 Live Diagnostics: (아직 생성 전)'
+        S = (_j.loads(_f.read_text(encoding='utf-8')).get('summary') or {})
+        c = S.get('issue_counts') or {}
+        _sh = S.get('sharpe')
+        _dd = S.get('current_dd_pct')
+        _is = S.get('mean_is_bps')
+        parts = [f"high {c.get('high', 0)} / med {c.get('medium', 0)} / low {c.get('low', 0)}"]
+        if _sh is not None:
+            parts.append(f"SR {float(_sh):.2f}")
+        if _dd is not None:
+            parts.append(f"DD {float(_dd):+.1f}%")
+        if _is is not None:
+            parts.append(f"IS {float(_is):.0f}bp")
+        return '🩺 Live Diagnostics (비차단): ' + ' | '.join(parts)
+    except Exception as _e:
+        return f'🩺 Live Diagnostics: 읽기 실패 ({type(_e).__name__})'
+
 class MeridianTelegram:
     """Meridian 텔레그램 알림 + 명령어.
 
@@ -157,7 +182,7 @@ class MeridianTelegram:
         verdict_icon = '✅' if verdict == 'GO' else '🛑' if verdict == 'NO_GO' else '⏳'
         from src.utils.metric_parser import parse_vix
         vix = parse_vix(signal, 0.0)
-        msg = f"{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {verdict_icon} Go/No-Go: {verdict} (Day {n_days}/14)\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {vix:.1f} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━"
+        msg = f"{_TAG} 📊 Daily Summary ({datetime.now().strftime('%Y-%m-%d')})\n━━━━━━━━━━━━━━━━━━━━\n  {regime_icon} Regime: {today_regime.upper()}\n  {_live_diag_line()}\n  Sharpe: {sharpe:.3f} | WR: {wr:.1%} | DD: {dd:+.1f}%\n━━━━━━━━━━━━━━━━━━━━\n  Orders: {today_orders} | Filled: {today_filled}\n  VIX: {vix:.1f} | OIS: {signal.get('ois', 'N/A')}\n━━━━━━━━━━━━━━━━━━━━"
         self._send(msg)
 
     def send_execution_summary(self, exec_result):
@@ -300,7 +325,7 @@ class MeridianCommandHandler:
         n_days = gonogo.get('n_days', 0)
         from src.utils.metric_parser import parse_vix
         vix = parse_vix(signal, 0.0)
-        return f"{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  Go/No-Go: {verdict} (Day {n_days}/14)\n  VIX: {vix:.1f}\n  OIS: {signal.get('ois', 'N/A')}"
+        return f"{_TAG} 📊 Status\n  Regime: {regime.upper()}\n  {_live_diag_line()}\n  VIX: {vix:.1f}\n  OIS: {signal.get('ois', 'N/A')}"
 
     def _cmd_regime(self, args: str) -> str:
         signal = _load_signal()

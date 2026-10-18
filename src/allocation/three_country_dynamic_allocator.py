@@ -18,6 +18,11 @@ Usage:
     allocs = allocator.allocate_capital(market_state, available_nav=18600000.0)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -91,7 +96,7 @@ class ThreeCountryDynamicAllocator:
         - Weekend Sweep (Fri 15:10 ~ Mon 09:05 KST): Idle Cash (100%) -> KOFR/SOFR
         """
         nav = max(0.0, float(available_nav))
-        reserve_ratio = float(self._get_cfg('portfolio.reserve_buffer_ratio', 0.04))
+        reserve_ratio = float(pget('portfolio.reserve_buffer_ratio', 0.04))
         net_capital = nav * (1.0 - reserve_ratio)
 
         kr_vol = float(market_state.get('kr_volatility', 0.18))
@@ -131,14 +136,14 @@ class ThreeCountryDynamicAllocator:
             session_name = 'WEEKEND_HOLIDAY_SWEEP'
         elif is_asian_session:
             # Asian Session Budget = 60% NAV split dynamically between KR & JP
-            asian_budget = net_capital * float(self._get_cfg('allocator.asian_session_budget_ratio', 0.60))
+            asian_budget = net_capital * float(pget('allocator.asian_session_budget_ratio', 0.60))
             sum_kr_jp = rp_weights['KR'] + rp_weights['JP'] + 1e-9
             allocations['KR'] = round(asian_budget * (rp_weights['KR'] / sum_kr_jp), 2)
             allocations['JP'] = round(asian_budget * (rp_weights['JP'] / sum_kr_jp), 2)
             session_name = 'ASIAN_DAYTIME_SESSION'
         elif is_us_session:
             # US Session Budget = 60% NAV (Capital reused from Asian Session)
-            us_budget = net_capital * float(self._get_cfg('allocator.us_session_budget_ratio', 0.60))
+            us_budget = net_capital * float(pget('allocator.us_session_budget_ratio', 0.60))
             allocations['US'] = round(us_budget, 2)
             session_name = 'US_NIGHTTIME_SESSION'
         else:

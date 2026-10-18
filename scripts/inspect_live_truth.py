@@ -88,7 +88,21 @@ def inspect_live_truth(as_json: bool = False):
             kis_data['kis_mode'] = 'live'
             kis_data['account'] = account_info
             kis_data['holdings'] = holdings
-            atomic_write_json(kis_path, kis_data, indent=2, ensure_ascii=False)
+            # ★ Wave 1 Track A: kis_portfolio.json 다중 writer(_kis_adapter 등) → 락 보유 merge-update.
+            #   이 스크립트가 갱신하는 키만 교체(account는 키 단위 병합), 손상 파일은 덮어쓰지 않음(→ 실패 처리).
+            from src.utils.file_ops import safe_json_update
+            _upd = json.loads(json.dumps({k: kis_data[k] for k in ('date', 'timestamp', 'kis_mode', 'holdings')},
+                                         ensure_ascii=False, default=str))
+            _acct_upd = json.loads(json.dumps(account_info, ensure_ascii=False, default=str))
+
+            def _mutate_kis(cur):
+                cur = cur if isinstance(cur, dict) else {}
+                cur.update(_upd)
+                acct = cur.get('account') if isinstance(cur.get('account'), dict) else {}
+                acct.update(_acct_upd)
+                cur['account'] = acct
+                return cur
+            kis_data = safe_json_update(kis_path, _mutate_kis, default={}, indent=2, ensure_ascii=False)
             live_fetched = True
     except Exception as e_live:
         error_msg = str(e_live)

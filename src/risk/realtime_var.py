@@ -16,6 +16,11 @@ Usage:
     var_calc = RealtimeVaR()
     result = var_calc.calculate(portfolio_value=100_000_000)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json, logging
 import numpy as np
 import pandas as pd
@@ -58,16 +63,22 @@ class RealtimeVaR:
             {var_pct, cvar_pct, ewma_vol, within_limit, dynamic_limit_pct, ...}
         """
         if confidence is None:
-            confidence = _cfg_get('risk.var_confidence', 0.95)
+            confidence = pget('risk.var_confidence', 0.95)
         if lookback is None:
-            lookback = _cfg_get('risk.var_lookback', 120)
+            lookback = pget('risk.var_lookback', 120)
+        self._fx_degraded = False
         if not positions:
             positions = self._load_positions()
         if positions and len(positions) > 0:
-            return self._portfolio_var(portfolio_value, positions, confidence, lookback)
+            _res = self._portfolio_var(portfolio_value, positions, confidence, lookback)
         else:
             _var_bench = DynamicConfig().get('var.benchmark_ticker', '069500')
-            return self._single_asset_var(portfolio_value, _var_bench, confidence, lookback)
+            _res = self._single_asset_var(portfolio_value, _var_bench, confidence, lookback)
+        if getattr(self, '_fx_degraded', False) and isinstance(_res, dict):
+            # ★ Wave 1 Track C: 환율 미확보로 US 성분 일부가 제외된 VaR — 소비자에게 degraded 표시
+            _res['fx_degraded'] = True
+            self._save(_res)
+        return _res
 
     def _portfolio_var(self, value: float, positions: Dict, confidence: float, lookback: int) -> Dict:
         """포트폴리오 VaR (분산-공분산 + Historical 혼합)."""
@@ -94,7 +105,7 @@ class RealtimeVaR:
         var_pct = float(np.percentile(port_returns, alpha_pct))
         tail = port_returns[port_returns < var_pct]
         cvar_pct = float(tail.mean()) if len(tail) > 0 else var_pct
-        ewma_lambda = _cfg_get('risk.ewma_lambda', 0.94)
+        ewma_lambda = pget('risk.ewma_lambda', 0.94)
         ewma_var = self._ewma_variance(port_returns, ewma_lambda)
         ewma_vol_daily = float(np.sqrt(ewma_var))
         ewma_vol_annual = ewma_vol_daily * np.sqrt(252)
@@ -103,7 +114,7 @@ class RealtimeVaR:
         mu = float(port_returns.mean())
         parametric_var = mu + z * ewma_vol_daily
         cf_var = self._cornish_fisher_var(port_returns, confidence)
-        sigma_target_annual = _cfg_get('risk.sigma_target_annual', 0.15)
+        sigma_target_annual = pget('risk.sigma_target_annual', 0.35)
         dynamic_limit_pct = self._compute_dynamic_limit(ewma_vol_annual, sigma_target_annual, confidence)
         result = {'var_pct': round(abs(var_pct) * 100, 3), 'var_amount': round(value * abs(var_pct), 0), 'cvar_pct': round(abs(cvar_pct) * 100, 3), 'cvar_amount': round(value * abs(cvar_pct), 0), 'parametric_var_pct': round(abs(parametric_var) * 100, 3), 'cornish_fisher_var_pct': round(abs(cf_var) * 100, 3), 'ewma_vol_daily_pct': round(ewma_vol_daily * 100, 3), 'ewma_vol_annual_pct': round(ewma_vol_annual * 100, 1), 'confidence': confidence, 'lookback': lookback, 'n_assets': len(tickers), 'n_matched': n_cols, 'portfolio_vol_annual': round(float(port_returns.std()) * np.sqrt(252) * 100, 2), 'method': 'portfolio_ewma', 'timestamp': datetime.now().isoformat()}
         result['dynamic_limit_pct'] = round(dynamic_limit_pct, 2)
@@ -154,11 +165,11 @@ class RealtimeVaR:
         var_pct = float(np.percentile(returns, alpha_pct))
         tail = returns[returns < var_pct]
         cvar_pct = float(tail.mean()) if len(tail) > 0 else var_pct
-        ewma_lambda = _cfg_get('risk.ewma_lambda', 0.94)
+        ewma_lambda = pget('risk.ewma_lambda', 0.94)
         ewma_var = self._ewma_variance(returns, ewma_lambda)
         ewma_vol_daily = float(np.sqrt(ewma_var))
         ewma_vol_annual = ewma_vol_daily * np.sqrt(252)
-        sigma_target_annual = _cfg_get('risk.sigma_target_annual', 0.15)
+        sigma_target_annual = pget('risk.sigma_target_annual', 0.35)
         dynamic_limit_pct = self._compute_dynamic_limit(ewma_vol_annual, sigma_target_annual, confidence)
         result = {'var_pct': round(abs(var_pct) * 100, 3), 'var_amount': round(value * abs(var_pct), 0), 'cvar_pct': round(abs(cvar_pct) * 100, 3), 'cvar_amount': round(value * abs(cvar_pct), 0), 'ewma_vol_daily_pct': round(ewma_vol_daily * 100, 3), 'ewma_vol_annual_pct': round(ewma_vol_annual * 100, 1), 'confidence': confidence, 'method': 'single_asset', 'ticker': ticker, 'within_limit': round(abs(var_pct) * 100, 3) <= dynamic_limit_pct, 'limit_pct': round(dynamic_limit_pct, 2), 'dynamic_limit_pct': round(dynamic_limit_pct, 2), 'sigma_target_annual': sigma_target_annual, 'sigma_ratio': round(ewma_vol_annual / sigma_target_annual, 3) if sigma_target_annual > 0 else 1.0}
         self._save(result)
@@ -166,14 +177,14 @@ class RealtimeVaR:
 
     def _fallback_var(self, value, confidence):
         """파라메트릭 가우시안 EWMA 기반 보수적 VaR 산출."""
-        sigma_target_annual = _cfg_get('risk.sigma_target_annual', 0.15)
-        assumed_annual_vol = _cfg_get('risk.fallback_annual_vol', 0.18)
+        sigma_target_annual = pget('risk.sigma_target_annual', 0.35)
+        assumed_annual_vol = pget('risk.fallback_annual_vol', 0.18)
         daily_vol = assumed_annual_vol / np.sqrt(252)
         from scipy.stats import norm
         z = abs(norm.ppf(1 - confidence))
         var_pct = abs(z * daily_vol)
         dynamic_limit = self._compute_dynamic_limit(assumed_annual_vol, sigma_target_annual, confidence)
-        _cvar_ratio = _cfg_get('risk.fallback_cvar_var_ratio', 1.25)
+        _cvar_ratio = pget('risk.fallback_cvar_var_ratio', 1.25)
         res = {
             'var_pct': round(var_pct * 100, 3),
             'var_amount': round(value * var_pct, 0),
@@ -204,7 +215,7 @@ class RealtimeVaR:
         Returns:
             {mc_var_pct, mc_cvar_pct, mc_var_amount, n_simulations}
         """
-        n_sim = _cfg_get('risk.mc_n_simulations', 10000)
+        n_sim = pget('risk.mc_n_simulations', 10000)
         horizon = _cfg_get('risk.mc_horizon_days', 1)
         seed = _cfg_get('risk.mc_seed', None)
         try:
@@ -252,7 +263,7 @@ class RealtimeVaR:
         """
         if len(returns) < 2:
             return float(np.var(returns)) if len(returns) > 0 else 0.0
-        _ewma_init_days = min(_cfg_get('risk.ewma_init_days', 10), max(1, len(returns) // 2))
+        _ewma_init_days = min(pget('risk.ewma_init_days', 10), max(1, len(returns) // 2))
         var_t = float(np.var(returns[:_ewma_init_days])) if _ewma_init_days > 0 else 0.0
         for r in returns[_ewma_init_days:]:
             var_t = lam * var_t + (1 - lam) * r * r
@@ -290,13 +301,13 @@ class RealtimeVaR:
         z = abs(norm.ppf(1 - confidence))
         daily_target_vol = sigma_target_annual / np.sqrt(252)
         base_limit = daily_target_vol * z * 100
-        buffer_mult = _cfg_get('risk.var_limit_buffer_multiplier', 1.5)
+        buffer_mult = pget('risk.var_limit_buffer_multiplier', 1.5)
         base_limit *= buffer_mult
         vol_ratio = realized_vol_annual / sigma_target_annual if sigma_target_annual > 0 else 1.0
-        scale_factor = max(1.0, min(vol_ratio, _cfg_get('risk.var_limit_max_scale', 3.0)))
+        scale_factor = max(1.0, min(vol_ratio, pget('risk.var_limit_max_scale', 3.0)))
         dynamic_limit = base_limit * scale_factor
-        floor = _cfg_get('risk.var_limit_floor_pct', 1.5)
-        ceiling = _cfg_get('risk.var_limit_ceiling_pct', 10.0)
+        floor = pget('risk.var_limit_floor_pct', 1.5)
+        ceiling = pget('risk.var_limit_ceiling_pct', 10.0)
         return max(floor, min(ceiling, dynamic_limit))
 
     def _load_returns(self, tickers, lookback):
@@ -360,22 +371,30 @@ class RealtimeVaR:
                 if holdings:
                     fx_rate = float(kis_data.get('fx_rate') or kis_data.get('account', {}).get('fx_rate') or 0.0)
                     if fx_rate <= 0:
+                        # ★ Wave 1 Track C: 무기한 stale signal_cache / 리터럴 1334.3 제거 → 게이트웨이(신선도 한도 내)
                         try:
-                            sc_p = _RESULTS / 'signal_cache.json'
-                            if sc_p.exists():
-                                fx_rate = float(json.loads(sc_p.read_text(encoding='utf-8')).get('usdkrw') or 0.0)
-                        except Exception:
-                            pass
-                    if fx_rate <= 0:
-                        fx_rate = 1334.3
+                            from src.data_collection.central_data_gateway import get_central_data_gateway
+                            _r_var = get_central_data_gateway().get_usdkrw_rate()
+                            fx_rate = float(_r_var) if _r_var is not None and float(_r_var) > 0 else 0.0
+                        except Exception as _fx_var_err:
+                            logger.debug(f"  [realtime_var] USD/KRW 조회 예외: {_fx_var_err}")
+                            fx_rate = 0.0
                     tot_val = 0.0
                     vals = {}
                     for ticker, h_info in holdings.items():
                         qty = float(h_info.get('qty', 0))
                         p = float(h_info.get('current_price', 0.0))
                         is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not str(ticker).isdigit()
-                        mult = fx_rate if is_us else 1.0
-                        pos_v = qty * p * mult
+                        if is_us and fx_rate <= 0:
+                            # 환율 미확보: 스냅샷 시점 실환산값(eval_krw)만 사용, 없으면 US 성분 제외 + degraded 표시
+                            pos_v = float(h_info.get('eval_krw', 0.0) or 0.0)
+                            if pos_v <= 0:
+                                self._fx_degraded = True
+                                logger.warning(f"  ⚠️ [realtime_var] {ticker}: USD/KRW 미확보 + eval_krw 없음 → VaR 가중치에서 제외 (degraded)")
+                                continue
+                        else:
+                            mult = fx_rate if is_us else 1.0
+                            pos_v = qty * p * mult
                         if pos_v > 0:
                             vals[ticker] = pos_v
                             tot_val += pos_v

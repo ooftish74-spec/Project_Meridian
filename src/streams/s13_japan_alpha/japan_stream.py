@@ -16,6 +16,11 @@ Usage:
     signals = s13.generate_signals(regime='bull', market_data={})
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 from datetime import datetime, time
@@ -155,12 +160,12 @@ class S13JapanAlphaStream(BaseStream):
         lead_res = self.calculate_us_lead_signal(nvda_chg, soxx_chg, qqq_chg, hist_us)
         lead_sig = lead_res['lead_signal']
 
-        if lead_sig <= float(cfg.get('s13.min_lead_threshold', -0.50)):
+        if lead_sig <= float(pget('s13.min_lead_threshold', -0.50)):
             logger.info(f"S13 Japan Alpha: Negative US Lead Signal ({lead_sig:.3f}) — Skipping Long Signals")
             return []
 
         scored_universe = self.score_japan_universe(lead_sig, jpy_krw_chg)
-        max_positions = int(cfg.get('s13.max_positions', 3))
+        max_positions = int(pget('s13.max_positions', 3))
 
         for stock in scored_universe[:max_positions]:
             if stock['composite_score'] <= 0.10:

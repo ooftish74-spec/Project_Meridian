@@ -17,6 +17,16 @@ Usage:
     names = resolve_names(['329200', '458730'])
 """
 
+try:
+    from src.params.tables import load_table  # Wave2 TrackF: ticker tables live in config/params/tables
+except Exception:  # pragma: no cover
+    import json as _tj, pathlib as _tp
+    def load_table(name, default=None):
+        _r = next((d for d in _tp.Path(__file__).resolve().parents if (d / 'config' / 'params').is_dir()), None)
+        try:
+            return _tj.loads((_r / 'config' / 'params' / 'tables' / f'{name}.json').read_text(encoding='utf-8'))
+        except Exception:
+            return {} if default is None else default
 import json
 import logging
 from pathlib import Path
@@ -29,88 +39,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 # ═══════════════════════════════════════════════════════
 # 수동 검증 매핑 (SSoT) — KRX/Naver Finance 기준
 # ═══════════════════════════════════════════════════════
-CANONICAL_NAMES: Dict[str, str] = {
-    # S1 Directional ETF
-    '122630': 'KODEX 레버리지',
-    '252670': 'KODEX 200선물인버스2X',
-    '069500': 'KODEX 200',
-    '114800': 'KODEX 인버스',
-    '233740': 'KODEX 코스닥150레버리지',
-    '133690': 'TIGER 미국나스닥100',
-    '360200': 'KODEX 미국S&P500',
-    '453010': 'TIGER 미국나스닥100레버리지(합성)',
-    '500063': 'TIGER SK하이닉스인버스',
-    # S2 Sector ETF
-    '091160': 'KODEX 반도체',
-    '305540': 'TIGER 2차전지테마',
-    '266420': 'KODEX 바이오',
-    '117460': 'KODEX 에너지화학',
-    '091170': 'KODEX 자동차',
-    '091180': 'KODEX 자동차',
-    '117680': 'KODEX 철강',
-    '091220': 'KODEX 은행',
-    '117700': 'KODEX 건설',
-    '227560': 'TIGER 200 생활소비재',
-    '139260': 'TIGER 200 IT',
-    '228810': 'TIGER 미디어콘텐츠',
-    '449450': 'PLUS K방산',
-    '305720': 'KODEX 2차전지산업',
-    '396500': 'TIGER 반도체TOP10',
-    '192090': 'TIGER 차이나CSI300',
-    '453870': 'TIGER 인도니프티50',
-    # S3 Factor
-    '395160': 'KODEX K-조선해운',
-    '371160': 'TIGER KPOP',
-    # S4 Advisory ETF
-    '279530': 'KODEX 고배당주',
-    '161510': 'TIGER 배당성장',
-    '211560': 'TIGER 배당성장',
-    '458730': 'TIGER 미국배당다우존스',
-    '441640': 'KODEX 미국배당커버드콜액티브',
-    '289480': 'TIGER 200커버드콜',
-    '166400': 'TIGER 200 커버드콜ATM',
-    '381170': 'TIGER 미국테크TOP10 INDXX',
-    '453640': 'KODEX 미국반도체MV',
-    '329200': 'TIGER 리츠부동산인프라',       # ★ 329200 ≠ TIGER 미국배당+7%
-    '329750': 'TIGER 리츠부동산인프라',
-    '458760': 'TIGER 미국배당다우존스타겟커버드콜2호',  # ★ 구 "미국배당+7%프리미엄다우존스"
-    '211900': 'KODEX 코리아배당성장',
-    '455890': 'TIGER 배당성장50',
-    '290130': 'KODEX 배당성장',
-    # 자산배분
-    '148070': 'KODEX 국고채10년',
-    '471230': 'KODEX 국고채10년액티브',
-    '305080': 'TIGER 미국채10년선물',
-    '132030': 'KODEX 골드선물(H)',
-    '411060': 'ACE KRX금현물',
-    '0091C0': 'KODEX 미국10년국채액티브(H)',  # 사용자 수동 매수 IRP
-    '261240': 'KODEX 미국달러선물',
-    '214980': 'KODEX 단기채권PLUS',
-    '357870': 'TIGER CD금리투자KIS(합성)',
-    '357330': 'TIGER CD금리액티브 (구)',
-    '459580': 'KODEX CD금리액티브(합성)',
-    '423160': 'KODEX KOFR금리액티브(합성)',
-    '449170': 'TIGER KOFR금리액티브(합성)',
-    '430740': 'KODEX KOFR금리액티브(합성) (구)',
-    '195930': 'TIGER MSCI선진국',
-    '379800': 'KODEX 미국S&P500',
-    # 개별주 (자주 등장)
-    '005930': '삼성전자',
-    '000660': 'SK하이닉스',
-    '005380': '현대자동차',
-    '000270': '기아',
-    '207940': '삼성바이오로직스',
-    '009150': '삼성전기',
-    '042700': '한미반도체',
-    '443060': 'HD현대마린솔루션',
-    # US Production Sleeve
-    'NVDA': 'NVIDIA Corporation',
-    'QQQ': 'Invesco QQQ Trust',
-    'SOXX': 'iShares Semiconductor ETF',
-    'XLK': 'Technology Select Sector SPDR Fund',
-    'SHV': 'iShares Short Treasury Bond ETF',
-    'SPY': 'SPDR S&P 500 ETF Trust',
-}
+CANONICAL_NAMES: Dict[str, str] = load_table('src.utils.ticker_name_resolver.CANONICAL_NAMES', {})
 
 # 런타임 캐시 (API/파일 조회 결과 저장)
 _name_cache: Dict[str, str] = {}

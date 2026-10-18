@@ -23,6 +23,12 @@ Usage:
     python scripts/collect_analyst_consensus.py --all    # 포트폴리오 + QVM Top 50
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 import os
@@ -86,7 +92,7 @@ def get_target_tickers(include_qvm_top: bool = True) -> List[str]:
 
     # ── 2. QVM Top N (S4 매수 후보 — 선행 평가) ──
     if include_qvm_top:
-        qvm_top_n = cfg.get('s4.consensus_qvm_top_n', 50)
+        qvm_top_n = pget('s4.consensus_qvm_top_n', 50)
         try:
             from src.streams.s4_advisory.advisory_stream import AdvisoryStream
             advisory = AdvisoryStream()
@@ -120,7 +126,7 @@ def get_target_tickers(include_qvm_top: bool = True) -> List[str]:
         try:
             sp = json.loads(sp_path.read_text())
             before = len(tickers)
-            recent_lookback = cfg.get('s4.consensus_sell_lookback_days', 14)
+            recent_lookback = pget('s4.consensus_sell_lookback_days', 14)
             from datetime import timedelta
             cutoff = datetime.now() - timedelta(days=recent_lookback)
             for trade in sp.get('trade_history', []):
@@ -139,7 +145,7 @@ def get_target_tickers(include_qvm_top: bool = True) -> List[str]:
             logger.debug(f"  매도 이력 로드 실패: {e}")
 
     # ── 5. 시총 Top N (시장 대표 커버리지) ──
-    top_n_market = cfg.get('s4.consensus_market_top_n', 30)
+    top_n_market = pget('s4.consensus_market_top_n', 30)
     mcap_path = _PROJECT_ROOT / 'data' / 'market_cap_cache.json'
     if mcap_path.exists():
         try:
@@ -319,7 +325,7 @@ def collect_all(include_qvm_top: bool = False) -> Dict:
     collected = 0
     failed = 0
     skipped = 0
-    rate_limit = cfg.get('s4.consensus_collect_delay', 0.5)
+    rate_limit = pget('s4.consensus_collect_delay', 0.5)
 
     for i, ticker in enumerate(tickers):
         logger.info(f"  [{i+1}/{len(tickers)}] {ticker} 수집 중...")

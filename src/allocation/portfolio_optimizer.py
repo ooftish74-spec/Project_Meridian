@@ -16,6 +16,11 @@ Medallion Upgrade Phase 3-B.
 
 모든 파라미터 DynamicConfig 동적 로드. 하드코딩 0.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import math
@@ -50,11 +55,11 @@ class TransactionCostFilter:
              'turnover': float, 'adjusted_weights': dict,
              'expected_profit': float, 'dynamic_override': bool}
         """
-        tx_cost_rate = cfg.get('optimizer.tx_cost_rate', 0.0015)
-        no_trade_zone = cfg.get('optimizer.no_trade_zone', 0.02)
-        min_trade_value = cfg.get('optimizer.min_trade_value', 500000)
+        tx_cost_rate = pget('optimizer.tx_cost_rate', 0.0015)
+        no_trade_zone = pget('optimizer.no_trade_zone', 0.01)
+        min_trade_value = pget('optimizer.min_trade_value', 50000)
         profit_cost_multiplier = cfg.get('optimizer.profit_cost_override_multiplier', 2.0)
-        etp_friction_mult = cfg.get('optimizer.etp_friction_multiplier', 1.15)
+        etp_friction_mult = pget('optimizer.etp_friction_multiplier', 1.15)
         total_turnover = 0
         adjusted = {}
         trades = {}
@@ -126,8 +131,8 @@ class TurnoverLimiter:
         """
         now = datetime.now()
         max_daily = cfg.get('optimizer.max_daily_rebalances', 2)
-        max_monthly = cfg.get('optimizer.max_monthly_rebalances', 10)
-        min_interval_hours = cfg.get('optimizer.min_rebalance_interval_hours', 4)
+        max_monthly = pget('optimizer.max_monthly_rebalances', 10)
+        min_interval_hours = pget('optimizer.min_rebalance_interval_hours', 4)
         regime_override = cfg.get('optimizer.regime_change_override', True)
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         daily_count = sum((1 for h in self._history if h.get('executed', False) and self._parse_ts(h.get('timestamp', '')) >= today_start))
@@ -182,7 +187,7 @@ class TurnoverLimiter:
             'executed': True,
             'n_trades': n_trades
         })
-        cutoff = datetime.now() - timedelta(days=cfg.get('optimizer.history_retention_days', 90))
+        cutoff = datetime.now() - timedelta(days=pget('optimizer.history_retention_days', 90))
         self._history = [h for h in self._history if self._parse_ts(h.get('timestamp', '')) >= cutoff]
         self._save_state()
 
@@ -332,7 +337,7 @@ class PortfolioOptimizer:
         from src.risk.exposure_orchestrator import ExposureOrchestrator
         eo = ExposureOrchestrator()
         result = eo.calculate()
-        return result.get('target_exposure', cfg.get('optimizer.exposure.caution', 0.65))
+        return result.get('target_exposure', pget('optimizer.exposure.caution', 0.85))
 
 
     def _compute_allocation(self, stream_metrics: Dict, regime: str) -> Dict[str, float]:
@@ -375,7 +380,7 @@ class PortfolioOptimizer:
         """CVaR 제약 검증."""
         import numpy as np
         import pandas as pd
-        max_cvar = cfg.get('optimizer.max_cvar_pct', cfg.get('risk.target_cvar_pct', -0.03))
+        max_cvar = cfg.get('optimizer.max_cvar_pct', pget('risk.target_cvar_pct', -0.03))
         returns_list = []
         weight_list = []
         stream_order = []
@@ -479,7 +484,7 @@ class PortfolioOptimizer:
                     return history[-1].get('weights', {})
             except Exception as _e5:
                 logger.critical(f"  [portfolio_optimizer] 현재 비중 파일 로드: {_e5}", exc_info=True)
-        return {'S1': cfg.get('allocator.s1_base_weight', 0.08), 'S2': cfg.get('allocator.s2_base_weight', 0.3), 'S3': cfg.get('allocator.s3_base_weight', 0.25), 'S4': cfg.get('allocator.s4_base_weight', 0.37)}
+        return {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S4': pget('allocator.s4_base_weight', 0.25)}
 
     def _save_result(self, result: Dict) -> None:
         """최적화 결과 저장."""
@@ -512,8 +517,8 @@ class PortfolioOptimizer:
             {passive_pct, active_pct, conviction, benchmark_etf,
              cash_drag_action, excess_cash, deploy_to}
         """
-        ic_scale = cfg.get('m6.ic_conviction_scale', 5.0)
-        max_passive = cfg.get('m6.max_passive_pct', 0.3)
+        ic_scale = pget('m6.ic_conviction_scale', 5.0)
+        max_passive = pget('m6.max_passive_pct', 0.3)
         min_passive = cfg.get('m6.min_passive_pct', 0.0)
         benchmark_etf = cfg.get('m6.benchmark_etf', '069500')
         ic_values = []
@@ -535,7 +540,7 @@ class PortfolioOptimizer:
             mean_ic = sum(ic_values) / len(ic_values)
             active_conviction = max(0.0, min(1.0, mean_ic * ic_scale))
         else:
-            active_conviction = cfg.get('m6.default_conviction', 0.5)
+            active_conviction = pget('m6.default_conviction', 0.5)
         passive_pct = max(min_passive, min(max_passive, (1 - active_conviction) * max_passive))
         active_pct = 1.0 - passive_pct
         cash_drag_action = None
@@ -553,16 +558,16 @@ class PortfolioOptimizer:
             target_cash = regime_targets.get(regime, 0.18)
             if cash_ratio > target_cash + 0.05:
                 excess_cash = cash - nav * target_cash
-                deploy_ratio = cfg.get('m6.cash_deploy_ratio', 0.5)
+                deploy_ratio = pget('m6.cash_deploy_ratio', 0.5)
                 deployable = excess_cash * deploy_ratio
                 passive_deploy = deployable * passive_pct
                 active_deploy = deployable * active_pct
-                if passive_deploy > cfg.get('m6.min_passive_trade', 500000):
+                if passive_deploy > pget('m6.min_passive_trade', 500000):
                     deploy_to.append({'target': benchmark_etf, 'stream': 'S3', 'amount': round(passive_deploy), 'type': 'passive_benchmark'})
                 active_streams = cfg.get('m6.active_deploy_streams', ['S2', 'S3'])
                 per_stream = active_deploy / max(len(active_streams), 1)
                 for sid in active_streams:
-                    if per_stream > cfg.get('m6.min_active_trade', 200000):
+                    if per_stream > pget('m6.min_active_trade', 200000):
                         deploy_to.append({'target': None, 'stream': sid, 'amount': round(per_stream), 'type': 'active_excess_cash'})
                 cash_drag_action = 'deploy'
                 logger.info(f"  💰 M6 Cash Drag: excess=₩{excess_cash:,.0f}, deploy=₩{deployable:,.0f} (passive={passive_pct:.0%}, active={active_pct:.0%})")

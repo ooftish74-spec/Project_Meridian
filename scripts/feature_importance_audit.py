@@ -12,6 +12,12 @@ IC 개선을 위한 제거 후보를 제안합니다.
 Author: Project_First
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import logging
 from pathlib import Path
@@ -101,7 +107,7 @@ def run_audit():
     # 활성 피처 중 하위 20% = 예측력 약한 피처 (진짜 noise 후보)
     if active_features:
         active_vals = [sorted_fi[f] for f in active_features]
-        low_pct = cfg.get('feature_audit.low_importance_pct', 0.8)
+        low_pct = pget('feature_audit.low_importance_pct', 0.8)
         cutoff_idx = int(len(active_vals) * low_pct)
         if cutoff_idx < len(active_vals):
             threshold = active_vals[cutoff_idx]
@@ -119,7 +125,7 @@ def run_audit():
         try:
             drift = json.loads(drift_path.read_text(encoding='utf-8'))
             psi_scores = drift.get('psi_scores', {})
-            psi_thresh = cfg.get('feature_audit.psi_threshold', 0.25)
+            psi_thresh = pget('feature_audit.psi_threshold', 0.1)
             high_psi = {k: v for k, v in psi_scores.items()
                         if isinstance(v, (int, float)) and v > psi_thresh}
             high_psi_sorted = dict(sorted(high_psi.items(),
@@ -171,7 +177,7 @@ def run_audit():
     if active_news:
         avg_news_imp = sum(sorted_fi.get(f, 0) for f in active_news) / len(active_news)
         overall_avg = sum(sorted_fi[f] for f in active_features) / len(active_features)
-        noise_ratio = cfg.get('feature_audit.noise_ratio', 0.5)
+        noise_ratio = pget('feature_audit.noise_ratio', 0.5)
         if avg_news_imp < overall_avg * noise_ratio:
             recommendations.append({
                 'action': 'REVIEW_NEWS_FEATURES',

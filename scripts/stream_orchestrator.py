@@ -32,6 +32,12 @@ Usage:
     result = orch.run()
 """
 
+def pget(name, fallback, ctx=None):  # Wave2 TrackF: lazy (scripts set sys.path after imports)
+    try:
+        from src.params import pget as _pget
+    except Exception:
+        return fallback
+    return _pget(name, fallback, ctx)
 import json
 import numpy as np
 import pandas as pd
@@ -338,7 +344,7 @@ class StreamOrchestrator:
         if portfolio is None:
             # ExecutionEngine에서 계좌 정보 가져오기
             acct = self.execution_engine.get_account_summary()
-            initial = cfg.get('portfolio.initial_capital', 20_000_000.0)
+            initial = pget('portfolio.initial_capital', 19600000.0)
 
             kis_path = _ROOT / 'results' / 'kis_portfolio.json'
             shadow_path = _ROOT / 'results' / 'shadow_portfolio.json'
@@ -355,13 +361,34 @@ class StreamOrchestrator:
                     acct_data = kis_data.get('account', {})
                     total_nav = float(acct_data.get('total_equity') or kis_data.get('nav') or acct_data.get('nav', total_nav))
                     cash = float(acct_data.get('cash', cash))
-                    _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 1334.3)
+                    # ★ Wave 1 Track C: 리터럴 1334.3 제거 — 스냅샷 환율 → (필요 시) 게이트웨이(신선도 한도 내) → 미확보
+                    _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 0.0) or None
+                    _fx_orch_tried = False
                     for t, h in raw_holdings.items():
                         holdings[t] = h
                         _qty_h = int(h.get('qty', 0))
                         _cp_h = float(h.get('current_price', 0.0))
                         _is_us_h = not str(t).isdigit()
-                        _amt_krw = float(h.get('eval_krw', 0.0) or (_qty_h * _cp_h * (_fx_orch if _is_us_h else 1.0)))
+                        _amt_krw = float(h.get('eval_krw', 0.0) or 0.0)
+                        _fx_deg_h = False
+                        if not _amt_krw:
+                            if _is_us_h:
+                                if _fx_orch is None and not _fx_orch_tried:
+                                    _fx_orch_tried = True
+                                    try:
+                                        from src.data_collection.central_data_gateway import get_central_data_gateway
+                                        _r_orch = get_central_data_gateway().get_usdkrw_rate()
+                                        _fx_orch = float(_r_orch) if _r_orch is not None and float(_r_orch) > 0 else None
+                                    except Exception as _fx_o_err:
+                                        logger.error(f"  ❌ [FX] 포트폴리오 평가용 USD/KRW 조회 예외: {_fx_o_err}")
+                                if _fx_orch is None:
+                                    # 환율 미확보: 원화 평가액 날조 금지 → 0 + degraded 표시 (해외 신규 매수는 FX Guard가 별도 차단)
+                                    _fx_deg_h = True
+                                    logger.critical(f"  🚨 [FX] {t}: USD/KRW 미확보 + eval_krw 없음 → 원화 평가액 미산출(degraded)")
+                                else:
+                                    _amt_krw = _qty_h * _cp_h * _fx_orch
+                            else:
+                                _amt_krw = _qty_h * _cp_h
                         _ret_h = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
                         positions[t] = {
                             'ticker': t,
@@ -377,6 +404,8 @@ class StreamOrchestrator:
                             'return_pct': _ret_h,
                             'market': h.get('market', 'US' if _is_us_h else 'KR')
                         }
+                        if _fx_deg_h:
+                            positions[t]['fx_degraded'] = True
                 except Exception as _k_err:
                     logger.warning(f"kis_portfolio.json 로드 예외: {_k_err}")
             elif shadow_path.exists():
@@ -537,26 +566,38 @@ class StreamOrchestrator:
             logger.debug(f"  거래일 검증 실패 (진행): {_td_e}")
 
         # ── Step 0.5: DATA_NOGO Circuit Breaker [Phase 70-A] ──
-        _data_nogo_flag = (
+        # ★ Track E (W1_2): 모듈 변수(_data_nogo_assets)는 프로세스/모듈 간 공유되지 않아 이 지점에
+        #   도달한 적이 없었다 → results/data_nogo.json(날짜+TTL) 영속 저장소를 함께 읽는다.
+        #   의미론 변경: 전체 중단(halt) → Exit-Only(신규 진입 금지, 청산 허용). 종목 단위 항목은
+        #   market_data['data_nogo_tickers'] 계약으로 전달된다.
+        _legacy_nogo = bool(
             (market_data.get('data_nogo', False) if market_data else False)
             or getattr(self, 'data_nogo', False)  # daily_pipeline에서 orch.data_nogo 주입 시
         )
-        if _data_nogo_flag and not market_data:
-            market_data = {}
-        if getattr(self, 'data_nogo', False) and isinstance(market_data, dict):
-            market_data.setdefault('data_nogo_reason',
-                                   getattr(self, 'data_nogo_reason', 'unknown'))
-        if _data_nogo_flag:
-            _nogo_reason = (
-                market_data.get('data_nogo_reason', 'unknown') if market_data else 'unknown'
-            )
+        try:
+            from src.measurement.data_nogo_store import apply_data_nogo_to_run
+            _md_nogo, _nogo_info = apply_data_nogo_to_run(
+                market_data, legacy_flag=_legacy_nogo,
+                legacy_reason=getattr(self, 'data_nogo_reason', None))
+        except Exception as _dn_e:
+            logger.error(f"  [DATA_NOGO] 저장소 판정 실패 — 레거시 플래그만 적용: {_dn_e}", exc_info=True)
+            _md_nogo = market_data if isinstance(market_data, dict) else {}
+            _nogo_info = {'active': _legacy_nogo, 'mode': 'exit_only' if _legacy_nogo else None,
+                          'reason': f"legacy:{getattr(self, 'data_nogo_reason', 'unknown')}" if _legacy_nogo else None}
+            if _legacy_nogo:
+                _md_nogo['exit_only'] = True
+                _md_nogo['data_nogo_reason'] = _nogo_info['reason']
+        if _nogo_info.get('active'):
+            market_data = _md_nogo
+            result['data_nogo'] = _nogo_info
+            result['data_nogo_reason'] = _nogo_info.get('reason')
+            if _nogo_info.get('mode') == 'exit_only':
+                result['status'] = 'data_nogo_exit_only'
             logger.critical(
-                f"  🚨 [Phase 70 DATA_NOGO] 데이터 신뢰도 상실 — 파이프라인 안전 중단: {_nogo_reason}"
+                f"  🚨 [Phase 70 DATA_NOGO] 데이터 신뢰도 상실 — {_nogo_info.get('mode')} "
+                f"(신규 진입 차단, 청산 허용): {_nogo_info.get('reason')} "
+                f"tickers={_nogo_info.get('tickers') or []}"
             )
-            result['status'] = 'halted_data_nogo'
-            result['data_nogo_reason'] = _nogo_reason
-            self._log_run_event(result)
-            return result
 
         # ── Step 1: Kill Switch 확인 ──
         logger.info("  📋 Step 1: Kill Switch 확인")
@@ -1088,22 +1129,22 @@ class StreamOrchestrator:
             o.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge')
             for o in orders
         ):
-            _argus_policy_thr = float(cfg.get('argus.bull_shield_policy_thr', 0.75))
-            _argus_semi_thr   = float(cfg.get('argus.semi_shield_thr',        0.75))
+            _argus_policy_thr = float(pget('argus.bull_shield_policy_thr', 0.75))
+            _argus_semi_thr   = float(pget('argus.semi_shield_thr', 0.75))
             if _argus_policy >= _argus_policy_thr or _argus_semi >= _argus_semi_thr:
                 for o in orders:
                     if o.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge'):
                         _prev_hedge = o['amount_krw']
-                        _argus_hedge_cut = float(cfg.get('argus.bull_shield_hedge_cut', 0.5))
+                        _argus_hedge_cut = float(pget('argus.bull_shield_hedge_cut', 0.5))
                         _new_h_amt = round(_prev_hedge * _argus_hedge_cut)
                         o['amount_krw'] = _new_h_amt
                         logger.info(f"  [Phase 66 Argus 오버레이] Bull 쉴드 발동 (policy={_argus_policy:.2f} semi={_argus_semi:.2f}) → 헤지 {_prev_hedge:.0f}→{_new_h_amt:.0f} (-50%)")
 
         # — Bear 쉴드: 상승장 신호에서 인플레 과열이면 롱 20% 삭감 (기존 orders에 직접 적용)
         _long_inflation_cut = 1.0
-        _argus_inf_thr = float(cfg.get('argus.bear_shield_inflation_thr', 0.80))
+        _argus_inf_thr = float(pget('argus.bear_shield_inflation_thr', 0.80))
         if regime == 'bull' and _argus_inflation >= _argus_inf_thr:
-            _long_inflation_cut = float(cfg.get('argus.bear_shield_long_cut', 0.8))
+            _long_inflation_cut = float(pget('argus.bear_shield_long_cut', 0.8))
             logger.info(
                 f"  [Phase 66 Argus 오버레이] Bear 쉴드 발동 "
                 f"(inflation={_argus_inflation:.2f}) "
@@ -1313,7 +1354,7 @@ class StreamOrchestrator:
                 iv_curr = float(signal_cache.get('iv_current', 0.85))
                 iv_hist = float(signal_cache.get('iv_historical_mean', 0.40))
                 neg_gex = bool(signal_cache.get('is_negative_gex', False))
-                eq_val = float(portfolio.get('total_nav', cfg.get('portfolio.initial_capital', 20_000_000.0)))
+                eq_val = float(portfolio.get('total_nav', pget('portfolio.initial_capital', 19600000.0)))
                 
                 tactic_e_res = self.tactic_e_sniper.evaluate_earnings_event_trade(
                     ticker='NVDA', cvd_15m=cvd_val, iv_current=iv_curr, iv_historical_mean=iv_hist,
@@ -1569,7 +1610,7 @@ class StreamOrchestrator:
                 logger.debug(f"S_YIELD Friction Guard check bypass: {_fe}")
 
             # 잉여 현금이 포트폴리오의 2% 이상이고, 주말/연휴 등 3일 이상 무위험 이자가 확정될 때만 KOFR 등 무위험 자산에 파킹
-            parking_threshold = float(cfg.get('orchestrator.idle_cash_parking_threshold', 0.02))
+            parking_threshold = float(pget('orchestrator.idle_cash_parking_threshold', 0.02))
             if is_parking_efficient and idle_cash > total_nav * parking_threshold:
                 logger.info(f"    [S_YIELD] 주말/연휴 {total_days}일치 무위험 이자 확정 ➔ 잉여 현금 {idle_cash:,.0f}원 파킹 집행")
                 
@@ -1603,7 +1644,7 @@ class StreamOrchestrator:
                     current_kofr = float(kofr_pos)
                 
                 if current_kofr > 10000:
-                    margin = float(cfg.get('orchestrator.idle_cash_margin', 1.05))
+                    margin = float(pget('orchestrator.idle_cash_margin', 1.05))
                     needed = abs(idle_cash) * margin # 수수료 등 감안 5% 여유
                     sell_amount = min(current_kofr, needed)
                     logger.info(f"    [S_YIELD] 현금 부족! 파킹된 KOFR {sell_amount:,.0f}원 매도하여 유동성 공급")
@@ -1950,7 +1991,7 @@ class StreamOrchestrator:
 
             # 소액 잔챙이 주문 차단 (신규 매수 주문에만 적용 — 매도/손절은 100% 집행 보장)
             # US 종목의 경우 최소 1주 이상이며 $50 USD 이상이면 정상 집행 허용, Min-Lot Sweep 또는 a3.min_trade_amount 이상도 허용
-            _min_trade_cfg = float(cfg.get('a3.min_trade_amount', 200_000) or 200_000)
+            _min_trade_cfg = float(pget('a3.min_trade_amount', 10000) or 200_000)
             effective_min_val = (50.0 * _net_fx) if is_us_net else min(min_order_krw, _min_trade_cfg)
             _is_min_lot = any(bo.get('_min_lot_sweep') for bo in ndata['buy_orders'])
             if final_action == 'buy' and final_price > 0 and netted_val_krw < effective_min_val and not _is_min_lot:
@@ -1988,7 +2029,7 @@ class StreamOrchestrator:
 
         # ── Step 9.2: CRO Final Gate 최후단 VaR Veto & Scaling ──
         try:
-            total_nav_val = float(portfolio.get('total_nav', portfolio.get('cash', cfg.get('portfolio.initial_capital', 20_000_000.0))))
+            total_nav_val = float(portfolio.get('total_nav', portfolio.get('cash', pget('portfolio.initial_capital', 19600000.0))))
             ticker_map = {o['ticker']: i for i, o in enumerate(exec_orders)}
             cov_eye = np.eye(max(1, len(ticker_map))) * 0.0004
             exec_orders, cro_audit = self.cro_final_gate.evaluate_and_scale_orders(
@@ -2325,9 +2366,9 @@ class StreamOrchestrator:
             _total_size_pct = sum(sig.get('size_pct', 0) for sig in valid_signals)
             
             # 포트폴리오 최대 일일 손실 한도 (기본 -3.0%)
-            max_daily_loss = abs(float(cfg.get('risk.global_max_daily_loss_pct', 3.0))) / 100.0
+            max_daily_loss = abs(float(pget('risk.global_max_daily_loss_pct', 3.0))) / 100.0
             
-            _max_leverage_limit = float(cfg.get('allocator.golden_bull_multiplier', 1.50)) if regime == 'bull' else 1.00
+            _max_leverage_limit = float(pget('allocator.golden_bull_multiplier', 1.50)) if regime == 'bull' else 1.00
             _scale_factor = 1.0
             if _total_size_pct > _max_leverage_limit:
                 _scale_factor = _max_leverage_limit / _total_size_pct
@@ -2424,7 +2465,15 @@ class StreamOrchestrator:
                                 _jpy_fx_ord = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
                                 _eff_px_krw = _sig_px * _jpy_fx_ord
                             else:
-                                _eff_px_krw = _sig_px * 1345.0
+                                # ★ Wave 1: 1345.0 리터럴 제거 → 관측 환율(signal_cache → 게이트웨이 last-good), 미상 시 해외 추가매수 생략
+                                _usd_fx_ord = float(((market_data or {}).get('signal_cache') or {}).get('usdkrw') or 0.0)
+                                if not (900.0 <= _usd_fx_ord <= 2500.0):
+                                    from src.data_collection.central_data_gateway import CentralDataGateway as _CDG_ord
+                                    _usd_fx_ord = float(_CDG_ord().get_usdkrw_rate() or 0.0)
+                                if _usd_fx_ord <= 0:
+                                    logger.warning(f"    🛑 [FX Guard] {_t}: USD/KRW 미상 → 해외 추가매수 생략")
+                                    continue
+                                _eff_px_krw = _sig_px * _usd_fx_ord
                             _dq_est = max(1, int(gap / max(_eff_px_krw, 1.0)))
                             _util_res = _dqe_ord.compute_discrete_lot_marginal_utility(
                                 _t_clean,
@@ -2449,7 +2498,7 @@ class StreamOrchestrator:
                 # 🎯 [User Rule] 100% 일시불 즉시 진입 (분할매수/DCA 100% 원천 차단)
                 amount_krw = gap
 
-                min_trade = cfg.get('a3.min_trade_amount', 200_000)
+                min_trade = pget('a3.min_trade_amount', 10000)
                 if amount_krw < min_trade:
                     continue
 
@@ -2561,7 +2610,7 @@ class StreamOrchestrator:
             #   VKOSPI 40 → vol_scaler=2.0: activate=6.0%, dist=5.0%  (패닉 최대 밴드)
             _sc_exit = (market_data or {}).get('signal_cache', {})
             _exit_vkospi = float(_sc_exit.get('vkospi', 18.0) or 18.0)
-            _vix_neutral = float(cfg.get('risk.vix_neutral_fallback', 18.0))
+            _vix_neutral = float(pget('risk.vix_neutral_fallback', 18.0))
             _exit_vix = float(_sc_exit.get('vix', _vix_neutral) or _vix_neutral)
 
             # vol_scaler: VKOSPI/20 기준 (최소 1.0, 최대 2.0으로 클램핑)
@@ -2618,12 +2667,12 @@ class StreamOrchestrator:
                 #        dist    = vol_daily(%) × Z=2.0 (고점 대비 2σ=95% CI 이탈 시 청산)
                 _asset_vol_daily = _compute_asset_daily_volatility(
                     _pos_ticker, market_data, fallback=0.02)
-                _trail_z_act  = float(cfg.get('exit.trail_z_activate',   3.0))
-                _trail_act_lo = float(cfg.get('exit.trail_activate_min', 3.0))
-                _trail_act_hi = float(cfg.get('exit.trail_activate_max', 15.0))
+                _trail_z_act  = float(pget('exit.trail_z_activate', 3.0))
+                _trail_act_lo = float(pget('exit.trail_activate_min', 3.0))
+                _trail_act_hi = float(pget('exit.trail_activate_max', 15.0))
                 _trail_z_dst  = float(cfg.get('exit.trail_z_dist',       2.0))
-                _trail_dst_lo = float(cfg.get('exit.trail_dist_min',     0.4))
-                _trail_dst_hi = float(cfg.get('exit.trail_dist_max',     10.0))
+                _trail_dst_lo = float(pget('exit.trail_dist_min', 0.4))
+                _trail_dst_hi = float(pget('exit.trail_dist_max', 10.0))
                 _dyn_trail_activate_raw = _asset_vol_daily * 100
                 _dyn_trail_dist_raw     = _asset_vol_daily * 100
                 _dyn_trail_activate = round(max(_trail_act_lo, min(_dyn_trail_activate_raw * _trail_z_act, _trail_act_hi)), 2)
@@ -2788,8 +2837,8 @@ class StreamOrchestrator:
             return orders
 
         # 동적 설정 로드
-        force_sell_ratio = cfg.get('dd_overlay.force_sell_ratio', 0.2)
-        hedge_ratio = cfg.get('dd_overlay.tail_risk_hedge_ratio', 0.2)
+        force_sell_ratio = pget('dd_overlay.force_sell_ratio', 0.2)
+        hedge_ratio = pget('dd_overlay.tail_risk_hedge_ratio', 0.2)
         inverse_ticker = cfg.get('dd_overlay.inverse_etf_ticker', '252670')
         inverse_name = cfg.get('dd_overlay.inverse_etf_name', 'KODEX 200선물인버스2X')
 
@@ -2885,6 +2934,14 @@ class StreamOrchestrator:
                                 f"매수 {len(orders) - len(kept)}건 제거, 매도 {len(kept)}건 통과")
             return kept
 
+        # ★ Wave 1: 종목 단위 DATA_NOGO — 데이터 이상 종목은 신규 매수 제거(청산은 허용)
+        _nogo_t = {str(x).strip() for x in ((market_data or {}).get('data_nogo_tickers') or [])}
+        if _nogo_t:
+            _before = len(orders)
+            orders = [o for o in orders if not (is_buy(o) and str(o.get('ticker', '')).strip() in _nogo_t)]
+            if len(orders) != _before:
+                logger.warning(f"  🛑 [Final Gate] DATA_NOGO 종목 매수 {_before - len(orders)}건 제거: {sorted(_nogo_t)}")
+
         def _ccy(o):
             t = str(o.get('ticker', '')).strip()
             if t.upper().endswith('.T'):
@@ -2901,7 +2958,7 @@ class StreamOrchestrator:
             return p
 
         w_sell = float(cfg.get('execution.cash_cap_sell_proceeds_weight', 0.0) or 0.0)
-        fee_buf = float(cfg.get('execution.cash_cap_fee_buffer', 0.003) or 0.003)
+        fee_buf = float(pget('execution.cash_cap_fee_buffer', 0.003) or 0.003)
         _pf = portfolio or {}
         cash = {'KRW': (float(_pf.get('cash') or 0) if 'cash' in _pf else None),
                 'USD': (float(_pf.get('cash_usd') or 0) if 'cash_usd' in _pf else None)}
@@ -2995,9 +3052,9 @@ def _is_kelly_booster_active(regime, signal_cache_path, portfolio_path):
     import json, statistics, pathlib as _pl
     if regime != 'bull':
         return False
-    ois_lookback  = int(cfg.get('kelly.ois_lookback_days', 60))
-    conf_pct      = int(cfg.get('kelly.confidence_percentile', 75))
-    conf_lookback = int(cfg.get('kelly.confidence_lookback', 30))
+    ois_lookback  = int(pget('kelly.ois_lookback_days', 60))
+    conf_pct      = int(pget('kelly.confidence_percentile', 75))
+    conf_lookback = int(pget('kelly.confidence_lookback', 30))
     # OIS 동적 임계값: 롤링 중앙값
     try:
         sc_path = _pl.Path(signal_cache_path)
@@ -3008,7 +3065,7 @@ def _is_kelly_booster_active(regime, signal_cache_path, portfolio_path):
         ois_history = [float(v) for v in sc.get('ois_history', []) if v is not None]
         ois_median  = (statistics.median(ois_history[-ois_lookback:])
                        if len(ois_history) >= 5
-                       else float(cfg.get('kelly.ois_fallback_threshold', 55)))
+                       else float(pget('kelly.ois_fallback_threshold', 55)))
         if ois_today <= ois_median:
             return False
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
@@ -3046,7 +3103,7 @@ def _is_kelly_booster_active(regime, signal_cache_path, portfolio_path):
 def _compute_kelly_max_positions(portfolio_path):
     """[Phase 37] 포지션 간 평균 상관계수 기반 Kelly 압축 종목 수 동적 결정."""
     import json, pathlib as _pl
-    fallback = int(cfg.get('kelly.max_pos_fallback', 3))
+    fallback = int(pget('kelly.max_pos_fallback', 3))
     try:
         import numpy as np
         sp_path = _pl.Path(portfolio_path)
@@ -3067,9 +3124,9 @@ def _compute_kelly_max_positions(portfolio_path):
             return fallback
         avg_corr = float(np.mean(corr_vals))
         if avg_corr < 0.3:
-            return int(cfg.get('kelly.max_pos_low_corr', 5))
+            return int(pget('kelly.max_pos_low_corr', 5))
         elif avg_corr < 0.6:
-            return int(cfg.get('kelly.max_pos_mid_corr', 3))
+            return int(pget('kelly.max_pos_mid_corr', 3))
         else:
             return int(cfg.get('kelly.max_pos_high_corr', 2))
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:

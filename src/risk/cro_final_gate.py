@@ -14,6 +14,16 @@ from config.dynamic_config import DynamicConfig
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
 
+
+def _cro_live_fx() -> float:
+    """★ Wave 1: 주문에 fx_rate가 없을 때 게이트웨이 실관측(last-good ≤ max_stale) 환율. 미상이면 0.0 (1350 날조 제거)."""
+    try:
+        from src.data_collection.central_data_gateway import CentralDataGateway
+        r = CentralDataGateway().get_usdkrw_rate()
+        return float(r) if r and float(r) > 0 else 0.0
+    except Exception:
+        return 0.0
+
 class CROFinalGate:
     """체결 직전 0.1초 시점 최후단 CRO 리스크 거부권(Final Veto) 엔진."""
 
@@ -97,7 +107,7 @@ class CROFinalGate:
                 raw_dir = order.get('action', order.get('direction', 1))
                 sign = -1.0 if str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit') else 1.0
                 price = float(order.get('price', 0.0) or 0.0)
-                fx_rate = float(order.get('fx_rate', 1350.0) or 1350.0) if not str(t).isdigit() else 1.0
+                fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not str(t).isdigit() else 1.0
                 price_krw = price * fx_rate
                 qty = float(order.get('net_shares', order.get('quantity', 0)) or 0)
                 amt = float(order.get('net_amount', order.get('amount_krw', qty * price_krw)) or 0.0)
@@ -169,7 +179,19 @@ class CROFinalGate:
             t = order.get('ticker', '')
             scaled_shares = int(raw_shares * final_scaling_factor)
             price = float(order.get('price', 0.0) or 0.0)
-            fx_rate = float(order.get('fx_rate', 1350.0) or 1350.0) if not str(t).isdigit() else 1.0
+            fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not str(t).isdigit() else 1.0
+            if fx_rate <= 0:
+                # ★ Wave 1: 환율 미상 → 해외 매수의 원화 리스크 산정 불가 → 매수 제외(fail-closed)
+                _blocked = dict(order)
+                if 'quantity' in _blocked:
+                    _blocked['quantity'] = 0
+                _blocked['net_shares'] = 0
+                _blocked['amount_krw'] = 0
+                _blocked['is_netted_out'] = True
+                _blocked['cro_block_reason'] = 'FX_UNKNOWN'
+                logger.warning(f"  🛑 [CROFinalGate] {t}: USD/KRW 미상 → 해외 매수 제외")
+                scaled_orders.append(_blocked)
+                continue
             price_krw = price * fx_rate
             if (
                 scaled_shares == 0

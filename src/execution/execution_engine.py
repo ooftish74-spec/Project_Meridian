@@ -14,6 +14,11 @@ Usage:
     engine = ExecutionEngine(mode='shadow')
     result = engine.execute(orders)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import pandas as pd
 import json
 import math
@@ -281,7 +286,7 @@ class ExecutionEngine:
             return 0.0
         if _cfg:
             try:
-                return float(_cfg.get('execution.tax_rate_stock', 0.0018))
+                return float(pget('execution.tax_rate_stock', 0.0018))
             except (ValueError, TypeError):
                 return 0.0018
         return 0.0018
@@ -445,7 +450,7 @@ class ExecutionEngine:
             krx_dir = _PROJECT_ROOT / 'data' / 'raw' / 'krx_stock_daily'
             if krx_dir.exists():
                 csv_files = sorted(krx_dir.glob('kospi_*.csv'), reverse=True)
-                lookback = _cfg.get('slippage.vol_lookback_days', 20) if _cfg else 20
+                lookback = pget('slippage.vol_lookback_days', 20) if _cfg else 20
                 for csv_file in csv_files[:lookback + 5]:
                     try:
                         df = pd.read_csv(csv_file)
@@ -477,12 +482,12 @@ class ExecutionEngine:
                         mean_r = sum(log_rets) / len(log_rets)
                         var = sum(((r - mean_r) ** 2 for r in log_rets)) / len(log_rets)
                         raw_vol = _math.sqrt(var)
-                        vol_min = _cfg.get('execution.volatility_min', 0.005) if _cfg else 0.005
-                        vol_max = _cfg.get('execution.volatility_max', 0.15) if _cfg else 0.15
+                        vol_min = pget('execution.volatility_min', 0.005) if _cfg else 0.005
+                        vol_max = pget('execution.volatility_max', 0.15) if _cfg else 0.15
                         volatility = max(vol_min, min(vol_max, raw_vol))
         except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             logger.critical(f"  Liquidity CSV 조회 실패 ({ticker}): {e}", exc_info=True)
-        fallback_vol = _cfg.get('slippage.default_daily_vol', 0.02) if _cfg else 0.02
+        fallback_vol = pget('slippage.default_daily_vol', 0.02) if _cfg else 0.02
         result = {'adv': adv, 'market_cap': market_cap, 'volatility': volatility if volatility > 0 else fallback_vol}
         self._liquidity_cache[ticker] = result
         return result
@@ -540,15 +545,20 @@ class ExecutionEngine:
 
         ticker_upper = ticker.upper()
         regime_lower = regime.lower()
-        bull_tickers = {'233740', '122630', 'TQQQ', 'SOXL', 'UPRO', 'QLD', 'SSO'}
-        bear_tickers = {'252670', '114800', 'SQQQ', 'SOXS', 'SPXS', 'QID', 'SDS'}
+        # [Wave2 TrackF] 레버리지/인버스 ETP 분류 SSOT = ticker_master (레거시 리터럴 세트 그대로 + fresh master 확장은 opt-in)
+        try:
+            from src.data_collection.ticker_master import overnight_etp_direction
+            etp_dir = overnight_etp_direction(ticker_upper)
+        except Exception as _tm_e:  # 분류 불가 시 전 종목 당일청산(대량 매도) 방지 → 일반 보유 정책
+            logger.error(f"  [Overnight] ticker_master 분류 실패 → 미분류(일반 보유 정책) 처리: {_tm_e}")
+            etp_dir = None
 
-        if ticker_upper not in bull_tickers and ticker_upper not in bear_tickers:
+        if etp_dir is None:
             return True  # 레버리지 ETP가 아닌 일반 주식/채권은 일반 보유 정책 적용
 
-        if regime_lower in ('bull', 'bull_strong') and ticker_upper in bull_tickers:
+        if regime_lower in ('bull', 'bull_strong') and etp_dir == 'bull':
             return True
-        if regime_lower in ('bear', 'bear_strong', 'crash_flash') and ticker_upper in bear_tickers:
+        if regime_lower in ('bear', 'bear_strong', 'crash_flash') and etp_dir == 'bear':
             return True
 
         # Sideways / Range 또는 레짐-ETP 불일치 시 오버나이트 차단 (당일 청산)
@@ -625,14 +635,14 @@ class ExecutionEngine:
                     slip_result = self._slippage_model.estimate(order_size=order_amount, adv=liq_data['adv'], market_cap=liq_data['market_cap'], regime=regime, volatility=liq_data.get('volatility', 0.0), ticker=ticker)
                     slip_bps = slip_result.get('slippage_bps', 8.0)
                     slip_components = slip_result.get('components', {})
-                    algo_reduction = _cfg.get('execution.algo_slip_reduction', 0.4) if _cfg else 0.4
+                    algo_reduction = pget('execution.algo_slip_reduction', 0.4) if _cfg else 0.4
                     if algo_name != 'market':
                         slip_bps *= algo_reduction
                         slip_components['algo_reduction'] = algo_reduction
                     slip_rate = slip_bps / 10000
                 else:
                     slip_rate = self._slippage_rate_fallback(exchange)
-                    algo_reduction = _cfg.get('execution.algo_slip_reduction', 0.4) if _cfg else 0.4
+                    algo_reduction = pget('execution.algo_slip_reduction', 0.4) if _cfg else 0.4
                     if algo_name != 'market':
                         slip_rate *= algo_reduction
                     slip_bps = slip_rate * 10000
@@ -679,8 +689,8 @@ class ExecutionEngine:
             return 'limit' if order.get('action', '').lower() in ('buy', 'add_on') else 'market'
             
         # 20억 원(2,000,000,000 KRW) 미만 주문은 100% 일시불 체결
-        _vwap_threshold = float(_cfg.get('execution.algo_vwap_threshold', 2000000000.0) if _cfg else 2000000000.0)
-        _twap_threshold = float(_cfg.get('execution.algo_twap_threshold', 2000000000.0) if _cfg else 2000000000.0)
+        _vwap_threshold = float(pget('execution.algo_vwap_threshold', 2000000000.0) if _cfg else 2000000000.0)
+        _twap_threshold = float(pget('execution.algo_twap_threshold', 2000000000.0) if _cfg else 2000000000.0)
         
         if order_amount >= _vwap_threshold:
             return 'vwap'
@@ -699,8 +709,8 @@ class ExecutionEngine:
         """
         raw_alpha = float(order.get('expected_alpha') or order.get('expected_return') or order.get('tp_pct') or 0.015)
         exp_alpha = raw_alpha / 100.0 if raw_alpha > 1.0 else raw_alpha
-        decay_ratio = float(_cfg.get('execution.alpha_decay_ratio', 0.50)) if _cfg else 0.50
-        fee_rate = float(_cfg.get('execution.fee_rate', 0.0015)) if _cfg else 0.0015
+        decay_ratio = float(pget('execution.alpha_decay_ratio', 0.50)) if _cfg else 0.50
+        fee_rate = float(pget('execution.fee_rate', 0.0015)) if _cfg else 0.0015
         
         max_allowed_slippage = exp_alpha * decay_ratio
         net_ev_cutoff = max(0.0, exp_alpha - fee_rate)
@@ -713,27 +723,19 @@ class ExecutionEngine:
         }
 
     def _get_dynamic_usdkrw_rate(self) -> float:
-        """KIS API 실시간 고시환율(t_rate) 및 디스크 캐시 기반 동적 환율 산출 (1400.0 하드코딩 100% 제거)."""
+        """★ Wave 1: CentralDataGateway 단일 경로 (실관측 → last-good ≤ fx.max_stale_hours → 미상).
+
+        미상이면 0.0 반환 — 과거의 무기한 stale 디스크 캐시와 1450.0 날조 폴백 제거.
+        호출자는 0.0이면 해외 신규 매수를 건너뛰어야 한다(fail-closed).
+        """
         try:
             from src.data_collection.central_data_gateway import CentralDataGateway
             rate = CentralDataGateway().get_usdkrw_rate()
-            if rate and isinstance(rate, (int, float)) and 1000.0 <= rate <= 2500.0:
+            if rate and isinstance(rate, (int, float)) and 900.0 <= rate <= 2500.0:
                 return float(rate)
-        except Exception:
-            pass
-        
-        # 2차 디스크 캐시 (EWMA 변동성 밴드 검증)
-        cache_path = _PROJECT_ROOT / 'results' / 'usdkrw_rate_cache.json'
-        if cache_path.exists():
-            try:
-                with open(cache_path, 'r', encoding='utf-8') as f:
-                    c_data = json.load(f)
-                    cached_rate = float(c_data.get('t_rate', c_data.get('rate', 0)))
-                    if 1000.0 <= cached_rate <= 2500.0:
-                        return cached_rate
-            except Exception:
-                pass
-        return 1450.0  # Dynamic fallback
+        except Exception as e:
+            logger.warning(f"  [FX] USD/KRW 조회 실패: {e}")
+        return 0.0
 
     def _execute_live(self, orders: List[Dict], result: ExecutionResult) -> ExecutionResult:
         """Live/Paper/Mock 모드: KISTrader를 통한 실제 체결.
@@ -801,7 +803,7 @@ class ExecutionEngine:
                     f"α={is_limits['expected_alpha']:.2%}, Slip={slip_pct:.2%}, Fee={is_limits['fee_rate']:.2%} → 트래킹 에러 차단 전량 취소")
                 return {'order': order, 'status': 'rejected', 'error': 'Institutional IS Stage 3: Net EV <= 0'}
 
-            max_retries = _cfg.get('execution.max_retries', 3) if _cfg else 3
+            max_retries = pget('execution.max_retries', 3) if _cfg else 3
             remaining_qty = quantity
             filled_qty = 0
             final_fills = []
@@ -967,8 +969,8 @@ class ExecutionEngine:
             DesyncError: diff_pct > desync_threshold이면
         """
         import time as _time
-        desync_threshold = _cfg.get('execution.desync_threshold', 0.01) if _cfg else 0.01
-        desync_warn_pct = _cfg.get('execution.desync_warn_pct', 0.005) if _cfg else 0.005
+        desync_threshold = pget('execution.desync_threshold', 0.01) if _cfg else 0.01
+        desync_warn_pct = pget('execution.desync_warn_pct', 0.005) if _cfg else 0.005
         nav_system: float = 0.0
         result_sync: Dict = {'ok': True, 'nav_system': 0.0, 'nav_broker': 0.0, 'diff_pct': 0.0, 'level': 'ok', 'message': ''}
         try:
@@ -1074,7 +1076,8 @@ class ExecutionEngine:
                                         TelegramNotifier().send_alert('🚨 SANITY CHECK FAILED', msg)
                                     except: pass
                                 else:
-                                    sm.force_reconcile(live_pos, broker_cash)
+                                    # ★ Wave 1 W1_3: 위에서 _last_positions_complete 확인 완료 → 수량 동기화 활성
+                                    sm.force_reconcile(live_pos, broker_cash, snapshot_complete=True)
                                     result_sync['message'] += " -> 섀도우 포트폴리오 강제 동기화 완료."
                                     result_sync['level'] = 'warn' # 동기화 했으므로 Halt 풀림
                                     result_sync['ok'] = True

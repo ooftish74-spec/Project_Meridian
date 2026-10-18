@@ -28,6 +28,9 @@ venv/
 *.joblib
 *.h5
 *.onnx
+# [WAVE3 Track D] 후보 모델 / ML 검증 리포트 (로컬 산출물)
+models_candidate/
+results/ml_validation/
 
 # 런타임 상태 (재생성 가능)
 results/*.json

@@ -16,6 +16,11 @@ Zero-Hardcoding Policy:
   모든 가중치(w_us_semi, w_cme, w_fx) 및 임계치 파라미터는 DynamicConfig ('s11.first_second.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 from typing import Dict, Any, Optional
 from config.dynamic_config import DynamicConfig
@@ -42,11 +47,11 @@ class FirstSecondDisparityEngine:
             }
         """
         # Zero-Hardcoding 파라미터 지연 로드
-        w_us_semi = float(cfg.get('s11.first_second.w_us_semi', 0.40))
-        w_cme = float(cfg.get('s11.first_second.w_cme', 0.35))
-        w_fx = float(cfg.get('s11.first_second.w_fx', 0.25))
-        base_threshold = float(cfg.get('s11.first_second.disparity_threshold_pct', 0.40)) # 0.4%
-        min_confidence = float(cfg.get('s11.first_second.min_confidence', 0.80))
+        w_us_semi = float(pget('s11.first_second.w_us_semi', 0.40))
+        w_cme = float(pget('s11.first_second.w_cme', 0.35))
+        w_fx = float(pget('s11.first_second.w_fx', 0.25))
+        base_threshold = float(pget('s11.first_second.disparity_threshold_pct', 0.40)) # 0.4%
+        min_confidence = float(pget('s11.first_second.min_confidence', 0.80))
 
         # 시장 데이터 파싱
         soxx_change = float(market_data.get('soxx_change_pct', market_data.get('us_semi_change_pct', 0.0)) or 0.0)

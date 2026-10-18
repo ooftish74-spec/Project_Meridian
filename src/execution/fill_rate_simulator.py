@@ -45,6 +45,11 @@ Usage:
     # → {'fill_probability': 0.75, 'n_candles': 20, ...}
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, List, Optional
@@ -69,8 +74,8 @@ class FillRateSimulator:
 
     def __init__(self):
         self.order_type = cfg.get('execution.fill_sim_order_type', 'limit')
-        self.discount_bps = cfg.get('execution.fill_sim_limit_discount_bps', 5.0)
-        self.window_candles = cfg.get('execution.fill_sim_window_candles', 20)
+        self.discount_bps = pget('execution.fill_sim_limit_discount_bps', 5.0)
+        self.window_candles = pget('execution.fill_sim_window_candles', 20)
 
     def _compute_limit_price(self, action: str, current_price: float) -> float:
         """지정가 계산.

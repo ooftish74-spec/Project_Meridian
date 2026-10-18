@@ -14,6 +14,11 @@ Usage:
     orch = MedallionOrchestrator()
     result = orch.validate_all()
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json, logging
 from datetime import datetime
 from src.utils.file_ops import atomic_write_json
@@ -52,11 +57,11 @@ class MedallionOrchestrator:
         self.fg_extreme_greed = 85
         if _cfg:
             self.max_sector_per_stream = _cfg.get('medallion.max_sector_per_stream', 2)
-            self.max_sector_global = _cfg.get('medallion.max_sector_global', 4)
-            self.max_single_pct = _cfg.get('medallion.max_single_pct', 0.15)
-            self.min_sectors = _cfg.get('medallion.min_sectors', 3)
-            self.fg_greed_threshold = _cfg.get('medallion.fg_greed_threshold', 70)
-            self.fg_extreme_greed = _cfg.get('medallion.fg_extreme_greed', 85)
+            self.max_sector_global = pget('medallion.max_sector_global', 4)
+            self.max_single_pct = pget('medallion.max_single_pct', 0.15)
+            self.min_sectors = pget('medallion.min_sectors', 3)
+            self.fg_greed_threshold = pget('medallion.fg_greed_threshold', 70)
+            self.fg_extreme_greed = pget('medallion.fg_extreme_greed', 85)
         self._corr_monitor = StreamCorrelationMonitor() if _CORR_AVAILABLE else None
         self._pnl_engine = PnLAttribution() if _PNL_AVAILABLE else None
 
@@ -113,8 +118,8 @@ class MedallionOrchestrator:
         elif fg >= self.fg_greed_threshold:
             exposure *= 0.6
             reasons.append(f"F&G={fg} (Greed)")
-        vix_ext = _cfg.get('medallion.vix_extreme', 50) if _cfg else 50
-        vix_high = _cfg.get('medallion.vix_high', 35) if _cfg else 35
+        vix_ext = pget('medallion.vix_extreme', 50) if _cfg else 50
+        vix_high = pget('medallion.vix_high', 35) if _cfg else 35
         if vix >= vix_ext:
             exposure = 0.0
             reasons.append(f"VIX={vix} (Extreme >= {vix_ext})")
@@ -151,7 +156,7 @@ class MedallionOrchestrator:
         for layer, pos_dict in positions.items():
             for ticker, pos in pos_dict.items():
                 pnl = pos.get('unrealized_pnl_pct', 0)
-                base_sl = _cfg.get('medallion.stop_loss_pct', -7) if _cfg else -7
+                base_sl = pget('medallion.stop_loss_pct', -7) if _cfg else -7
                 atr_pct = pos.get('atr_pct', 0)
                 if atr_pct > 0:
                     sl_mult = _cfg.get('risk.atr_sl_multiplier', 2.0) if _cfg else 2.0

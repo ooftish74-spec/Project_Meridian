@@ -16,6 +16,11 @@ Zero-Hardcoding Policy:
   모든 임계치 및 가중치는 DynamicConfig ('s1.ofi_velocity.*')에서 지연 로드됩니다.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import numpy as np
 import logging
@@ -52,9 +57,9 @@ class OFIVelocityEngine:
             }
         """
         # Zero-Hardcoding 파라미터 지연 로드
-        z_threshold = float(cfg.get('s1.ofi_velocity.z_threshold', 1.5))
-        max_hist_len = int(cfg.get('s1.ofi_velocity.max_history_length', 120))
-        min_hist_len = int(cfg.get('s1.ofi_velocity.min_history_length', 10))
+        z_threshold = float(pget('s1.ofi_velocity.z_threshold', 1.5))
+        max_hist_len = int(pget('s1.ofi_velocity.max_history_length', 120))
+        min_hist_len = int(pget('s1.ofi_velocity.min_history_length', 10))
 
         # 1. OFI 계산
         bid_term = (current_bid_qty - prev_bid_qty) if bid_price_delta >= 0 else 0.0

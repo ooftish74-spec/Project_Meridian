@@ -16,6 +16,11 @@ HMM 붕괴 확률(P_c) + VIX 페널티로 매 분마다 현금 비중을 연속 
 기존 MetaCapitalAllocator는 보존하되,
 SmartWalletAllocator를 새로운 진입점으로 추가.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 import numpy as np
@@ -81,7 +86,7 @@ class SmartWalletAllocator:
                 signal_cache = self._load_signal_cache()
             vol_spot_key = self._get('smart_wallet.vol_spot_key', 'vkospi')
             vol_ema_key = self._get('smart_wallet.vol_ema_key', 'vkospi_ema')
-            ema_fallback = float(self._get('smart_wallet.vol_ema_fallback', 15.0))
+            ema_fallback = float(pget('smart_wallet.vol_ema_fallback', 15.0))
             current_vix = float(signal_cache.get(vol_spot_key, 0) or 0)
             ema_vix = float(signal_cache.get(vol_ema_key, 0) or 0)
             if current_vix <= 0:
@@ -114,8 +119,8 @@ class SmartWalletAllocator:
         Returns:
             f_long ∈ [0.0, base_long_ratio]
         """
-        base_long = float(self._get('smart_wallet.base_long_ratio', 0.9))
-        bear_half = float(self._get('smart_wallet.bear_half_weight', 0.5))
+        base_long = float(pget('smart_wallet.base_long_ratio', 0.9))
+        bear_half = float(pget('smart_wallet.bear_half_weight', 0.5))
         numerator = max(0.0, 1.0 - p_crash - bear_half * p_bear)
         denom = max(1.0, vol_penalty)
         f_long = base_long * numerator / denom
@@ -130,7 +135,7 @@ class SmartWalletAllocator:
         Returns:
             target_cash_ratio ∈ [min_cash_ratio, 1.0]
         """
-        min_cash = float(self._get('smart_wallet.min_cash_ratio', 0.1))
+        min_cash = float(pget('smart_wallet.min_cash_ratio', 0.1))
         f_long = self.compute_f_long(p_crash, p_bear, vol_penalty)
         target_cash = max(min_cash, 1.0 - f_long)
         return round(target_cash, 6)
@@ -161,7 +166,7 @@ class SmartWalletAllocator:
                 'fallback_reason':    str,      # Fallback 발생 이유 (없으면 '')
             }
         """
-        default_cash = float(self._get('smart_wallet.default_cash_ratio', 0.5))
+        default_cash = float(pget('smart_wallet.default_cash_ratio', 0.5))
         fallback_result = {'target_cash_ratio': default_cash, 'target_long_ratio': round(1.0 - default_cash, 6), 'f_long': round(1.0 - default_cash, 6), 'vol_penalty': 1.0, 'p_crash': 0.0, 'p_bear': 0.0, 'p_normal': 1.0, 'regime_source': 'fallback', 'fallback_reason': ''}
         try:
             if regime_probs is not None:
@@ -197,13 +202,13 @@ class SmartWalletAllocator:
             return detector.get_regime_probabilities(market_data)
         except Exception as e:
             logger.warning(f"  [SmartWallet] RegimeDetector 실패 → 보수적 Fallback: {e}")
-            return {'normal': float(self._get('smart_wallet.fallback_normal', 0.3)), 'bear': float(self._get('smart_wallet.fallback_bear', 0.3)), 'crash': float(self._get('smart_wallet.fallback_crash', 0.4))}
+            return {'normal': float(pget('smart_wallet.fallback_normal', 0.3)), 'bear': float(pget('smart_wallet.fallback_bear', 0.3)), 'crash': float(pget('smart_wallet.fallback_crash', 0.4))}
 
     def _get_regime_probs_from_cache(self, signal_cache: Optional[Dict]=None) -> Dict[str, float]:
         """signal_cache.json에서 기존 확률 읽기 (probe 모드)."""
-        fb_normal = float(self._get('smart_wallet.cache_fallback_normal', 0.5))
-        fb_bear = float(self._get('smart_wallet.cache_fallback_bear', 0.3))
-        fb_crash = float(self._get('smart_wallet.cache_fallback_crash', 0.2))
+        fb_normal = float(pget('smart_wallet.cache_fallback_normal', 0.5))
+        fb_bear = float(pget('smart_wallet.cache_fallback_bear', 0.3))
+        fb_crash = float(pget('smart_wallet.cache_fallback_crash', 0.2))
         fallback = {'normal': fb_normal, 'bear': fb_bear, 'crash': fb_crash}
         cache = signal_cache or self._load_signal_cache()
         stored = cache.get('regime_probabilities', {})

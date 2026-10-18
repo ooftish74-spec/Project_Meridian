@@ -7,6 +7,11 @@ Event Calendar + Intraday Event Detection
 Author: Project-A
 Date: 2026-04-02
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime, date, timedelta
@@ -308,7 +313,7 @@ class IntradayEventDetector:
     def _thresholds(self) -> Dict:
         """동적 임계값 로드."""
         cfg = self._cfg
-        return {'kospi_drop_pct': cfg.get('intraday.kospi_drop_pct', -2.0) if cfg else -2.0, 'kospi_surge_pct': cfg.get('intraday.kospi_surge_pct', 2.0) if cfg else 2.0, 'vix_spike_pct': cfg.get('intraday.vix_spike_pct', 3.0) if cfg else 3.0, 'freeze_minutes': cfg.get('intraday.freeze_minutes', 30) if cfg else 30}
+        return {'kospi_drop_pct': pget('intraday.kospi_drop_pct', -2.0) if cfg else -2.0, 'kospi_surge_pct': cfg.get('intraday.kospi_surge_pct', 2.0) if cfg else 2.0, 'vix_spike_pct': pget('intraday.vix_spike_pct', 3.0) if cfg else 3.0, 'freeze_minutes': pget('intraday.freeze_minutes', 30) if cfg else 30}
 
     def detect(self, current_data: Dict) -> Dict:
         """장중 이벤트 감지."""

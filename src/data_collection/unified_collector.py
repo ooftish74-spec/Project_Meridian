@@ -20,6 +20,11 @@ Usage:
     python src/data_collection/unified_collector.py --sectors      # 섹터 ETF만
     python src/data_collection/unified_collector.py --initial      # 최초 10년 백필
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import argparse
 import json
 import logging
@@ -714,8 +719,8 @@ def _run_freshness_gate() -> Dict:
     """
     gate_results = {'status': 'pass', 'repairs': {}}
     now = datetime.now()
-    _default_stale_h = float(cfg.get('data.freshness_stale_h', 20.0))
-    _holiday_buffer_h = float(cfg.get('data.freshness_holiday_buffer_h', 4.0))
+    _default_stale_h = float(pget('data.freshness_stale_h', 20.0))
+    _holiday_buffer_h = float(pget('data.freshness_holiday_buffer_h', 4.0))
     stale_h = _default_stale_h
     try:
         from src.utils.market_calendar import get_calendar
@@ -901,7 +906,7 @@ def run_daily(mode: str='full', **kwargs):
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
                 tickers = json.loads(uni_file.read_text())
-                max_stocks = cfg.get('collector.max_stock_tickers', 350)
+                max_stocks = pget('collector.max_stock_tickers', 350)
                 stock_results = collect_kr_stocks(tickers[:max_stocks])
                 n_updated = sum((1 for v in stock_results.values() if v > 0))
                 n_failed = sum((1 for v in stock_results.values() if v < 0))
@@ -988,7 +993,7 @@ def run_daily(mode: str='full', **kwargs):
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
                 tickers = json.loads(uni_file.read_text())
-                max_stocks = cfg.get('collector.max_stock_tickers', 350)
+                max_stocks = pget('collector.max_stock_tickers', 350)
                 stock_results = collect_kr_stocks(tickers[:max_stocks])
                 results['stocks'] = sum((1 for v in stock_results.values() if v > 0))
                 results['stocks_attempted'] = len(stock_results)
@@ -1331,7 +1336,7 @@ def _save_collection_status(results: Dict, mode: str):
             _GLOBAL_FALLBACK_EVENTS.clear()
         phases[phase_key] = phase_entry
         stale_files = []
-        stale_threshold_h = cfg.get('collector.stale_threshold_hours', 36)
+        stale_threshold_h = pget('collector.stale_threshold_hours', 36)
         if _DATA_DIR.exists():
             for f in sorted(_DATA_DIR.glob('kr_*.parquet'))[:500]:
                 age_h = (datetime.now() - datetime.fromtimestamp(f.stat().st_mtime)).total_seconds() / 3600
@@ -1406,7 +1411,7 @@ def run_initial():
     collect_all_kr_etfs(backfill=True)
     logger.info('\n[5/6] KR 개별종목 10년 백필 (상위 50종목)')
     if tickers:
-        max_stocks = cfg.get('collector.max_stock_tickers', 350)
+        max_stocks = pget('collector.max_stock_tickers', 350)
         collect_kr_stocks(tickers[:max_stocks], backfill=True)
     logger.info('\n[6/6] US 매크로 + 크로스마켓 초기 수집')
     collect_us_macro()

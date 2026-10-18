@@ -13,6 +13,11 @@ Usage:
     detector = RegimeDetector()
     result = detector.detect(market_data)
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import pandas as pd
 import json
 import logging
@@ -100,9 +105,9 @@ class RegimeDetector:
         Returns:
             is_crash_warning이 Hysteresis 적용된 결과
         """
-        entry_thresh = float(self._get('regime.crash_radar_warn_threshold', 0.5))
-        exit_thresh = float(self._get('regime.crash_radar_exit_threshold', 0.35))
-        min_hold_days = int(self._get('regime.crash_radar_min_hold_days', 3))
+        entry_thresh = float(pget('regime.crash_radar_warn_threshold', 0.5))
+        exit_thresh = float(pget('regime.crash_radar_exit_threshold', 0.35))
+        min_hold_days = int(pget('regime.crash_radar_min_hold_days', 3))
         crash_prob = raw_result.get('crash_prob', 0.0)
         was_active = self._crash_radar_state.get('is_active', False)
         hold_elapsed = self._crash_radar_state.get('hold_days_elapsed', 0)
@@ -215,7 +220,7 @@ class RegimeDetector:
         import pandas as pd
         missing_count = sum((1 for k in critical_keys if k not in signal or pd.isna(signal[k])))
         import math
-        k_decay = float(self._get('regime.watchdog_decay_k', 0.5))
+        k_decay = float(pget('regime.watchdog_decay_k', 0.5))
         data_confidence_score = 100.0 * math.exp(-k_decay * missing_count)
         watchdog_triggered = False
         if data_confidence_score < 75.0:
@@ -225,7 +230,7 @@ class RegimeDetector:
         crash_radar_result = self._crash_radar(market_data)
         crash_radar_result = self._apply_crash_hysteresis(crash_radar_result)
         if crash_radar_result.get('is_crash_warning'):
-            _crash_penalty = float(self._get('regime.crash_radar_score_penalty', 5.0))
+            _crash_penalty = float(pget('regime.crash_radar_score_penalty', 5.0))
             rule_result['score'] = max(0.0, rule_result.get('score', 50.0) - _crash_penalty)
             rule_result['crash_radar_triggered'] = True
             logger.warning(f"  [CrashRadar→Rule] score 패널티 -{_crash_penalty:.0f}점 적용 → score={rule_result['score']:.1f}")
@@ -301,8 +306,8 @@ class RegimeDetector:
                 vix_prev_5d = float(np.mean(vix_history_clean[-6:-1]))
                 vix_velocity = (vix_now - vix_prev_5d) / max(vix_prev_5d, 1e-09)
                 result['vix_velocity'] = round(vix_velocity, 4)
-                vel_warn = float(self._get('regime.crash_vix_vel_warn', 0.3))
-                vel_alarm = float(self._get('regime.crash_vix_vel_alarm', 0.6))
+                vel_warn = float(pget('regime.crash_vix_vel_warn', 0.3))
+                vel_alarm = float(pget('regime.crash_vix_vel_alarm', 0.6))
                 if vix_velocity >= vel_alarm:
                     vix_velocity_score = 1.0
                 elif vix_velocity >= vel_warn:
@@ -318,28 +323,28 @@ class RegimeDetector:
                 if vol_std > 1e-09:
                     z = (vol_now - vol_mean) / vol_std
                     result['volume_zscore'] = round(float(z), 4)
-                    z_thresh = float(self._get('regime.crash_volume_z_threshold', 3.0))
+                    z_thresh = float(pget('regime.crash_volume_z_threshold', 3.0))
                     vol_zscore_score = min(1.0, max(0.0, (z - z_thresh) / z_thresh))
             fear_score = 0.0
             pcr = parse_metric(signal, 'options_pcr', 1.0)
             vkospi = parse_metric(signal, 'vkospi', 15.0)
-            pcr_normal = float(self._get('regime.crash_pcr_normal', 0.8))
-            pcr_extreme = float(self._get('regime.crash_pcr_extreme', 1.5))
-            vkospi_normal = float(self._get('regime.crash_vkospi_normal', 15.0))
-            vkospi_extreme = float(self._get('regime.crash_vkospi_extreme', 40.0))
+            pcr_normal = float(pget('regime.crash_pcr_normal', 0.8))
+            pcr_extreme = float(pget('regime.crash_pcr_extreme', 1.5))
+            vkospi_normal = float(pget('regime.crash_vkospi_normal', 15.0))
+            vkospi_extreme = float(pget('regime.crash_vkospi_extreme', 40.0))
             pcr_score = min(1.0, max(0.0, (pcr - pcr_normal) / max(pcr_extreme - pcr_normal, 1e-09)))
             vkospi_score = min(1.0, max(0.0, (vkospi - vkospi_normal) / max(vkospi_extreme - vkospi_normal, 1e-09)))
             fear_score = (pcr_score + vkospi_score) / 2.0
             result['fear_composite'] = round(fear_score, 4)
-            w_vix = float(self._get('regime.crash_radar_w_vix', 0.4))
-            w_vol = float(self._get('regime.crash_radar_w_vol', 0.3))
-            w_fear = float(self._get('regime.crash_radar_w_fear', 0.3))
+            w_vix = float(pget('regime.crash_radar_w_vix', 0.4))
+            w_vol = float(pget('regime.crash_radar_w_vol', 0.3))
+            w_fear = float(pget('regime.crash_radar_w_fear', 0.3))
             crash_prob = w_vix * vix_velocity_score + w_vol * vol_zscore_score + w_fear * fear_score
             result['crash_prob'] = round(min(1.0, crash_prob), 4)
             try:
                 _cr_state = self._crash_radar_state
                 _hold_days = int(_cr_state.get('hold_days_elapsed', 0)) if isinstance(_cr_state, dict) else 0
-                _decay_days = int(self._get('regime.crash_decay_days', 5))
+                _decay_days = int(pget('regime.crash_decay_days', 5))
                 # [S1 Patch] Bridgewater-style Macro-Conditional Hysteresis
                 # 거시 구조(VIX)가 안정화되었을 때만 기하급수적 감쇠 적용
                 if _hold_days > _decay_days:
@@ -355,7 +360,7 @@ class RegimeDetector:
                         logger.info(f"  [CrashDecay] VIX({vix_now:.1f}) >= 25.0 유지중. 기간 경과({_hold_days}일)에도 불구하고 감쇠 보류 (구조적 위기 지속).")
             except Exception as _decay_e:
                 logger.error(f"  [CrashDecay] 감쇠 계산 실패 (비치명적): {_decay_e}", exc_info=True)
-            warn_thresh = float(self._get('regime.crash_radar_warn_threshold', 0.5))
+            warn_thresh = float(pget('regime.crash_radar_warn_threshold', 0.5))
             result['is_crash_warning'] = crash_prob >= warn_thresh
             if result['is_crash_warning']:
                 logger.warning(f"  🚨 [CrashRadar] 경보! crash_prob={crash_prob:.3f} (vix_vel={vix_velocity_score:.3f}, vol_z={vol_zscore_score:.3f}, fear={fear_score:.3f})")
@@ -382,16 +387,16 @@ class RegimeDetector:
                 vix_caution = np.percentile(vix_history_clean, 85)
                 vix_bear = np.percentile(vix_history_clean, 95)
             else:
-                vix_bull = self._get('regime.vix_bull_threshold', 18)
-                vix_caution = self._get('regime.vix_caution_threshold', 25)
-                vix_bear = self._get('regime.vix_bear_threshold', 35)
+                vix_bull = pget('regime.vix_bull_threshold', 18)
+                vix_caution = pget('regime.vix_caution_threshold', 25)
+                vix_bear = pget('regime.vix_bear_threshold', 35)
         else:
-            vix_bull = self._get('regime.vix_bull_threshold', 18)
-            vix_caution = self._get('regime.vix_caution_threshold', 25)
-            vix_bear = self._get('regime.vix_bear_threshold', 35)
-        vix_boost = self._get('regime.rule_vix_boost', 20)
-        vix_interp = self._get('regime.rule_vix_interp', 10)
-        vix_crash_penalty = self._get('regime.rule_vix_crash_penalty', 25)
+            vix_bull = pget('regime.vix_bull_threshold', 18)
+            vix_caution = pget('regime.vix_caution_threshold', 25)
+            vix_bear = pget('regime.vix_bear_threshold', 35)
+        vix_boost = pget('regime.rule_vix_boost', 20)
+        vix_interp = pget('regime.rule_vix_interp', 10)
+        vix_crash_penalty = pget('regime.rule_vix_crash_penalty', 25)
         if vix < vix_bull:
             score += vix_boost
         elif vix < vix_caution:
@@ -408,17 +413,17 @@ class RegimeDetector:
                 vkospi_mid = np.percentile(vkospi_clean, 85)
                 vkospi_high = np.percentile(vkospi_clean, 95)
             else:
-                vkospi_low = self._get('regime.vol_bull_threshold', 12)
-                vkospi_mid = self._get('regime.vol_caution_threshold', 20)
-                vkospi_high = self._get('regime.vol_bear_threshold', 30)
+                vkospi_low = pget('regime.vol_bull_threshold', 12)
+                vkospi_mid = pget('regime.vol_caution_threshold', 20)
+                vkospi_high = pget('regime.vol_bear_threshold', 30)
         else:
-            vkospi_low = self._get('regime.vol_bull_threshold', 12)
-            vkospi_mid = self._get('regime.vol_caution_threshold', 20)
-            vkospi_high = self._get('regime.vol_bear_threshold', 30)
-        vk_boost = self._get('regime.rule_vkospi_boost', 15)
-        vk_mild = self._get('regime.rule_vkospi_mild', 5)
-        vk_stress = self._get('regime.rule_vkospi_stress', 10)
-        vk_crash = self._get('regime.rule_vkospi_crash', 20)
+            vkospi_low = pget('regime.vol_bull_threshold', 12)
+            vkospi_mid = pget('regime.vol_caution_threshold', 20)
+            vkospi_high = pget('regime.vol_bear_threshold', 30)
+        vk_boost = pget('regime.rule_vkospi_boost', 15)
+        vk_mild = pget('regime.rule_vkospi_mild', 5)
+        vk_stress = pget('regime.rule_vkospi_stress', 10)
+        vk_crash = pget('regime.rule_vkospi_crash', 20)
         if vkospi < vkospi_low:
             score += vk_boost
         elif vkospi < vkospi_mid:
@@ -429,20 +434,20 @@ class RegimeDetector:
             score -= vk_crash
         fx_change = (usdkrw - usdkrw_prev) / usdkrw_prev * 100 if usdkrw_prev > 0 else 0
         fx_risk_threshold = self._get('regime.rule_fx_risk_pct', 1.0)
-        fx_risk_penalty = self._get('regime.rule_fx_risk_penalty', 8)
-        fx_safe_threshold = self._get('regime.rule_fx_safe_pct', -0.5)
-        fx_safe_boost = self._get('regime.rule_fx_safe_boost', 5)
+        fx_risk_penalty = pget('regime.rule_fx_risk_penalty', 8)
+        fx_safe_threshold = pget('regime.rule_fx_safe_pct', -0.5)
+        fx_safe_boost = pget('regime.rule_fx_safe_boost', 5)
         if fx_change > fx_risk_threshold:
             score -= fx_risk_penalty
         elif fx_change < fx_safe_threshold:
             score += fx_safe_boost
         ois = parse_metric(signal, 'ois', 50.0)
-        ois_bull = self._get('regime.rule_ois_bull', 70)
-        ois_neutral = self._get('regime.rule_ois_neutral', 50)
-        ois_bear = self._get('regime.rule_ois_bear', 30)
-        ois_bull_boost = self._get('regime.rule_ois_bull_boost', 10)
-        ois_neutral_boost = self._get('regime.rule_ois_neutral_boost', 3)
-        ois_bear_penalty = self._get('regime.rule_ois_bear_penalty', 10)
+        ois_bull = pget('regime.rule_ois_bull', 70)
+        ois_neutral = pget('regime.rule_ois_neutral', 50)
+        ois_bear = pget('regime.rule_ois_bear', 30)
+        ois_bull_boost = pget('regime.rule_ois_bull_boost', 10)
+        ois_neutral_boost = pget('regime.rule_ois_neutral_boost', 3)
+        ois_bear_penalty = pget('regime.rule_ois_bear_penalty', 10)
         if ois >= ois_bull:
             score += ois_bull_boost
         elif ois >= ois_neutral:
@@ -450,9 +455,9 @@ class RegimeDetector:
         elif ois <= ois_bear:
             score -= ois_bear_penalty
         pcr = parse_metric(signal, 'options_pcr', 1.0)
-        pcr_risk_penalty = self._get('regime.pcr_risk_penalty', 15)
-        pcr_extreme_th = self._get('regime.pcr_extreme_threshold', 1.5)
-        vix_assurance_th = self._get('regime.pcr_vix_assurance', 25.0)
+        pcr_risk_penalty = pget('regime.pcr_risk_penalty', 15)
+        pcr_extreme_th = pget('regime.pcr_extreme_threshold', 1.5)
+        vix_assurance_th = pget('regime.pcr_vix_assurance', 25.0)
         if hasattr(self, '_adaptive_engine') and self._adaptive_engine:
             dyn_th = self._adaptive_engine.get_last()
             if dyn_th:
@@ -526,9 +531,9 @@ class RegimeDetector:
                 crash_type = 'recession'
                 logger.info(f"  [RegimeDetector] 펀더멘털 악화 감지 (export={export_yoy:.1f}%, cycle={macro_cycle}) → crash_type = recession")
         score = max(0, min(100, score))
-        bull_threshold = self._get('regime.rule_score_bull', 65)
-        caution_threshold = self._get('regime.rule_score_caution', 45)
-        bear_threshold = self._get('regime.rule_score_bear', 25)
+        bull_threshold = pget('regime.rule_score_bull', 65)
+        caution_threshold = pget('regime.rule_score_caution', 45)
+        bear_threshold = pget('regime.rule_score_bear', 25)
         if score >= bull_threshold:
             regime = 'bull'
         elif score >= caution_threshold:
@@ -582,7 +587,7 @@ class RegimeDetector:
         divergence_state = max(states, key=states.get) if total_prob > 0 else 'goldilocks'
         logger.info(f"  [RegimeDetector] Probabilistic Inference: FlashCrash={prob_flash_crash:.2f}, Recession={prob_recession:.2f}, Stress={cross_asset_stress:.2f} → state={divergence_state}")
         confidence = abs(score - 50) / 50
-        conf_floor = self._get('regime.rule_confidence_floor', 0.3)
+        conf_floor = pget('regime.rule_confidence_floor', 0.3)
         confidence = max(conf_floor, min(1.0, confidence))
         return {'regime': regime, 'score': round(score, 1), 'confidence': confidence, 'crash_type': crash_type, 'divergence_state': divergence_state, 'prob_flash_crash': prob_flash_crash, 'prob_recession': prob_recession, 'prob_liquidity_rally': prob_liquidity_rally, 'prob_recovery': prob_recovery, 'cross_asset_stress': cross_asset_stress}
 
@@ -648,7 +653,7 @@ class RegimeDetector:
         Returns:
             {'type': str, 'strength': float, 'window': int}
         """
-        window = self._get('regime.transition_window', 10)
+        window = pget('regime.transition_window', 10)
         if len(states) < window:
             return {'type': 'none', 'strength': 0}
         recent = states[-window:]
@@ -661,7 +666,7 @@ class RegimeDetector:
         late_avg = sum((regime_score.get(r, 2) for r in late)) / max(len(late), 1)
         delta = late_avg - early_avg
         strength = round(abs(delta) / 3.0, 3)
-        v_threshold = self._get('regime.v_signal_threshold', 0.3)
+        v_threshold = pget('regime.v_signal_threshold', 0.3)
         if delta > v_threshold:
             return {'type': 'v_recovery', 'strength': strength, 'delta': round(delta, 3), 'window': window, 'early_regime': early[-1] if early else 'unknown', 'late_regime': late[-1] if late else 'unknown'}
         elif delta < -v_threshold:
@@ -671,9 +676,9 @@ class RegimeDetector:
     def _ensemble(self, rule: Dict, hmm: Dict, gi: Dict=None) -> tuple:
         """Rule + HMM + G/I Matrix 앙상블 (가중치 DynamicConfig)."""
         regime_scores = {r: 0.0 for r in self.REGIMES}
-        rule_weight = self._get('regime.rule_weight', 0.5)
-        hmm_weight = self._get('regime.hmm_weight', 0.35)
-        gi_weight = self._get('regime.gi_weight', 0.15)
+        rule_weight = pget('regime.rule_weight', 0.55)
+        hmm_weight = pget('regime.hmm_weight', 0.45)
+        gi_weight = pget('regime.gi_weight', 0.15)
         regime_scores[rule['regime']] += rule_weight * rule['confidence']
         hmm_regime = hmm['regime']
         if hmm_regime in regime_scores:
@@ -707,10 +712,10 @@ class RegimeDetector:
         결측 시 VIX, USDKRW, US10Y로 Fallback.
         """
         import numpy as np
-        vixy_w = self._get('regime.mri_vixy_weight', 0.5)
-        uup_w = self._get('regime.mri_uup_weight', 0.3)
-        ief_w = self._get('regime.mri_ief_weight', 0.2)
-        window = int(self._get('regime.mri_ma_window', 30))
+        vixy_w = pget('regime.mri_vixy_weight', 0.5)
+        uup_w = pget('regime.mri_uup_weight', 0.3)
+        ief_w = pget('regime.mri_ief_weight', 0.2)
+        window = int(pget('regime.mri_ma_window', 30))
 
         def _get_zscore(ticker, fallback_val, fallback_base, fallback_std):
             hist = signal_cache.get(f"{ticker}_history", [])
@@ -727,8 +732,8 @@ class RegimeDetector:
         usdkrw_base = self._get('regime.mri_usdkrw_baseline', 1300.0)
         usdkrw_std = self._get('regime.mri_usdkrw_std', 50.0)
         uup_z = _get_zscore('UUP', 'usdkrw', usdkrw_base, usdkrw_std)
-        us10y_base = self._get('regime.mri_us10y_baseline', 4.0)
-        us10y_std = self._get('regime.mri_us10y_std', 0.5)
+        us10y_base = pget('regime.mri_us10y_baseline', 4.0)
+        us10y_std = pget('regime.mri_us10y_std', 0.5)
         ief_hist = signal_cache.get('IEF_history', [])
         if len(ief_hist) >= window:
             arr = np.array([float(x) for x in ief_hist[-window:]])
@@ -745,8 +750,8 @@ class RegimeDetector:
         df = e^{-k * max(0, MRI)} clamp [0.001, 1.0]
         """
         import math
-        k = self._get('regime.mri_decay_k', 0.8)
-        min_df = self._get('defense.min_factor', 0.001)
+        k = pget('regime.mri_decay_k', 0.8)
+        min_df = pget('defense.min_factor', 0.001)
         val = math.exp(-k * max(0.0, mri))
         return float(max(min_df, min(1.0, val)))
 
@@ -857,9 +862,9 @@ class RegimeDetector:
             rule_norm = max(0.0, min(1.0, rule_score / 100.0))
             p_crash_rule = max(0.0, 1.0 - 2.0 * rule_norm)
             p_bear_rule = max(0.0, 1.0 - 2.0 * rule_norm) * 0.5 if rule_norm < 0.5 else 0.0
-            w_radar_raw = float(self._get('regime.smart_w_radar', 0.4))
-            w_hmm_raw = float(self._get('regime.smart_w_hmm', 0.4))
-            w_rule_raw = float(self._get('regime.smart_w_rule', 0.2))
+            w_radar_raw = float(pget('regime.smart_w_radar', 0.4))
+            w_hmm_raw = float(pget('regime.smart_w_hmm', 0.4))
+            w_rule_raw = float(pget('regime.smart_w_rule', 0.2))
             w_sum = w_radar_raw + w_hmm_raw + w_rule_raw
             if w_sum > 0:
                 w_radar = w_radar_raw / w_sum

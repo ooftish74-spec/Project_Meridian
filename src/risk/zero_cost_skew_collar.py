@@ -10,6 +10,11 @@ Zero-Cost Collar 포지션 파라미터를 자동 산출하는 정밀 퀀트 엔
   Net Premium = Put_Premium(K_put) - Call_Premium(K_call) == 0.0
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 from typing import Dict, Any, List, Optional, Tuple
@@ -46,8 +51,8 @@ class ZeroCostSkewCollar:
             iv_call = float(option_chain['call_iv'])
         else:
             # VKOSPI 기반 스큐 프록시 연산 (하락 공포 시 Put IV 승수 상승)
-            skew_mult = float(cfg.get('skew_collar.default_skew_mult', 1.25))
-            call_mult = float(cfg.get('skew_collar.default_call_mult', 0.85))
+            skew_mult = float(pget('skew_collar.default_skew_mult', 1.25))
+            call_mult = float(pget('skew_collar.default_call_mult', 0.85))
             iv_put = (vkospi / 100.0) * skew_mult
             iv_call = (vkospi / 100.0) * call_mult
 

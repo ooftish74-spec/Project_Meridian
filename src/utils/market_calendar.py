@@ -25,7 +25,8 @@ KRX 시장 캘린더 유틸리티
 """
 
 import logging
-from datetime import datetime, timedelta, time
+import threading
+from datetime import date, datetime, timedelta, time
 from typing import Optional, Dict, Tuple
 
 logger = logging.getLogger(__name__)
@@ -34,10 +35,15 @@ logger = logging.getLogger(__name__)
 class MarketCalendar:
     """KRX 한국거래소 시장 캘린더.
     
-    공휴일 판단 우선순위:
-      1. holidays 라이브러리 (대체공휴일/선거일 자동 계산)
-      2. 하드코딩 fallback (라이브러리 미설치 시)
-      3. config/kr_holidays.txt (수동 추가)
+    휴장일 판단 (연도 무관, 연도별 계산 후 캐시):
+      1. holidays 라이브러리 (대체공휴일/선거일/음력 공휴일 자동 계산)
+         - 라이브러리 미설치 시: 하드코딩 fallback(_FALLBACK_HOLIDAYS) + 양력 고정 공휴일 (fail-closed 로그)
+      2. 법정 공휴일 보강 (2026~): 노동절(5/1)·제헌절(7/17) + 대체휴일
+         - 라이브러리 구버전(예: 0.90)에 없는 경우에만 추가 → 로컬/운영 라이브러리 버전 차이 제거
+      3. KRX 고유 휴장일 (규칙 기반):
+         - 근로자의 날/노동절 5/1 (매년)
+         - 연말 휴장일: 그 해의 마지막 영업일 (12/31이 주말이면 직전 평일 — 예: 2023-12-29)
+      4. config/kr_holidays.txt (수동 추가: 임시공휴일 등)
     
     시장 상태:
       - closed: 주말/공휴일
@@ -50,20 +56,40 @@ class MarketCalendar:
     MARKET_OPEN = time(9, 0)    # 09:00
     MARKET_CLOSE = time(15, 30)  # 15:30
     
-    # holidays 라이브러리 미설치 시 fallback (최소한)
+    # holidays 라이브러리 미설치 시 fallback (음력 공휴일은 라이브러리 없이 계산 불가 → 연도별 명시)
     _FALLBACK_HOLIDAYS = {
         '20260101', '20260216', '20260217', '20260218',
         '20260301', '20260302', '20260501',  # ★ 근로자의 날
         '20260505', '20260524', '20260525',
         '20260603',  # 지방선거일
-        '20260606', '20260815', '20260817',
+        '20260606', '20260717',  # 제헌절 (2026~ 공휴일)
+        '20260815', '20260817',
         '20260924', '20260925', '20260926',  # 추석 (수정됨)
         '20261003', '20261005', '20261009', '20261225',
         '20261231',  # 연말 임시휴장 (KRX 관례)
+        # 2027 (holidays 0.103 기준 + KRX 연말 휴장)
+        '20270101', '20270206', '20270207', '20270208', '20270209',  # 설날 + 대체
+        '20270301', '20270501', '20270503',  # 노동절 + 대체
+        '20270505', '20270513',  # 어린이날, 부처님오신날
+        '20270606', '20270717', '20270719',  # 현충일, 제헌절 + 대체
+        '20270815', '20270816',
+        '20270914', '20270915', '20270916',  # 추석
+        '20271003', '20271004', '20271009', '20271011',
+        '20271225', '20271227',
+        '20271231',  # 연말 휴장
     }
+    # fallback 테이블이 음력 공휴일까지 커버하는 연도
+    _FALLBACK_YEARS = frozenset({2026, 2027})
+    # 라이브러리 미설치 + 테이블 미커버 연도에 최소한으로 적용할 양력 고정 공휴일 (MM-DD)
+    _SOLAR_FIXED = (
+        (1, 1, '신정'), (3, 1, '삼일절'), (5, 5, '어린이날'), (6, 6, '현충일'),
+        (8, 15, '광복절'), (10, 3, '개천절'), (10, 9, '한글날'), (12, 25, '기독탄신일'),
+    )
+    # 2026년부터 관공서 공휴일 (대체공휴일 적용) — holidays 0.103에는 있으나 구버전에는 없음
+    _STATUTORY_FROM_2026 = ((5, 1, '노동절'), (7, 17, '제헌절'))
 
-    # ★ KRX 고유 휴장일 — 공휴일은 아니지만 KRX가 휴장하는 날
-    # holidays 라이브러리에 없으므로 반드시 별도 관리
+    # ★ KRX 고유 휴장일 — 레거시 정적 목록 (하위호환 유지).
+    #   실제 판정은 _closures_for_year()가 규칙(5/1, 연말 마지막 영업일)으로 매년 계산한다.
     _KRX_ONLY_HOLIDAYS = {
         '20240501', '20250501', '20260501', '20270501',  # 근로자의 날 (매년 5/1)
         '20261231',  # 연말 임시휴장
@@ -72,23 +98,28 @@ class MarketCalendar:
     def __init__(self):
         """초기화. holidays 라이브러리 + 수동 공휴일 로드 (오프라인 전용)."""
         self._holidays_lib = None
+        self._holidays_mod = None
         self._extra_holidays = set()
+        self._year_cache: Dict[int, Dict[str, str]] = {}
+        self._cache_lock = threading.Lock()
         self._init_holidays_lib()
         self._load_extra_holidays()
     
     def _init_holidays_lib(self):
         """holidays 라이브러리로 공휴일 자동 계산.
         
-        대체공휴일, 선거일, 음력 공휴일 모두 포함.
+        대체공휴일, 선거일, 음력 공휴일 모두 포함. 연도는 조회 시점에 연도별로 계산 (하드코딩 범위 없음).
         """
         try:
             import holidays
-            # 2024~2027년 범위 (백테스트 + 향후 2년)
+            self._holidays_mod = holidays
+            # 하위호환: 기존 속성 유지 (lazy expand — 조회 연도 자동 확장)
             self._holidays_lib = holidays.SouthKorea(years=range(2024, 2028))
             logger.debug(f"holidays 라이브러리: {len(self._holidays_lib)}일 로드")
         except ImportError as e:
             logger.error("holidays 라이브러리 미설치 → 하드코딩 fallback 사용", exc_info=True)
             self._holidays_lib = None
+            self._holidays_mod = None
     
     def _load_extra_holidays(self):
         """config/kr_holidays.txt에서 추가 공휴일 로드 (수동 오버라이드)."""
@@ -102,27 +133,102 @@ class MarketCalendar:
                     self._extra_holidays.add(line)
             if self._extra_holidays:
                 logger.debug(f"수동 공휴일 {len(self._extra_holidays)}일 로드")
+
+    # ── 연도별 휴장일 계산 (캐시) ─────────────────────────────────
+    @staticmethod
+    def _next_substitute_day(d: date, closures: Dict[str, str]) -> date:
+        """대체공휴일: d 다음날부터 주말/휴일이 아닌 첫 평일."""
+        cur = d + timedelta(days=1)
+        while cur.weekday() >= 5 or cur.strftime('%Y%m%d') in closures:
+            cur += timedelta(days=1)
+        return cur
+
+    def _lib_holidays_for_year(self, year: int) -> Optional[Dict[str, str]]:
+        """holidays 라이브러리 기준 해당 연도 공휴일. 실패 시 None (→ fallback)."""
+        if self._holidays_mod is None:
+            return None
+        try:
+            lib = self._holidays_mod.SouthKorea(years=year)
+            return {d.strftime('%Y%m%d'): str(name) for d, name in lib.items() if d.year == year}
+        except Exception:
+            logger.error(f"holidays.SouthKorea({year}) 계산 실패 → fallback", exc_info=True)
+            return None
+
+    def _compute_closures(self, year: int) -> Dict[str, str]:
+        closures: Dict[str, str] = {}
+        prefix = str(year)
+
+        # 1) 공휴일 (라이브러리 → fallback)
+        lib = self._lib_holidays_for_year(year)
+        if lib is not None:
+            closures.update(lib)
+        else:
+            for ds in self._FALLBACK_HOLIDAYS:
+                if ds.startswith(prefix) and not ds.endswith('1231'):  # 연말 휴장은 규칙(4)으로 계산
+                    closures[ds] = '공휴일 (fallback)'
+            if year not in self._FALLBACK_YEARS:
+                logger.critical(
+                    f"[KRX 캘린더] holidays 라이브러리 없음 + {year}년 fallback 테이블 없음 → "
+                    f"양력 고정 공휴일만 적용 (설/추석/부처님오신날 미반영 — 수동 확인 필요)")
+                for m, dd, name in self._SOLAR_FIXED:
+                    closures.setdefault(date(year, m, dd).strftime('%Y%m%d'), name)
+
+        # 2) 법정 공휴일 보강 (2026~): 라이브러리가 기본일을 모르는 경우에만 추가 (대체휴일 포함)
+        if year >= 2026:
+            for m, dd, name in self._STATUTORY_FROM_2026:
+                base = date(year, m, dd)
+                base_ds = base.strftime('%Y%m%d')
+                if base_ds in closures:
+                    continue  # 라이브러리(또는 fallback)가 이미 처리 — 대체휴일도 라이브러리 책임
+                closures[base_ds] = name
+                if base.weekday() >= 5:
+                    sub = self._next_substitute_day(base, closures)
+                    closures.setdefault(sub.strftime('%Y%m%d'), f'{name} 대체 휴일')
+
+        # 3) KRX 고유: 근로자의 날 5/1 (매년, 주말이면 대체 없음 — 2026~는 위 법정 보강이 처리)
+        closures.setdefault(date(year, 5, 1).strftime('%Y%m%d'), '근로자의 날 (KRX 휴장)')
+
+        # 4) 연말 휴장일: 그 해 마지막 영업일 (공휴일 반영 후, 레거시/수동 목록 추가 전에 계산 —
+        #    정적 목록의 12/31이 휴장일을 12/30으로 밀어내지 않도록)
+        ye = date(year, 12, 31)
+        while ye.weekday() >= 5 or ye.strftime('%Y%m%d') in closures:
+            ye -= timedelta(days=1)
+        closures[ye.strftime('%Y%m%d')] = '연말 휴장일 (KRX)'
+
+        # 5) 레거시 정적 목록 / 수동 오버라이드 (추가만, fail-closed)
+        for ds in self._KRX_ONLY_HOLIDAYS:
+            if ds.startswith(prefix):
+                closures.setdefault(ds, 'KRX 휴장일')
+        for ds in self._extra_holidays:
+            if ds.startswith(prefix):
+                closures.setdefault(ds, '수동 지정 휴장일 (config/kr_holidays.txt)')
+        return closures
+
+    def _closures_for_year(self, year: int) -> Dict[str, str]:
+        """해당 연도 KRX 휴장일 {YYYYMMDD: 이름} (주말 제외, 캐시)."""
+        cached = self._year_cache.get(year)
+        if cached is not None:
+            return cached
+        with self._cache_lock:
+            cached = self._year_cache.get(year)
+            if cached is None:
+                cached = self._compute_closures(year)
+                self._year_cache[year] = cached
+            return cached
     
     @property
     def all_holidays(self) -> set:
-        """전체 공휴일 세트 (holidays 라이브러리 + KRX 고유 + 수동)."""
-        result = set(self._extra_holidays)
-        # KRX 고유 휴장일 (근로자의 날 등) — 항상 포함
-        result |= self._KRX_ONLY_HOLIDAYS
-        if self._holidays_lib is not None:
-            for d in self._holidays_lib:
-                result.add(d.strftime('%Y%m%d'))
-        else:
-            result |= self._FALLBACK_HOLIDAYS
+        """전체 휴장일 세트 (하위호환). 2024~(올해+1) + 이미 조회된 연도."""
+        years = set(range(2024, datetime.now().year + 2)) | set(self._year_cache)
+        result = set()
+        for y in sorted(years):
+            result |= set(self._closures_for_year(y))
         return result
     
     def get_holiday_name(self, date_str: Optional[str] = None) -> Optional[str]:
-        """공휴일 이름 반환 (거래일이면 None)."""
+        """공휴일/휴장일 이름 반환 (거래일이면 None)."""
         d = self._parse_date(date_str)
-        if self._holidays_lib is not None:
-            name = self._holidays_lib.get(d.date() if hasattr(d, 'date') else d)
-            return name
-        return None
+        return self._closures_for_year(d.year).get(d.strftime('%Y%m%d'))
     
     def is_holiday(self, date_str: Optional[str] = None) -> bool:
         """공휴일 여부 (주말 제외, 순수 공휴일만).
@@ -131,7 +237,7 @@ class MarketCalendar:
             date_str: 'YYYYMMDD' 또는 'YYYY-MM-DD' 형식. None이면 오늘.
         """
         d = self._parse_date(date_str)
-        return d.strftime('%Y%m%d') in self.all_holidays
+        return d.strftime('%Y%m%d') in self._closures_for_year(d.year)
     
     def is_weekend(self, date_str: Optional[str] = None) -> bool:
         """주말 여부."""
@@ -156,7 +262,7 @@ class MarketCalendar:
             return False
         
         # 2. 공휴일 및 KRX 고유 휴장일
-        if ds in self.all_holidays:
+        if ds in self._closures_for_year(d.year):
             return False
         
         return True
@@ -182,7 +288,7 @@ class MarketCalendar:
         current_time = now.time()
         
         is_weekend = now.weekday() >= 5
-        is_holiday = date_str in self.all_holidays
+        is_holiday = date_str in self._closures_for_year(now.year)
         is_td = not is_weekend and not is_holiday
         
         if is_weekend:
@@ -365,26 +471,141 @@ def get_data_query_date(fmt: str = '%Y%m%d') -> str:
 # US Market Calendar — NYSE/NASDAQ 개장일 + KST→EST 변환
 # ══════════════════════════════════════════════════════════════
 
-# 2026 NYSE/NASDAQ 휴장일
-US_HOLIDAYS_2026 = {
-    '20260101',  # New Year's Day
-    '20260119',  # Martin Luther King Jr. Day (3rd Mon Jan)
-    '20260216',  # Presidents' Day (3rd Mon Feb)
-    '20260403',  # Good Friday
-    '20260525',  # Memorial Day (last Mon May)
-    '20260619',  # Juneteenth
-    '20260703',  # Independence Day observed (Fri, 7/4=Sat)
-    '20260907',  # Labor Day (1st Mon Sep)
-    '20261126',  # Thanksgiving (4th Thu Nov)
-    '20261225',  # Christmas
+# ── NYSE 휴장일/조기폐장일: 연도 무관 계산 (연도별 캐시) ─────────────────
+#   1순위: holidays.NYSE (특별 휴장 — 예: 2025-01-09 Carter 국장 — 포함)
+#   2순위: 내부 규칙 엔진 (_nyse_rule_holidays) — holidays import/계산 실패 시
+#   조기폐장(13:00 ET) 규칙: 7/3(평일·비휴장), 추수감사절 다음날, 12/24(평일·비휴장).
+#     예) 2026-07-03은 독립기념일 대체 '휴장'(반일 아님), 2026-07-02는 정상 거래일,
+#         2027-12-24는 성탄절 대체 '휴장'(반일 아님).
+
+# holidays 라이브러리 없이도 재현해야 하는 NYSE 특별 휴장 (국장 등, 비정기)
+_NYSE_SPECIAL_CLOSURES: Dict[str, str] = {
+    '20181205': 'National Day of Mourning for former President George H. W. Bush',
+    '20250109': 'National Day of Mourning for former President Jimmy Carter',
 }
 
-# 2026 반일 거래 (13:00 EST 조기 마감)
-US_HALF_DAYS_2026 = {
-    '20260702',  # Independence Day eve
-    '20261127',  # Black Friday
-    '20261224',  # Christmas Eve
-}
+_US_CAL_LOCK = threading.Lock()
+_US_HOLIDAY_CACHE: Dict[int, Dict[str, str]] = {}
+_US_HALF_DAY_CACHE: Dict[int, Dict[str, str]] = {}
+
+
+def _easter_sunday(year: int) -> date:
+    """그레고리력 부활절 (Anonymous Gregorian / Meeus-Jones-Butcher computus)."""
+    a = year % 19
+    b, c = divmod(year, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """month월의 n번째 weekday (0=월)."""
+    first = date(year, month, 1)
+    return first + timedelta(days=(weekday - first.weekday()) % 7 + 7 * (n - 1))
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> date:
+    nxt = date(year + (month == 12), month % 12 + 1, 1)
+    last = nxt - timedelta(days=1)
+    return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+
+def _observed_sat_fri_sun_mon(d: date) -> date:
+    """연방 공휴일 대체 규칙: 토→금, 일→월."""
+    if d.weekday() == 5:
+        return d - timedelta(days=1)
+    if d.weekday() == 6:
+        return d + timedelta(days=1)
+    return d
+
+
+def _nyse_rule_holidays(year: int) -> Dict[str, str]:
+    """holidays 라이브러리 없이 NYSE 휴장일 계산 (NYSE Rule 7.2 기준)."""
+    out: Dict[str, date] = {}
+    # New Year's Day: 일→월 대체, 토요일이면 대체 없음 (NYSE는 전년 12/31 휴장하지 않음)
+    ny = date(year, 1, 1)
+    if ny.weekday() == 6:
+        out["New Year's Day (observed)"] = ny + timedelta(days=1)
+    elif ny.weekday() != 5:
+        out["New Year's Day"] = ny
+    out['Martin Luther King Jr. Day'] = _nth_weekday(year, 1, 0, 3)
+    out["Washington's Birthday"] = _nth_weekday(year, 2, 0, 3)
+    out['Good Friday'] = _easter_sunday(year) - timedelta(days=2)
+    out['Memorial Day'] = _last_weekday(year, 5, 0)
+    if year >= 2022:
+        out['Juneteenth National Independence Day'] = _observed_sat_fri_sun_mon(date(year, 6, 19))
+    out['Independence Day'] = _observed_sat_fri_sun_mon(date(year, 7, 4))
+    out['Labor Day'] = _nth_weekday(year, 9, 0, 1)
+    out['Thanksgiving Day'] = _nth_weekday(year, 11, 3, 4)
+    out['Christmas Day'] = _observed_sat_fri_sun_mon(date(year, 12, 25))
+    res = {d.strftime('%Y%m%d'): name for name, d in out.items() if d.year == year}
+    for ds, name in _NYSE_SPECIAL_CLOSURES.items():
+        if ds.startswith(str(year)):
+            res[ds] = name
+    return res
+
+
+def _nyse_lib_holidays(year: int) -> Optional[Dict[str, str]]:
+    """holidays.NYSE 기준 휴장일. import/계산 실패 또는 빈 결과면 None."""
+    try:
+        import holidays as _hol
+        lib = _hol.NYSE(years=[year - 1, year, year + 1])
+        res = {d.strftime('%Y%m%d'): str(n) for d, n in lib.items() if d.year == year}
+        return res or None
+    except ImportError:
+        logger.warning("holidays 라이브러리 미설치 → NYSE 내부 규칙 엔진 사용")
+        return None
+    except Exception:
+        logger.error(f"holidays.NYSE({year}) 계산 실패 → NYSE 내부 규칙 엔진 사용", exc_info=True)
+        return None
+
+
+def get_us_holidays(year: int) -> Dict[str, str]:
+    """NYSE/NASDAQ 휴장일 {YYYYMMDD: 이름} (주말 제외, 연도별 캐시)."""
+    year = int(year)
+    cached = _US_HOLIDAY_CACHE.get(year)
+    if cached is not None:
+        return cached
+    with _US_CAL_LOCK:
+        cached = _US_HOLIDAY_CACHE.get(year)
+        if cached is None:
+            cached = _nyse_lib_holidays(year) or _nyse_rule_holidays(year)
+            _US_HOLIDAY_CACHE[year] = cached
+        return cached
+
+
+def get_us_half_days(year: int) -> Dict[str, str]:
+    """NYSE 조기폐장일(13:00 ET) {YYYYMMDD: 이름} (연도별 캐시)."""
+    year = int(year)
+    cached = _US_HALF_DAY_CACHE.get(year)
+    if cached is not None:
+        return cached
+    hol = get_us_holidays(year)
+    out: Dict[str, str] = {}
+    candidates = (
+        (date(year, 7, 3), 'Independence Day eve (early close 13:00 ET)'),
+        (_nth_weekday(year, 11, 3, 4) + timedelta(days=1), 'Day after Thanksgiving (early close 13:00 ET)'),
+        (date(year, 12, 24), 'Christmas Eve (early close 13:00 ET)'),
+    )
+    for d, name in candidates:
+        ds = d.strftime('%Y%m%d')
+        if d.weekday() < 5 and ds not in hol:
+            out[ds] = name
+    with _US_CAL_LOCK:
+        _US_HALF_DAY_CACHE.setdefault(year, out)
+        return _US_HALF_DAY_CACHE[year]
+
+
+# 하위호환: 기존 모듈 레벨 상수 (이제 계산값). 신규 코드는 get_us_holidays(year)/get_us_half_days(year) 사용.
+US_HOLIDAYS_2026 = set(get_us_holidays(2026))
+US_HALF_DAYS_2026 = set(get_us_half_days(2026))
 
 
 def _kst_to_us_trading_date(kst_now: Optional[datetime] = None) -> datetime:
@@ -426,18 +647,29 @@ def is_us_trading_day(date_str: Optional[str] = None) -> bool:
     d = datetime.strptime(date_str, '%Y%m%d')
     if d.weekday() >= 5:
         return False
-    # 공휴일 체크
-    if date_str in US_HOLIDAYS_2026:
+    # 공휴일 체크 (연도 무관 계산 캘린더)
+    if date_str in get_us_holidays(d.year):
         return False
     return True
 
 
+def is_us_holiday(date_str: Optional[str] = None) -> bool:
+    """NYSE/NASDAQ 공휴일(휴장일) 여부 (주말 제외)."""
+    if date_str is None:
+        date_str = _kst_to_us_trading_date().strftime('%Y%m%d')
+    date_str = date_str.replace('-', '')
+    d = datetime.strptime(date_str, '%Y%m%d')
+    return date_str in get_us_holidays(d.year)
+
+
 def is_us_half_day(date_str: Optional[str] = None) -> bool:
-    """미국 반일 거래일 여부 (13:00 EST 조기 마감)."""
+    """미국 반일 거래일 여부 (13:00 ET 조기 마감)."""
     if date_str is None:
         us_dt = _kst_to_us_trading_date()
         date_str = us_dt.strftime('%Y%m%d')
-    return date_str.replace('-', '') in US_HALF_DAYS_2026
+    date_str = date_str.replace('-', '')
+    d = datetime.strptime(date_str, '%Y%m%d')
+    return date_str in get_us_half_days(d.year)
 
 
 def get_us_session_state(now: Optional[datetime] = None) -> Tuple[bool, str]:
@@ -589,8 +821,8 @@ def get_full_market_status() -> Dict:
         # 미국
         'us_trading_date': us_dt.strftime('%Y-%m-%d'),
         'us_open': is_us_trading_day(us_date_str),
-        'us_holiday': us_date_str in US_HOLIDAYS_2026,
-        'us_half_day': us_date_str in US_HALF_DAYS_2026,
+        'us_holiday': is_us_holiday(us_date_str),
+        'us_half_day': is_us_half_day(us_date_str),
     }
 
 

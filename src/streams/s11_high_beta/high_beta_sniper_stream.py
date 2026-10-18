@@ -11,6 +11,11 @@ S11 HighBeta Sniper Stream — 월가 3대 거장 벤치마크 직교 계층구�
   - 09:05 KST 아침에는 100% 자금을 S0 KOFR 파킹에 배정하여 무위험 이자를 수확
   - 09:15 KST S11 수급 신호 터질 시 KOFR를 1초 만에 부분 매도하여 S11 롱/숏 저격으로 현금 동적 스왑!
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Any, Dict, List
@@ -147,19 +152,19 @@ class S11HighBetaSniperStream(BaseStream):
         skew_boost_mult = float(_cfg.get('offensive.skew_boost_mult', 2.0)) if call_skew_z >= skew_boost_threshold else 1.0
 
         # [Offensive Strategy 1] Pyramiding Velocity Multiplier
-        pyramid_rate = float(_cfg.get('execution.pyramid_rate', 0.30))
+        pyramid_rate = float(pget('execution.pyramid_rate', 0.30))
         pyramid_mult = 1.0 + pyramid_rate
 
         raw_scale = (target_vkospi / vkospi_val) * skew_boost_mult * ofi_mult
-        max_pos_scale = float(_cfg.get('offensive.max_position_scale', 2.50))
+        max_pos_scale = float(pget('offensive.max_position_scale', 2.50))
         position_scale = max(0.20, min(max_pos_scale, raw_scale))
 
         # Base Expected Value (EV): 수급 정밀도(OFI & LeadLag) 연동 동적 기대값
         base_ev = (0.02500 + 0.01000 * min(1.0, abs(lead_lag_score))) * position_scale
 
         # [Red Team Guardrail] 손실 방지 비대칭 손익비 & 극소 손절 수식 (Tight -0.8% SL / 2.0x TP)
-        tight_sl_pct = float(_cfg.get('offensive.tight_sl_pct', -0.008))
-        target_tp_pct = float(_cfg.get('offensive.target_tp_pct', 0.016))
+        tight_sl_pct = float(pget('offensive.tight_sl_pct', -0.008))
+        target_tp_pct = float(pget('offensive.target_tp_pct', 0.016))
         norm_sl_pct = abs(tight_sl_pct) * 100.0 if 0 < abs(tight_sl_pct) < 0.5 else abs(tight_sl_pct)
         norm_tp_pct = target_tp_pct * 100.0 if 0 < target_tp_pct < 0.5 else target_tp_pct
         norm_conf = round(max(0.0, min(1.0, position_scale / max_pos_scale if max_pos_scale > 1.0 and position_scale > 1.0 else position_scale)), 2)
@@ -202,7 +207,7 @@ class S11HighBetaSniperStream(BaseStream):
                 'ticker': vol_etn_ticker,
                 'name': '신한 블룸버그 2X 천연가스/변동성 ETN',
                 'direction': 'long',
-                'size_pct': float(_s11_cfg.get('s11.track_c_size_pct', 0.25)),
+                'size_pct': float(pget('s11.track_c_size_pct', 0.25)),
                 'confidence': 0.90,
                 'expected_value': 0.025,
                 'sl_pct': norm_sl_pct,

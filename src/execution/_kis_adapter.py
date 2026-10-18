@@ -7,6 +7,11 @@ Meridian 전용 상태 파일 + 토큰 캐시를 사용합니다.
 이 모듈은 mock/paper/live 모드에서 KIS OpenAPI와 실제 통신합니다.
 Shadow 모드는 ExecutionEngine이 직접 처리합니다.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import os
 import pandas as pd
 import json
@@ -608,7 +613,7 @@ class KISTraderAdapter:
                 
             # 2. Hard Limits (DynamicConfig)
             _cfg = DynamicConfig()
-            max_qty = _cfg.get('execution.max_order_qty', 100000)
+            max_qty = pget('execution.max_order_qty', 100000)
             max_amount = _cfg.get('execution.max_order_amount_krw', 50000000)
             
             if order.quantity > max_qty:
@@ -616,10 +621,18 @@ class KISTraderAdapter:
                 
             is_us = not str(order.ticker).isdigit()
             fx_rate = self._get_live_fx_rate() if is_us else 1.0
+            _fx_unknown = is_us and not (fx_rate and float(fx_rate) > 0)
+            if _fx_unknown:
+                if order.side.lower() in ('buy', 'long'):
+                    # ★ Wave 1 Track C: 환율 미확보 → 원화 환산 현금 방화벽 계산 불가 → 해외 신규 매수 거부 (fail-closed)
+                    raise ValueError(f"FX_UNKNOWN: USD/KRW 미확보 — 해외 신규 매수 거부 ({order.ticker})")
+                # 매도/청산은 환율과 무관하게 진행 (원화 명목 한도 검사만 생략)
+                logger.warning(f"  ⚠️ [FX Unknown] {order.ticker} {order.side.upper()}: USD/KRW 미확보 → 원화 명목 한도 검사 생략 후 매도 진행")
+                fx_rate = 0.0
             order_price_krw = order.price * fx_rate
             order_val_krw = order.quantity * order_price_krw
 
-            if order_val_krw > max_amount and order.order_type != 'market':
+            if (not _fx_unknown) and order_val_krw > max_amount and order.order_type != 'market':
                 raise ValueError(f"Order amount ₩{order_val_krw:,.0f} exceeds MAX_AMOUNT_KRW (₩{max_amount:,.0f})")
 
             # [Cash-Only Execution Firewall] 100% 현금 전액 주문 강제 락 (미수/신용 차단)
@@ -1197,10 +1210,10 @@ class KISTraderAdapter:
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             _cfg = None
         if timeout_sec is None:
-            timeout_sec = _cfg.get('execution.fill_timeout_sec', 60) if _cfg else 60
+            timeout_sec = pget('execution.fill_timeout_sec', 60) if _cfg else 60
         if fallback is None:
             fallback = _cfg.get('execution.fill_fallback', 'market') if _cfg else 'market'
-        check_interval = _cfg.get('execution.fill_check_interval_sec', 5) if _cfg else 5
+        check_interval = pget('execution.fill_check_interval_sec', 5) if _cfg else 5
         start = time.time()
         is_us = not str(order.ticker).isdigit()
         while time.time() - start < timeout_sec:
@@ -1445,63 +1458,107 @@ class KISTraderAdapter:
     _fx_cache_ts: float = 0.0
 
     def _get_live_fx_rate(self) -> float:
-        """4중 멀티 폴백 원/달러 동적 환율 획득 (KIS OpenAPI t_rate -> Gateway -> Naver Bridge -> Cache)."""
+        """원/달러 환율 (★ Wave 1 Track C: CentralDataGateway.get_usdkrw_rate() 단일 경로).
+
+        우선순위(게이트웨이 SSOT): 실시간 KIS t_rate → Naver → BOK → 직전 실관측(나이 ≤ fx.max_stale_hours)
+        → 확보 실패 시 0.0 (상수 대체 금지). 반환형 float 유지 — 0.0은 '환율 미확보'를 뜻하며
+        호출자는 해외 신규 매수를 거부하고(fail-closed) 매도/청산은 환율과 무관하게 진행해야 한다.
+        (기존: 무기한 stale signal_cache 및 리터럴 1350.0 폴백 → 제거)
+        """
         now_ts = time.time()
         if KISTraderAdapter._fx_cache_val > 1000 and (now_ts - KISTraderAdapter._fx_cache_ts) < 60.0:
             return KISTraderAdapter._fx_cache_val
 
-        # 1. KIS OpenAPI 실시간 고시 환율 (t_rate) 우선 참조
-        try:
-            from src.data_collection.kis_data_collector import KISDataCollector
-            kis_fx = KISDataCollector().get_usdkrw_exchange_rate()
-            if kis_fx and kis_fx > 1000:
-                KISTraderAdapter._fx_cache_val = float(kis_fx)
-                KISTraderAdapter._fx_cache_ts = now_ts
-                return float(kis_fx)
-        except Exception:
-            pass
-
-        # 2. CentralDataGateway 참조
         try:
             from src.data_collection.central_data_gateway import get_central_data_gateway
-            fx_res = get_central_data_gateway().get_macro_indicator('usdkrw')
-            px = float(fx_res.get('price', 0) or 0)
-            if px > 1000:
-                KISTraderAdapter._fx_cache_val = px
+            rate = get_central_data_gateway().get_usdkrw_rate()
+            if rate is not None and float(rate) > 1000:
+                KISTraderAdapter._fx_cache_val = float(rate)
                 KISTraderAdapter._fx_cache_ts = now_ts
-                return px
-        except Exception:
-            pass
+                return float(rate)
+        except Exception as _fx_e:
+            logger.error(f"  ❌ [FX] 게이트웨이 환율 조회 예외: {_fx_e}")
 
-        # 3. Naver Finance FX Bridge 참조
-        try:
-            from src.data_collection.macro_realtime_refresher import MacroRealtimeRefresher
-            naver_fx = MacroRealtimeRefresher._fetch_usdkrw_naver()
-            if naver_fx and naver_fx > 1000:
-                KISTraderAdapter._fx_cache_val = float(naver_fx)
-                KISTraderAdapter._fx_cache_ts = now_ts
-                return float(naver_fx)
-        except Exception:
-            pass
-
-        # 4. Signal Cache 파일 참조
-        try:
-            sc_file = _PROJECT_ROOT / 'results' / 'signal_cache.json'
-            if sc_file.exists():
-                sc_data = json.loads(sc_file.read_text(encoding='utf-8'))
-                cached_fx = float(sc_data.get('USDKRW_RATE', sc_data.get('usdkrw', 0)) or 0)
-                if cached_fx > 1000:
-                    KISTraderAdapter._fx_cache_val = cached_fx
-                    KISTraderAdapter._fx_cache_ts = now_ts
-                    return cached_fx
-        except Exception:
-            pass
-
-        return 1350.0  # Dynamic lookup baseline fallback
+        logger.critical("  🚨 [FX] USD/KRW 미확보 — 리터럴 대체 없이 0.0 반환 (해외 신규 매수 차단, 매도/청산은 진행)")
+        return 0.0
 
     def _get_dynamic_usdkrw_rate(self) -> float:
         """Alias for _get_live_fx_rate() for backward compatibility."""
         return self._get_live_fx_rate()
+
+    _BALANCE_MAX_PAGES_DEFAULT = 20
+
+    def _kis_paged_get(self, url: str, headers: Dict, params: Dict, ctx_suffix: str, timeout: int = 10):
+        """★ Wave 1 Track C (W1_3): KIS 연속조회(페이징) GET.
+
+        - 응답 헤더 tr_cont ∈ {'M','F'} 이면 다음 페이지 존재 → 응답 본문의 ctx_area_fk{N}/nk{N}을
+          요청 파라미터 CTX_AREA_FK{N}/NK{N}에 넣고 요청 헤더 tr_cont='N'으로 재조회.
+          (국내 TTTC8434R: N=100, 해외 TTTS3012R: N=200)
+        - 페이지 상한(execution.balance_max_pages, 기본 20) 초과/중간 페이지 실패/연속키 누락 → complete=False.
+        - 첫 페이지 요청 예외는 그대로 전파(호출자 기존 실패 처리 유지), 이후 페이지 예외는 complete=False.
+
+        Returns:
+            (merged, complete): merged = 첫 페이지 응답 dict 사본 + output1(전 페이지 병합)
+                                + output2(첫 번째 비어있지 않은 페이지 값)
+        """
+        import requests
+        try:
+            from config.dynamic_config import DynamicConfig
+            max_pages = int(DynamicConfig().get('execution.balance_max_pages', self._BALANCE_MAX_PAGES_DEFAULT)
+                            or self._BALANCE_MAX_PAGES_DEFAULT)
+        except Exception:
+            max_pages = self._BALANCE_MAX_PAGES_DEFAULT
+        max_pages = max(1, max_pages)
+        fk_key, nk_key = f'CTX_AREA_FK{ctx_suffix}', f'CTX_AREA_NK{ctx_suffix}'
+        req_headers = dict(headers or {})
+        req_params = dict(params or {})
+        merged: Dict[str, Any] = {}
+        rows: List[Dict] = []
+        for page in range(max_pages):
+            if page == 0:
+                resp = requests.get(url, headers=req_headers, params=req_params, timeout=timeout)
+                data = resp.json()
+                merged = dict(data) if isinstance(data, dict) else {'rt_cd': '1'}
+                if merged.get('rt_cd') != '0':
+                    return merged, False
+            else:
+                time.sleep(0.1)   # 연속조회 간 최소 간격 (초당 거래건수 제한 방어)
+                try:
+                    resp = requests.get(url, headers=req_headers, params=req_params, timeout=timeout)
+                    data = resp.json()
+                except Exception as _pg_e:
+                    logger.critical(f"  🚨 [Paging] {url.rsplit('/', 1)[-1]} {page + 1}페이지 조회 예외 → 불완전 스냅샷: {_pg_e}")
+                    merged['output1'] = rows
+                    return merged, False
+                if not isinstance(data, dict) or data.get('rt_cd') != '0':
+                    _d = data if isinstance(data, dict) else {}
+                    logger.critical(f"  🚨 [Paging] {url.rsplit('/', 1)[-1]} {page + 1}페이지 실패 "
+                                    f"rt_cd={_d.get('rt_cd')} msg={_d.get('msg_cd')}/{_d.get('msg1')} → 불완전 스냅샷")
+                    merged['output1'] = rows
+                    return merged, False
+                if not merged.get('output2') and data.get('output2'):
+                    merged['output2'] = data.get('output2')
+            rows.extend(data.get('output1') or [])
+            _rh = getattr(resp, 'headers', None)
+            try:
+                tr_cont = str((_rh.get('tr_cont', '') if _rh is not None else '') or '').strip().upper()
+            except Exception:
+                tr_cont = ''
+            if tr_cont not in ('M', 'F'):
+                merged['output1'] = rows
+                return merged, True
+            fk = data.get(fk_key.lower(), data.get(fk_key, ''))
+            nk = data.get(nk_key.lower(), data.get(nk_key, ''))
+            if not str(fk or '').strip() and not str(nk or '').strip():
+                logger.critical(f"  🚨 [Paging] {url.rsplit('/', 1)[-1]}: tr_cont={tr_cont} 이나 연속조회 키 누락 → 불완전 스냅샷")
+                merged['output1'] = rows
+                return merged, False
+            req_params[fk_key] = fk
+            req_params[nk_key] = nk
+            req_headers['tr_cont'] = 'N'
+        logger.critical(f"  🚨 [Paging] {url.rsplit('/', 1)[-1]}: 페이지 상한({max_pages}) 초과 → 불완전 스냅샷")
+        merged['output1'] = rows
+        return merged, False
 
     def fetch_live_balance(self) -> bool:
         """[Live Patch] KIS 잔고/예수금 API 실시간 조회 → account.cash & total_equity 갱신.
@@ -1537,12 +1594,14 @@ class KISTraderAdapter:
                 acnt = self.account_no.split('-')
                 params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
                 url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
-                resp = requests.get(url, headers=headers, params=params, timeout=10)
-                data = resp.json()
+                # ★ Wave 1 Track C (W1_3): 연속조회 페이징 (tr_cont M/F + CTX_AREA_FK100/NK100)
+                data, _kr_pages_complete = self._kis_paged_get(url, headers, params, '100')
 
                 # [Red Team Patch] 미수 및 달러 통합증거금 침범 없는 100% 순수 원화 매수가능금액 정밀 조회 (TTTC8908R, OVRS_ICLD_YN='N')
                 ord_psbl_cash = 0.0
-                fx_rate = self._get_live_fx_rate() or 1373.64
+                # ★ Wave 1 Track C: 리터럴 1373.64 폴백 제거 — 미확보 시 0.0 (아래 CTRP6504R 고시환율로 보강 가능)
+                _fx_from_gateway = float(self._get_live_fx_rate() or 0.0)
+                fx_rate = _fx_from_gateway
                 try:
                     headers_psbl = self._get_headers()
                     headers_psbl['tr_id'] = 'TTTC8908R' if self.mode == 'live' else 'VTTC8908R'
@@ -1569,6 +1628,12 @@ class KISTraderAdapter:
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_psbl}", exc_info=True)
                     logger.debug(f"  [Live Patch] inquire-psbl-order 2차 조회 우회: {e_psbl}")
 
+                if data.get('rt_cd') == '0' and not _kr_pages_complete:
+                    # ★ Wave 1 Track C (W1_3): 국내 잔고 연속조회 중간 실패 → 부분 원장으로 positions/NAV 덮어쓰기 금지
+                    self._last_positions_complete = False
+                    self._last_balance_complete = False
+                    logger.critical("  🚨 [Live Balance] 국내 잔고 페이징 불완전 — positions/NAV 갱신 보류 (기존 값 유지)")
+                    return False
                 if data.get('rt_cd') == '0':
                     output2 = data.get('output2', [{}])
                     if output2:
@@ -1587,10 +1652,13 @@ class KISTraderAdapter:
                         tot_evlu = kr_tot_evlu
 
                         # 🎯 [SSoT Root Fix] 기존 인메모리 포지션 전면 초기화 (유령/레거시 포지션 잔존 100% 원천 차단)
+                        _prev_positions_snapshot = dict(self.positions)   # 해외 페이징 불완전 시 복원용
                         self.positions.clear()
 
                         # 🎯 [SSoT Fix] 해외(미국) 주식 잔고 및 외화예수금 원장(CTRP6504R + TTTS3012R + TTTS3007R) 100% 동기화
                         us_fetch_ok = False
+                        _us_pages_complete = True
+                        _us_exposure_usd = 0.0
                         try:
                             headers_us = self._get_headers()
                             headers_us['tr_id'] = 'TTTS3012R' if self.mode == 'live' else 'VTTS3012R'
@@ -1598,32 +1666,32 @@ class KISTraderAdapter:
                             merged_us_output1 = []
                             seen_us_tickers = set()
                             out2_us = {}
-                            _us_excgs = ('NASD',) if getattr(requests.get, 'side_effect', None) is not None else ('NASD', 'NYSE', 'AMEX')
-                            for _excg_cd in _us_excgs:
-                                params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': _excg_cd, 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
-                                try:
-                                    resp_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
-                                    d_ex = resp_us.json()
-                                    if d_ex.get('rt_cd') == '0':
-                                        us_fetch_ok = True
-                                        if not out2_us and isinstance(d_ex.get('output2'), dict):
-                                            out2_us = d_ex.get('output2', {})
-                                        for _it in (d_ex.get('output1') or []):
-                                            _tk_u = str(_it.get('ovrs_pdno', '')).strip()
-                                            if _tk_u and _tk_u not in seen_us_tickers:
-                                                seen_us_tickers.add(_tk_u)
-                                                merged_us_output1.append(_it)
-                                except Exception:
-                                    pass
+                            # ★ Wave 1 Track C: 거래소 순회 금지 — NASD 조회가 NYSE/AMEX(예: XLV) 보유분까지 전부 반환함(실검증).
+                            #   거래소별 반복 조회는 중복 계상/불필요한 호출을 유발 → 단일 조회 + 연속조회 페이징.
+                            params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': 'NASD', 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
+                            try:
+                                d_ex, _us_pg_ok = self._kis_paged_get(url_us, headers_us, params_us, '200')
+                                if d_ex.get('rt_cd') == '0':
+                                    us_fetch_ok = True
+                                    _us_pages_complete = _us_pg_ok
+                                    if isinstance(d_ex.get('output2'), dict):
+                                        out2_us = d_ex.get('output2', {})
+                                    for _it in (d_ex.get('output1') or []):
+                                        _tk_u = str(_it.get('ovrs_pdno', '')).strip()
+                                        if _tk_u and _tk_u not in seen_us_tickers:
+                                            seen_us_tickers.add(_tk_u)
+                                            merged_us_output1.append(_it)
+                            except Exception as _us_bal_e:
+                                logger.warning(f"  ⚠️ 해외 inquire-balance 조회 예외: {_us_bal_e}")
                             data_us = {'rt_cd': '0' if us_fetch_ok else '1', 'output1': merged_us_output1, 'output2': out2_us}
                             if not us_fetch_ok:
                                 # Fallback to inquire-present-balance if inquire-balance is unavailable
                                 params_us = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': '%', 'TR_CRCY_CD': 'USD', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
                                 url_us = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
-                                resp_us = requests.get(url_us, headers=headers_us, params=params_us, timeout=10)
-                                data_us = resp_us.json()
+                                data_us, _us_pg_ok = self._kis_paged_get(url_us, headers_us, params_us, '200')
                                 if data_us.get('rt_cd') == '0':
                                     us_fetch_ok = True
+                                    _us_pages_complete = _us_pg_ok
 
                             out2_us = data_us.get('output2', {}) if isinstance(data_us.get('output2'), dict) else {}
                             us_stock_usd = 0.0
@@ -1662,6 +1730,10 @@ class KISTraderAdapter:
                                             _ctrp_fx = float(_crow.get('frst_bltn_exrt', 0) or 0.0)
                                             if _ctrp_fx > 0:
                                                 fx_rate = _ctrp_fx
+                                                if _fx_from_gateway <= 0 and _ctrp_fx > 1000:
+                                                    # ★ Wave 1 Track C: 게이트웨이 미확보 시 증권사 당일 최초고시환율(실관측)을 60초 캐시에 반영
+                                                    KISTraderAdapter._fx_cache_val = _ctrp_fx
+                                                    KISTraderAdapter._fx_cache_ts = time.time()
                                             break
                             except Exception as _ctrp_e:
                                 logger.debug(f"CTRP6504R inquiry bypass: {_ctrp_e}")
@@ -1716,7 +1788,8 @@ class KISTraderAdapter:
                             )
 
                             us_tot_usd = us_stock_usd + self.net_usd_cash_for_nav
-                            kis_us_krw = us_tot_usd * fx_rate
+                            _us_exposure_usd = us_tot_usd
+                            kis_us_krw = us_tot_usd * fx_rate if fx_rate > 0 else 0.0
                             tot_evlu += kis_us_krw
 
                             for item_us in data_us.get('output1', []):
@@ -1745,6 +1818,15 @@ class KISTraderAdapter:
                                     logger.info(f"  🇺🇸 [Live US Position] {u_ticker} ({u_name}): {int(u_qty)}주 @ ${u_curr:.2f} (수익률: {u_pnl:.2%})")
                         except Exception as e_us:
                             logger.warning(f"  ⚠️ 해외주식 잔고 통합 수집 예외: {e_us}")
+
+                        if us_fetch_ok and not _us_pages_complete:
+                            # ★ Wave 1 Track C (W1_3): 해외 잔고 연속조회 중간 실패 → 부분 원장 폐기, 직전 positions 복원
+                            self.positions.clear()
+                            self.positions.update(_prev_positions_snapshot)
+                            self._last_positions_complete = False
+                            self._last_balance_complete = False
+                            logger.critical("  🚨 [Live Balance] 해외 잔고 페이징 불완전 — positions/NAV 갱신 보류 (직전 값 복원)")
+                            return False
 
                         # 🎯 [SSoT Fix] 국내 주식 개별 보유 종목(output1)을 self.positions 원장에 동기화
                         for item_kr in data.get('output1', []):
@@ -1786,6 +1868,17 @@ class KISTraderAdapter:
                             logger.warning(f"  ⚠️ [PositionLedger] 동기화 경고: {_ledg_err}")
 
                         self.account.cash = ord_psbl_cash
+                        # ★ Wave 1 Track C: 해외 익스포저가 있는데 환율 미확보 → NAV 원화환산 불가.
+                        #   상수 환율로 날조하지 않고 NAV/대사/SSOT 기록을 보류(직전 NAV 유지) + degraded 플래그 + False 반환.
+                        #   (수량·원화 현금은 환율과 무관하므로 위에서 정상 갱신됨 → 매도/청산 경로는 영향 없음)
+                        _has_us_exposure = _us_exposure_usd > 0 or any(not str(_t).isdigit() for _t in self.positions)
+                        self.nav_fx_degraded = bool(_has_us_exposure and not (fx_rate and fx_rate > 0))
+                        if self.nav_fx_degraded:
+                            self._last_balance_complete = False
+                            logger.critical(f"  🚨 [Live Balance] USD/KRW 미확보 + 해외 익스포저(${_us_exposure_usd:,.2f}) → "
+                                            f"NAV 갱신/대사/kis_portfolio 기록 보류 (직전 NAV ₩{float(self.account.total_equity or 0):,.0f} 유지)")
+                            return False
+                        self._last_balance_complete = True
                         self.account.total_equity = tot_evlu
                         try:
                             from src.execution.account_reconciler import AccountReconciler
@@ -1795,9 +1888,8 @@ class KISTraderAdapter:
 
                         if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST'):
                             try:
-                                from src.utils.file_ops import atomic_write_json
+                                from src.utils.file_ops import safe_json_update
                                 _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
-                                _kp_data = json.loads(_kp_path.read_text(encoding='utf-8')) if _kp_path.exists() else {}
                                 _live_holdings = {}
                                 for _tk, _p in self.positions.items():
                                     _is_us = not _tk.isdigit()
@@ -1814,11 +1906,7 @@ class KISTraderAdapter:
                                         'currency': 'USD' if _is_us else 'KRW',
                                         'entry_date': getattr(_p, 'entry_date', '')
                                     }
-                                _kp_data['kis_mode'] = 'live'
-                                _kp_data['updated_at'] = datetime.now().isoformat()
-                                _kp_data['holdings'] = _live_holdings
-                                _kp_acct = _kp_data.get('account', {})
-                                _kp_acct.update({
+                                _acct_patch = {
                                     'nav': round(float(self.account.total_equity)),
                                     'total_equity': round(float(self.account.total_equity)),
                                     'cash': round(float(self.account.cash)),
@@ -1827,20 +1915,39 @@ class KISTraderAdapter:
                                     'fx_rate': round(float(fx_rate), 2),
                                     'positions': _live_holdings,
                                     'n_positions': len(_live_holdings),
-                                })
-                                _kp_data['account'] = _kp_acct
-                                _kp_data['nav'] = round(float(self.account.total_equity))
-                                atomic_write_json(_kp_path, _kp_data, indent=2)
+                                }
+
+                                def _kp_mutator(_kp_data):
+                                    # ★ Wave 1 Track C: 잠금 하 read-modify-write (스키마 불변)
+                                    if not isinstance(_kp_data, dict):
+                                        _kp_data = {}
+                                    _kp_data['kis_mode'] = 'live'
+                                    _kp_data['updated_at'] = datetime.now().isoformat()
+                                    _kp_data['holdings'] = _live_holdings
+                                    _kp_acct = _kp_data.get('account', {})
+                                    if not isinstance(_kp_acct, dict):
+                                        _kp_acct = {}
+                                    _kp_acct.update(_acct_patch)
+                                    _kp_data['account'] = _kp_acct
+                                    _kp_data['nav'] = round(float(self.account.total_equity))
+                                    return _kp_data
+
+                                safe_json_update(_kp_path, _kp_mutator, default={}, indent=2)
                             except Exception as _kp_err:
-                                logger.debug(f"  [Live SSOT] kis_portfolio.json 자동 동기화 우회: {_kp_err}")
+                                logger.warning(f"  ⚠️ [Live SSOT] kis_portfolio.json 자동 동기화 실패(기존 파일 유지): {_kp_err}")
                         logger.info(f"  ✅ [Live Patch] KIS OpenAPI 통합 원장 갱신 완료: 주문가능현금={self.account.cash:,.0f}원 / MTS 100% 동일 총자산=₩{self.account.total_equity:,.0f}원")
                         return True
                     else:
                         logger.warning('  ⚠️ fetch_live_balance: output2 비어있음')
                 elif data.get('rt_cd') == '1' and ('만료' in data.get('msg1', '') or '토큰' in data.get('msg1', '') or data.get('msg_cd') in ('EGW00123', 'EGW00103')):
                     logger.warning('  ⚠️ [Token Expired] 토큰 만료 감지 → 신규 토큰 발급 후 재시도')
-                    if self._request_new_token():
-                        return self.fetch_live_balance()
+                    if not getattr(self, '_balance_token_retry', False) and self._request_new_token():
+                        self._last_balance_fetch_ts = 0.0   # ★ Wave 1: TTL 단락으로 재조회 없이 True 반환되던 버그
+                        self._balance_token_retry = True    # 1회만 재시도 (무한 재귀 방지)
+                        try:
+                            return self.fetch_live_balance()
+                        finally:
+                            self._balance_token_retry = False
                 elif data.get('rt_cd') == '1' and '초과' in data.get('msg1', ''):
                     _m1_rl = data.get("msg1", "")
                     logger.warning(f"  ⚠️ fetch_live_balance API 속도 제한 (Rate Limit): {_m1_rl}")
@@ -1887,8 +1994,8 @@ class KISTraderAdapter:
                     'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''
                 }
                 url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
-                resp = requests.get(url, headers=headers, params=params, timeout=10)
-                data = resp.json()
+                # ★ Wave 1 Track C (W1_3): 연속조회 페이징 — 중간 실패 시 불완전 스냅샷
+                data, _kr_pages_ok = self._kis_paged_get(url, headers, params, '100')
                 
                 live_pos = {}
                 self.live_position_details = {}
@@ -1900,6 +2007,9 @@ class KISTraderAdapter:
                         qty = int(item.get('hldg_qty', 0))
                         if ticker and qty > 0:
                             live_pos[ticker] = qty
+                    if not _kr_pages_ok:
+                        _complete = False
+                        logger.error("  ❌ [Live Positions] 국내 잔고 연속조회(페이징) 불완전")
                 else:
                     _complete = False
                     logger.error(f"  ❌ [Live Positions] 국내 잔고 조회 실패 rt_cd={data.get('rt_cd')} msg={data.get('msg_cd')}/{data.get('msg1')}")
@@ -1918,9 +2028,12 @@ class KISTraderAdapter:
                         'CTX_AREA_NK200': ''
                     }
                     us_url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-present-balance"
-                    us_resp = requests.get(us_url, headers=us_headers, params=us_params, timeout=10)
-                    us_data = us_resp.json()
+                    # ★ Wave 1 Track C (W1_3): 연속조회 페이징 (거래소 순회 없음 — 단일 조회가 전 거래소 반환)
+                    us_data, _us_pages_ok = self._kis_paged_get(us_url, us_headers, us_params, '200')
                     if us_data.get('rt_cd') == '0':
+                        if not _us_pages_ok:
+                            _complete = False
+                            logger.error("  ❌ [Live Positions] 해외 잔고 연속조회(페이징) 불완전")
                         for u_item in us_data.get('output1', []):
                             u_ticker = u_item.get('ovrs_pdno', '').strip()
                             u_qty = int(float(u_item.get('ovrs_cblc_qty', 0)))
@@ -1961,11 +2074,19 @@ class KISTraderAdapter:
                 return {}
 
     def _update_account(self):
-        fx = float(getattr(self, 'fx_rate', 0) or self._get_live_fx_rate() or 1334.3)
+        _us_cash_usd = float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0)) or 0.0)
+        _has_us = _us_cash_usd > 0 or any((not str(p.ticker).isdigit()) and p.quantity > 0 for p in self.positions.values())
+        fx = float(getattr(self, 'fx_rate', 0) or self._get_live_fx_rate() or 0.0) if _has_us else 0.0
+        if _has_us and fx <= 0:
+            # ★ Wave 1 Track C: 환율 미확보 → 원화 NAV 날조 금지. 직전 평가값 유지 + degraded 플래그.
+            self.nav_fx_degraded = True
+            logger.critical("  🚨 [Account] USD/KRW 미확보 + 해외 익스포저 → positions_value/total_equity 갱신 보류 (직전 값 유지)")
+            return
+        self.nav_fx_degraded = False
         pv = sum((p.current_price * p.quantity * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
         self.account.positions_value = pv
         self.account.unrealized_pnl = sum((p.unrealized_pnl * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
-        us_cash_krw = float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0)) or 0.0) * fx
+        us_cash_krw = _us_cash_usd * fx
         self.account.total_equity = self.account.cash + us_cash_krw + pv
 
     def _save_state(self):
@@ -2309,20 +2430,25 @@ class KISTraderAdapter:
                 logger.error(f"  ❌ [Integrated Margin] 실계좌 잔고 수집 재시도 실패: {e2}")
             
         # SSoT Strict Rule: Live 모드 시 레거시 파일(shadow_portfolio.json) 우회 전면 제거. 오직 KIS API 실시간 수집만 사용.
-        fx_rate = self._get_live_fx_rate() or 1358.70
+        # ★ Wave 1 Track C: 리터럴 1358.70 제거 — 환율 미확보 시 교차통화 환산을 하지 않음(매수여력 과소 계상 = fail-closed)
+        fx_rate = float(self._get_live_fx_rate() or 0.0)
+        _fx_ok = fx_rate > 0
         krw_cash = float(getattr(self.account, 'cash', 0.0) or 0.0)
         usd_cash = float(getattr(self, 'us_cash_usd', 0.0) or 0.0)
 
         # 원화/달러 구분 없는 통합 실질 총 매수여력 (Integrated Buying Power)
-        total_buying_power_krw = krw_cash + (usd_cash * fx_rate)
-        total_buying_power_usd = usd_cash + (krw_cash / fx_rate if fx_rate > 0 else 0.0)
+        total_buying_power_krw = krw_cash + (usd_cash * fx_rate if _fx_ok else 0.0)
+        total_buying_power_usd = usd_cash + (krw_cash / fx_rate if _fx_ok else 0.0)
+        if not _fx_ok:
+            logger.critical("  🚨 [Integrated Margin] USD/KRW 미확보 → 교차통화 매수여력 미반영 (원화/달러 각자 통화분만 집계)")
         
         return {
             'krw_cash': round(krw_cash, 0),
             'usd_cash': round(usd_cash, 2),
             'fx_rate': round(fx_rate, 2),
             'total_buying_power_krw': round(total_buying_power_krw, 0),
-            'total_buying_power_usd': round(total_buying_power_usd, 2)
+            'total_buying_power_usd': round(total_buying_power_usd, 2),
+            'fx_degraded': not _fx_ok,
         }
 
     def sweep_uninvested_cash_to_shield(self) -> Dict[str, Any]:

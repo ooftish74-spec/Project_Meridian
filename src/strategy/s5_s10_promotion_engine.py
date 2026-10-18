@@ -12,6 +12,11 @@ Usage:
     eval_s10 = engine.evaluate_s10_mega_trend(market_snapshot)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -88,12 +93,12 @@ class S5S10PromotionEngine:
         p_ois_bear = float(norm_cdf(-ois_z))
 
         # Dynamic Threshold calculation from config CDF (default 0.70, i.e., ois_z >= ~0.524)
-        p_threshold = float(self._get_cfg('s5.ois_entry_probability_threshold', 0.70))
+        p_threshold = float(pget('s5.ois_entry_probability_threshold', 0.70))
         is_entry_approved = bool(p_ois >= p_threshold)
         is_inverse_entry_approved = bool(p_ois_bear >= p_threshold)
 
         # Dynamic Square-Root Volatility Position Sizing
-        vix_baseline = float(self._get_cfg('s5.vix_baseline', 18.0))
+        vix_baseline = float(pget('s5.vix_baseline', 18.0))
         vol_scale = float(math.sqrt(max(0.1, vix_baseline / max(current_vix, 1.0))))
         final_size_multiplier = float(max(p_ois, p_ois_bear) * vol_scale)
 
@@ -101,7 +106,7 @@ class S5S10PromotionEngine:
         globex_chg = float(market_snapshot.get('globex_futures_chg_pct', 0.0))
         hist_globex = market_snapshot.get('historical_globex_futures', [])
         z_globex = get_z(globex_chg, hist_globex)
-        exit_z_cutoff = norm_ppf(float(self._get_cfg('s5.globex_early_exit_quantile', 0.07))) # ~ -1.5 StdDev
+        exit_z_cutoff = norm_ppf(float(pget('s5.globex_early_exit_quantile', 0.07))) # ~ -1.5 StdDev
         early_exit_triggered = bool(z_globex < exit_z_cutoff)
 
         return {
@@ -133,9 +138,9 @@ class S5S10PromotionEngine:
         vix_zscore = float(market_snapshot.get('vix_zscore', 0.0))
 
         # 1. Dynamic ICIR Weighting for Institutional Flows
-        icir_streak = float(self._get_cfg('s10.icir_streak', 0.305))
-        icir_netbuy = float(self._get_cfg('s10.icir_netbuy', 0.229))
-        icir_accel = float(self._get_cfg('s10.icir_accel', 0.219))
+        icir_streak = float(pget('s10.icir_streak', 0.305))
+        icir_netbuy = float(pget('s10.icir_netbuy', 0.229))
+        icir_accel = float(pget('s10.icir_accel', 0.219))
         total_icir = icir_streak + icir_netbuy + icir_accel
         w1, w2, w3 = icir_streak / total_icir, icir_netbuy / total_icir, icir_accel / total_icir
 

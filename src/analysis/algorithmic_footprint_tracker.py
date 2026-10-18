@@ -10,6 +10,11 @@ Project Meridian — Algorithmic Footprint Tracker Engine
   is_herding_active = (S_footprint >= 0.75)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -65,7 +70,7 @@ class AlgorithmicFootprintTracker:
         Returns:
             Flow Acceleration Z-score (-3.0 ~ +3.0)
         """
-        max_hist = int(cfg.get('footprint.max_history', 60))
+        max_hist = int(pget('footprint.max_history', 60))
         self._flow_history.append(float(net_flow_krw))
         if len(self._flow_history) > max_hist:
             self._flow_history.pop(0)
@@ -113,10 +118,10 @@ class AlgorithmicFootprintTracker:
         inst_flow = float(signal_cache.get('INST_NET_BUY_KRW_15M', signal_cache.get('foreign_net_buy', 0.0)))
         timestamps = market_data.get('recent_order_timestamps', [])
 
-        w_ofi = float(cfg.get('footprint.w_ofi', 0.30))
-        w_vpin = float(cfg.get('footprint.w_vpin', 0.30))
-        w_period = float(cfg.get('footprint.w_period', 0.20))
-        w_accel = float(cfg.get('footprint.w_accel', 0.20))
+        w_ofi = float(pget('footprint.w_ofi', 0.30))
+        w_vpin = float(pget('footprint.w_vpin', 0.30))
+        w_period = float(pget('footprint.w_period', 0.20))
+        w_accel = float(pget('footprint.w_accel', 0.20))
 
         periodicity = self.detect_periodic_slicing(timestamps)
         flow_accel = self.compute_flow_acceleration(inst_flow)
@@ -129,7 +134,7 @@ class AlgorithmicFootprintTracker:
         footprint_score = (w_ofi * norm_ofi) + (w_vpin * norm_vpin) + (w_period * periodicity) + (w_accel * norm_accel)
         footprint_score = round(float(np.clip(footprint_score, 0.0, 1.0)), 4)
 
-        herding_threshold = float(cfg.get('footprint.herding_threshold', 0.70))
+        herding_threshold = float(pget('footprint.herding_threshold', 0.70))
         is_herding = footprint_score >= herding_threshold
 
         if is_herding:

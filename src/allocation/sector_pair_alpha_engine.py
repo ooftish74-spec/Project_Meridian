@@ -11,6 +11,11 @@ Sector Relative-Strength Pair Trading Engine (Market Neutral Pair Alpha)
   4. 시장 전체 베타 노이즈 0% 헤지 & 알파 수익 추격
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -71,9 +76,9 @@ class SectorPairAlphaEngine:
     """섹터 상대강도 Market-Neutral Long Strong / Short Weak 페어 트레이딩 엔진."""
 
     def __init__(self):
-        self.min_spread_z = float(cfg.get('pair.min_spread_z', 1.2))
-        self.max_pair_allocation = float(cfg.get('pair.max_allocation_pct', 0.20))
-        self.stop_loss_spread_z = float(cfg.get('pair.stop_loss_spread_z', 2.5))
+        self.min_spread_z = float(pget('pair.min_spread_z', 1.2))
+        self.max_pair_allocation = float(pget('pair.max_allocation_pct', 0.20))
+        self.stop_loss_spread_z = float(pget('pair.stop_loss_spread_z', 2.5))
         self.sector_etf_map = cfg.get('pair.sector_etf_map', DEFAULT_SECTOR_ETF_MAP)
 
     def compute_sector_z_scores(self, sector_returns: Dict[str, float]) -> Dict[str, float]:

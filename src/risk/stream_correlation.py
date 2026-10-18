@@ -14,6 +14,11 @@ Usage:
     report = monitor.measure()
     budget = monitor.compute_risk_budget()
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import json
 import logging
 from datetime import datetime
@@ -96,7 +101,7 @@ class StreamCorrelationMonitor:
         avg_abs_corr = report.get('avg_abs_correlation', 0.0)
         high_corr_count = report.get('high_corr_count', 0)
         
-        warn_threshold = float(_cfg.get('risk.corr_warn_threshold', 0.85)) if _cfg else 0.85
+        warn_threshold = float(pget('risk.corr_warn_threshold', 0.85)) if _cfg else 0.85
         
         if avg_abs_corr >= warn_threshold or high_corr_count >= 3:
             deleveraging_factor = 0.70  # 30% 레버리지 즉시 자동 감쇄
@@ -179,7 +184,7 @@ class StreamCorrelationMonitor:
             ticker = key.split(':')[-1] if ':' in key else key
             tickers.append(ticker)
         tickers = list(set(tickers))
-        lookback = cfg.get('risk.corr_lookback', 60) if cfg else 60
+        lookback = pget('risk.corr_lookback', 60) if cfg else 60
         data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
         returns_data = {}
         for ticker in tickers:
@@ -206,7 +211,7 @@ class StreamCorrelationMonitor:
         n = len(ticker_keys)
         off_diag = []
         high_corr_pairs = []
-        high_corr_threshold = cfg.get('risk.corr_high_threshold', 0.7) if cfg else 0.7
+        high_corr_threshold = pget('risk.corr_high_threshold', 0.7) if cfg else 0.7
         for i in range(n):
             for j in range(i + 1, n):
                 corr = abs(float(corr_matrix[i, j]))
@@ -217,7 +222,7 @@ class StreamCorrelationMonitor:
         orthogonality = 1.0 - avg_abs_corr
         scale = self._orthogonality_to_scale(orthogonality)
         result = {'concentration_scale': round(scale, 4), 'orthogonality_score': round(orthogonality, 4), 'avg_abs_correlation': round(avg_abs_corr, 4), 'high_corr_pairs': high_corr_pairs, 'high_corr_count': len(high_corr_pairs), 'n_positions': len(ticker_keys), 'n_observations': min_len, 'sufficient_data': True, 'timestamp': datetime.now().isoformat()}
-        _warn_threshold = cfg.get('risk.corr_warn_threshold', 0.85) if cfg else 0.85
+        _warn_threshold = pget('risk.corr_warn_threshold', 0.85) if cfg else 0.85
         if high_corr_pairs:
             _log_fn = logger.warning if scale < _warn_threshold else logger.info
             _log_fn(f"  {('⚠️' if scale < _warn_threshold else 'ℹ️')} 집중 리스크: {len(high_corr_pairs)}쌍 고상관 (직교성={orthogonality:.2f}, scale={scale:.2f})")
@@ -240,9 +245,9 @@ class StreamCorrelationMonitor:
           - risk.corr_scale_min: 최소 스케일 (기본 0.5)
         """
         cfg = _cfg
-        ortho_good = cfg.get('risk.corr_ortho_good', 0.7) if cfg else 0.7
-        ortho_bad = cfg.get('risk.corr_ortho_bad', 0.3) if cfg else 0.3
-        scale_min = cfg.get('risk.corr_scale_min', 0.5) if cfg else 0.5
+        ortho_good = pget('risk.corr_ortho_good', 0.7) if cfg else 0.7
+        ortho_bad = pget('risk.corr_ortho_bad', 0.3) if cfg else 0.3
+        scale_min = pget('risk.corr_scale_min', 0.5) if cfg else 0.5
         if orthogonality >= ortho_good:
             return 1.0
         elif orthogonality <= ortho_bad:

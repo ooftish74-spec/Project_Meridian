@@ -13,6 +13,11 @@ S12 Derivative Squeeze Short Alpha Stream
   2. 3대 파생 델타 스퀴즈 조건 동시 달성 시 252670(곱버스) / 114800(인버스) 숏 저격 발화.
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Any, Dict, List, Tuple
@@ -30,8 +35,8 @@ class S12DerivativeSqueezeStream(BaseStream):
         super().__init__(stream_id=stream_id, name=name)
         self.inverse_2x_ticker = str(cfg.get('s12.inverse_2x_ticker', '252670'))
         self.inverse_1x_ticker = str(cfg.get('s12.inverse_1x_ticker', '114800'))
-        self.z_skew_threshold = float(cfg.get('s12.z_skew_threshold', 1.5))       # Skew Z-Score >= +1.5
-        self.z_flow_threshold = float(cfg.get('s12.z_flow_threshold', 1.5))       # Foreign Futures Net Sell Z-Score >= +1.5
+        self.z_skew_threshold = float(pget('s12.z_skew_threshold', 1.5))       # Skew Z-Score >= +1.5
+        self.z_flow_threshold = float(pget('s12.z_flow_threshold', 1.5))       # Foreign Futures Net Sell Z-Score >= +1.5
         self.bdi_threshold = float(cfg.get('s12.bdi_threshold', 0.0))            # BDI <= 0.0 (Backwardation)
 
     def compute_z_score(self, value: float, mean: float, std: float) -> float:
@@ -93,8 +98,8 @@ class S12DerivativeSqueezeStream(BaseStream):
             )
             logger.info(f"  {reason}")
 
-            _raw_sl = float(cfg.get('s12.sl_pct', 3.0))
-            _raw_tp = float(cfg.get('s12.tp_pct', 6.0))
+            _raw_sl = float(pget('s12.sl_pct', 3.0))
+            _raw_tp = float(pget('s12.tp_pct', 6.0))
             norm_sl_pct = abs(_raw_sl) * 100.0 if 0 < abs(_raw_sl) < 0.5 else abs(_raw_sl)
             norm_tp_pct = _raw_tp * 100.0 if 0 < _raw_tp < 0.5 else _raw_tp
 
@@ -103,7 +108,7 @@ class S12DerivativeSqueezeStream(BaseStream):
                 'ticker': target_ticker,
                 'name': f"S12 파생 스퀴즈 숏 알파 ({target_ticker})",
                 'direction': 'long',
-                'size_pct': float(cfg.get('s12.default_size_pct', 0.25)),
+                'size_pct': float(pget('s12.default_size_pct', 0.25)),
                 'confidence': round(confidence, 3),
                 'strategy': 'derivative_squeeze_short_alpha',
                 'sl_pct': norm_sl_pct,

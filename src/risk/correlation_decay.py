@@ -3,6 +3,11 @@
 과제 8: 30/60/120일 다중 윈도우로 스트림 간 상관계수 추적.
 상관계수 > 0.6이면 직교성 위반 경고.
 """
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import json
 import math
@@ -28,8 +33,8 @@ class CorrelationDecayMonitor:
         self._state_path = _RESULTS / 'correlation_decay_state.json'
         self._state = self._load_state()
         self._windows = cfg.get('correlation.windows', [30, 60, 120])
-        self._alert_threshold = cfg.get('correlation.alert_threshold', 0.6)
-        self._critical_threshold = cfg.get('correlation.critical_threshold', 0.8)
+        self._alert_threshold = pget('correlation.alert_threshold', 0.6)
+        self._critical_threshold = pget('correlation.critical_threshold', 0.8)
 
     def _load_state(self) -> Dict:
         if self._state_path.exists():
@@ -136,11 +141,11 @@ class CorrelationDecayMonitor:
         streams = sorted(self._state['daily_returns'].keys())
         if len(streams) < 2:
             return {'error': '스트림 부족'}
-        omega = cfg.get('risk.garch_omega', 1e-05)
-        alpha = cfg.get('risk.garch_alpha', 0.06)
-        beta = cfg.get('risk.garch_beta', 0.93)
-        dcc_a = cfg.get('risk.dcc_a', 0.05)
-        dcc_b = cfg.get('risk.dcc_b', 0.93)
+        omega = pget('risk.garch_omega', 1e-05)
+        alpha = pget('risk.garch_alpha', 0.06)
+        beta = pget('risk.garch_beta', 0.93)
+        dcc_a = pget('risk.dcc_a', 0.05)
+        dcc_b = pget('risk.dcc_b', 0.93)
         all_returns = {}
         for sid in streams:
             rets = [d['return'] for d in self._state['daily_returns'].get(sid, [])]

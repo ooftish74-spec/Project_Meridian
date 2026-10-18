@@ -1,0 +1,32 @@
+{
+ "TLT": {
+  "name": "iShares 20+ Year Treasury Bond ETF",
+  "sector": "bond",
+  "market": "US"
+ },
+ "GLD": {
+  "name": "SPDR Gold Shares",
+  "sector": "commodity",
+  "market": "US"
+ },
+ "UUP": {
+  "name": "Invesco DB US Dollar Index Bullish",
+  "sector": "currency",
+  "market": "US"
+ },
+ "SQQQ": {
+  "name": "ProShares UltraPro Short QQQ",
+  "sector": "us_inverse_tech",
+  "market": "US"
+ },
+ "SOXS": {
+  "name": "Direxion Daily Semiconductor Bear 3X Shares",
+  "sector": "us_inverse_semi",
+  "market": "US"
+ },
+ "SH": {
+  "name": "ProShares Short S&P500",
+  "sector": "us_inverse_broad",
+  "market": "US"
+ }
+}

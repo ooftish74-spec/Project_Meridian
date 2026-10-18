@@ -22,6 +22,11 @@ Mathematical Add-On Filter (Pure Quantitative Volatility-Adaptive Engine)
      min_volume_power(t) = max(1.05, 1.0 + 0.10 * max(0.0, volume_z_score))
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import logging
 import math
 from typing import Dict, Any, Tuple
@@ -35,8 +40,8 @@ class MathematicalAddOnFilter:
     """고정 상수를 전면 제거하고 종목별 ATR/변동성 Z-Score로 100% 동적 변동하는 퀀트 엔진."""
 
     def __init__(self):
-        self.base_vwap_margin_bps = float(cfg.get('execution.staggered_vwap_margin_bps', 10.0))
-        self.base_min_volume_power = float(cfg.get('execution.staggered_min_vp', 1.15))
+        self.base_vwap_margin_bps = float(pget('execution.staggered_vwap_margin_bps', 10.0))
+        self.base_min_volume_power = float(pget('execution.staggered_min_vp', 1.15))
 
     def compute_dynamic_parameters(
         self,

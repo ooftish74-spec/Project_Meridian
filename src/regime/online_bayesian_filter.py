@@ -9,6 +9,11 @@ Project Meridian — Online Bayesian Particle Filter Engine
   Regime_Prob = Σ w_t^{(i)} · I(x_t^{(i)} ∈ State_k)
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -86,7 +91,7 @@ class OnlineBayesianParticleFilter:
             self.weights = np.ones(self.num_particles) / self.num_particles
 
         # [Ergodic Markov Transition Kernel] 입자 멸종(Particle Degeneracy) 원천 차단
-        mutation_prob = float(cfg.get('bayesian_filter.transition_mutation_prob', 0.04))
+        mutation_prob = float(pget('bayesian_filter.transition_mutation_prob', 0.04))
         if mutation_prob > 0.0:
             mutate_mask = np.random.random(self.num_particles) < mutation_prob
             n_mutate = int(np.sum(mutate_mask))

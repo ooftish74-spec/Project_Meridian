@@ -10,6 +10,11 @@ Volatility Decay & Choppiness Shield (0% Hardcoding / Dynamic Sigmoid Scaling)
   LeverageScale = 1.0 / ( 1.0 + exp( k * (CHOP - μ_CHOP_60d) ) )
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
 import math
 import logging
 import numpy as np
@@ -26,7 +31,7 @@ class VolatilityDecayShield:
     def __init__(self, period: int = 14, rolling_window_days: int = 60):
         self.period = period
         self.rolling_window = rolling_window_days
-        self.k_steepness = float(cfg.get('decay_shield.k_steepness', 0.15))
+        self.k_steepness = float(pget('decay_shield.k_steepness', 0.15))
 
         # 롤링 통계 캐시
         self._chop_history: List[float] = []

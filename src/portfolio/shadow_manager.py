@@ -27,6 +27,13 @@ Usage:
     mgr.save()
 """
 
+try:
+    from src.params import pget
+except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
+    def pget(name, fallback, ctx=None):
+        return fallback
+import copy
+import hashlib
 import json
 import logging
 import os
@@ -38,13 +45,32 @@ from typing import Dict, Optional, Any, List
 
 from config.dynamic_config import DynamicConfig
 from src.portfolio.state_backend import RedisStateBackend
-from src.utils.file_ops import atomic_write_json
+from src.utils.file_ops import atomic_write_json, file_lock_transaction, FileLockTimeout
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 _STOCK_NAMES_PATH = _PROJECT_ROOT / 'data' / 'stock_names.json'
+
+# ★ Wave 1 Track A: shadow_portfolio.json 단일 락 (file_ops: <path>.lock, 스레드 재진입).
+#   transaction()/save()/로더가 모두 이 락을 공유한다 (과거: Redis 락 vs 무잠금 save 혼재).
+_SHADOW_LOCK_TIMEOUT = 30
+# 동시 writer 3-way 병합 시 '양쪽 변경분을 더하는' 스칼라 (현금 등 증감량 보존)
+_ADDITIVE_SCALARS = ('cash',)
+# 수량 동기화 상한: 추적 종목의 50% 초과가 바뀌면 스냅샷 이상으로 간주하고 거부
+_QTY_SYNC_MAX_CHANGE_RATIO = 0.5
+_MISSING = object()
+
+
+def _json_key(obj) -> str:
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _as_number(x):
+    """수량 정규화: 정수값이면 int, 아니면 float (해외 소수점 수량 호환)."""
+    v = float(x)
+    return int(v) if v.is_integer() else v
 
 
 class ShadowPortfolioCorruptError(RuntimeError):
@@ -120,8 +146,8 @@ def get_stream_exit_profiles() -> Dict[str, Dict]:
         # ── S1 Edge (Intraday) ──────────────────────────────────────
     # Renaissance Medallion 스타일: 초단기, 극소 손절, 당일 청산
     'S1': {
-        'take_profit_pct': DynamicConfig().get('s1.exit.base_tp_pct', 0.015),  # +1.5% 익절
-        'stop_loss_pct':   DynamicConfig().get('s1.exit.base_sl_pct', -0.010), # -1.0% 손절
+        'take_profit_pct': pget('s1.exit.base_tp_pct', 0.015),  # +1.5% 익절
+        'stop_loss_pct':   pget('s1.exit.base_sl_pct', -0.010), # -1.0% 손절
         'trailing_stop_pct': None,      # 기본 비활성 (confluence ≥2 에서 동적 활성화)
         'trailing_activate_pct': None,  # 기본 비활성 (confluence ≥2 에서 동적 활성화)
         'max_hold_days': {'bull': 0, 'caution': 0, 'bear': 0, 'crash': 0},
@@ -141,14 +167,14 @@ def get_stream_exit_profiles() -> Dict[str, Dict]:
     # Two Sigma 스타일: 시그널 반감기 기반 EXIT, alpha decay 추적
     'S2': {
         'take_profit_pct': None,        # TP 제거 (ML Alpha — Let winners run)
-        'stop_loss_pct':          DynamicConfig().get('s2.exit.sl_pct',               -0.07),
-        'trailing_stop_pct':      DynamicConfig().get('s2.exit.trailing_stop_pct',    -0.10),
-        'trailing_activate_pct':  DynamicConfig().get('s2.exit.trailing_activate_pct', 0.05),
+        'stop_loss_pct':          pget('s2.exit.sl_pct', -0.07),
+        'trailing_stop_pct':      pget('s2.exit.trailing_stop_pct', -0.10),
+        'trailing_activate_pct':  pget('s2.exit.trailing_activate_pct', 0.05),
         'max_hold_days': {
-            'bull':    DynamicConfig().get('s2.exit.max_hold.bull',    30),
-            'caution': DynamicConfig().get('s2.exit.max_hold.caution', 20),
-            'bear':    DynamicConfig().get('s2.exit.max_hold.bear',    14),
-            'crash':   DynamicConfig().get('s2.exit.max_hold.crash',    7),
+            'bull':    pget('s2.exit.max_hold.bull', 20),
+            'caution': pget('s2.exit.max_hold.caution', 15),
+            'bear':    pget('s2.exit.max_hold.bear', 10),
+            'crash':   pget('s2.exit.max_hold.crash', 7),
         },
         'min_hold_days': 1,
         'signal_expire_days': 3,        # ML 신호 반감기 ≈ 3일
@@ -161,10 +187,10 @@ def get_stream_exit_profiles() -> Dict[str, Dict]:
     # ── S3 Factor/Sector Rotation (ETFs) ───────────────────────
     # AQR 스타일: 모멘텀 보호, whipsaw 최소화, 넓은 스탑
     'S3': {
-        'take_profit_pct':        DynamicConfig().get('s3.exit.tp_pct',               0.20),
-        'stop_loss_pct':          DynamicConfig().get('s3.exit.sl_pct',              -0.08),
-        'trailing_stop_pct':      DynamicConfig().get('s3.exit.trailing_stop_pct',   -0.12),
-        'trailing_activate_pct':  DynamicConfig().get('s3.exit.trailing_activate_pct', 0.08),
+        'take_profit_pct':        pget('s3.exit.tp_pct', 0.20),
+        'stop_loss_pct':          pget('s3.exit.sl_pct', -0.08),
+        'trailing_stop_pct':      pget('s3.exit.trailing_stop_pct', -0.12),
+        'trailing_activate_pct':  pget('s3.exit.trailing_activate_pct', 0.08),
         'max_hold_days': {'bull': 90, 'caution': 60, 'bear': 45, 'crash': 21},
         'min_hold_days': 5,             # 노이즈 필터 (5거래일 최소 보유)
         'signal_expire_days': 999,  # [Phase79] 날짜기반 만료 폐지
@@ -172,39 +198,39 @@ def get_stream_exit_profiles() -> Dict[str, Dict]:
         'atr_sl_multiplier': 2.5,       # ATR × 2.5 (ETF → 넓게)
         'atr_tp_multiplier': 4.0,       # ATR × 4.0
         'partial_exit': True,           # 부분 청산 허용
-        'partial_exit_pct':       DynamicConfig().get('s3.exit.partial_exit_pct',     0.50),
-        'partial_exit_trigger':   DynamicConfig().get('s3.exit.partial_trigger_pct',  0.12),
+        'partial_exit_pct':       pget('s3.exit.partial_exit_pct', 0.50),
+        'partial_exit_trigger':   pget('s3.exit.partial_trigger_pct', 0.12),
     },
 
     # ── S4 Advisory (Tax-Advantaged Accounts) ──────────────────
     # Bridgewater/Vanguard 스타일: 세후 순이익 극대화, 최소 회전율
     'S4': {
         'take_profit_pct': None,        # TP 제거 (장기 보유 → let winners run)
-        'stop_loss_pct':          DynamicConfig().get('s4.exit.sl_pct',               -0.12),  # -12%
-        'trailing_stop_pct':      DynamicConfig().get('s4.exit.trailing_stop_pct',    -0.15),  # HWM -15%
-        'trailing_activate_pct':  DynamicConfig().get('s4.exit.trailing_activate_pct', 0.10),  # +10% 활성화
+        'stop_loss_pct':          pget('s4.exit.sl_pct', -0.12),  # -12%
+        'trailing_stop_pct':      pget('s4.exit.trailing_stop_pct', -0.15),  # HWM -15%
+        'trailing_activate_pct':  pget('s4.exit.trailing_activate_pct', 0.10),  # +10% 활성화
         'max_hold_days': {'bull': 180, 'caution': 120, 'bear': 90, 'crash': 45},
         'min_hold_days': 10,            # 최소 10거래일
         'signal_expire_days': 30,       # 장기 신호 → 30일 유예
         'use_atr_stops': False,         # 장기 투자 → 고정 % 사용
         'partial_exit': True,           # 부분 청산 허용
-        'partial_exit_pct':       DynamicConfig().get('s4.exit.partial_exit_pct',     0.30),   # 30% 부분 익절
-        'partial_exit_trigger':   DynamicConfig().get('s4.exit.partial_trigger_pct',  0.20),   # +20% 도달 시
+        'partial_exit_pct':       pget('s4.exit.partial_exit_pct', 0.30),   # 30% 부분 익절
+        'partial_exit_trigger':   pget('s4.exit.partial_trigger_pct', 0.20),   # +20% 도달 시
         # ── S4 전용: 세금 최적화 ──
         'tax_aware': True,
-        'tax_loss_harvest_pct':   DynamicConfig().get('s4.exit.tax_loss_harvest_pct', -0.10),  # -10% 손실 확정
-        'isa_tax_free_limit':     DynamicConfig().get('s4.exit.isa_tax_free_limit',  2_000_000),  # ISA 비과세 한도
-        'isa_min_hold_years':     DynamicConfig().get('s4.exit.isa_min_hold_years',  3),       # ISA 최소 보유 3년
-        'turnover_penalty':       DynamicConfig().get('s4.exit.turnover_penalty',    0.005),   # 매매 비용 0.5%
+        'tax_loss_harvest_pct':   pget('s4.exit.tax_loss_harvest_pct', -0.10),  # -10% 손실 확정
+        'isa_tax_free_limit':     pget('s4.exit.isa_tax_free_limit', 2_000_000),  # ISA 비과세 한도
+        'isa_min_hold_years':     pget('s4.exit.isa_min_hold_years', 3),       # ISA 최소 보유 3년
+        'turnover_penalty':       pget('s4.exit.turnover_penalty', 0.005),   # 매매 비용 0.5%
     },
 
     # ── S5 Alpha Factory (Mathematical Alpha) ──────────────────
     # 순수 수학적 팩터 발굴: 트렌드 팔로잉 + 모멘텀 보호
     'S5': {
         'take_profit_pct': None,        # TP 제거 (수학 알파가 꺾일 때까지 Hold)
-        'stop_loss_pct':          DynamicConfig().get('s5.exit.sl_pct',               -0.08),  # -8% 손절
-        'trailing_stop_pct':      DynamicConfig().get('s5.exit.trailing_stop_pct',    -0.10),  # HWM -10%
-        'trailing_activate_pct':  DynamicConfig().get('s5.exit.trailing_activate_pct', 0.05),  # +5% 활성화
+        'stop_loss_pct':          pget('s5.exit.sl_pct', -0.08),  # -8% 손절
+        'trailing_stop_pct':      pget('s5.exit.trailing_stop_pct', -0.10),  # HWM -10%
+        'trailing_activate_pct':  pget('s5.exit.trailing_activate_pct', 0.05),  # +5% 활성화
         'max_hold_days': {'bull': 45, 'caution': 30, 'bear': 15, 'crash': 7},
         'min_hold_days': 3,
         'signal_expire_days': 7,
@@ -218,7 +244,7 @@ def get_stream_exit_profiles() -> Dict[str, Dict]:
     # Exposure Orchestrator가 관리 — TP 없음, 롱 있는 한 유지
     'H': {
         'take_profit_pct': None,          # TP 없음 — 헤지 비율로 관리
-        'stop_loss_pct':   DynamicConfig().get('h.exit.sl_pct', -0.15),  # 극단 손절만 (-15%)
+        'stop_loss_pct':   pget('h.exit.sl_pct', -0.15),  # 극단 손절만 (-15%)
         'trailing_stop_pct': None,
         'trailing_activate_pct': None,
         'max_hold_days': {'bull': 999, 'caution': 999, 'bear': 999, 'crash': 999},
@@ -250,7 +276,9 @@ class ShadowPortfolioManager:
                 initial_capital = None
         self.file_path = _RESULTS / 'shadow_portfolio.json'
         self.initial_capital = initial_capital
-        self.data = self._load_or_create()
+        self._base_snapshot = None   # ★ Wave 1: 마지막 로드/저장 시점의 상태 (3-way 병합 기준)
+        self._disk_digest = None     # ★ Wave 1: 그 시점 디스크 바이트 sha256 (동시 writer 감지)
+        self.data = self._locked_load()
 
         # ★ 레거시 포지션 마이그레이션 (plain ticker → stream:ticker)
         self._migrate_legacy_positions()
@@ -261,27 +289,59 @@ class ShadowPortfolioManager:
     # I/O & Concurrency
     # ═══════════════════════════════════════
 
+    def _file_digest(self) -> Optional[str]:
+        try:
+            return hashlib.sha256(self.file_path.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            return None
+
+    def _capture_base(self, data: Dict, digest: Any = _MISSING) -> None:
+        """현재 메모리 상태를 '디스크와 일치하는 기준점'으로 기록 (락 보유 상태에서 호출)."""
+        self._base_snapshot = copy.deepcopy(data) if isinstance(data, dict) else None
+        self._disk_digest = self._file_digest() if digest is _MISSING else digest
+
+    def _locked_load(self) -> Dict:
+        """★ Wave 1: 락을 잡고 로드 + 기준점(base/digest) 기록 — 로드와 digest가 같은 디스크 버전임을 보장."""
+        try:
+            with file_lock_transaction(self.file_path, timeout=_SHADOW_LOCK_TIMEOUT, strict=True):
+                data = self._load_or_create()
+                self._capture_base(data)
+                return data
+        except FileLockTimeout as e:
+            # 읽기는 원자적 교체 덕분에 반쪽 파일이 없다 → 무잠금 읽기 허용, 단 digest를 무효화해
+            # save() 시 반드시 3-way 병합 경로를 타게 한다(동시 writer 변경 보존).
+            logger.warning(f"  [Shadow] 로드 락 획득 실패({e}) — 무잠금 읽기, 저장 시 병합 강제")
+            data = self._load_or_create()
+            self._capture_base(data, digest='__unknown__')
+            return data
+
     from contextlib import contextmanager
     @contextmanager
-    def transaction(self, timeout: int = 10):
-        """[Red Team V8] 다중 프로세스(S1~S5) 환경에서 TOC/TOU Data Race를 원천 방지하는 분산 트랜잭션 락.
+    def transaction(self, timeout: int = _SHADOW_LOCK_TIMEOUT):
+        """[Red Team V8] 다중 프로세스(S1~S5) 환경에서 TOC/TOU Data Race를 원천 방지하는 트랜잭션 락.
         
-        Redis 기반 분산 락(Distributed Lock)을 획득한 후 파일에서 최신 상태를 강제로 다시 읽어오고, 
+        락을 획득한 후 파일에서 최신 상태를 강제로 다시 읽어오고, 
         with 블록이 끝날 때 원자적으로(atomic) 자동 저장합니다.
+
+        ★ Wave 1 Track A: Redis 락 → file_ops 파일락(shadow_portfolio.json.lock)으로 통일.
+          - 과거 Redis 락은 2×timeout 후 자동 만료(작업 중 락 상실)되고, Redis 단절 시
+            다른 파일(.lock_shadow_portfolio.lock)로 폴백 → 프로세스마다 서로 다른 락을 잡을 수 있었다.
+            또한 transaction 밖의 save()는 이 락과 무관했다.
+          - 이제 로더/save()/transaction 이 같은 재진입 락을 공유하므로 교착 없이 상호배제된다.
+          - 획득 실패 시 FileLockTimeout(TimeoutError 하위) — 기존 Redis TimeoutError와 동일 계약.
         
         Usage:
             with ShadowPortfolioManager().transaction() as sm:
                 sm.execute_buys(orders)
         """
-        from src.utils.distributed_lock import redis_lock_transaction
-        lock_name = "shadow_portfolio"
-        with redis_lock_transaction(lock_name, timeout=timeout):
-            self.data = self._load_or_create()
+        with file_lock_transaction(self.file_path, timeout=timeout, strict=True):
+            self.data = self._locked_load()
             self._migrate_legacy_positions()
             try:
                 yield self
             finally:
                 self.save()
+
 
 
 
@@ -303,7 +363,8 @@ class ShadowPortfolioManager:
             live_positions = trader.fetch_live_positions()
             details = getattr(trader, 'live_position_details', {})
             if live_positions and getattr(trader, '_last_positions_complete', False):
-                self.force_reconcile(live_positions, trader.account.cash, position_details=details)
+                self.force_reconcile(live_positions, trader.account.cash, position_details=details,
+                                     snapshot_complete=True)
                 self.data['live_synced_at'] = datetime.now().isoformat()
                 self.data['real_account_synced'] = True
                 self.save()
@@ -692,7 +753,8 @@ class ShadowPortfolioManager:
         etf_tickers.update(_KNOWN_ETFS)
         return etf_tickers
 
-    def force_reconcile(self, live_positions: Dict[str, int], live_cash: float, position_details: Optional[Dict] = None):
+    def force_reconcile(self, live_positions: Dict[str, int], live_cash: float, position_details: Optional[Dict] = None,
+                        snapshot_complete: bool = False):
         """[Red Team V6] KIS 실계좌 상태와 로컬 섀도우 포트폴리오 강제 동기화 (Zombie Position 척결).
         
         KIS 실계좌의 보유 종목(live_positions)과 현금(live_cash)을 기준으로 
@@ -701,6 +763,10 @@ class ShadowPortfolioManager:
         - KIS에는 있는데 로컬에 없는 종목 (Zombie): 'S_RECON:ticker' 스트림으로 편입하여 관리에 포함.
         - 로컬에는 있는데 KIS에 없는 종목 (Ghost): 로컬에서 강제 삭제.
         - 현금 불일치: KIS 현금으로 강제 덮어쓰기.
+        - ★ Wave 1 W1_3 수량 동기화: snapshot_complete=True(어댑터 `_last_positions_complete` 확인 후)일 때만
+          양쪽에 존재하는 종목의 수량 차이를 브로커(SSOT) 기준으로 교정한다.
+          (avg_price는 브로커 상세가 있을 때만 갱신, results/reconcile_audit.jsonl에 before/after 기록,
+           추적 종목의 50% 초과가 바뀌면 스냅샷 이상으로 보고 전체 거부 + CRITICAL 알림)
         """
         changed = False
         if not isinstance(getattr(self, 'data', None), dict) or 'positions' not in self.data:
@@ -724,11 +790,13 @@ class ShadowPortfolioManager:
         # ★ Wave 0 E5: 브로커 스냅샷이 불완전(빈 응답·해외 조회 실패 등)할 때의 대량 Ghost 삭제 차단
         _ghost_tickers = {local_pos[k].get('ticker') for k in keys_to_delete if local_pos[k].get('ticker')}
         _tracked_tickers = set(local_aggregated.keys())
+        _snapshot_suspect = not live_positions
         if keys_to_delete and (not live_positions or
                                (len(_tracked_tickers) >= 2 and len(_ghost_tickers) / len(_tracked_tickers) > 0.5)):
             logger.critical(f"  🚨 [RECON] 브로커 스냅샷 불완전 의심 — Ghost 삭제 보류 "
                             f"(live={len(live_positions)}, 삭제후보={sorted(_ghost_tickers)}, 추적={len(_tracked_tickers)})")
             keys_to_delete = []
+            _snapshot_suspect = True
 
         for k in keys_to_delete:
             logger.critical(f"  🚨 [RECON] KIS에 없는 Ghost 포지션 삭제: {k}")
@@ -745,6 +813,16 @@ class ShadowPortfolioManager:
                 _kp_nav = float(_kp_raw.get('total_nav', _kp_raw.get('nav', 0.0)) or 0.0)
         except Exception:
             pass
+
+        # ★ Wave 1 W1_3: 수량 동기화 (브로커 = SSOT). 불완전/의심 스냅샷에서는 절대 수행하지 않는다.
+        _qty_audit: List[Dict] = []
+        if not snapshot_complete:
+            logger.debug("  [RECON] snapshot_complete=False — 수량 동기화 생략")
+        elif _snapshot_suspect:
+            logger.critical("  🚨 [RECON] 스냅샷 의심(빈 응답/대량 Ghost) — 수량 동기화 거부")
+        else:
+            if self._sync_quantities_to_broker(live_positions, local_aggregated, position_details, _qty_audit):
+                changed = True
 
         for t, live_qty in live_positions.items():
             loc_qty = local_aggregated.get(t, 0)
@@ -798,8 +876,205 @@ class ShadowPortfolioManager:
             
         if changed:
             self._heal_positions(self.data)
-            self.save()
+            _saved = self.save()
             logger.critical("  ✅ [RECON] 섀도우 포트폴리오 좀비 포지션 치유 및 상태 동기화 완료!")
+            if _qty_audit:
+                for rec in _qty_audit:
+                    rec['saved'] = bool(_saved)
+                self._append_reconcile_audit(_qty_audit)
+
+    # ───────────────────────────────────────
+    # ★ Wave 1 W1_3: Broker-SSOT quantity sync
+    # ───────────────────────────────────────
+    def _append_reconcile_audit(self, records: List[Dict]) -> None:
+        """results/reconcile_audit.jsonl 에 감사 레코드 append (락 보유, 실패해도 대사 자체는 계속)."""
+        if not records:
+            return
+        path = _RESULTS / 'reconcile_audit.jsonl'
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with file_lock_transaction(path, timeout=10):
+                with open(path, 'a', encoding='utf-8') as fh:
+                    for rec in records:
+                        fh.write(json.dumps(rec, ensure_ascii=False, default=str) + '\n')
+                    fh.flush()
+                    os.fsync(fh.fileno())
+        except Exception as e:
+            logger.error(f"  [RECON] 감사 로그 기록 실패: {e}")
+
+    def _sync_quantities_to_broker(self, live_positions: Dict, local_aggregated: Dict,
+                                   position_details: Optional[Dict], audit: List[Dict]) -> bool:
+        """완전한 브로커 스냅샷 기준 종목별 수량 교정. 변경 여부 반환.
+
+        - 대상: 로컬(수량>0)과 브로커 양쪽에 존재하고 수량이 다른 종목.
+        - 상한: 추적 종목 ≥2 이고 변경 종목 비율 > 50% → 전부 거부 + CRITICAL (+텔레그램 시도).
+          (1종목 포트폴리오는 Ghost 가드와 동일하게 비율 가드 미적용)
+        - 배분: 동일 종목의 여러 스트림 포지션은 S_RECON 우선 → 최근 진입(LIFO) 순으로 증감.
+          감소로 0이 된 포지션은 삭제.
+        - avg_price: 단일 포지션 & 브로커 상세(position_details.entry_price>0)가 있을 때만 갱신.
+        """
+        local_pos = self.data['positions']
+        ts = datetime.now().isoformat()
+        plan = []
+        for t, live_qty in live_positions.items():
+            loc_qty = local_aggregated.get(t, 0)
+            if not loc_qty or loc_qty <= 0:
+                continue   # 로컬에 없는 종목은 기존 Zombie 경로(S_RECON 편입)가 처리
+            try:
+                live_f = float(live_qty)
+            except (TypeError, ValueError):
+                logger.critical(f"  🚨 [RECON] 브로커 수량 파싱 실패 {t}={live_qty!r} — 수량 동기화 전체 거부")
+                return False
+            if live_f < 0:
+                logger.critical(f"  🚨 [RECON] 음수 브로커 수량 {t}={live_qty} — 수량 동기화 전체 거부")
+                return False
+            if abs(live_f - float(loc_qty)) > 1e-9:
+                plan.append((t, live_f, float(loc_qty)))
+
+        if not plan:
+            return False
+
+        n_tracked = len(local_aggregated)
+        ratio = len(plan) / max(n_tracked, 1)
+        if n_tracked >= 2 and ratio > _QTY_SYNC_MAX_CHANGE_RATIO:
+            msg = (f"수량 동기화 거부: 추적 {n_tracked}종목 중 {len(plan)}종목({ratio:.0%}) 변경 필요 "
+                   f"(> {_QTY_SYNC_MAX_CHANGE_RATIO:.0%}) — 브로커 스냅샷 이상 의심. "
+                   f"{[(t, loc, live) for t, live, loc in plan][:10]}")
+            logger.critical(f"  🚨 [RECON] {msg}")
+            audit.append({'ts': ts, 'event': 'qty_sync_refused_cap', 'n_tracked': n_tracked,
+                          'n_changes': len(plan), 'ratio': round(ratio, 4),
+                          'changes': [{'ticker': t, 'local_qty': loc, 'broker_qty': live} for t, live, loc in plan]})
+            # 거부 이벤트는 저장 여부와 무관하게 즉시 기록
+            for rec in audit:
+                rec.setdefault('saved', None)
+            self._append_reconcile_audit(list(audit))
+            audit.clear()
+            try:
+                from src.utils.telegram_notifier import TelegramNotifier
+                TelegramNotifier().send_alert('🚨 RECON 수량 동기화 거부', msg)
+            except Exception as _tg:
+                logger.debug(f"  [RECON] 알림 실패: {_tg}")
+            return False
+
+        changed = False
+        for t, live_f, loc_f in plan:
+            keys = [k for k, p in local_pos.items() if p.get('ticker') == t and float(p.get('quantity', 0) or 0) > 0]
+            if not keys:
+                continue
+            keys.sort(key=lambda k: str(local_pos[k].get('entry_date') or ''), reverse=True)   # 최근 진입 우선
+            keys.sort(key=lambda k: 0 if str(k).startswith('S_RECON:') else 1)                 # S_RECON 최우선 (stable)
+            dtls = (position_details or {}).get(t, {}) or {}
+            try:
+                broker_avg = float(dtls.get('entry_price', 0.0) or dtls.get('avg_price', 0.0) or 0.0)
+            except (TypeError, ValueError):
+                broker_avg = 0.0
+            diff = live_f - loc_f
+            remaining = abs(diff)
+            for idx, k in enumerate(keys):
+                if remaining <= 1e-9:
+                    break
+                p = local_pos[k]
+                q_before = float(p.get('quantity', 0) or 0)
+                avg_before = p.get('avg_price', p.get('entry_price', 0))
+                if diff > 0:
+                    q_after = q_before + remaining
+                    remaining = 0.0
+                else:
+                    take = min(remaining, q_before)
+                    q_after = q_before - take
+                    remaining -= take
+                rec = {'ts': ts, 'event': 'qty_sync', 'ticker': t, 'position_key': k,
+                       'broker_qty': _as_number(live_f), 'local_qty_total_before': _as_number(loc_f),
+                       'before': {'quantity': _as_number(q_before), 'avg_price': avg_before}}
+                if q_after <= 1e-9:
+                    del local_pos[k]
+                    rec['action'] = 'delete'
+                    rec['after'] = None
+                    logger.critical(f"  🚨 [RECON] 수량 동기화: {k} {q_before:g} → 0 (삭제, 브로커 총 {live_f:g})")
+                else:
+                    p['quantity'] = _as_number(q_after)
+                    if len(keys) == 1 and broker_avg > 0:
+                        p['avg_price'] = broker_avg
+                        p['entry_price'] = broker_avg
+                    avg = float(p.get('avg_price', p.get('entry_price', 0)) or 0)
+                    cur = float(p.get('current_price', 0) or 0) or avg
+                    if avg > 0:
+                        p['amount'] = avg * p['quantity']
+                    if cur > 0:
+                        p['market_value'] = cur * p['quantity']
+                        if avg > 0:
+                            p['unrealized_pnl'] = (cur - avg) * p['quantity']
+                    rec['action'] = 'adjust'
+                    rec['after'] = {'quantity': p['quantity'], 'avg_price': p.get('avg_price')}
+                    logger.critical(f"  🚨 [RECON] 수량 동기화: {k} {q_before:g} → {q_after:g} (브로커 총 {live_f:g})")
+                audit.append(rec)
+                changed = True
+        return changed
+
+    # ───────────────────────────────────────
+    # ★ Wave 1 Track A: concurrent-writer 3-way merge
+    # ───────────────────────────────────────
+    @staticmethod
+    def _merge_append_only(base_l, mine_l, theirs_l) -> list:
+        """append-only 리스트 병합: 디스크(theirs) 전체 + 내가 로드 이후 새로 추가한 항목."""
+        base_l = list(base_l or [])
+        mine_l = list(mine_l or [])
+        theirs_l = list(theirs_l or [])
+        if mine_l[:len(base_l)] == base_l:
+            my_new = mine_l[len(base_l):]
+        else:
+            base_keys = {_json_key(e) for e in base_l}
+            my_new = [e for e in mine_l if _json_key(e) not in base_keys]
+        their_new_keys = {_json_key(e) for e in theirs_l[len(base_l):]}
+        return theirs_l + [e for e in my_new if _json_key(e) not in their_new_keys]
+
+    @staticmethod
+    def _merge_value(key, b, m, t, additive: bool, conflicts: list):
+        if m == b:
+            return t
+        if t == b:
+            return m
+        if (additive and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (b, m, t))):
+            return t + (m - b)
+        conflicts.append(key)
+        return m
+
+    def _merge_concurrent(self, base: Dict, mine: Dict, theirs_raw: Dict):
+        """마지막 로드 이후 다른 writer가 디스크를 바꿨을 때의 3-way 병합.
+
+        - trade_history: append-only 합집합 (어느 쪽 거래도 유실하지 않음)
+        - positions: 포지션 키별 3-way (한쪽만 바꾼 키는 그쪽, 양쪽 다 바꾸면 내 값)
+        - cash: 양쪽 증감량 합산 (theirs + (mine - base))
+        - 기타 최상위 키: 한쪽만 바꿨으면 그쪽, 양쪽이면 내 값
+        - realized_pnl/total_commission/strategy_pnl: 병합된 trade_history로 재계산
+        """
+        try:
+            theirs = self._normalize_loaded(copy.deepcopy(theirs_raw))
+        except Exception:
+            theirs = copy.deepcopy(theirs_raw)
+        conflicts: list = []
+        merged: Dict = {}
+        for k in set(base) | set(mine) | set(theirs):
+            b, m, t = base.get(k, _MISSING), mine.get(k, _MISSING), theirs.get(k, _MISSING)
+            if k == 'trade_history' and not getattr(self, '_allow_history_rewrite', False):
+                v = self._merge_append_only(None if b is _MISSING else b,
+                                            None if m is _MISSING else m,
+                                            None if t is _MISSING else t)
+            elif k == 'positions' and all(isinstance(x, dict) for x in (b, m, t)):
+                v = {}
+                for pk in set(b) | set(m) | set(t):
+                    pv = self._merge_value(f"positions.{pk}", b.get(pk, _MISSING), m.get(pk, _MISSING),
+                                           t.get(pk, _MISSING), False, conflicts)
+                    if pv is not _MISSING:
+                        v[pk] = pv
+            else:
+                v = self._merge_value(k, b, m, t, k in _ADDITIVE_SCALARS, conflicts)
+            if v is not _MISSING:
+                merged[k] = v
+        merged.setdefault('positions', {})
+        merged.setdefault('trade_history', [])
+        self._reconcile_accumulated_fields(merged)
+        return merged, conflicts
 
     def save(self) -> bool:
         """Atomic write + 불변식 가드 + 직전 버전 백업.
@@ -810,6 +1085,12 @@ class ShadowPortfolioManager:
           - 거부 시 예외 대신 디스크 진실 보존 + 거부된 메모리 상태를 포렌식 파일로 남기고 False 반환
             (동시 writer 경합이 실매매 장부 처리 중 예외로 번지지 않도록). 다음 reload에서 메모리 치유.
           - .bak은 '직전 디스크 버전'을 보존(기존: 동일 내용을 두 파일에 써서 복구 불가).
+
+        ★ Wave 1 Track A:
+          - 검증→백업→기록 전 구간을 shadow 락(strict)으로 보호. 락 실패 시 무잠금 쓰기 대신 거부.
+          - 로드 이후 디스크가 다른 writer에 의해 바뀌었으면(digest 불일치) 3-way 병합 후 저장
+            → load→mutate→save 사이의 동시 writer 거래(trade_history)가 유실되지 않는다.
+          - 병합 결과에도 E1 불변식(append-only)을 디스크 버전 기준으로 재검증.
         """
         def _reject(reason: str) -> bool:
             logger.critical(f"  🚨 [SaveGuard] 포트폴리오 저장 거부: {reason} — 디스크 상태 보존")
@@ -824,15 +1105,38 @@ class ShadowPortfolioManager:
 
         if not isinstance(self.data, dict) or 'positions' not in self.data:
             return _reject("positions 키 없음 (stub 덮어쓰기 차단)")
-        self.data['updated'] = datetime.now().isoformat()
         _RESULTS.mkdir(exist_ok=True)
 
+        try:
+            with file_lock_transaction(self.file_path, timeout=_SHADOW_LOCK_TIMEOUT, strict=True):
+                return self._save_locked(_reject)
+        except FileLockTimeout as e:
+            return _reject(f"락 획득 실패 ({e}) — 무잠금 쓰기 금지")
+
+    def _save_locked(self, _reject) -> bool:
+        self.data['updated'] = datetime.now().isoformat()
+
+        raw = None
         on_disk = None
         if self.file_path.exists():
             try:
-                on_disk = json.loads(self.file_path.read_text(encoding='utf-8'))
+                raw = self.file_path.read_bytes()
+                on_disk = json.loads(raw.decode('utf-8'))
             except Exception:
                 on_disk = None  # 손상된 디스크 파일은 비교 불가 → 덮어쓰기 허용(백업은 아래에서 원본 바이트 보존)
+        cur_digest = hashlib.sha256(raw).hexdigest() if raw is not None else None
+
+        base = getattr(self, '_base_snapshot', None)
+        if (isinstance(on_disk, dict) and isinstance(base, dict)
+                and cur_digest != getattr(self, '_disk_digest', None)):
+            n_before = len(on_disk.get('trade_history') or [])
+            merged, conflicts = self._merge_concurrent(base, self.data, on_disk)
+            logger.warning(f"  ⚠️ [SaveMerge] 로드 이후 다른 writer가 shadow_portfolio.json 갱신 — 3-way 병합 "
+                           f"(disk trades={n_before}, merged trades={len(merged.get('trade_history') or [])}, "
+                           f"양측 충돌 키(내 값 채택)={conflicts[:20]})")
+            merged['updated'] = self.data['updated']
+            self.data = merged
+
         if isinstance(on_disk, dict):
             n_disk = len(on_disk.get('trade_history') or [])
             n_mem = len(self.data.get('trade_history') or [])
@@ -840,16 +1144,22 @@ class ShadowPortfolioManager:
                 return _reject(f"append-only trade_history 축소 ({n_disk} → {n_mem})")
 
         try:
-            if self.file_path.exists():
+            if raw is not None and on_disk is None:
+                # ★ Wave 1: 디스크 손상 시 마지막 정상 .bak 은 보존하고 손상 바이트는 포렌식 파일로 격리
+                side = _RESULTS / f"shadow_portfolio.corrupt_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.json"
+                side.write_bytes(raw)
+                logger.critical(f"  🚨 [SaveGuard] 디스크 shadow_portfolio.json 손상 — 원본을 {side.name}로 격리, .bak 유지")
+            elif raw is not None or self.file_path.exists():
                 bak = self.file_path.with_suffix('.json.bak')
                 tmp_fd, tmp_name = tempfile.mkstemp(dir=str(_RESULTS), prefix='.shadow_bak_', suffix='.tmp')
                 with os.fdopen(tmp_fd, 'wb') as fh:
-                    fh.write(self.file_path.read_bytes())
+                    fh.write(raw if raw is not None else self.file_path.read_bytes())
                 os.replace(tmp_name, bak)
             atomic_write_json(self.file_path, self.data, indent=2, default=str)
         except Exception as e:
             logger.error(f"  ❌ 포트폴리오 저장 실패: {e}", exc_info=True)
             raise
+        self._capture_base(self.data)
         self.last_save_rejected = None
         logger.info(f"  💾 포트폴리오 저장: NAV=₩{float(self.data.get('virtual_nav', 0) or 0):,.0f}")
         return True
@@ -986,7 +1296,7 @@ class ShadowPortfolioManager:
         if _sleeve_a_nav == 0 and _sleeve_b_nav == 0 and new_nav > 0:
             try:
                 from config.dynamic_config import DynamicConfig
-                _cfg_ratio = DynamicConfig().get('portfolio.sleeve_a_ratio', 0.60)
+                _cfg_ratio = pget('portfolio.sleeve_a_ratio', 0.60)
             except Exception:
                 _cfg_ratio = 0.60
             _sleeve_a_nav = new_nav * _cfg_ratio
@@ -1050,16 +1360,16 @@ class ShadowPortfolioManager:
                 # 비활성 스트림: SL을 max(current_loss, -3%)로 타이트닝
                 # 트레일링 스탑 즉시 활성화
                 cfg = DynamicConfig()
-                _tighten_sl = cfg.get('exit.deactivated_stream_sl', -0.03)
+                _tighten_sl = pget('exit.deactivated_stream_sl', -0.03)
                 _current_pnl = 0  # position 정보 없음 — 보수적 기본값
                 _forced_sl = max(_tighten_sl, _current_pnl - 0.01)  # 1% below current
                 logger.info(f"M11: {stream_id} deactivated → forced SL={_forced_sl:.1%}")
                 return {
-                    'tp_pct': cfg.get('exit.deactivated_stream_tp', 0.02),
+                    'tp_pct': pget('exit.deactivated_stream_tp', 0.02),
                     'sl_pct': _forced_sl,
                     'trailing_activate_pct': max(0.01, _current_pnl * 0.5) if _current_pnl > 0 else 0.01,
-                    'trailing_stop_pct': cfg.get('exit.deactivated_trailing_stop', -0.015),
-                    'max_hold_days': cfg.get('exit.deactivated_max_hold', 20),
+                    'trailing_stop_pct': pget('exit.deactivated_trailing_stop', -0.015),
+                    'max_hold_days': pget('exit.deactivated_max_hold', 20),
                     'deactivated': True,
                 }
         except ImportError as e:
@@ -1175,11 +1485,11 @@ class ShadowPortfolioManager:
         # WR 기반 trailing 활성화 비율 (TP 대비):
         # WR < 40% → TP × 0.20 (조기), WR 40-55% → TP × 0.30, WR > 55% → TP × 0.40
         if _wr_for_trailing < 0.40:
-            _trailing_ratio = _cfg.get('portfolio.trailing_ratio.bull', 0.20)
+            _trailing_ratio = pget('portfolio.trailing_ratio.bull', 0.20)
         elif _wr_for_trailing < 0.55:
-            _trailing_ratio = _cfg.get('portfolio.trailing_ratio.caution', 0.30)
+            _trailing_ratio = pget('portfolio.trailing_ratio.caution', 0.30)
         else:
-            _trailing_ratio = _cfg.get('portfolio.trailing_ratio.bear', 0.40)
+            _trailing_ratio = pget('portfolio.trailing_ratio.bear', 0.40)
 
         # 동적 trailing 활성화 = TP × ratio (vol_scale 반영)
         _dynamic_trailing_activate = tp_decimal * _trailing_ratio
@@ -1224,9 +1534,9 @@ class ShadowPortfolioManager:
 
         _cfg_exit = DynamicConfig()
         _partial_ratios = {
-            's2': _cfg_exit.get('s2.exit.partial_ratio', 0.35),
-            's3': _cfg_exit.get('s3.exit.partial_ratio', 0.60),
-            's4': _cfg_exit.get('s4.exit.partial_ratio', 0.67),
+            's2': pget('s2.exit.partial_ratio', 0.35),
+            's3': pget('s3.exit.partial_ratio', 0.60),
+            's4': pget('s4.exit.partial_ratio', 0.67),
         }
         _default_partial_ratio = _partial_ratios.get(prefix, 0.50)
         _tp_based_trigger = tp_decimal * _default_partial_ratio
@@ -1279,13 +1589,13 @@ class ShadowPortfolioManager:
         """signal_cache에서 변동성 컨텍스트 로드 (VIX, VKOSPI)."""
         _cfg = DynamicConfig()
         _cfg_vix = DynamicConfig()
-        base_vix = _cfg_vix.get('risk.vix_base_level', 18.0)  # 정상 VIX 기준값
+        base_vix = pget('risk.vix_base_level', 18.0)  # 정상 VIX 기준값
         try:
             sc = json.loads((_RESULTS / 'signal_cache.json').read_text())
             vix = sc.get('vix')
             if vix is None or vix <= 0:
                 last_vix = getattr(self, '_last_known_vix', base_vix)
-                vix_panic = _cfg_vix.get('risk.vix_panic_level', 30.0)  # 패닉 VIX 기준값
+                vix_panic = pget('risk.vix_panic_level', 30.0)  # 패닉 VIX 기준값
                 vix = max(last_vix, vix_panic)
                 logger.warning(f"  🚨 [ShadowManager] VIX 누락 감지. 보수적 방어/청산 모드 돌입 (VIX={vix:.1f} 가정)")
             else:
@@ -1320,7 +1630,7 @@ class ShadowPortfolioManager:
             ATR (% decimal)
         """
         _cfg = DynamicConfig()
-        atr_period = _cfg.get('exit.atr_period', 14)
+        atr_period = pget('exit.atr_period', 20)
 
         # 루프 캐시 확인
         if _atr_loop_cache is not None and ticker in _atr_loop_cache:
@@ -1370,7 +1680,7 @@ class ShadowPortfolioManager:
             _cfg2 = DynamicConfig()
             raw_vol = abs(pos.get('pnl_pct', 2.0)) / 100  # pnl 절대값 proxy
             raw_vol = max(0.01, min(0.15, raw_vol))
-            atr_pct = raw_vol * _cfg2.get('exit.atr_vol_proxy_factor', 1.5)
+            atr_pct = raw_vol * pget('exit.atr_vol_proxy_factor', 1.5)
             logger.debug(f"  SM ATR vol_proxy [{ticker}]: {atr_pct*100:.2f}%")
 
         atr_pct = max(0.005, min(0.15, atr_pct))
@@ -1530,8 +1840,8 @@ class ShadowPortfolioManager:
 
         # ★ 장마감 청산 컨텍스트
         _time_exit_on = _cfg.get('s1.exit.time_based_exit_enabled', True)
-        _close_h = _cfg.get('s1.exit.close_time_hour', 15)
-        _close_m = _cfg.get('s1.exit.close_time_minute', 10)
+        _close_h = pget('s1.exit.close_time_hour', 15)
+        _close_m = pget('s1.exit.close_time_minute', 10)
         _time_exit_min_cl = _cfg.get('s1.exit.time_exit_min_confluence', 2)
         _is_close_time = (today_dt.hour > _close_h or
                           (today_dt.hour == _close_h and
@@ -1570,7 +1880,7 @@ class ShadowPortfolioManager:
         # ★ 프리미엄 필터 컨텍스트
         _prem_on = _cfg.get('s1.exit.premium_filter_enabled', True)
         _prem_warn = _cfg.get('s1.exit.premium_warn_pct', 2.0)
-        _prem_block = _cfg.get('s1.exit.premium_block_pct', 5.0)
+        _prem_block = pget('s1.exit.premium_block_pct', 5.0)
 
         # ★ [Phase 81] S2 다변량 군집 셧다운(Covariance Shutdown) 사전 계산
         _s2_sector_distress = {}
@@ -1583,8 +1893,8 @@ class ShadowPortfolioManager:
                     p_pnl = (cp - ap) / ap
                     _atr_pre = self._compute_ticker_atr_pct(tck, p, _atr_loop_cache)
                     # 하락폭이 ATR의 1.5배 이상이거나 절대 하락이 4% 이상일 때 Distress 증가
-                    _dist_min = float(_cfg.get('s2.distress.min_pnl_threshold', 0.04))
-                    _dist_atr = float(_cfg.get('s2.distress.atr_mult',          1.5))
+                    _dist_min = float(pget('s2.distress.min_pnl_threshold', 0.04))
+                    _dist_atr = float(pget('s2.distress.atr_mult', 1.5))
                     if p_pnl < -max(_dist_min, _atr_pre * _dist_atr):
                         sec = p.get('sector', 'unknown')
                         _s2_sector_distress[sec] = _s2_sector_distress.get(sec, 0) + 1
@@ -1716,19 +2026,19 @@ class ShadowPortfolioManager:
 
                 # ── Chandelier 배수 (레짐 + VIX) ───────────────────────
                 _regime_mult = {
-                    'bull':    _cfg.get('exit.chandelier_mult.bull',    3.0),
-                    'caution': _cfg.get('exit.chandelier_mult.caution', 2.5),
+                    'bull':    pget('exit.chandelier_mult.bull', 3.0),
+                    'caution': pget('exit.chandelier_mult.caution', 2.5),
                     'bear':    _cfg.get('exit.chandelier_mult.bear',    2.0),
-                    'crash':   _cfg.get('exit.chandelier_mult.crash',   1.5),
+                    'crash':   pget('exit.chandelier_mult.crash', 1.5),
                 }
                 _ch_mult = _regime_mult.get(regime, 2.5)
-                _vix_thresh = _cfg.get('exit.chandelier_vix_tighten', 25.0)
+                _vix_thresh = pget('exit.chandelier_vix_tighten', 25.0)
                 if _vix >= _vix_thresh:
-                    _ch_mult *= _cfg.get('exit.chandelier_vix_factor', 0.8)
+                    _ch_mult *= pget('exit.chandelier_vix_factor', 0.8)
 
                 # 🎯 [High-Profit Lock-in Fix] 수익률 +2.5% 돌파 시 익절 방어 배수 동적 바짝 축소
-                if pnl_pct >= _cfg.get('exit.high_profit_threshold', 0.025):
-                    _ch_mult *= _cfg.get('exit.high_profit_tighten_factor', 0.8)
+                if pnl_pct >= pget('exit.high_profit_threshold', 0.025):
+                    _ch_mult *= pget('exit.high_profit_tighten_factor', 0.8)
 
                 _ch_mult = max(1.0, _ch_mult)
 
@@ -1746,7 +2056,7 @@ class ShadowPortfolioManager:
 
                 # ── 0-A) S2 Catastrophic Stop ────────────────────────
                 if stream_id in ('S2', 'ml_alpha') and _peak_dec > 0:
-                    _cat_mult = _cfg.get('exit.catastrophic_atr_mult', 4.0)
+                    _cat_mult = pget('exit.catastrophic_atr_mult', 4.0)
                     _allowed_dd = _atr * _cat_mult  # decimal
                     _actual_dd = _peak_dec - _cur_dec  # 양수 = 하락
                     if _actual_dd >= _allowed_dd:
@@ -1761,9 +2071,9 @@ class ShadowPortfolioManager:
 
                 # ── 0-B) 50% Scale-out ────────────────────────────
                 if not sell_reason and not pos.get('scaled_out', False):
-                    _so_mult   = _cfg.get('exit.scale_out_atr_mult',  10.0)
-                    _so_min    = _cfg.get('exit.scale_out_min_pct',   30.0) / 100
-                    _so_ratio  = _cfg.get('exit.scale_out_ratio',     0.50)
+                    _so_mult   = pget('exit.scale_out_atr_mult', 10.0)
+                    _so_min    = pget('exit.scale_out_min_pct', 30.0) / 100
+                    _so_ratio  = pget('exit.scale_out_ratio', 0.50)
                     _so_target = max(_atr * _so_mult, _so_min)  # decimal
                     if _cur_dec >= _so_target and quantity >= 2:
                         sell_quantity = max(1, int(quantity * _so_ratio))
@@ -1777,11 +2087,11 @@ class ShadowPortfolioManager:
 
                 # ── 0-C) ATR 샹들리에 Trailing Stop ──────────────────
                 if not sell_reason:
-                    _trailing_trigger_pct = _cfg.get('s4.exit.trailing_tp_trigger', 15) / 100
+                    _trailing_trigger_pct = pget('s4.exit.trailing_tp_trigger', 10) / 100
                     _ch_drop = _atr * _ch_mult  # decimal
                     # 클램핑
-                    _min_drop = _cfg.get('s4.exit.trailing_drop_floor', 3) / 100
-                    _max_drop = _cfg.get('s4.exit.trailing_drop_ceil',  15) / 100
+                    _min_drop = pget('s4.exit.trailing_drop_floor', 3) / 100
+                    _max_drop = pget('s4.exit.trailing_drop_ceil', 15) / 100
                     _ch_drop = max(_min_drop, min(_max_drop, _ch_drop))
 
                     if (_peak_dec >= _trailing_trigger_pct
@@ -1823,8 +2133,8 @@ class ShadowPortfolioManager:
                     if sec in _s2_sector_distress:
                         # 동일 섹터 내 급락 종목 수에 비례하여 SL을 수학적으로 축소 (Deleveraging)
                         # 페널티: 하락 종목당 cfg 비율씩 SL 타이트닝 (최대 cfg 한도)
-                        _penalty_per = float(_cfg.get('s2.covariance_shutdown.penalty_per_stock', 0.2))
-                        _penalty_max = float(_cfg.get('s2.covariance_shutdown.max_penalty',       0.8))
+                        _penalty_per = float(pget('s2.covariance_shutdown.penalty_per_stock', 0.2))
+                        _penalty_max = float(pget('s2.covariance_shutdown.max_penalty', 0.8))
                         _penalty = min(_penalty_max, _s2_sector_distress[sec] * _penalty_per)
                         _original_sl = sl_pct
                         sl_pct = sl_pct * (1.0 - _penalty)
@@ -1835,8 +2145,8 @@ class ShadowPortfolioManager:
                 if stream_id == 'S3':
                     _zscore = _s3_signals_cache.get(ticker, 0.0)
                     _zsc_thr  = float(_cfg.get('s3.exit.zscore_threshold',   -1.0))
-                    _zsc_rate = float(_cfg.get('s3.exit.zscore_penalty_rate', 0.3))
-                    _zsc_cap  = float(_cfg.get('s3.exit.zscore_penalty_cap',  0.8))
+                    _zsc_rate = float(pget('s3.exit.zscore_penalty_rate', 0.3))
+                    _zsc_cap  = float(pget('s3.exit.zscore_penalty_cap', 0.8))
                     if _zscore < _zsc_thr:
                         # 펀더멘털 스코어가 임계치 아래로 붕괴하면 선제적 손절/익절 (Soft Exit)
                         # Z-Score가 낮을수록 SL을 선형적으로 좁힘 (최대 _zsc_cap)
@@ -1848,11 +2158,11 @@ class ShadowPortfolioManager:
             if stream_id == 'S1':
                 try:
                     _now = datetime.now()
-                    _close_dt = _now.replace(hour=int(_cfg.get('s1.exit.close_time_hour',15)), minute=int(_cfg.get('s1.exit.close_time_minute',30)), second=0, microsecond=0)
+                    _close_dt = _now.replace(hour=int(pget('s1.exit.close_time_hour', 15)), minute=int(pget('s1.exit.close_time_minute', 10)), second=0, microsecond=0)
                     _mins_rem = max(0.0, (_close_dt - _now).total_seconds() / 60.0)
-                    _t_ratio = min(1.0, _mins_rem / max(float(_cfg.get('s1.exit.session_minutes',360.0)), 1.0))
-                    _decay_base  = _cfg.get('portfolio.time_decay_base', 0.5)
-                    _decay_scale = _cfg.get('portfolio.time_decay_scale', 0.5)
+                    _t_ratio = min(1.0, _mins_rem / max(float(pget('s1.exit.session_minutes', 360.0)), 1.0))
+                    _decay_base  = pget('portfolio.time_decay_base', 0.5)
+                    _decay_scale = pget('portfolio.time_decay_scale', 0.5)
                     _time_decay_factor = _decay_base + _decay_scale * _t_ratio
                     sl_pct = sl_pct * _time_decay_factor
                     logger.debug(f"  [Phase80 S1-TimeSL] {ticker} rem={_mins_rem:.0f}min decay={_time_decay_factor:.3f} sl={sl_pct:.2f}%")
@@ -1973,7 +2283,7 @@ class ShadowPortfolioManager:
                 if stream_id.upper().startswith('S3') and not still_in_signals:
                     try:
                         _pos_score  = float(pos.get('qvm_score', pos.get('score', 0.0)))
-                        _score_cut  = float(_cfg.get('s3.hysteresis_score_cutoff', 55.0))
+                        _score_cut  = float(pget('s3.hysteresis_score_cutoff', 55.0))
                         if _pos_score >= _score_cut:
                             _s3_hysteresis_hold = True
                             logger.info(
@@ -2016,7 +2326,7 @@ class ShadowPortfolioManager:
             # 8) S1 장초반/장중 장세 붕괴 조기 청산 (Early Exit)
             # ──────────────────────────────────────
             if not sell_reason and stream_id == 'S1':
-                _early_exit_th = _cfg.get('s1.exit.early_exit_threshold', -0.5)
+                _early_exit_th = pget('s1.exit.early_exit_threshold', -0.5)
                 pos_leverage = pos.get('leverage', 1)
                 # 롱 포지션 조기 청산 (장세 악화)
                 if pos_leverage > 0 and _s1_reval_score < _early_exit_th:
@@ -2151,7 +2461,7 @@ class ShadowPortfolioManager:
             )
 
         # ★ L2-X FIX: 패닉셀 슬리피지 0.005 하드코딩 → cfg 기반
-        _panic_slippage = _cfg.get('portfolio.panic_sell_slippage', 0.005)  # 기본 0.5%
+        _panic_slippage = pget('portfolio.panic_sell_slippage', 0.005)  # 기본 0.5%
         return self.execute_sells(sell_orders, current_prices, commission_rate=_panic_slippage)
 
     def execute_sells(self, sell_orders: List[Dict],
@@ -2190,7 +2500,7 @@ class ShadowPortfolioManager:
 
         # ★ 증권거래세율 동적 로드 (하드코딩 배제)
         _cfg_sell = DynamicConfig()
-        _tax_rate = _cfg_sell.get('cost.tax_sell_pct', 0.18) / 100  # 0.18% → 0.0018
+        _tax_rate = pget('cost.tax_sell_pct', 0.18) / 100  # 0.18% → 0.0018
 
         # ★ ETF 판별용 유니버스 로드 (ETF는 증권거래세 면제)
         _etf_tickers = self._get_etf_tickers()
@@ -2983,7 +3293,7 @@ class ShadowPortfolioManager:
         """
         _cfg = DynamicConfig()
         score = 100.0
-        penalty_per_issue = float(_cfg.get('shadow.data_qa_penalty_per_issue', 10.0))
+        penalty_per_issue = float(pget('shadow.data_qa_penalty_per_issue', 10.0))
 
         # ① API 오류 플래그
         if portfolio.get('api_error') or portfolio.get('data_fetch_error'):
@@ -3004,12 +3314,12 @@ class ShadowPortfolioManager:
             elif avg > 0:
                 move = abs(cur - avg) / avg
                 extreme_threshold = float(
-                    _cfg.get('shadow.data_qa_extreme_move_threshold', 0.50)
+                    pget('shadow.data_qa_extreme_move_threshold', 0.50)
                 )
                 if move > extreme_threshold:
                     extreme_move_count += 1
 
-        zero_price_penalty_mult = float(_cfg.get('shadow.data_qa_zero_price_penalty_mult', 5.0))
+        zero_price_penalty_mult = float(pget('shadow.data_qa_zero_price_penalty_mult', 5.0))
         extreme_move_penalty_mult = float(_cfg.get('shadow.data_qa_extreme_move_penalty_mult', 2.0))
         score -= (zero_price_count / total_pos) * penalty_per_issue * zero_price_penalty_mult
         score -= (extreme_move_count / total_pos) * penalty_per_issue * extreme_move_penalty_mult
@@ -3020,7 +3330,7 @@ class ShadowPortfolioManager:
         if snapshots:
             last_snap = snapshots[-1]
             daily_pnl_pct = last_snap.get('daily_return_pct', 0.0) / 100.0
-        pnl_floor = float(_cfg.get('shadow.data_qa_pnl_floor', -0.90))
+        pnl_floor = float(pget('shadow.data_qa_pnl_floor', -0.90))
         pnl_ceil  = float(_cfg.get('shadow.data_qa_pnl_ceil', 1.00))
         pnl_outlier_penalty = float(_cfg.get('shadow.data_qa_pnl_outlier_penalty', penalty_per_issue * 4))
         if daily_pnl_pct < pnl_floor or daily_pnl_pct > pnl_ceil:

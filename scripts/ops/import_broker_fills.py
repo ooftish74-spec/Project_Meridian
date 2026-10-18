@@ -243,18 +243,22 @@ def main() -> int:
         print("DRY RUN — shadow_portfolio.json not modified. Re-run with --apply (daemon stopped).")
         return 0
 
-    bk = SHADOW.with_name(f"shadow_portfolio.json.pre_fill_import_{now.strftime('%Y%m%d_%H%M%S')}")
-    shutil.copy2(SHADOW, bk)
-    shadow['trade_history'] = merged
-    for key, p in (shadow.get('positions') or {}).items():
-        tk = p.get('ticker') or str(key).split(':')[-1]
-        if tk in entry:
-            p['entry_date'] = entry[tk]
-            p['entry_date_source'] = 'broker_fifo'
-    rb = shadow.setdefault('track_record_rebase', {})
-    rb['history_reconstruction'] = {'at': now.isoformat(), 'added': n_added, 'audit_file': audit.name,
-                                    'price_missing': n_missing_px, 'window_days': args.days}
-    atomic_write_json(SHADOW, shadow, indent=2, ensure_ascii=False, default=str)
+    from src.utils.file_ops import file_lock_transaction
+    with file_lock_transaction(SHADOW, timeout=30, strict=True):   # ★ Wave 1: 매니저와 동일 락
+        shadow = json.loads(SHADOW.read_text(encoding='utf-8'))      # 락 안에서 재로드 (그사이 변경 반영)
+        merged, n_added = merge_history(shadow.get('trade_history') or [], _importable)
+        bk = SHADOW.with_name(f"shadow_portfolio.json.pre_fill_import_{now.strftime('%Y%m%d_%H%M%S')}")
+        shutil.copy2(SHADOW, bk)
+        shadow['trade_history'] = merged
+        for key, p in (shadow.get('positions') or {}).items():
+            tk = p.get('ticker') or str(key).split(':')[-1]
+            if tk in entry:
+                p['entry_date'] = entry[tk]
+                p['entry_date_source'] = 'broker_fifo'
+        rb = shadow.setdefault('track_record_rebase', {})
+        rb['history_reconstruction'] = {'at': now.isoformat(), 'added': n_added, 'audit_file': audit.name,
+                                        'price_missing': n_missing_px, 'window_days': args.days}
+        atomic_write_json(SHADOW, shadow, indent=2, ensure_ascii=False, default=str)
     print(f"✅ merged (+{n_added}); backup {bk.name}")
     return 0
 
