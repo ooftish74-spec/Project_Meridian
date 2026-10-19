@@ -87,32 +87,51 @@ class UnknownBlackSwanDetector:
     @staticmethod
     def _extract_empirical_mahalanobis_inputs(signal_cache: Dict[str, Any]) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
         """signal_cache 내 롤링 히스토리(vix_history, usdkrw_history, us10y_history, dxy_history)로부터
-        실측 다변량 상태 벡터 x_t, 평균 μ, 공분산 행렬 Σ를 동적 구성.
+        실측 다변량 상태 벡터 x_t, 평균 μ, Empirical-Bayes 정규화 공분산 행렬 Σ를 동적 구성.
+        저변동성 구간 분산 붕괴(Variance Collapse)로 인한 평시 오탐을 막기 위해
+        사전 변동계수 하한(CV floor) 및 단방향 상방 스트레스 투영 max(mean, curr)을 적용합니다.
         """
         _min_hist = int(pget('black_swan.min_history_len', 10))
+        _cv_vix = float(pget('black_swan.cv_floor_vix', 0.18))
+        _cv_macro = float(pget('black_swan.cv_floor_macro', 0.025))
         series_list = []
-        for hk in ('vix_history', 'usdkrw_history', 'us10y_history', 'dxy_history'):
+        live_vals = []
+        cv_floors = []
+        key_pairs = (
+            ('vix_history', 'vix', _cv_vix),
+            ('usdkrw_history', 'usdkrw', _cv_macro),
+            ('us10y_history', 'us10y', _cv_vix),
+            ('dxy_history', 'dxy', _cv_macro),
+        )
+        for hk, lk, cv_f in key_pairs:
             raw = signal_cache.get(hk)
             if isinstance(raw, list):
                 clean = [float(v) for v in raw if isinstance(v, (int, float)) and math.isfinite(float(v)) and float(v) > 0]
                 if len(clean) >= _min_hist:
                     series_list.append(clean)
+                    lv = signal_cache.get(lk)
+                    live_vals.append(float(lv) if isinstance(lv, (int, float)) and math.isfinite(float(lv)) and float(lv) > 0 else clean[-1])
+                    cv_floors.append(cv_f)
         if not series_list:
             return None
         min_len = min(len(s) for s in series_list)
         if min_len < _min_hist:
             return None
-        # 최근 min_len 구간 정렬 행렬 (T x D)
         mat = np.column_stack([np.asarray(s[-min_len:], dtype=float) for s in series_list])
-        curr_vec = mat[-1]
         hist_mat = mat[:-1]
         mean_vec = np.mean(hist_mat, axis=0)
+        # 하방(안정화) 이동이 블랙스완 폭락으로 오인되지 않도록 상방 스트레스 편차만 투영
+        raw_curr = np.asarray(live_vals, dtype=float)
+        curr_vec = np.maximum(mean_vec, raw_curr)
         if mat.shape[1] == 1:
-            var_val = max(float(np.var(hist_mat[:, 0], ddof=1)), _EPS)
-            cov_mat = np.array([[var_val]])
+            emp_var = float(np.var(hist_mat[:, 0], ddof=1))
+            prior_var = float((mean_vec[0] * cv_floors[0]) ** 2)
+            cov_mat = np.array([[max(emp_var, prior_var, _EPS)]])
         else:
-            cov_mat = np.cov(hist_mat, rowvar=False, ddof=1)
-            cov_mat = np.asarray(cov_mat, dtype=float) + np.eye(mat.shape[1]) * _EPS
+            cov_mat = np.asarray(np.cov(hist_mat, rowvar=False, ddof=1), dtype=float)
+            for j in range(mat.shape[1]):
+                prior_var_j = float((mean_vec[j] * cv_floors[j]) ** 2)
+                cov_mat[j, j] = max(float(cov_mat[j, j]), prior_var_j, _EPS)
         return curr_vec, mean_vec, cov_mat
 
     @staticmethod

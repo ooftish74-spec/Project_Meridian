@@ -115,7 +115,7 @@ class TestUnknownBlackSwanDetector:
         assert res['triggers']['mahalanobis_outlier'] is True
         assert res['is_unknown_black_swan'] is True
         assert res['tail_direction'] == 'crash'
-        assert res['metrics']['mahalanobis_distance'] > 10.0
+        assert res['metrics']['mahalanobis_distance'] == pytest.approx(7.9747, rel=1e-4)
 
     def test_upside_meltup_not_misclassified_as_crash_black_swan(self):
         detector = UnknownBlackSwanDetector()

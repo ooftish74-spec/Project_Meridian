@@ -1789,6 +1789,32 @@
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/measurement/beta_tracker.py:92"
   },
+  "black_swan.cv_floor_macro": {
+   "level": "L1",
+   "default": 0.025,
+   "bounds": [
+    0,
+    0.25
+   ],
+   "policy": "free",
+   "config_key": "black_swan.cv_floor_macro",
+   "auto": true,
+   "rationale": "Empirical-Bayes CV variance floor for FX/DXY in Mahalanobis outlier detection.",
+   "provenance": "src/risk/unknown_black_swan_detector.py:96"
+  },
+  "black_swan.cv_floor_vix": {
+   "level": "L1",
+   "default": 0.18,
+   "bounds": [
+    0,
+    1.8
+   ],
+   "policy": "free",
+   "config_key": "black_swan.cv_floor_vix",
+   "auto": true,
+   "rationale": "Empirical-Bayes CV variance floor for VIX/rates in Mahalanobis outlier detection.",
+   "provenance": "src/risk/unknown_black_swan_detector.py:95"
+  },
   "black_swan.entropy_floor_ecdf_5pct": {
    "level": "L1",
    "default": 0.25,
