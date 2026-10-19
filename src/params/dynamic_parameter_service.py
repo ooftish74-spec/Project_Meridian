@@ -197,8 +197,8 @@ class DynamicParameterService:
     def l2_mode(self) -> str:
         if self._l2_mode_override:
             return self._l2_mode_override
-        mode = str(self._cfg('params.l2_mode', 'shadow') or 'shadow').lower()
-        return mode if mode in L2_MODES else 'shadow'
+        mode = str(self._cfg('params.l2_mode', 'live') or 'live').lower()
+        return mode if mode in L2_MODES else 'live'
 
     def set_l2_mode(self, mode: Optional[str]) -> None:
         if mode is not None and mode not in L2_MODES:

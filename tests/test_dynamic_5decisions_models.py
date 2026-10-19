@@ -323,3 +323,24 @@ def test_model5_empirical_bayes_stream_shrinkage_closed_form(tmp_path: Path):
     )
     assert w_out['S2'] == pytest.approx(0.0, abs=1e-12)
     assert sum(w_out.values()) == pytest.approx(1.0, rel=1e-9)
+
+
+def test_real_data_datetime_index_and_live_l2_mode(tmp_path: Path):
+    import pandas as pd
+    from src.params.dynamic_parameter_service import DynamicParameterService
+    from src.params.estimators import _read_close_series
+
+    idx = pd.date_range('2025-10-01', periods=252, freq='B')
+    df = pd.DataFrame({'close': [17.0] * 252}, index=idx)
+    pq_path = tmp_path / 'vix.parquet'
+    df.to_parquet(pq_path)
+
+    snap = _read_close_series(pq_path, eod_hour_utc=21)
+    assert snap is not None
+    assert len(snap.values) == 252
+    assert snap.asof is not None
+    assert snap.values[-1] == pytest.approx(17.0, rel=1e-9)
+
+    svc = DynamicParameterService(audit_path=tmp_path / 'audit.jsonl', config_getter=lambda k, d: d)
+    assert svc.l2_mode() == 'live'
+

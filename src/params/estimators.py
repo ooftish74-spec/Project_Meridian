@@ -170,6 +170,11 @@ def _read_close_series(path: Path, eod_hour_utc: Optional[int]) -> Optional[Seri
         if len(df) == 0:
             return None
         asof = _to_utc(df['_ts'].iloc[-1], eod_hour_utc)
+    elif isinstance(df.index, pd.DatetimeIndex):
+        df = df[[close_col]].dropna().sort_index()
+        if len(df) == 0:
+            return None
+        asof = _to_utc(df.index[-1], eod_hour_utc)
     else:
         df = df[[close_col]].dropna()
         asof = None
@@ -201,7 +206,8 @@ def default_sources() -> Dict[str, Callable[[], Optional[SeriesSnapshot]]]:
     return {
         # CBOE VIX daily close. US close 16:00 ET ≈ 21:00 UTC (20:00 in DST; 1h difference is immaterial for τ≥24h).
         'vix_daily': make_file_source(
-            ['data/lake/indices_us/VIX.csv', 'data/lake/indices_global/VIX.csv',
+            ['data/us_stocks/prices/^VIX.parquet', 'data/kr_markets/us_stocks/^VIX.parquet',
+             'data/lake/indices_us/VIX.csv', 'data/lake/indices_global/VIX.csv',
              'data/raw_historical/VOL_VIX.csv', 'data/global_markets/us_vix.parquet',
              'data/kr_markets/cross_vix.parquet', 'data/global_markets/cross_vix.parquet'],
             eod_hour_utc=21, min_rows=60),
