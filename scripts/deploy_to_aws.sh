@@ -45,6 +45,7 @@ RSYNC_EXCLUDES=(
   --exclude 'catboost_info' --exclude '/reports/' --exclude '/scratch/' --exclude '/.archive/'
   --exclude '.DS_Store' --exclude '*.pdf' --exclude '*.parquet' --exclude '/models/'
   --exclude '.ruff_cache' --exclude '.mypy_cache' --exclude '/docs/' --exclude 'ec2-trust-policy.json'
+  --exclude '/models_candidate/' --exclude '*.joblib' --exclude '*.pkl'
 )
 
 GIT_SHA="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
