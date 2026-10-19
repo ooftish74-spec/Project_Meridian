@@ -1209,10 +1209,17 @@ class ShadowPortfolioManager:
             if not kp.exists():
                 return None
             d = json.loads(kp.read_text(encoding='utf-8'))
-            ts = d.get('timestamp') or d.get('updated_at')
-            if not ts:
+            # 어댑터는 updated_at만 갱신하므로 두 타임스탬프 중 최신값 기준
+            _tss = []
+            for _k in ('timestamp', 'updated_at'):
+                try:
+                    if d.get(_k):
+                        _tss.append(datetime.fromisoformat(str(d[_k])).replace(tzinfo=None))
+                except Exception:
+                    pass
+            if not _tss:
                 return None
-            age_min = (datetime.now() - datetime.fromisoformat(str(ts)).replace(tzinfo=None)).total_seconds() / 60.0
+            age_min = (datetime.now() - max(_tss)).total_seconds() / 60.0
             if age_min > max_age_min or age_min < -5:
                 return None
             nav = float((d.get('account') or {}).get('total_equity') or d.get('nav') or 0)

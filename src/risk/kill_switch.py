@@ -337,8 +337,14 @@ class KillSwitch:
                 return out
             import json as _jk
             d = _jk.loads(kp.read_text(encoding='utf-8'))
-            ts_raw = d.get('timestamp') or d.get('updated_at')
-            ts = datetime.fromisoformat(str(ts_raw)) if ts_raw else None
+            _tss = []
+            for _k in ('timestamp', 'updated_at'):   # 어댑터는 updated_at만 갱신 → 최신값 기준
+                try:
+                    if d.get(_k):
+                        _tss.append(datetime.fromisoformat(str(d[_k])).replace(tzinfo=None))
+                except Exception:
+                    pass
+            ts = max(_tss) if _tss else None
             if ts is None:
                 out['reason'] = 'no_timestamp'
                 return out

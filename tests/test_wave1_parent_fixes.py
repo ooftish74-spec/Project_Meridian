@@ -170,3 +170,14 @@ def test_adapter_token_fail_fast(monkeypatch):
     monkeypatch.setattr(KISTraderAdapter, '_token_fail_until', 0.0, raising=False)
     assert a._request_new_token() is False and sum(slept) <= 2
     assert a._request_new_token() is False and sum(slept) <= 2     # cooldown: no wait, no network
+
+
+def test_broker_nav_freshness_uses_latest_timestamp(tmp_path, monkeypatch):
+    import json
+    from datetime import datetime
+    sm, m = _mk_shadow(tmp_path, monkeypatch)
+    (tmp_path / 'kis_portfolio.json').write_text(json.dumps(
+        {'timestamp': '2026-10-19T09:00:00', 'updated_at': datetime.now().isoformat(),
+         'account': {'total_equity': 19052453.0}}))
+    monkeypatch.setattr(sm.DynamicConfig, 'get', lambda self, k, d=None: 'live' if k == 'execution.current_mode' else d, raising=False)
+    assert m._broker_nav_if_fresh() == 19052453.0
