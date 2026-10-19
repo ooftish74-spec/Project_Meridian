@@ -238,6 +238,73 @@ class TestIntradayCapitalRouter:
         for sig in routed:
             assert sig['price'] > 0.0, f"Ticker {sig['ticker']} price must be strictly positive"
 
+    def test_cross_asset_swap_amortized_cost_penalty_rejects_premature_flip(self):
+        """진입 직후(15분) 포지션은 시간 감가상각 페널티로 인해 미세 우위 자산으로의 섣부른 핑퐁 스왑이 차단된다."""
+        portfolio = {
+            'holdings': {
+                'KO': {'ticker': 'KO', 'qty': 2, 'price': 93.0, 'current_price': 93.0, 'holding_minutes': 15.0}
+            }
+        }
+        # Incoming TLT signal has only marginal edge over KO
+        signals = [
+            {'ticker': 'TLT', 'side': 'buy', 'action': 'buy', 'direction': 'buy', 'price': 80.0, 'ev_adj': 1.15, 'target_amount': 200000.0}
+        ]
+        market_data = {
+            'holdings_ev': {'KO': 0.95},
+            'ticker_atr_pct': {'TLT': 1.0, 'KO': 1.0},
+            'regime': 'crash',
+            'usdkrw': 1350.0
+        }
+        # Zero cash forces router to evaluate swap
+        routed = self.router.route_intraday_capital(signals, market_data, total_cash_krw=0.0, portfolio=portfolio)
+        # Swap must be rejected (no SELL KO, no swap BUY TLT)
+        sell_orders = [o for o in routed if o.get('action') == 'sell' and o.get('ticker') == 'KO']
+        assert len(sell_orders) == 0, "진입 15분 된 KO 포지션은 감가상각 허들로 인해 스왑 매도되지 않아야 함"
+
+    def test_cross_asset_swap_permits_mature_decayed_position_flip(self):
+        """보유 기간이 충분히 경과(1440분)하여 감가상각이 완료되고 유의미한 알파 초과(>=1.0σ)가 있을 때는 정상 스왑된다."""
+        portfolio = {
+            'holdings': {
+                'TLT': {'ticker': 'TLT', 'qty': 2, 'price': 80.0, 'current_price': 80.0, 'holding_minutes': 1440.0}
+            }
+        }
+        signals = [
+            {'ticker': 'KO', 'side': 'buy', 'action': 'buy', 'direction': 'buy', 'price': 93.0, 'ev_adj': 3.50, 'target_amount': 200000.0}
+        ]
+        market_data = {
+            'holdings_ev': {'TLT': 0.50},
+            'ticker_atr_pct': {'TLT': 1.0, 'KO': 1.0},
+            'regime': 'crash',
+            'usdkrw': 1350.0
+        }
+        routed = self.router.route_intraday_capital(signals, market_data, total_cash_krw=0.0, portfolio=portfolio)
+        sell_orders = [o for o in routed if o.get('action') == 'sell' and o.get('ticker') == 'TLT']
+        buy_orders = [o for o in routed if o.get('action') == 'buy' and o.get('ticker') == 'KO']
+        assert len(sell_orders) == 1, "감가상각 완료 + 고알파(EV 3.5 vs 0.5) 자산으로의 스왑 매도가 발화되어야 함"
+        assert len(buy_orders) == 1, "스왑 매수 주문이 생성되어야 함"
+
+    def test_cross_asset_swap_co_domain_unification(self):
+        """보유 종목(KO)이 당해 사이클에서도 강력한 매수 신호(EV 2.80)를 받고 있다면, 신규 TLT(EV 2.50)가 KO를 쫓아내지 못한다."""
+        portfolio = {
+            'holdings': {
+                'KO': {'ticker': 'KO', 'qty': 2, 'price': 93.0, 'current_price': 93.0, 'holding_minutes': 180.0}
+            }
+        }
+        signals = [
+            {'ticker': 'KO', 'side': 'buy', 'action': 'buy', 'direction': 'buy', 'price': 93.0, 'ev_adj': 2.80, 'target_amount': 200000.0},
+            {'ticker': 'TLT', 'side': 'buy', 'action': 'buy', 'direction': 'buy', 'price': 80.0, 'ev_adj': 2.50, 'target_amount': 200000.0}
+        ]
+        market_data = {
+            'holdings_ev': {'KO': 0.95}, # generic holding EV would be 0.95 without unification
+            'ticker_atr_pct': {'TLT': 1.0, 'KO': 1.0},
+            'regime': 'crash',
+            'usdkrw': 1350.0
+        }
+        routed = self.router.route_intraday_capital(signals, market_data, total_cash_krw=0.0, portfolio=portfolio)
+        sell_orders = [o for o in routed if o.get('action') == 'sell' and o.get('ticker') == 'KO']
+        assert len(sell_orders) == 0, "공동 공역 통일에 의해 KO는 신규 신호 EV 2.80을 상속받으므로 TLT(2.50)에 의해 매도될 수 없음"
+
+
 
 
 

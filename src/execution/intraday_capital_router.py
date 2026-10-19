@@ -325,8 +325,6 @@ class IntradayCapitalRouter:
                 holdings_ev[ticker] = 0.50 # 안전자산 기본 중립값
                 continue
 
-            current_p = float(pos.get('current_price') or pos.get('price') or 0.0)
-            avg_p = float(pos.get('avg_price', current_p) or current_p)
             return_pct = float(pos.get('return_pct', pos.get('pnl_pct', 0.0)) or 0.0)
 
             # 승률 기본값
@@ -371,14 +369,17 @@ class IntradayCapitalRouter:
 
             win_rate = max(0.15, min(0.85, win_rate))
 
-            # (4) 변동성(ATR%) 및 목표/손절비율
-            atr_pct = float(market_data.get('ticker_atr_pct', {}).get(ticker, 1.8))
+            # (4) 변동성(ATR%) 및 동적 출구 장벽 연동 (통일된 스케일)
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            _dqe = get_quant_engine()
+            _barriers = _dqe.compute_dynamic_exit_barriers(ticker) if ticker else {}
+            atr_pct = float(market_data.get('ticker_atr_pct', {}).get(ticker, _barriers.get('sigma_daily_pct', 1.8)))
             tp_atr_mult = float(pget('exit.tp_atr_multiplier', 3.5))
             sl_atr_mult = float(pget('exit.sl_atr_multiplier', 2.0))
             tp_min_pct = float(pget('exit.tp_min_pct', 3.0))
             sl_min_pct = float(pget('exit.sl_min_pct', 1.5))
-            tp_pct = max(tp_min_pct, atr_pct * tp_atr_mult)
-            sl_pct = max(sl_min_pct, atr_pct * sl_atr_mult)
+            tp_pct = float(_barriers.get('take_profit_pct', max(tp_min_pct, atr_pct * tp_atr_mult)))
+            sl_pct = abs(float(_barriers.get('stop_loss_pct', max(sl_min_pct, atr_pct * sl_atr_mult))))
 
             ev_adj = self.compute_ev_adj(win_rate, tp_pct, sl_pct, atr_pct)
             holdings_ev[ticker] = round(ev_adj, 4)
@@ -598,6 +599,13 @@ class IntradayCapitalRouter:
                     eligible_holdings = {}
                     holdings_dict = portfolio.get('holdings') or portfolio.get('positions') or {} if portfolio else {}
 
+                    # [Co-domain Unification] 현재 사이클 신규 매수 시그널에 동일 보유 종목이 포함되어 있다면 그 높은 기대값을 상속
+                    active_sig_ev_map = {
+                        str(s.get('ticker', '')).strip(): float(s.get('ev_adj', 0.0))
+                        for s in ranked_signals
+                        if (s.get('direction') == 'buy' or s.get('action') == 'buy') and float(s.get('ev_adj', 0.0)) > 0
+                    }
+
                     for h_ticker, h_ev in holdings_ev.items():
                         h_is_us = not str(h_ticker).isdigit()
                         if h_is_us == is_us_candidate and h_ticker not in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
@@ -605,27 +613,80 @@ class IntradayCapitalRouter:
                                 h_tradable, _ = is_ticker_tradable_now(h_ticker)
                                 if not h_tradable:
                                     continue
-                            eligible_holdings[h_ticker] = h_ev
+                            eff_h_ev = max(float(h_ev), active_sig_ev_map.get(str(h_ticker).strip(), 0.0))
+                            eligible_holdings[h_ticker] = eff_h_ev
 
                     if eligible_holdings:
                         lowest_ticker = min(eligible_holdings, key=eligible_holdings.get)
                         lowest_ev = eligible_holdings[lowest_ticker]
+                        lowest_pos = holdings_dict.get(lowest_ticker) or {}
+                        lowest_qty = int(lowest_pos.get('qty', lowest_pos.get('quantity', 0)))
+                        lowest_price = float(lowest_pos.get('current_price', lowest_pos.get('price', 0.0)))
+                        lowest_name = lowest_pos.get('name', lowest_ticker)
+                        lowest_is_us = not str(lowest_ticker).isdigit()
+                        lowest_price_krw = (lowest_price * dyn_fx if dyn_fx else 0.0) if lowest_is_us else lowest_price
                         
-                        # [Pure Dynamic Math] 실제 마찰비용 및 변동성에 기반한 스왑 허들
+                        # [Pure Dynamic Math] 실제 마찰비용 및 변동성에 기반한 기본 스왑 허들
                         atr_val = float(market_data.get('ticker_atr_pct', {}).get(ticker, market_data.get('atr_pct', 1.5)))
                         friction_kr = float(pget('cost.friction_kr_pct', 0.23))
                         friction_us = float(pget('cost.friction_us_pct', 0.08))
                         friction_pct = friction_kr if not is_us_candidate else friction_us
-                        swap_premium = round(friction_pct / max(0.5, atr_val), 4)
+                        base_swap_premium = round(friction_pct / max(0.5, atr_val), 4)
 
-                        if sig_ev > (lowest_ev + swap_premium):
-                            lowest_pos = holdings_dict.get(lowest_ticker) or {}
-                            lowest_qty = int(lowest_pos.get('qty', lowest_pos.get('quantity', 0)))
-                            lowest_price = float(lowest_pos.get('current_price', lowest_pos.get('price', 0.0)))
-                            lowest_name = lowest_pos.get('name', lowest_ticker)
-                            lowest_is_us = not str(lowest_ticker).isdigit()
-                            lowest_price_krw = (lowest_price * dyn_fx if dyn_fx else 0.0) if lowest_is_us else lowest_price
+                        # [Tier-1 Continuous Amortized Cost Penalty Function (Boyd / Almgren-Chriss)]
+                        elapsed_mins = float(lowest_pos.get('holding_minutes', lowest_pos.get('holding_time_min', 0.0)) or 0.0)
+                        if elapsed_mins <= 0.0:
+                            try:
+                                from src.execution.position_ledger import PositionLedgerManager
+                                from datetime import datetime
+                                _plm = PositionLedgerManager()
+                                _hwm = _plm.get_hwm(lowest_ticker)
+                                _created_at_str = _hwm.get('created_at')
+                                if _created_at_str:
+                                    _dt_entry = datetime.fromisoformat(str(_created_at_str).replace('Z', '+00:00'))
+                                    _now_dt = datetime.now(_dt_entry.tzinfo) if _dt_entry.tzinfo is not None else datetime.now()
+                                    _diff_sec = (_now_dt - _dt_entry).total_seconds()
+                                    if _diff_sec >= 0:
+                                        elapsed_mins = _diff_sec / 60.0
+                            except Exception as _t_err:
+                                logger.debug(f"Holding elapsed time parse fallback for {lowest_ticker}: {_t_err}")
 
+                        if elapsed_mins <= 0.0:
+                            _entry_date = lowest_pos.get('entry_date')
+                            _today_str = datetime.now().strftime("%Y-%m-%d")
+                            if _entry_date and str(_entry_date)[:10] == _today_str:
+                                elapsed_mins = 30.0
+                            elif _entry_date and str(_entry_date)[:10] < _today_str:
+                                elapsed_mins = 1440.0
+
+                        from src.utils.dynamic_quant_engine import get_quant_engine
+                        _dqe = get_quant_engine()
+                        _opt_params = _dqe.compute_optimal_stopping_params(
+                            ticker=lowest_ticker,
+                            regime=market_data.get('regime', 'caution'),
+                            price=lowest_price if lowest_price > 0 else 100.0,
+                            atr_pct=atr_val
+                        )
+                        tau_amort = float(_opt_params.get('min_holding_minutes', 30.0))
+                        tau_amort = max(15.0, min(180.0, tau_amort * 2.0))
+
+                        kappa_turnover = float(pget('swap.kappa_turnover', 3.0))
+                        amort_mult = 1.0 + kappa_turnover * math.exp(-max(0.0, elapsed_mins) / max(1.0, tau_amort))
+                        amort_friction = base_swap_premium * amort_mult
+
+                        # [Empirical Statistical Significance Hurdle >= 0.25 * sigma_ev]
+                        cand_evs = [float(s.get('ev_adj', 0.0)) for s in ranked_signals if float(s.get('ev_adj', 0.0)) > 0]
+                        if len(cand_evs) >= 2:
+                            _ev_mean = sum(cand_evs) / len(cand_evs)
+                            _ev_std = math.sqrt(sum((x - _ev_mean) ** 2 for x in cand_evs) / len(cand_evs))
+                        else:
+                            _ev_std = 0.50
+
+                        stat_sig_weight = float(pget('swap.stat_sig_hurdle', 0.25))
+                        sigma_hurdle = max(0.10, stat_sig_weight * _ev_std)
+                        total_swap_hurdle = amort_friction + sigma_hurdle
+
+                        if sig_ev > (lowest_ev + total_swap_hurdle):
                             if lowest_qty > 0 and lowest_price_krw > 0 and eff_price_krw > 0:
                                 # [Pure Dynamic Math] 신규 매수에 필요한 정확한 수량만큼만 정밀 매도 (임의 35% 강제 청산 폐지)
                                 min_buy_amount = eff_price_krw * 1.02
@@ -637,7 +698,8 @@ class IntradayCapitalRouter:
                                 if buy_qty >= 1:
                                     logger.info(
                                         f"  🔄 [Cross-Asset Alpha Swap Trigger] 신규 {ticker} (EV_adj={sig_ev:.2f}) > "
-                                        f"기존 {lowest_ticker} (EV_adj={lowest_ev:.2f}) + 교체비용({swap_premium:.1f}%) "
+                                        f"기존 {lowest_ticker} (EV_adj={lowest_ev:.2f}) + 동적교체허들({total_swap_hurdle:.2f}, "
+                                        f"감가비용={amort_friction:.2f}(x{amort_mult:.2f}, {elapsed_mins:.0f}m) + 유의성={sigma_hurdle:.2f}) "
                                         f"➔ {lowest_ticker} {sell_qty}주 매도(₩{swap_freed_krw:,.0f}) 후 {ticker} {buy_qty}주 자금 스왑 발화!"
                                     )
                                     # 1. 기존 저효율 자산 매도 주문 생성 (매도 선행)
@@ -652,7 +714,7 @@ class IntradayCapitalRouter:
                                         'price': lowest_price,
                                         'confidence': 1.0,
                                         'strategy': 'cross_alpha_swap_sell',
-                                        'reason': f"자본 스왑 매도: {lowest_ticker}(EV={lowest_ev:.2f}) -> {ticker}(EV={sig_ev:.2f})",
+                                        'reason': f"자본 스왑 매도: {lowest_ticker}(EV={lowest_ev:.2f}) -> {ticker}(EV={sig_ev:.2f}) [Hurdle={total_swap_hurdle:.2f}]",
                                         'target_buy_ticker': ticker
                                     }
                                     routed_signals.append(sell_order)
@@ -667,7 +729,7 @@ class IntradayCapitalRouter:
                                     buy_order['allocated_cash'] = buy_qty * eff_price_krw
                                     buy_order['reallocate_from'] = lowest_ticker
                                     buy_order['strategy'] = 'cross_alpha_swap_buy'
-                                    buy_order['reason'] = f"자본 스왑 매수: {ticker}(EV={sig_ev:.2f}) <- {lowest_ticker}(EV={lowest_ev:.2f})"
+                                    buy_order['reason'] = f"자본 스왑 매수: {ticker}(EV={sig_ev:.2f}) <- {lowest_ticker}(EV={lowest_ev:.2f}) [Hurdle={total_swap_hurdle:.2f}]"
                                     routed_signals.append(buy_order)
 
                                     # 동일 사이클 내 중복 편출 방지를 위해 lowest_ticker 임시 EV 상향
@@ -676,7 +738,8 @@ class IntradayCapitalRouter:
                         else:
                             logger.info(
                                 f"  🛡️ [Alpha Premium Unmet] 신규 {ticker} (EV_adj={sig_ev:.2f}) <= "
-                                f"기존 {lowest_ticker} (EV_adj={lowest_ev:.2f}) + 교체비용({swap_premium:.1f}%) ➔ 기존 포지션 유지 (교체 매매 스킵)"
+                                f"기존 {lowest_ticker} (EV_adj={lowest_ev:.2f}) + 동적교체허들({total_swap_hurdle:.2f}, "
+                                f"감가비용={amort_friction:.2f}(x{amort_mult:.2f}, {elapsed_mins:.0f}m) + 유의성={sigma_hurdle:.2f}) ➔ 기존 포지션 유지 (교체 매매 스킵)"
                             )
                 else:
                     logger.info(
