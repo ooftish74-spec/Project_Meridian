@@ -1620,6 +1620,24 @@ class MarketDataBridge:
                 logger.debug('  [Phase 10] NQ 선물: 인메모리 캐시 사용')
                 return dict(self._nq_cache_data)
         _project_root = Path(__file__).resolve().parent.parent.parent
+        # ★ Wave 1 (2026-10-19 사고): 15:10 S5가 '금요일 QQQ 일봉 등락(-2.50%)'을 NQ 선물 급락으로 오인해
+        #   2X 인버스(252670)를 매수. 일봉 프록시는 KR 장중에 이미 반영된 '지난 미국 세션' 정보다.
+        #   → 1순위로 실시간 NQ 선물 호가(전일 정산가 대비)를 시도하고, 결과에 is_live_futures 플래그를 단다.
+        try:
+            from src.utils.google_finance_collector import GoogleFinanceCollector as _GFC
+            _q = _GFC.get_quote_details('NQ=F') or {}
+            _px = float(_q.get('price', 0) or 0)
+            _pc = float(_q.get('prev_close', 0) or 0)
+            if 5000.0 <= _px <= 80000.0 and _pc > 0:
+                from datetime import datetime as _dtl
+                _r = {'chg_1d_pct': round((_px / _pc - 1) * 100, 4), 'chg_5d_pct': 0.0, 'close': round(_px, 2),
+                      'source': 'google_nq_live', 'is_live_futures': True, 'cached_at': _dtl.now().isoformat()}
+                self._nq_cache_data = _r
+                self._nq_cache_ts_val = _dtl.now()
+                logger.info(f"  🌐 [NQ Live] NQ 선물 실시간: {_px:,.0f}pts ({_r['chg_1d_pct']:+.2f}% vs 전일 정산)")
+                return _r
+        except Exception as _e_live:
+            logger.debug(f"  [NQ Live] 실시간 선물 호가 실패: {_e_live}")
         try:
             _mpc_file = _project_root / 'results' / 'macro_proxy.json'
             if _mpc_file.exists():
@@ -1630,7 +1648,7 @@ class MarketDataBridge:
                 if _age < self._NQ_CACHE_TTL_SEC:
                     _nq = _mpc_data.get('nq_futures', {})
                     if _nq:
-                        _r = {'chg_1d_pct': float(_nq.get('chg_1d_pct', 0.0)), 'chg_5d_pct': float(_nq.get('chg_5d_pct', 0.0)), 'close': float(_nq.get('close', 0.0)), 'source': 'macro_proxy_file', 'cached_at': _mpc_data.get('cached_at', '')}
+                        _r = {'chg_1d_pct': float(_nq.get('chg_1d_pct', 0.0)), 'chg_5d_pct': float(_nq.get('chg_5d_pct', 0.0)), 'close': float(_nq.get('close', 0.0)), 'source': 'macro_proxy_file', 'is_live_futures': False, 'cached_at': _mpc_data.get('cached_at', '')}
                         self._nq_cache_data = _r
                         from datetime import datetime as _dt3
                         self._nq_cache_ts_val = _dt3.now()
@@ -1658,7 +1676,7 @@ class MarketDataBridge:
                         _c5 = float(_closes.iloc[-6])
                         _chg5 = (_latest / _c5 - 1) * 100 if _c5 > 0 else 0.0
                     from datetime import datetime as _dt4
-                    _r = {'chg_1d_pct': round(_chg1, 4), 'chg_5d_pct': round(_chg5, 4), 'close': round(_latest, 2), 'source': 'vendor_multiplexer_primary', 'cached_at': _dt4.now().isoformat()}
+                    _r = {'chg_1d_pct': round(_chg1, 4), 'chg_5d_pct': round(_chg5, 4), 'close': round(_latest, 2), 'source': 'vendor_multiplexer_primary', 'is_live_futures': False, 'asof': str(_closes.index[-1])[:10], 'cached_at': _dt4.now().isoformat()}
                     self._nq_cache_data = _r
                     self._nq_cache_ts_val = _dt4.now()
                     logger.info(f"  🌐 [Phase 10: SSoT Primary] NQ/QQQ 선물: {_latest:,.0f}pts ({_chg1:+.2f}% 1일)")

@@ -114,9 +114,13 @@ class CallAuctionManager:
             ticker=ticker,
             quantity=sell_qty,
             price=0,
-            order_type="06",
+            order_type="premarket_close",   # ★ Wave 1: KIS '05' 장전 시간외 (과거 '06'=장후 시간외로 전량 거부)
             exchange="KRX"
         )
+        # ★ Wave 1: 거부/미확정 주문을 '제출 성공'으로 기록하던 결함 수정 (2026-10-19 08:30 실측)
+        if order is not None and str(getattr(order, 'status', '')).lower() in ('rejected', 'failed', 'skipped_insufficient_holdings'):
+            logger.error(f"  ❌ [CallAuction] 장전 매도 주문 거부: {ticker} {sell_qty}주 status={order.status} notes={getattr(order, 'notes', '')}")
+            return None
         if order and getattr(order, "order_id", None):
             order_info = {
                 "order_id": order.order_id,

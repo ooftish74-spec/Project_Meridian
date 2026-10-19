@@ -2499,9 +2499,22 @@ def _phase_call_auction_0830():
 
         kodex_pos = cam.adapter.positions.get("069500")
         total_qty = kodex_pos.quantity if kodex_pos else 0
-        if total_qty > 0:
-            total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 20911598.0)))
-            kodex_price = float(kodex_pos.current_price) if kodex_pos.current_price > 0 else 105650.0
+        # ★ Wave 1 (2026-10-19 08:30 실측): DynamicCapEngine이 '목표비중 0%'로 KODEX 200 51주(NAV 24%) 전량 매도를 발주.
+        #   (주문코드 오류로 거부되어 미체결) — 리밸런싱성 자동 매도는 Wave 0 원칙(리밸런싱 비활성, 자동 청산 금지)에
+        #   따라 기본 비활성. 손절/청산(UniversalExitEngine)은 아래에서 그대로 수행.
+        _release_enabled = False
+        try:
+            from config.dynamic_config import DynamicConfig as _DC_ca
+            _release_enabled = bool(_DC_ca().get('call_auction.kodex_release_enabled', False))
+        except Exception:
+            _release_enabled = False
+        if total_qty > 0 and not _release_enabled:
+            logger.info("  ⏸️ [08:30 CallAuction] KODEX 200 자본 해제(리밸런싱 매도) 비활성 (call_auction.kodex_release_enabled=false)")
+        if total_qty > 0 and _release_enabled:
+            total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 0.0)) or 0.0)
+            kodex_price = float(kodex_pos.current_price or 0.0)
+            if total_nav <= 0 or kodex_price <= 0:
+                raise ValueError(f"NAV/가격 미상 (nav={total_nav}, price={kodex_price}) — 고정값(20.9M/105,650) 대체 금지")
 
             # 오늘 프리마켓 시그널에서 액티브 알파 기대값(EV%) 추출
             active_ev = 0.015  # 기본 보수적 1.5%

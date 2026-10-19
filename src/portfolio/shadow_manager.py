@@ -1176,6 +1176,51 @@ class ShadowPortfolioManager:
     def nav(self) -> float:
         return self.data['virtual_nav']
 
+    # ★ Wave 1 (2026-10-19 사고 대응): shadow 원장은 원화 단일 통화 장부라 USD 예수금(cash_usd)이
+    #   NAV에서 누락되어, 10-19 15:35 일일 스냅샷이 −34.76%(가짜) 일간손실을 기록 → 킬스위치 daily_loss 발동.
+    def _usd_cash_krw(self) -> float:
+        """USD 예수금의 원화 평가액. 환율 미상이면 직전 평가액 유지(날조 금지)."""
+        usd = float(self.data.get('cash_usd') or 0.0)
+        if usd <= 0:
+            return 0.0
+        try:
+            from src.data_collection.central_data_gateway import CentralDataGateway
+            fx = CentralDataGateway().get_usdkrw_rate()
+        except Exception:
+            fx = None
+        if fx and float(fx) > 0:
+            self.data['cash_usd_krw'] = round(usd * float(fx), 0)
+            self.data['cash_usd_fx'] = float(fx)
+            self.data.pop('nav_fx_degraded', None)
+        else:
+            self.data['nav_fx_degraded'] = True
+        return float(self.data.get('cash_usd_krw') or 0.0)
+
+    def _compose_nav(self, market_value: float) -> float:
+        """NAV = 원화 현금 + USD 예수금(원화 평가) + 포지션 평가액(원화)."""
+        return float(self.data.get('cash') or 0.0) + self._usd_cash_krw() + float(market_value or 0.0)
+
+    def _broker_nav_if_fresh(self, max_age_min: float = 60.0) -> Optional[float]:
+        """live 모드: 신선한 브로커 총자산(kis_portfolio.json)을 NAV SSOT로 사용. 아니면 None."""
+        try:
+            if str(DynamicConfig().get('execution.current_mode', '') or '').lower() != 'live':
+                return None
+            kp = _RESULTS / 'kis_portfolio.json'
+            if not kp.exists():
+                return None
+            d = json.loads(kp.read_text(encoding='utf-8'))
+            ts = d.get('timestamp') or d.get('updated_at')
+            if not ts:
+                return None
+            age_min = (datetime.now() - datetime.fromisoformat(str(ts)).replace(tzinfo=None)).total_seconds() / 60.0
+            if age_min > max_age_min or age_min < -5:
+                return None
+            nav = float((d.get('account') or {}).get('total_equity') or d.get('nav') or 0)
+            return nav if nav > 0 else None
+        except Exception as e:
+            logger.warning(f"  [Shadow] 브로커 NAV 조회 실패 — shadow 계산 NAV 사용: {e}")
+            return None
+
     def get_total_equity(self) -> float:
         return float(self.data.get('virtual_nav') or self.data.get('total_nav') or self.data.get('cash') or 0.0)
 
@@ -1262,7 +1307,7 @@ class ShadowPortfolioManager:
         # NAV 업데이트
         market_value = sum(p.get('market_value', p.get('amount', 0))
                           for p in self.positions.values())
-        new_nav = self.data['cash'] + market_value
+        new_nav = self._compose_nav(market_value)
         self.data['virtual_nav'] = new_nav
         self.data['unrealized_pnl'] = total_unrealized
 
@@ -2839,7 +2884,7 @@ class ShadowPortfolioManager:
         # NAV 업데이트
         market_value = sum(p.get('market_value', p.get('amount', 0))
                           for p in self.positions.values())
-        self.data['virtual_nav'] = self.data['cash'] + market_value
+        self.data['virtual_nav'] = self._compose_nav(market_value)
         self.data['hwm'] = max(self.data['hwm'], self.data['virtual_nav'])
         self.data['total_commission'] = self.data.get('total_commission', 0) + total_commission
 
@@ -2957,6 +3002,17 @@ class ShadowPortfolioManager:
         일일 스냅샷 기록.
         """
         nav = self.data.get('virtual_nav', 19600000.0)
+        # ★ Wave 1: live 모드에서는 신선한 브로커 총자산을 일일 NAV의 SSOT로 사용 (shadow 단일통화 장부의
+        #   USD 누락·KR 종가 미갱신으로 인한 가짜 일간손실 → 킬스위치 오발동 방지)
+        _broker_nav = self._broker_nav_if_fresh()
+        if _broker_nav:
+            if abs(_broker_nav - float(nav or 0)) / _broker_nav > 0.02:
+                logger.warning(f"  [Shadow] 일일 스냅샷 NAV: shadow ₩{float(nav or 0):,.0f} → 브로커 ₩{_broker_nav:,.0f} 사용")
+            nav = _broker_nav
+            self.data['virtual_nav'] = nav
+            self.data['nav_source'] = 'broker'
+        else:
+            self.data['nav_source'] = 'shadow'
         initial = self.data.get('initial_capital', 19600000.0)
         total_return = (nav - initial) / initial * 100 if initial > 0 else 0
 

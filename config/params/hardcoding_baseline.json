@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated_at": "2026-10-18T23:20:38+00:00",
+ "generated_at": "2026-10-19T10:00:48+00:00",
  "roots": [
   "src",
   "scripts"
@@ -9,12 +9,12 @@
  "totals": {
   "kr_ticker_literals": 731,
   "us_ticker_literals": 473,
-  "threshold_literals": 1853,
-  "fallback_literals": 703
+  "threshold_literals": 1858,
+  "fallback_literals": 702
  },
- "total_all": 3760,
+ "total_all": 3764,
  "allowed_pragmas": 48,
- "n_files_scanned": 323,
+ "n_files_scanned": 324,
  "parse_errors": [],
  "files": {
   "scripts/stream_orchestrator.py": {
@@ -48,14 +48,14 @@
   "src/data/market_data_bridge.py": {
    "kr_ticker_literals": 31,
    "us_ticker_literals": 16,
-   "threshold_literals": 65,
+   "threshold_literals": 67,
    "fallback_literals": 15,
    "allowed": 0
   },
   "src/portfolio/shadow_manager.py": {
    "kr_ticker_literals": 45,
    "us_ticker_literals": 0,
-   "threshold_literals": 30,
+   "threshold_literals": 32,
    "fallback_literals": 46,
    "allowed": 0
   },
@@ -133,7 +133,7 @@
    "kr_ticker_literals": 21,
    "us_ticker_literals": 0,
    "threshold_literals": 16,
-   "fallback_literals": 12,
+   "fallback_literals": 11,
    "allowed": 0
   },
   "scripts/run_live_trader_daemon.py": {
@@ -1144,6 +1144,13 @@
    "fallback_literals": 0,
    "allowed": 0
   },
+  "src/utils/telegram_notifier.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 4,
+   "fallback_literals": 0,
+   "allowed": 0
+  },
   "src/utils/ticker_canonical.py": {
    "kr_ticker_literals": 4,
    "us_ticker_literals": 0,
@@ -1257,13 +1264,6 @@
    "allowed": 0
   },
   "src/risk/factor_risk.py": {
-   "kr_ticker_literals": 0,
-   "us_ticker_literals": 0,
-   "threshold_literals": 3,
-   "fallback_literals": 0,
-   "allowed": 0
-  },
-  "src/utils/telegram_notifier.py": {
    "kr_ticker_literals": 0,
    "us_ticker_literals": 0,
    "threshold_literals": 3,

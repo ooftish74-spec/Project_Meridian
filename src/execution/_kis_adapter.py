@@ -269,15 +269,27 @@ class KISTraderAdapter:
         except Exception as e:
             logger.critical(f"  토큰 캐시 저장 실패: {e}", exc_info=True)
 
+    _token_fail_until: float = 0.0   # ★ Wave 1: 프로세스 공용 토큰 발급 실패 쿨다운 (epoch sec)
+
     def _request_new_token(self) -> bool:
+        """KIS 토큰 발급.
+
+        ★ Wave 1: 과거 구현은 모든 오류에 65s+130s 대기 → 인증 장애 시 데몬 루프가 최대 195초 멈춰
+          그동안 손절/청산 감시가 중단될 수 있었다.
+          - EGW00133(1분 1회 제한): 캐시 토큰 복구 → 실패 시 65초 1회 대기 후 재시도
+          - 네트워크/기타 오류: 2초 후 1회 재시도
+          - 최종 실패: 60초 쿨다운(즉시 실패) + 만료 캐시 토큰 복구 시도(기존 동작 유지)
+        """
         import requests
+        if time.time() < KISTraderAdapter._token_fail_until:
+            if self._load_cached_token(ignore_expiry=True) and self._access_token:
+                return True
+            return False
         url = f"{self.base_url}/oauth2/tokenP"
         body = {'grant_type': 'client_credentials', 'appkey': self.app_key, 'appsecret': self.app_secret}
-        for attempt in range(3):
-            delay = [0, 65, 130][attempt]
-            if delay > 0:
-                logger.warning(f"  ⏳ 토큰 재시도 {attempt + 1}/3: {delay}초 대기...")
-                time.sleep(delay)
+        rl_retry = False
+        net_retry = False
+        while True:
             try:
                 resp = requests.post(url, json=body, timeout=(1.5, 3.0))
                 data = resp.json()
@@ -286,6 +298,7 @@ class KISTraderAdapter:
                     expires_in = data.get('expires_in', 86400)
                     self._token_expires = datetime.now() + timedelta(seconds=expires_in)
                     self._save_token_cache()
+                    KISTraderAdapter._token_fail_until = 0.0
                     logger.info(f"  ✅ 인증 성공 (만료: {self._token_expires.strftime('%H:%M')})")
                     return True
                 error_code = data.get('error_code', '')
@@ -294,12 +307,23 @@ class KISTraderAdapter:
                     if self._load_cached_token(ignore_expiry=True) and self._access_token:
                         logger.info("  ✅ 디스크 캐시 토큰 복구 성공! (65초 지연 회피)")
                         return True
-                    continue
-                else:
-                    logger.error(f"  ❌ 인증 실패: {data}")
+                    if not rl_retry:
+                        rl_retry = True
+                        logger.warning("  ⏳ 캐시 토큰 없음 → 65초 후 1회 재시도")
+                        time.sleep(65)
+                        continue
+                    break
+                logger.error(f"  ❌ 인증 실패: {data}")
+                break
             except Exception as e:
                 logger.error(f"  ❌ 인증 오류: {e}")
-        logger.error('  🚨 KIS 토큰 갱신 최종 실패 — 만료 캐시 토큰 강제 복구 시도')
+                if not net_retry:
+                    net_retry = True
+                    time.sleep(2)
+                    continue
+                break
+        KISTraderAdapter._token_fail_until = time.time() + 60.0
+        logger.error('  🚨 KIS 토큰 갱신 최종 실패(60초 쿨다운) — 만료 캐시 토큰 강제 복구 시도')
         if self._load_cached_token(ignore_expiry=True) and self._access_token:
             logger.warning('  ✅ 만료된 디스크 캐시 토큰 강제 복구 성공 (주문 무산 방지)')
             return True
@@ -349,7 +373,7 @@ class KISTraderAdapter:
                 return order
 
             is_call_auction = (dtime(8, 30) <= now_time < dtime(9, 0))
-            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or urgency == 'repeg')
+            is_explicit_repeg_market = (str(order_type).lower() in ('01', '05', '06', '13', '14', 'premarket_close') or urgency == 'repeg')
             if self.mode in ('live', 'paper') and not is_call_auction and not is_explicit_repeg_market:
                 cur_info = self._get_current_price(ticker)
                 if not cur_info or cur_info <= 0:
@@ -393,7 +417,7 @@ class KISTraderAdapter:
             is_call_auction = (dtime(8, 30) <= now_time < dtime(9, 0))
             # ★ Wave 0 E4: 긴급 청산(panic/stop/high)은 직전가 지정가 변환 금지 — 급락장 미체결로 손절 불발 방지
             is_urgent_exit = _urg in _URGENT_EXIT_LEVELS
-            is_explicit_repeg_market = (str(order_type).lower() in ('01', '06', '13', '14') or _urg == 'repeg' or is_urgent_exit)
+            is_explicit_repeg_market = (str(order_type).lower() in ('01', '05', '06', '13', '14', 'premarket_close') or _urg == 'repeg' or is_urgent_exit)
             if self.mode in ('live', 'paper') and not is_call_auction and not is_explicit_repeg_market:
                 cur_info = self._get_current_price(ticker)
                 if not cur_info or cur_info <= 0:
@@ -683,17 +707,20 @@ class KISTraderAdapter:
             _tif_part = [p for p in order.notes.split(',') if 'tif=' in p]
             if _tif_part:
                 tif = _tif_part[0].split('=', 1)[-1].strip().upper()
-        # [KRX Pre-Market Alpha Patch] PREMARKET_CLOSE ('06': 장전 시간외종가 08:30~08:40 KST 전일 종가 매수/매도)
-        _TIF_ORD_DVSN = {'DAY': '00' if order.order_type != 'market' else '01', 'MARKET': '01', 'IOC': '13', 'FOK': '14', 'PREMARKET_CLOSE': '06'}
-        ord_dvsn = _TIF_ORD_DVSN.get(tif, '06' if tif == 'PREMARKET_CLOSE' else ('01' if order.order_type == 'market' else '00'))
-        if str(order.order_type).lower() in ('06', 'premarket_close'):
-            ord_dvsn = '06'
+        # [KRX Pre-Market Alpha Patch] PREMARKET_CLOSE = KIS ORD_DVSN '05' (장전 시간외, 08:30~08:40, 전일 종가)
+        # ★ Wave 1 (2026-10-19 실측): '06'은 '장후 시간외'라 08:30 주문이 APBK0918(장종료후시간외종가)로 거부됨.
+        _TIF_ORD_DVSN = {'DAY': '00' if order.order_type != 'market' else '01', 'MARKET': '01', 'IOC': '13', 'FOK': '14', 'PREMARKET_CLOSE': '05'}
+        ord_dvsn = _TIF_ORD_DVSN.get(tif, '05' if tif == 'PREMARKET_CLOSE' else ('01' if order.order_type == 'market' else '00'))
+        if str(order.order_type).lower() in ('05', 'premarket_close'):
+            ord_dvsn = '05'
+        elif str(order.order_type).lower() == '06':
+            ord_dvsn = '06'   # 명시적 장후 시간외
         elif str(order.order_type).lower() in ('01', 'market'):
             ord_dvsn = '01'
         elif str(order.order_type).lower() in ('00', 'limit'):
             ord_dvsn = '00'
 
-        if ord_dvsn in ('01', '06', '13', '14'):
+        if ord_dvsn in ('01', '05', '06', '13', '14'):
             ord_price = '0'
         else:
             snapped_p = _snap_to_exchange_tick(order.price, order.ticker)
@@ -1951,6 +1978,16 @@ class KISTraderAdapter:
                 elif data.get('rt_cd') == '1' and '초과' in data.get('msg1', ''):
                     _m1_rl = data.get("msg1", "")
                     logger.warning(f"  ⚠️ fetch_live_balance API 속도 제한 (Rate Limit): {_m1_rl}")
+                    # ★ Wave 1: 09:00 데몬·파이프라인 동시 조회로 초당 한도 초과 → 지터 백오프 후 1회 재시도
+                    if not getattr(self, '_balance_rl_retry', False):
+                        import random as _rnd
+                        self._balance_rl_retry = True
+                        self._last_balance_fetch_ts = 0.0
+                        time.sleep(1.0 + _rnd.random())
+                        try:
+                            return self.fetch_live_balance()
+                        finally:
+                            self._balance_rl_retry = False
                 else:
                     logger.warning(f"  ❌ fetch_live_balance API 오류: {data.get('msg1', '')} (rt_cd={data.get('rt_cd')})")
             except Exception as e:

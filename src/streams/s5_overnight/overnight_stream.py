@@ -101,6 +101,11 @@ class S5OvernightStream(BaseStream):
             _nq_data = _MDB().get_nq_futures_change() or {}
             if 'chg_1d_pct' not in _nq_data or str(_nq_data.get('source', '')).lower() == 'fallback':
                 raise ValueError(f"NQ data unavailable/placeholder (source={_nq_data.get('source')!r})")
+            # ★ Wave 1: 오버나잇 판단에는 '실시간 NQ 선물'만 유효. QQQ 일봉 등락은 직전 미국 세션(KR 장중 기반영) 정보라
+            #   신규 레버리지 진입(롱·인버스 헷지 모두)의 근거로 쓰지 않는다 → fail-closed (롱 차단, 헷지 미발동)
+            if not _nq_data.get('is_live_futures', False):
+                raise ValueError(f"NQ live futures unavailable — daily proxy (source={_nq_data.get('source')!r}, "
+                                 f"asof={_nq_data.get('asof')!r}) is stale for overnight decisions")
             _nq_chg = float(_nq_data.get('chg_1d_pct', 0.0))
             _base_block = pget('s5.nq_block_threshold_pct', -0.5)
             _base_hedge = pget('s5.nq_hedge_threshold_pct', -1.5)
