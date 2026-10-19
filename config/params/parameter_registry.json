@@ -1815,6 +1815,84 @@
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/unknown_black_swan_detector.py:91"
   },
+  "black_swan.min_cross_abs_ret_pct": {
+   "level": "L1",
+   "default": 1.8,
+   "bounds": [
+    0,
+    18.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.min_cross_abs_ret_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:124"
+  },
+  "black_swan.min_cross_assets": {
+   "level": "L1",
+   "default": 5,
+   "bounds": [
+    0,
+    50.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.min_cross_assets",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:123"
+  },
+  "black_swan.min_history_len": {
+   "level": "L1",
+   "default": 10,
+   "bounds": [
+    0,
+    100.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.min_history_len",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:92"
+  },
+  "black_swan.surge_mean_ret_min_pct": {
+   "level": "L1",
+   "default": 1.2,
+   "bounds": [
+    0,
+    12.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.surge_mean_ret_min_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:168"
+  },
+  "black_swan.tail_bucket_high_pct": {
+   "level": "L1",
+   "default": 2.5,
+   "bounds": [
+    0,
+    25.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.tail_bucket_high_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:125"
+  },
+  "black_swan.tail_bucket_low_pct": {
+   "level": "L1",
+   "default": 0.8,
+   "bounds": [
+    0,
+    8.0
+   ],
+   "policy": "free",
+   "config_key": "black_swan.tail_bucket_low_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:126"
+  },
   "black_swan.tda_betti_loop_threshold": {
    "level": "L1",
    "default": 0.85,
@@ -1827,6 +1905,19 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/unknown_black_swan_detector.py:92"
+  },
+  "black_swan.vix_elevated_mult": {
+   "level": "L1",
+   "default": 1.15,
+   "bounds": [
+    0,
+    11.5
+   ],
+   "policy": "free",
+   "config_key": "black_swan.vix_elevated_mult",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/unknown_black_swan_detector.py:169"
   },
   "checkpoint.max_retries": {
    "level": "L1",
@@ -2022,6 +2113,45 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/crash_defense.py:103"
+  },
+  "crash.default_usdkrw": {
+   "level": "L1",
+   "default": 1350.0,
+   "bounds": [
+    0,
+    13500.0
+   ],
+   "policy": "free",
+   "config_key": "crash.default_usdkrw",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/crash_defense.py:52"
+  },
+  "crash.default_vix": {
+   "level": "L1",
+   "default": 20.0,
+   "bounds": [
+    0,
+    200.0
+   ],
+   "policy": "free",
+   "config_key": "crash.default_vix",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/crash_defense.py:50"
+  },
+  "crash.default_vkospi": {
+   "level": "L1",
+   "default": 18.0,
+   "bounds": [
+    0,
+    180.0
+   ],
+   "policy": "free",
+   "config_key": "crash.default_vkospi",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/crash_defense.py:51"
   },
   "crash.stress_fx_max_score": {
    "level": "L1",
@@ -6719,7 +6849,7 @@
   },
   "ml.warmup_bars_v3": {
    "level": "L1",
-   "default": 260,
+   "default": 65,
    "bounds": [
     0,
     2600
@@ -7756,6 +7886,32 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/intelligence/regime_engine.py:602"
+  },
+  "regime.hy_spread_baseline": {
+   "level": "L1",
+   "default": 3.5,
+   "bounds": [
+    0,
+    35.0
+   ],
+   "policy": "free",
+   "config_key": "regime.hy_spread_baseline",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:301"
+  },
+  "regime.hy_spread_scale": {
+   "level": "L1",
+   "default": 1.0,
+   "bounds": [
+    0,
+    10.0
+   ],
+   "policy": "free",
+   "config_key": "regime.hy_spread_scale",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:302"
   },
   "regime.intraday_crisis_cum_ret": {
    "level": "L1",
@@ -10958,6 +11114,32 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/streams/s12_derivative_squeeze/derivative_squeeze_stream.py:106"
+  },
+  "s12.default_sl_pct": {
+   "level": "L1",
+   "default": 3.5,
+   "bounds": [
+    0,
+    35.0
+   ],
+   "policy": "free",
+   "config_key": "s12.default_sl_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "scripts/stream_orchestrator.py:837"
+  },
+  "s12.default_tp_pct": {
+   "level": "L1",
+   "default": 8.0,
+   "bounds": [
+    0,
+    80.0
+   ],
+   "policy": "free",
+   "config_key": "s12.default_tp_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "scripts/stream_orchestrator.py:838"
   },
   "s12.sl_pct": {
    "level": "L1",
@@ -14339,6 +14521,240 @@
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/strategy/s5_s10_promotion_engine.py:96"
   },
+  "scenarios.default_bull_prior": {
+   "level": "L1",
+   "default": 0.25,
+   "bounds": [
+    0,
+    2.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.default_bull_prior",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:110"
+  },
+  "scenarios.default_crash_prior": {
+   "level": "L1",
+   "default": 0.1,
+   "bounds": [
+    0,
+    1.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.default_crash_prior",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:111"
+  },
+  "scenarios.default_regime_conf": {
+   "level": "L1",
+   "default": 0.5,
+   "bounds": [
+    0,
+    5.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.default_regime_conf",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:109"
+  },
+  "scenarios.lead_lag_scale_pct": {
+   "level": "L1",
+   "default": 1.2,
+   "bounds": [
+    0,
+    12.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.lead_lag_scale_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:195"
+  },
+  "scenarios.max_surge_attack_ratio": {
+   "level": "L1",
+   "default": 0.95,
+   "bounds": [
+    0,
+    9.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.max_surge_attack_ratio",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:221"
+  },
+  "scenarios.min_empirical_len": {
+   "level": "L1",
+   "default": 5,
+   "bounds": [
+    0,
+    50.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.min_empirical_len",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:74"
+  },
+  "scenarios.min_quality_for_surge": {
+   "level": "L1",
+   "default": 0.5,
+   "bounds": [
+    0,
+    5.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.min_quality_for_surge",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:247"
+  },
+  "scenarios.min_surge_defense_ratio": {
+   "level": "L1",
+   "default": 0.05,
+   "bounds": [
+    0,
+    0.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.min_surge_defense_ratio",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:222"
+  },
+  "scenarios.min_vix_hist_len": {
+   "level": "L1",
+   "default": 10,
+   "bounds": [
+    0,
+    100.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.min_vix_hist_len",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:131"
+  },
+  "scenarios.ois_neutral_center": {
+   "level": "L1",
+   "default": 50.0,
+   "bounds": [
+    0,
+    500.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.ois_neutral_center",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:186"
+  },
+  "scenarios.ois_std_scale": {
+   "level": "L1",
+   "default": 12.0,
+   "bounds": [
+    0,
+    120.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.ois_std_scale",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:187"
+  },
+  "scenarios.prob_midpoint": {
+   "level": "L1",
+   "default": 0.5,
+   "bounds": [
+    0,
+    5.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.prob_midpoint",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:220"
+  },
+  "scenarios.s1.bull_prob_min": {
+   "level": "L1",
+   "default": 0.55,
+   "bounds": [
+    0,
+    5.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s1.bull_prob_min",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:258"
+  },
+  "scenarios.s1.fx_1d_scale_pct": {
+   "level": "L1",
+   "default": 0.85,
+   "bounds": [
+    0,
+    8.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s1.fx_1d_scale_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:291"
+  },
+  "scenarios.s1.fx_z_threshold": {
+   "level": "L1",
+   "default": 2.0,
+   "bounds": [
+    0,
+    20.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s1.fx_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:256"
+  },
+  "scenarios.s1.hy_calm_max_z": {
+   "level": "L1",
+   "default": -0.5,
+   "bounds": [
+    -5.0,
+    0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s1.hy_calm_max_z",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:257"
+  },
+  "scenarios.s1.usdkrw_threshold": {
+   "level": "L1",
+   "default": 1450.0,
+   "bounds": [
+    0,
+    14500.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s1.usdkrw_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:255"
+  },
+  "scenarios.s2.footprint_threshold": {
+   "level": "L1",
+   "default": 0.7,
+   "bounds": [
+    0,
+    7.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s2.footprint_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:262"
+  },
   "scenarios.s2.futures_net_sell": {
    "level": "L1",
    "default": -1500000000000,
@@ -14351,6 +14767,123 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/master_scenario_engine.py:54"
+  },
+  "scenarios.s2.semi_hard_z_threshold": {
+   "level": "L1",
+   "default": 2.5,
+   "bounds": [
+    0,
+    25.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s2.semi_hard_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:261"
+  },
+  "scenarios.s2.semi_z_threshold": {
+   "level": "L1",
+   "default": 2.2,
+   "bounds": [
+    0,
+    22.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s2.semi_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:260"
+  },
+  "scenarios.s2.sox_1d_scale_pct": {
+   "level": "L1",
+   "default": 1.8,
+   "bounds": [
+    0,
+    18.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s2.sox_1d_scale_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:354"
+  },
+  "scenarios.s3.garch_chg_eps": {
+   "level": "L1",
+   "default": 0.05,
+   "bounds": [
+    0,
+    0.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.garch_chg_eps",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:268"
+  },
+  "scenarios.s3.ou_drift_min_z": {
+   "level": "L1",
+   "default": 1.5,
+   "bounds": [
+    0,
+    15.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.ou_drift_min_z",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:269"
+  },
+  "scenarios.s3.panic_ois_max": {
+   "level": "L1",
+   "default": 45.0,
+   "bounds": [
+    0,
+    450.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.panic_ois_max",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:267"
+  },
+  "scenarios.s3.rebound_kospi_chg_min": {
+   "level": "L1",
+   "default": 0.5,
+   "bounds": [
+    0,
+    5.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.rebound_kospi_chg_min",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:266"
+  },
+  "scenarios.s3.rebound_ois_min": {
+   "level": "L1",
+   "default": 55.0,
+   "bounds": [
+    0,
+    550.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.rebound_ois_min",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:265"
+  },
+  "scenarios.s3.vix_z_threshold": {
+   "level": "L1",
+   "default": 2.5,
+   "bounds": [
+    0,
+    25.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s3.vix_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:264"
   },
   "scenarios.s3.vkospi_threshold": {
    "level": "L1",
@@ -14365,6 +14898,32 @@
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/master_scenario_engine.py:55"
   },
+  "scenarios.s4.usdjpy_1d_scale_pct": {
+   "level": "L1",
+   "default": 0.75,
+   "bounds": [
+    0,
+    7.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s4.usdjpy_1d_scale_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:471"
+  },
+  "scenarios.s4.usdjpy_z_threshold": {
+   "level": "L1",
+   "default": -2.5,
+   "bounds": [
+    -25.0,
+    0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s4.usdjpy_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:270"
+  },
   "scenarios.s5.corr_z_threshold": {
    "level": "L1",
    "default": 0.95,
@@ -14377,6 +14936,123 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/master_scenario_engine.py:57"
+  },
+  "scenarios.s5.min_cross_assets": {
+   "level": "L1",
+   "default": 4,
+   "bounds": [
+    0,
+    40.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s5.min_cross_assets",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:272"
+  },
+  "scenarios.s5.neg_ret_cut_pct": {
+   "level": "L1",
+   "default": -1.5,
+   "bounds": [
+    -15.0,
+    0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s5.neg_ret_cut_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:273"
+  },
+  "scenarios.s5.pos_mean_min_pct": {
+   "level": "L1",
+   "default": 1.8,
+   "bounds": [
+    0,
+    18.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s5.pos_mean_min_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:276"
+  },
+  "scenarios.s5.pos_ret_cut_pct": {
+   "level": "L1",
+   "default": 1.2,
+   "bounds": [
+    0,
+    12.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s5.pos_ret_cut_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:275"
+  },
+  "scenarios.s5.sync_ratio_min": {
+   "level": "L1",
+   "default": 0.85,
+   "bounds": [
+    0,
+    8.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s5.sync_ratio_min",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:274"
+  },
+  "scenarios.s6.ois_min_z": {
+   "level": "L1",
+   "default": 1.2,
+   "bounds": [
+    0,
+    12.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s6.ois_min_z",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:280"
+  },
+  "scenarios.s6.us10y_drop_max_pct": {
+   "level": "L1",
+   "default": -1.5,
+   "bounds": [
+    -15.0,
+    0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s6.us10y_drop_max_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:279"
+  },
+  "scenarios.s6.wti_1d_scale_pct": {
+   "level": "L1",
+   "default": 2.2,
+   "bounds": [
+    0,
+    22.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s6.wti_1d_scale_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:550"
+  },
+  "scenarios.s6.wti_drop_max_pct": {
+   "level": "L1",
+   "default": -2.5,
+   "bounds": [
+    -25.0,
+    0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.s6.wti_drop_max_pct",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:278"
   },
   "scenarios.s6.wti_z_threshold": {
    "level": "L1",
@@ -14416,6 +15092,58 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/risk/master_scenario_engine.py:60"
+  },
+  "scenarios.surge_z_threshold": {
+   "level": "L1",
+   "default": 2.0,
+   "bounds": [
+    0,
+    20.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.surge_z_threshold",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:283"
+  },
+  "scenarios.weight_historical": {
+   "level": "L1",
+   "default": 0.65,
+   "bounds": [
+    0,
+    6.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.weight_historical",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:251"
+  },
+  "scenarios.weight_predictive": {
+   "level": "L1",
+   "default": 0.35,
+   "bounds": [
+    0,
+    3.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.weight_predictive",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:252"
+  },
+  "scenarios.z99_normal": {
+   "level": "L1",
+   "default": 2.32635,
+   "bounds": [
+    0,
+    23.2635
+   ],
+   "policy": "free",
+   "config_key": "scenarios.z99_normal",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/risk/master_scenario_engine.py:132"
   },
   "self_learning.data_qa_min_score": {
    "level": "L1",
@@ -15358,6 +16086,32 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "scripts/run_live_trader_daemon.py:85"
+  },
+  "tactic_e.iv_eps": {
+   "level": "L1",
+   "default": 1e-06,
+   "bounds": [
+    0,
+    9.999999999999999e-06
+   ],
+   "policy": "free",
+   "config_key": "tactic_e.iv_eps",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/strategy/tactic_e_event_squeeze.py:72"
+  },
+  "tactic_e.max_allocation_ratio": {
+   "level": "L1",
+   "default": 0.15,
+   "bounds": [
+    0,
+    1.5
+   ],
+   "policy": "free",
+   "config_key": "tactic_e.max_allocation_ratio",
+   "auto": true,
+   "rationale": "100% mathematical dynamic scenario & event engine parameter (L1 prior).",
+   "provenance": "src/strategy/tactic_e_event_squeeze.py:30"
   },
   "tax.kr_dividend_net_factor": {
    "level": "L0",

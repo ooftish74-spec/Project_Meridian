@@ -535,3 +535,59 @@ def test_min_train_rows_guard_skips_tiny_folds():
     # fold0 train = (24-5)일 x 4종목 = 76행 < 150 → 스킵, 나머지(164, 252행)는 수행
     assert len(rep['folds']) < 3 and len(rep['folds']) >= 1
     assert any('min_train_rows' in w for w in rep['warnings'])
+
+
+def test_cross_sectional_eb_classifier_closed_form_and_purged_wf():
+    from scipy.stats import norm
+    from src.ml.cross_sectional_eb_model import (
+        CrossSectionalEBClassifier,
+        compute_cross_sectional_targets,
+        cross_sectional_rank_z_matrix,
+    )
+
+    # 1. Closed-form Blom/Rankit normal-score invariance test
+    x_raw = np.array([[10.0], [20.0], [30.0], [40.0], [50.0]], dtype=float)
+    d_single = np.array(['2026-07-01'] * 5)
+    z_out = cross_sectional_rank_z_matrix(x_raw, d_single)
+    expected_u = (np.arange(1, 6, dtype=float) - 0.5) / 5.0
+    expected_z = norm.ppf(expected_u)
+    assert z_out[:, 0] == pytest.approx(expected_z, rel=1e-9)
+
+    # Invariance to date-level affine shift (market beta shift + scale)
+    x_shifted = x_raw * 3.5 + 1234.5
+    z_shifted = cross_sectional_rank_z_matrix(x_shifted, d_single)
+    assert z_shifted[:, 0] == pytest.approx(z_out[:, 0], rel=1e-9)
+
+    # 2. Closed-form signed rank target decomposition identity: (2y - 1)*w == 2*(u - 0.5)
+    fwd = np.array([-4.0, -1.5, 0.2, 1.8, 3.3, 6.0, -2.1, 0.9, 4.2, -0.5], dtype=float)
+    d_ten = np.array(['2026-07-01'] * 10)
+    y_bin, w_rank = compute_cross_sectional_targets(fwd, d_ten, min_weight=0.01)
+    u_ten = (np.argsort(np.argsort(fwd)) + 1.0 - 0.5) / 10.0
+    signed_target = (2.0 * y_bin - 1.0) * w_rank
+    expected_signed = 2.0 * (u_ten - 0.5)
+    assert signed_target == pytest.approx(expected_signed, rel=1e-9)
+
+    # 3. Empirical-Bayes IC-IR shrinkage + Purged Walk-Forward positive OOS IC test
+    rng = np.random.default_rng(42)
+    n_dates, n_tickers, n_feats = 60, 20, 10
+    dates = np.repeat(_bdays(n_dates), n_tickers)
+    X_panel = rng.normal(0.0, 1.0, size=(n_dates * n_tickers, n_feats))
+    # True cross-sectional signal in features 0 and 1; features 2..9 are pure noise
+    true_alpha = 0.6 * X_panel[:, 0] - 0.5 * X_panel[:, 1]
+    fwd_ret = true_alpha + rng.normal(0.0, 1.0, size=len(dates))
+    X_cs = cross_sectional_rank_z_matrix(X_panel, dates)
+    y_cs, sw_cs = compute_cross_sectional_targets(fwd_ret, dates)
+
+    cv = DatePurgedWalkForward(n_splits=3, label_horizon_days=5, embargo_days=5)
+    fac = pwf.make_pipeline_factory(
+        lambda: CrossSectionalEBClassifier(n_blocks=4, top_k=4, ortho_strength=0.5, tree_blend=0.1),
+        impute=True, variance_filter=True, scale=True,
+    )
+    rep = pwf.run_purged_walk_forward(
+        X_cs, y_cs, dates, cv, fac,
+        fwd_ret=fwd_ret, sample_weight=sw_cs, task='classification', horizon_days=5,
+    )
+    assert rep['oos']['ic']['mean'] > 0.25
+    assert rep['oos']['ic']['nw_t_stat'] > 4.0
+    assert rep['oos']['decile_spread']['mean'] > 0.5
+

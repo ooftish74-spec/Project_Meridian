@@ -47,17 +47,23 @@ class CrashDefense:
         """
         signal_cache = market_data.get('signal_cache', {})
         overnight = market_data.get('overnight_intel', {})
-        vix = signal_cache.get('vix', 20)
-        vkospi = signal_cache.get('vkospi', 18)
-        vix_prev = signal_cache.get('vix_prev', vix)
-        vix_change = (vix / vix_prev - 1) * 100 if vix_prev > 0 else 0
-        usdkrw = signal_cache.get('usdkrw', 1350)
-        usdkrw_prev = signal_cache.get('usdkrw_prev', usdkrw)
-        fx_change = (usdkrw / usdkrw_prev - 1) * 100 if usdkrw_prev > 0 else 0
-        foreign_net = signal_cache.get('foreign_net_buy', 0)
-        sp500_change = overnight.get('sp500_change_pct', 0)
-        nasdaq_change = overnight.get('nasdaq_change_pct', 0)
-        kospi_change = signal_cache.get('kospi_change_pct', 0)
+        vix_default = float(pget('crash.default_vix', 20.0))
+        vkospi_default = float(pget('crash.default_vkospi', 18.0))
+        fx_default = float(pget('crash.default_usdkrw', 1350.0))
+        vix = float(signal_cache.get('vix', vix_default) or vix_default)
+        vkospi = float(signal_cache.get('vkospi', vkospi_default) or vkospi_default)
+        vix_prev = float(signal_cache.get('vix_prev', vix) or vix)
+        vix_change = (vix / vix_prev - 1) * 100 if vix_prev > 0 else float(signal_cache.get('vix_change_1d', 0.0) or 0.0)
+        usdkrw = float(signal_cache.get('usdkrw', fx_default) or fx_default)
+        usdkrw_prev = signal_cache.get('usdkrw_prev')
+        if usdkrw_prev is not None and float(usdkrw_prev) > 0:
+            fx_change = (usdkrw / float(usdkrw_prev) - 1) * 100
+        else:
+            fx_change = float(signal_cache.get('usdkrw_change_1d', 0.0) or 0.0)
+        foreign_net = float(signal_cache.get('foreign_net_buy', 0.0) or 0.0)
+        sp500_change = float(overnight.get('sp500_change_pct', signal_cache.get('sp500_change_1d', 0.0)) or 0.0)
+        nasdaq_change = float(overnight.get('nasdaq_change_pct', signal_cache.get('nasdaq_change_1d', 0.0)) or 0.0)
+        kospi_change = float(signal_cache.get('kospi_change_pct', signal_cache.get('kospi_change_1d', 0.0)) or 0.0)
         _vix_thresh = pget('crash.stress_vix_threshold', 30)
         _vix_max = pget('crash.stress_vix_max_score', 40)
         _vix_scale = cfg.get('crash.stress_vix_scale', 2)
@@ -75,10 +81,12 @@ class CrashDefense:
             stress_score += min(_vix_max, (vix - _vix_thresh) * _vix_scale)
         if vkospi > _vkospi_thresh:
             stress_score += min(_vkospi_max, (vkospi - _vkospi_thresh) * _vkospi_scale)
-        if abs(sp500_change) > _sp500_thresh:
+        # S&P500 하락(sp500_change < -_sp500_thresh) 시에만 스트레스 가산 (상승 랠리 시 오작동 차단)
+        if sp500_change < -_sp500_thresh:
             stress_score += min(_sp500_max, abs(sp500_change) * _sp500_scale)
-        if abs(fx_change) > _fx_thresh:
-            stress_score += min(_fx_max, abs(fx_change) * _fx_scale)
+        # 원/달러 환율 급등(원화 약세, fx_change > _fx_thresh) 시에만 스트레스 가산 (원화 강세 시 오작동 차단)
+        if fx_change > _fx_thresh:
+            stress_score += min(_fx_max, fx_change * _fx_scale)
         _fn_threshold = pget('risk.crash_foreign_net_threshold', -500000000000)
         _fn_scale = pget('risk.crash_foreign_net_scale', 100000000000)
         if foreign_net < _fn_threshold:

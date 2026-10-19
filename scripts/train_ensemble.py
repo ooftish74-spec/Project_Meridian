@@ -299,32 +299,40 @@ def _load_cross_asset_data() -> Dict:
     """
     result = {'sp500': {}, 'vix': {}, 'usdkrw': {}}
     _SIGNAL_DIR = DATA_DIR.parent / 'signals'
+    _US_PRICES_DIR = DATA_DIR.parent / 'us_stocks' / 'prices'
     files = {
-        'sp500': [_SIGNAL_DIR / 'signal_sp500.parquet',
-                  DATA_DIR / 'cross_sp500.parquet'],
-        'vix':   [_SIGNAL_DIR / 'signal_vix.parquet',
-                  DATA_DIR / 'cross_vix.parquet'],
-        'usdkrw': [_SIGNAL_DIR / 'signal_usdkrw.parquet',
-                   DATA_DIR / 'cross_usdkrw.parquet'],
+        'sp500': [DATA_DIR / 'cross_sp500.parquet',
+                  _US_PRICES_DIR / 'SPY.parquet',
+                  _SIGNAL_DIR / 'signal_sp500.parquet'],
+        'vix':   [DATA_DIR / 'cross_vix.parquet',
+                  _US_PRICES_DIR / '^VIX.parquet',
+                  _SIGNAL_DIR / 'signal_vix.parquet'],
+        'usdkrw': [DATA_DIR / 'cross_usdkrw.parquet',
+                   _SIGNAL_DIR / 'signal_usdkrw.parquet'],
     }
 
+    _min_series_rows = 10
     for key, fp_list in files.items():
-        # ★ 첫 번째 존재하는 파일 사용 (signals/ 우선)
-        fp = None
+        df = None
         for candidate in fp_list:
-            if candidate.exists():
-                fp = candidate
-                break
-        if fp is None:
+            if not candidate.exists():
+                continue
+            try:
+                cand_df = pd.read_parquet(candidate)
+                if len(cand_df) >= _min_series_rows:
+                    df = cand_df
+                    break
+            except Exception:
+                continue
+        if df is None:
             continue
         try:
-            df = pd.read_parquet(fp)
             # 컬럼명 정규화
             df.columns = [c.lower() if isinstance(c, str) else c for c in df.columns]
             if hasattr(df.columns, 'levels'):
                 df.columns = ['_'.join(c).strip('_') if isinstance(c, tuple) else c
                               for c in df.columns]
-            closes = df['close'].values
+            closes = pd.to_numeric(df['close'], errors='coerce').values
             # index가 Date 또는 date 컬럼
             if 'date' in df.columns:
                 dates = pd.to_datetime(df['date'])
@@ -334,11 +342,13 @@ def _load_cross_asset_data() -> Dict:
                 date_strs = [pd.Timestamp(d).strftime('%Y-%m-%d') for d in dates]
 
             for i in range(1, len(closes)):
+                if not np.isfinite(closes[i]) or not np.isfinite(closes[i - 1]):
+                    continue
                 d = date_strs[i]
                 if key == 'sp500':
                     prev = closes[i - 1]
                     ret = (closes[i] / prev - 1) * 100 if prev > 0 else 0
-                    result['sp500'][d] = {'return': ret}
+                    result['sp500'][d] = {'return': float(ret)}
                 elif key == 'vix':
                     result['vix'][d] = {
                         'close': float(closes[i]),
@@ -559,8 +569,9 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     _cv_method = _resolve_cv_method(_cfg, cv_method)
 
     # ★ 동적 파라미터 로드 (하드코딩 금지)
+    _default_win = 950
     if window_days is None:
-        window_days = _cfg.get('train.window_days', 730)
+        window_days = _cfg.get('train.window_days', _cfg.get('train.rolling_window_days', _default_win))
     if forward_days is None:
         forward_days = _cfg.get('train.forward_days', 5)
     if sample_interval is None:
@@ -569,7 +580,7 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     val_ratio = _cfg.get('train.val_ratio', 0.2)
 
     # ★ DD-12: 타겟 변수 설정 (하드코딩 금지)
-    target_type = _cfg.get('ml.target_type', 'max_high')
+    target_type = _cfg.get('ml.target_type', 'cross_sectional_excess')
     max_high_threshold = _cfg.get('ml.target_threshold_pct', 3.0)
     c2c_threshold = _cfg.get('ml.close_to_close_threshold_pct', 2.0)
 
@@ -611,7 +622,6 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     # [WAVE3 Track D] 거래일 기준 label-overlap purge 용 tz-naive 경계
     _val_cutoff_naive = pd.Timestamp(val_cutoff).tz_localize(None)
     n_label_purged = 0
-    # meta 수집 (return_meta=True 일 때만 사용)
     _m_train_dates, _m_val_dates = [], []
     _m_train_tickers, _m_val_tickers = [], []
     _m_train_fwd, _m_val_fwd = [], []
@@ -626,7 +636,7 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     aux_loader = AuxDataLoader()
     n_purged = 0
     
-    use_automl = _cfg.get('ml.use_automl_features', True)
+    use_automl = _cfg.get('ml.use_automl_features', False)
     active_features = list(FEATURE_NAMES)
 
     if use_automl:
@@ -642,18 +652,24 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
 
     # [WAVE3 Track D] 1단계: 가격 선로딩 (공통 거래일 캘린더 샘플링용)
     _loaded = []
+    _cal_counts = {}
     for ticker in universe:
         _arr = _load_ticker_ohlcv(ticker)
         if _arr is None:
             continue
         _loaded.append((ticker, _arr))
         if return_meta or _common_sampling:
-            _calendar.update(pd.DatetimeIndex(_arr[5]).normalize())
+            for _d_norm in pd.DatetimeIndex(_arr[5]).normalize():
+                _cal_counts[_d_norm] = _cal_counts.get(_d_norm, 0) + 1
+
+    _full_uni_gate = 60
+    _min_cs_names = 50
+    if len(_loaded) >= _full_uni_gate:
+        _calendar = {d for d, cnt in _cal_counts.items() if cnt >= _min_cs_names}
+    else:
+        _calendar = set(_cal_counts.keys())
 
     # [WAVE3 Track D] 공통 거래일 캘린더 샘플링 — 모든 종목을 같은 날짜에 샘플링.
-    # (기존: 종목별 idx 260 부터 sample_interval 간격 → 상장/이력 길이에 따라 위상이 달라
-    #  날짜별 횡단면이 희소해지고 날짜 단위 IC 검정력이 떨어짐)
-    # 전체 캘린더에서 '마지막 라벨 가능일(끝-forward_days)' 을 앵커로 sample_interval 간격.
     _sample_dates = None
     if _common_sampling and _calendar:
         _sample_dates = _common_sample_dates(_calendar, forward_days, sample_interval)
@@ -661,17 +677,20 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             logger.info(f"  📅 [WAVE3] 공통 캘린더 샘플링: {len(_sample_dates)}개 날짜 "
                         f"(간격 {sample_interval} 거래일, 앵커 {max(_sample_dates).date()})")
 
+    _default_warmup = 65
+    _warmup_idx = int(_cfg.get('ml.warmup_bars', _default_warmup))
+
     for ticker, (close, high, low, opn, vol, dates) in _loaded:
         n = len(close)
 
         is_etf = ticker.startswith(('069', '091', '114', '122', '305', '244',
-                                     '117', '360', '315', '371'))
+                                     '117', '360', '315', '371')) or not ticker[0].isdigit()
 
         if _sample_dates is not None:
             _dn = pd.DatetimeIndex(dates).normalize()
-            _idx_iter = [i for i in range(260, n - forward_days) if _dn[i] in _sample_dates]
+            _idx_iter = [i for i in range(_warmup_idx, n - forward_days) if _dn[i] in _sample_dates]
         else:
-            _idx_iter = range(260, n - forward_days, sample_interval)
+            _idx_iter = range(_warmup_idx, n - forward_days, sample_interval)
         for idx in _idx_iter:
             dt = pd.Timestamp(dates[idx])
             if dt.tz_localize(None) < pd.Timestamp(cutoff_date).tz_localize(None):
@@ -716,12 +735,11 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             label_c2c = 1 if close_return_pct >= c2c_threshold else 0
 
             # 타겟 선택
-            if target_type == 'close_to_close':
+            if target_type in ('close_to_close', 'cross_sectional_excess', 'cs_rank', 'cross_sectional'):
                 label = label_c2c
             elif target_type == 'ensemble':
-                # 양쪽 모두 만족해야 양성 (보수적 앙상블)
                 label = 1 if (label_max_high == 1 and label_c2c == 1) else 0
-            else:  # 'max_high' (기존 기본값)
+            else:  # 'max_high'
                 label = label_max_high
             row = [feat.get(f, 0) for f in active_features]  # ★ H-21
 
@@ -732,50 +750,88 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             # ★ DD-04: Purged TS Split
             if dt.tz_localize(None) < pd.Timestamp(train_end).tz_localize(None):
                 if _cv_method == CV_METHOD_PURGED and _label_end >= _val_cutoff_naive:
-                    # 라벨 구간이 val 구간과 겹침 → purge (거래일 기준)
                     n_label_purged += 1
                     _split = 'purged'
                 else:
-                    # Train 구간
-                    train_X.append(row); train_y.append(label)
                     _split = 'train'
-                    if return_meta:
-                        _m_train_dates.append(_dt_naive); _m_train_tickers.append(ticker)
-                        _m_train_fwd.append(close_return_pct)
             elif dt.tz_localize(None) >= pd.Timestamp(val_cutoff).tz_localize(None):
-                # Val 구간 (embargo 이후)
-                val_X.append(row); val_y.append(label)
                 _split = 'val'
-                if return_meta:
-                    _m_val_dates.append(_dt_naive); _m_val_tickers.append(ticker)
-                    _m_val_fwd.append(close_return_pct)
             else:
-                # Embargo 구간 — 제외 (data leakage 방지)
                 n_purged += 1
                 _split = 'embargo'
-            if return_meta:
-                _p_rows.append(row); _p_dates.append(_dt_naive); _p_tickers.append(ticker)
-                _p_labels.append(label); _p_fwd.append(close_return_pct); _p_split.append(_split)
 
-    train_X, train_y = np.array(train_X), np.array(train_y)
-    val_X, val_y = np.array(val_X), np.array(val_y)
+            _p_rows.append(row); _p_dates.append(_dt_naive); _p_tickers.append(ticker)
+            _p_labels.append(label); _p_fwd.append(close_return_pct); _p_split.append(_split)
+
+    # Filter out sparse non-KRX holiday dates (n < 50) when full universe is loaded
+    if len(_loaded) >= _full_uni_gate and len(_p_rows) > 0:
+        _date_series = pd.Series(_p_dates)
+        _date_cnts = _date_series.map(_date_series.value_counts()).values
+        _valid_mask = _date_cnts >= _min_cs_names
+        if np.any(_valid_mask) and not np.all(_valid_mask):
+            _idx_keep = np.where(_valid_mask)[0]
+            _p_rows = [_p_rows[i] for i in _idx_keep]
+            _p_dates = [_p_dates[i] for i in _idx_keep]
+            _p_tickers = [_p_tickers[i] for i in _idx_keep]
+            _p_labels = [_p_labels[i] for i in _idx_keep]
+            _p_fwd = [_p_fwd[i] for i in _idx_keep]
+            _p_split = [_p_split[i] for i in _idx_keep]
+
+    _all_X = np.asarray(_p_rows, dtype=np.float64) if _p_rows else np.zeros((0, len(active_features)), dtype=np.float64)
+    _all_fwd = np.asarray(_p_fwd, dtype=np.float64)
+    _all_y = np.asarray(_p_labels, dtype=int)
+    _all_sw = np.ones(len(_all_y), dtype=np.float64)
+
+    # Cross-Sectional Rank-Z Standardization & Excess Return Target (zero look-ahead across dates)
+    if len(_all_X) > 0:
+        try:
+            from src.ml.cross_sectional_eb_model import (
+                cross_sectional_rank_z_matrix,
+                compute_cross_sectional_targets,
+            )
+            if bool(_cfg.get('ml.cross_sectional_standardize', True)):
+                _all_X = cross_sectional_rank_z_matrix(_all_X, _p_dates)
+            if target_type in ('cross_sectional_excess', 'cs_rank', 'cross_sectional'):
+                _all_y, _all_sw = compute_cross_sectional_targets(_all_fwd, _p_dates)
+                _p_labels = _all_y.tolist()
+        except Exception as _cs_e:
+            logger.warning(f"  ⚠️ Cross-sectional standardization fallback: {_cs_e}")
+
+    _split_arr = np.asarray(_p_split, dtype=object)
+    _tr_mask = _split_arr == 'train'
+    _va_mask = _split_arr == 'val'
+
+    train_X = _all_X[_tr_mask] if len(_all_X) else np.zeros((0, len(active_features)))
+    train_y = _all_y[_tr_mask] if len(_all_y) else np.zeros(0, dtype=int)
+    val_X = _all_X[_va_mask] if len(_all_X) else np.zeros((0, len(active_features)))
+    val_y = _all_y[_va_mask] if len(_all_y) else np.zeros(0, dtype=int)
+
+    if return_meta and len(_p_dates) > 0:
+        _dates_arr = np.asarray(_p_dates, dtype='datetime64[ns]')
+        _tickers_arr = np.asarray(_p_tickers, dtype=object)
+        _m_train_dates = _dates_arr[_tr_mask]
+        _m_val_dates = _dates_arr[_va_mask]
+        _m_train_tickers = _tickers_arr[_tr_mask]
+        _m_val_tickers = _tickers_arr[_va_mask]
+        _m_train_fwd = _all_fwd[_tr_mask]
+        _m_val_fwd = _all_fwd[_va_mask]
 
     logger.info(f"  Target: type={target_type}, "
                 f"max_high_threshold={max_high_threshold}%, "
                 f"c2c_threshold={c2c_threshold}%")
-    logger.info(f"  Train: {len(train_X):,} (양성 {train_y.mean():.1%})")
-    logger.info(f"  Val:   {len(val_X):,} (양성 {val_y.mean():.1%})")
+    logger.info(f"  Train: {len(train_X):,} (양성 {train_y.mean():.1%})" if len(train_y) else "  Train: 0")
+    logger.info(f"  Val:   {len(val_X):,} (양성 {val_y.mean():.1%})" if len(val_y) else "  Val: 0")
     logger.info(f"  ★ Purged: {n_purged:,}건 embargo 제외 ({embargo_days}일)")
     if _cv_method == CV_METHOD_PURGED:
         logger.info(f"  ★ [WAVE3] Label-overlap purge: {n_label_purged:,}건 "
                     f"(라벨 종료 ≥ val 시작, h={forward_days} 거래일)")
 
-    # [WAVE3 Track D] meta (DD-11 피처 제외 이전의 전체 피처 패널 보존 →
-    #  purged WF 에서는 fold 내부 VarianceThreshold 로 처리)
+    # [WAVE3 Track D] meta
     _meta = None
     if return_meta:
-        _panel = pd.DataFrame(_p_rows, columns=list(active_features)) if _p_rows else \
+        _panel = pd.DataFrame(_all_X, columns=list(active_features)) if len(_all_X) else \
             pd.DataFrame(columns=list(active_features))
+        _panel.insert(0, 'sample_weight', np.asarray(_all_sw, dtype=float))
         _panel.insert(0, 'split', _p_split)
         _panel.insert(0, 'fwd_ret', np.asarray(_p_fwd, dtype=float))
         _panel.insert(0, 'label', np.asarray(_p_labels, dtype=int))
@@ -790,6 +846,8 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             'val_tickers': np.array(_m_val_tickers, dtype=object),
             'train_fwd_ret': np.array(_m_train_fwd, dtype=float),
             'val_fwd_ret': np.array(_m_val_fwd, dtype=float),
+            'train_sample_weight': _all_sw[_tr_mask] if len(_all_sw) else np.zeros(0, dtype=float),
+            'val_sample_weight': _all_sw[_va_mask] if len(_all_sw) else np.zeros(0, dtype=float),
             'panel': _panel,
             'panel_features': list(active_features),
             'calendar': pd.DatetimeIndex(sorted(_calendar)),
@@ -831,10 +889,14 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 logger.info(f"     config: {excluded_cfg}")
                 
             active_features = [fname for fname, keep in zip(active_features, keep_mask) if keep]
+            if return_meta and _meta is not None:
+                _drop_all = [c for c in all_excluded if c in _meta['panel'].columns]
+                if _drop_all:
+                    _meta['panel'] = _meta['panel'].drop(columns=_drop_all)
+                    _meta['panel_features'] = [f for f in _meta['panel_features'] if f not in _drop_all]
 
     # ★ H-21 FIX: active_features를 함께 반환하여 run_training에서 직접 사용
     if return_meta:
-        # 운영자가 명시 제외한 피처는 검증 패널에서도 제외 (분산0 제외는 fold 내부에서)
         if excluded_cfg and _meta is not None:
             _drop = [c for c in excluded_cfg if c in _meta['panel'].columns]
             if _drop:
@@ -850,7 +912,8 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
 
 def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                    train_dates=None, val_dates=None, label_horizon_days: Optional[int] = None,
-                   cv_method: Optional[str] = None, artifact_dir=None, calendar=None):
+                   cv_method: Optional[str] = None, artifact_dir=None, calendar=None,
+                   sample_weights=None, val_sample_weights=None):
     """5-모델 앙상블 학습 + 검증 (GBR+XGB+RF+LGB+CatBoost).
 
     ★ P1-4: 모든 하이퍼파라미터를 DynamicConfig에서 로드.
@@ -904,10 +967,14 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                    else cfg.get('train.forward_days', 5))
     _artifact_dir = Path(artifact_dir) if artifact_dir is not None else MODEL_DIR
 
-    # ★ M8: 비대칭 손실 — FP 패널티 sample_weight 계산
-    fp_penalty = cfg.get('ml.fp_penalty_ratio', 1.5)
-    sample_weights = np.where(train_y == 0, fp_penalty, 1.0)
-    logger.info(f"  ⚖️ M8 Asymmetric loss: FP penalty={fp_penalty}")
+    # ★ M8 / 횡단면 Rank-Magnitude sample_weight 계산
+    if sample_weights is not None and len(sample_weights) == len(train_y):
+        sample_weights = np.asarray(sample_weights, dtype=float)
+        logger.info("  ⚖️ Cross-Sectional Rank-Magnitude sample_weights 적용")
+    else:
+        fp_penalty = cfg.get('ml.fp_penalty_ratio', 1.5)
+        sample_weights = np.where(train_y == 0, fp_penalty, 1.0)
+        logger.info(f"  ⚖️ M8 Asymmetric loss: FP penalty={fp_penalty}")
 
     # ★ P1-4: 선택적 자동 튜닝
     auto_tune = cfg.get('ml.auto_tune_enabled', False)
@@ -1053,6 +1120,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     # ★ L2-01: val_X, val_y를 시계열 순으로 cal_X/cal_y(전반 50%)와 eval_X/eval_y(후반 50%)로 분할
     cal_X, cal_y = val_X, val_y
     eval_X, eval_y = val_X, val_y
+    _cal_sw_slice = None
     _date_split_done = False
     # [WAVE3 Track D] val 행은 종목-major 순서이므로 행 절반 분할은 '시계열 순'이 아니다.
     # → 날짜 단위 앞/뒤 분할 + 라벨 horizon(h 거래일) purge gap.
@@ -1066,6 +1134,8 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                     and len(np.unique(val_y[_ei])) >= 2:
                 cal_X, cal_y = val_X[_ci], val_y[_ci]
                 eval_X, eval_y = val_X[_ei], val_y[_ei]
+                if val_sample_weights is not None and len(val_sample_weights) == len(val_y):
+                    _cal_sw_slice = np.asarray(val_sample_weights, dtype=float)[_ci]
                 _date_split_done = True
                 logger.info(f"  📐 [DatePurged] Val 분할: cal={len(cal_X)}건({_sinfo.get('cal_dates')}일) "
                             f"| purge {_sinfo.get('purged_dates')}일 | "
@@ -1081,6 +1151,8 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         if len(np.unique(_c_y)) >= 2 and len(np.unique(_e_y)) >= 2:
             cal_X, cal_y = val_X[:_mid], _c_y
             eval_X, eval_y = val_X[_mid:], _e_y
+            if val_sample_weights is not None and len(val_sample_weights) == len(val_y):
+                _cal_sw_slice = np.asarray(val_sample_weights, dtype=float)[:_mid]
             logger.info(f"  📐 Val 분할: cal={len(cal_X)}건, eval={len(eval_X)}건")
 
     # [S2 Upgrade] Task 3: Probability Calibration (FrozenEstimator 기반 prefit 보정)
@@ -1245,6 +1317,41 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
 
         models['catboost'] = _calibrate_prefit(cb, 'CatBoost')
 
+    # ═══ Cross-Sectional Empirical-Bayes IC-IR Shrinkage Model ═══
+    try:
+        from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
+        _vol_names = {'volatility_20d', 'atr_pct', 'high_low_range'}
+        _vol_idx = tuple(
+            i for i, fn in enumerate(active_features or [])
+            if fn in _vol_names
+        ) or (4, 10, 18)
+        _def_blocks, _def_topk = 5, 8
+        _def_ortho, _def_crowd, _def_blend = 0.95, 0.35, 0.25
+        _eb_blocks = int(cfg.get('ml.eb.n_blocks') or _def_blocks)
+        _eb_topk = int(cfg.get('ml.eb.top_k') or _def_topk)
+        _eb_ortho = float(cfg.get('ml.eb.ortho_strength') or _def_ortho)
+        _eb_crowd = float(cfg.get('ml.eb.crowd_threshold') or _def_crowd)
+        _eb_blend = float(cfg.get('ml.eb.tree_blend') or _def_blend)
+        eb_model = CrossSectionalEBClassifier(
+            n_blocks=_eb_blocks,
+            top_k=_eb_topk,
+            ortho_strength=_eb_ortho,
+            crowd_threshold=_eb_crowd,
+            tree_blend=_eb_blend,
+            vol_cols=_vol_idx,
+        )
+        if eval_X is not val_X and len(cal_X) > 0 and _cal_sw_slice is not None:
+            _eb_X = np.vstack([train_X, cal_X])
+            _eb_y = np.concatenate([train_y, cal_y])
+            _eb_sw = np.concatenate([sample_weights, _cal_sw_slice]) if sample_weights is not None else None
+        else:
+            _eb_X, _eb_y, _eb_sw = train_X, train_y, sample_weights
+        eb_model.fit(_eb_X, _eb_y, sample_weight=_eb_sw)
+        models['eb_ic'] = eb_model
+        logger.info(f"  📊 CrossSectionalEBClassifier 학습 완료 (top_k={_eb_topk}, ortho={_eb_ortho})")
+    except Exception as _eb_e:
+        logger.warning(f"  ⚠️ CrossSectionalEBClassifier 학습 실패: {_eb_e}")
+
     logger.info(
         f"\n  [S2 Upgrade] Task 3 완료: "
         f"{sum(1 for m in models.values() if hasattr(m, 'calibrated_classifiers_'))}"
@@ -1295,29 +1402,34 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         }
         logger.info(f"  {name}: ACC={acc:.3f} AUC={auc:.3f}")
 
-    # ★ P1-5: 동적 앙상블 가중치 계산
-    weighting_method = cfg.get('ml.ensemble_weighting', 'equal')
+    # ★ P1-5: 동적 앙상블 가중치 계산 (Empirical-Bayes OOS Edge Shrinkage)
+    weighting_method = cfg.get('ml.ensemble_weighting', 'oos_auc')
     logger.info(f"\n  ⚖️ P1-5: 앙상블 가중치 방식: {weighting_method}")
 
     model_names = list(preds.keys())
     n_models = len(model_names)
 
-    if weighting_method == 'oos_auc' and n_models > 0:
-        # AUC 기반 가중치: 각 모델 AUC를 정규화
-        raw_scores = np.array([model_aucs[m] for m in model_names])
-        if raw_scores.std() < 1e-9:
-            weights = np.ones(n_models) / n_models
+    if weighting_method in ('oos_auc', 'eb_ic', 'oos_ic') and n_models > 0:
+        _half = 0.5
+        _eb_prior = 0.70
+        edges = np.array([max(0.0, float(model_aucs[m]) - _half) for m in model_names], dtype=float)
+        if np.sum(edges) > 1e-9:
+            w_edge = (edges ** 2) / float(np.sum(edges ** 2))
         else:
-            weights = raw_scores / raw_scores.sum()
+            w_edge = np.ones(n_models, dtype=float) / float(n_models)
+        if 'eb_ic' in model_names:
+            w_prior = np.array([1.0 if m == 'eb_ic' else 0.0 for m in model_names], dtype=float)
+            weights = _eb_prior * w_prior + (1.0 - _eb_prior) * w_edge
+            weights = weights / float(np.sum(weights))
+        else:
+            weights = w_edge
     elif weighting_method == 'oos_acc' and n_models > 0:
-        # ACC 기반 가중치
         raw_scores = np.array([model_accs[m] for m in model_names])
         if raw_scores.std() < 1e-9:
             weights = np.ones(n_models) / n_models
         else:
             weights = raw_scores / raw_scores.sum()
     else:
-        # 'equal' (기본값)
         weights = np.ones(n_models) / n_models
 
     ensemble_weights = {m: round(float(w), 4) for m, w in zip(model_names, weights)}
@@ -1421,9 +1533,21 @@ def build_purged_cv_splits(train_dates, cfg_obj, label_horizon_days: int,
     return splits
 
 
-def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'gbr'):
+def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
     """fold 별 새 estimator 를 만드는 팩토리 (운영 앙상블과 동일 HP 소스)."""
-    name = (model_name or 'gbr').lower()
+    name = (model_name or 'eb_ic').lower()
+
+    def _eb_ic():
+        from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
+        _def_blocks, _def_topk = 5, 8
+        _def_ortho, _def_crowd, _def_blend = 0.95, 0.35, 0.25
+        return CrossSectionalEBClassifier(
+            n_blocks=int(cfg_obj.get('ml.eb.n_blocks') or _def_blocks),
+            top_k=int(cfg_obj.get('ml.eb.top_k') or _def_topk),
+            ortho_strength=float(cfg_obj.get('ml.eb.ortho_strength') or _def_ortho),
+            crowd_threshold=float(cfg_obj.get('ml.eb.crowd_threshold') or _def_crowd),
+            tree_blend=float(cfg_obj.get('ml.eb.tree_blend') or _def_blend),
+        )
 
     def _gbr():
         from sklearn.ensemble import GradientBoostingClassifier
@@ -1447,7 +1571,14 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'gbr'):
         from sklearn.linear_model import LogisticRegression
         return LogisticRegression(C=float(cfg_obj.get('ml.meta_learner_C', 1.0)), max_iter=1000)
 
-    return {'gbr': _gbr, 'rf': _rf, 'logit': _logit}.get(name, _gbr)
+    return {
+        'eb_ic': _eb_ic,
+        'eb': _eb_ic,
+        'cross_sectional_eb': _eb_ic,
+        'gbr': _gbr,
+        'rf': _rf,
+        'logit': _logit,
+    }.get(name, _eb_ic)
 
 
 def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=None,
@@ -1459,7 +1590,7 @@ def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=N
     """패널(date, ticker, label, fwd_ret, features) → Purged WF OOS 리포트.
 
     * 전처리(impute/variance/scaler)는 Pipeline 으로 fold train 에서만 fit.
-    * sample_weight 는 운영과 동일한 FP penalty(M8) 를 fold train 에만 적용.
+    * sample_weight 는 횡단면 순위 가중치(sample_weight 컬럼 존재 시) 또는 FP penalty 적용.
     * save=True 이면 out_dir(기본 results/ml_validation)/purged_wf_<ts>.json 저장.
 
     Returns: (report dict, saved path or None)
@@ -1475,14 +1606,33 @@ def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=N
     dates = pd.DatetimeIndex(panel['date'])
     fwd = panel['fwd_ret'].to_numpy(dtype=float)
     fp_penalty = float(cfg_obj.get('ml.fp_penalty_ratio', 1.5))
-    sw = np.where(y == 0, fp_penalty, 1.0)
+
+    mname = model_name or cfg_obj.get('ml.purged_wf.model', 'eb_ic')
+    if 'sample_weight' in panel.columns:
+        sw = panel['sample_weight'].to_numpy(dtype=float)
+    elif str(mname).lower() in ('eb_ic', 'eb', 'cross_sectional_eb'):
+        try:
+            from src.ml.cross_sectional_eb_model import compute_cross_sectional_targets
+            _, sw = compute_cross_sectional_targets(fwd, dates)
+        except Exception:
+            sw = np.where(y == 0, fp_penalty, 1.0)
+    else:
+        sw = np.where(y == 0, fp_penalty, 1.0)
 
     p = _purged_wf_params(cfg_obj, forward_days)
+    _min_td = p['min_train_dates']
+    _n_uniq_dates = len(dates.unique())
+    _min_panel_dates = 100
+    _default_min_td = 41
+    if _min_td is None and _n_uniq_dates >= _min_panel_dates:
+        _min_td = _default_min_td
+    elif _min_td is not None and _n_uniq_dates < _min_panel_dates:
+        _min_td = None
+
     splitter = DatePurgedWalkForward(
-        n_splits=int(n_splits or p['n_splits']), min_train_dates=p['min_train_dates'],
+        n_splits=int(n_splits or p['n_splits']), min_train_dates=_min_td,
         label_horizon_days=int(forward_days), embargo_days=p['embargo_days'],
         expanding=p['expanding'], calendar=calendar)
-    mname = model_name or cfg_obj.get('ml.purged_wf.model', 'gbr')
     est_factory = _purged_wf_estimator_factory(cfg_obj, mname)
     pipe_factory = _pwf.make_pipeline_factory(est_factory, impute=True,
                                               variance_filter=True, scale=True)
@@ -1556,7 +1706,7 @@ def run_purged_validation(window_days: Optional[int] = None, max_tickers: Option
         forward_days = meta['forward_days']
     if feature_cols is None:
         feature_cols = [c for c in panel.columns
-                        if c not in ('date', 'ticker', 'label', 'fwd_ret', 'split')]
+                        if c not in ('date', 'ticker', 'label', 'fwd_ret', 'split', 'sample_weight')]
     forward_days = int(forward_days or cfg.get('train.forward_days', 5))
     if panel is None or len(panel) == 0:
         return {'status': 'skip', 'reason': 'empty_panel'}
@@ -2087,7 +2237,9 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         val_dates=ds_meta['val_dates'] if _use_dates else None,
         label_horizon_days=ds_meta['forward_days'] if ds_meta else None,
         cv_method=_cv_method,
-        calendar=ds_meta['calendar'] if _use_dates else None)
+        calendar=ds_meta['calendar'] if _use_dates else None,
+        sample_weights=ds_meta.get('train_sample_weight') if _use_dates else None,
+        val_sample_weights=ds_meta.get('val_sample_weight') if _use_dates else None)
 
     # ═══ [WAVE3 Track D] Date-major Purged WF OOS 리포트 (실패해도 학습은 계속) ═══
     purged_wf_summary = None

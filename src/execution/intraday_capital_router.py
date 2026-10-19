@@ -673,7 +673,8 @@ class IntradayCapitalRouter:
                         tau_amort = float(_opt_params.get('min_holding_minutes') or _default_tau)
                         tau_amort = max(_min_tau, min(_max_tau, tau_amort * 2.0))
 
-                        kappa_turnover = float(pget('swap.kappa_turnover', 3.0))
+                        _def_kappa = 3.0
+                        kappa_turnover = float(cfg.get('swap.kappa_turnover') or _def_kappa)
                         amort_mult = 1.0 + kappa_turnover * math.exp(-max(0.0, elapsed_mins) / max(1.0, tau_amort))
                         amort_friction = base_swap_premium * amort_mult
 
@@ -685,7 +686,8 @@ class IntradayCapitalRouter:
                         else:
                             _ev_std = 0.50
 
-                        stat_sig_weight = float(pget('swap.stat_sig_hurdle', 0.25))
+                        _def_sig_w = 0.25
+                        stat_sig_weight = float(cfg.get('swap.stat_sig_hurdle') or _def_sig_w)
                         _min_sig_hurdle = 0.10
                         sigma_hurdle = max(_min_sig_hurdle, stat_sig_weight * _ev_std)
                         total_swap_hurdle = amort_friction + sigma_hurdle

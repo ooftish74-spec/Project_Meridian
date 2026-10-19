@@ -89,7 +89,7 @@ class S12DerivativeSqueezeStream(BaseStream):
 
         # ── 3. 숏 알파 신호 발화 ──
         if skew_trigger and flow_trigger and basis_trigger:
-            target_ticker = self.inverse_2x_ticker if regime.lower() in ('bear', 'caution', 'bull') else self.inverse_1x_ticker
+            target_ticker = self.inverse_2x_ticker if regime.lower() in ('crash', 'crisis', 'bear', 'caution', 'bull') else self.inverse_1x_ticker
             confidence = min(1.0, max(0.60, 0.50 + 0.10 * (z_skew + z_flow_sell) / 2.0))
 
             reason = (

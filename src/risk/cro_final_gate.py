@@ -136,16 +136,47 @@ class CROFinalGate:
         if proposed_exposure_pct > dynamic_allowed_exposure and proposed_exposure_pct > 0:
             exposure_scale_factor = dynamic_allowed_exposure / proposed_exposure_pct
 
-        final_scaling_factor = min(1.0, var_scale_factor, exposure_scale_factor)
+        # ── Historical & Surge Scenario Stress Gate ──
+        stress_scale_factor = 1.0
+        stress_res = None
+        try:
+            from src.params import pget as _pget_cro
+        except Exception:
+            def _pget_cro(name, fallback, ctx=None):
+                return fallback
+        _cro_eps = float(_pget_cro('risk.cro_weight_eps', 1e-9))
+        _min_vh = int(_pget_cro('risk.cro_vix_hist_min_len', 12))
+        try:
+            inv_map = {idx: tk for tk, idx in ticker_order_map.items()}
+            w_by_tk = {inv_map[i]: float(weights_vec[i]) for i in range(n_tickers) if i in inv_map and abs(weights_vec[i]) > _cro_eps}
+            if w_by_tk:
+                stress_res = self.stress_tester.simulate_scenario_shocks(w_by_tk, portfolio_value)
+                if not stress_res.get('stress_test_passed', True):
+                    stress_scale_factor = float(stress_res.get('suggested_scaling_factor', 1.0))
+        except Exception as _st_e:
+            logger.debug(f"Stress tester evaluation skipped: {_st_e}")
+
+        final_scaling_factor = min(1.0, var_scale_factor, exposure_scale_factor, stress_scale_factor)
         
         # ── Phase 1: Asymmetric V-Bounce Rebound Engine ──
         # GARCH 변동성 피크아웃(Delta GARCH Volatility < 0) 감지 시 축소 스케일 즉시 조기 해제
         try:
             prev_vol = getattr(self, '_prev_garch_vol', None)
-            curr_vol = self.garch_forecaster.predict_next_volatility(np.array([proposed_var_pct]))
+            ret_series = None
+            if market_data and isinstance(market_data, dict):
+                sc_md = market_data.get('signal_cache') or {}
+                vh = sc_md.get('vix_history')
+                if isinstance(vh, list) and len(vh) >= _min_vh:
+                    v_arr = np.asarray([float(x) for x in vh if isinstance(x, (int, float)) and float(x) > 0], dtype=float)
+                    if len(v_arr) >= _min_vh:
+                        ret_series = np.diff(v_arr) / np.maximum(v_arr[:-1], _cro_eps)
+            g_res = self.garch_forecaster.forecast_next_volatility(
+                ret_series if ret_series is not None else np.array([proposed_var_pct])
+            )
+            curr_vol = float(g_res['forecasted_daily_vol'])
             self._prev_garch_vol = curr_vol
             if prev_vol is not None and curr_vol < prev_vol and final_scaling_factor < 1.0:
-                vol_decay_rate = (prev_vol - curr_vol) / (curr_vol + 1e-6)
+                vol_decay_rate = (prev_vol - curr_vol) / (curr_vol + _cro_eps)
                 rebound_multiplier = 1.0 + max(0.0, float(vol_decay_rate))
                 final_scaling_factor = min(1.0, final_scaling_factor * rebound_multiplier)
                 logger.info(f"  📈 [CROFinalGate Phase1] V자 반등 감지 (Vol Decay={vol_decay_rate*100:.2f}%) → 스케일 {final_scaling_factor*100:.1f}% 복원")
@@ -160,6 +191,8 @@ class CROFinalGate:
             reasons.append(f"VaR 초과 ({proposed_var_pct*100:.2f}% > 한도 {self.max_daily_var_pct*100:.2f}%)")
         if exposure_scale_factor < 1.0:
             reasons.append(f"Exposure 초과 ({proposed_exposure_pct*100:.1f}% > 한도 {self.max_portfolio_exposure*100:.1f}%)")
+        if stress_scale_factor < 1.0 and stress_res is not None:
+            reasons.append(f"Stress 한도 초과 ({stress_res.get('worst_scenario_name')}: {stress_res.get('worst_loss_pct', 0)*100:.1f}%)")
         reason_str = " & ".join(reasons) if reasons else "PASS"
 
         # 주문 수량 비례 축소 (Vector Projection Scaling — 매도/청산 주문은 리스크 축소 목적이므로 축소 제외)

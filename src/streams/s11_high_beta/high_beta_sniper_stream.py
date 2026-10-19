@@ -99,7 +99,7 @@ class S11HighBetaSniperStream(BaseStream):
         tot_net_flow = inst_net_buy + foreign_net_buy  # 단위: 원
 
         # [Citadel-Style Dynamic Flow Target] 150억 이상 수급이면 유연하게 저격 집행
-        portfolio_nav = float(market_data.get('portfolio_nav', 16764181.0))
+        portfolio_nav = float(market_data.get('portfolio_nav', pget('portfolio.initial_capital', 19600000.0)))
         dynamic_flow_target = max(100e8, min(300e8, portfolio_nav * 900.0))  # 150억~200억선 완화!
 
         ofi_ratio = float(signal_cache.get('OFI_RATIO', 1.0))
@@ -109,8 +109,8 @@ class S11HighBetaSniperStream(BaseStream):
         # [EVT Tail Risk Guard] VIX 35.0 하드코딩 100% 제거 ➔ DynamicConfig 및 EVT 95% 분위수 동적 Shock Guard 적용
         from config.dynamic_config import DynamicConfig
         _s11_cfg = DynamicConfig()
-        vix_shock_val = float(signal_cache.get('vix', signal_cache.get('VIX', 18.0)))
-        vix_evt_threshold = float(_s11_cfg.get('sizer.vix_shock_threshold', signal_cache.get('vix_evt_95_pct', 32.0)))
+        vix_shock_val = float(signal_cache.get('vix', signal_cache.get('VIX', pget('crash.default_vix', 20.0))))
+        vix_evt_threshold = float(_s11_cfg.get('sizer.vix_shock_threshold', signal_cache.get('vix_evt_95_pct', pget('scenarios.s3.vkospi_threshold', 35.0))))
         if vix_shock_val >= vix_evt_threshold:
             logger.warning(f"  🚨 [Red Team Shock Guard] VIX={vix_shock_val:.1f} >= EVT한계({vix_evt_threshold:.1f}) 블랙스완 과열 감지 -> 주식 진입 셧다운 (SGOV/현금 보존)")
             return signals

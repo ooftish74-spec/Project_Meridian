@@ -84,7 +84,8 @@ except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     SS_ETF_FEATURE_NAMES = ['ss_etf_vol_ratio', 'lp_delta_pressure', 'intraday_vol_anomaly']
 FEATURE_NAMES_V7 = FEATURE_NAMES_V6 + SS_ETF_FEATURE_NAMES
 SIGNATURE_FEATURE_NAMES: List[str] = ['sig5_level1_p', 'sig5_area', 'sig20_level1_p', 'sig20_area', 'sig20_mom_qual']
-FEATURE_NAMES_V7 = FEATURE_NAMES_V7 + SIGNATURE_FEATURE_NAMES
+ALPHA_FACTORY_NEW_EDGES: List[str] = ['alpha_order_imbalance_10d', 'alpha_smart_money_flow_20d', 'alpha_vol_term_structure', 'alpha_vol_adj_mom_10d', 'alpha_dd_velocity_3d', 'alpha_pca_mr_proxy_20d']
+FEATURE_NAMES_V7 = FEATURE_NAMES_V7 + SIGNATURE_FEATURE_NAMES + ALPHA_FACTORY_NEW_EDGES
 EXPORT_MACRO_FEATURE_NAMES: List[str] = ['export_total_yoy', 'export_10d_yoy', 'export_yoy_auto', 'export_yoy_semi', 'export_yoy_battery', 'us_export_yoy', 'china_export_yoy', 'us_momentum_spread', 'china_rebound_index']
 FEATURE_NAMES_V7 = FEATURE_NAMES_V7 + EXPORT_MACRO_FEATURE_NAMES
 try:
@@ -94,8 +95,7 @@ except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError) as e:
     import logging
     logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
     AUTO_ALPHA_FEATURE_NAMES = []
-ALPHA_FACTORY_NEW_EDGES: List[str] = ['alpha_order_imbalance_10d', 'alpha_smart_money_flow_20d', 'alpha_vol_term_structure', 'alpha_vol_adj_mom_10d', 'alpha_dd_velocity_3d', 'alpha_pca_mr_proxy_20d']
-FEATURE_NAMES_V8 = FEATURE_NAMES_V7 + AUTO_ALPHA_FEATURE_NAMES + ALPHA_FACTORY_NEW_EDGES
+FEATURE_NAMES_V8 = FEATURE_NAMES_V7 + AUTO_ALPHA_FEATURE_NAMES
 FEATURE_NAMES = FEATURE_NAMES_V8
 
 def inject_auto_alphas(df, max_alphas: Optional[int]=None):
@@ -221,12 +221,63 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     feat['ss_etf_vol_ratio'] = float(ss.get('ss_etf_vol_ratio', 0.0))
     feat['lp_delta_pressure'] = float(ss.get('lp_delta_pressure', 0.0))
     feat['intraday_vol_anomaly'] = float(ss.get('intraday_vol_anomaly', 0.0))
+
+    # V8 Alpha Factory Next-Gen Edges & Rough-Path Signatures (point-in-time array computation)
+    _eps = 1e-9
+    _w26 = 26
+    _w21 = 21
+    _w23 = 23
+    c_win = c[-_w26:] if len(c) >= _w26 else c
+    v_win = v[-_w26:] if len(v) >= _w26 else v
+    if len(c_win) >= _w21 and len(v_win) == len(c_win):
+        rets_w = np.diff(c_win) / np.maximum(c_win[:-1], _eps)
+        sv_w = v_win[1:] * np.sign(rets_w)
+        feat['alpha_order_imbalance_10d'] = float(np.sum(sv_w[-10:]) / (np.sum(v_win[-10:]) + _eps))
+        v_ma20_w = float(np.mean(v_win[-20:]))
+        v_sub20 = v_win[1:][-20:]
+        r_sub20 = rets_w[-20:]
+        sm_w = np.where(
+            (v_sub20 > v_ma20_w) & (r_sub20 > 0.0), v_sub20,
+            np.where((v_sub20 > v_ma20_w) & (r_sub20 < 0.0), -v_sub20, 0.0)
+        )
+        feat['alpha_smart_money_flow_20d'] = float(np.sum(sm_w) / (np.sum(v_win[-20:]) + _eps))
+        vol5_w = float(np.std(rets_w[-5:]) * np.sqrt(252.0))
+        vol20_w = float(np.std(rets_w[-20:]) * np.sqrt(252.0))
+        feat['alpha_vol_term_structure'] = float(vol5_w / (vol20_w + _eps))
+        mom10_w = float(c_win[-1] / max(float(c_win[-11]), _eps) - 1.0)
+        feat['alpha_vol_adj_mom_10d'] = float(mom10_w / (vol20_w + _eps))
+        dd_now = float(c_win[-1] / max(float(np.max(c_win[-20:])), _eps) - 1.0)
+        slice_len = len(c_win)
+        c_prev_win = c_win[-_w23:-3] if slice_len >= _w23 else c_win[:-3]
+        dd_3d = float(c_win[-4] / max(float(np.max(c_prev_win)), _eps) - 1.0)
+        feat['alpha_dd_velocity_3d'] = float(dd_now - dd_3d)
+        z20_w = float((c_win[-1] - np.mean(c_win[-20:])) / (np.std(c_win[-20:]) + _eps))
+        _one = 1.0
+        feat['alpha_pca_mr_proxy_20d'] = float(np.clip(-z20_w / 3.0, -_one, _one))
+
+        p5 = np.log(np.maximum(c_win[-5:], _eps) / max(float(c_win[-5]), _eps))
+        u5 = np.cumsum(v_win[-5:]) / (np.sum(v_win[-5:]) + _eps) - np.linspace(0.0, 1.0, 5)
+        feat['sig5_level1_p'] = float(p5[-1])
+        feat['sig5_area'] = float(0.5 * np.sum(p5[:-1] * np.diff(u5) - u5[:-1] * np.diff(p5)))
+
+        p20 = np.log(np.maximum(c_win[-20:], _eps) / max(float(c_win[-20]), _eps))
+        u20 = np.cumsum(v_win[-20:]) / (np.sum(v_win[-20:]) + _eps) - np.linspace(0.0, 1.0, 20)
+        feat['sig20_level1_p'] = float(p20[-1])
+        feat['sig20_area'] = float(0.5 * np.sum(p20[:-1] * np.diff(u20) - u20[:-1] * np.diff(p20)))
+        feat['sig20_mom_qual'] = float(p20[-1] / (np.sum(np.abs(np.diff(p20))) + _eps))
+    else:
+        for _k in ALPHA_FACTORY_NEW_EDGES + SIGNATURE_FEATURE_NAMES:
+            feat[_k] = 0.0
+
+    if 'automl_alpha_score' not in feat:
+        feat['automl_alpha_score'] = 0.0
+
     return feat
 
 def _extract_v3_standalone(close, high, low, opn, volume, idx, is_etf=False, alpha_model=None):
     """V3 피처 독립 추출 (train_ensemble import 불가 시 fallback)."""
     n = len(close)
-    _warmup_v3 = int(pget('ml.warmup_bars_v3', 260)) if _cfg else 260
+    _warmup_v3 = int(pget('ml.warmup_bars_v3', 65)) if _cfg else 65
     if idx < _warmup_v3 or idx >= n:
         return None
     c = close[:idx + 1]

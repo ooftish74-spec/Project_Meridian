@@ -84,3 +84,9 @@ class GARCHVolatilityForecaster:
             'garch_variance': float(next_variance),
             'persistence': float(self.alpha + self.beta)
         }
+
+    def predict_next_volatility(self, returns_series: np.ndarray) -> float:
+        """스칼라 1-Step-Ahead 일일 변동성 반환 (CROFinalGate V-Bounce 연동)."""
+        res = self.forecast_next_volatility(returns_series)
+        return float(res['forecasted_daily_vol'])
+

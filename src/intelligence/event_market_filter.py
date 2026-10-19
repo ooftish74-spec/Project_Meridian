@@ -54,11 +54,20 @@ except ImportError:
 __all__ = ['EventCalendar', 'IntradayEventDetector', 'MarketShockDetector', 'MarketDirectionFilter', 'DefensiveAlphaFinder', 'QualityGrowthDiscount', 'SectorRotationDetector', 'EventMarketFilter']
 
 class MarketDirectionFilter:
-    """ML 예측에 시장 방향 보정 적용."""
+    """ML 예측에 시장 방향 연속 수학적 보정 적용."""
     ADJUSTMENT_TABLE = {'strong_bull': 1.3, 'bull': 1.15, 'mild_bull': 1.05, 'neutral': 1.0, 'mild_bear': 0.85, 'bear': 0.65, 'strong_bear': 0.4}
 
     def get_market_direction(self) -> Tuple[str, float]:
-        """오늘 시장 방향 예측."""
+        """오늘 시장 방향 예측 (signal_cache.json 및 overnight_macro 실시간 연동)."""
+        try:
+            from src.params import pget as _pget_mdf
+        except Exception:
+            def _pget_mdf(name, fallback, ctx=None):
+                return fallback
+        _ois_center = float(_pget_mdf('scenarios.ois_neutral_center', 50.0))
+        _def_conf = float(_pget_mdf('scenarios.default_regime_conf', 0.5))
+        _strong_th = float(_pget_mdf('scenarios.mdf_strong_threshold', 3.0))
+
         overnight = {}
         overnight_path = sorted((DATA / 'raw' / 'overnight_macro').glob('*.json'), reverse=True)
         if overnight_path:
@@ -66,19 +75,34 @@ class MarketDirectionFilter:
                 overnight = json.load(open(overnight_path[0]))
             except Exception as _e:
                 logger.warning(f'  suppressed: {_e}', exc_info=True)
-        gap_est = overnight.get('kospi_gap_estimate', {}).get('estimated_gap_pct', 0)
-        overnight_score = overnight.get('overnight_score', {}).get('overnight_score', 50)
-        signals = {}
-        sig_path = RESULTS / 'pt_daily_signals.json'
-        if sig_path.exists():
+        gap_est = float(overnight.get('kospi_gap_estimate', {}).get('estimated_gap_pct', 0) or 0.0)
+        overnight_score = float(overnight.get('overnight_score', {}).get('overnight_score', _ois_center) or _ois_center)
+
+        sc_path = RESULTS / 'signal_cache.json'
+        if sc_path.exists():
             try:
-                signals = json.load(open(sig_path))
-            except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
-        regime = signals.get('regime', 'caution')
-        market_score = signals.get('market_score', 50)
-        combined = gap_est * 0.4 + (overnight_score - 50) / 10 * 0.3 + (market_score - 50) / 10 * 0.3
-        if combined >= 3.0:
+                sc = json.loads(sc_path.read_text(encoding='utf-8'))
+                if sc.get('ois') is not None:
+                    overnight_score = float(sc['ois'])
+                nf_chg = sc.get('night_futures_change_1d', sc.get('sp500_change_1d'))
+                if nf_chg is not None and gap_est == 0.0:
+                    gap_est = float(nf_chg)
+            except Exception:
+                pass
+
+        signals = {}
+        for cand_name in ('current_regime.json', 'pt_daily_signals.json'):
+            sig_path = RESULTS / cand_name
+            if sig_path.exists():
+                try:
+                    signals = json.load(open(sig_path))
+                    if signals:
+                        break
+                except Exception as _e:
+                    logger.warning(f'  suppressed: {_e}', exc_info=True)
+        market_score = float(signals.get('market_score', signals.get('confidence', _def_conf) * 100.0 if 'confidence' in signals else _ois_center) or _ois_center)
+        combined = gap_est * 0.4 + (overnight_score - _ois_center) / 10.0 * 0.3 + (market_score - _ois_center) / 10.0 * 0.3
+        if combined >= _strong_th:
             direction = 'strong_bull'
         elif combined >= 1.0:
             direction = 'bull'
@@ -86,34 +110,46 @@ class MarketDirectionFilter:
             direction = 'mild_bull'
         elif combined >= -1.0:
             direction = 'mild_bear'
-        elif combined >= -3.0:
+        elif combined >= -_strong_th:
             direction = 'bear'
         else:
             direction = 'strong_bear'
-        return (direction, combined)
+        return (direction, float(combined))
 
     def adjust_predictions(self, predictions: Dict, event_reduction: float=0.0) -> Dict:
-        """ML 예측에 시장방향 + 이벤트 보정 적용."""
+        """ML 예측에 연속 tanh 시장방향 보정 + 이벤트 보정 적용."""
+        import math as _math
+        try:
+            from src.params import pget as _pget_mdf
+        except Exception:
+            def _pget_mdf(name, fallback, ctx=None):
+                return fallback
+        _adj_lo = float(_pget_mdf('scenarios.mdf_adj_min', 0.40))
+        _adj_hi = float(_pget_mdf('scenarios.mdf_adj_max', 1.35))
+        _adj_cut = float(_pget_mdf('scenarios.mdf_neutral_cut', 0.70))
+        _conf_lo = float(_pget_mdf('scenarios.mdf_conf_min', 0.01))
+        _conf_hi = float(_pget_mdf('scenarios.mdf_conf_max', 0.99))
+        _def_conf = float(_pget_mdf('scenarios.default_regime_conf', 0.5))
+
         direction, score = self.get_market_direction()
-        adjustment = self.ADJUSTMENT_TABLE.get(direction, 1.0)
+        adjustment = float(max(_adj_lo, min(_adj_hi, 1.0 + 0.35 * _math.tanh(float(score) / 3.0))))
         event_factor = 1.0 - event_reduction
         adjusted = {}
         for ticker, pred in predictions.items():
             if not isinstance(pred, dict):
                 adjusted[ticker] = pred
                 continue
-            raw_conf = pred.get('confidence', 0.5)
-            raw_ret = pred.get('expected_return', 0)
+            raw_conf = pred.get('confidence', _def_conf)
             raw_dir = pred.get('direction', 'neutral')
             if raw_dir in ('up', 'strong_buy', 'buy'):
                 adj_conf = raw_conf * adjustment * event_factor
-                if adjustment < 0.7:
+                if adjustment < _adj_cut:
                     raw_dir = 'neutral'
             elif raw_dir in ('down', 'strong_sell', 'sell'):
                 adj_conf = raw_conf * (2.0 - adjustment) * event_factor
             else:
                 adj_conf = raw_conf * event_factor
-            adj_conf = min(max(adj_conf, 0.01), 0.99)
+            adj_conf = min(max(adj_conf, _conf_lo), _conf_hi)
             adjusted[ticker] = {**pred, 'raw_confidence': raw_conf, 'confidence': round(adj_conf, 4), 'market_direction': direction, 'market_adjustment': round(adjustment, 3), 'event_reduction': round(event_reduction, 3), 'direction': raw_dir}
         return adjusted
 

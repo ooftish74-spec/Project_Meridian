@@ -88,6 +88,11 @@ class S2MLAlphaStream(BaseStream):
         numpy 2.x에서 구버전 pickle 호환성 문제 대응:
         MT19937 BitGenerator 모듈 경로 변경에 대한 리매핑 포함.
         """
+        try:
+            import sklearn._loss._loss as _sk_loss
+            sys.modules.setdefault('_loss', _sk_loss)
+        except Exception:
+            pass
         ensemble_path = _MODEL_DIR / 'stock_ranker_ensemble.pkl'
         meta_path = _MODEL_DIR / 'ensemble_meta.json'
         self._fast_corrector = None
@@ -242,12 +247,20 @@ class S2MLAlphaStream(BaseStream):
                     return getattr(self._cb, name)
                 raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
+        try:
+            import sklearn._loss._loss as _sk_loss
+            sys.modules.setdefault('_loss', _sk_loss)
+        except Exception:
+            pass
+
         class _NumpyCompatUnpickler(pickle.Unpickler):
             _REMAP = {('numpy.random._mt19937', 'MT19937'): ('numpy.random', 'MT19937'), ('numpy.random._philox', 'Philox'): ('numpy.random', 'Philox'), ('numpy.random._pcg64', 'PCG64'): ('numpy.random', 'PCG64'), ('numpy.random._sfc64', 'SFC64'): ('numpy.random', 'SFC64')}
 
             def find_class(self, module, name):
                 if name == 'SklearnCompatibleCatBoost':
                     return SklearnCompatibleCatBoost
+                if module == '_loss':
+                    module = 'sklearn._loss._loss'
                 key = (module, name)
                 if key in self._REMAP:
                     module, name = self._REMAP[key]
@@ -603,21 +616,37 @@ class S2MLAlphaStream(BaseStream):
         """
         scored = []
         import pandas as pd
-        use_automl = cfg.get('ml.use_automl_features', True)
+        use_automl = cfg.get('ml.use_automl_features', False)
         if use_automl:
             from src.analysis.automl_feature_generator import AutoMLFeatureGenerator
             from pathlib import Path
             data_dir = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'historical_10y'
             automl_gen = AutoMLFeatureGenerator(data_dir)
+        _ca_latest = self._load_cross_asset_latest()
+        _aux_preserve = {
+            'foreign_net_buy_norm', 'inst_net_buy_norm', 'retail_contrarian',
+            'flow_divergence', 'per', 'pbr', 'roe', 'debt_ratio_latest',
+            'news_sentiment_mean', 'news_volume', 'sentiment_momentum',
+        }
+        _bridge = None
+        _min_bars = 20
+        _prepared = []
         for stock in candidates:
             features = dict(stock.get('features', {}) or {})
-            if not features or 'rsi_14' not in features:
+            _needs_v4 = (
+                not features
+                or 'rsi_14' not in features
+                or 'alpha_smart_money_flow_20d' not in features
+                or 'sig5_area' not in features
+            )
+            if _needs_v4:
                 try:
                     from src.data.market_data_bridge import MarketDataBridge
                     from src.intelligence.v4_features import extract_v4
-                    _bridge = MarketDataBridge()
+                    if _bridge is None:
+                        _bridge = MarketDataBridge()
                     _df = _bridge._load_price_history(stock['ticker'])
-                    if _df is not None and len(_df) >= 20:
+                    if _df is not None and len(_df) >= _min_bars:
                         _c = _df['close'].values.astype(float)
                         _h = _df['high'].values.astype(float)
                         _l = _df['low'].values.astype(float)
@@ -625,9 +654,11 @@ class S2MLAlphaStream(BaseStream):
                         _v = _df['volume'].values.astype(float)
                         _idx = len(_df) - 1
                         _is_etf = stock['ticker'] in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
-                        _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, is_etf=_is_etf) or {}
+                        _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, is_etf=_is_etf) or {}
                         for _vk, _vv in _v4_feats.items():
-                            features.setdefault(_vk, _vv)
+                            if _vk in _aux_preserve and features.get(_vk, 0) != 0 and _vv == 0:
+                                continue
+                            features[_vk] = _vv
                 except Exception as _e_feat:
                     logger.debug(f"  extract_v4 live KIS build failed for {stock['ticker']}: {_e_feat}")
             if use_automl:
@@ -662,28 +693,44 @@ class S2MLAlphaStream(BaseStream):
                 fb = self._fallback_score_single(stock, market_data)
                 scored.append(fb)
                 continue
+            _excluded = set()
             if cfg.get('s2.filter_placeholder_features', True):
                 _excluded = set(cfg.get('s2.placeholder_features', ['dart_disclosure', 'institutional_flow', 'short_interest', 'options_flow']))
                 features = {k: v for k, v in features.items() if k not in _excluded}
+            if self._feature_names:
+                row = []
+                for fn in self._feature_names:
+                    val = features.get(fn, 0)
+                    if pd.isna(val):
+                        val = 0
+                    row.append(float(val))
+            else:
+                from src.intelligence.v4_features import FEATURE_NAMES_V6
+                feat_keys = [k for k in FEATURE_NAMES_V6 if k not in _excluded and k != 'target']
+                row = []
+                for k in feat_keys:
+                    val = features.get(k, 0)
+                    if pd.isna(val):
+                        val = 0
+                    row.append(float(val))
+            _prepared.append((stock, features, row))
+
+        _min_cs_candidates = 5
+        _X_all = None
+        if len(_prepared) >= _min_cs_candidates and cfg.get('ml.cross_sectional_standardize', True):
             try:
-                if self._feature_names:
-                    row = []
-                    for fn in self._feature_names:
-                        val = features.get(fn, 0)
-                        if pd.isna(val):
-                            val = 0
-                        row.append(float(val))
-                    X = np.array([row])
+                from src.ml.cross_sectional_eb_model import cross_sectional_rank_z_matrix
+                _raw_mat = np.asarray([r for _, _, r in _prepared], dtype=float)
+                _X_all = cross_sectional_rank_z_matrix(_raw_mat, np.zeros(len(_raw_mat), dtype=int))
+            except Exception as _cs_e:
+                logger.debug(f"  S2: 횡단면 Rank-Z 정규화 스킵: {_cs_e}")
+
+        for _idx_p, (stock, features, row) in enumerate(_prepared):
+            try:
+                if _X_all is not None:
+                    X = _X_all[_idx_p:_idx_p + 1]
                 else:
-                    from src.intelligence.v4_features import FEATURE_NAMES_V6
-                    feat_keys = [k for k in FEATURE_NAMES_V6 if k not in _excluded and k != 'target']
-                    row = []
-                    for k in feat_keys:
-                        val = features.get(k, 0)
-                        if pd.isna(val):
-                            val = 0
-                        row.append(float(val))
-                    X = np.array([row])
+                    X = np.array([row], dtype=float)
                 _regime_up_prob = None
                 try:
                     from src.ml.ml_regime_router import get_router as _get_router

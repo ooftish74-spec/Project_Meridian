@@ -219,8 +219,10 @@ class StreamOrchestrator:
         self.cro_final_gate = CROFinalGate()
         self.audit_ledger = ConflictAuditLedger()
 
-        # 8대 마스터 시나리오 및 고효율 알파/절세/상쇄 모듈
+        # 8대 마스터 시나리오, 미지 블랙스완 탐지기 및 고효율 알파/절세/상쇄 모듈
         self.master_scenario_engine = MasterScenarioEngine()
+        from src.risk.unknown_black_swan_detector import UnknownBlackSwanDetector
+        self.black_swan_detector = UnknownBlackSwanDetector()
         self.tactic_e_sniper = AsymmetricEventSqueezeSniper()
         self.tax_harvest_engine = TaxLossHarvestingEngine()
         self.cross_venue_netting = CrossVenueSpreadNetting()
@@ -686,17 +688,19 @@ class StreamOrchestrator:
         cd_result = self.crash_defense.assess(market_data, portfolio, regime)
         result['risk']['crash_defense'] = cd_result
 
-        # ── Step 2.5: Master 8-Scenario Engine 검증 & 대응 ──
-        logger.info("  📋 Step 2.5: MasterScenarioEngine 8대 마스터 시나리오 검증")
+        # ── Step 2.5: Master 8-Scenario Engine & Unknown Black Swan 검증 & 대응 ──
+        logger.info("  📋 Step 2.5: MasterScenarioEngine 8대 마스터 시나리오 & 미지 블랙스완 검증")
         sc_result = self.master_scenario_engine.evaluate_scenarios(market_data)
         result['risk']['master_scenarios'] = sc_result
+        bs_result = self.black_swan_detector.detect_unknown_crisis(market_data=market_data)
+        result['risk']['unknown_black_swan'] = bs_result
 
         # ── Step 3: DD Guard 확인 ──
         logger.info("  📋 Step 3: DrawdownGuard 확인")
         dd_result = self.dd_guard.assess(portfolio, regime)
         result['risk']['drawdown_guard'] = dd_result
 
-        # 최대 노출도 결정 (리스크 모듈들의 최소값)
+        # 최대 노출도 결정 (리스크 모듈들의 최소값 — tighten_only)
         max_exposure = 1.0
         scale_multiplier = 1.0
         dd_action = 'none'
@@ -711,6 +715,25 @@ class StreamOrchestrator:
             for action in cd_result['judgment']['actions']:
                 target = 1.0 - action.get('target_cash_ratio', 0)
                 max_exposure = min(max_exposure, target)
+
+        if bs_result.get('is_unknown_black_swan'):
+            max_exposure = 0.0
+            scale_multiplier = 0.0
+            logger.warning(
+                f"  🚨 [UnknownBlackSwan] {bs_result.get('reason')} → 신규 롱 노출 전면 차단 (max_exposure=0%)"
+            )
+        elif sc_result.get('status') == 'CRITICAL_SCENARIO_TRIGGERED':
+            _sc_rec_exp = float(sc_result.get('recommended_max_exposure', 1.0))
+            max_exposure = min(max_exposure, _sc_rec_exp)
+            logger.warning(
+                f"  🚨 [MasterScenario] {sc_result.get('active_scenarios')} 발동 "
+                f"(P={float(sc_result.get('composite_crash_prob', 0.0)):.1%}) → max_exposure={max_exposure:.0%}"
+            )
+        elif sc_result.get('status') == 'V_REBOUND_SURGE_TRIGGERED':
+            logger.info(
+                f"  🚀 [MasterScenario] V-Rebound/Surge 시나리오 포착 "
+                f"({sc_result.get('active_scenarios')}, P={float(sc_result.get('composite_surge_prob', 0.0)):.1%})"
+            )
 
         logger.info(f"  📊 최대 노출도: {max_exposure:.0%}, DD Scale: {scale_multiplier:.2f}, DD Action: {dd_action}")
 
@@ -750,16 +773,90 @@ class StreamOrchestrator:
             else:
                 all_signals.pop('S10', None)
 
+        # ── Step 4.1: 8대 마스터 시나리오 & 블랙스완 즉각 대응 (신호 차단 / 인버스 스위칭) ──
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_sc
+            _inv_set_sc = set(_get_qe_sc().get_inverse_hedge_tickers())
+            _sc_dirs = dict(sc_result.get('stream_directives') or {})
+            if bs_result.get('is_unknown_black_swan'):
+                for _bs_sid in list(all_signals.keys()):
+                    if _bs_sid not in ('S0', 'S12', 'S_YIELD'):
+                        _sc_dirs[_bs_sid] = 'STOP_ALL_NEW_BUYS'
 
+            for _d_sid, _d_act in _sc_dirs.items():
+                if _d_act in ('BLOCK_LONG_SIGNALS', 'BLOCK_LONG_SNIPING', 'STOP_ALL_NEW_BUYS'):
+                    for _match_sid in (_d_sid, 'S10_MEGA_TREND' if _d_sid == 'S10' else _d_sid):
+                        if _match_sid in all_signals:
+                            _before_n = len(all_signals[_match_sid])
+                            all_signals[_match_sid] = [
+                                _s for _s in all_signals[_match_sid]
+                                if isinstance(_s, dict) and (
+                                    str(_s.get('direction', '')).lower() == 'exit'
+                                    or _s.get('strategy') == '_sys_meta'
+                                    or str(_s.get('ticker', '')).upper() in _inv_set_sc
+                                    or bool(_s.get('is_hedge', False))
+                                )
+                            ]
+                            if len(all_signals[_match_sid]) < _before_n:
+                                logger.info(
+                                    f"    🛡️ [Scenario Directive] {_match_sid} ({_d_act}): "
+                                    f"신규 롱 신호 {_before_n - len(all_signals[_match_sid])}건 차단"
+                                )
+                elif _d_act == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH':
+                    # V-반등/폭등 시나리오 발동 시 보유 인버스 ETF 즉시 청산 시그널 주입
+                    _held_for_inv = {}
+                    if portfolio and isinstance(portfolio, dict):
+                        _held_for_inv.update(portfolio.get('positions') or portfolio.get('holdings') or {})
+                    for _hk, _hv in _held_for_inv.items():
+                        _htk = str((_hv.get('ticker') if isinstance(_hv, dict) else _hk) or _hk).split(':')[-1].upper()
+                        _hq = float((_hv.get('qty', _hv.get('quantity', 0)) if isinstance(_hv, dict) else 0) or 0)
+                        if _htk in _inv_set_sc and _hq > 0:
+                            all_signals.setdefault('S0', []).append({
+                                'stream_id': 'S0',
+                                'ticker': _htk,
+                                'direction': 'exit',
+                                'action': 'exit',
+                                'confidence': float(sc_result.get('composite_surge_prob', 1.0)),
+                                'strategy': 'scenario_v_rebound_inverse_harvest',
+                                'reason': f"MasterScenario V-Rebound ({sc_result.get('active_scenarios')}) inverse harvest",
+                            })
+                            logger.info(f"    🚀 [Scenario V-Rebound] 보유 인버스 {_htk} 전량 즉시 청산 시그널 주입")
+                elif _d_act in ('FORCE_2X_INVERSE_MAX_BUDGET', 'FORCE_INVERSE_HEDGE', 'MAX_INVERSE_SQUEEZE'):
+                    _inv_ratio = float(sc_result.get('target_inverse_hedge_ratio', 0.0))
+                    if _inv_ratio > 0 and not all_signals.get('S12'):
+                        _s12_tk = getattr(self.s12, 'ticker_inv_2x', getattr(self.s0, 'TICKER_INVERSE_2X', ''))
+                        if _s12_tk:
+                            all_signals['S12'] = [{
+                                'stream_id': 'S12',
+                                'ticker': _s12_tk,
+                                'direction': 'long',
+                                'action': 'buy',
+                                'is_hedge': True,
+                                'size_pct': _inv_ratio,
+                                'confidence': float(sc_result.get('composite_crash_prob', 1.0)),
+                                'sl_pct': float(pget('s12.default_sl_pct', 3.5)),
+                                'tp_pct': float(pget('s12.default_tp_pct', 8.0)),
+                                'strategy': 'master_scenario_inverse_squeeze',
+                                'reason': f"MasterScenario {sc_result.get('active_scenarios')} immediate inverse hedge",
+                            }]
+                            logger.warning(
+                                f"    🛡️ [Scenario Inverse] S12 {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
+                            )
+        except Exception as _sc_dir_e:
+            logger.error(f"    ⚠️ [Step 4.1] 시나리오 디렉티브 적용 예외: {_sc_dir_e}", exc_info=True)
 
         result['signals'] = {
             sid: [s for s in sigs]
             for sid, sigs in all_signals.items()
         }
-        
+
         # ★ Exit-Only Mode 처리: 데이터 이상 시 신규 매수 시그널 전부 삭제 (TP/SL만 유지)
         if market_data and market_data.get('exit_only'):
             logger.error("🚨 [Exit-Only Mode] 신규 매수 시그널을 모두 삭제합니다.")
+            all_signals = {
+                sid: [s for s in sigs if isinstance(s, dict) and str(s.get('direction', '')).lower() == 'exit']
+                for sid, sigs in all_signals.items()
+            }
             result['signals'] = {sid: [] for sid in result['signals']}
 
         # [Phase 48 C-1] existing_tickers 사전 선언 — Step 4.5보다 반드시 앞에 위치해야
@@ -906,7 +1003,7 @@ class StreamOrchestrator:
         if '_s2_oos_validation' not in stream_metrics:
             try:
                 from src.params.dynamic_quant_models import load_latest_purged_wf_oos
-                _oos_v = load_latest_purged_wf_oos(_RESULTS / 'ml_validation')
+                _oos_v = load_latest_purged_wf_oos(_ROOT / 'results' / 'ml_validation')
                 if _oos_v is not None:
                     stream_metrics['_s2_oos_validation'] = _oos_v
             except Exception:
@@ -1370,17 +1467,19 @@ class StreamOrchestrator:
                 )
                 result['tactic_e_event_squeeze'] = tactic_e_res
                 if tactic_e_res['action'] in ('LONG', 'SHORT_INVERSE'):
+                    _exec_tk = tactic_e_res.get('execution_ticker', tactic_e_res['target_ticker'])
                     orders.append({
                         'stream_id': 'TACTIC_E',
                         'strategy': 'EarningsEventSqueezeSniper',
-                        'ticker': tactic_e_res['target_ticker'],
+                        'ticker': _exec_tk,
                         'action': 'buy',
                         'direction': 'long',
+                        'is_hedge': tactic_e_res['action'] == 'SHORT_INVERSE',
                         'amount_krw': tactic_e_res['allocated_capital'],
                         'confidence': 0.90,
                         'reason': tactic_e_res['reason']
                     })
-                    logger.info(f"  🎯 [TacticE] 어닝 스퀴즈 주문 주입: {tactic_e_res['action']} ₩{tactic_e_res['allocated_capital']:,.0f}")
+                    logger.info(f"  🎯 [TacticE] 어닝 스퀴즈 주문 주입: {tactic_e_res['action']} ({_exec_tk}) ₩{tactic_e_res['allocated_capital']:,.0f}")
             else:
                 logger.debug("Tactic E: cvd_15m 미존재로 어닝 스퀴즈 주문 스킵")
         except Exception as e:
@@ -2561,6 +2660,8 @@ class StreamOrchestrator:
             positions = {}
             if portfolio and 'positions' in portfolio:
                 positions = portfolio['positions']
+            elif portfolio and 'holdings' in portfolio:
+                positions = portfolio['holdings']
             elif getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
                 import json as _json_exit
                 from src.execution.position_ledger import PositionLedgerManager

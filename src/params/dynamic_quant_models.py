@@ -549,6 +549,17 @@ def load_latest_purged_wf_oos(val_dir: Optional[Path] = None) -> Optional[Dict[s
                 'n_folds': float(agg.get('n_folds', 0)),
                 'n_oos_dates': float(agg.get('n_oos_dates', 0)),
             }
+        oos = data.get('oos') or {}
+        ic_obj = oos.get('ic') or {}
+        if 'mean' in ic_obj and ('nw_t_stat' in ic_obj or 't_stat' in ic_obj):
+            t_val = ic_obj.get('nw_t_stat') if ic_obj.get('nw_t_stat') is not None else ic_obj.get('t_stat', 0.0)
+            return {
+                'ic_mean': float(ic_obj['mean']),
+                'ic_t_stat': float(t_val),
+                'n_folds': float(len(data.get('folds') or [])),
+                'n_oos_dates': float(ic_obj.get('n_dates', oos.get('n_dates_total', 0))),
+            }
     except Exception:
         return None
     return None
+
