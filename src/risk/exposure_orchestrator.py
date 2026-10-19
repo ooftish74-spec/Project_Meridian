@@ -164,7 +164,24 @@ class ExposureOrchestrator:
         components['regime'] = {'score': regime_score, 'value': regime}
         _vix_d = pget('exposure.vix_missing_default', 20.0)
         _ois_d = pget('exposure.ois_missing_default', 50.0)
-        vix = float(sentiment.get('vix', _vix_d) or _vix_d)
+        raw_vix_in = sentiment.get('vix', _vix_d)
+        vix_age_h = sentiment.get('vix_age_hours', None)
+        ou_exit_only = False
+        if raw_vix_in is None or (isinstance(raw_vix_in, (int, float)) and float(raw_vix_in) <= 0.0) or (vix_age_h is not None and float(vix_age_h) > 0.0):
+            from src.params.dynamic_quant_models import ou_kalman_vix_state
+            _valid_v0 = float(raw_vix_in) if (raw_vix_in is not None and float(raw_vix_in) > 0.0) else None
+            _ou = ou_kalman_vix_state(last_vix=_valid_v0, age_hours=vix_age_h, long_run_vix=float(_vix_d))
+            vix = _ou.effective_vix
+            data_penalty = min(float(data_penalty), _ou.kelly_entry_scale)
+            ou_exit_only = _ou.exit_only
+            components['ou_kalman_vix'] = {
+                'effective_vix': round(_ou.effective_vix, 4),
+                'information_quality': round(_ou.information_quality, 4),
+                'kelly_entry_scale': round(_ou.kelly_entry_scale, 4),
+                'exit_only': _ou.exit_only,
+            }
+        else:
+            vix = float(raw_vix_in or _vix_d)
         options_skew = float(sentiment.get('options_skew', 0.0) or 0.0)
         raw_ois = float(sentiment.get('ois', _ois_d) or _ois_d)
         
@@ -189,7 +206,7 @@ class ExposureOrchestrator:
         target = round(float(np.clip(vol_surface_score * regime_score, 0.0, 1.0)), 3)
         
         reasons.append(f"Vol-Surface Dynamic (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> raw={vol_surface_score:.2f}, target={target:.2f}")
-        components['vol_surface'] = {'score': vol_surface_score, 'vix': vix, 'skew': options_skew, 'ois': raw_ois, 'ois_norm': ois_norm}
+        components['vol_surface'] = {'score': vol_surface_score, 'vix': vix, 'skew': options_skew, 'ois': raw_ois, 'ois_norm': ois_norm, 'exit_only': ou_exit_only}
         intraday_adj = 1.0
         if self._intraday:
             try:

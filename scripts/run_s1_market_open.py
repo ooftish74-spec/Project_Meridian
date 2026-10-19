@@ -164,35 +164,53 @@ def main():
                 logger.info(f"  {k}: {pos.get('name', '')} qty={pos['quantity']}")
             return
 
-        # 4. 매수 주문 생성
+        # 4. 매수 주문 생성 ([Model 3] Dynamic NAV_t Volatility-Targeted S1 Budget & 1-Lot Net-EV Viability)
         logger.info("\n📋 매수 주문 생성")
+        from src.params.dynamic_quant_models import (
+            check_integer_lot_viability,
+            compute_dynamic_s1_budget,
+            resolve_live_nav_krw,
+        )
 
-        s1_budget = pget('allocation.s1_budget', 200000)
-        s1_min_trade = pget('allocation.s1_min_trade', 100000)
+        s1_floor_budget = float(pget('allocation.s1_budget', 200000))
+        s1_min_trade = float(pget('allocation.s1_min_trade', 100000))
+        s1_stream_w = float(pget('allocator.s1_base_weight', 0.25))
 
         # S1 기존 투자액 차감
-        s1_invested = 0
+        s1_invested = 0.0
         for pos_key, pos in mgr.positions.items():
             if pos_key.startswith('S1:'):
                 s1_invested += pos.get('quantity', 0) * pos.get('current_price',
                                                                  pos.get('avg_price', 0))
-        remaining = max(0, s1_budget - s1_invested)
 
         # VaR/리스크 스케일은 현재 상태 참조
+        _default_pos_scale = 0.7
         try:
             with open(_RESULTS / 'realtime_var.json') as f:
                 var_data = json.load(f)
-            position_scale = var_data.get('position_scale', 0.7)
+            position_scale = float(var_data.get('position_scale', _default_pos_scale))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            position_scale = 0.7
+            position_scale = _default_pos_scale
 
+        live_nav_krw = resolve_live_nav_krw(_RESULTS, fallback_initial_capital=float(INITIAL_CAPITAL or 0.0))
+        dyn_s1 = compute_dynamic_s1_budget(
+            nav_krw=live_nav_krw,
+            s1_stream_weight=s1_stream_w,
+            var_position_scale=position_scale,
+            invested_s1_krw=s1_invested,
+        )
+        s1_budget = max(s1_floor_budget, dyn_s1['gross_budget_krw'])
+        remaining = max(0.0, s1_budget - s1_invested)
         effective_remaining = remaining * position_scale
-        logger.info(f"  S1 예산: ₩{s1_budget:,.0f}, 잔여: ₩{remaining:,.0f}, "
+        logger.info(f"  S1 동적예산(NAV=₩{live_nav_krw:,.0f}): ₩{s1_budget:,.0f}, 잔여: ₩{remaining:,.0f}, "
                     f"스케일={position_scale:.3f}, 유효예산: ₩{effective_remaining:,.0f}")
 
         orders = []
+        _default_size_pct = 0.10
+        _default_ev_pct = 1.0
+        _default_fric_pct = 0.13
         for signal in s1_signals:
             ticker = signal.get('ticker', '')
             price = signal.get('price', 0)
@@ -203,17 +221,6 @@ def main():
 
             if ticker in existing_tickers:
                 logger.info(f"  ⏭ {ticker}: 기보유 — 스킵")
-                continue
-
-            size_pct = signal.get('size_pct', 0.10)
-            amount = round(effective_remaining * size_pct)
-
-            # S1 최소 사이즈 보장
-            if amount < s1_min_trade and effective_remaining >= s1_min_trade:
-                logger.info(f"  📏 최소 사이즈 보장: {ticker} ₩{amount:,} → ₩{s1_min_trade:,}")
-                amount = s1_min_trade
-            elif amount < 200_000:
-                logger.info(f"  ⏭ {ticker}: 금액 부족 ₩{amount:,}")
                 continue
 
             is_us = not str(ticker).isdigit()
@@ -228,12 +235,26 @@ def main():
             else:
                 eff_price_krw = price
 
-            quantity = max(1, int(amount / eff_price_krw))
-            order_amount = quantity * eff_price_krw
+            size_pct = float(signal.get('size_pct', _default_size_pct))
+            amount = round(effective_remaining * size_pct)
+            if amount < s1_min_trade and effective_remaining >= s1_min_trade:
+                amount = round(s1_min_trade)
+            amount = min(float(amount), float(effective_remaining))
 
-            if order_amount > effective_remaining:
-                quantity = max(1, int(effective_remaining / eff_price_krw))
-                order_amount = quantity * eff_price_krw
+            exp_alpha_rate = float(signal.get('ev_pct', _default_ev_pct)) / 100.0
+            fric_rate = float(signal.get('friction_pct', _default_fric_pct)) / 100.0
+            lot_check = check_integer_lot_viability(
+                order_budget_krw=amount,
+                price_krw=eff_price_krw,
+                expected_alpha_rate=exp_alpha_rate,
+                roundtrip_friction_rate=fric_rate,
+            )
+            if not lot_check['viable']:
+                logger.info(f"  ⏭ {ticker}: 1주 정수 로트/순기대값 미달 ({lot_check['reason']}, 예산=₩{amount:,.0f}, 1주가=₩{eff_price_krw:,.0f})")
+                continue
+
+            quantity = int(lot_check['qty'])
+            order_amount = float(lot_check['notional_krw'])
 
             orders.append({
                 'stream': 'S1',

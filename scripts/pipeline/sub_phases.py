@@ -1730,8 +1730,20 @@ def _phase_intraday():
             _flow_collector = IntradayFlowCollector(config=cfg)
             
             _RESULTS_DIR = _PROJECT_ROOT / 'results'
-            # 스로틀링: 마지막 수집 이후 interval 이상 경과 시에만 API 호출
-            _flow_interval_sec = pget('intraday.flow_fetch_interval_min', 10) * 60
+            # [Model 1] Information-driven Poisson adaptive sampling interval
+            _base_flow_sec = float(pget('intraday.flow_fetch_interval_min', 10)) * 60.0
+            _vol_z_now = 0.0
+            try:
+                _sc_path = _RESULTS_DIR / 'signal_cache.json'
+                if _sc_path.exists():
+                    _sc_obj = json.loads(_sc_path.read_text(encoding='utf-8'))
+                    _vol_z_now = float(_sc_obj.get('vix_zscore') or _sc_obj.get('intraday_vol_z') or 0.0)
+            except Exception:
+                _vol_z_now = 0.0
+            _flow_interval_sec = _flow_collector.compute_adaptive_interval_sec(
+                vol_z=_vol_z_now,
+                base_interval_sec=_base_flow_sec,
+            )
             _last_flow_ts_file = _RESULTS_DIR / ".intraday_flow_last_ts"
             _now_ts = _time_mod.time()
             _last_ts = 0.0

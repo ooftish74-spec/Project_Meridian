@@ -466,13 +466,21 @@ class PortfolioOptimizer:
 
     def _load_stream_metrics(self) -> Dict:
         """스트림 성과 지표 로드."""
+        metrics = {}
         try:
             f = _RESULTS / 'stream_metrics.json'
             if f.exists():
-                return json.loads(f.read_text())
+                metrics = json.loads(f.read_text())
         except Exception as _e4:
             logger.critical(f"  [portfolio_optimizer] stream_metrics 로드: {_e4}", exc_info=True)
-        return {}
+        try:
+            from src.params.dynamic_quant_models import load_latest_purged_wf_oos
+            oos_val = load_latest_purged_wf_oos(_RESULTS / 'ml_validation')
+            if oos_val is not None and '_s2_oos_validation' not in metrics:
+                metrics['_s2_oos_validation'] = oos_val
+        except Exception:
+            pass
+        return metrics
 
     def _load_current_weights(self) -> Dict[str, float]:
         """현재 스트림 비중 로드."""

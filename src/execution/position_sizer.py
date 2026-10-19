@@ -125,6 +125,18 @@ class PositionSizer:
             if vix <= 0 or math.isnan(vix):
                 logger.warning(f"  [PositionSizer] {ticker}: VIX 데이터 누락. 진입 차단 (Stale-Halt 방어)")
                 return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': 'VIX 데이터 누락', 'drop_reason': 'missing_vix_stale_halt'}
+        # [Model 4] OU Kalman prediction variance inflation & continuous Kelly shrinkage on stale VIX
+        vix_age_h = market_data.get('vix_age_hours', signal.get('vix_age_hours', 0.0))
+        kelly_stale_scale = 1.0
+        if vix_age_h is not None and float(vix_age_h or 0.0) > 0.0:
+            from src.params.dynamic_quant_models import ou_kalman_vix_state
+            ou_st = ou_kalman_vix_state(last_vix=vix, age_hours=float(vix_age_h), long_run_vix=vix_neutral)
+            vix = ou_st.effective_vix
+            vix_val = max(vix_val, ou_st.effective_vix)
+            market_var = (max(vix_val, pget('sizer.vix_floor', 10.0)) / vix_neutral) ** 2
+            kelly_stale_scale = ou_st.kelly_entry_scale
+            if ou_st.exit_only:
+                return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 0.0, 'reason': 'VIX 정보 품질 임계치 미달 (OU Kalman Stale Halt)', 'drop_reason': 'stale_vix_ou_halt'}
         regime_min_ev = pget('allocator.min_net_ev_pct', 0.35, ctx={'regime': regime})
         vix_margin_sc = pget('sizer.vix_extra_margin_slope', 0.002)
         extra_margin = max(0.0, (vix - vix_neutral) * vix_margin_sc)
@@ -146,7 +158,7 @@ class PositionSizer:
         sigma_dec = max(0.005, sigma_pct / 100.0)
         cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - K_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
         half_kelly_factor = pget('sizer.half_kelly_factor', 0.5)
-        vix_scale = 1.0 / market_var
+        vix_scale = (1.0 / market_var) * kelly_stale_scale
         final_size = raw_size * vix_scale * max(pget('sizer.cf_penalty_floor', 0.1), min(1.0, cf_penalty)) * half_kelly_factor
         
         # ★ 대표님 지시 반영: 횡보장(caution) 미세 정찰대(Probe Sizing = 3% NAV) 공격적 투입!
@@ -212,18 +224,26 @@ class PositionSizer:
     def _compute_friction(self, signal: Dict, kelly_size: float, portfolio_value: float, regime: str, adv: float, market_cap: float, ticker: str) -> float:
         """총 마찰비용(%) = 매수(슬리피지+수수료) + 매도(슬리피지+수수료+증권거래세).
         """
+        from src.params.dynamic_quant_models import statutory_sell_tax_bps
         commission_bps = pget('sizer.commission_bps', 1.5)
         stream_id = signal.get('stream_id', signal.get('stream', ''))
         asset_type = str(signal.get('asset_type', '')).lower()
         t_str = str(ticker)
         name_str = str(signal.get('name', '')).lower()
-        is_etf = (
+        explicit_etf = (
             stream_id in ('S0', 'S1', 'S3_A', 'S5', 'S_YIELD') or 
             asset_type in ('etf', 'etn') or
             any(t_str.startswith(prefix) for prefix in ('0695', '1226', '2526', '1148', '4491', '4595', '3811', '2527')) or
             'etf' in t_str.lower() or 'etn' in t_str.lower() or 'kodex' in name_str or 'tiger' in name_str or 'ace' in name_str
         )
-        tax_bps = 0.0 if is_etf else pget('tax.kr_sell_tax_bps', 18.0)
+        as_of_dt = signal.get('as_of_date') or signal.get('date')
+        tax_bps = statutory_sell_tax_bps(
+            ticker=t_str,
+            as_of_date=as_of_dt,
+            is_etf=True if explicit_etf else None,
+            market=signal.get('market'),
+            base_kr_tax_bps=pget('tax.kr_sell_tax_bps', 18.0),
+        )
         if self._slippage and portfolio_value > 0 and (kelly_size > 0):
             try:
                 order_size = portfolio_value * kelly_size

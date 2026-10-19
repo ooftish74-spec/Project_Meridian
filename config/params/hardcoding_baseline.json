@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated_at": "2026-10-19T10:00:48+00:00",
+ "generated_at": "2026-10-19T13:26:26+00:00",
  "roots": [
   "src",
   "scripts"
@@ -9,12 +9,12 @@
  "totals": {
   "kr_ticker_literals": 731,
   "us_ticker_literals": 473,
-  "threshold_literals": 1858,
-  "fallback_literals": 702
+  "threshold_literals": 1857,
+  "fallback_literals": 700
  },
- "total_all": 3764,
+ "total_all": 3761,
  "allowed_pragmas": 48,
- "n_files_scanned": 324,
+ "n_files_scanned": 325,
  "parse_errors": [],
  "files": {
   "scripts/stream_orchestrator.py": {
@@ -1165,13 +1165,6 @@
    "fallback_literals": 0,
    "allowed": 0
   },
-  "scripts/run_s1_market_open.py": {
-   "kr_ticker_literals": 0,
-   "us_ticker_literals": 0,
-   "threshold_literals": 2,
-   "fallback_literals": 2,
-   "allowed": 0
-  },
   "src/data_collection/bok_ecos_collector.py": {
    "kr_ticker_literals": 0,
    "us_ticker_literals": 0,
@@ -1751,6 +1744,13 @@
    "us_ticker_literals": 0,
    "threshold_literals": 0,
    "fallback_literals": 1,
+   "allowed": 0
+  },
+  "scripts/run_s1_market_open.py": {
+   "kr_ticker_literals": 0,
+   "us_ticker_literals": 0,
+   "threshold_literals": 1,
+   "fallback_literals": 0,
    "allowed": 0
   },
   "scripts/update_user_gdrive_report.py": {

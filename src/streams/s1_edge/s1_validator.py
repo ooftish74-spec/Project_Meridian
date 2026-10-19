@@ -147,9 +147,20 @@ class S1InclusionValidator:
             max_slippage = max(slippages) if slippages else 0
             avg_cost = sum(costs) / len(costs) if costs else 0
 
-            # 비용 차감 수익률 추정
+            # 비용 차감 수익률 추정 + [Model 3] Almgren-Chriss 동적 슬리피지 상한
             total_cost_per_trade = avg_slippage + avg_cost
             estimated_round_trip = total_cost_per_trade * 2
+            from src.params.dynamic_quant_models import compute_almgren_chriss_slippage_bound
+            raw_avg_ev = float((signal_log or {}).get('avg_ev', 0.0) or 0.0)
+            _pct_unit_cutoff = 0.1
+            avg_alpha_rate = raw_avg_ev / 100.0 if raw_avg_ev > _pct_unit_cutoff else raw_avg_ev
+            ac_bound = compute_almgren_chriss_slippage_bound(
+                expected_alpha_rate=avg_alpha_rate,
+                one_way_comm_rate=avg_cost,
+                sell_tax_rate=0.0,
+            )
+            dyn_slip_max = ac_bound['max_allowable_one_way_slippage']
+            effective_slip_threshold = dyn_slip_max if dyn_slip_max > 0.0 else self.max_slippage
 
             result['cost_analysis'] = {
                 'avg_slippage_pct': round(avg_slippage * 100, 4),
@@ -157,8 +168,9 @@ class S1InclusionValidator:
                 'avg_commission_pct': round(avg_cost * 100, 4),
                 'estimated_round_trip_pct': round(estimated_round_trip * 100, 4),
                 'n_measured': len(slippages),
-                'slippage_threshold_pct': round(self.max_slippage * 100, 4),
-                'slippage_pass': avg_slippage <= self.max_slippage,
+                'slippage_threshold_pct': round(effective_slip_threshold * 100, 4),
+                'almgren_chriss_max_slippage_pct': round(dyn_slip_max * 100, 4),
+                'slippage_pass': avg_slippage <= effective_slip_threshold,
             }
 
         # ── 3. 전략별 분해 ──

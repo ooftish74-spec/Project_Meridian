@@ -576,6 +576,44 @@ class AlphaAllocator:
                             log_event('S2_FALLBACK', {'wr_5d': wr_5d, 'ic_5d': ic_5d, 'surplus_transferred': total_surplus, 'new_weights': weights}, source='alpha_allocator')
                         except Exception as _e1:
                             logger.critical(f'  [alpha_allocator] 알파 배분 로직: {_e1}', exc_info=True)
+            # [Model 5] Empirical Bayes (James-Stein) OOS IC Shrinkage from Purged Walk-Forward CV
+            oos_val = stream_metrics.get('_s2_oos_validation')
+            if isinstance(oos_val, dict) and ('ic_mean' in oos_val and 'ic_t_stat' in oos_val):
+                from src.params.dynamic_quant_models import empirical_bayes_stream_shrinkage
+                eb = empirical_bayes_stream_shrinkage(
+                    ic_mean=float(oos_val.get('ic_mean', 0.0)),
+                    ic_t_stat=float(oos_val.get('ic_t_stat', 0.0)),
+                )
+                if eb.weight_multiplier < 1.0:
+                    weights = dict(weights)
+                    s2_keys = [k for k in weights if k.upper().startswith('S2')]
+                    if s2_keys:
+                        eb_surplus = 0.0
+                        for k in s2_keys:
+                            orig_w = float(weights[k])
+                            shrunk_w = orig_w * eb.weight_multiplier
+                            eb_surplus += (orig_w - shrunk_w)
+                            weights[k] = shrunk_w
+                        s3a_keys = [k for k in weights if 'S3' in k.upper() and 'A' in k.upper()]
+                        s3b_keys = [k for k in weights if 'S3' in k.upper() and 'B' in k.upper()]
+                        if not s3a_keys:
+                            s3a_keys = [k for k in weights if k.upper().startswith('S3')][:1]
+                        if not s3b_keys and len([k for k in weights if k.upper().startswith('S3')]) > 1:
+                            s3b_keys = [k for k in weights if k.upper().startswith('S3')][1:]
+                        if s3a_keys and s3b_keys:
+                            weights[s3a_keys[0]] = weights.get(s3a_keys[0], 0.0) + eb_surplus * s3a_ratio
+                            weights[s3b_keys[0]] = weights.get(s3b_keys[0], 0.0) + eb_surplus * s3b_ratio
+                        elif s3a_keys:
+                            weights[s3a_keys[0]] = weights.get(s3a_keys[0], 0.0) + eb_surplus
+                        elif 'S5' in weights:
+                            weights['S5'] = weights.get('S5', 0.0) + eb_surplus
+                        total_w = sum(weights.values())
+                        if total_w > 0.0:
+                            weights = {k: v / total_w for k, v in weights.items()}
+                        logger.info(
+                            f"  📉 [Empirical Bayes S2 Shrinkage] OOS IC={eb.raw_ic:+.4f}, t_NW={eb.ic_t_stat:+.3f}, "
+                            f"PSR={eb.psr_ic:.1%} ➔ γ_EB={eb.weight_multiplier:.4f} (잉여 {eb_surplus:.3f} 이관)"
+                        )
         except Exception as e:
             logger.critical(f'  [Phase 40] S2 Auto-Fallback 오류 (skip): {e}', exc_info=True)
         try:

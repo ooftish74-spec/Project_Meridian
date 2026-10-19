@@ -155,6 +155,33 @@ class IntradayFlowCollector:
     def get_ticker_flow(cache: Dict[str, Any], ticker: str) -> Dict[str, Any]:
         """캐시에서 특정 종목 수급 데이터 추출."""
         return cache.get('tickers', {}).get(ticker, {})
+
+    def compute_adaptive_interval_sec(
+        self,
+        vol_z: float = 0.0,
+        base_interval_sec: float = 600.0,
+        flow_cache: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """[Model 1] Information-Driven Adaptive Sampling Interval (Poisson intensity):
+        dt_t^* = clip(base_interval_sec * exp(-alpha * max(0, vol_z) - beta * |OFI_t|), dt_min_rl, dt_max)
+        """
+        from src.params.dynamic_quant_models import (
+            adaptive_sampling_interval_sec,
+            compute_ofi_from_flow_cache,
+        )
+        cache_obj = flow_cache if flow_cache is not None else self.load_cache(self.results_dir)
+        ofi_abs = compute_ofi_from_flow_cache(cache_obj)
+        delay_sec = float(self._cfg('intraday.ticker_api_delay_sec'))
+        max_tickers = int(self._cfg('intraday.max_batch_tickers'))
+        return adaptive_sampling_interval_sec(
+            vol_z=vol_z,
+            ofi_abs=ofi_abs,
+            base_interval_sec=base_interval_sec,
+            n_tickers=max_tickers,
+            per_ticker_api_delay_sec=delay_sec,
+        )
+
+
 if __name__ == '__main__':
     import argparse
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%H:%M:%S')

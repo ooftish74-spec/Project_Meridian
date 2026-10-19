@@ -903,6 +903,14 @@ class StreamOrchestrator:
 
         # ★ [SSOT Wiring Fix] all_signals를 _stream_signals로 주입하여 섹터 한도(_enforce_sector_limits) 및 직교화 활성화
         stream_metrics['_stream_signals'] = all_signals
+        if '_s2_oos_validation' not in stream_metrics:
+            try:
+                from src.params.dynamic_quant_models import load_latest_purged_wf_oos
+                _oos_v = load_latest_purged_wf_oos(_RESULTS / 'ml_validation')
+                if _oos_v is not None:
+                    stream_metrics['_s2_oos_validation'] = _oos_v
+            except Exception:
+                pass
 
         weights = self.allocator.allocate(stream_metrics, regime, market_data, s0_sigs=s0_sigs)
         result['allocation'] = weights
