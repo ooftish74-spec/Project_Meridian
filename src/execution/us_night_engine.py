@@ -15,6 +15,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
         return fallback
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional

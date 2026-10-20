@@ -179,6 +179,7 @@ class StreamOrchestrator:
     def _is_ticker_session_open_for_live_exit(self, ticker: str, market_data: Dict = None) -> bool:
         """라이브 모드에서 현재 해당 종목의 거래소가 개장(거래 가능) 상태인지 판별.
         단위 테스트(MERIDIAN_TEST_MODE / PYTEST_CURRENT_TEST) 및 shadow 모드에서는 항상 True 반환."""
+        import os
         if getattr(self, 'exec_mode', 'shadow') != 'live':
             return True
         if os.environ.get('MERIDIAN_TEST_MODE') == '1' or os.environ.get('PYTEST_CURRENT_TEST'):
