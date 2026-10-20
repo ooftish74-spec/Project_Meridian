@@ -2935,7 +2935,7 @@ class StreamOrchestrator:
 
         # --- ETF Tracking Logic (Delegated to LeverageJudge) ---
         try:
-            etf_exits = self.leverage_judge.check_etf_stops(positions, market_data)
+            etf_exits = self.leverage_judge.check_etf_stops(positions, market_data, regime=regime)
             if etf_exits:
                 for eo in etf_exits:
                     # Prevent duplicates if already exited

@@ -180,32 +180,91 @@ class LeverageJudge:
                 logger.critical(f'  [leverage_judge] 레버리지 판단 데이터 로드: {_e0}', exc_info=True)
         return {'measurement': measurement, 'judgment': judgment}
 
-    def check_etf_stops(self, positions: Dict, market_data: Dict) -> List[Dict]:
+    def check_etf_stops(self, positions: Dict, market_data: Dict, regime: Any = None) -> List[Dict]:
         """
-        ETF(레버리지/인버스) 포지션에 대한 Tracking 상태(HWM 등)를 업데이트하고,
+        ETF(레버리지/인버스) 포지션에 대한 Tracking 상태(영구 HWM 원장 동기화)를 업데이트하고,
         청산 조건에 도달한 포지션의 청산 주문(reason, urgency 포함)을 반환합니다.
-        브릿지워터(Macro/Risk-Parity)와 메달리온(Signal Decay) 철학을 반영한 동적 임계값을 사용합니다.
+        100% 수학적 동적 모델 원칙:
+          1) 고정 VIX 22.0 상수를 폐기하고 DynamicQuantEngine 로그정규 분위수(Q_caution)와 VKOSPI를 결합
+          2) 한국/시장 레짐이 bear/crash이거나 양(+)의 추세 수익(pnl_pct > 0, HWM 트레일링 미이탈) 진행 중일 때는
+             'Macro 안정화' 명목의 인위적 강제 청산을 금지하고 동적 ATR 트레일링 스탑으로 수익 추종
+          3) 레버리지 롱은 고변동성에서 변동성 누수(Volatility Drag) 방지를 위해 보유기한을 단축하되,
+             인버스 헤지는 bear/crash 레짐 동안 일수 제한(Medallion Decay) 면제
         """
         exit_orders = []
         etf_tickers_str = cfg.get('leverage_judge.etf_tickers', '114800,252670,122630,233740,0195R0,0195S0')
         etf_tickers = [t.strip() for t in etf_tickers_str.split(',')]
+        inverse_tickers = set(cfg.get('leverage_judge.inverse_tickers', ['114800', '252670']))
         base_max_hold = int(pget('leverage_judge.max_hold_days', 5))
-        macro_vix_threshold = float(pget('leverage_judge.macro_vix_threshold', 22.0))
         atr_sl_mult = float(cfg.get('leverage_judge.atr_sl_mult', 2.0))
         atr_trail_mult = float(pget('leverage_judge.atr_trail_mult', 1.5))
-        current_date = market_data.get('date', datetime.now().strftime('%Y-%m-%d')) if market_data else datetime.now().strftime('%Y-%m-%d')
-        vix_raw = market_data.get('signal_cache', {}).get('vix', 20.0) if market_data else 20.0
+
+        signal_cache = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
+        current_date = (market_data or {}).get('date', datetime.now().strftime('%Y-%m-%d')) if isinstance(market_data, dict) else datetime.now().strftime('%Y-%m-%d')
+
+        # 1) 현재 레짐 동적 해석 (인자 -> market_data -> signal_cache -> pipeline_state -> config)
+        resolved_regime = ''
+        if isinstance(regime, dict):
+            resolved_regime = str(regime.get('primary_regime') or regime.get('regime') or '').lower()
+        elif isinstance(regime, str) and regime.strip():
+            resolved_regime = regime.strip().lower()
+        if not resolved_regime and isinstance(market_data, dict):
+            _md_reg = market_data.get('regime') or market_data.get('current_regime') or signal_cache.get('regime')
+            if isinstance(_md_reg, dict):
+                resolved_regime = str(_md_reg.get('primary_regime') or _md_reg.get('regime') or '').lower()
+            elif isinstance(_md_reg, str):
+                resolved_regime = _md_reg.strip().lower()
+        if not resolved_regime:
+            resolved_regime = str(cfg.get('market.current_regime', 'caution')).lower()
+
+        # 2) VIX 및 VKOSPI 실측치 + 로그정규 분포 동적 분위수(DynamicQuantEngine) 산출
+        vix_fallback = float(pget('leverage_judge.macro_vix_threshold', 22.0))
+        vix_raw = signal_cache.get('vix', vix_fallback)
+        vkospi_raw = signal_cache.get('vkospi', 0.0)
         try:
             vix = float(vix_raw)
             if math.isnan(vix) or vix <= 0:
-                vix = 20.0
+                vix = vix_fallback
         except (ValueError, TypeError):
-            vix = 20.0
-        dynamic_max_hold = max(1, int(base_max_hold * (pget('leverage_judge.vix_hold_ref', 10.0) / max(vix, pget('leverage_judge.vix_hold_floor', 10.0)))))
+            vix = vix_fallback
+        try:
+            vkospi = float(vkospi_raw or 0.0)
+            if math.isnan(vkospi) or vkospi < 0:
+                vkospi = 0.0
+        except (ValueError, TypeError):
+            vkospi = 0.0
+
+        effective_vol_index = max(vix, vkospi)
+        dynamic_vix_caution = vix_fallback
+        dynamic_vix_baseline = float(pget('leverage_judge.vix_hold_ref', 10.0))
+        dqe = None
+        try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            dqe = get_quant_engine()
+            vq = dqe.get_vix_regime_quantiles(signal_cache)
+            dynamic_vix_caution = float(vq.get('caution', vix_fallback) or vix_fallback)
+            dynamic_vix_baseline = float(vq.get('baseline', dynamic_vix_baseline) or dynamic_vix_baseline)
+            inverse_tickers.update(dqe.get_inverse_hedge_tickers())
+        except Exception:
+            pass
+
+        vix_floor = float(pget('leverage_judge.vix_hold_floor', 10.0))
+        long_dynamic_max_hold = max(1, int(round(base_max_hold * (max(dynamic_vix_baseline, vix_floor) / max(effective_vol_index, vix_floor)))))
+
+        ledger_mgr = None
+        try:
+            from src.execution.position_ledger import PositionLedgerManager
+            ledger_mgr = PositionLedgerManager()
+        except Exception:
+            ledger_mgr = None
+
+        is_bear_or_crash = resolved_regime in ('bear', 'crash', 'panic')
+
         for pos_key, pos in positions.items():
-            ticker = pos.get('ticker', pos_key.split(':')[-1])
-            stream_id = pos_key.split(':')[0] if ':' in pos_key else pos.get('stream_id', '')
-            is_leverage_or_inverse = ticker in etf_tickers or stream_id == 'SYS_HEDGE'
+            ticker = str(pos.get('ticker', pos_key.split(':')[-1]))
+            stream_id = pos_key.split(':')[0] if ':' in pos_key else str(pos.get('stream_id', ''))
+            is_inverse_pos = (ticker in inverse_tickers) or (stream_id == 'SYS_HEDGE')
+            is_leverage_or_inverse = (ticker in etf_tickers) or is_inverse_pos
             if not is_leverage_or_inverse:
                 continue
             qty = pos.get('quantity', pos.get('qty', 0))
@@ -215,11 +274,37 @@ class LeverageJudge:
             current_price = float(pos.get('current_price', 0))
             if entry_price <= 0 or current_price <= 0:
                 continue
+
+            # 3) 영구 원장(PositionLedgerManager) 및 포지션 메타데이터에서 실제 HWM / 진입일 복원
+            saved_peak = max(
+                current_price,
+                entry_price,
+                float(pos.get('peak_price', 0.0) or 0.0),
+                float(pos.get('highest_price', 0.0) or 0.0),
+            )
+            saved_entry_date = pos.get('entry_date')
+            if ledger_mgr is not None:
+                try:
+                    hwm_info = ledger_mgr.get_hwm(ticker)
+                    saved_peak = max(saved_peak, float(hwm_info.get('peak_price', 0.0) or 0.0))
+                    if not saved_entry_date:
+                        saved_entry_date = ledger_mgr.get_entry_date(ticker)
+                except Exception:
+                    pass
+            if not saved_entry_date:
+                saved_entry_date = current_date
+
             if pos_key not in self.etf_state:
-                self.etf_state[pos_key] = {'hwm': current_price, 'entry_price': entry_price, 'entry_date': pos.get('entry_date', current_date)}
+                self.etf_state[pos_key] = {
+                    'hwm': saved_peak,
+                    'entry_price': entry_price,
+                    'entry_date': saved_entry_date,
+                }
             state = self.etf_state[pos_key]
-            if current_price > state['hwm']:
-                state['hwm'] = current_price
+            state['hwm'] = max(float(state.get('hwm', current_price) or current_price), saved_peak, current_price)
+            if not state.get('entry_date'):
+                state['entry_date'] = saved_entry_date
+
             pnl_pct = (current_price / entry_price - 1) * 100
             drawdown_from_hwm = (state['hwm'] - current_price) / state['hwm'] * 100 if state['hwm'] > 0 else 0
             try:
@@ -229,32 +314,69 @@ class LeverageJudge:
                 days_held = (curr_dt - entry_dt).days
             except Exception:
                 days_held = pos.get('days_held', 0)
+
             reason = None
             urgency = 0
+            atr_pct = 0.0
             try:
                 from src.execution.risk_params import _estimate_atr_pct
-                atr_pct = _estimate_atr_pct(ticker, market_data)
+                atr_pct = float(_estimate_atr_pct(ticker, market_data) or 0.0)
             except Exception:
-                vix_val = float(market_data.get('signal_cache', {}).get('vix', market_data.get('signal_cache', {}).get('vkospi', 18.0))) if market_data else 18.0
-                atr_pct = max(pget('leverage_judge.atr_proxy_floor', 0.01), vix_val / (100.0 * 15.87))
+                atr_pct = 0.0
+            if atr_pct <= 0 and dqe is not None:
+                try:
+                    atr_pct = float(dqe.get_asset_metrics(ticker).get('vol_daily', 0.0) or 0.0)
+                except Exception:
+                    atr_pct = 0.0
+            if atr_pct <= 0:
+                atr_pct = max(pget('leverage_judge.atr_proxy_floor', 0.01), effective_vol_index / (100.0 * 15.87))
+
             dynamic_hard_sl = -abs(atr_pct * 100 * atr_sl_mult)
             dynamic_hard_sl = min(dynamic_hard_sl, pget('leverage_judge.hard_sl_cap_pct', -2.0))
             dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)
             dynamic_trail_stop = max(dynamic_trail_stop, pget('leverage_judge.trail_stop_floor_pct', 1.5))
+
+            # 인버스 헤지는 bear/crash 레짐이거나 변동성 스트레스가 caution 분위수 이상일 때 보유기한 만료(Decay) 면제
+            effective_max_hold = base_max_hold if (is_inverse_pos and (is_bear_or_crash or effective_vol_index >= dynamic_vix_caution)) else long_dynamic_max_hold
+            allow_time_decay_exit = not (is_inverse_pos and is_bear_or_crash)
+
             if pnl_pct <= dynamic_hard_sl:
                 reason = f'[ETF Stop] Hard SL (ATR 기반): 손실률 {pnl_pct:.2f}% (<= {dynamic_hard_sl:.2f}%)'
                 urgency = 3
-            elif days_held >= dynamic_max_hold:
-                reason = f'[ETF Stop] Medallion Decay: {days_held}일 보유 >= 동적 임계값 {dynamic_max_hold}일 (VIX={vix:.1f})'
+            elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price:
+                reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
-            elif ticker in cfg.get('leverage_judge.inverse_tickers', ['114800', '252670']) and vix < macro_vix_threshold:
-                reason = f'[ETF Stop] Macro 안정화 (VIX={vix:.1f} < {macro_vix_threshold:.1f}) → 인버스 동적 청산'
-                urgency = 3
+            elif is_inverse_pos and (not is_bear_or_crash) and (effective_vol_index < dynamic_vix_caution) and (pnl_pct <= 0):
+                reason = (
+                    f'[ETF Stop] Macro 안정화 (Regime={resolved_regime}, '
+                    f'Vol={effective_vol_index:.1f} < Q_caution={dynamic_vix_caution:.1f}, PnL={pnl_pct:+.2f}%) → 인버스 동적 청산'
+                )
+                urgency = 2
+            elif allow_time_decay_exit and days_held >= effective_max_hold:
+                reason = f'[ETF Stop] Medallion Decay: {days_held}일 보유 >= 동적 임계값 {effective_max_hold}일 (Vol={effective_vol_index:.1f})'
+                urgency = 2
             elif drawdown_from_hwm >= dynamic_trail_stop:
                 reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
+
             if reason:
-                exit_orders.append({'stream_id': stream_id, 'ticker': ticker, 'name': pos.get('name', ''), 'action': 'sell', 'direction': 'sell', 'quantity': int(qty), 'amount_krw': pos.get('amount') or pos.get('eval_krw') or round(qty * current_price), 'price': current_price, 'confidence': 1.0, 'strategy': 'etf_dynamic_exit', 'reason': reason, 'sell_type': 'etf_stop', 'urgency': urgency, 'pos_key': pos_key, 'pnl_pct': pnl_pct})
+                exit_orders.append({
+                    'stream_id': stream_id,
+                    'ticker': ticker,
+                    'name': pos.get('name', ''),
+                    'action': 'sell',
+                    'direction': 'sell',
+                    'quantity': int(qty),
+                    'amount_krw': pos.get('amount') or pos.get('eval_krw') or round(qty * current_price),
+                    'price': current_price,
+                    'confidence': 1.0,
+                    'strategy': 'etf_dynamic_exit',
+                    'reason': reason,
+                    'sell_type': 'etf_stop',
+                    'urgency': urgency,
+                    'pos_key': pos_key,
+                    'pnl_pct': pnl_pct,
+                })
         active_keys = set(positions.keys())
         for key in list(self.etf_state.keys()):
             if key not in active_keys or positions.get(key, {}).get('quantity', positions.get(key, {}).get('qty', 0)) <= 0:

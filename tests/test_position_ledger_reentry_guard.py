@@ -115,3 +115,86 @@ def test_closed_form_reentry_hurdle_blocks_18min_sqqq_rebuy(monkeypatch):
     assert actual_hurdle == pytest.approx(expected_hurdle, rel=1e-9)
     # Typical S3 signal EV (~3.9%) must be strictly below the ~9.6% hurdle 18.6 minutes after exit
     assert 3.90 < actual_hurdle
+
+
+def test_leverage_judge_preserves_profitable_inverse_in_crash_regime():
+    """In crash/bear regime, a profitable inverse ETF (252670 at +7.69%) must NOT be
+    prematurely liquidated even if US VIX is 18.4 (< 22.0).
+    """
+    from src.risk.leverage_judge import LeverageJudge
+
+    judge = LeverageJudge()
+    positions = {
+        "252670": {
+            "ticker": "252670",
+            "name": "KODEX 200선물인버스2X",
+            "quantity": 967,
+            "avg_price": 104.0,
+            "current_price": 112.0,
+            "peak_price": 112.0,
+            "entry_date": "2026-10-19",
+        }
+    }
+    market_data = {
+        "date": "2026-10-20",
+        "signal_cache": {"vix": 18.4, "vkospi": 24.5},
+    }
+    exits = judge.check_etf_stops(positions, market_data, regime="crash")
+    assert exits == []
+
+
+def test_leverage_judge_trailing_stop_captures_inverse_profit_on_reversal():
+    """When a profitable inverse ETF (252670) reverses from its peak (115 -> 109, -5.22% drawdown),
+    check_etf_stops must trigger the ATR-based Trailing Stop.
+    """
+    from src.risk.leverage_judge import LeverageJudge
+
+    judge = LeverageJudge()
+    positions = {
+        "252670": {
+            "ticker": "252670",
+            "name": "KODEX 200선물인버스2X",
+            "quantity": 967,
+            "avg_price": 104.0,
+            "current_price": 109.0,
+            "peak_price": 115.0,
+            "entry_date": "2026-10-19",
+        }
+    }
+    market_data = {
+        "date": "2026-10-20",
+        "signal_cache": {"vix": 18.4, "vkospi": 20.0},
+    }
+    exits = judge.check_etf_stops(positions, market_data, regime="crash")
+    assert len(exits) == 1
+    assert exits[0]["ticker"] == "252670"
+    assert "Trailing Stop" in exits[0]["reason"]
+
+
+def test_leverage_judge_macro_stabilization_exits_losing_inverse_in_bull_regime():
+    """When regime has normalized to bull, both VIX and VKOSPI are below Q_caution,
+    and the inverse position is losing (pnl_pct <= 0), Macro Stabilization exit fires.
+    """
+    from src.risk.leverage_judge import LeverageJudge
+
+    judge = LeverageJudge()
+    positions = {
+        "252670": {
+            "ticker": "252670",
+            "name": "KODEX 200선물인버스2X",
+            "quantity": 967,
+            "avg_price": 104.0,
+            "current_price": 102.5,
+            "peak_price": 104.0,
+            "entry_date": "2026-10-19",
+        }
+    }
+    market_data = {
+        "date": "2026-10-20",
+        "signal_cache": {"vix": 13.5, "vkospi": 13.0, "vix_history": [18.0] * 25},
+    }
+    exits = judge.check_etf_stops(positions, market_data, regime="bull")
+    assert len(exits) == 1
+    assert exits[0]["ticker"] == "252670"
+    assert "Macro 안정화" in exits[0]["reason"]
+
