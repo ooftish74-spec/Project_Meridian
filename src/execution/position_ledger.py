@@ -129,7 +129,8 @@ class PositionLedgerManager:
                 if not isinstance(day_map, dict):
                     day_map = {}
                 tk_key = str(ticker).upper()
-                now_iso = datetime.now().isoformat()
+                now_dt = datetime.now()
+                now_iso = now_dt.isoformat()
                 prev_entry = day_map.get(tk_key)
                 history = []
                 first_exited_at = now_iso
@@ -143,6 +144,22 @@ class PositionLedgerManager:
                             "reason": prev_entry.get("reason", ""),
                             "realized_pnl_pct": float(prev_entry.get("realized_pnl_pct", 0.0) or 0.0),
                         }]
+                    # 60초 이내 동일 종목 중복 호출(엔진+데몬 이중 기록) 시 카운트 부풀림 방지 (Idempotency)
+                    prev_ex_str = str(prev_entry.get("exited_at", ""))
+                    if prev_ex_str:
+                        try:
+                            prev_dt = datetime.fromisoformat(prev_ex_str).replace(tzinfo=None)
+                            if abs((now_dt.replace(tzinfo=None) - prev_dt).total_seconds()) < 60.0:
+                                if reason and prev_entry.get("reason") in ("", "Position closed on live balance sync"):
+                                    prev_entry["reason"] = reason
+                                if abs(float(realized_pnl_pct or 0.0)) > 1e-6:
+                                    prev_entry["realized_pnl_pct"] = float(realized_pnl_pct)
+                                day_map[tk_key] = prev_entry
+                                data[date_str] = day_map
+                                atomic_write_json(self.daily_exit_path, data, indent=2, ensure_ascii=False)
+                                return
+                        except Exception:
+                            pass
                 new_event = {
                     "exited_at": now_iso,
                     "reason": reason,
@@ -163,18 +180,40 @@ class PositionLedgerManager:
             except Exception as e:
                 logger.debug(f"  [PositionLedger] record_daily_exit 예외: {e}")
 
-    def get_daily_exit_details(self, date_str: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
-        """당일 리스크/트레일링 청산된 종목별 상세 메타데이터(exited_at, realized_pnl_pct) 반환."""
+    def get_daily_exit_details(self, date_str: Optional[str] = None, lookback_hours: float = 16.0) -> Dict[str, Dict[str, Any]]:
+        """당일(및 미국장 자정 경계를 가로지르는 연속 세션 lookback_hours 이내) 청산된 종목별 상세 메타데이터 반환."""
+        explicit_date = date_str is not None
+        now_dt = datetime.now()
         if not date_str:
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = now_dt.strftime("%Y-%m-%d")
         with self._lock:
             try:
                 if self.daily_exit_path.exists():
                     with open(self.daily_exit_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
+                    if not isinstance(data, dict):
+                        return {}
+                    merged: Dict[str, Dict[str, Any]] = {}
+                    # 자정(00:00 KST)을 넘기는 미국 본장(22:30~05:00 KST) 연속성 보장을 위해 전일 이력 중 lookback_hours 이내 항목 병합
+                    if not explicit_date and lookback_hours > 0:
+                        from datetime import timedelta
+                        prev_date_str = (now_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+                        prev_map = data.get(prev_date_str, {})
+                        if isinstance(prev_map, dict):
+                            for k, v in prev_map.items():
+                                if isinstance(v, dict) and v.get("exited_at"):
+                                    try:
+                                        ex_dt = datetime.fromisoformat(str(v["exited_at"])).replace(tzinfo=None)
+                                        elapsed_h = (now_dt.replace(tzinfo=None) - ex_dt).total_seconds() / 3600.0
+                                        if 0.0 <= elapsed_h <= lookback_hours:
+                                            merged[str(k).upper()] = v
+                                    except Exception:
+                                        pass
                     day_map = data.get(date_str, {})
                     if isinstance(day_map, dict):
-                        return {str(k).upper(): (v if isinstance(v, dict) else {"exited_at": "", "realized_pnl_pct": 0.0}) for k, v in day_map.items()}
+                        for k, v in day_map.items():
+                            merged[str(k).upper()] = v if isinstance(v, dict) else {"exited_at": "", "realized_pnl_pct": 0.0}
+                    return merged
             except Exception:
                 pass
             return {}
@@ -205,16 +244,29 @@ class PositionLedgerManager:
             logger.info(f"  📌 [PositionLedger] 분할 청산(scaled_out=True) 영구 기록: {ticker}")
 
     def purge_closed_positions(self, active_tickers) -> None:
-        """실계좌 미보유(청산 완료) 종목 원장 제거."""
+        """실계좌 미보유(청산 완료) 종목 원장 제거 및 당일 청산 이력(Sunk-Cost Exit Ledger) 누락 방지 자동 등록."""
         active_set = set(str(t) for t in (active_tickers or []))
+        purged_entries: List[ tuple ] = []
         with self._lock:
             ledger = self._load_file_unlocked()
             to_remove = [t for t in ledger if t not in active_set]
             if to_remove:
                 for t in to_remove:
+                    info = ledger.get(t, {}) if isinstance(ledger.get(t), dict) else {}
+                    purged_entries.append((str(t), float(info.get("last_pnl_pct", 0.0) or 0.0)))
                     del ledger[t]
                     logger.info(f"  🗑️ [PositionLedger] 청산 종목 원장 제거: {t}")
                 self._save_file_unlocked(ledger)
+        # 원장에서 제거된 종목이 당일 청산 원장(daily_exited_tickers.json)에 누락되어 있다면 즉시 보강 기록
+        if purged_entries:
+            recent_exits = self.get_daily_exit_details()
+            for tk_purged, last_pnl in purged_entries:
+                if tk_purged.upper() not in recent_exits:
+                    self.record_daily_exit(
+                        tk_purged,
+                        reason="Position closed on live balance sync",
+                        realized_pnl_pct=last_pnl,
+                    )
 
     def update_hwm(
         self,
@@ -294,6 +346,10 @@ class PositionLedgerManager:
 
             if "scaled_out" not in info:
                 info["scaled_out"] = False
+                updated = True
+
+            if abs(float(current_pnl_pct or 0.0) - float(info.get("last_pnl_pct", 0.0) or 0.0)) > 1e-4:
+                info["last_pnl_pct"] = float(current_pnl_pct or 0.0)
                 updated = True
 
             # 트레일링 발동 조건 돌파 이력 체크

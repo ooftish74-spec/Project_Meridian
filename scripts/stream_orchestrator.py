@@ -1617,7 +1617,7 @@ class StreamOrchestrator:
                 if qty <= 0:
                     qty = int(o.get('amount_krw', 0.0) / _cost_per_share_krw) if _cost_per_share_krw > 0 else 0
                 
-                # Min-Lot Sweep: 기보유 수량이 0주인 신규 진입 종목에 한해 1주 이산 한계 순효용 검증 후 배정
+                # Min-Lot Sweep: 기보유 수량이 0주이고 당일(연속 세션) 청산 이력이 없는 순수 신규 진입 종목에 한해 최소 1주 배정
                 _tk_check = str(o.get('ticker', '')).split(':')[-1].upper()
                 _already_held_s84 = False
                 if portfolio and isinstance(portfolio, dict):
@@ -1628,11 +1628,19 @@ class StreamOrchestrator:
                                 if _pt_s == _tk_check and float(_pv_s.get('quantity', _pv_s.get('qty', 0)) or 0) > 0:
                                     _already_held_s84 = True
                                     break
+                _recently_exited_s84 = False
+                if getattr(self, 'exec_mode', 'live') == 'live':
+                    try:
+                        from src.execution.position_ledger import PositionLedgerManager
+                        _recently_exited_s84 = _tk_check in PositionLedgerManager().get_daily_exited_tickers()
+                    except Exception:
+                        _recently_exited_s84 = False
                 _amt_budget = float(o.get('amount_krw', 0.0) or 0.0)
-                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상일 때만 1주 배정 (amount=0 또는 confidence만으로 강제 매수 금지)
-                if qty <= 0 and not _already_held_s84 and _cost_per_share_krw > 0 and _amt_budget >= 0.5 * _cost_per_share_krw:
+                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상이고 당일 청산 종목이 아닐 때만 1주 배정
+                if qty <= 0 and not _already_held_s84 and not _recently_exited_s84 and _cost_per_share_krw > 0 and _amt_budget >= 0.5 * _cost_per_share_krw:
                     qty = 1
                     o['_min_lot_sweep'] = True
+                    o['amount_krw'] = max(_amt_budget, float(_cost_per_share_krw / max(margin_rate, 1.0)))
                     logger.info(f"    💡 [Step 8.4 Min-Lot Sweep] {o.get('ticker')} (단가: {_exec_price:.2f}) 신규 진입 예산 미달 절삭 방지 ➔ 최소 1주 배정")
 
                 if qty > 0:
@@ -1903,8 +1911,8 @@ class StreamOrchestrator:
                 if _is_buy_o and _otk in same_day_exit_details:
                     _ex_info = same_day_exit_details[_otk]
                     try:
-                        _ex_dt = datetime.fromisoformat(str(_ex_info.get('exited_at', '')))
-                        _elapsed_m = max(0.0, (datetime.now() - _ex_dt).total_seconds() / 60.0)
+                        _ex_dt = datetime.fromisoformat(str(_ex_info.get('exited_at', ''))).replace(tzinfo=None)
+                        _elapsed_m = max(0.0, (datetime.now().replace(tzinfo=None) - _ex_dt).total_seconds() / 60.0)
                     except Exception:
                         _elapsed_m = 0.0
                     _prev_pnl = float(_ex_info.get('realized_pnl_pct', 0.0) or 0.0)

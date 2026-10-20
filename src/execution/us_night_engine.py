@@ -335,14 +335,34 @@ class USNightExecutionEngine:
             entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
             drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
 
-            # Dynamic Volatility ATR Trailing Stop
-            ticker_atr = atr_map.get(ticker, 0.015) if atr_map else 0.015
-            atr_multiplier = cfg.get('us_night.trailing_stop_atr_mult', 2.0)
-            dynamic_trailing_stop_pct = max(0.015, min(0.05, ticker_atr * atr_multiplier))
+            # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 DynamicQuantEngine 실측 일간 변동성 조회)
+            ticker_atr = 0.0
+            if atr_map and ticker in atr_map and float(atr_map[ticker] or 0.0) > 0:
+                ticker_atr = float(atr_map[ticker])
+            else:
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine
+                    _m = get_quant_engine().get_asset_metrics(ticker)
+                    ticker_atr = float(_m.get("vol_daily", 0.0) or 0.0)
+                except Exception:
+                    ticker_atr = 0.0
+            if ticker_atr <= 0:
+                ticker_atr = 0.015
+
+            atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
+            dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
+            dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
+            effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
             # 1) Hard Stop-Loss (수익 활성화 전에도 진입가 대비 -hard_stop_pct 이탈 시 즉시 손절)
             if entry_p > 0 and entry_return <= -self.hard_stop_pct:
+                exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 한도=-{self.hard_stop_pct*100:.2f}%)")
+                ledger_mgr.record_daily_exit(
+                    ticker,
+                    reason=exit_reason,
+                    realized_pnl_pct=float(entry_return * 100.0),
+                )
                 exit_orders.append({
                     'ticker': ticker,
                     'direction': 'sell',
@@ -350,12 +370,19 @@ class USNightExecutionEngine:
                     'quantity': h.get('quantity', 0),
                     'amount': h.get('amount', 0),
                     'price': price,
-                    'reason': f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)",
+                    'pnl_pct': round(entry_return * 100.0, 4),
+                    'reason': exit_reason,
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 })
-            # 2) Trailing Stop (고점이 진입가 대비 +trail_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화)
-            elif entry_p > 0 and highest_price >= entry_p * (1.0 + self.trail_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+            # 2) Trailing Stop (고점이 진입가 대비 +effective_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화)
+            elif entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+                exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")
+                ledger_mgr.record_daily_exit(
+                    ticker,
+                    reason=exit_reason,
+                    realized_pnl_pct=float(entry_return * 100.0),
+                )
                 exit_orders.append({
                     'ticker': ticker,
                     'direction': 'sell',
@@ -363,7 +390,8 @@ class USNightExecutionEngine:
                     'quantity': h.get('quantity', 0),
                     'amount': h.get('amount', 0),
                     'price': price,
-                    'reason': f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)",
+                    'pnl_pct': round(entry_return * 100.0, 4),
+                    'reason': exit_reason,
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 })
             else:

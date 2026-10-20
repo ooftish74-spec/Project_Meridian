@@ -571,6 +571,16 @@ def main():
                                             logger.info(f"  ⏳ [US Exit In-Flight Cooldown] {_tk_us} 매도 주문 이미 접수 진행 중 ({_now_us_ts - main._exit_orders_in_flight[_tk_us]:.0f}s 전) ➔ 중복 발주 차단")
                                             continue
                                         main._exit_orders_in_flight[_tk_us] = _now_us_ts
+                                        try:
+                                            from src.execution.position_ledger import PositionLedgerManager
+                                            PositionLedgerManager().record_daily_exit(
+                                                str(_tk_us),
+                                                eo.get('reason', 'US Night Trailing Stop'),
+                                                today_str,
+                                                realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
+                                            )
+                                        except Exception:
+                                            pass
                                         logger.info(f"  🚨 [US Trailing Stop] {_tk_us} 손절/익절 청산 주문 송출: {eo['quantity']}주 @ ${eo['price']:.2f}")
                                         _adapter.sell(
                                             ticker=_tk_us,
