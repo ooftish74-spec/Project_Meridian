@@ -54,7 +54,7 @@ class AntiWhipsawDefenseEngine:
         if self._is_test and 'results' in str(self._state_path):
             return
         try:
-            from src.utils.atomic_io import atomic_write_json
+            from src.utils.file_ops import atomic_write_json
             atomic_write_json(self._state_path, {
                 'consecutive_losses': self._consecutive_whipsaw_losses,
                 'cooldown_until': self._cooldown_until_timestamp,

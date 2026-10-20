@@ -61,7 +61,7 @@ class VolatilityDecayShield:
         if self._is_test and 'results' in str(self._state_path):
             return
         try:
-            from src.utils.atomic_io import atomic_write_json
+            from src.utils.file_ops import atomic_write_json
             atomic_write_json(self._state_path, {
                 'chop_history': self._chop_history[-100:],
                 'mean_chop': self._mean_chop,
