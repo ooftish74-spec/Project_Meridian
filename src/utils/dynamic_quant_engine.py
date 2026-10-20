@@ -957,10 +957,13 @@ class DynamicQuantEngine:
         """
         tk = str(ticker or "").strip().upper()
         m = self.get_asset_metrics(tk)
-        sigma_d_pct = max(
-            (float(atr_pct) * 100.0) if (atr_pct and atr_pct > 0) else (float(m.get("vol_daily", 0.018)) * 100.0),
-            0.35,
-        )
+        _unit_cut = 1.0 / math.e
+        if atr_pct and float(atr_pct) > 0:
+            _raw_atr = float(atr_pct)
+            _atr_pct_val = _raw_atr if _raw_atr >= _unit_cut else (_raw_atr * 100.0)
+        else:
+            _atr_pct_val = float(m.get("vol_daily", 0.018)) * 100.0
+        sigma_d_pct = max(_atr_pct_val, _unit_cut)
         ir = float(m.get("ir", 0.0))
         c_rt_pct = self.compute_roundtrip_friction_pct(tk, order_value_krw=order_value_krw, price=price)
 

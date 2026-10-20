@@ -16497,6 +16497,111 @@
    "auto": true,
    "rationale": "Auto-migrated DynamicConfig fallback (Wave2 TrackF). Generic 10x safety bounds; policy/bounds to be reviewed per risk semantics.",
    "provenance": "src/execution/realtime_exit_monitor.py:236"
+  },
+  "risk.cro_weight_eps": {
+   "level": "L1",
+   "default": 1e-09,
+   "bounds": [
+    0.0,
+    0.001
+   ],
+   "policy": "free",
+   "config_key": "risk.cro_weight_eps",
+   "auto": true,
+   "rationale": "Minimum non-zero weight epsilon for CROFinalGate stress test filtering.",
+   "provenance": "src/risk/cro_final_gate.py:147"
+  },
+  "risk.cro_vix_hist_min_len": {
+   "level": "L1",
+   "default": 12,
+   "bounds": [
+    2,
+    252
+   ],
+   "policy": "free",
+   "config_key": "risk.cro_vix_hist_min_len",
+   "auto": true,
+   "rationale": "Minimum VIX history length for GARCH V-Bounce volatility estimation in CROFinalGate.",
+   "provenance": "src/risk/cro_final_gate.py:148"
+  },
+  "scenarios.mdf_strong_threshold": {
+   "level": "L1",
+   "default": 3.0,
+   "bounds": [
+    0.5,
+    10.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_strong_threshold",
+   "auto": true,
+   "rationale": "Strong market direction threshold for MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:69"
+  },
+  "scenarios.mdf_adj_min": {
+   "level": "L1",
+   "default": 0.4,
+   "bounds": [
+    0.05,
+    1.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_adj_min",
+   "auto": true,
+   "rationale": "Minimum continuous tanh adjustment bound in MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:127"
+  },
+  "scenarios.mdf_adj_max": {
+   "level": "L1",
+   "default": 1.35,
+   "bounds": [
+    1.0,
+    3.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_adj_max",
+   "auto": true,
+   "rationale": "Maximum continuous tanh adjustment bound in MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:128"
+  },
+  "scenarios.mdf_neutral_cut": {
+   "level": "L1",
+   "default": 0.7,
+   "bounds": [
+    0.1,
+    1.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_neutral_cut",
+   "auto": true,
+   "rationale": "Neutral cut threshold in MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:129"
+  },
+  "scenarios.mdf_conf_min": {
+   "level": "L1",
+   "default": 0.01,
+   "bounds": [
+    0.0,
+    0.5
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_conf_min",
+   "auto": true,
+   "rationale": "Minimum confidence clamp in MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:130"
+  },
+  "scenarios.mdf_conf_max": {
+   "level": "L1",
+   "default": 0.99,
+   "bounds": [
+    0.5,
+    1.0
+   ],
+   "policy": "free",
+   "config_key": "scenarios.mdf_conf_max",
+   "auto": true,
+   "rationale": "Maximum confidence clamp in MarketDirectionFilter.",
+   "provenance": "src/intelligence/event_market_filter.py:131"
   }
  }
 }
+

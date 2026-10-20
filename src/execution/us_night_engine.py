@@ -310,6 +310,9 @@ class USNightExecutionEngine:
     def update_trailing_stop(self, current_prices: Dict[str, float], atr_map: Optional[Dict[str, float]] = None) -> List[Dict]:
         """미국 장 트레일링 스탑 감시 및 청산 주문 생성 (ATR 변동성 동적 연동 및 HWM 원장 동기화)."""
         exit_orders = []
+        if not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+            if not self.is_us_session_active():
+                return exit_orders
         remaining = []
         from src.execution.position_ledger import PositionLedgerManager
         ledger_mgr = PositionLedgerManager()

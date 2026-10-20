@@ -172,6 +172,14 @@ class S14SectorPairStream(BaseStream):
             )
 
             if us_pair_res.get('pair_active') and us_pair_res.get('spread_z', 0.0) >= active_spread_threshold:
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                _dqe_s14 = get_quant_engine()
+                _sc_us = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
+                _vix_us = float((market_data or {}).get('vix') or _sc_us.get('vix', 20.0) or 20.0)
+                _ois_us = float((market_data or {}).get('ois') or _sc_us.get('ois', 50.0) or 50.0)
+                _reg_us = str((market_data or {}).get('regime', 'caution')).lower() if isinstance(market_data, dict) else 'caution'
+                _vix_caut_lim = float(_dqe_s14.get_vix_regime_quantiles()['caution'])
+                _ois_bull_lim = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _us_inv_map = {'semi': 'SOXS', 'tech': 'PSQ', 'SOXX': 'SOXS', 'XLK': 'PSQ'}
                 for order in us_pair_res.get('pair_orders', []):
                     t_dir = order.get('direction', 'long').lower()
@@ -180,6 +188,8 @@ class S14SectorPairStream(BaseStream):
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or action in ('sell', 'buy_inverse')
                     
                     if is_inv_hedge:
+                        if (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull':
+                            continue
                         sec_key = str(order.get('sector', '')).lower()
                         if ticker in ('SH', 'PSQ', 'SOXS', 'SQQQ'):
                             ticker_to_trade = ticker
@@ -196,6 +206,12 @@ class S14SectorPairStream(BaseStream):
 
                     # 연속적 노이즈 강도에 따른 동적 포지션 크기 스케일링
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_us, 4)
+                    try:
+                        _bar_us = _dqe_s14.compute_dynamic_exit_barriers(ticker_to_trade)
+                        _tp_us = float(_bar_us['take_profit_pct'])
+                        _sl_us = abs(float(_bar_us['stop_loss_pct']))
+                    except Exception:
+                        _tp_us, _sl_us = 2.5, 1.5
 
                     signals.append({
                         'stream_id': self.stream_id,
@@ -204,6 +220,9 @@ class S14SectorPairStream(BaseStream):
                         'direction': direction_to_trade,
                         'action': action_to_trade,
                         'size_pct': dynamic_size,
+                        'tp_pct': round(_tp_us, 2),
+                        'sl_pct': round(_sl_us, 2),
+                        'expected_return_pct': round(_tp_us, 2),
                         'confidence': order.get('confidence', 0.70),
                         'strategy': 'us_sector_pair_alpha',
                         'reason': f"[S14 US Pair] {order['reason']} (KER={ker_us:.2f}, Noise={noise_us:.1%})",
@@ -234,17 +253,20 @@ class S14SectorPairStream(BaseStream):
 
             if kr_pair_res.get('pair_active') and kr_pair_res.get('spread_z', 0.0) >= active_spread_threshold:
                 from src.utils.dynamic_quant_engine import get_quant_engine
-                _kr_inv_list = get_quant_engine().get_inverse_hedge_tickers('KR')
+                _dqe_kr = get_quant_engine()
+                _kr_inv_list = _dqe_kr.get_inverse_hedge_tickers('KR')
                 _kr_1x_inv = _kr_inv_list[-1] if _kr_inv_list else '114800'
                 _sc_kr = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
                 _vix_kr = float((market_data or {}).get('vix') or _sc_kr.get('vix', 20.0) or 20.0)
                 _ois_kr = float((market_data or {}).get('ois') or _sc_kr.get('ois', 50.0) or 50.0)
+                _vix_caut_kr = float(_dqe_kr.get_vix_regime_quantiles()['caution'])
+                _ois_bull_kr = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 for order in kr_pair_res.get('pair_orders', []):
                     t_dir = order.get('direction', 'long').lower()
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or order.get('action') in ('sell', 'buy_inverse')
                     
                     if is_inv_hedge:
-                        if _vix_kr < 22.0 and _ois_kr >= 55.0:
+                        if _vix_kr < _vix_caut_kr and _ois_kr >= _ois_bull_kr:
                             continue  # VIX 안정 + 강세 반등 구간에서는 Step 4.7 인버스 강제청산 및 지수 롱 상쇄 방지를 위해 인버스 헤지 생략
                         trade_ticker = _kr_1x_inv
                         trade_dir = 'long'      # 인버스를 매수하므로 현물 계좌 주문 방향은 long
@@ -255,6 +277,12 @@ class S14SectorPairStream(BaseStream):
                         leg_label = 'LONG'
 
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_kr, 4)
+                    try:
+                        _bar_kr = _dqe_kr.compute_dynamic_exit_barriers(trade_ticker)
+                        _tp_kr = float(_bar_kr['take_profit_pct'])
+                        _sl_kr = abs(float(_bar_kr['stop_loss_pct']))
+                    except Exception:
+                        _tp_kr, _sl_kr = 2.5, 1.5
 
                     signals.append({
                         'stream_id': self.stream_id,
@@ -263,6 +291,9 @@ class S14SectorPairStream(BaseStream):
                         'direction': trade_dir,
                         'action': 'buy',
                         'size_pct': dynamic_size,
+                        'tp_pct': round(_tp_kr, 2),
+                        'sl_pct': round(_sl_kr, 2),
+                        'expected_return_pct': round(_tp_kr, 2),
                         'confidence': order.get('confidence', 0.70),
                         'strategy': 'kr_sector_pair_alpha',
                         'reason': f"[S14 KR Pair] {order['reason']} (KER={ker_kr:.2f}, Noise={noise_kr:.1%})",
@@ -278,6 +309,7 @@ class S14SectorPairStream(BaseStream):
                 for _mkt, _noise in (('KR', noise_kr), ('US', noise_us)):
                     for _p in _dqe.discover_stat_arb_pairs(_mkt, max_pairs=1):
                         if abs(_p['z_score']) >= active_spread_threshold:
+                            _ou_er_pct = round(max(1.5, float(_p.get('expected_return', 0.025) or 0.025) * 100.0), 2)
                             signals.append({
                                 'stream_id': self.stream_id,
                                 'ticker': _p['long_ticker'],
@@ -285,6 +317,9 @@ class S14SectorPairStream(BaseStream):
                                 'direction': 'long',
                                 'action': 'buy',
                                 'size_pct': round(0.08 * _noise, 4),
+                                'tp_pct': _ou_er_pct,
+                                'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
+                                'expected_return_pct': _ou_er_pct,
                                 'confidence': _p['confidence'],
                                 'expected_return': _p['expected_return'],
                                 'strategy': f"{_mkt.lower()}_ou_cointegration_pair",

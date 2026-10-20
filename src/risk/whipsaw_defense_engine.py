@@ -28,10 +28,40 @@ cfg = DynamicConfig()
 class AntiWhipsawDefenseEngine:
     """Anti-Whipsaw Defense Engine for Chop Market Protection."""
 
-    def __init__(self):
+    def __init__(self, state_path: Optional[str] = None):
+        import os
+        from pathlib import Path
         self._consecutive_whipsaw_losses: int = 0
         self._cooldown_until_timestamp: float = 0.0
         self._loss_history_timestamps: List[float] = []
+        self._state_path = Path(state_path) if state_path else (Path(__file__).resolve().parent.parent.parent / 'results' / 'whipsaw_defense_state.json')
+        self._is_test = bool(os.environ.get('PYTEST_CURRENT_TEST') or os.environ.get('MERIDIAN_TEST_MODE') == '1')
+        if not self._is_test or state_path:
+            self._load_state()
+
+    def _load_state(self) -> None:
+        try:
+            import json
+            if self._state_path.exists():
+                d = json.loads(self._state_path.read_text(encoding='utf-8'))
+                self._consecutive_whipsaw_losses = int(d.get('consecutive_losses', 0) or 0)
+                self._cooldown_until_timestamp = float(d.get('cooldown_until', 0.0) or 0.0)
+                self._loss_history_timestamps = [float(x) for x in d.get('loss_history_timestamps', [])]
+        except Exception:
+            pass
+
+    def _save_state(self) -> None:
+        if self._is_test and 'results' in str(self._state_path):
+            return
+        try:
+            from src.utils.atomic_io import atomic_write_json
+            atomic_write_json(self._state_path, {
+                'consecutive_losses': self._consecutive_whipsaw_losses,
+                'cooldown_until': self._cooldown_until_timestamp,
+                'loss_history_timestamps': self._loss_history_timestamps[-50:],
+            })
+        except Exception:
+            pass
 
     def compute_kaufman_efficiency_ratio(self, prices: List[float], period: int = 20) -> float:
         """Kaufman Efficiency Ratio (KER) 연산.
@@ -92,6 +122,7 @@ class AntiWhipsawDefenseEngine:
             # 이익 청산 시 연속 손실 카운트 초기화
             self._consecutive_whipsaw_losses = 0
 
+        self._save_state()
         cooldown_active = now < self._cooldown_until_timestamp
         return {
             'consecutive_losses': self._consecutive_whipsaw_losses,

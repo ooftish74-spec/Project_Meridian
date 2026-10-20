@@ -198,3 +198,57 @@ def test_leverage_judge_macro_stabilization_exits_losing_inverse_in_bull_regime(
     assert exits[0]["ticker"] == "252670"
     assert "Macro 안정화" in exits[0]["reason"]
 
+
+def test_s3_track_c_blocks_inverse_in_caution_or_negative_1d_return():
+    """S3CrossAssetSleeve must never emit SQQQ/SOXS in 'caution' regime or when 1d return is negative."""
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+
+    sleeve = S3CrossAssetSleeve()
+    # 1) Caution regime -> SQQQ blocked even if 5d return is positive
+    sigs_caution = sleeve.generate_track_c_signals(
+        "caution",
+        {"spy_return_5d": -0.02, "sqqq_return_5d": 0.09, "sqqq_return_1d": 0.02},
+    )
+    assert all(s["ticker"] not in ("SQQQ", "SOXS") for s in sigs_caution)
+
+    # 2) Bear regime but 1d return is negative -> SQQQ blocked
+    sigs_neg_1d = sleeve.generate_track_c_signals(
+        "bear",
+        {"spy_return_5d": -0.02, "sqqq_return_5d": 0.09, "sqqq_return_1d": -0.015},
+    )
+    assert all(s["ticker"] != "SQQQ" for s in sigs_neg_1d)
+
+    # 3) Bear regime and both 5d and 1d returns are positive -> SQQQ allowed with tp_pct/sl_pct
+    sigs_bear_pos = sleeve.generate_track_c_signals(
+        "bear",
+        {"spy_return_5d": -0.02, "sqqq_return_5d": 0.09, "sqqq_return_1d": 0.025},
+    )
+    sqqq_sigs = [s for s in sigs_bear_pos if s["ticker"] == "SQQQ"]
+    assert len(sqqq_sigs) == 1
+    assert sqqq_sigs[0]["tp_pct"] > 0
+    assert sqqq_sigs[0]["sl_pct"] > 0
+
+
+def test_compute_dynamic_tp_sl_atr_unit_invariance():
+    """Passing atr_pct as decimal (0.015) or percentage (1.5) must produce identical closed-form barriers."""
+    import pytest
+    from src.utils.dynamic_quant_engine import get_quant_engine
+
+    dqe = get_quant_engine()
+    res_dec = dqe.compute_optimal_stopping_params("005930", regime="caution", price=70000.0, atr_pct=0.015)
+    res_pct = dqe.compute_optimal_stopping_params("005930", regime="caution", price=70000.0, atr_pct=1.5)
+    assert res_dec["sigma_daily_pct"] == pytest.approx(1.5, rel=1e-9)
+    assert res_pct["sigma_daily_pct"] == pytest.approx(1.5, rel=1e-9)
+    assert res_dec["min_holding_minutes"] == pytest.approx(res_pct["min_holding_minutes"], rel=1e-9)
+    assert res_dec["hard_sl_limit_pct"] == pytest.approx(res_pct["hard_sl_limit_pct"], rel=1e-9)
+
+
+def test_realtime_data_bus_skips_krx_endpoints_for_us_tickers():
+    """US tickers must immediately return None on KRX-only endpoints without tripping circuit breakers."""
+    from src.data_collection.realtime_data_bus import RealtimeDataBus
+
+    bus = RealtimeDataBus()
+    assert bus.get_orderbook("SQQQ") is None
+    assert bus.get_foreign_flow("NVDA") is None
+    assert bus.get_institutional_flow("SOXS") is None
+

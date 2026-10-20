@@ -361,6 +361,8 @@ class RealtimeDataBus:
                              'cumulative_5d': float}, quality=0~1)
             or None (캐시도 없음)
         """
+        if not str(ticker or '').strip().isdigit():
+            return None
         cache = self._caches['foreign_flow']
         cb = self._cbs['foreign_flow']
 
@@ -383,6 +385,8 @@ class RealtimeDataBus:
 
     def get_institutional_flow(self, ticker: str) -> Optional[DataPoint]:
         """기관 순매수 데이터 조회."""
+        if not str(ticker or '').strip().isdigit():
+            return None
         cache = self._caches['institutional_flow']
         cb = self._cbs['institutional_flow']
 
@@ -411,6 +415,8 @@ class RealtimeDataBus:
 
     def get_orderbook(self, ticker: str) -> Optional[DataPoint]:
         """호가잔량 조회."""
+        if not str(ticker or '').strip().isdigit():
+            return None
         cache = self._caches['orderbook']
         cb = self._cbs['orderbook']
 

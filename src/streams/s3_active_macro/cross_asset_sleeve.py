@@ -84,6 +84,25 @@ class S3CrossAssetSleeve:
                 pass
             return 0.0
 
+        def _get_live_1d_return(tk: str) -> float:
+            key_1d = f"{tk.lower()}_return_1d"
+            if key_1d in market_data:
+                return float(market_data.get(key_1d, 0.0) or 0.0)
+            try:
+                from pathlib import Path
+                import pandas as pd
+                pq_path = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'us_stocks' / 'prices' / f'{tk}.parquet'
+                if pq_path.exists():
+                    df = pd.read_parquet(pq_path)
+                    close_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if close_col and len(df) >= 2:
+                        s = df[close_col].dropna()
+                        if len(s) >= 2 and float(s.iloc[-2]) > 0:
+                            return float(s.iloc[-1]) / float(s.iloc[-2]) - 1.0
+            except Exception:
+                pass
+            return 0.0
+
         has_explicit_returns = ('spy_return_5d' in market_data) or ('sp500_return_5d' in market_data) or ('asset_returns' in market_data)
         signals = []
         if has_explicit_returns:
@@ -92,6 +111,10 @@ class S3CrossAssetSleeve:
             spy_return = _get_live_5d_return('SPY')
 
         for ticker, meta in cross_universe.items():
+            is_inv_hedge = (meta.get('category') == 'inverse_hedge')
+            if is_inv_hedge and regime not in ('bear', 'crash'):
+                continue
+
             key_ret = f"{ticker.lower()}_return_5d"
             if key_ret in market_data or (isinstance(market_data.get('asset_returns'), dict) and ticker in market_data['asset_returns']):
                 asset_ret = float(market_data.get(key_ret, market_data.get('asset_returns', {}).get(ticker, 0.0)) or 0.0)
@@ -101,8 +124,14 @@ class S3CrossAssetSleeve:
                 asset_ret = 0.0
             spread = asset_ret - spy_return
 
-            is_flight_to_quality = (regime in ['bear', 'crash', 'caution']) and (asset_ret > 0.0)
-            is_momentum_outperformance = spread >= spread_threshold and (meta.get('category') != 'inverse_hedge' or asset_ret > 0.0)
+            if is_inv_hedge:
+                ret_1d = _get_live_1d_return(ticker)
+                if ret_1d < 0.0:
+                    logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 당일/1일 수익률({ret_1d:+.2%}) 음수 전환 — 역방향 추격 매수 차단")
+                    continue
+
+            is_flight_to_quality = (regime in ['bear', 'crash'] if is_inv_hedge else regime in ['bear', 'crash', 'caution']) and (asset_ret > 0.0)
+            is_momentum_outperformance = spread >= spread_threshold and (not is_inv_hedge or asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
                 confidence = min(1.0, min_confidence + abs(spread) * 2.0)
@@ -112,6 +141,14 @@ class S3CrossAssetSleeve:
                 )
                 logger.info(f"  {reason}")
 
+                try:
+                    _barriers = _dqe.compute_dynamic_exit_barriers(ticker)
+                    _tp_pct = float(_barriers.get('take_profit_pct', max(2.0, abs(spread) * 100.0)))
+                    _sl_pct = abs(float(_barriers.get('stop_loss_pct', 1.5)))
+                except Exception:
+                    _tp_pct = round(max(2.0, abs(spread) * 100.0), 2)
+                    _sl_pct = 1.5
+
                 sig = {
                     'stream_id': 'S3_C',
                     'ticker': ticker,
@@ -119,6 +156,9 @@ class S3CrossAssetSleeve:
                     'direction': 'long',
                     'confidence': round(confidence, 3),
                     'size_pct': round(min(0.20, confidence * 0.15), 4),
+                    'tp_pct': round(_tp_pct, 2),
+                    'sl_pct': round(_sl_pct, 2),
+                    'expected_return_pct': round(_tp_pct, 2),
                     'strategy': 's3_cross_asset_momentum',
                     'category': meta['category'],
                     'market': 'US',

@@ -850,7 +850,6 @@ class ShadowPortfolioManager:
                         changed = True
                     if pnl_p != 0:
                         p['pnl_pct'] = pnl_p
-                        p['sl_pct'] = -1.15
                         changed = True
             elif diff > 0:
                 logger.critical(f"  🚨 [RECON] KIS 초과 수량 발견 (Zombie). {recon_key}에 {diff}주 (매수가=${avg_p}, 현재가=${cur_p}, PnL={pnl_p}%) 강제 편입!")
@@ -859,7 +858,6 @@ class ShadowPortfolioManager:
                     'entry_price': avg_p, 'avg_price': avg_p, 'current_price': cur_p,
                     'amount': (avg_p if avg_p > 0 else cur_p) * diff, 'market_value': cur_p * diff,
                     'unrealized_pnl': (cur_p - avg_p) * diff if avg_p > 0 and cur_p > 0 else 0.0, 'pnl_pct': pnl_p,
-                    'sl_pct': -1.15
                 }
                 changed = True
                 
@@ -3023,12 +3021,17 @@ class ShadowPortfolioManager:
         initial = self.data.get('initial_capital', 19600000.0)
         total_return = (nav - initial) / initial * 100 if initial > 0 else 0
 
-        # 일일 수익률 계산 — ★ 전일 스냅샷 기준 (같은 날 중복 update 시 정확도 보장)
+        # 일일 수익률 계산 — ★ 전일 스냅샷 기준 (같은 날 중복 update 시 정확도 보장, shadow↔broker 기준 전환 왜곡 차단)
         snapshots = self.data.get('daily_snapshots', [])
         today_str = _today()
+        curr_nav_source = self.data.get('nav_source', 'shadow')
         prev_nav = initial
         for s in reversed(snapshots):
             if s.get('date', '') != today_str:
+                s_source = s.get('nav_source')
+                if curr_nav_source == 'broker' and s_source is not None and s_source != 'broker':
+                    prev_nav = nav
+                    break
                 prev_nav = s.get('nav', initial)
                 break
         daily_return = (nav - prev_nav) / prev_nav * 100 if prev_nav > 0 else 0
@@ -3037,6 +3040,7 @@ class ShadowPortfolioManager:
             'date': _today(),
             'timestamp': datetime.now().isoformat(),
             'nav': nav,
+            'nav_source': curr_nav_source,
             'cash': self.data['cash'],
             'market_value': nav - self.data['cash'],
             'n_positions': len(self.positions),

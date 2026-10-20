@@ -28,7 +28,9 @@ cfg = DynamicConfig()
 class VolatilityDecayShield:
     """하드코딩 0% 동적 분위수 & Sigmoid 연속 스케일링 Choppiness 변동성 방어막."""
 
-    def __init__(self, period: int = 14, rolling_window_days: int = 60):
+    def __init__(self, period: int = 14, rolling_window_days: int = 60, state_path: Optional[str] = None):
+        import os
+        from pathlib import Path
         self.period = period
         self.rolling_window = rolling_window_days
         self.k_steepness = float(pget('decay_shield.k_steepness', 0.15))
@@ -38,6 +40,36 @@ class VolatilityDecayShield:
         self._mean_chop = 50.0
         self._q90_chop = 61.8
         self._q10_chop = 38.2
+        self._state_path = Path(state_path) if state_path else (Path(__file__).resolve().parent.parent.parent / 'results' / 'volatility_decay_shield_state.json')
+        self._is_test = bool(os.environ.get('PYTEST_CURRENT_TEST') or os.environ.get('MERIDIAN_TEST_MODE') == '1')
+        if not self._is_test or state_path:
+            self._load_state()
+
+    def _load_state(self) -> None:
+        try:
+            import json
+            if self._state_path.exists():
+                d = json.loads(self._state_path.read_text(encoding='utf-8'))
+                self._chop_history = [float(x) for x in d.get('chop_history') or []]
+                self._mean_chop = float(d.get('mean_chop') or self._mean_chop)
+                self._q90_chop = float(d.get('q90_chop') or self._q90_chop)
+                self._q10_chop = float(d.get('q10_chop') or self._q10_chop)
+        except Exception:
+            pass
+
+    def _save_state(self) -> None:
+        if self._is_test and 'results' in str(self._state_path):
+            return
+        try:
+            from src.utils.atomic_io import atomic_write_json
+            atomic_write_json(self._state_path, {
+                'chop_history': self._chop_history[-100:],
+                'mean_chop': self._mean_chop,
+                'q90_chop': self._q90_chop,
+                'q10_chop': self._q10_chop,
+            })
+        except Exception:
+            pass
 
     def compute_choppiness_index(
         self,
@@ -107,7 +139,9 @@ class VolatilityDecayShield:
         self._chop_history.append(chop)
         if len(self._chop_history) > 100:
             self._chop_history = self._chop_history[-100:]
+        if len(self._chop_history) >= self.period:
             self.update_rolling_quantiles(self._chop_history)
+        self._save_state()
 
         leverage_scale = self.compute_sigmoid_leverage_scale(chop)
         is_choppy = chop >= self._q90_chop

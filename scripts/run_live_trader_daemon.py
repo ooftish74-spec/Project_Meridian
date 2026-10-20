@@ -116,9 +116,12 @@ def main():
             is_kr_trading = cal.is_trading_day(today_str)
             is_kr_session = is_kr_trading and ((now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30))
 
-            # Lever 3: US 장 확장 관제 (월~금 야간 18:00~24:00 KST 및 화~토 새벽 00:00~06:00 KST)
+            # Lever 3: US 장 확장 관제 (월~금 야간 18:00~24:00 KST 및 화~토 새벽 정규장 종료 시각까지: EDT 05:00 / EST 06:00 KST)
+            from src.utils.market_calendar import get_us_market_open_time
+            _us_open_h_chk, _ = get_us_market_open_time()
+            _us_close_h_chk = 5 if _us_open_h_chk == 22 else 6
             is_us_evening = (now.weekday() in (0, 1, 2, 3, 4)) and (now.hour >= 18)
-            is_us_morning = (now.weekday() in (1, 2, 3, 4, 5)) and (now.hour < 6)
+            is_us_morning = (now.weekday() in (1, 2, 3, 4, 5)) and (now.hour < _us_close_h_chk)
             is_us_session = is_us_evening or is_us_morning
 
             from scripts.daily_pipeline import run_pipeline
@@ -449,17 +452,21 @@ def main():
                                 if _tk in main._exit_orders_in_flight:
                                     logger.info(f"  ⏳ [Exit In-Flight Cooldown] {_tk} 매도 주문 이미 접수 진행 중 ({_now_ts - main._exit_orders_in_flight[_tk]:.0f}s 전) ➔ 중복 발주 차단")
                                     continue
-                                _exit_orders.append(_eo)
-                                main._exit_orders_in_flight[_tk] = _now_ts
-                                if _eo.get('exit_type') in ('scale_out_50pct', 'time_decay_exit'):
-                                    ledger_mgr.mark_scaled_out(str(_tk))
                                 _ex_pnl = float(_exit_positions.get(f"LIVE_SSOT:{_tk}", {}).get('unrealized_pnl_pct', 0.0) or 0.0)
-                                ledger_mgr.record_daily_exit(str(_tk), _eo.get('reason', 'IntradayExit'), today_str, realized_pnl_pct=_ex_pnl)
+                                _eo['pnl_pct'] = _ex_pnl
+                                _exit_orders.append(_eo)
 
                             if _exit_orders:
                                 logger.warning(f"  🚨 [Intraday Exit Triggered] {len(_exit_orders)}건 손절/청산 신호 발화 ➔ 즉시 실계좌 시장가 매도 집행!")
                                 _exec = ExecutionEngine(mode='live')
-                                _exec.execute(_exit_orders)
+                                _exec_res = _exec.execute(_exit_orders)
+                                _filled_tks = {str(_f.get('ticker')) for _f in getattr(_exec_res, 'fills', [])}
+                                for _eo in _exit_orders:
+                                    _tk = str(_eo.get('ticker'))
+                                    if _tk in _filled_tks or getattr(_exec_res, 'n_filled', 0) > 0:
+                                        main._exit_orders_in_flight[_tk] = _now_ts
+                                        if _eo.get('exit_type') in ('scale_out_50pct', 'time_decay_exit'):
+                                            ledger_mgr.mark_scaled_out(_tk)
                     except Exception as _exit_err:
                         logger.error(f"  ❌ [Intraday Exit Scanner] 예외 발생: {_exit_err}", exc_info=True)
 
@@ -570,25 +577,26 @@ def main():
                                         if _tk_us in main._exit_orders_in_flight:
                                             logger.info(f"  ⏳ [US Exit In-Flight Cooldown] {_tk_us} 매도 주문 이미 접수 진행 중 ({_now_us_ts - main._exit_orders_in_flight[_tk_us]:.0f}s 전) ➔ 중복 발주 차단")
                                             continue
-                                        main._exit_orders_in_flight[_tk_us] = _now_us_ts
-                                        try:
-                                            from src.execution.position_ledger import PositionLedgerManager
-                                            PositionLedgerManager().record_daily_exit(
-                                                str(_tk_us),
-                                                eo.get('reason', 'US Night Trailing Stop'),
-                                                today_str,
-                                                realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
-                                            )
-                                        except Exception:
-                                            pass
                                         logger.info(f"  🚨 [US Trailing Stop] {_tk_us} 손절/익절 청산 주문 송출: {eo['quantity']}주 @ ${eo['price']:.2f}")
-                                        _adapter.sell(
+                                        _us_sell_fill = _adapter.sell(
                                             ticker=_tk_us,
                                             quantity=eo['quantity'],
                                             price=eo['price'],
                                             order_type='limit',
                                             notes=eo.get('reason', 'US Night Trailing Stop')
                                         )
+                                        if getattr(_us_sell_fill, 'status', '') in ('filled', 'submitted', 'partially_filled', 'filled_market_fallback'):
+                                            main._exit_orders_in_flight[_tk_us] = _now_us_ts
+                                            try:
+                                                from src.execution.position_ledger import PositionLedgerManager
+                                                PositionLedgerManager().record_daily_exit(
+                                                    str(_tk_us),
+                                                    eo.get('reason', 'US Night Trailing Stop'),
+                                                    today_str,
+                                                    realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
+                                                )
+                                            except Exception:
+                                                pass
                             except Exception as _ex_err:
                                 logger.debug(f"  US Trailing Stop 평가 예외: {_ex_err}")
 

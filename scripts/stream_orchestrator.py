@@ -154,18 +154,46 @@ def _compute_asset_daily_volatility(
             atr_val = float(sc[atr_key] or 0.0)
             if atr_val > 0:
                 logger.debug(f"[Phase 51 vol] {ticker}: ATR proxy {atr_val:.3f}%")
-                return atr_val / 100.0  # % → 소수 변환
+                return atr_val / 100.0 if atr_val > 0.5 else atr_val
+
+        # ④ DynamicQuantEngine 실측 20일 변동성 (로컬 Parquet OHLCV 기반)
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _m_vol = float(get_quant_engine().get_asset_metrics(str(ticker)).get('vol_daily', 0.0) or 0.0)
+        if 0.001 <= _m_vol <= 0.30:
+            logger.debug(f"[Phase 51 vol] {ticker}: DynamicQuantEngine vol={_m_vol*100:.3f}%")
+            return _m_vol
 
     except Exception as _vol_e:
         logger.error(f"[Phase 51 vol] {ticker} 변동성 계산 실패: {_vol_e}", exc_info=True)
 
     logger.debug(f"[Phase 51 vol] {ticker} → fallback {fallback*100:.1f}%")
     return fallback
+
+
 class StreamOrchestrator:
     """4-Stream 통합 오케스트레이터.
 
     모든 컴포넌트를 조율하여 하나의 매매 사이클을 실행합니다.
     """
+
+    def _is_ticker_session_open_for_live_exit(self, ticker: str, market_data: Dict = None) -> bool:
+        """라이브 모드에서 현재 해당 종목의 거래소가 개장(거래 가능) 상태인지 판별.
+        단위 테스트(MERIDIAN_TEST_MODE / PYTEST_CURRENT_TEST) 및 shadow 모드에서는 항상 True 반환."""
+        if getattr(self, 'exec_mode', 'shadow') != 'live':
+            return True
+        if os.environ.get('MERIDIAN_TEST_MODE') == '1' or os.environ.get('PYTEST_CURRENT_TEST'):
+            return True
+        if isinstance(market_data, dict) and market_data.get('disable_session_gate'):
+            return True
+        try:
+            from src.utils.market_calendar import is_ticker_tradable_now
+            clean_tk = str(ticker or '').split(':')[-1].strip()
+            if not clean_tk:
+                return True
+            is_open, _ = is_ticker_tradable_now(clean_tk)
+            return bool(is_open)
+        except Exception:
+            return True
 
     def __init__(self, exec_mode: str = None):
         if exec_mode is None:
@@ -392,6 +420,19 @@ class StreamOrchestrator:
                             else:
                                 _amt_krw = _qty_h * _cp_h
                         _ret_h = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
+                        _hwm_orch = {}
+                        _ed_orch = h.get('entry_date')
+                        try:
+                            from src.execution.position_ledger import PositionLedgerManager
+                            _plm_orch = PositionLedgerManager()
+                            if self._is_ticker_session_open_for_live_exit(t, market_data):
+                                _hwm_orch = _plm_orch.update_hwm(t, current_price=_cp_h, current_pnl_pct=_ret_h) or {}
+                            else:
+                                _hwm_orch = _plm_orch.get_hwm(t) or {}
+                            if not _ed_orch:
+                                _ed_orch = _plm_orch.get_entry_date(t)
+                        except Exception:
+                            pass
                         positions[t] = {
                             'ticker': t,
                             'name': h.get('name', t),
@@ -404,6 +445,10 @@ class StreamOrchestrator:
                             'unrealized_pnl_pct': _ret_h,
                             'pnl_pct': _ret_h,
                             'return_pct': _ret_h,
+                            'peak_pnl_pct': float(_hwm_orch.get('peak_pnl_pct', h.get('peak_pnl_pct', _ret_h)) or _ret_h),
+                            'peak_price': float(_hwm_orch.get('peak_price', h.get('peak_price', _cp_h)) or _cp_h),
+                            'trail_activated': bool(_hwm_orch.get('trail_activated', h.get('trail_activated', False))),
+                            'entry_date': _ed_orch or h.get('entry_date'),
                             'market': h.get('market', 'US' if _is_us_h else 'KR')
                         }
                         if _fx_deg_h:
@@ -1814,6 +1859,8 @@ class StreamOrchestrator:
                         ledger_mgr = PositionLedgerManager()
                         kp = json.loads(kp_path.read_text(encoding='utf-8'))
                         for t, h in kp.get('holdings', {}).items():
+                            if not self._is_ticker_session_open_for_live_exit(t, market_data):
+                                continue
                             curr_p = float(h.get('current_price', 0.0))
                             curr_ret = float(h.get('return_pct', 0.0))
                             hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
@@ -1825,8 +1872,8 @@ class StreamOrchestrator:
                                 _h_mins = 1440.0
                             else:
                                 try:
-                                    _c_dt = datetime.fromisoformat(str(hwm_data.get('created_at', '')))
-                                    _h_mins = max(0.0, (datetime.now() - _c_dt).total_seconds() / 60.0)
+                                    _c_dt = datetime.fromisoformat(str(hwm_data.get('created_at', '')).replace('Z', '+00:00')).replace(tzinfo=None)
+                                    _h_mins = max(0.0, (datetime.now().replace(tzinfo=None) - _c_dt).total_seconds() / 60.0)
                                 except Exception:
                                     _h_mins = 0.0
                             all_positions[f"LIVE_SSOT:{t}"] = {
@@ -1878,7 +1925,7 @@ class StreamOrchestrator:
         logger.info("  📋 Step 9: ExecutionEngine 체결")
         # 🎯 [Risk Dominance Gate & Sunk-Cost Exponential Decay Re-Entry Hurdle]:
         # 1) 현 사이클에서 즉시 청산(매도)되는 종목은 동시 매수 충돌을 차단하고,
-        # 2) 당일 이전에 청산된 종목은 고정 '자정까지 무조건 금지' 대신 매몰비용·변동성 지수감쇠 허들(H_reentry)을 초과하는 기대수익 신호만 통과!
+        # 2) 당일 이전에 실제 체결/접수되어 청산된 종목은 매몰비용·변동성 지수감쇠 허들(H_reentry)을 초과하는 기대수익 신호만 통과!
         exit_tickers = {
             str(o['ticker']).upper() for o in (exit_orders + dynamic_exit_orders)
             if o.get('ticker') and (o.get('action') == 'sell' or o.get('direction') in ('short', 'sell'))
@@ -1888,13 +1935,6 @@ class StreamOrchestrator:
             try:
                 from src.execution.position_ledger import PositionLedgerManager
                 _plm = PositionLedgerManager()
-                for _eo_rec in (exit_orders + dynamic_exit_orders):
-                    if _eo_rec.get('ticker') and (_eo_rec.get('action') == 'sell' or _eo_rec.get('direction') in ('short', 'sell')):
-                        _plm.record_daily_exit(
-                            str(_eo_rec['ticker']),
-                            str(_eo_rec.get('reason', 'OrchestratorExit')),
-                            realized_pnl_pct=float(_eo_rec.get('pnl_pct', _eo_rec.get('unrealized_pnl_pct', 0.0)) or 0.0),
-                        )
                 same_day_exit_details = _plm.get_daily_exit_details()
             except Exception:
                 pass
@@ -2395,7 +2435,7 @@ class StreamOrchestrator:
 
         # [L4 Upgrade] Task 1: 시그널 증발 버그 복구 — S1/S2/S3/S5 시그널 순회 및 주문 생성
         # (S4는 Advisory 전용: 자동 주문 제외)
-        _meta_keys = ['tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days']
+        _meta_keys = ['tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days', 'expected_return_pct', 'expected_return', 'expected_value']
         
         # [Phase 46 BugFix] PositionSizer(EV/SNR 허들) 연결 누락 복구
         try:
@@ -2705,6 +2745,26 @@ class StreamOrchestrator:
             if isinstance(positions, list):
                 positions = {p.get('ticker', f"pos_{i}"): p for i, p in enumerate(positions) if isinstance(p, dict)}
 
+            if getattr(self, 'exec_mode', 'live') == 'live' and positions:
+                try:
+                    from src.execution.position_ledger import PositionLedgerManager
+                    _ledger_enrich = PositionLedgerManager()
+                    for _pk_e, _pv_e in list(positions.items()):
+                        if isinstance(_pv_e, dict):
+                            _tk_e = str(_pv_e.get('ticker', _pk_e.split(':')[-1] if ':' in str(_pk_e) else _pk_e)).strip()
+                            if _tk_e and ('peak_pnl_pct' not in _pv_e or 'entry_date' not in _pv_e):
+                                _hwm_e = _ledger_enrich.get_hwm(_tk_e)
+                                _cp_e = float(_pv_e.get('current_price', 0.0) or 0.0)
+                                _cr_e = float(_pv_e.get('unrealized_pnl_pct', _pv_e.get('pnl_pct', 0.0)) or 0.0)
+                                _pv_e.setdefault('peak_pnl_pct', max(_cr_e, float(_hwm_e.get('peak_pnl_pct', _cr_e) or _cr_e)))
+                                _pv_e.setdefault('peak_price', max(_cp_e, float(_hwm_e.get('peak_price', _cp_e) or _cp_e)))
+                                _pv_e.setdefault('trail_activated', bool(_hwm_e.get('trail_activated', False)))
+                                _ed_e = _ledger_enrich.get_entry_date(_tk_e)
+                                if _ed_e:
+                                    _pv_e.setdefault('entry_date', _ed_e)
+                except Exception:
+                    pass
+
             _explicit_exit_map = {}
             for _esid, _esigs in (getattr(self, '_latest_signals', None) or {}).items():
                 for _es in (_esigs or []):
@@ -2759,6 +2819,9 @@ class StreamOrchestrator:
                 _pos_ticker_up = str(_pos_ticker).split(':')[-1].upper()
 
                 if pos.get('quantity', pos.get('qty', 0)) <= 0:
+                    continue
+
+                if not self._is_ticker_session_open_for_live_exit(_pos_ticker_up, market_data):
                     continue
 
                 # ── S10 등 스트림 명시적 Exit 시그널(direction='exit') 우선 점검 ──
@@ -2935,7 +2998,13 @@ class StreamOrchestrator:
 
         # --- ETF Tracking Logic (Delegated to LeverageJudge) ---
         try:
-            etf_exits = self.leverage_judge.check_etf_stops(positions, market_data, regime=regime)
+            _tradable_pos = {
+                k: v for k, v in positions.items()
+                if self._is_ticker_session_open_for_live_exit(
+                    (v.get('ticker', k) if isinstance(v, dict) else k), market_data
+                )
+            } if isinstance(positions, dict) else positions
+            etf_exits = self.leverage_judge.check_etf_stops(_tradable_pos, market_data, regime=regime)
             if etf_exits:
                 for eo in etf_exits:
                     # Prevent duplicates if already exited
@@ -2978,6 +3047,7 @@ class StreamOrchestrator:
                 p for p in pos_list
                 if isinstance(p, dict) and p.get('quantity', p.get('qty', 0)) > 0
                 and str(p.get('stream_id')) not in ('S1', 'S2', 'S5', 'S_BETA', 'BETA', 'S_YIELD')
+                and self._is_ticker_session_open_for_live_exit(p.get('ticker', ''), None)
             ]
             
             if dd_action == 'force_sell_bottom_20':
@@ -3004,6 +3074,7 @@ class StreamOrchestrator:
                         'strategy': 'dd_overlay_force_sell',
                         'reason': f"DD Stage 1: 수익률 하위 {n_sell}종목 강제 청산",
                         'sell_type': 'force_sell',
+                        'urgency': 3,
                         'pos_key': f"{t.get('stream_id', 'S0')}:{t['ticker']}"
                     })
                 logger.warning(f"    🚨 DD Stage 1: 하위 {force_sell_ratio:.0%} ({n_sell}개) 강제 청산")

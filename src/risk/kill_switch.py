@@ -88,7 +88,7 @@ class KillSwitch:
                 self._last_clear_alert_time = _d.get('last_clear_alert_time', 0)
                 for k, v in _d.get('last_alert_times', {}).items():
                     try:
-                        self._last_alert_times[k] = datetime.fromisoformat(v)
+                        self._last_alert_times[k] = datetime.fromisoformat(v).replace(tzinfo=None)
                     except Exception as _e0:
                         logger.critical(f"  [kill_switch] 시각 파싱 (비치명적): {_e0}", exc_info=True)
         except Exception as e:
@@ -107,7 +107,7 @@ class KillSwitch:
         """
         try:
             _RESULTS.mkdir(parents=True, exist_ok=True)
-            _mine = {k: v.isoformat() for k, v in self._last_alert_times.items()}
+            _mine = {k: v.replace(tzinfo=None).isoformat() for k, v in self._last_alert_times.items()}
             _my_clear = getattr(self, '_last_clear_alert_time', 0)
             _reset = bool(getattr(self, '_reset_pending', False))
 
@@ -117,7 +117,7 @@ class KillSwitch:
                 for k, v in _mine.items():
                     old = merged_times.get(k)
                     try:
-                        if old is None or datetime.fromisoformat(v) >= datetime.fromisoformat(old):
+                        if old is None or datetime.fromisoformat(v).replace(tzinfo=None) >= datetime.fromisoformat(old).replace(tzinfo=None):
                             merged_times[k] = v
                     except Exception:
                         merged_times[k] = v
@@ -137,7 +137,7 @@ class KillSwitch:
             # 다른 프로세스가 기록한 더 최근 알림 시각을 메모리에도 반영 (쿨다운 일관성)
             for k, v in (new_state.get('last_alert_times') or {}).items():
                 try:
-                    self._last_alert_times[k] = datetime.fromisoformat(v)
+                    self._last_alert_times[k] = datetime.fromisoformat(v).replace(tzinfo=None)
                 except Exception:
                     pass
             self._reset_pending = False
@@ -167,6 +167,30 @@ class KillSwitch:
                 return daily_returns
             _sp = _json.loads(_sp_file.read_text())
             _snaps = _sp.get('daily_snapshots', [])
+            if len(_snaps) >= 2:
+                _prev_s = _snaps[-2]
+                _curr_s = _snaps[-1]
+                _curr_src = _curr_s.get('nav_source') or _sp.get('nav_source', 'shadow')
+                _prev_src = _prev_s.get('nav_source')
+                _basis_mismatch = (_curr_src == 'broker' and _prev_src is not None and _prev_src != 'broker')
+                if not _basis_mismatch and _curr_src == 'broker' and _prev_src is None:
+                    try:
+                        _kp_file = _RESULTS / 'kis_portfolio.json'
+                        if _kp_file.exists():
+                            _kp_d = _json.loads(_kp_file.read_text())
+                            _kp_hwm = float(_kp_d.get('hwm', 0.0) or _kp_d.get('initial_capital', 0.0) or 0.0)
+                            _prev_nav_val = float(_prev_s.get('nav', 0.0) or 0.0)
+                            if _kp_hwm > 0 and _prev_nav_val > _kp_hwm * 1.015:
+                                _basis_mismatch = True
+                    except Exception:
+                        pass
+                if _basis_mismatch:
+                    logger.warning(
+                        f"  [KillSwitch] ⚠️ Shadow→Broker NAV 기준점 전환 감지 "
+                        f"(prev_nav={_prev_s.get('nav')}, curr_nav={_curr_s.get('nav')}) "
+                        f"— 가짜 일간 수익률({daily_returns[-1] * 100:.2f}%) 필터링"
+                    )
+                    return daily_returns[:-1]
             snap_dates = []
             for s in _snaps:
                 d = s.get('date') or s.get('timestamp', '')[:10]

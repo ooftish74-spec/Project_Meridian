@@ -79,6 +79,9 @@ class IntradayCapitalRouter:
 
             ev_adj = self.compute_ev_adj(win_rate, tp, sl, atr_pct)
             sig_copy = dict(sig)
+            sig_copy.setdefault('tp_pct', round(tp, 4))
+            sig_copy.setdefault('sl_pct', round(sl, 4))
+            sig_copy.setdefault('expected_return_pct', round(tp, 4))
             sig_copy['ev_adj'] = ev_adj
             ranked.append(sig_copy)
 
@@ -471,6 +474,17 @@ class IntradayCapitalRouter:
                         else:
                             _mapped_us = _KR_TO_US_INVERSE_MAP.get(ticker)
                         if _mapped_us:
+                            try:
+                                from src.execution.position_ledger import PositionLedgerManager
+                                _exited_map = PositionLedgerManager().get_daily_exit_details()
+                                if _mapped_us[0].upper() in _exited_map:
+                                    logger.info(
+                                        f"  🛑 [Cross-Market Inverse Bridge Veto] {ticker} ➔ {_mapped_us[0]}: "
+                                        f"당일 {_mapped_us[0]} 이미 청산됨 ({_exited_map[_mapped_us[0].upper()].get('reason')}) — 브릿지 재진입 차단"
+                                    )
+                                    continue
+                            except Exception:
+                                pass
                             logger.info(f"  🌐 [Cross-Market Inverse Bridge] KRX 휴장 & US 개장 감지: {ticker} ➔ {_mapped_us[0]} ({_mapped_us[1]}) 자동 전환")
                             ticker = _mapped_us[0]
                             sig['name'] = _mapped_us[1]

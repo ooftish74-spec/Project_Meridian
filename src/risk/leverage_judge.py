@@ -28,6 +28,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
         return fallback
 import logging
 import math
+import os
 from datetime import datetime
 from typing import Any, Dict, List
 from config.dynamic_config import DynamicConfig
@@ -306,6 +307,11 @@ class LeverageJudge:
                 state['entry_date'] = saved_entry_date
 
             pnl_pct = (current_price / entry_price - 1) * 100
+            if ledger_mgr is not None and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                try:
+                    ledger_mgr.update_hwm(ticker, current_price=state['hwm'], current_pnl_pct=pnl_pct)
+                except Exception:
+                    pass
             drawdown_from_hwm = (state['hwm'] - current_price) / state['hwm'] * 100 if state['hwm'] > 0 else 0
             try:
                 import pandas as pd
