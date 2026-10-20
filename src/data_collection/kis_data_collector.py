@@ -914,13 +914,13 @@ class KISDataCollector:
         return f"101{y_code}{m_code}000"
 
     def get_night_futures_close(self) -> Optional[float]:
-        """KOSPI 야간선물(KRX) 당월물 최종 등락률 1회성(REST) 수집."""
+        """KOSPI 야간선물(KRX/CME 'CM') 당월물 최종 등락률 1회성(REST) 수집."""
         from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
         front_code = DynamicFuturesContractResolver.get_current_front_month_code()
         ticker = DynamicFuturesContractResolver.to_kis_code(front_code)
         url = f"{self._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
-        data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': ticker})
-        data_rep = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
+        data = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'CM', 'FID_INPUT_ISCD': ticker})
+        data_rep = self._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'CM', 'FID_INPUT_ISCD': '10100000'})
         
         merged_data = {}
         if data_rep:

@@ -118,8 +118,12 @@ class OvernightIntelligenceScore:
         return result
 
     def _score_kospi_intraday(self) -> Dict:
-        """KOSPI 장중 모멘텀 점수."""
+        """KOSPI 장중 모멘텀 점수 (09:00 KST 정규장 개장 전에는 전일 종가 잔상 배제)."""
         try:
+            from datetime import time as _dt_time
+            now_time = datetime.now().time()
+            if now_time < _dt_time(9, 0):
+                return {'score': None, 'detail': 'before KRX regular open (09:00 KST)'}
             sc_path = self.results_dir / 'signal_cache.json'
             if sc_path.exists():
                 sc = json.loads(sc_path.read_text())
@@ -129,21 +133,25 @@ class OvernightIntelligenceScore:
                     return {'score': round(score, 1), 'detail': f"KOSPI {kospi_chg:+.2f}%", 'status': 'OK'}
         except Exception as _e:
             logger.warning('kospi_intraday skip: %s', _e)
-        return {'score': 50.0, 'detail': 'no data'}
+        return {'score': None, 'detail': 'no data'}
 
     def _score_nxt_premarket(self) -> Dict:
-        """장전 동호가/프리마켓(08:00~09:00 KST) 호가 잔량 및 프리마켓 체결가(삼성전자/SK하이닉스/KODEX200) 모멘텀 점수."""
+        """장전 동시호가/프리마켓(08:00~09:00 KST) 호가 잔량 및 프리마켓 체결가(삼성전자/SK하이닉스/KODEX200) 모멘텀 점수."""
+        from datetime import time as _dt_time
+        now_time = datetime.now().time()
+        if now_time < _dt_time(8, 0):
+            return {'score': None, 'detail': 'outside premarket window (08:00-09:00 KST)'}
         try:
             sc_path = self.results_dir / 'signal_cache.json'
             sc = json.loads(sc_path.read_text()) if sc_path.exists() else {}
             pa = sc.get('premarket_auction', {})
+            pa_ts = pa.get('timestamp', pa.get('updated_at', ''))
             gap = pa.get('disparity_pct', sc.get('krx_premarket_gap_pct'))
             if gap is not None and isinstance(gap, (int, float)):
-                score = float(np.clip(50.0 + float(gap) * (50.0 / 2.0), 10.0, 90.0))
-                return {'score': round(score, 1), 'detail': f"Premarket Gap {gap:+.2f}%", 'status': 'OK'}
+                if not pa_ts or str(pa_ts)[:10] == datetime.now().strftime('%Y-%m-%d'):
+                    score = float(np.clip(50.0 + float(gap) * (50.0 / 2.0), 10.0, 90.0))
+                    return {'score': round(score, 1), 'detail': f"Premarket Gap {gap:+.2f}%", 'status': 'OK'}
 
-            from datetime import time as _dt_time
-            now_time = datetime.now().time()
             if _dt_time(8, 0) <= now_time <= _dt_time(15, 30):
                 from src.data_collection.kis_data_collector import KISDataCollector
                 kis = KISDataCollector()
@@ -160,14 +168,13 @@ class OvernightIntelligenceScore:
                     avg_gap = float(sum(gaps) / len(gaps))
                     score = float(np.clip(50.0 + avg_gap * (50.0 / 2.0), 10.0, 90.0))
                     return {'score': round(score, 1), 'detail': f"NXT Premarket/Leader Avg {avg_gap:+.2f}%", 'gap_pct': round(avg_gap, 3), 'status': 'OK'}
+            ois_ts = str((sc.get('ois_details') or {}).get('timestamp', ''))
             prev_nxt = (sc.get('ois_details') or {}).get('components', {}).get('nxt_premarket', {})
-            if isinstance(prev_nxt, dict) and isinstance(prev_nxt.get('score'), (int, float)):
+            if ois_ts[:10] == datetime.now().strftime('%Y-%m-%d') and isinstance(prev_nxt, dict) and isinstance(prev_nxt.get('score'), (int, float)):
                 return prev_nxt
         except Exception as _e:
             logger.warning('nxt_premarket score skip: %s', _e)
             
-        from datetime import time as _dt_time
-        now_time = datetime.now().time()
         if _dt_time(8, 0) <= now_time <= _dt_time(9, 0):
             return {'score': None, 'detail': 'premarket auction pending (08:00-09:00 KST)'}
         return {'score': None, 'detail': 'outside premarket window (08:00-09:00 KST)'}

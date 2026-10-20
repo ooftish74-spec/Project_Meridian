@@ -1537,6 +1537,13 @@ class MarketDataBridge:
                             data[_chg1d_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-2] - 1.0) * 100.0), 2)
                         if not data.get(_chg1m_k) and len(cs_u) >= 21:
                             data[_chg1m_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-21] - 1.0) * 100.0), 2)
+            # Legacy alias 키(spx_change_1d, ixic_change_1d, soxx_change_1d)를 최신 1D 변동률과 강제 동기화 (과거 잔상 오염 차단)
+            if data.get('sp500_change_1d') is not None:
+                data['spx_change_1d'] = data['sp500_change_1d']
+            if data.get('nasdaq_change_1d') is not None:
+                data['ixic_change_1d'] = data['nasdaq_change_1d']
+            if data.get('sox_change_1d') is not None:
+                data['soxx_change_1d'] = data['sox_change_1d']
             # us10y & vix_change_1d / 1m & us_regime / cross_asset_direction 자동 보강
             _mf = data.get('macro_features') if isinstance(data.get('macro_features'), dict) else {}
             if not data.get('us10y') and _mf.get('dgs10'):

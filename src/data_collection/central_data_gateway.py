@@ -257,25 +257,28 @@ class CentralDataGateway:
                 except Exception:
                     pass
 
-        # Tier 1: KIS OpenAPI Direct Query for KRX Night Futures (F202612 / 101V12)
+        # Tier 1: KIS OpenAPI Direct Query for KRX Night Futures (FID_COND_MRKT_DIV_CODE='CM')
         try:
             from src.data_collection.kis_data_collector import KISDataCollector, parse_kis_futures_output
             from src.data_collection.futures_contract_resolver import DynamicFuturesContractResolver
             kis = KISDataCollector()
             front_code = DynamicFuturesContractResolver.get_current_front_month_code()
             kis_code = DynamicFuturesContractResolver.to_kis_code(front_code)
-            
-            url = f"{kis._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
-            data_rep = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
-            data_specific = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': kis_code})
 
-            # 1. Extract KIS Futures quote from output1 (F 202612 / 10100000)
-            # Note: output2 is KOSPI composite index (0001) and output3 is KOSPI200 cash index (2001), NOT night futures!
+            url = f"{kis._base_url}/uapi/domestic-futureoption/v1/quotations/inquire-price"
+            # ★ 'CM' = KRX/Eurex 야간선물 시장 분류 코드 ('F'는 주간선물 전용)
+            cm_rep = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'CM', 'FID_INPUT_ISCD': '10100000'})
+            cm_specific = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'CM', 'FID_INPUT_ISCD': kis_code})
+
             o1 = {}
-            for d_cand in [data_rep, data_specific]:
-                if d_cand and isinstance(d_cand.get('output1'), dict) and d_cand['output1'].get('futs_prpr'):
-                    o1 = d_cand['output1']
-                    break
+            for d_cand in [cm_rep, cm_specific]:
+                if d_cand and isinstance(d_cand.get('output1'), dict):
+                    cand_o1 = d_cand['output1']
+                    if float(cand_o1.get('futs_prpr') or 0.0) > 0 and int(float(cand_o1.get('acml_vol') or 0)) > 0:
+                        o1 = cand_o1
+                        break
+                    elif float(cand_o1.get('futs_prpr') or 0.0) > 0 and not o1:
+                        o1 = cand_o1
 
             fut_price = 0.0
             daytime_price = 0.0
@@ -284,7 +287,8 @@ class CentralDataGateway:
             if o1:
                 try:
                     fut_price = float(o1.get('futs_prpr') or 0.0)
-                    daytime_price = float(o1.get('futs_prdy_clpr') or o1.get('futs_sdpr') or 0.0)
+                    # ★ 야간선물(CM)의 기준가(futs_sdpr)가 당일 주간선물 종가이며, futs_prdy_clpr는 전일 야간선물 종가임
+                    daytime_price = float(o1.get('futs_sdpr') or o1.get('futs_prdy_clpr') or 0.0)
                     raw_vrss = float(o1.get('futs_prdy_vrss') or 0.0)
                     raw_ctrt = float(o1.get('futs_prdy_ctrt') or 0.0)
                     sign_code = str(o1.get('prdy_vrss_sign', '3'))
@@ -294,11 +298,13 @@ class CentralDataGateway:
                 except (ValueError, TypeError):
                     pass
 
-            if daytime_price <= 0.0 and data_rep and isinstance(data_rep.get('output3'), dict):
-                try:
-                    daytime_price = float(data_rep['output3'].get('bstp_nmix_prpr') or 0.0)
-                except (ValueError, TypeError):
-                    daytime_price = 0.0
+            if daytime_price <= 0.0:
+                data_day = kis._call(url, 'FHMIF10000000', {'FID_COND_MRKT_DIV_CODE': 'F', 'FID_INPUT_ISCD': '10100000'})
+                if data_day and isinstance(data_day.get('output1'), dict):
+                    try:
+                        daytime_price = float(data_day['output1'].get('futs_prpr') or data_day['output1'].get('futs_sdpr') or 0.0)
+                    except (ValueError, TypeError):
+                        daytime_price = 0.0
 
             if existing_night and existing_night.get('close', 0) > 0 and str(existing_night.get('source', '')) == 'KRX_Night_Session':
                 fut_price = float(existing_night['close'])
