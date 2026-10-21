@@ -177,19 +177,18 @@ class S14SectorPairStream(BaseStream):
                 _sc_us = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
                 _vix_us = float((market_data or {}).get('vix') or _sc_us.get('vix', 20.0) or 20.0)
                 _ois_us = float((market_data or {}).get('ois') or _sc_us.get('ois', 50.0) or 50.0)
-                _reg_us = str((market_data or {}).get('regime', 'caution')).lower() if isinstance(market_data, dict) else 'caution'
+                _reg_us = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
                 _vix_caut_lim = float(_dqe_s14.get_vix_regime_quantiles()['caution'])
                 _ois_bull_lim = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _us_inv_map = {'semi': 'SOXS', 'tech': 'PSQ', 'SOXX': 'SOXS', 'XLK': 'PSQ'}
-                for order in us_pair_res.get('pair_orders', []):
+                _us_inv_blocked = (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull'
+                for order in (us_pair_res.get('pair_orders', []) if not _us_inv_blocked else []):
                     t_dir = order.get('direction', 'long').lower()
                     ticker = order['ticker']
                     action = order.get('action', 'buy').lower()
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or action in ('sell', 'buy_inverse')
                     
                     if is_inv_hedge:
-                        if (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull':
-                            continue
                         sec_key = str(order.get('sector', '')).lower()
                         if ticker in ('SH', 'PSQ', 'SOXS', 'SQQQ'):
                             ticker_to_trade = ticker
@@ -216,6 +215,8 @@ class S14SectorPairStream(BaseStream):
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': ticker_to_trade,
+                        'pair_id': order.get('pair_id', ''),
+                        'pair_partner': order.get('pair_partner', ''),
                         'name': f"US Pair {order['sector'].upper()} ({leg_label})",
                         'direction': direction_to_trade,
                         'action': action_to_trade,
@@ -261,20 +262,22 @@ class S14SectorPairStream(BaseStream):
                 _ois_kr = float((market_data or {}).get('ois') or _sc_kr.get('ois', 50.0) or 50.0)
                 _vix_caut_kr = float(_dqe_kr.get_vix_regime_quantiles()['caution'])
                 _ois_bull_kr = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
-                for order in kr_pair_res.get('pair_orders', []):
+                _reg_kr = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
+                _kr_inv_blocked = (_vix_kr < _vix_caut_kr and _ois_kr >= _ois_bull_kr) or _reg_kr == 'bull'
+                for order in (kr_pair_res.get('pair_orders', []) if not _kr_inv_blocked else []):
                     t_dir = order.get('direction', 'long').lower()
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or order.get('action') in ('sell', 'buy_inverse')
                     
                     if is_inv_hedge:
-                        if _vix_kr < _vix_caut_kr and _ois_kr >= _ois_bull_kr:
-                            continue  # VIX 안정 + 강세 반등 구간에서는 Step 4.7 인버스 강제청산 및 지수 롱 상쇄 방지를 위해 인버스 헤지 생략
                         trade_ticker = _kr_1x_inv
                         trade_dir = 'long'      # 인버스를 매수하므로 현물 계좌 주문 방향은 long
                         leg_label = 'INVERSE_HEDGE'
+                        partner_tk = order.get('pair_partner', '')
                     else:
                         trade_ticker = order['ticker']
                         trade_dir = 'long'
                         leg_label = 'LONG'
+                        partner_tk = _kr_1x_inv
 
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_kr, 4)
                     try:
@@ -287,6 +290,8 @@ class S14SectorPairStream(BaseStream):
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': trade_ticker,
+                        'pair_id': order.get('pair_id', ''),
+                        'pair_partner': partner_tk,
                         'name': f"KR Pair {order['sector'].upper()} ({leg_label})",
                         'direction': trade_dir,
                         'action': 'buy',
@@ -302,31 +307,65 @@ class S14SectorPairStream(BaseStream):
                     })
 
         # ── 4. Ornstein-Uhlenbeck 평균회귀 반감기 기반 무하드코딩 동적 공적분 페어 보강 ──
-        if not signals:
+        _reg_all = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
+        if not signals and _reg_all not in ('bull', 'momentum_surge'):
             try:
                 from src.utils.dynamic_quant_engine import get_quant_engine
                 _dqe = get_quant_engine()
-                for _mkt, _noise in (('KR', noise_kr), ('US', noise_us)):
-                    for _p in _dqe.discover_stat_arb_pairs(_mkt, max_pairs=1):
-                        if abs(_p['z_score']) >= active_spread_threshold:
-                            _ou_er_pct = round(max(1.5, float(_p.get('expected_return', 0.025) or 0.025) * 100.0), 2)
-                            signals.append({
-                                'stream_id': self.stream_id,
-                                'ticker': _p['long_ticker'],
-                                'name': f"{_mkt} StatArb {_p['long_ticker']}/{_p['short_ticker']} (LONG)",
-                                'direction': 'long',
-                                'action': 'buy',
-                                'size_pct': round(0.08 * _noise, 4),
-                                'tp_pct': _ou_er_pct,
-                                'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
-                                'expected_return_pct': _ou_er_pct,
-                                'confidence': _p['confidence'],
-                                'expected_return': _p['expected_return'],
-                                'strategy': f"{_mkt.lower()}_ou_cointegration_pair",
-                                'reason': f"[S14 OU StatArb] {_p['pair_id']} Z={_p['z_score']:+.2f} (HalfLife={_p['half_life']:.1f}d, ρ={_p['corr']:.2f})",
-                                'spread_z': abs(_p['z_score']),
-                                'timestamp': pd.Timestamp.now().isoformat()
-                            })
+                _sc_ou = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
+                _vix_ou = float((market_data or {}).get('vix') or _sc_ou.get('vix', 20.0) or 20.0)
+                _ois_ou = float((market_data or {}).get('ois') or _sc_ou.get('ois', 50.0) or 50.0)
+                _vix_caut_ou = float(_dqe.get_vix_regime_quantiles()['caution'])
+                _ois_bull_ou = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
+                if not (_vix_ou < _vix_caut_ou and _ois_ou >= _ois_bull_ou):
+                    for _mkt, _noise in (('KR', noise_kr), ('US', noise_us)):
+                        _inv_list_ou = _dqe.get_inverse_hedge_tickers(_mkt)
+                        if not _inv_list_ou:
+                            continue
+                        _inv_tk_ou = _inv_list_ou[-1]
+                        for _p in _dqe.discover_stat_arb_pairs(_mkt, max_pairs=1):
+                            if abs(_p['z_score']) >= active_spread_threshold:
+                                _ou_er_pct = round(max(1.5, float(_p.get('expected_return', 0.025) or 0.025) * 100.0), 2)
+                                _pid_ou = str(_p.get('pair_id') or f"{_mkt}_OU_{_p['long_ticker']}_{_inv_tk_ou}")
+                                _sz_ou = round(0.08 * _noise, 4)
+                                signals.append({
+                                    'stream_id': self.stream_id,
+                                    'ticker': _p['long_ticker'],
+                                    'pair_id': _pid_ou,
+                                    'pair_partner': _inv_tk_ou,
+                                    'name': f"{_mkt} StatArb {_p['long_ticker']}/{_inv_tk_ou} (LONG)",
+                                    'direction': 'long',
+                                    'action': 'buy',
+                                    'size_pct': _sz_ou,
+                                    'tp_pct': _ou_er_pct,
+                                    'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
+                                    'expected_return_pct': _ou_er_pct,
+                                    'confidence': _p['confidence'],
+                                    'expected_return': _p['expected_return'],
+                                    'strategy': f"{_mkt.lower()}_ou_cointegration_pair",
+                                    'reason': f"[S14 OU StatArb] {_pid_ou} Z={_p['z_score']:+.2f} (HalfLife={_p['half_life']:.1f}d, ρ={_p['corr']:.2f})",
+                                    'spread_z': abs(_p['z_score']),
+                                    'timestamp': pd.Timestamp.now().isoformat()
+                                })
+                                signals.append({
+                                    'stream_id': self.stream_id,
+                                    'ticker': _inv_tk_ou,
+                                    'pair_id': _pid_ou,
+                                    'pair_partner': _p['long_ticker'],
+                                    'name': f"{_mkt} StatArb {_p['long_ticker']}/{_inv_tk_ou} (INVERSE_HEDGE)",
+                                    'direction': 'long',
+                                    'action': 'buy',
+                                    'size_pct': _sz_ou,
+                                    'tp_pct': _ou_er_pct,
+                                    'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
+                                    'expected_return_pct': _ou_er_pct,
+                                    'confidence': _p['confidence'],
+                                    'expected_return': _p['expected_return'],
+                                    'strategy': f"{_mkt.lower()}_ou_cointegration_pair",
+                                    'reason': f"[S14 OU StatArb Hedge] {_pid_ou} Z={_p['z_score']:+.2f} (HalfLife={_p['half_life']:.1f}d, ρ={_p['corr']:.2f})",
+                                    'spread_z': abs(_p['z_score']),
+                                    'timestamp': pd.Timestamp.now().isoformat()
+                                })
             except Exception as _ou_e:
                 logger.debug(f"  [S14 OU StatArb] 동적 페어 탐색 참고: {_ou_e}")
 

@@ -2248,14 +2248,29 @@ def _us_phase_window_check(phase_name: str) -> bool:
             logger.info(f"  [Phase 41] US 본장 세션 외 (KST {_now.strftime('%H:%M')} / ET {_ny.strftime('%H:%M')}, DST={_is_dst}, half={_half}) → skip")
             return False
         
-        # [Rate Limit & Cadence Guard] 60초 쿨다운을 적용하여 데몬의 무한 5초 루프 API 낭비 방지
+        # [DST Dual-Trigger Idempotency Guard]
+        # systemd 타이머가 22:30 KST(EDT 개장)와 23:25 KST(EST 개장) 두 OnCalendar를 모두 가질 때,
+        # 서머타임(EDT) 기간에는 22:30(09:30 EDT)에 1회 실행 후 23:25(10:25 EDT) 재발화를 당일 NY 거래일 락으로 차단.
+        import os as _os
         import time as _t
         _last_reg_ts = getattr(_us_phase_window_check, '_last_regular_ts', 0.0)
         _now_ts = _t.time()
         if _now_ts - _last_reg_ts < 60.0:
             return False
+        if not _os.environ.get('PYTEST_CURRENT_TEST') and _os.environ.get('MERIDIAN_TEST_MODE') != '1':
+            _lock_dir = _PROJECT_ROOT / str(_cfg.get('us.idempotency_lock_dir', 'logs'))
+            _lock_dir.mkdir(parents=True, exist_ok=True)
+            _ny_date_str = _ny.strftime('%Y%m%d')
+            _reg_lock = _lock_dir / f'us_regular_{_ny_date_str}.lock'
+            if _reg_lock.exists():
+                logger.info(
+                    f"  [Phase 41] US 본장(regular) 당일({_ny_date_str} ET) 이미 실행 완료 "
+                    f"(KST {_now.strftime('%H:%M')} / ET {_ny.strftime('%H:%M')}) → 중복 트리거 skip"
+                )
+                return False
+            _reg_lock.write_text(f'executed_at={_now.isoformat()} ny={_ny.isoformat()}\n', encoding='utf-8')
         _us_phase_window_check._last_regular_ts = _now_ts
-        
+
         logger.info(f"  [Phase 41] US 본장 세션 가동 허가 (now={_now.strftime('%H:%M')})")
         return True
 

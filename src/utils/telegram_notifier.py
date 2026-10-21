@@ -50,10 +50,11 @@ class TelegramNotifier:
             payload = {
                 "chat_id": self.chat_id,
                 "text": message,
-                "parse_mode": "Markdown"
             }
+            if message.count("_") % 2 == 0 and message.count("*") % 2 == 0 and message.count("`") % 2 == 0:
+                payload["parse_mode"] = "Markdown"
             response = requests.post(url, json=payload, timeout=5)
-            if response.status_code == 400:
+            if response.status_code == 400 and "parse_mode" in payload:
                 # ★ Wave 1: Markdown 파싱 실패(예: 'daily_loss'의 '_') → 평문으로 재전송.
                 #   2026-10-19 킬스위치 발동 알림이 이 오류로 유실됨.
                 logger.warning(f"  ⚠️ 텔레그램 Markdown 거부(400) → 평문 재전송: {response.text[:160]}")

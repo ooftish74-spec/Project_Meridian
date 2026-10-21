@@ -156,3 +156,42 @@ def test_stream_positions_and_performance(stream):
     assert perf['stream_id'] == 'S14_PAIR_ALPHA'
     assert 'win_rate' in perf
     assert 'sharpe' in perf
+
+
+def test_atomic_pair_metadata_and_bull_guard_suppression(stream):
+    market_data = {
+        'qqq_ker': 0.20,
+        'kospi_ker': 0.25,
+        'vix': 22.0,
+        'us_sector_returns': {
+            'semi': 0.04,
+            'tech': 0.02,
+            'energy': -0.02,
+            'consumer_stap': -0.03
+        },
+        'us_volatility_map': {
+            'semi': 0.28,
+            'tech': 0.22,
+            'energy': 0.20,
+            'consumer_stap': 0.14
+        }
+    }
+    # In caution/high-VIX, pairs should be emitted in complete 2-leg pairs with matching pair_id & mutual pair_partner
+    signals_caution = stream.generate_signals(regime='caution', market_data=market_data)
+    assert len(signals_caution) >= 2
+    assert len(signals_caution) % 2 == 0
+    by_pair = {}
+    for s in signals_caution:
+        pid = s.get('pair_id')
+        assert pid
+        by_pair.setdefault(pid, []).append(s)
+    for pid, legs in by_pair.items():
+        assert len(legs) == 2
+        assert legs[0]['pair_partner'] == legs[1]['ticker']
+        assert legs[1]['pair_partner'] == legs[0]['ticker']
+
+    # In bull regime or low VIX (< 18), if the inverse hedge leg is suppressed, the entire pair must be suppressed (0 orphaned legs)
+    market_data_low_vix = dict(market_data, vix=14.0)
+    signals_bull = stream.generate_signals(regime='bull', market_data=market_data_low_vix)
+    assert len(signals_bull) == 0
+

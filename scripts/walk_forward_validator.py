@@ -58,6 +58,11 @@ class WalkForwardValidator:
         # 앙상블 모델 로드
         try:
             import pickle
+            try:
+                import sklearn._loss._loss as _sk_loss
+                sys.modules.setdefault('_loss', _sk_loss)
+            except Exception:
+                pass
             model_path = _MODEL_DIR / 'stock_ranker_ensemble.pkl'
             if not model_path.exists():
                 result['reason'] = '모델 미존재'

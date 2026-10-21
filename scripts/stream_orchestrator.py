@@ -1235,6 +1235,8 @@ class StreamOrchestrator:
             for _sid, _sigs in all_signals.items():
                 if _sid in ('S0', 'S4', 'S5', 'S_YIELD'):
                     continue
+                if float(weights.get(_sid, 0.0) or 0.0) <= 0.0:
+                    continue
                 for _s in _sigs:
                     _tk = str(_s.get('ticker', '')).strip()
                     if (
@@ -1246,16 +1248,17 @@ class StreamOrchestrator:
                     ):
                         _candidate_sigs.append(_s)
 
-            # Step 3: 자본 스왑 라우팅 집행 (기존 최저 EV 보유자산 매도 + 신규 매수 주문 쌍 생성)
-            _avail_cash = float(portfolio.get('cash', 0.0) or 0.0)
-            _swap_orders = _router.route_intraday_capital(_candidate_sigs, market_data, total_cash_krw=_avail_cash, portfolio=portfolio, enforce_session_gate=True)
+            # Step 3: 자본 스왑 라우팅 집행 (기존 최저 EV 보유자산 매도 대금으로만 신규 고EV 자산 교체 매수 — 미배정 현금 임의 집행 차단)
+            _swap_orders = _router.route_intraday_capital(_candidate_sigs, market_data, total_cash_krw=0.0, portfolio=portfolio, enforce_session_gate=True)
             
             if _swap_orders:
                 _swap_sells = [o for o in _swap_orders if o.get('direction') == 'sell' or o.get('action') == 'sell']
                 _swap_buys = [o for o in _swap_orders if o.get('direction') in ('buy', 'long') or o.get('action') == 'buy']
-                if _swap_sells or _swap_buys:
+                if _swap_sells and _swap_buys:
                     orders = _swap_sells + orders + _swap_buys
                     logger.info(f"    🔄 [Cross-Asset Alpha Swap] 자본 교체 매매: 매도 {len(_swap_sells)}건, 매수 {len(_swap_buys)}건 병합")
+                elif _swap_buys and not _swap_sells:
+                    logger.info(f"    🛡️ [Cross-Asset Alpha Swap] 매도 대상 없는 단독 매수 {len(_swap_buys)}건 병합 차단 (정규 예산 규율 보호)")
         except Exception as _swap_err:
             logger.error(f"    ❌ Cross-Asset Alpha Swap 실행 실패: {_swap_err}", exc_info=True)
 
@@ -1884,8 +1887,8 @@ class StreamOrchestrator:
                                 'entry_price': h.get('avg_price', 0.0),
                                 'current_price': curr_p,
                                 'unrealized_pnl_pct': curr_ret,
-                                'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
-                                'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
+                                'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
+                                'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
                                 'trail_activated': bool(hwm_data.get('trail_activated', False)),
                                 'holding_minutes': _h_mins,
                                 'market': h.get('market', 'KR' if t.isdigit() else 'US')
@@ -2024,6 +2027,11 @@ class StreamOrchestrator:
                 logger.warning(f"  ⚠️ [Order Normalize] {ticker}: 방향 미상 action='{raw_action}' direction='{raw_direction}' → 주문 제외 (추측 금지)")
                 continue
 
+            # [Session Gate] 폐장 세션(야간 US 장중 국내 KR 종목 매수 등) 주문이 Final Gate S5 / CRO를 오염시키는 현상 차단
+            if action == 'buy' and not self._is_ticker_session_open_for_live_exit(ticker, market_data):
+                logger.debug(f"    ⏭️ [Session Gate] {ticker}: 현재 거래 세션 외 신규 매수 주문 스킵")
+                continue
+
             price = float(o.get('price', 0.0))
             qty = int(o.get('quantity', 0))
             amount_krw = float(o.get('amount_krw', 0.0))
@@ -2146,9 +2154,9 @@ class StreamOrchestrator:
                 netted_val_krw = final_price * abs(net_qty)
 
             # 소액 잔챙이 주문 차단 (신규 매수 주문에만 적용 — 매도/손절은 100% 집행 보장)
-            # US 종목의 경우 최소 1주 이상이며 $50 USD 이상이면 정상 집행 허용, Min-Lot Sweep 또는 a3.min_trade_amount 이상도 허용
+            # US 종목의 경우 정규 1주 이상(abs(net_qty) >= 1) 주문은 단가가 $50 미만(예: SOXS $43, PSQ $25)이어도 1주 최소 단위로 정상 집행 허용 (페어 헤지 레그 절삭 방지)
             _min_trade_cfg = float(pget('a3.min_trade_amount', 10000) or 200_000)
-            effective_min_val = (50.0 * _net_fx) if is_us_net else min(min_order_krw, _min_trade_cfg)
+            effective_min_val = (min(50.0, final_price) * _net_fx) if (is_us_net and abs(net_qty) >= 1) else ((50.0 * _net_fx) if is_us_net else min(min_order_krw, _min_trade_cfg))
             _is_min_lot = any(bo.get('_min_lot_sweep') for bo in ndata['buy_orders'])
             if final_action == 'buy' and final_price > 0 and netted_val_krw < effective_min_val and not _is_min_lot:
                 logger.info(f"    🛑 [Order Netting Drop] {ticker}: 신규 매수 상계 금액(₩{netted_val_krw:,.0f}) < ₩{effective_min_val:,.0f} 미달 스킵")
@@ -2159,6 +2167,13 @@ class StreamOrchestrator:
                 'stream_id': dominant_stream_id,
                 'contributing_streams': contributing_streams,
                 'ticker': ticker,
+                'pair_id': sample_order.get('pair_id', ''),
+                'pair_partner': sample_order.get('pair_partner', ''),
+                'pair_partners': [
+                    str(_do.get('pair_partner', '')).strip().upper()
+                    for _do in (dominant_orders or [])
+                    if _do.get('pair_partner')
+                ],
                 'action': final_action,
                 'direction': 'long' if final_action == 'buy' else 'short',
                 'quantity': abs(net_qty),
@@ -2175,6 +2190,31 @@ class StreamOrchestrator:
 
         # ── ★ Wave 0 Final Gate (S2 Exit-Only + S5 Global Cash Constraint) ──
         exec_orders = self._apply_final_execution_gate(exec_orders, portfolio, market_data)
+
+        # ── ★ [Atomic Pair Integrity Guard] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
+        _active_buy_tks = {
+            str(_eo.get('ticker', '')).strip().upper()
+            for _eo in exec_orders
+            if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
+        }
+        _atomic_filtered = []
+        for _eo in exec_orders:
+            _partners = [p for p in (_eo.get('pair_partners') or []) if p]
+            if not _partners and _eo.get('pair_partner'):
+                _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
+            if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
+                _active_partners = [
+                    p for p in _partners
+                    if p in _active_buy_tks or _held_qty_by_ticker.get(p, 0) > 0
+                ]
+                if not _active_partners:
+                    logger.warning(
+                        f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 미체결/절삭 감지 "
+                        f"→ 반쪽짜리 방향성 노출 방지를 위해 단독 레그 매수 기각"
+                    )
+                    continue
+            _atomic_filtered.append(_eo)
+        exec_orders = _atomic_filtered
 
         # ── Step 9.1: Global Cross-Venue Netting & Dark Pool RPI Routing ──
         try:
@@ -2436,7 +2476,7 @@ class StreamOrchestrator:
 
         # [L4 Upgrade] Task 1: 시그널 증발 버그 복구 — S1/S2/S3/S5 시그널 순회 및 주문 생성
         # (S4는 Advisory 전용: 자동 주문 제외)
-        _meta_keys = ['tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days', 'expected_return_pct', 'expected_return', 'expected_value']
+        _meta_keys = ['tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days', 'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner']
         
         # [Phase 46 BugFix] PositionSizer(EV/SNR 허들) 연결 누락 복구
         try:
@@ -2730,8 +2770,8 @@ class StreamOrchestrator:
                         'amount': float(h.get('qty', 0)) * curr_p,
                         'unrealized_pnl_pct': curr_ret,
                         'pnl_pct': curr_ret,
-                        'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
-                        'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
+                        'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
+                        'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
                         'trail_activated': bool(hwm_data.get('trail_activated', False)),
                         'market': h.get('market', 'KR')
                     }
@@ -2757,8 +2797,10 @@ class StreamOrchestrator:
                                 _hwm_e = _ledger_enrich.get_hwm(_tk_e)
                                 _cp_e = float(_pv_e.get('current_price', 0.0) or 0.0)
                                 _cr_e = float(_pv_e.get('unrealized_pnl_pct', _pv_e.get('pnl_pct', 0.0)) or 0.0)
-                                _pv_e.setdefault('peak_pnl_pct', max(_cr_e, float(_hwm_e.get('peak_pnl_pct', _cr_e) or _cr_e)))
-                                _pv_e.setdefault('peak_price', max(_cp_e, float(_hwm_e.get('peak_price', _cp_e) or _cp_e)))
+                                _hwm_pk_pnl = float(_hwm_e['peak_pnl_pct']) if _hwm_e.get('peak_pnl_pct') is not None else _cr_e
+                                _hwm_pk_px = float(_hwm_e['peak_price']) if (_hwm_e.get('peak_price') or 0.0) > 0 else _cp_e
+                                _pv_e.setdefault('peak_pnl_pct', max(_cr_e, _hwm_pk_pnl))
+                                _pv_e.setdefault('peak_price', max(_cp_e, _hwm_pk_px))
                                 _pv_e.setdefault('trail_activated', bool(_hwm_e.get('trail_activated', False)))
                                 _ed_e = _ledger_enrich.get_entry_date(_tk_e)
                                 if _ed_e:

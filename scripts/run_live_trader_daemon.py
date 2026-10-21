@@ -423,9 +423,9 @@ def main():
                                     'entry_price': _avg,
                                     'current_price': _cp,
                                     'unrealized_pnl_pct': _ret,
-                                    'peak_pnl_pct': float(_hwm.get('peak_pnl_pct', _ret) or _ret),
-                                    'peak_price': float(_hwm.get('peak_price', _cp) or _cp),
-                                    'lowest_price': float(_hwm.get('lowest_price', _cp) or _cp),
+                                    'peak_pnl_pct': float(_hwm['peak_pnl_pct']) if _hwm.get('peak_pnl_pct') is not None else _ret,
+                                    'peak_price': float(_hwm['peak_price']) if (_hwm.get('peak_price') or 0.0) > 0 else _cp,
+                                    'lowest_price': float(_hwm['lowest_price']) if (_hwm.get('lowest_price') or 0.0) > 0 else _cp,
                                     'scaled_out': bool(_hwm.get('scaled_out', False)),
                                     'trail_activated': bool(_hwm.get('trail_activated', False)),
                                     'holding_days': float(_hold_days),
@@ -600,11 +600,11 @@ def main():
                             except Exception as _ex_err:
                                 logger.debug(f"  US Trailing Stop 평가 예외: {_ex_err}")
 
-                        # 3. [Time-Bounded Re-Peg Loop] 미체결 주문 포착 시 실시간 매도호가 정정 감시 (3.0초 쿨다운 적용)
+                        # 3. [Time-Bounded Re-Peg Loop] 미체결 주문 포착 시 실시간 매도호가 정정 감시 (3.0초 쿨다운 + 최소 10초 거래소 접수 대기)
                         if not hasattr(main, '_last_repeg_time'):
                             main._last_repeg_time = 0.0
                         if time.time() - main._last_repeg_time >= 3.0:
-                            _adapter.check_and_repeg_unexecuted_orders()
+                            _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0)
                             main._last_repeg_time = time.time()
                     except Exception as _swee:
                         logger.debug(f"  [Auto-Sweep/RePeg] 이벤트 스윕 및 정정 예외: {_swee}")

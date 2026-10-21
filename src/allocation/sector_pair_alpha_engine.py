@@ -200,8 +200,11 @@ class SectorPairAlphaEngine:
             conf_strong = float(0.5 * (1.0 + math.erf(abs(strong_z) / math.sqrt(2))))
             conf_weak = float(0.5 * (1.0 + math.erf(abs(weak_z) / math.sqrt(2))))
 
+            pair_id = f"{long_ticker}_{short_ticker}"
             pair_orders.append({
                 'ticker': long_ticker,
+                'pair_id': pair_id,
+                'pair_partner': short_ticker,
                 'sector': strong_sec,
                 'direction': 'long',
                 'action': 'buy',
@@ -212,6 +215,8 @@ class SectorPairAlphaEngine:
             })
             pair_orders.append({
                 'ticker': short_ticker,
+                'pair_id': pair_id,
+                'pair_partner': long_ticker,
                 'inverse_ticker': short_ticker,
                 'underlying_short_ticker': underlying_short_ticker,
                 'sector': weak_sec,

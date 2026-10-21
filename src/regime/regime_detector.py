@@ -383,9 +383,9 @@ class RegimeDetector:
         if vix_history and len(vix_history) >= 20:
             vix_history_clean = [v for v in vix_history if v is not None and (not np.isnan(v))]
             if len(vix_history_clean) >= 20:
-                vix_bull = np.percentile(vix_history_clean, 60)
-                vix_caution = np.percentile(vix_history_clean, 85)
-                vix_bear = np.percentile(vix_history_clean, 95)
+                vix_bull = max(15.0, float(np.percentile(vix_history_clean, 60)))
+                vix_caution = max(20.0, float(np.percentile(vix_history_clean, 85)))
+                vix_bear = max(25.0, float(np.percentile(vix_history_clean, 95)))
             else:
                 vix_bull = pget('regime.vix_bull_threshold', 18)
                 vix_caution = pget('regime.vix_caution_threshold', 25)

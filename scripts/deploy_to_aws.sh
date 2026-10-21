@@ -89,8 +89,8 @@ fi
 echo "[2/6] Creating remote backup..."
 BACKUP_FILE="$REMOTE_BACKUP_DIR/deploy_${TS}_pre_${GIT_SHA}.tgz"
 "${SSH[@]}" "set -e; mkdir -p '$REMOTE_BACKUP_DIR'; cd '$REMOTE_DIR'; \
-  tar czf '$BACKUP_FILE' --exclude='__pycache__' --exclude='*.lock' src scripts config tests dashboard results \
-    \$(ls -d requirements.txt pytest.ini Makefile DEPLOYED_VERSION 2>/dev/null); \
+  tar --warning=no-file-changed -czf '$BACKUP_FILE' --exclude='__pycache__' --exclude='*.lock' src scripts config tests dashboard results \
+    \$(ls -d requirements.txt pytest.ini Makefile DEPLOYED_VERSION 2>/dev/null) || [ \$? -eq 1 ]; \
   tar tzf '$BACKUP_FILE' > /dev/null; \
   ls -1t '$REMOTE_BACKUP_DIR'/deploy_*.tgz | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f; \
   echo \"  backup: \$(du -h '$BACKUP_FILE' | cut -f1) $BACKUP_FILE\""

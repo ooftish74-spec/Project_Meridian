@@ -35,7 +35,17 @@ class FastCorrector:
         """
         if not self.is_fitted:
             return np.zeros(len(X))
-        return self.model.predict(X)
+        X_arr = np.asarray(X, dtype=float)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(1, -1)
+        n_in = getattr(self.model, 'n_features_in_', None)
+        if n_in is not None:
+            if X_arr.shape[1] > n_in:
+                X_arr = X_arr[:, :n_in]
+            elif X_arr.shape[1] < n_in:
+                pad = np.zeros((X_arr.shape[0], n_in - X_arr.shape[1]), dtype=float)
+                X_arr = np.hstack([X_arr, pad])
+        return self.model.predict(X_arr)
 
     def save(self, path: Path):
         if self.is_fitted:

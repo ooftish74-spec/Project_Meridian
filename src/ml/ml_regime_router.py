@@ -71,6 +71,12 @@ class MLRegimeRouter:
             logger.debug(f"  [MLRegimeRouter] {regime} 모델 파일 없음: {model_file.name} → 통합 앙상블 fallback 사용")
             return None
         try:
+            import sys
+            try:
+                import sklearn._loss._loss as _sk_loss
+                sys.modules.setdefault('_loss', _sk_loss)
+            except Exception:
+                pass
             with open(model_file, 'rb') as f:
                 model = pickle.load(f)
             self._models[regime] = model
@@ -79,6 +85,17 @@ class MLRegimeRouter:
         except Exception as e:
             logger.warning(f"  [MLRegimeRouter] {regime} 모델 로드 실패: {e}")
             return None
+
+    @staticmethod
+    def _align_features(X: np.ndarray, model: object) -> np.ndarray:
+        n_in = getattr(model, 'n_features_in_', None)
+        if n_in is not None:
+            if X.shape[1] > n_in:
+                return X[:, :n_in]
+            if X.shape[1] < n_in:
+                pad = np.zeros((X.shape[0], n_in - X.shape[1]), dtype=X.dtype)
+                return np.hstack([X, pad])
+        return X
 
     def predict(self, features: np.ndarray, regime: str='caution', feature_names: Optional[List[str]]=None) -> float:
         """레짐 특화 모델로 예측 스코어 반환.
@@ -101,10 +118,11 @@ class MLRegimeRouter:
         model = self._load_model_for_regime(regime)
         if model is not None:
             try:
+                X_in = self._align_features(X_clean, model)
                 if hasattr(model, 'predict_proba'):
-                    prob = float(model.predict_proba(X_clean)[0, 1])
+                    prob = float(model.predict_proba(X_in)[0, 1])
                 elif hasattr(model, 'predict'):
-                    prob = float(model.predict(X_clean)[0])
+                    prob = float(model.predict(X_in)[0])
                 else:
                     prob = 0.5
                 logger.debug(f"  [MLRegimeRouter] {regime.upper()} 모델 예측: {prob:.4f}")
@@ -138,8 +156,7 @@ class MLRegimeRouter:
                 try:
                     m = joblib.load(mp)
                     if hasattr(m, 'predict_proba'):
-                        n_features = getattr(m, 'n_features_in_', X.shape[1])
-                        X_in = X[:, :n_features] if X.shape[1] >= n_features else X
+                        X_in = self._align_features(X, m)
                         X_in_clean = np.nan_to_num(X_in, nan=0.0)
                         p = float(m.predict_proba(X_in_clean)[0, 1])
                         preds.append(p)
@@ -173,10 +190,11 @@ class MLRegimeRouter:
         model = self._load_model_for_regime(regime)
         if model is not None:
             try:
+                X_in = self._align_features(X_clean, model)
                 if hasattr(model, 'predict_proba'):
-                    return model.predict_proba(X_clean)[:, 1]
+                    return model.predict_proba(X_in)[:, 1]
                 elif hasattr(model, 'predict'):
-                    return model.predict(X_clean).astype(float)
+                    return model.predict(X_in).astype(float)
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)

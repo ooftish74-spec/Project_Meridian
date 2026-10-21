@@ -182,7 +182,7 @@ class USStockCollector:
                         import requests
                         fred_key = CredentialManager().read_from_env('FRED_API_KEY')
                         if fred_key:
-                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&api_key={fred_key}&file_type=json"
+                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=VIXCLS&observation_start={start_str}&api_key={fred_key}&file_type=json"
                             resp = requests.get(url, timeout=10).json()
                             if 'observations' in resp:
                                 records = []
@@ -197,6 +197,13 @@ class USStockCollector:
                                     source = "FRED (Fallback)"
                     except Exception as e:
                         logger.debug(f"FRED fetch failed for ^VIX: {e}")
+                if not source and (self.prices_dir / f'{ticker}.parquet').exists():
+                    try:
+                        df_cached = pd.read_parquet(self.prices_dir / f'{ticker}.parquet')
+                        if not df_cached.empty:
+                            source = "Local Parquet Cache (Fallback)"
+                    except Exception:
+                        pass
                         
             elif ticker == 'KRW=X':
                 # USD/KRW: AV FX_DAILY (Primary) -> FDR (Fallback)
@@ -216,7 +223,7 @@ class USStockCollector:
                         logger.debug(f"FDR fetch failed for KRW=X: {e}")
                         
             elif ticker == '^TNX':
-                # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> FRED (Fallback)
+                # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> FRED (Fallback) -> Local Cache
                 df_av = None
                 try:
                     from src.data_collection.alt_sources.alphavantage_econ import collect_econ_indicator_daily_ohlcv
@@ -231,7 +238,7 @@ class USStockCollector:
                         import requests
                         fred_key = CredentialManager().read_from_env('FRED_API_KEY')
                         if fred_key:
-                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key={fred_key}&file_type=json"
+                            url = f"https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&observation_start={start_str}&api_key={fred_key}&file_type=json"
                             resp = requests.get(url, timeout=10).json()
                             if 'observations' in resp:
                                 records = []
@@ -246,6 +253,13 @@ class USStockCollector:
                                     source = "FRED (Fallback)"
                     except Exception as e:
                         logger.debug(f"FRED fetch failed for ^TNX: {e}")
+                if not source and (self.prices_dir / f'{ticker}.parquet').exists():
+                    try:
+                        df_cached = pd.read_parquet(self.prices_dir / f'{ticker}.parquet')
+                        if not df_cached.empty:
+                            source = "Local Parquet Cache (Fallback)"
+                    except Exception:
+                        pass
                         
             elif ticker == 'CL=F':
                 # WTI Crude: AV WTI (Primary)

@@ -171,14 +171,16 @@ class IntradayCapitalRouter:
                         break
                     continue
 
-                # 조건 2: 역방향 ETF 상충 (정적 매핑 + 경험적 베타 부호 반대 β1 * β2 <= -0.75)
+                # 조건 2: 역방향 ETF 상충 (정적 매핑 + 동일 주식군 내 경험적 베타 부호 반대 β1 * β2 <= -0.75 & 주가지수 상관곱 ρ1 * ρ2 <= -0.55)
+                # 비주식 안전자산(금/채권/원자재 등 safe_havens/cash_equivalents 또는 상관 약한 자산)은 주식 인버스와 다중자산 헤지이므로 제외
                 _m1 = _dqe.get_asset_metrics(t1)
                 _m2 = _dqe.get_asset_metrics(t2)
-                _same_mkt = (t1.isalpha() == t2.isalpha())
+                _non_eq = _dqe.get_cash_equivalent_tickers() | set((_dqe._classifications or {}).get('safe_havens', set()))
+                _same_mkt = (t1.isalpha() == t2.isalpha()) and (t1 not in _non_eq) and (t2 not in _non_eq)
                 _beta_conflict = (
                     _same_mkt
                     and (_m1.get('beta', 1.0) * _m2.get('beta', 1.0) <= -0.75)
-                    and (_m1.get('corr', 0.5) * _m2.get('corr', 0.5) <= -0.45)
+                    and (_m1.get('corr', 0.0) * _m2.get('corr', 0.0) <= -0.55)
                 )
                 inverse_conflict = ((self.INVERSE_PAIR_MAP.get(t1) == t2) or _beta_conflict) and (side1 == 'buy' and side2 == 'buy')
 
@@ -197,10 +199,10 @@ class IntradayCapitalRouter:
                             continue
 
                     # 확신도 및 요청 자본에 기반한 유효 노출(Exposure) 연산
-                    has_amt1 = 'amount_krw' in s1 or 'target_amount' in s1
-                    has_amt2 = 'amount_krw' in s2 or 'target_amount' in s2
-                    amt1 = float(s1.get('amount_krw', s1.get('target_amount', 1.0)) or 1.0)
-                    amt2 = float(s2.get('amount_krw', s2.get('target_amount', 1.0)) or 1.0)
+                    has_amt1 = 'amount_krw' in s1 or 'target_amount' in s1 or 'size_pct' in s1 or 'weight' in s1
+                    has_amt2 = 'amount_krw' in s2 or 'target_amount' in s2 or 'size_pct' in s2 or 'weight' in s2
+                    amt1 = float(s1.get('amount_krw', s1.get('target_amount', s1.get('size_pct', s1.get('weight', 1.0)))) or 1.0)
+                    amt2 = float(s2.get('amount_krw', s2.get('target_amount', s2.get('size_pct', s2.get('weight', 1.0)))) or 1.0)
                     conf1 = float(s1.get('confidence', s1.get('win_rate', s1.get('ev_adj', 0.5))) or 0.5)
                     conf2 = float(s2.get('confidence', s2.get('win_rate', s2.get('ev_adj', 0.5))) or 0.5)
 

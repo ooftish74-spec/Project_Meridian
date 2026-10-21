@@ -356,6 +356,18 @@ class KISTraderAdapter:
             return 'NYSE'
         if t_upper in _NASD_SET:
             return 'NASD'
+        try:
+            from src.params import load_table
+            _ex_map = load_table('src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP', {})
+            _mapped = str((_ex_map or {}).get(t_upper, '')).upper().strip()
+            if _mapped in ('AMS', 'AMEX'):
+                return 'AMEX'
+            if _mapped in ('NYS', 'NYSE'):
+                return 'NYSE'
+            if _mapped in ('NAS', 'NASD', 'NASDAQ'):
+                return 'NASD'
+        except Exception:
+            pass
         return 'NASD'
 
     def buy(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY', is_yield_sweep: bool = False, notes: str = '', **kwargs) -> Order:
@@ -1328,7 +1340,7 @@ class KISTraderAdapter:
             logger.info(f"  ❌ 타임아웃 취소 확인: {order.ticker} (체결 {order.filled_quantity}/{order.quantity})")
         return order
 
-    def get_live_overseas_price(self, ticker: str, exchange: str = 'NASD', ask_side: bool = False) -> Optional[float]:
+    def get_live_overseas_price(self, ticker: str, exchange: str = '', ask_side: bool = False) -> Optional[float]:
         """[SSoT Rule] 미국 주식 실시간 체결가/호가 직접 조회 (HHDFS00000300)."""
         if self.mode == 'mock':
             mock_prices = {'SHV': 110.28, 'SOXX': 582.82, 'XLK': 201.39, 'SPY': 520.0, 'QQQ': 757.73, 'NVDA': 237.47}
@@ -1340,27 +1352,29 @@ class KISTraderAdapter:
             headers = self._get_headers()
             headers['tr_id'] = 'HHDFS00000300'
             std_excg = self.resolve_overseas_exchange(ticker, exchange)
-            excd = 'NAS' if std_excg == 'NASD' else ('NYS' if std_excg == 'NYSE' else 'AMS')
-            params = {'AUTH': '', 'EXCD': excd, 'SYMB': ticker}
+            primary_excd = 'NAS' if std_excg == 'NASD' else ('NYS' if std_excg == 'NYSE' else 'AMS')
+            excd_candidates = [primary_excd] + [e for e in ('NAS', 'AMS', 'NYS') if e != primary_excd]
             url = f"{self.base_url}/uapi/overseas-price/v1/quotations/price"
-            resp = requests.get(url, headers=headers, params=params, timeout=5)
-            data = resp.json()
-            if data.get('rt_cd') == '0' and 'output' in data:
-                out = data['output']
-                if ask_side:
-                    pask_str = str(out.get('pask1', out.get('last', '0')) or '0').strip()
-                    pask_p = float(pask_str) if pask_str else 0.0
-                    if pask_p > 0:
-                        return pask_p
-                else:
-                    pbid_str = str(out.get('pbid1', out.get('last', '0')) or '0').strip()
-                    pbid_p = float(pbid_str) if pbid_str else 0.0
-                    if pbid_p > 0:
-                        return pbid_p
-                last_str = str(out.get('last') or out.get('base') or out.get('pask1') or '0').strip()
-                last_p = float(last_str) if last_str else 0.0
-                if last_p > 0:
-                    return last_p
+            for excd in excd_candidates:
+                params = {'AUTH': '', 'EXCD': excd, 'SYMB': ticker}
+                resp = requests.get(url, headers=headers, params=params, timeout=5)
+                data = resp.json()
+                if data.get('rt_cd') == '0' and 'output' in data:
+                    out = data['output']
+                    if ask_side:
+                        pask_str = str(out.get('pask1', out.get('last', '0')) or '0').strip()
+                        pask_p = float(pask_str) if pask_str else 0.0
+                        if pask_p > 0:
+                            return pask_p
+                    else:
+                        pbid_str = str(out.get('pbid1', out.get('last', '0')) or '0').strip()
+                        pbid_p = float(pbid_str) if pbid_str else 0.0
+                        if pbid_p > 0:
+                            return pbid_p
+                    last_str = str(out.get('last') or out.get('base') or out.get('pask1') or '0').strip()
+                    last_p = float(last_str) if last_str else 0.0
+                    if last_p > 0:
+                        return last_p
         except Exception as e:
             logger.warning(f"  ⚠️ get_live_overseas_price API 조회 오류 ({ticker}): {e}")
         return None

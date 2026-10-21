@@ -356,12 +356,13 @@ class USNightExecutionEngine:
             atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
             dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
+            dynamic_hard_stop_pct = min(self.hard_stop_pct, max(self.trail_activation_pct, dynamic_trailing_stop_pct))
             effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
-            # 1) Hard Stop-Loss (수익 활성화 전에도 진입가 대비 -hard_stop_pct 이탈 시 즉시 손절)
-            if entry_p > 0 and entry_return <= -self.hard_stop_pct:
+            # 1) Hard Stop-Loss (수익 활성화 전에도 종목별 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)
+            if entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
-                logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 한도=-{self.hard_stop_pct*100:.2f}%)")
+                logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
                 ledger_mgr.record_daily_exit(
                     ticker,
                     reason=exit_reason,

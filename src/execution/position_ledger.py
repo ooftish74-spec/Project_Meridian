@@ -317,15 +317,17 @@ class PositionLedgerManager:
                 info["peak_date"] = date_str
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
 
-            prev_peak_price = float(info.get("peak_price", current_price) or current_price)
+            raw_peak_price = float(info.get("peak_price", 0.0) or 0.0)
+            prev_peak_price = raw_peak_price or float(current_price or 0.0)
             prev_lowest_price = float(info.get("lowest_price", current_price) or current_price)
-            prev_peak_pnl = float(info.get("peak_pnl_pct", current_pnl_pct) or current_pnl_pct)
+            raw_peak_pnl = info.get("peak_pnl_pct", None)
+            prev_peak_pnl = float(raw_peak_pnl) if (raw_peak_pnl is not None and raw_peak_price) else float(current_pnl_pct or 0.0)
 
             updated = False
-            # 신규 고점 갱신 (가격 또는 수익률 기준)
-            if current_price > prev_peak_price or current_pnl_pct > prev_peak_pnl:
-                info["peak_price"] = max(prev_peak_price, current_price)
-                info["peak_pnl_pct"] = max(prev_peak_pnl, current_pnl_pct)
+            # 신규 고점 갱신 (초기 peak_price == 0.0 상태 포함, 가격 또는 수익률 기준)
+            if (not raw_peak_price) or current_price > prev_peak_price or current_pnl_pct > prev_peak_pnl:
+                info["peak_price"] = max(prev_peak_price, float(current_price or 0.0))
+                info["peak_pnl_pct"] = max(prev_peak_pnl, float(current_pnl_pct or 0.0))
                 info["peak_date"] = date_str
                 updated = True
             else:
