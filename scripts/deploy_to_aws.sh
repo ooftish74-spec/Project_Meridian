@@ -23,7 +23,7 @@ KEY_PATH="$HOME/.ssh/meridian-key.pem"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE_DIR="/home/ubuntu/Project_Meridian"
 REMOTE_BACKUP_DIR="/home/ubuntu/meridian_backups"   # outside REMOTE_DIR: rsync can never touch it
-KEEP_BACKUPS=15
+KEEP_BACKUPS=5
 SSH=(ssh -i "$KEY_PATH" -o BatchMode=yes -o ConnectTimeout=15 "$EC2_USER@$EC2_IP")
 
 DRY_RUN=0
@@ -89,7 +89,7 @@ fi
 echo "[2/6] Creating remote backup..."
 BACKUP_FILE="$REMOTE_BACKUP_DIR/deploy_${TS}_pre_${GIT_SHA}.tgz"
 "${SSH[@]}" "set -e; mkdir -p '$REMOTE_BACKUP_DIR'; cd '$REMOTE_DIR'; \
-  tar --warning=no-file-changed -czf '$BACKUP_FILE' --exclude='__pycache__' --exclude='*.lock' src scripts config tests dashboard results \
+  tar --warning=no-file-changed -czf '$BACKUP_FILE' --exclude='__pycache__' --exclude='*.lock' --exclude='results/models/ensemble_v_*.pkl' src scripts config tests dashboard results \
     \$(ls -d requirements.txt pytest.ini Makefile DEPLOYED_VERSION 2>/dev/null) || [ \$? -eq 1 ]; \
   tar tzf '$BACKUP_FILE' > /dev/null; \
   ls -1t '$REMOTE_BACKUP_DIR'/deploy_*.tgz | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f; \

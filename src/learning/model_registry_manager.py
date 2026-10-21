@@ -62,8 +62,21 @@ class ModelRegistryManager:
         registry = self._load_registry()
         registry['versions'][version_id] = {'path': str(model_path.name), 'metadata': metadata, 'status': 'candidate', 'registered_at': now.isoformat()}
         self._save_registry(registry)
+        self._prune_old_models(registry)
         logger.info(f"  📦 Model {version_id} registered as candidate.")
         return version_id
+
+    def _prune_old_models(self, registry: Dict):
+        """디스크 고갈 방지를 위해 active 모델 및 최신 3개 버전 외 구버전 ensemble_v_*.pkl 정리."""
+        try:
+            active_ver = registry.get('active_version')
+            active_file = (registry.get('versions', {}).get(active_ver) or {}).get('path') if active_ver else None
+            pkl_files = sorted(self.registry_dir.glob('ensemble_v_*.pkl'), key=lambda p: p.stat().st_mtime, reverse=True)
+            for old_p in pkl_files[3:]:
+                if old_p.name != active_file and not old_p.samefile(self.latest_link) if self.latest_link.exists() else (old_p.name != active_file):
+                    old_p.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def evaluate_and_promote(self, new_version_id: str, new_auc: float, min_improvement: float=0.005) -> Tuple[bool, str]:
         """
