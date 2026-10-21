@@ -56,15 +56,14 @@ def get_universe_tickers(stocks_only: bool=False, include_etf: bool=True, market
         종목 코드 리스트
     """
     _ensure_loaded()
-    if stocks_only:
+    m_up = str(market or 'ALL').upper()
+    if stocks_only or m_up == 'KR':
         return list(_cache['stocks'] or [])
-    if market == 'KR':
-        return list(_cache['stocks'] or [])
-    elif market == 'ETF':
+    elif m_up == 'ETF':
         return list(_cache['etfs'] or [])
-    elif market == 'US':
+    elif m_up == 'US':
         return list(_cache['us'] or [])
-    elif market == 'KR+ETF':
+    elif m_up == 'KR+ETF':
         kr = list(_cache['stocks'] or [])
         etf = list(_cache['etfs'] or []) if include_etf else []
         return kr + etf
@@ -130,8 +129,29 @@ def _ensure_loaded():
                     us.append(t)
                     names[t] = s.get('name', t)
                     meta[t] = {'market': 'US', 'type': 'us_stock', 'sector': s.get('sector')}
+            if not us:
+                us_prices_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
+                if us_prices_dir.exists():
+                    for pf in sorted(us_prices_dir.glob('*.parquet')):
+                        tk_us = pf.stem.strip().upper()
+                        if tk_us and not tk_us.startswith('^') and tk_us not in us:
+                            us.append(tk_us)
+                            names.setdefault(tk_us, tk_us)
+                            meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
+                us_map_path = _PROJECT_ROOT / 'config' / 'params' / 'tables' / 'src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP.json'
+                if us_map_path.exists():
+                    try:
+                        us_map_obj = json.loads(us_map_path.read_text())
+                        for tk_us in (us_map_obj.get('value', us_map_obj) or {}).keys():
+                            tk_us = str(tk_us).strip().upper()
+                            if tk_us and tk_us not in us:
+                                us.append(tk_us)
+                                names.setdefault(tk_us, tk_us)
+                                meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
+                    except Exception:
+                        pass
             if tickers:
-                built = u.get('built_at', '')
+                built = u.get('built_at', '') or 'dynamic'
                 total_kr = len(stocks)
                 total_etf = len(etfs)
                 total_us = len(us)

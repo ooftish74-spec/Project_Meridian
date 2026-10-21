@@ -114,7 +114,7 @@ class MacroCollector:
                 if fred_s is not None and len(fred_s) > _fred_min:
                     return fred_s.rename('high_yield_spread')
             except Exception as _e:
-                logger.error(f'  FRED HY Spread 실패: {_e}', exc_info=True)
+                logger.warning(f'  FRED HY Spread 일시 불가 ({_e}) → HYG/IEF 프록시 전환')
         logger.info('  HY Spread: VendorMultiplexer HYG/IEF 프록시')
         _ss, _es = (start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d'))
         if self._vmx is None:
@@ -221,6 +221,11 @@ class MacroCollector:
         params = {'series_id': series_id, 'api_key': self.fred_key, 'file_type': 'json', 'observation_start': start.strftime('%Y-%m-%d'), 'observation_end': end.strftime('%Y-%m-%d')}
         resp = requests.get(url, params=params, timeout=20)
         resp.raise_for_status()
+        ctype = resp.headers.get('Content-Type', '').lower()
+        body_text = (resp.text or '').lstrip()
+        if 'html' in ctype or body_text.startswith('<'):
+            logger.warning(f'  FRED API 점검 중 (HTML 응답 수신): {series_id}')
+            return None
         data = resp.json()
         obs = data.get('observations', [])
         if not obs:

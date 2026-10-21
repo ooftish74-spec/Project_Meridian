@@ -42,6 +42,7 @@ class USADataCollector:
         """
         self.fred_api_key = fred_api_key
         self._fred = None
+        self._fred_down = False
         logger.info('USA Data Collector initialized')
 
     def _get_fred(self):
@@ -51,6 +52,8 @@ class USADataCollector:
         fredapi는 API 키가 순수 32자 영숫자여야 하며,
         .env 파일의 개행/공백이 포함되면 Bad Request 오류 발생.
         """
+        if self._fred_down:
+            return None
         if self._fred is None:
             try:
                 from fredapi import Fred
@@ -66,6 +69,29 @@ class USADataCollector:
             except ImportError as e:
                 logger.error('fredapi not installed. Run: pip install fredapi', exc_info=True)
         return self._fred
+
+    def _safe_fred_get_series(self, series_id: str, start_date: Optional[str]=None, end_date: Optional[str]=None) -> Optional[pd.Series]:
+        """FRED get_series 래퍼 — FRED 점검(HTML 응답 ParseError) 시 서킷브레이커 작동."""
+        if self._fred_down:
+            return None
+        fred = self._get_fred()
+        if fred is None:
+            return None
+        try:
+            kwargs = {}
+            if start_date:
+                kwargs['observation_start'] = start_date
+            if end_date:
+                kwargs['observation_end'] = end_date
+            return fred.get_series(series_id, **kwargs)
+        except Exception as e:
+            err_str = str(e)
+            if 'syntax error' in err_str.lower() or 'parseerror' in type(e).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
+                self._fred_down = True
+                logger.warning(f'  ⚠️ FRED API 점검/연결 이상 감지 ({series_id}: {e}) → 금회 FRED 연속 호출 서킷브레이커 작동')
+            else:
+                logger.warning(f'  ⚠ FRED {series_id} 조회 실패: {e}')
+            return None
 
     def collect_all_usa_data(self, start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
         """
@@ -117,19 +143,15 @@ class USADataCollector:
         """
         logger.info('Collecting US indices via FRED...')
         try:
-            fred = self._get_fred()
-            if fred is None:
+            if self._get_fred() is None:
                 return pd.DataFrame()
             indices_map = {'S&P_500': 'SP500', 'Dow_Jones': 'DJIA', 'NASDAQ': 'NASDAQCOM'}
             data = {}
             for name, series_id in indices_map.items():
-                try:
-                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
-                    if s is not None and not s.empty:
-                        data[name] = s
-                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
-                except Exception as e:
-                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
+                s = self._safe_fred_get_series(series_id, start_date, end_date)
+                if s is not None and not s.empty:
+                    data[name] = s
+                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
                 logger.info(f"✓ Collected {len(result)} records for US indices via FRED")
@@ -148,19 +170,15 @@ class USADataCollector:
         """
         logger.info('Collecting US Treasury yields via FRED...')
         try:
-            fred = self._get_fred()
-            if fred is None:
+            if self._get_fred() is None:
                 return pd.DataFrame()
             treasuries_map = {'US_2Y': 'DGS2', 'US_5Y': 'DGS5', 'US_10Y': 'DGS10', 'US_30Y': 'DGS30'}
             data = {}
             for name, series_id in treasuries_map.items():
-                try:
-                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
-                    if s is not None and not s.empty:
-                        data[name] = s
-                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
-                except Exception as e:
-                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
+                s = self._safe_fred_get_series(series_id, start_date, end_date)
+                if s is not None and not s.empty:
+                    data[name] = s
+                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
                 logger.info(f"✓ Collected {len(result)} records for US treasuries via FRED")
@@ -179,8 +197,7 @@ class USADataCollector:
         """
         logger.info('Collecting US currencies via FRED...')
         try:
-            fred = self._get_fred()
-            if fred is None:
+            if self._get_fred() is None:
                 return pd.DataFrame()
             currencies_map = {
                 'USD_Index': 'DTWEXBGS',
@@ -190,13 +207,10 @@ class USADataCollector:
             }
             data = {}
             for name, series_id in currencies_map.items():
-                try:
-                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
-                    if s is not None and not s.empty:
-                        data[name] = s
-                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
-                except Exception as e:
-                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
+                s = self._safe_fred_get_series(series_id, start_date, end_date)
+                if s is not None and not s.empty:
+                    data[name] = s
+                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
                 logger.info(f"✓ Collected {len(result)} records for US currencies via FRED")
@@ -215,23 +229,18 @@ class USADataCollector:
         """
         logger.info('Collecting US commodities via FRED...')
         try:
-            fred = self._get_fred()
-            if fred is None:
-                return pd.DataFrame()
             commodities_map = {
                 'WTI_Oil': 'DCOILWTICO',
                 'Brent_Oil': 'DCOILBRENTEU',
                 'Natural_Gas': 'DHHNGSP',
             }
             data = {}
-            for name, series_id in commodities_map.items():
-                try:
-                    s = fred.get_series(series_id, observation_start=start_date, observation_end=end_date)
+            if self._get_fred() is not None:
+                for name, series_id in commodities_map.items():
+                    s = self._safe_fred_get_series(series_id, start_date, end_date)
                     if s is not None and not s.empty:
                         data[name] = s
                         logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
-                except Exception as e:
-                    logger.warning(f'  ⚠ {name} (FRED {series_id}): {e}')
             # Gold: FRED GOLDAMGBD228NLBM is retired; use GLD / GoogleFinance proxy without FRED 400 warning
             try:
                 from pathlib import Path as _P
@@ -274,24 +283,20 @@ class USADataCollector:
             Dictionary of economic indicator DataFrames
         """
         logger.info('Collecting US economic indicators from FRED...')
-        fred = self._get_fred()
-        if fred is None:
+        if self._get_fred() is None:
             return {}
         try:
             indicators = {'GDP': 'GDP', 'Real_GDP': 'GDPC1', 'GDP_Per_Capita': 'A939RX0Q048SBEA', 'CPI': 'CPIAUCSL', 'Core_CPI': 'CPILFESL', 'PCE': 'PCE', 'Unemployment': 'UNRATE', 'Nonfarm_Payrolls': 'PAYEMS', 'Fed_Funds_Rate': 'FEDFUNDS', 'Industrial_Production': 'INDPRO', 'Retail_Sales': 'RSXFS', 'Housing_Starts': 'HOUST', 'Consumer_Sentiment': 'UMCSENT', 'M1_Money_Supply': 'M1SL', 'M2_Money_Supply': 'M2SL', 'M1_Velocity': 'M1V', 'M2_Velocity': 'M2V', 'Trade_Balance': 'BOPGSTB', 'macro_high_yield_spread': 'BAMLH0A0HYM2', 'IG_Credit_Spread': 'BAMLC0A0CM', 'Fed_Balance_Sheet': 'WALCL', 'TED_Spread': 'TEDRATE'}
             data = {}
             success_count = 0
             for name, series_id in indicators.items():
-                try:
-                    series = fred.get_series(series_id, start_date, end_date)
-                    if not series.empty:
-                        df = series.to_frame(name=name)
-                        if self.validate_data(df):
-                            data[name] = df
-                            success_count += 1
-                            logger.info(f"  ✓ {name}: {len(df)} records")
-                except Exception as e:
-                    logger.error(f'  ✗ {name}: {e}', exc_info=True)
+                series = self._safe_fred_get_series(series_id, start_date, end_date)
+                if series is not None and not series.empty:
+                    df = series.to_frame(name=name)
+                    if self.validate_data(df):
+                        data[name] = df
+                        success_count += 1
+                        logger.info(f"  ✓ {name}: {len(df)} records")
             logger.info(f"✓ Collected {success_count}/{len(indicators)} US economic indicators")
             return data
         except Exception as e:
@@ -303,19 +308,20 @@ class USADataCollector:
         단일 FRED 시리즈 수집. friendly name 또는 FRED ID 사용 가능.
         (구 FREDCollector.fetch_data 기능)
         """
-        fred = self._get_fred()
-        if fred is None:
+        if self._get_fred() is None:
             return pd.DataFrame()
         try:
             fred_id = self.FRED_SERIES_MAP.get(series_id, series_id)
             logger.info(f"Fetching FRED {series_id} ({fred_id})")
-            data = fred.get_series(fred_id, observation_start=start_date, observation_end=end_date)
+            data = self._safe_fred_get_series(fred_id, start_date, end_date)
+            if data is None or data.empty:
+                return pd.DataFrame()
             df = pd.DataFrame(data, columns=[series_id])
             if self.validate_data(df):
                 return df
             return pd.DataFrame()
         except Exception as e:
-            logger.error(f'Error fetching FRED {series_id}: {e}', exc_info=True)
+            logger.warning(f'Error fetching FRED {series_id}: {e}')
             return pd.DataFrame()
 
     def validate_data(self, data: pd.DataFrame) -> bool:

@@ -46,13 +46,113 @@ class PnLAttribution:
     4. Time: 시간대별 수익
     """
 
-    def __init__(self):
+    def __init__(self, auto_load: bool = True):
         self._trades: List[Dict] = []
         self._daily_pnl: Dict[str, float] = {}  # date -> total pnl
         self._stream_pnl: Dict[str, List[float]] = defaultdict(list)
         self._strategy_pnl: Dict[str, List[float]] = defaultdict(list)
         self._ticker_pnl: Dict[str, float] = defaultdict(float)
         self._regime_pnl: Dict[str, List[float]] = defaultdict(list)
+        self._auto_load = auto_load
+
+    def _load_persisted_trades(self):
+        """실계좌/쉐도우 포트폴리오에 기록된 체결 이력을 자동 적재."""
+        try:
+            for fname in ('kis_portfolio.json', 'shadow_portfolio.json'):
+                fpath = _RESULTS / fname
+                if not fpath.exists():
+                    continue
+                data = json.loads(fpath.read_text())
+                trades = data.get('closed_trades') or data.get('trade_history') or []
+                fx = float(data.get('fx_rate') or (data.get('account') or {}).get('fx_rate') or 1.0)
+                for t in trades:
+                    if not isinstance(t, dict):
+                        continue
+                    action = str(t.get('action', t.get('side', 'sell'))).lower()
+                    if action == 'buy' and 'pnl' not in t and 'realized_pnl' not in t:
+                        continue
+                    tk = str(t.get('ticker', '')).strip()
+                    if not tk:
+                        continue
+                    pnl_raw = float(t.get('realized_pnl', t.get('pnl', 0.0)) or 0.0)
+                    is_us = not tk[0].isdigit()
+                    pnl_krw = pnl_raw * fx if (is_us and str(t.get('currency', 'USD')).upper() == 'USD' and fx > 2.0) else pnl_raw
+                    stream = str(t.get('stream', t.get('stream_id', 'S2')) or 'S2')
+                    ep = float(t.get('entry_price', 0.0) or 0.0)
+                    xp = float(t.get('exit_price', t.get('price', 0.0)) or 0.0)
+                    qty = int(float(t.get('qty', t.get('quantity', 0)) or 0))
+                    ts = str(t.get('timestamp', t.get('exit_date', t.get('date', datetime.now().isoformat()))))
+                    dt_str = ts.split('T')[0].split(' ')[0] or datetime.now().strftime('%Y-%m-%d')
+                    rec = {
+                        'timestamp': ts,
+                        'date': dt_str,
+                        'stream': stream,
+                        'ticker': tk,
+                        'strategy': str(t.get('strategy', t.get('reason', stream))),
+                        'pnl': pnl_krw,
+                        'entry_price': ep,
+                        'exit_price': xp,
+                        'quantity': qty,
+                        'return_pct': float(t.get('pnl_pct', (xp / ep - 1) * 100 if ep > 0 and xp > 0 else 0.0) or 0.0),
+                        'regime': str(t.get('regime', '')),
+                        'holding_minutes': int(float(t.get('holding_minutes', 0) or 0)),
+                    }
+                    self._trades.append(rec)
+                    self._stream_pnl[stream].append(pnl_krw)
+                    if rec['strategy']:
+                        self._strategy_pnl[rec['strategy']].append(pnl_krw)
+                    self._ticker_pnl[tk] += pnl_krw
+                    if rec['regime']:
+                        self._regime_pnl[rec['regime']].append(pnl_krw)
+                    self._daily_pnl[dt_str] = self._daily_pnl.get(dt_str, 0.0) + pnl_krw
+                if not self._trades:
+                    holdings = data.get('holdings') or data.get('positions') or {}
+                    ledger_path = _RESULTS / 'position_entry_ledger.json'
+                    ledger_pos = (json.loads(ledger_path.read_text()).get('positions') or {}) if ledger_path.exists() else {}
+                    if isinstance(holdings, dict):
+                        for tk, h in holdings.items():
+                            if not isinstance(h, dict):
+                                continue
+                            qty = int(float(h.get('qty', h.get('quantity', 0)) or 0))
+                            ep = float(h.get('entry_price', h.get('avg_price', 0.0)) or 0.0)
+                            cp = float(h.get('current_price', ep) or ep)
+                            if qty <= 0 or ep <= 0:
+                                continue
+                            is_us = not str(tk)[0].isdigit()
+                            pnl_raw = (cp - ep) * qty
+                            pnl_krw = pnl_raw * fx if (is_us and fx > 2.0) else pnl_raw
+                            l_info = ledger_pos.get(str(tk)) if isinstance(ledger_pos, dict) else None
+                            default_sid = 'S3' if is_us else 'S2'
+                            stream = str(
+                                h.get('stream')
+                                or h.get('stream_id')
+                                or (l_info.get('stream_id') if isinstance(l_info, dict) else None)
+                                or default_sid
+                            )
+                            dt_str = datetime.now().strftime('%Y-%m-%d')
+                            rec = {
+                                'timestamp': datetime.now().isoformat(),
+                                'date': dt_str,
+                                'stream': stream,
+                                'ticker': str(tk),
+                                'strategy': str(h.get('strategy', stream)),
+                                'pnl': pnl_krw,
+                                'entry_price': ep,
+                                'exit_price': cp,
+                                'quantity': qty,
+                                'return_pct': float(h.get('pnl_pct', (cp / ep - 1) * 100.0)),
+                                'regime': str(h.get('regime', '')),
+                                'holding_minutes': 0,
+                            }
+                            self._trades.append(rec)
+                            self._stream_pnl[stream].append(pnl_krw)
+                            self._strategy_pnl[rec['strategy']].append(pnl_krw)
+                            self._ticker_pnl[str(tk)] += pnl_krw
+                            self._daily_pnl[dt_str] = self._daily_pnl.get(dt_str, 0.0) + pnl_krw
+                if self._trades:
+                    break
+        except Exception as e:
+            logger.debug(f'PnLAttribution persisted trades load skipped: {e}')
 
     def record_trade(self, stream: str, ticker: str, pnl: float,
                      strategy: str = '', entry_price: float = 0,
@@ -109,6 +209,8 @@ class PnLAttribution:
         Returns:
             종합 PnL 분해 보고서
         """
+        if not self._trades and getattr(self, '_auto_load', True):
+            self._load_persisted_trades()
         total_pnl = sum(t['pnl'] for t in self._trades)
         n_trades = len(self._trades)
 

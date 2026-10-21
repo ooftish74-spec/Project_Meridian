@@ -330,7 +330,9 @@ class KISTraderAdapter:
         return False
 
     def _get_headers(self) -> Dict:
-        if not self._access_token or (hasattr(self, '_token_expires') and self._token_expires and datetime.now() >= self._token_expires - timedelta(minutes=10)):
+        if not self._access_token:
+            self.authenticate()
+        elif hasattr(self, '_token_expires') and self._token_expires and datetime.now() >= self._token_expires - timedelta(minutes=10):
             self._request_new_token()
         return {'Content-Type': 'application/json; charset=utf-8', 'authorization': f"Bearer {self._access_token}", 'appkey': self.app_key, 'appsecret': self.app_secret}
 

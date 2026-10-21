@@ -32,7 +32,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
-_DATA_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+_DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 try:
     from config.dynamic_config import DynamicConfig
     _cfg = DynamicConfig()
@@ -47,7 +47,8 @@ class FactorRiskDecomposer:
     FACTOR_PROXIES = {'market': {'description': 'Market β (KOSPI)', 'proxy_ticker': None}, 'size': {'description': 'Size (소형주 프리미엄)', 'method': 'market_cap_quintile'}, 'value': {'description': 'Value (가치주 프리미엄)', 'method': 'pbr_quintile'}, 'momentum': {'description': 'Momentum (12-1개월 모멘텀)', 'method': 'return_12m_1m'}, 'volatility': {'description': 'Low Volatility (저변동성 프리미엄)', 'method': 'realized_vol'}}
 
     def __init__(self):
-        pass
+        self._min_obs = int(_get('risk.factor_min_obs', 20))
+        self._min_tickers = int(_get('risk.factor_min_tickers', 10))
 
     def decompose(self, regime: str=None) -> Dict:
         """포트폴리오 팩터 리스크 분해.
@@ -69,7 +70,7 @@ class FactorRiskDecomposer:
         lookback = pget('risk.factor_lookback_days', 120)
         factor_list = _get('risk.factor_list', ['market', 'size', 'value', 'momentum', 'volatility'])
         port_returns = self._load_portfolio_returns(lookback)
-        if port_returns is None or len(port_returns) < 20:
+        if port_returns is None or len(port_returns) < self._min_obs:
             return self._empty_result('포트폴리오 수익률 부족')
         factor_returns = self._build_factor_returns(factor_list, lookback)
         if factor_returns is None or factor_returns.shape[1] == 0:
@@ -109,24 +110,66 @@ class FactorRiskDecomposer:
             return self._empty_result(f"회귀 실패: {e}")
 
     def _load_portfolio_returns(self, lookback: int) -> Optional[np.ndarray]:
-        """포트폴리오 일일 수익률 로드."""
+        """포트폴리오 일일 수익률 로드 (스냅샷 부족 시 실계좌 보유종목 가중 일간 수익률로 복원)."""
+        min_obs = self._min_obs
         try:
             me_path = _RESULTS / 'measurement_engine.json'
             if me_path.exists():
                 me = json.loads(me_path.read_text())
                 daily = me.get('daily_series', [])
-                if daily:
+                if len(daily) >= min_obs:
                     returns = [d.get('daily_return_pct', 0) / 100 for d in daily[-lookback:]]
-                    if returns:
+                    if len(returns) >= min_obs:
                         return np.array(returns)
             sp_path = _RESULTS / 'shadow_portfolio.json'
             if sp_path.exists():
                 sp = json.loads(sp_path.read_text())
                 snaps = sp.get('daily_snapshots', [])
-                if len(snaps) >= 2:
-                    navs = [s.get('nav', 0) for s in snaps[-lookback:]]
-                    returns = np.diff(navs) / np.array(navs[:-1])
-                    return returns[np.isfinite(returns)]
+                if len(snaps) > min_obs:
+                    navs = [s.get('nav', 0) for s in snaps[-(lookback + 1):] if s.get('nav', 0) > 0]
+                    if len(navs) > min_obs:
+                        returns = np.diff(navs) / np.array(navs[:-1])
+                        returns = returns[np.isfinite(returns)]
+                        if len(returns) >= min_obs:
+                            return returns
+            kis_path = _RESULTS / 'kis_portfolio.json'
+            if kis_path.exists():
+                kis = json.loads(kis_path.read_text())
+                holdings = kis.get('holdings', {})
+                sc_path = _RESULTS / 'signal_cache.json'
+                sc_fx = json.loads(sc_path.read_text()).get('usdkrw') if sc_path.exists() else None
+                fx = float(kis.get('fx_rate') or (kis.get('account') or {}).get('fx_rate') or sc_fx or 1.0)
+                nav = float(kis.get('nav') or (kis.get('account') or {}).get('total_equity') or 0.0)
+                if holdings and nav > 0:
+                    series_list = []
+                    weights = []
+                    us_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
+                    for tk, info in holdings.items():
+                        qty = float(info.get('qty', info.get('quantity', 0)) or 0)
+                        cp = float(info.get('current_price', info.get('entry_price', 0)) or 0)
+                        if qty <= 0 or cp <= 0:
+                            continue
+                        is_kr = str(tk)[0].isdigit()
+                        val_krw = qty * cp if is_kr else qty * cp * fx
+                        p_file = (_DATA_DIR / f'kr_{tk}.parquet') if is_kr else (us_dir / f'{tk}.parquet')
+                        if not p_file.exists():
+                            continue
+                        df_p = pd.read_parquet(p_file)
+                        c_col = 'close' if 'close' in df_p.columns else ('Close' if 'Close' in df_p.columns else None)
+                        if not c_col:
+                            continue
+                        closes = pd.to_numeric(df_p[c_col], errors='coerce').dropna().tail(lookback + 1).values
+                        if len(closes) > min_obs:
+                            rets = np.diff(closes) / np.maximum(closes[:-1], 1e-8)
+                            series_list.append(rets)
+                            weights.append(val_krw / nav)
+                    if series_list:
+                        min_l = min(len(r) for r in series_list)
+                        if min_l >= min_obs:
+                            port_ret = np.zeros(min_l)
+                            for w, r in zip(weights, series_list):
+                                port_ret += w * r[-min_l:]
+                            return port_ret
         except Exception as e:
             logger.critical(f'포트폴리오 수익률 로드 실패: {e}', exc_info=True)
         return None
@@ -149,13 +192,14 @@ class FactorRiskDecomposer:
         try:
             if factor_name == 'market':
                 path = _DATA_DIR / 'kr_069500.parquet'
-                if not path.exists():
-                    path = _DATA_DIR / 'kr_069500.parquet'
                 if path.exists():
                     df = pd.read_parquet(path)
-                    close = df['close'].tail(lookback + 1).values
-                    return np.diff(close) / close[:-1]
-                return np.random.normal(0.0003, 0.01, lookback)
+                    c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if c_col:
+                        close = pd.to_numeric(df[c_col], errors='coerce').dropna().tail(lookback + 1).values
+                        if len(close) > self._min_obs:
+                            return np.diff(close) / close[:-1]
+                return None
             elif factor_name == 'momentum':
                 return self._long_short_factor_return(lookback, sort_by='return_60d', ascending=False)
             elif factor_name == 'size':
@@ -170,28 +214,50 @@ class FactorRiskDecomposer:
 
     def _long_short_factor_return(self, lookback: int, sort_by: str, ascending: bool) -> Optional[np.ndarray]:
         """Long-Short 팩터 수익률 (상위 20% - 하위 20%)."""
-        tickers = []
-        for f in list(_DATA_DIR.glob('kr_*.parquet'))[:50]:
-            tickers.append(f.stem.replace('kr_', ''))
-        if len(tickers) < 10:
+        files = sorted(_DATA_DIR.glob('kr_*.parquet'))[:80]
+        if len(files) < self._min_tickers:
             return None
         all_returns = {}
-        for ticker in tickers:
+        scores = {}
+        for f in files:
+            ticker = f.stem.replace('kr_', '')
             try:
-                df = pd.read_parquet(_DATA_DIR / f"kr_{ticker}.parquet")
-                close = df['close'].tail(lookback + 1).values
-                if len(close) > lookback:
-                    all_returns[ticker] = np.diff(close) / close[:-1]
+                df = pd.read_parquet(f)
+                c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                v_col = 'volume' if 'volume' in df.columns else ('Volume' if 'Volume' in df.columns else None)
+                if not c_col:
+                    continue
+                close = pd.to_numeric(df[c_col], errors='coerce').dropna().tail(lookback + 1).values
+                if len(close) <= self._min_obs:
+                    continue
+                rets = np.diff(close) / close[:-1]
+                all_returns[ticker] = rets
+                if sort_by == 'return_60d':
+                    scores[ticker] = float(close[-1] / close[-60:][0] - 1.0)
+                elif sort_by == 'return_20d':
+                    scores[ticker] = float(close[-1] / close[-20:][0] - 1.0)
+                elif sort_by == 'volatility':
+                    scores[ticker] = float(np.std(rets[-60:]))
+                elif sort_by == 'avg_volume' and v_col:
+                    vols = pd.to_numeric(df[v_col], errors='coerce').dropna().tail(60).values
+                    scores[ticker] = float(np.mean(vols * close[-len(vols):])) if len(vols) > 0 else float(close[-1])
+                else:
+                    scores[ticker] = float(np.mean(rets))
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
-        if len(all_returns) < 10:
+        if len(all_returns) < self._min_tickers:
             return None
         min_len = min((len(v) for v in all_returns.values()))
-        aligned = {k: v[-min_len:] for k, v in all_returns.items()}
-        arr = np.array(list(aligned.values()))
-        return np.mean(arr, axis=0)
+        if min_len < self._min_obs:
+            return None
+        sorted_tks = sorted(all_returns.keys(), key=lambda t: scores.get(t, 0.0), reverse=not ascending)
+        q_n = (len(sorted_tks) // 5) or 1
+        long_tks = sorted_tks[:q_n]
+        short_tks = sorted_tks[-q_n:]
+        long_arr = np.mean([all_returns[t][-min_len:] for t in long_tks], axis=0)
+        short_arr = np.mean([all_returns[t][-min_len:] for t in short_tks], axis=0)
+        return long_arr - short_arr
 
     def _save_results(self, result: Dict):
         """결과 저장."""

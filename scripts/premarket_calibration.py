@@ -44,11 +44,12 @@ def _get_expected_kospi_gap():
         logger.warning(f"  KIS API 예상 체결가 조회 실패 (fallback to 0.0): {e}")
         return 0.0
 
-def _get_expected_stock_gap(ticker: str) -> float:
+def _get_expected_stock_gap(ticker: str, adapter=None) -> float:
     """개별 종목의 동시호가 예상 등락률 수집 (FHKST01010200 동시호가 호가 수진)."""
     try:
         from src.execution._kis_adapter import KISTraderAdapter
-        adapter = KISTraderAdapter(mode="live", fetch_balance_on_init=False)
+        if adapter is None:
+            adapter = KISTraderAdapter(mode="live", fetch_balance_on_init=False)
         headers = adapter._get_headers()
         headers["tr_id"] = "FHKST01010200"
         params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker}
@@ -92,6 +93,7 @@ def run_calibration():
     # 0. Account Reconciliation (08:50 KST Account Alignment)
     # ----------------------------------------------------
     logger.info("  ⚖️ [Account Reconciliation] KIS 실계좌 Bottom-Up NAV 대조 및 MTS 동기화 진행...")
+    adapter = None
     try:
         from src.execution._kis_adapter import KISTraderAdapter
         from src.execution.account_reconciler import AccountReconciler
@@ -170,7 +172,7 @@ def run_calibration():
         if not ticker:
             continue
         
-        stock_gap = _get_expected_stock_gap(ticker)
+        stock_gap = _get_expected_stock_gap(ticker, adapter=adapter)
         name = sig.get('name', ticker)
         original_size = sig.get('size_pct', 0.0)
         
@@ -193,6 +195,7 @@ def run_calibration():
     try:
         HIGH_LIQUIDITY_INDEX_ETFS = {'069500', '122630', '252670', '114800', '252710'}
         dual_exit_plan = []
+        seen_krx_tickers = set()
         raw_signals = data.get('signals', {})
         sigs_list = []
         if isinstance(raw_signals, dict):
@@ -203,9 +206,12 @@ def run_calibration():
             sigs_list = raw_signals
 
         for sig in sigs_list:
-            t = sig.get('ticker')
-            if not t or t.startswith('_'):
+            t = str(sig.get('ticker', '')).strip()
+            if not t or t.startswith('_') or not t[0].isdigit():
                 continue
+            if t in seen_krx_tickers:
+                continue
+            seen_krx_tickers.add(t)
             is_high_liq = t in HIGH_LIQUIDITY_INDEX_ETFS
             if is_high_liq:
                 action = '08:54:30_CANCEL_IF_POSITIVE_GAP' if expected_gap > -0.3 else '08:30_KEEP_AUCTION_SELL'

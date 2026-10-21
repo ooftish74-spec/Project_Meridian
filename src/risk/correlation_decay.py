@@ -37,12 +37,77 @@ class CorrelationDecayMonitor:
         self._critical_threshold = pget('correlation.critical_threshold', 0.8)
 
     def _load_state(self) -> Dict:
+        state = {'daily_returns': {}, 'last_analysis': None, 'alerts': []}
         if self._state_path.exists():
             try:
-                return json.loads(self._state_path.read_text())
+                loaded = json.loads(self._state_path.read_text())
+                if isinstance(loaded, dict):
+                    state.update(loaded)
             except Exception as _e0:
                 logger.critical(f'  [correlation_decay] 상관관계 캐시 로드: {_e0}', exc_info=True)
-        return {'daily_returns': {}, 'last_analysis': None, 'alerts': []}
+        min_obs = int(cfg.get('correlation.min_obs', 5))
+        valid_streams = [k for k, v in (state.get('daily_returns') or {}).items() if isinstance(v, list) and len(v) >= min_obs]
+        if len(valid_streams) < 2:
+            sm_path = _RESULTS / 'stream_metrics.json'
+            if sm_path.exists():
+                try:
+                    sm = json.loads(sm_path.read_text())
+                    raw_d = sm.get('raw_data', {})
+                    for sid, sdata in raw_d.items():
+                        d_rets = sdata.get('daily_returns', []) if isinstance(sdata, dict) else []
+                        if isinstance(d_rets, list) and len(d_rets) >= min_obs:
+                            state.setdefault('daily_returns', {})[sid] = [
+                                {'date': f't-{len(d_rets)-idx}', 'return': float(r)} for idx, r in enumerate(d_rets[-120:])
+                            ]
+                except Exception:
+                    pass
+        valid_streams = [k for k, v in (state.get('daily_returns') or {}).items() if isinstance(v, list) and len(v) >= min_obs]
+        if len(valid_streams) < 2:
+            kis_path = _RESULTS / 'kis_portfolio.json'
+            if kis_path.exists():
+                try:
+                    import pandas as pd
+                    import numpy as np
+                    kis = json.loads(kis_path.read_text())
+                    holdings = kis.get('holdings') or {}
+                    ledger_path = _RESULTS / 'position_entry_ledger.json'
+                    ledger_pos = (json.loads(ledger_path.read_text()).get('positions') or {}) if ledger_path.exists() else {}
+                    kr_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+                    us_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
+                    stream_series = {}
+                    for tk, h in holdings.items():
+                        if not isinstance(h, dict):
+                            continue
+                        is_kr = str(tk)[0].isdigit()
+                        l_info = ledger_pos.get(str(tk)) if isinstance(ledger_pos, dict) else None
+                        default_sid = 'S2' if is_kr else 'S3'
+                        sid = str(
+                            h.get('stream')
+                            or h.get('stream_id')
+                            or (l_info.get('stream_id') if isinstance(l_info, dict) else None)
+                            or default_sid
+                        )
+                        pf = (kr_dir / f'kr_{tk}.parquet') if is_kr else (us_dir / f'{tk}.parquet')
+                        if not pf.exists():
+                            continue
+                        df = pd.read_parquet(pf)
+                        c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                        if not c_col:
+                            continue
+                        closes = pd.to_numeric(df[c_col], errors='coerce').dropna().tail(61).values
+                        if len(closes) > min_obs:
+                            rets = np.diff(closes) / closes[:-1]
+                            stream_series.setdefault(sid, []).append(rets)
+                    for sid, r_list in stream_series.items():
+                        m_len = min(len(r) for r in r_list)
+                        if m_len >= min_obs:
+                            avg_r = np.mean([r[-m_len:] for r in r_list], axis=0)
+                            state.setdefault('daily_returns', {})[sid] = [
+                                {'date': f't-{m_len-idx}', 'return': float(val)} for idx, val in enumerate(avg_r)
+                            ]
+                except Exception:
+                    pass
+        return state
 
     def _save_state(self):
         try:

@@ -297,7 +297,10 @@ class KISDataCollector:
             dt = r.get('stck_bsop_date', '')
             if not dt:
                 continue
-            records.append({'Date': dt, 'Open': int(r.get('stck_oprc', 0)), 'High': int(r.get('stck_hgpr', 0)), 'Low': int(r.get('stck_lwpr', 0)), 'Close': int(r.get('stck_clpr', 0)), 'Volume': int(r.get('acml_vol', 0))})
+            vol = int(float(r.get('acml_vol', 0) or 0))
+            if vol <= 0:
+                continue
+            records.append({'Date': dt, 'Open': int(r.get('stck_oprc', 0)), 'High': int(r.get('stck_hgpr', 0)), 'Low': int(r.get('stck_lwpr', 0)), 'Close': int(r.get('stck_clpr', 0)), 'Volume': vol})
         if not records:
             return None
         df = pd.DataFrame(records)
@@ -449,7 +452,10 @@ class KISDataCollector:
                 clos = r.get('clos', '')
                 if not dt or not clos:
                     continue
-                records.append({'Date': dt, 'Open': float(r.get('open', 0)), 'High': float(r.get('high', 0)), 'Low': float(r.get('low', 0)), 'Close': float(clos), 'Volume': int(r.get('tvol', 0))})
+                vol = int(float(r.get('tvol', 0) or 0))
+                if vol <= 0:
+                    continue
+                records.append({'Date': dt, 'Open': float(r.get('open', 0)), 'High': float(r.get('high', 0)), 'Low': float(r.get('low', 0)), 'Close': float(clos), 'Volume': vol})
             if records:
                 df = pd.DataFrame(records)
                 df['Date'] = pd.to_datetime(df['Date'])

@@ -120,6 +120,7 @@ def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optiona
             if col in d.columns:
                 d[col] = pd.to_numeric(d[col], errors='coerce')
         d = d.dropna(subset=['open', 'high', 'low', 'close', 'volume'])
+        d = d[d['volume'] > 0]
         d['date'] = pd.to_datetime(d['date'])
         if pd.api.types.is_datetime64tz_dtype(d['date']):
             d['date'] = d['date'].dt.tz_localize(None)
@@ -203,10 +204,16 @@ def collect_all_kr_etfs(backfill: bool=False) -> Dict[str, int]:
         if out_file.exists() and (not backfill):
             existing = pd.read_parquet(out_file)
             existing.columns = [str(c).lower() for c in existing.columns]
-            last_date = pd.to_datetime(existing['date']).max()
-            days_since = (datetime.now() - last_date).days
+            if 'volume' in existing.columns:
+                existing = existing[pd.to_numeric(existing['volume'], errors='coerce').fillna(0) > 0]
+            last_date = pd.to_datetime(existing['date']).max() if not existing.empty else pd.Timestamp('2000-01-01')
+            now_dt = datetime.now()
+            days_since = (now_dt.date() - last_date.date()).days
             needs_history = len(existing) < 300
-            if days_since <= 0 and not needs_history:
+            mtime_dt = datetime.fromtimestamp(out_file.stat().st_mtime)
+            _close_hm = (int(cfg.get('collector.kr_close_hour', 15)), int(cfg.get('collector.kr_close_minute', 30)))
+            needs_closing_refresh = (days_since == 0 and (now_dt.hour, now_dt.minute) >= _close_hm and (mtime_dt.date() < now_dt.date() or (mtime_dt.hour, mtime_dt.minute) < _close_hm))
+            if days_since <= 0 and not needs_history and not needs_closing_refresh:
                 logger.debug(f'  [{i}/{total}] {ticker}: 최신 (스킵)')
                 results[ticker] = 0
                 continue
@@ -261,6 +268,7 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
         except Exception as _dt_e:
             logger.error(f'  _ensure_date_col: 첫 컬럼 날짜 변환 실패 — {_dt_e}', exc_info=True)
         return df
+    _close_hm = (int(cfg.get('collector.kr_close_hour', 15)), int(cfg.get('collector.kr_close_minute', 30)))
     for i, ticker in enumerate(valid_tickers, 1):
         out_file = _DATA_DIR / f'kr_{ticker}.parquet'
         if out_file.exists() and (not backfill):
@@ -276,10 +284,15 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                     else:
                         results[ticker] = -1
                     continue
-                last_date = pd.to_datetime(existing['date']).max()
-                days_since = (datetime.now() - last_date).days
+                if 'volume' in existing.columns:
+                    existing = existing[pd.to_numeric(existing['volume'], errors='coerce').fillna(0) > 0]
+                last_date = pd.to_datetime(existing['date']).max() if not existing.empty else pd.Timestamp('2000-01-01')
+                now_dt = datetime.now()
+                days_since = (now_dt.date() - last_date.date()).days
                 needs_history = len(existing) < 300
-                if days_since <= 0 and not needs_history:
+                mtime_dt = datetime.fromtimestamp(out_file.stat().st_mtime)
+                needs_closing_refresh = (days_since == 0 and (now_dt.hour, now_dt.minute) >= _close_hm and (mtime_dt.date() < now_dt.date() or (mtime_dt.hour, mtime_dt.minute) < _close_hm))
+                if days_since <= 0 and not needs_history and not needs_closing_refresh:
                     results[ticker] = 0
                     continue
                 fetch_days = max(days_since + 5, 730 if needs_history else 60)
@@ -295,6 +308,8 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                 try:
                     existing = pd.read_parquet(out_file)
                     existing = _ensure_date_col(existing)
+                    if 'volume' in existing.columns:
+                        existing = existing[pd.to_numeric(existing['volume'], errors='coerce').fillna(0) > 0]
                     df = _ensure_date_col(df)
                     merge_key = 'date' if 'date' in existing.columns else None
                     if merge_key:
@@ -325,9 +340,9 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     """
     from src.data_collection.alpha_vantage_collector import collect_global_macro
     _CROSS_SYNC_MAP = {'vix': ['cross_vix.parquet', 'us_vix.parquet'], 'sp500': ['cross_sp500.parquet'], 'usdkrw': ['cross_usdkrw.parquet'], 'us10y': ['cross_us10y.parquet'], 'wti': ['cross_oil_futures.parquet'], 'gold_us': ['cross_gold_futures.parquet']}
-    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet'], 'ewy': ['EWY.parquet']}
+    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet']}
     signals = {}
-    today_dt = datetime.now()
+    today_dt = pd.Timestamp(datetime.now().date())
     from src.data_collection.bok_ecos_collector import BOKEcosCollector
     from src.data_collection.usa_collector import USADataCollector
 
@@ -361,12 +376,10 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                 usa_collector = USADataCollector()
             try:
                 fred_id = usa_collector.FRED_SERIES_MAP.get(yf_ticker, yf_ticker)
-                fred = usa_collector._get_fred()
-                if fred is not None:
-                    series = fred.get_series(fred_id)
-                    if series is not None and not series.empty:
-                        price = float(series.iloc[-1])
-                        av_data[yf_ticker] = {'price': price}
+                series = usa_collector._safe_fred_get_series(fred_id) if hasattr(usa_collector, '_safe_fred_get_series') else None
+                if series is not None and not series.empty:
+                    price = float(series.iloc[-1])
+                    av_data[yf_ticker] = {'price': price}
             except Exception as e:
                 logger.warning(f"Failed to fetch {yf_ticker} via FRED: {e}")
         
@@ -389,6 +402,7 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                         existing = pd.read_parquet(cross_path)
                         existing.columns = [c.lower() for c in existing.columns]
                         if 'date' in existing.columns:
+                            existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
                             combined = pd.concat([existing, df]).drop_duplicates(subset='date', keep='last').sort_values('date')
                             safe_parquet_write(combined, cross_path)
                     else:
@@ -404,7 +418,10 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                         existing = pd.read_parquet(us_path)
                         existing.columns = [c.lower() for c in existing.columns]
                         if 'date' in existing.columns:
+                            existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
                             existing = existing.set_index('date')
+                        else:
+                            existing.index = pd.to_datetime(existing.index).normalize()
                         combined = pd.concat([existing, df_us])
                         combined = combined[~combined.index.duplicated(keep='last')]
                         safe_parquet_write(combined, us_path)

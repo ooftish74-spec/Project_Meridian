@@ -32,6 +32,7 @@ class CrossMarketCollector:
 
     def __init__(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._fred_down = False
         self._setup_fred()
         self._setup_yf()
 
@@ -39,7 +40,7 @@ class CrossMarketCollector:
         try:
             from fredapi import Fred
             from src.utils.credential_manager import CredentialManager
-            key = CredentialManager().read_from_env('FRED_API_KEY') or ''
+            key = (CredentialManager().read_from_env('FRED_API_KEY') or '').strip()
             self.fred = Fred(api_key=key) if key else None
             if self.fred:
                 logger.info('  ✅ FRED API 초기화 완료 (key=%s...)', key[:8] if key else '?')
@@ -47,6 +48,22 @@ class CrossMarketCollector:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
             self.fred = None
+
+    def _safe_fred_get_series(self, series_id: str, observation_start: Optional[str]=None) -> Optional[pd.Series]:
+        """FRED get_series 래퍼 — FRED 점검(HTML 응답 ParseError) 시 서킷브레이커 작동."""
+        if self._fred_down or not self.fred:
+            return None
+        try:
+            kwargs = {'observation_start': observation_start} if observation_start else {}
+            return self.fred.get_series(series_id, **kwargs)
+        except Exception as _fe:
+            err_str = str(_fe)
+            if 'syntax error' in err_str.lower() or 'parseerror' in type(_fe).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
+                self._fred_down = True
+                logger.warning(f'  ⚠️ FRED API 점검/연결 이상 감지 ({series_id}: {_fe}) → 금회 크로스마켓 FRED 서킷브레이커 작동 (CSV ffill 전환)')
+            else:
+                logger.warning(f'  FRED {series_id} 실패: {_fe}')
+            return None
 
     def _setup_yf(self):
         # yfinance 폐기 — KIS / FRED / Alpha Vantage 전용
@@ -69,7 +86,7 @@ class CrossMarketCollector:
         try:
             if csv_path.exists():
                 df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
-                logger.warning(f"  폄 {csv_path.name}: 실시간 수집 실패 → 이전 CSV ffill 적용 ({len(df)}행 이전 데이터)")
+                logger.warning(f"  📋 {csv_path.name}: 실시간 수집 실패 → 이전 CSV ffill 적용 ({len(df)}행 이전 데이터)")
                 return df
         except Exception as _e:
             logger.warning(f'  CSV ffill 로드 실패 {csv_path}: {_e}', exc_info=True)
@@ -82,15 +99,12 @@ class CrossMarketCollector:
         """
         logger.info('📊 US-JP 금리 스프레드 수집...')
         try:
-            us_10y = None
-            if self.fred:
-                us_10y = self.fred.get_series('DGS10', observation_start=(datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d'))
+            obs_start = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
+            us_10y = self._safe_fred_get_series('DGS10', observation_start=obs_start)
             if (us_10y is None or us_10y.empty) and self.yf:
                 df = self.yf.download('^TNX', period=f'{lookback_years}y', progress=False)
                 us_10y = df['Close'].squeeze() if not df.empty else None
-            jp_10y = None
-            if self.fred:
-                jp_10y = self.fred.get_series('IRLTLT01JPM156N', observation_start=(datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d'))
+            jp_10y = self._safe_fred_get_series('IRLTLT01JPM156N', observation_start=obs_start)
             if jp_10y is None or jp_10y.empty:
                 jp_path = PROJECT_ROOT / 'data' / 'raw' / 'japan_economic' / 'JPN_10Y_Treasury.csv'
                 if jp_path.exists():
@@ -104,11 +118,16 @@ class CrossMarketCollector:
                 atomic_write_dataframe(combined, DATA_DIR / 'us_jp_spread.csv', file_format='csv')
                 logger.info(f"  ✅ US-JP 스프레드: {len(combined)}일, 현재 {combined['US_JP_Spread'].iloc[-1]:.2f}%p")
                 return combined
-            else:
-                logger.warning('  ⚠️ US/JP 10Y 데이터 부족')
-                return None
+            old_df = self._load_csv_ffill(DATA_DIR / 'us_jp_spread.csv')
+            if old_df is not None and not old_df.empty:
+                return old_df
+            logger.warning('  ⚠️ US/JP 10Y 데이터 부족')
+            return None
         except Exception as e:
-            logger.warning(f'  ⚠️ US-JP 스프레드 실패 (데이터 부족): {e}', exc_info=True)
+            old_df = self._load_csv_ffill(DATA_DIR / 'us_jp_spread.csv')
+            if old_df is not None and not old_df.empty:
+                return old_df
+            logger.warning(f'  ⚠️ US-JP 스프레드 실패 (데이터 부족): {e}')
             return None
 
     def collect_caixin_pmi(self) -> Optional[pd.DataFrame]:
@@ -124,16 +143,13 @@ class CrossMarketCollector:
         FRED_CHINA_SERIES = [('MANEMP', 'US_Mfg_Emp_proxy')]
         from datetime import datetime, timedelta
         fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
-        if self.fred:
+        if self.fred and not self._fred_down:
             for series_id, col_name in FRED_CHINA_SERIES:
-                try:
-                    s = self.fred.get_series(series_id, observation_start=fred_start_date)
-                    if s is not None and (not s.empty):
-                        results[col_name] = s
-                        logger.info(f"  FRED {series_id}: {len(s)}행")
-                        break
-                except Exception as _fe:
-                    logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
+                s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
+                if s is not None and (not s.empty):
+                    results[col_name] = s
+                    logger.info(f"  FRED {series_id}: {len(s)}행")
+                    break
         if results.empty and self.yf:
             df = self._yf_fetch_with_retry('FXI', period='3y', n_retry=3)
             if df is not None and (not df.empty):
@@ -163,15 +179,12 @@ class CrossMarketCollector:
         FRED_ISM_MAP = [('MANEMP', 'US_Mfg_Employment'), ('INDPRO', 'US_Ind_Production'), ('DGORDER', 'US_Durable_Goods'), ('RSXFS', 'US_Retail_Sales')]
         from datetime import datetime, timedelta
         fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
-        if self.fred:
+        if self.fred and not self._fred_down:
             for series_id, col_name in FRED_ISM_MAP:
-                try:
-                    s = self.fred.get_series(series_id, observation_start=fred_start_date)
-                    if s is not None and (not s.empty):
-                        results[col_name] = s.resample('ME').last()
-                        logger.info(f"  FRED {series_id}: {len(s)}행")
-                except Exception as _fe:
-                    logger.warning(f'  FRED {series_id} 실패: {_fe}', exc_info=True)
+                s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
+                if s is not None and (not s.empty):
+                    results[col_name] = s.resample('ME').last()
+                    logger.info(f"  FRED {series_id}: {len(s)}행")
         if results.empty and self.yf:
             df_xli = self._yf_fetch_with_retry('XLI', period='3y', n_retry=3)
             if df_xli is not None and (not df_xli.empty):
@@ -199,14 +212,11 @@ class CrossMarketCollector:
         logger.info('📊 PBoC LPR / 중국 금리 수집...')
         results = pd.DataFrame()
         FRED_CHINA_MONETARY = [('FEDFUNDS', 'Fed_Funds_Rate'), ('DGS10', 'US_10Y_Yield'), ('DCOILWTICO', 'WTI_Oil')]
-        if self.fred:
+        if self.fred and not self._fred_down:
             for series_id, col_name in FRED_CHINA_MONETARY:
-                try:
-                    s = self.fred.get_series(series_id, observation_start='2020-01-01')
-                    if s is not None and (not s.empty):
-                        results[col_name] = s
-                except Exception as _fe:
-                    logger.warning(f'  FRED {series_id}: {_fe}', exc_info=True)
+                s = self._safe_fred_get_series(series_id, observation_start='2020-01-01')
+                if s is not None and (not s.empty):
+                    results[col_name] = s
         if results.empty and self.yf:
             df = self._yf_fetch_with_retry('CBON', period='2y', n_retry=3)
             if df is not None and (not df.empty):
@@ -233,10 +243,10 @@ class CrossMarketCollector:
         try:
             results = pd.DataFrame()
             start = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
-            if self.fred:
-                us_2y = self.fred.get_series('DGS2', observation_start=start)
-                us_10y = self.fred.get_series('DGS10', observation_start=start)
-                us_3m = self.fred.get_series('DGS3MO', observation_start=start)
+            if self.fred and not self._fred_down:
+                us_2y = self._safe_fred_get_series('DGS2', observation_start=start)
+                us_10y = self._safe_fred_get_series('DGS10', observation_start=start)
+                us_3m = self._safe_fred_get_series('DGS3MO', observation_start=start)
                 if us_2y is not None:
                     results['US_2Y'] = us_2y
                 if us_10y is not None:
@@ -247,12 +257,14 @@ class CrossMarketCollector:
                 df = self._yf_fetch_with_retry('^IRX', period=f'{lookback_years}y', n_retry=3)
                 if df is not None and (not df.empty):
                     results['US_2Y'] = df['Close'].squeeze()
-            if 'US_2Y' not in results.columns:
+            if 'US_2Y' not in results.columns or 'US_10Y' not in results.columns:
                 old_df = self._load_csv_ffill(DATA_DIR / 'us_yield_curve.csv', col='US_2Y')
-                if old_df is not None and 'US_2Y' in old_df.columns:
-                    results['US_2Y'] = old_df['US_2Y']
+                if old_df is not None and not old_df.empty:
+                    for col_c in ('US_2Y', 'US_10Y', 'US_3M', 'Yield_Curve_2Y10Y', 'Curve_Inverted', 'Yield_Curve_3M10Y'):
+                        if col_c not in results.columns and col_c in old_df.columns:
+                            results[col_c] = old_df[col_c]
             if 'US_2Y' in results.columns and 'US_10Y' in results.columns:
-                results = results.dropna()
+                results = results.dropna(subset=['US_2Y', 'US_10Y'])
                 results['Yield_Curve_2Y10Y'] = results['US_10Y'] - results['US_2Y']
                 results['Curve_Inverted'] = (results['Yield_Curve_2Y10Y'] < 0).astype(int)
                 if 'US_3M' in results.columns:
@@ -263,7 +275,10 @@ class CrossMarketCollector:
                 return results
             return None
         except Exception as e:
-            logger.warning(f'  ⚠️ 수익률 곡선 실패 (데이터 부족): {e}', exc_info=True)
+            old_df = self._load_csv_ffill(DATA_DIR / 'us_yield_curve.csv')
+            if old_df is not None and not old_df.empty:
+                return old_df
+            logger.warning(f'  ⚠️ 수익률 곡선 실패 (데이터 부족): {e}')
             return None
 
     def compute_sector_betas(self, lookback_days: int=60) -> Dict[str, float]:

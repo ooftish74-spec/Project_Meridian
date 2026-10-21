@@ -128,7 +128,7 @@ fi
 if [ "$REINSTALL_SYSTEMD" = "1" ]; then
   "${SSH[@]}" "sudo chown -R ubuntu:ubuntu '$REMOTE_DIR' && bash '$REMOTE_DIR/scripts/install_systemd_services.sh'"
 fi
-"${SSH[@]}" "sudo systemctl start meridian_live_trader_daemon.service"
+"${SSH[@]}" "sudo systemctl start meridian_live_trader_daemon.service && (sudo systemctl try-restart meridian_telegram.service || true)"
 
 # ── [7] Real health check (reads production state; prints nothing hardcoded) ──
 echo "[6/6] Health check..."

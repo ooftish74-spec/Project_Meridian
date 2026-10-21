@@ -1788,8 +1788,12 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             _ens_path = _PROJECT_ROOT / 'results' / 'models' / 'stock_ranker_ensemble.pkl'
             _shap_path = _PROJECT_ROOT / 'results' / 'shap_analysis.json'
             if _ens_path.exists():
-                with open(_ens_path, 'rb') as _f:
-                    _pkg = _pkl_shap.load(_f)
+                try:
+                    from src.streams.s2_ml_alpha.ml_stream import MLStream
+                    _pkg = MLStream._safe_pickle_load(_ens_path)
+                except Exception:
+                    with open(_ens_path, 'rb') as _f:
+                        _pkg = _pkl_shap.load(_f)
                 _models = _pkg.get('models', {})
                 _feat_names = _pkg.get('metadata', {}).get('feature_names', _pkg.get('feature_names', []))
                 if _models and _feat_names:
