@@ -1,0 +1,22 @@
+# .dockerignore for Project Meridian
+.git
+.gitignore
+.pytest_cache
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+catboost_info
+archive
+backups
+scratch
+results/*.bak
+user_data*.txt
+ec2-trust-policy.json
+logic_diff.patch
+patch*.py
+*.patch
+*.xlsx

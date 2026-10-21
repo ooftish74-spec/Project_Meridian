@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-10-14T16:30:07.369118",
+  "mode": "daily",
+  "dry_run": false,
+  "sandbox_isolation": "STRICT_SHADOW_SANDBOX",
+  "order_execution_blocked": true,
+  "modules": {
+    "active_inference": {
+      "status": "SUCCESS",
+      "free_energy": {
+        "free_energy": 4.930668317128957,
+        "complexity_penalty": 4.943668317128957,
+        "accuracy_reward": 0.013000000000000001,
+        "is_overfitted": true
+      },
+      "phase_transition": {
+        "phase_collapse": true,
+        "entropy": 1.3300340011101142,
+        "entropy_spike": 0.3664680973414874
+      },
+      "factor_weights": {
+        "tech_momentum": 0.5,
+        "value_reversal": 0.5,
+        "orderbook_entropy": 0.5,
+        "ois_macro_proxy": 0.5
+      },
+      "surge_agonists": {
+        "active_agonists": [],
+        "surge_leverage_multiplier": 1.0,
+        "target_etp_universe": [],
+        "surge_active": false
+      }
+    },
+    "soliton_causal": {
+      "status": "SUCCESS",
+      "modulated_weights": {
+        "S0": 0.046423,
+        "S1": 0.247899,
+        "S2": 0.218911,
+        "S3": 0.104064,
+        "S5": 0.202405,
+        "S11_HIGHBETA_SNIPER": 0.087127,
+        "S14_PAIR_ALPHA": 0.093171
+      },
+      "causal_invariance_scores": {
+        "S0": 0.9999999999999991,
+        "S1": 0.9999999999999971,
+        "S2": 0.9999999999999959,
+        "S3": 0.9999999999999987,
+        "S5": 0.9999999999999982,
+        "S11_HIGHBETA_SNIPER": 0.9999999999999954,
+        "S14_PAIR_ALPHA": 0.9999999999999986
+      },
+      "elites_count": 3,
+      "zero_bias_verified": true
+    },
+    "genetic_evolution": {
+      "status": "SUCCESS",
+      "best_chromosome": {
+        "execution.us_3x_min_vp": 160.0,
+        "execution.us_3x_min_z": 2.0491,
+        "exit.sl_atr_multiplier": 1.788,
+        "exit.trailing_tp_trigger": 3.0521,
+        "regime.leverage.ois_min": 53.7296
+      },
+      "overrides_updated": 5
+    }
+  }
+}

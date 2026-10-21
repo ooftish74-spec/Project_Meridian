@@ -1,0 +1,13 @@
+﻿거래일자,체결시간,법인계좌명,거래구분,시장구분,종목코드,종목명,통화,수량,체결단가,약정금액,증권사수수료,제세공과금,적용환율(원/달러),원화약정금액,운용스트림,적요/비고
+2026-07-08,09:00:00,Project Meridian 法人 Master Account,배당수령 (DIVIDEND),해외주식 (US),SHV,iShares Short Treasury Bond ETF,USD,0,0.0,3.08,0.0,0.46,1380.0,4250.0,S3/S5 (단기채권 리밸런싱),7월 배당 수령
+2026-08-07,09:00:00,Project Meridian 法人 Master Account,배당수령 (DIVIDEND),해외주식 (US),SHV,iShares Short Treasury Bond ETF,USD,0,0.0,3.08,0.0,0.46,1380.0,4250.0,S3/S5 (단기채권 리밸런싱),8월 배당 수령
+2026-09-08,09:00:00,Project Meridian 法人 Master Account,배당수령 (DIVIDEND),해외주식 (US),SHV,iShares Short Treasury Bond ETF,USD,0,0.0,3.08,0.0,0.46,1380.0,4250.0,S3/S5 (단기채권 리밸런싱),9월 배당 수령
+2026-09-18,09:00:00,Project Meridian 法人 Master Account,배당수령 (DIVIDEND),해외주식 (US),SOXX,iShares Semiconductor ETF,USD,0,0.0,0.62,0.0,0.09,1380.0,856.0,S1 (반도체 섹터 Alpha ETF),3분기 배당 수령
+2026-09-18,09:00:00,Project Meridian 法人 Master Account,배당수령 (DIVIDEND),해외주식 (US),XLK,Technology Select Sector SPDR Fund,USD,0,0.0,0.58,0.0,0.09,1380.0,800.0,S1 (테크 섹터 Alpha ETF),3분기 배당 수령
+2026-09-19,22:30:00,Project Meridian 法人 Master Account,매도 (SELL),해외주식 (US),SHV,iShares Short Treasury Bond ETF,USD,7,110.2,771.4,0.08,0.0,1380.0,1064532.0,S3/S5 (단기채권 리밸런싱),Project Meridian 리밸런싱 자산 교체 매도 (SHV ➔ XLK)
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),국내주식 (KRX),069500,KODEX 200,KRW,51,89476.96,4563325.0,684.0,0.0,1.0,4563325.0,S2 (KRX 대형주 ETF),Project Meridian AI 알파 엔진 자율 입증 매수
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),국내주식 (KRX),091160,KODEX 반도체,KRW,10,116028.0,1160280.0,174.0,0.0,1.0,1160280.0,S2 (KODEX 반도체 ETF),Project Meridian AI 알파 엔진 자율 입증 매수
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),국내주식 (KRX),305720,KODEX 2차전지산업,KRW,334,14704.12,4911176.0,737.0,0.0,1.0,4911176.0,Alpha Engine,Project Meridian AI 알파 엔진 자율 입증 매수
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),해외주식 (US),TLT,ISHARES 20+Y TREASURY BOND,USD,2,79.68,159.36,0.02,0.0,1380.0,219917.0,Alpha Engine,Project Meridian AI 알파 엔진 자율 입증 매수
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),해외주식 (US),TMUS,T 모바일 US,USD,2,158.25,316.5,0.03,0.0,1380.0,436770.0,Alpha Engine,Project Meridian AI 알파 엔진 자율 입증 매수
+2026-10-16,09:30:00,Project Meridian 法人 Master Account,매수 (BUY),해외주식 (US),XLV,SS HEALTH CARE SELECT SECTOR SPDR,USD,2,178.22,356.44,0.04,0.0,1380.0,491887.0,Alpha Engine,Project Meridian AI 알파 엔진 자율 입증 매수

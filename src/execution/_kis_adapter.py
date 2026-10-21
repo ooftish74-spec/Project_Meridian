@@ -178,6 +178,8 @@ class KISTraderAdapter:
     def __init__(self, mode: str='live', app_key: str='', app_secret: str='', account_no: str='', initial_capital: float=None, fetch_balance_on_init: bool=True):
         import threading
         self._lock = threading.RLock()
+        if mode == 'real':
+            mode = 'live'
         self.mode = mode
         try:
             from config.dynamic_config import DynamicConfig
@@ -1429,6 +1431,14 @@ class KISTraderAdapter:
                             return float(df[col].dropna().iloc[-1])
                     except Exception:
                         pass
+            if self.mode != 'mock':
+                try:
+                    from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+                    _yc = fetch_yahoo_chart_ohlcv(tk_str, range_str='5d')
+                    if _yc is not None and not _yc.empty and 'close' in _yc.columns:
+                        return float(_yc['close'].dropna().iloc[-1])
+                except Exception:
+                    pass
             return None
 
         if self.mode != 'mock' and (self._access_token or self.authenticate()):

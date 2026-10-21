@@ -211,6 +211,10 @@
   "sector": "ETF",
   "exchange": "AMEX"
  },
+ "PSQ": {
+  "sector": "ETF",
+  "exchange": "AMEX"
+ },
  "TLT": {
   "sector": "ETF",
   "exchange": "NASD"

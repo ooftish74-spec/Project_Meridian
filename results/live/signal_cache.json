@@ -1,0 +1,22 @@
+{
+  "vix": 14.92,
+  "vkospi": 14.23,
+  "usdkrw": 1367.66,
+  "sp500_change_1d": -0.52,
+  "nasdaq_change_1d": -0.6,
+  "sox_change_1d": -2.74,
+  "ewy_change_1d": 0.33,
+  "night_futures_change_1d": -0.31,
+  "overnight_intel": {
+    "sp500_change_pct": -0.52,
+    "nasdaq_change_pct": -0.6,
+    "sox_change_pct": -2.74,
+    "ewy_change_pct": 0.33,
+    "night_futures_pct": -0.31,
+    "us_sentiment": "slightly_bearish",
+    "timestamp": "2026-09-01T06:25:00+09:00",
+    "soxx_change_pct": 0.57
+  },
+  "last_overnight_update": "2026-09-01T06:25:00+09:00",
+  "soxx_change_1d": 0.57
+}

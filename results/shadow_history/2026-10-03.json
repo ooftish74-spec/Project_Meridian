@@ -1,0 +1,49 @@
+{
+  "engine_status": "SHADOW_SANDBOX_ACTIVE",
+  "order_execution_permitted": false,
+  "promotion_status": "STRICT_SHADOW_SANDBOX",
+  "current_regime": "caution",
+  "factor_weights": {
+    "tech_momentum": 0.4,
+    "value_reversal": 0.5,
+    "orderbook_entropy": 0.92,
+    "ois_macro_proxy": 0.85
+  },
+  "phase_transition": {
+    "phase_collapse": true,
+    "entropy": 1.261131870925641,
+    "entropy_spike": 0.6567579578493339
+  },
+  "phase_resonance": {
+    "coherence_index": 0.6911764704865918,
+    "effective_complexity_discount": 0.3088235295134082,
+    "surge_scale": 1.691176470486592
+  },
+  "surge_agonists": {
+    "active_agonists": [],
+    "surge_leverage_multiplier": 1.0,
+    "target_etp_universe": [],
+    "surge_active": false
+  },
+  "free_energy_metrics": {
+    "free_energy": 4.751664115687638,
+    "complexity_penalty": 4.775664115687638,
+    "accuracy_reward": 0.024,
+    "is_overfitted": true
+  },
+  "wired_execution_modules": {
+    "whipsaw_defense": "WHIPSAW_FILTER_GREEN",
+    "realtime_entry_monitor": "MONITORING_ACTIVE",
+    "capital_router": {
+      "core_allocation_pct": 85.0,
+      "intraday_sniper_pct": 15.0
+    },
+    "netting_engine": "ZERO_REDUNDANT_TURNOVER",
+    "stealth_qvm_engine": {
+      "target_slippage_bps": 2.0,
+      "execution_style": "TWAP_VWAP_STEALTH"
+    }
+  },
+  "recommendation": "SOFT_VETO",
+  "timestamp": "2026-10-03T21:48:27.720242"
+}

@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meridian-orchestrator
+    restart: always
+    environment:
+      - ENVIRONMENT=production
+      - TZ=Asia/Seoul
+      - AWS_REGION=ap-northeast-2
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    command: python scripts/stream_orchestrator.py
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meridian-dashboard
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      - ENVIRONMENT=production
+      - TZ=Asia/Seoul
+      - AWS_REGION=ap-northeast-2
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./reports:/app/reports
+    command: streamlit run dashboard/app.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - orchestrator
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
