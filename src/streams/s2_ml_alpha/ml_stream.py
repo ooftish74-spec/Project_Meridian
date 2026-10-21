@@ -22,6 +22,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
     def pget(name, fallback, ctx=None):
         return fallback
 import json
+import sys
 import pandas as pd
 import logging
 import math
@@ -776,10 +777,14 @@ class S2MLAlphaStream(BaseStream):
                     up_prob = _blended
                 if self._fast_corrector is not None:
                     try:
-                        correction = float(self._fast_corrector.predict_correction(X)[0])
-                        old_prob = up_prob
-                        up_prob = max(0.0, min(1.0, up_prob + correction))
-                        logger.debug(f"  [Phase 2] FastCorrector: {stock['ticker']} {old_prob:.4f} → {up_prob:.4f} (Δ={correction:+.4f})")
+                        _fc_mod = getattr(self._fast_corrector, 'model', None)
+                        _fc_n = getattr(_fc_mod, 'n_features_in_', None)
+                        _X_fc = X[:, :_fc_n] if (_fc_n is not None and X.shape[1] > _fc_n) else X
+                        if _fc_n is None or _X_fc.shape[1] == _fc_n:
+                            correction = float(self._fast_corrector.predict_correction(_X_fc)[0])
+                            old_prob = up_prob
+                            up_prob = max(0.0, min(1.0, up_prob + correction))
+                            logger.debug(f"  [Phase 2] FastCorrector: {stock['ticker']} {old_prob:.4f} → {up_prob:.4f} (Δ={correction:+.4f})")
                     except Exception as e:
                         from src.utils.error_logger import log_error_rate_limited
                         log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)

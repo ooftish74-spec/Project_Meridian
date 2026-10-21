@@ -91,7 +91,19 @@ class S5OvernightStream(BaseStream):
             pass
 
         signal_cache = market_data.get('signal_cache', {})
-        kospi_chg = signal_cache.get('kospi_change_1d', 0.0)
+        kospi_chg = float(signal_cache.get('kospi_change_1d', 0.0) or 0.0)
+        if not is_backtest:
+            _kr_ts = str(signal_cache.get('kr_refresh_ts', ''))
+            _today_iso = datetime.now().strftime('%Y-%m-%d')
+            if _kr_ts[:10] != _today_iso:
+                try:
+                    from src.data_collection.kis_data_collector import KISDataCollector
+                    _q_lev = KISDataCollector().get_current_price(S5OvernightStream.lev_ticker)
+                    if isinstance(_q_lev, dict) and _q_lev.get('change_pct') is not None:
+                        kospi_chg = round(float(_q_lev['change_pct']) / 2.0, 2)
+                        logger.info(f"  🔄 [S5 Live KOSPI Sync] signal_cache.kr_refresh_ts({_kr_ts[:10]}) 노후 감지 ➔ 실시간 KOSPI 추정 등락률({kospi_chg:+.2f}%) 적용")
+                except Exception as _k_e:
+                    logger.debug(f"  [S5 Live KOSPI Sync] 폴백 유지: {_k_e}")
         vix = signal_cache.get('vix', 15.0)
         _nq_chg = 0.0
         _nq_blocked = False

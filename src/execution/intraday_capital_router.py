@@ -229,7 +229,16 @@ class IntradayCapitalRouter:
                         if 'amount_usd' in s1:
                             s1['amount_usd'] = float(s1['amount_usd']) * net_ratio
                         if 'quantity' in s1:
-                            s1['quantity'] = max(1, int(round(float(s1['quantity']) * net_ratio)))
+                            new_q1 = int(round(float(s1['quantity']) * net_ratio))
+                            if new_q1 <= 0:
+                                logger.info(
+                                    f"  🛑 [Smart Netting Cancel] ({t1}:{side1}, E={exp1:,.0f}) vs ({t2}:{side2}, E={exp2:,.0f}) "
+                                    f"-> 상쇄 후 순노출({exp1 - exp2:,.0f}, 비율 {net_ratio*100:.1f}%)이 1주 미만(0주)이므로 양측 모두 상쇄 취소"
+                                )
+                                cancelled_indices.add(i)
+                                cancelled_indices.add(j)
+                                break
+                            s1['quantity'] = new_q1
                         s1['netted_with'] = t2
                         s1['saved_turnover_krw'] = saved_vol
                         logger.info(
@@ -248,7 +257,16 @@ class IntradayCapitalRouter:
                         if 'amount_usd' in s2:
                             s2['amount_usd'] = float(s2['amount_usd']) * net_ratio
                         if 'quantity' in s2:
-                            s2['quantity'] = max(1, int(round(float(s2['quantity']) * net_ratio)))
+                            new_q2 = int(round(float(s2['quantity']) * net_ratio))
+                            if new_q2 <= 0:
+                                logger.info(
+                                    f"  🛑 [Smart Netting Cancel] ({t2}:{side2}, E={exp2:,.0f}) vs ({t1}:{side1}, E={exp1:,.0f}) "
+                                    f"-> 상쇄 후 순노출({exp2 - exp1:,.0f}, 비율 {net_ratio*100:.1f}%)이 1주 미만(0주)이므로 양측 모두 상쇄 취소"
+                                )
+                                cancelled_indices.add(i)
+                                cancelled_indices.add(j)
+                                break
+                            s2['quantity'] = new_q2
                         s2['netted_with'] = t1
                         s2['saved_turnover_krw'] = saved_vol
                         logger.info(
