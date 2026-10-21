@@ -1702,7 +1702,7 @@ def _phase_intraday():
                 _kis_col = KISDataCollector()
                 for ticker in tickers:
                     try:
-                        _p = _kis_col.get_kr_current_price(ticker)
+                        _p = _kis_col.get_current_price(ticker)
                         if _p:
                             logger.debug(f"  장중 시세 갱신 {ticker}: {_p}")
                     except Exception as _pe:
@@ -2618,9 +2618,9 @@ def _phase_call_auction_0830():
                         'entry_price': h.get('avg_price', 0.0),
                         'current_price': curr_p,
                         'unrealized_pnl_pct': curr_ret,
-                        'peak_pnl_pct': float(hwm_data.get('peak_pnl_pct', curr_ret) or curr_ret),
-                        'peak_price': float(hwm_data.get('peak_price', curr_p) or curr_p),
-                        'lowest_price': float(hwm_data.get('lowest_price', curr_p) or curr_p),
+                        'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
+                        'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
+                        'lowest_price': float(hwm_data['lowest_price']) if (hwm_data.get('lowest_price') or 0.0) > 0 else curr_p,
                         'scaled_out': bool(hwm_data.get('scaled_out', False)),
                         'trail_activated': bool(hwm_data.get('trail_activated', False)),
                         'holding_minutes': 999.0,

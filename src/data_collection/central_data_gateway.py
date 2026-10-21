@@ -111,6 +111,15 @@ class CentralDataGateway:
         """종목/지수/ETF 실시간 호가 조회 (3중 핫-페일오버 자동 적용)."""
         from src.utils.ticker_canonical import canonical_ticker
         symbol = canonical_ticker(symbol, context='central_data_gateway')
+        now_str = datetime.now().isoformat()
+        if not symbol or str(symbol).strip().startswith('_'):
+            return {
+                'symbol': symbol,
+                'price': None,
+                'status': 'SKIPPED',
+                'source': 'META_SKIPPED',
+                'timestamp': now_str
+            }
 
         if symbol.upper() in ('USDKRW=X', 'USDKRW', 'KRW=X'):
             macro_res = self.get_macro_indicator('usdkrw')
@@ -123,7 +132,6 @@ class CentralDataGateway:
             else:
                 is_kr = False
 
-        now_str = datetime.now().isoformat()
         if symbol.upper().endswith('.T'):
             jp_code = symbol.split('.')[0]
             try:
@@ -148,7 +156,29 @@ class CentralDataGateway:
                     'source': 'Tier2_HotFailover',
                     'timestamp': now_str
                 }
-            logger.info(f"ℹ️ [CentralDataGateway] 일본 도쿄증시 종목({symbol}) 실시간 시세 미지원 — 스킵")
+            for _jp_pq in (
+                _PROJECT_ROOT / 'data' / 'jp_stocks' / 'prices' / f'{symbol}.parquet',
+                _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{symbol}.parquet',
+                _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{jp_code}.parquet',
+            ):
+                if _jp_pq.exists():
+                    try:
+                        import pandas as _pd_jp
+                        _df_jp = _pd_jp.read_parquet(_jp_pq)
+                        _col_jp = 'close' if 'close' in _df_jp.columns else ('Close' if 'Close' in _df_jp.columns else None)
+                        if _col_jp and not _df_jp.empty:
+                            _px_jp = float(_df_jp[_col_jp].dropna().iloc[-1])
+                            if _px_jp > 0:
+                                return {
+                                    'symbol': symbol,
+                                    'price': _px_jp,
+                                    'status': 'OK',
+                                    'source': 'LocalParquet_JP',
+                                    'timestamp': now_str
+                                }
+                    except Exception:
+                        pass
+            logger.debug(f"ℹ️ [CentralDataGateway] 일본 도쿄증시 종목({symbol}) 실시간 시세 미지원 — 스킵")
             return {
                 'symbol': symbol,
                 'price': None,

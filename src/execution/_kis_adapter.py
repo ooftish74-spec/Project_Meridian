@@ -346,18 +346,8 @@ class KISTraderAdapter:
         if excg_upper in ('NASD', 'NAS', 'NASDAQ'):
             return 'NASD'
 
-        _AMEX_SET = {'SOXL', 'SOXS', 'UPRO', 'SPXL', 'SPXS', 'TECL', 'WEBL', 'BOIL', 'KOLD', 'SVIX', 'UVIX', 'LABU', 'LABD', 'BULZ', 'CONL', 'MSTX', 'MSTU', 'XBI', 'GLD', 'SLV', 'USO', 'XLK', 'XLE', 'XLF', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY'}
-        _NYSE_SET = {'SHV', 'SGOV', 'SPY', 'TSM', 'CAT', 'KO', 'DIS', 'JNJ', 'PFE', 'UNH', 'JPM', 'BAC', 'V', 'MA', 'WMT', 'EWY', 'IWM', 'LIT', 'SLX', 'BDRY', 'URA', 'BIL'}
-        _NASD_SET = {'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX', 'TLT', 'TMUS', 'IEF', 'SHY'}
-
-        if t_upper in _AMEX_SET:
-            return 'AMEX'
-        if t_upper in _NYSE_SET:
-            return 'NYSE'
-        if t_upper in _NASD_SET:
-            return 'NASD'
         try:
-            from src.params import load_table
+            from src.params.tables import load_table
             _ex_map = load_table('src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP', {})
             _mapped = str((_ex_map or {}).get(t_upper, '')).upper().strip()
             if _mapped in ('AMS', 'AMEX'):
@@ -368,6 +358,17 @@ class KISTraderAdapter:
                 return 'NASD'
         except Exception:
             pass
+
+        _AMEX_SET = {'SOXL', 'SOXS', 'UPRO', 'SPXL', 'SPXS', 'TECL', 'WEBL', 'BOIL', 'KOLD', 'SVIX', 'UVIX', 'LABU', 'LABD', 'BULZ', 'CONL', 'MSTX', 'MSTU', 'XBI', 'GLD', 'SLV', 'USO', 'SPY', 'SGOV', 'BIL', 'EWY', 'IWM', 'LIT', 'SLX', 'BDRY', 'URA', 'XLK', 'XLE', 'XLF', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY'}
+        _NYSE_SET = {'TSM', 'CAT', 'KO', 'DIS', 'JNJ', 'PFE', 'UNH', 'JPM', 'BAC', 'V', 'MA', 'WMT'}
+        _NASD_SET = {'SHV', 'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX', 'TLT', 'TMUS', 'IEF', 'SHY'}
+
+        if t_upper in _AMEX_SET:
+            return 'AMEX'
+        if t_upper in _NYSE_SET:
+            return 'NYSE'
+        if t_upper in _NASD_SET:
+            return 'NASD'
         return 'NASD'
 
     def buy(self, ticker: str, quantity: int, price: float=0, order_type: str='market', exchange: str='SOR', stream: str='', urgency: str='normal', time_in_force: str='DAY', is_yield_sweep: bool = False, notes: str = '', **kwargs) -> Order:
@@ -1380,14 +1381,39 @@ class KISTraderAdapter:
         return None
 
     def _get_current_price(self, ticker: str) -> Optional[float]:
-        """현재가 조회 — API → KRX CSV → parquet 순서."""
+        """현재가 조회 — 국내(KRX) 및 해외(US) 종목 자동 분기."""
         import pandas as pd
+        tk_str = str(ticker or '').strip()
+        if not tk_str:
+            return None
+        if not tk_str.isdigit():
+            if self.mode != 'mock' and self._access_token:
+                try:
+                    us_px = self.get_live_overseas_price(tk_str, self.resolve_overseas_exchange(tk_str))
+                    if us_px and us_px > 0:
+                        return float(us_px)
+                except Exception as _us_e:
+                    logger.debug(f"  KIS 해외 현재가 조회 폴백 ({tk_str}): {_us_e}")
+            for _us_pq in (
+                _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{tk_str}.parquet',
+                _PROJECT_ROOT / 'data' / 'historical_10y' / f'{tk_str}.parquet',
+            ):
+                if _us_pq.exists():
+                    try:
+                        df = pd.read_parquet(_us_pq)
+                        col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                        if col and not df.empty:
+                            return float(df[col].dropna().iloc[-1])
+                    except Exception:
+                        pass
+            return None
+
         if self.mode != 'mock' and self._access_token:
             try:
                 import requests
                 headers = self._get_headers()
                 headers['tr_id'] = 'FHKST01010100'
-                params = {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': ticker}
+                params = {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': tk_str}
                 url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
                 resp = requests.get(url, headers=headers, params=params, timeout=5)
                 data = resp.json()
@@ -1396,7 +1422,7 @@ class KISTraderAdapter:
                     if price > 0:
                         return price
             except Exception as e:
-                logger.debug(f"  KIS 실시간 현재가 조회 폴백 ({ticker}): {e}")
+                logger.debug(f"  KIS 실시간 현재가 조회 폴백 ({tk_str}): {e}")
         krx_dir = _PROJECT_ROOT / 'data' / 'raw' / 'krx_stock_daily'
         if krx_dir.exists():
             try:
@@ -1406,7 +1432,7 @@ class KISTraderAdapter:
                     for col in ['ISU_CD', '종목코드', 'Code', 'ticker']:
                         if col in df.columns:
                             df[col] = df[col].astype(str).str.zfill(6)
-                            row = df[df[col] == ticker]
+                            row = df[df[col] == tk_str]
                             if not row.empty:
                                 for pc in ['TDD_CLSPRC', '종가', 'Close']:
                                     if pc in row.columns:
@@ -1418,17 +1444,40 @@ class KISTraderAdapter:
                 import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
-        for pattern in [f"kr_{ticker}.parquet", f"{ticker}.parquet"]:
-            pq = _PROJECT_ROOT / 'data' / 'historical_10y' / pattern
-            if pq.exists():
-                try:
-                    df = pd.read_parquet(pq)
-                    return float(df['close'].iloc[-1])
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                    pass
+        for _dir_name in ('kr_markets', 'historical_10y'):
+            for pattern in [f"kr_{tk_str}.parquet", f"{tk_str}.parquet"]:
+                pq = _PROJECT_ROOT / 'data' / _dir_name / pattern
+                if pq.exists():
+                    try:
+                        df = pd.read_parquet(pq)
+                        col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                        if col and not df.empty:
+                            return float(df[col].dropna().iloc[-1])
+                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                        import logging
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+                        pass
         return None
+
+    def _estimate_price(self, ticker: str) -> float:
+        """지정가 전환 폴백용 가격 추정."""
+        return float(self._get_current_price(ticker) or 0.0)
+
+    def _estimate_spread_bps(self, ticker: str) -> float:
+        """종목별 호가 스프레드(bps) 추정."""
+        try:
+            if str(ticker or '').isdigit():
+                from src.data_collection.kis_data_collector import KISDataCollector
+                ob = KISDataCollector().get_orderbook(str(ticker))
+                if ob and ob.get('spread_pct') is not None:
+                    return float(ob['spread_pct']) * 100.0
+        except Exception:
+            pass
+        return 5.0
+
+    def fetch_live_account_balance(self) -> bool:
+        """fetch_live_balance 호환 별칭 (ExecutionEngine / ExposureOrchestrator 호환)."""
+        return self.fetch_live_balance()
 
     def panic_sell_all(self) -> List[Order]:
         """(Phase 5) 긴급 보호 조치: 보유 중인 전 종목 시장가 매도.
@@ -2258,6 +2307,8 @@ class KISTraderAdapter:
                     params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'OVRS_EXCG_CD': excg, 'SORT_SQN': 'DS', 'CTX_AREA_FK200': '', 'CTX_AREA_NK200': ''}
                     url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-nccs"
                     resp = requests.get(url, headers=headers, params=params, timeout=5)
+                    if hasattr(resp, 'text') and isinstance(resp.text, str) and not resp.text.strip():
+                        continue
                     data = resp.json()
                     if data.get('rt_cd') == '0':
                         output = data.get('output', data.get('output1', []))
@@ -2273,6 +2324,8 @@ class KISTraderAdapter:
                 params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'INQR_DVSN_1': '0', 'INQR_DVSN_2': '0', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
                 url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
                 resp = requests.get(url, headers=headers, params=params, timeout=5)
+                if hasattr(resp, 'text') and isinstance(resp.text, str) and not resp.text.strip():
+                    return []
                 data = resp.json()
                 if data.get('rt_cd') == '0':
                     output = data.get('output', data.get('output1', []))
@@ -2309,6 +2362,8 @@ class KISTraderAdapter:
                 }
                 url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-nccs"
                 resp = requests.get(url, headers=headers, params=params, timeout=10)
+                if hasattr(resp, 'text') and isinstance(resp.text, str) and not resp.text.strip():
+                    continue
                 data = resp.json()
                 if data.get('rt_cd') == '0':
                     for item in data.get('output', []):

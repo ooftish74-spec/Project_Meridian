@@ -77,8 +77,12 @@ class MLRegimeRouter:
                 sys.modules.setdefault('_loss', _sk_loss)
             except Exception:
                 pass
-            with open(model_file, 'rb') as f:
-                model = pickle.load(f)
+            try:
+                from src.streams.s2_ml_alpha.ml_stream import MLStream
+                model = MLStream._safe_pickle_load(model_file)
+            except Exception:
+                with open(model_file, 'rb') as f:
+                    model = pickle.load(f)
             self._models[regime] = model
             logger.info(f"  ✅ [Phase 10: Alpha Breakthrough] MLRegimeRouter {regime.upper()} 모델 로드: {model_file.name}")
             return model

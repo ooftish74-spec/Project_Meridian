@@ -106,7 +106,7 @@ class ExportMacroCollector:
                 out['export_total_yoy'] = float(d.get('export_yoy_pct', 0.0))
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning(f"Silent exception caught in fallback: {e}", exc_info=True)
+                logging.getLogger(__name__).debug(f"  [ExportMacro] MOTIE 속보치 폴백 처리: {e}")
 
             # 10/20일 속보
             out['export_10d_yoy'] = _news_yoy('관세청 10일 수출 전년대비')

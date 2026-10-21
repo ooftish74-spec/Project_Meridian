@@ -131,5 +131,9 @@ class ModelRegistryManager:
         """
         if not self.latest_link.exists():
             return None
-        with open(self.latest_link, 'rb') as f:
-            return pickle.load(f)
+        try:
+            from src.streams.s2_ml_alpha.ml_stream import MLStream
+            return MLStream._safe_pickle_load(self.latest_link)
+        except Exception:
+            with open(self.latest_link, 'rb') as f:
+                return pickle.load(f)

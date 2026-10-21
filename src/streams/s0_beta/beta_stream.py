@@ -384,3 +384,7 @@ class S0BetaStream(BaseStream):
         perf['pnl_history'] = list(self._pnl_history)
         return perf
 
+    def record_trade_result(self, pnl_ratio: float) -> None:
+        """청산 수익률 기록 (Shadow/Live Manager 호환 인터페이스)."""
+        self._pnl_history.append(float(pnl_ratio))
+

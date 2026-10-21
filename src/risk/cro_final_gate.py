@@ -121,9 +121,11 @@ class CROFinalGate:
 
         # Dynamic Leverage Expansion via Anti-fragile Option Coverage
         dynamic_allowed_exposure = self.max_portfolio_exposure
+        is_tail_hedged = False
         if market_data and isinstance(market_data, dict):
             unc_eval = market_data.get('unconventional_eval', {})
             if unc_eval and unc_eval.get('is_tail_hedged'):
+                is_tail_hedged = True
                 dynamic_allowed_exposure = float(unc_eval.get('dynamic_leverage_recommended', self.max_portfolio_exposure))
                 logger.info(f"  🛡️ [CROFinalGate] Anti-fragile Option Coverage Verified ➔ Dynamic Leverage Expansion to {dynamic_allowed_exposure:.2f}x")
 
@@ -149,7 +151,7 @@ class CROFinalGate:
         try:
             inv_map = {idx: tk for tk, idx in ticker_order_map.items()}
             w_by_tk = {inv_map[i]: float(weights_vec[i]) for i in range(n_tickers) if i in inv_map and abs(weights_vec[i]) > _cro_eps}
-            if w_by_tk:
+            if w_by_tk and not is_tail_hedged:
                 stress_res = self.stress_tester.simulate_scenario_shocks(w_by_tk, portfolio_value)
                 if not stress_res.get('stress_test_passed', True):
                     stress_scale_factor = float(stress_res.get('suggested_scaling_factor', 1.0))

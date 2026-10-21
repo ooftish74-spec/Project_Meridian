@@ -169,7 +169,7 @@ class RegimeDetector:
             return self.HMM_STATE_MAP_4
         return self.HMM_STATE_MAP_2
 
-    def detect(self, market_data: Dict) -> Dict:
+    def detect(self, market_data: Optional[Dict] = None) -> Dict:
         """레짐 감지. (Priority 락 체크 포함)
 
         Args:
@@ -190,6 +190,15 @@ class RegimeDetector:
                 'method': str,          # 'rule_only' or 'ensemble'
             }
         """
+        if market_data is None:
+            market_data = {}
+            try:
+                import json as _sc_json
+                _sc_path = Path(__file__).resolve().parent.parent.parent / 'results' / 'signal_cache.json'
+                if _sc_path.exists():
+                    market_data['signal_cache'] = _sc_json.loads(_sc_path.read_text(encoding='utf-8'))
+            except Exception:
+                pass
         try:
             import json
             from datetime import datetime
@@ -200,9 +209,10 @@ class RegimeDetector:
                 
                 # Check Priority & TTL
                 if state_data.get('priority', 3) == 1 and state_data.get('ttl_until'):
-                    ttl = datetime.fromisoformat(state_data['ttl_until'])
-                    if datetime.now() < ttl:
-                        logger.warning(f"  🚨 [Priority Lock] 우선순위가 높은(1) 수동/NightWatch 레짐 상태가 발효 중입니다. 남은 시간: {ttl - datetime.now()}")
+                    ttl = datetime.fromisoformat(str(state_data['ttl_until'])).replace(tzinfo=None)
+                    now_naive = datetime.now().replace(tzinfo=None)
+                    if now_naive < ttl:
+                        logger.warning(f"  🚨 [Priority Lock] 우선순위가 높은(1) 수동/NightWatch 레짐 상태가 발효 중입니다. 남은 시간: {ttl - now_naive}")
                         logger.warning(f"  🚨 [Priority Lock] 강제로 {state_data.get('current_state')} 상태를 유지합니다. 일반 앙상블 분석은 기각(Bypass)됩니다.")
                         return {
                             'regime': state_data.get('current_state', 'crash'),
@@ -215,7 +225,7 @@ class RegimeDetector:
                         }
         except Exception as e:
             logger.error(f"  Priority Lock 검사 중 오류: {e}")
-        signal = market_data.get('signal_cache', {})
+        signal = market_data.get('signal_cache', market_data if isinstance(market_data, dict) else {})
         critical_keys = ['vix', 'vkospi', 'usdkrw']
         import pandas as pd
         missing_count = sum((1 for k in critical_keys if k not in signal or pd.isna(signal[k])))

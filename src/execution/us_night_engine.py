@@ -179,7 +179,7 @@ class USNightExecutionEngine:
                             'current_price': curr_p,
                             'highest_price': final_peak,
                             'peak_price': final_peak,
-                            'peak_pnl_pct': float(hwm.get('peak_pnl_pct', curr_ret) or curr_ret),
+                            'peak_pnl_pct': float(hwm['peak_pnl_pct']) if hwm.get('peak_pnl_pct') is not None else curr_ret,
                             'trail_activated': bool(hwm.get('trail_activated', False)) or (entry_p > 0 and final_peak >= entry_p * (1.0 + self.trail_activation_pct)),
                             'quantity': int(h.get('qty', 0)),
                             'amount': float(h.get('qty', 0)) * curr_p,

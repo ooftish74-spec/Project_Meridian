@@ -994,8 +994,9 @@ class ExecutionEngine:
         nav_system: float = 0.0
         result_sync: Dict = {'ok': True, 'nav_system': 0.0, 'nav_broker': 0.0, 'diff_pct': 0.0, 'level': 'ok', 'message': ''}
         try:
-            if portfolio and portfolio.get('total_nav'):
-                nav_system = float(portfolio['total_nav'])
+            _p_nav = portfolio.get('nav') or portfolio.get('total_nav') or portfolio.get('total_value') if portfolio else None
+            if _p_nav:
+                nav_system = float(_p_nav)
             elif self.mode in ('live', 'paper'):
                 trader = self._get_trader()
                 if trader:

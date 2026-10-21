@@ -482,7 +482,7 @@ class RealtimeDataBus:
         pykrx → KIS API → investor_flow_collector 순서로 시도.
         """
         try:
-            from pykrx import stock as pykrx_stock
+            from src.data_collection.pykrx_compat import stock as pykrx_stock
             import pandas as _pd
             today_str = datetime.now().strftime('%Y%m%d')
             df = pykrx_stock.get_market_trading_volume_by_date(today_str, today_str, ticker)
@@ -493,7 +493,7 @@ class RealtimeDataBus:
                 total_volume = float(row.get('전체', 1) or 1)
                 return {'foreign_net': foreign_net, 'institutional_net': institutional_net, 'foreign_ratio': foreign_net / total_volume if total_volume else 0.0, 'fetched_method': 'pykrx'}
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [RealtimeDataBus] pykrx 외국인 순매수 폴백: {e}')
         try:
             from src.data_collection.investor_flow_collector import InvestorFlowCollector
             ifc = InvestorFlowCollector()
@@ -502,7 +502,7 @@ class RealtimeDataBus:
                 latest = df.iloc[-1]
                 return {'foreign_net': float(latest.get('foreign_net', 0)), 'institutional_net': float(latest.get('inst_net', 0)), 'foreign_ratio': float(latest.get('foreign_ratio', 0)), 'fetched_method': 'ifc_cache'}
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [RealtimeDataBus] ifc 외국인 순매수 폴백: {e}')
         raise ConnectionError(f"{ticker} 외국인 순매수 조회 실패 (모든 소스)")
 
     def _fetch_institutional_flow_live(self, ticker: str) -> Optional[Dict]:
@@ -513,7 +513,7 @@ class RealtimeDataBus:
                 inst = foreign_dp.value.get('institutional_net', 0)
                 return {'institutional_net': inst, 'fetched_method': 'from_foreign'}
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [RealtimeDataBus] 기관 순매수 캐시 예외: {e}')
         raise ConnectionError(f"{ticker} 기관 순매수 조회 실패")
 
     def _fetch_price_live(self, ticker: str) -> Optional[Dict]:
@@ -557,18 +557,18 @@ class RealtimeDataBus:
                     data['fetched_method'] = 'local_cache'
                     return data
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [RealtimeDataBus] 프로그램 매매 캐시 예외: {e}')
         try:
-            from pykrx import stock as pykrx_stock
+            from src.data_collection.pykrx_compat import stock as pykrx_stock
             today_str = datetime.now().strftime('%Y%m%d')
-            df = pykrx_stock.get_market_program_trading_tend(today_str)
+            df = getattr(pykrx_stock, 'get_market_program_trading_tend', lambda d: None)(today_str)
             if df is not None and (not df.empty):
                 result = {'program_net': float(df['순매수'].sum()), 'fetched_method': 'pykrx'}
                 prog_file.parent.mkdir(parents=True, exist_ok=True)
                 atomic_write_json(prog_file, result)
                 return result
         except Exception as e:
-            logger.warning(f'  suppressed: {e}', exc_info=True)
+            logger.debug(f'  [RealtimeDataBus] 프로그램 매매 폴백: {e}')
         raise ConnectionError('프로그램 매매 조회 실패')
 
 def quality_weighted_signal(base_signal: float, quality: float, min_quality_to_use: float=0.1) -> Tuple[float, float]:

@@ -69,8 +69,12 @@ class WalkForwardValidator:
                 self._save(result)
                 return result
 
-            with open(model_path, 'rb') as f:
-                pkg = pickle.load(f)
+            try:
+                from src.streams.s2_ml_alpha.ml_stream import MLStream
+                pkg = MLStream._safe_pickle_load(model_path)
+            except Exception:
+                with open(model_path, 'rb') as f:
+                    pkg = pickle.load(f)
             if not pkg:
                 result['reason'] = '모델 메타데이터 비어있음'
                 self._save(result)

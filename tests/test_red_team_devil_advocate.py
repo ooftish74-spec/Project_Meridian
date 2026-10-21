@@ -29,8 +29,9 @@ class TestOverseasExchangeResolution:
         assert KISTraderAdapter.resolve_overseas_exchange('NVDA') == 'NASD'
         assert KISTraderAdapter.resolve_overseas_exchange('QQQ') == 'NASD'
         assert KISTraderAdapter.resolve_overseas_exchange('SOXX') == 'NASD'
-        assert KISTraderAdapter.resolve_overseas_exchange('SPY') == 'NYSE'
-        assert KISTraderAdapter.resolve_overseas_exchange('SHV') == 'NYSE'
+        assert KISTraderAdapter.resolve_overseas_exchange('SPY') == 'AMEX'
+        assert KISTraderAdapter.resolve_overseas_exchange('SHV') == 'NASD'
+        assert KISTraderAdapter.resolve_overseas_exchange('KO') == 'NYSE'
         assert KISTraderAdapter.resolve_overseas_exchange('XLK') == 'AMEX'
         assert KISTraderAdapter.resolve_overseas_exchange('SOXL') == 'AMEX'
 

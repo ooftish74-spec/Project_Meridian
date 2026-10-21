@@ -2490,6 +2490,12 @@ class StreamOrchestrator:
         _cumulative_ordered_krw_by_ticker = {}
         for stream_id, stream_signals in signals.items():
             stream_orders[stream_id] = []
+            stream_signals = [
+                _s for _s in (stream_signals or [])
+                if isinstance(_s, dict)
+                and not str(_s.get('ticker', '')).strip().startswith('_')
+                and str(_s.get('direction', '')).lower() != 'meta'
+            ]
             budget = stream_budgets.get(stream_id, 0)
             if budget <= 0 and stream_id == 'S10_MEGA_TREND':
                 budget = stream_budgets.get('S10', 0)
@@ -2983,7 +2989,7 @@ class StreamOrchestrator:
                 # ── Trailing Stop ──
                 # trail_activate_pct에 도달한 뒤 trail_distance_pct 이상 하락 시 청산
                 # 과거 또는 현재에 트레일링 활성화 조건을 1회 이상 달성한 경우, 고점 대비 하락폭 기준 청산
-                peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct) or pnl_pct)
+                peak_pnl = float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else pnl_pct
                 drawdown_from_peak = peak_pnl - pnl_pct
                 is_trail_activated = bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate)
                 if (reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
