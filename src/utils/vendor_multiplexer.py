@@ -90,9 +90,8 @@ class VendorMultiplexer:
                 from datetime import datetime as _dt, timedelta as _td
                 from src.data_collection.kis_data_collector import KISDataCollector
                 kis = KISDataCollector()
+                # ★ Wave 1: 선물/지수(CL=F, GC=F, DX-Y.NYB, ^TNX) → ETF(USO, GLD, UUP, IEF) 이종 레벨 매핑 금지
                 kis_ticker_map = {
-                    # ★ Wave 1: ^TNX→IEF 매핑 제거 — 금리(수익률) ≠ 채권 ETF 가격(역상관)
-                    'CL=F': 'USO', 'GC=F': 'GLD', 'DX-Y.NYB': 'UUP',
                     'EWY': 'EWY', 'FLKR': 'FLKR',
                 }
                 mapped = kis_ticker_map.get(ticker, ticker)
@@ -111,8 +110,21 @@ class VendorMultiplexer:
                 elif mapped.isalpha() and len(mapped) <= 5:
                     df_kis = kis.get_us_daily_ohlcv(mapped, e_str)
                 if df_kis is not None and not df_kis.empty:
-                    col = field if field in df_kis.columns else ('Close' if 'Close' in df_kis.columns else df_kis.columns[-1])
+                    col = field if field in df_kis.columns else ('Close' if 'Close' in df_kis.columns else ('close' if 'close' in df_kis.columns else df_kis.columns[-1]))
                     s_out = pd.to_numeric(df_kis[col], errors='coerce').dropna().rename(ticker)
+                    s_out.index = pd.to_datetime(s_out.index).tz_localize(None)
+                    # KIS 해외 일봉 API는 최대 100영업일만 반환하므로 장기 구간(start~end > 140일) 요청 시 DirectChart 히스토리와 결합
+                    if start and end and mapped == ticker:
+                        try:
+                            from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+                            df_hist = fetch_yahoo_chart_ohlcv(ticker, range_str='2y')
+                            if df_hist is not None and not df_hist.empty and 'close' in df_hist.columns:
+                                s_hist = pd.to_numeric(df_hist['close'], errors='coerce').dropna().rename(ticker)
+                                s_hist.index = pd.to_datetime(s_hist.index).tz_localize(None)
+                                s_out = pd.concat([s_hist, s_out])
+                                s_out = s_out[~s_out.index.duplicated(keep='last')].sort_index()
+                        except Exception:
+                            pass
                     if start and end:
                         s_slice = s_out.loc[start:end]
                         if not s_slice.empty:
@@ -127,6 +139,24 @@ class VendorMultiplexer:
 
         if source == 'google_finance':
             try:
+                # 1. 장기 시계열 요청 시 Direct Chart REST를 통해 실제 일별 시계열 우선 확보 (상수 배열 오염 방지)
+                try:
+                    from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+                    df_ch = fetch_yahoo_chart_ohlcv(ticker, range_str='2y')
+                    if df_ch is not None and not df_ch.empty:
+                        col_c = field.lower() if field.lower() in df_ch.columns else 'close'
+                        if col_c in df_ch.columns:
+                            s_ch = pd.to_numeric(df_ch[col_c], errors='coerce').dropna().rename(ticker)
+                            s_ch.index = pd.to_datetime(s_ch.index).tz_localize(None)
+                            if start and end:
+                                s_sub = s_ch.loc[start:end]
+                                if not s_sub.empty:
+                                    s_ch = s_sub
+                            if len(s_ch) >= 2:
+                                logger.info(f"[Vendor] DirectChart Historical (1순위): {ticker} ({len(s_ch)}건, 최신={s_ch.iloc[-1]:.2f})")
+                                return s_ch
+                except Exception:
+                    pass
                 from src.utils.google_finance_collector import GoogleFinanceCollector
                 details = GoogleFinanceCollector.get_quote_details(ticker)
                 if details and details.get('price', 0) > 0:
@@ -195,13 +225,24 @@ class VendorMultiplexer:
                 if not key:
                     logger.debug('[Vendor] ALPHA_VANTAGE_API_KEY 없음 — 스킵')
                     return None
-                # ★ Wave 1: 의미가 다른 프록시 제거 — VIX 레벨≠VIXY 가격(선물 롤 ETF), ^TNX(금리)≠IEF(가격, 역상관),
-                #   ^SKEW≠VIXY. 잘못된 시계열을 원래 티커 이름으로 반환하느니 None → 다음 소스/fail-closed.
-                if ticker in ('VIX', '^VIX', '^TNX', '^SKEW'):
-                    logger.debug(f"[Vendor] Alpha Vantage: {ticker}는 동등 프록시 없음 → 스킵")
+                # ★ Wave 1: 의미가 다른 프록시 제거 — VIX 레벨≠VIXY 가격, ^TNX≠IEF, ^SKEW≠VIXY, HG=F≠CPER, GC=F≠GLD
+                if ticker in ('VIX', '^VIX', '^SKEW', 'HG=F', 'GC=F', 'DX-Y.NYB', 'ES=F', 'NQ=F', 'YM=F'):
+                    logger.debug(f"[Vendor] Alpha Vantage: {ticker}는 동등 레벨 시계열 아님 → 스킵")
                     return None
-                av_ticker_map = {'ES=F': 'SPY', 'NQ=F': 'QQQ', 'YM=F': 'DIA', 'CL=F': 'USO', 'GC=F': 'GLD', 'HG=F': 'CPER', 'DX-Y.NYB': 'UUP'}
-                mapped_ticker = av_ticker_map.get(ticker, ticker)
+                if ticker in ('^TNX', 'US10Y', 'DGS10', 'CL=F', 'WTI'):
+                    from src.data_collection.alpha_vantage_collector import collect_econ_indicator_daily_ohlcv
+                    fn = 'TREASURY_YIELD' if ticker in ('^TNX', 'US10Y', 'DGS10') else 'WTI'
+                    mat = '10year' if fn == 'TREASURY_YIELD' else None
+                    df_ec = collect_econ_indicator_daily_ohlcv(fn, maturity=mat)
+                    if df_ec is not None and not df_ec.empty and 'close' in df_ec.columns:
+                        s_ec = pd.to_numeric(df_ec['close'], errors='coerce').dropna().rename(ticker)
+                        if start and end:
+                            s_sub = s_ec.loc[start:end]
+                            if not s_sub.empty:
+                                s_ec = s_sub
+                        return s_ec
+                    return None
+                mapped_ticker = ticker
                 if ('KRW' in ticker and 'USD' in ticker) or ticker in ['USDKRW', 'USDKRW=X', 'DEXKOUS']:
                     from alpha_vantage.foreignexchange import ForeignExchange
                     fx = ForeignExchange(key=key)
@@ -225,12 +266,7 @@ class VendorMultiplexer:
                 if av_field not in data.columns:
                     return None
                 _raw = data[av_field].dropna().rename(ticker)
-                if mapped_ticker != ticker:
-                    # 레벨은 원 상품과 다름(수익률만 근사) — 소비자가 구분할 수 있게 표시
-                    _raw.attrs['proxy_for'] = ticker
-                    _raw.attrs['proxy_ticker'] = mapped_ticker
-                    _raw.attrs['level_comparable'] = False
-                logger.info(f"[Vendor] Alpha Vantage 수집 성공: {ticker} (AV Ticker: {mapped_ticker})")
+                logger.info(f"[Vendor] Alpha Vantage 수집 성공: {ticker}")
                 return _raw
             except Exception as e:
                 from src.utils.error_logger import log_error_rate_limited
@@ -238,7 +274,6 @@ class VendorMultiplexer:
                 logger.debug(f"[Vendor] alpha_vantage 에러 ({ticker}): {e}")
                 return None
         if source == 'yfinance':
-            # yfinance 폐기 — 로컬 RealtimeDataBus / MarketDataBridge 우선 참조
             return None
         if source == 'fred':
             try:
@@ -248,23 +283,16 @@ class VendorMultiplexer:
                     'USDKRW': 'DEXKOUS', 'USDKRW=X': 'DEXKOUS', 'DEXKOUS': 'DEXKOUS',
                     'DXY': 'DTWEXAFEGS', 'DX-Y.NYB': 'DTWEXAFEGS',
                     'WTI': 'DCOILWTICO', 'CL=F': 'DCOILWTICO',
-                    'GOLD': 'GOLDAMGBD228NLBM', 'GC=F': 'GOLDAMGBD228NLBM'
                 }
                 mapped_fred = fred_symbol_map.get(ticker, ticker)
-                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={mapped_fred}"
-                df = pd.read_csv(url)
-                if not df.empty and len(df.columns) >= 2:
-                    df.columns = ['date', 'value']
-                    df['value'] = pd.to_numeric(df['value'], errors='coerce')
-                    df = df.dropna()
-                    df['date'] = pd.to_datetime(df['date'])
-                    df = df.set_index('date')['value']
-                    df = df.loc[start:end] if not df.loc[start:end].empty else df.tail(10)
-                    logger.info(f"[Vendor] FRED Official CSV 수집 성공: {ticker} -> {mapped_fred} ({len(df)}건)")
-                    return pd.Series(df, name=ticker)
+                from src.data_collection.usa_collector import USADataCollector
+                s = USADataCollector()._safe_fred_get_series(mapped_fred, start, end)
+                if s is not None and not s.empty:
+                    logger.info(f"[Vendor] FRED/MultiVendor 수집 성공: {ticker} -> {mapped_fred} ({len(s)}건)")
+                    return s.rename(ticker)
                 return None
             except Exception as e:
-                logger.warning(f"[Vendor] FRED CSV 수집 에러 ({ticker}): {e}")
+                logger.warning(f"[Vendor] FRED 수집 에러 ({ticker}): {e}")
                 return None
         logger.debug(f"[Vendor] 지원하지 않는 소스: {source}")
         return None

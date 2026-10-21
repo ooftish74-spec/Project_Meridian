@@ -97,44 +97,68 @@ class MotieCollector:
         raw = self.fetch_monthly_trend(year, month)
         return {'motie_export_yoy': float(raw['export_yoy_pct']), 'motie_trade_balance': float(raw['trade_balance_usd']), 'motie_semi_export_yoy': float(raw['semi_yoy_pct'])}
 
-    def _fetch_from_naver_news(self, year: int, month: int) -> Dict[str, float]:
-        """[Phase 63] 네이버 뉴스 API 호출 + Regex NLP 파서.
-
-        Raises:
-            DataCollectionError: API 키 누락 시 즉시 raise (Fail-Fast)
-        """
-        if not self.client_id or not self.client_secret:
-            logger.info('  [Phase 63] NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 미설정 ➔ 네이버 뉴스 센티멘트 수집 생략')
-            return {}
-        query = f'{year}년 {month}월 수출입동향 수출액 무역수지'
-        headers = {'X-Naver-Client-Id': self.client_id, 'X-Naver-Client-Secret': self.client_secret}
-        params = {'query': query, 'display': 20, 'sort': 'sim'}
-        raw_texts: List[str] = []
-        for attempt in range(1, _RETRY_COUNT + 1):
+    @staticmethod
+    def _fetch_public_news_texts(queries: List[str]) -> List[str]:
+        """네이버 모바일 뉴스 검색 및 Google News RSS를 통한 공개 뉴스 텍스트 수집."""
+        import urllib.parse
+        texts: List[str] = []
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        for q in queries:
             try:
-                resp = requests.get(_NAVER_NEWS_URL, headers=headers, params=params, timeout=_TIMEOUT)
-                resp.raise_for_status()
-                data = resp.json()
-                items = data.get('items', [])
-                if not items:
-                    logger.warning(f'  [Phase 63] 네이버 뉴스 검색 결과 없음: query="{query}"')
-                    return {}
-                for item in items:
-                    for field in ('title', 'description'):
-                        text = item.get(field, '')
-                        text = re.sub('<[^>]+>', '', text)
-                        raw_texts.append(text)
-                logger.info(f'  [Phase 63] 네이버 뉴스 {len(items)}건 수집 → Regex 파싱 시작')
-                break
-            except requests.exceptions.Timeout:
-                logger.warning(f'  [Phase 63] 타임아웃 ({attempt}/{_RETRY_COUNT})')
-            except requests.exceptions.HTTPError as e:
-                logger.warning(f'  [Phase 63] HTTP 오류: {e}', exc_info=True)
-                return {}
-            except Exception as e:
-                logger.warning(f'  [Phase 63] API 예외 ({attempt}/{_RETRY_COUNT}): {e}')
-            if attempt < _RETRY_COUNT:
-                time.sleep(2 ** attempt)
+                u_nv = f"https://m.search.naver.com/search.naver?where=m_news&query={urllib.parse.quote(q)}"
+                r_nv = requests.get(u_nv, headers=headers, timeout=_TIMEOUT)
+                if r_nv.ok and r_nv.text:
+                    clean_nv = re.sub(r'<[^>]+>', ' ', r_nv.text)
+                    clean_nv = re.sub(r'\s+', ' ', clean_nv)
+                    texts.append(clean_nv)
+            except Exception as _e_nv:
+                logger.debug(f'  [Phase 63] 공개 네이버 뉴스 조회 스킵: {_e_nv}')
+            try:
+                u_gg = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
+                r_gg = requests.get(u_gg, headers=headers, timeout=_TIMEOUT)
+                if r_gg.ok and r_gg.text:
+                    titles = re.findall(r'<title>(.*?)</title>', r_gg.text)
+                    descs = re.findall(r'<description>(.*?)</description>', r_gg.text)
+                    for t_str in titles + descs:
+                        texts.append(re.sub(r'<[^>]+>', ' ', t_str))
+            except Exception as _e_gg:
+                logger.debug(f'  [Phase 63] 공개 Google News RSS 조회 스킵: {_e_gg}')
+        return texts
+
+    def _fetch_from_naver_news(self, year: int, month: int) -> Dict[str, float]:
+        """[Phase 63] 네이버 뉴스 OpenAPI + 공개 뉴스 검색 NLP 파서."""
+        query = f'{year}년 {month}월 수출입동향 수출액 무역수지'
+        raw_texts: List[str] = []
+        if self.client_id and self.client_secret:
+            headers = {'X-Naver-Client-Id': self.client_id, 'X-Naver-Client-Secret': self.client_secret}
+            params = {'query': query, 'display': 20, 'sort': 'sim'}
+            for attempt in range(1, _RETRY_COUNT + 1):
+                try:
+                    resp = requests.get(_NAVER_NEWS_URL, headers=headers, params=params, timeout=_TIMEOUT)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    items = data.get('items', [])
+                    for item in items:
+                        for field in ('title', 'description'):
+                            text = item.get(field, '')
+                            text = re.sub('<[^>]+>', '', text)
+                            raw_texts.append(text)
+                    if raw_texts:
+                        logger.info(f'  [Phase 63] 네이버 뉴스 OpenAPI {len(items)}건 수집 → Regex 파싱 시작')
+                        break
+                except Exception as e:
+                    logger.debug(f'  [Phase 63] OpenAPI 조회 스킵 ({attempt}/{_RETRY_COUNT}): {e}')
+                    break
+        if not raw_texts:
+            prev_month = 12 if month == 1 else month - 1
+            raw_texts = self._fetch_public_news_texts([
+                query,
+                f'{month}월 수출입동향 수출 무역수지 억 달러 반도체',
+                f'{prev_month}월 수출입동향 수출 무역수지 억 달러 반도체',
+                '산업부 수출입동향 수출 증가 무역수지 억 달러 반도체',
+            ])
+            if raw_texts:
+                logger.info(f'  [Phase 63] 공개 뉴스 검색 {len(raw_texts)}건 수집 → Regex 파싱 시작')
         if not raw_texts:
             return {}
         combined = ' '.join(raw_texts)

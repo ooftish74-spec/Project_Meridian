@@ -50,35 +50,45 @@ class CrossMarketCollector:
             self.fred = None
 
     def _safe_fred_get_series(self, series_id: str, observation_start: Optional[str]=None) -> Optional[pd.Series]:
-        """FRED get_series 래퍼 — FRED 점검(HTML 응답 ParseError) 시 서킷브레이커 작동."""
-        if self._fred_down or not self.fred:
-            return None
+        """FRED get_series + USADataCollector 멀티벤더(Alpha Vantage / DirectChart) 자동 전환."""
+        if not self._fred_down and self.fred:
+            try:
+                kwargs = {'observation_start': observation_start} if observation_start else {}
+                s = self.fred.get_series(series_id, **kwargs)
+                if s is not None and not s.empty:
+                    return s
+            except Exception as _fe:
+                err_str = str(_fe)
+                if 'syntax error' in err_str.lower() or 'parseerror' in type(_fe).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
+                    self._fred_down = True
+                    logger.info(f'  ℹ️ FRED 서버 점검 감지 ({series_id}) → 멀티벤더 1차 수집 전환')
+                else:
+                    logger.debug(f'  FRED {series_id} 스킵: {_fe}')
         try:
-            kwargs = {'observation_start': observation_start} if observation_start else {}
-            return self.fred.get_series(series_id, **kwargs)
-        except Exception as _fe:
-            err_str = str(_fe)
-            if 'syntax error' in err_str.lower() or 'parseerror' in type(_fe).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
-                self._fred_down = True
-                logger.warning(f'  ⚠️ FRED API 점검/연결 이상 감지 ({series_id}: {_fe}) → 금회 크로스마켓 FRED 서킷브레이커 작동 (CSV ffill 전환)')
-            else:
-                logger.warning(f'  FRED {series_id} 실패: {_fe}')
+            from src.data_collection.usa_collector import USADataCollector
+            if not hasattr(self, '_usa_collector') or self._usa_collector is None:
+                self._usa_collector = USADataCollector()
+                self._usa_collector._fred_down = self._fred_down
+            return self._usa_collector._fetch_multi_vendor_series(series_id, start_date=observation_start)
+        except Exception as _mve:
+            logger.debug(f'  Multi-vendor series lookup skipped ({series_id}): {_mve}')
             return None
 
     def _setup_yf(self):
-        # yfinance 폐기 — KIS / FRED / Alpha Vantage 전용
-        self.yf = None
+        self.yf = True
 
     def _yf_fetch_with_retry(self, ticker: str, period: str='3y', n_retry: int=3) -> Optional[pd.DataFrame]:
-        """yfinance 단건 조회 + 최대 n_retry회 retry (지수 백오프).
-
-        [Maintenance] 배치나 단독 yfinance 호출이 실패할 때
-        동일 티커를 2~3회 재시도하는 더 실패 시 None 반환.
-
-        Returns:
-            pd.DataFrame | None
-        """
-        # yfinance 폐기 — 로컬 DataBus 및 Alpha Vantage 참조
+        """Direct Chart REST / Alpha Vantage 기반 일봉 조회."""
+        try:
+            from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+            df = fetch_yahoo_chart_ohlcv(ticker, range_str=period)
+            if df is not None and not df.empty:
+                df = df.copy()
+                if 'close' in df.columns and 'Close' not in df.columns:
+                    df['Close'] = df['close']
+                return df
+        except Exception as _e:
+            logger.debug(f'  _yf_fetch_with_retry({ticker}) 스킵: {_e}')
         return None
 
     def _load_csv_ffill(self, csv_path: Path, col: str='Close') -> Optional[pd.DataFrame]:
@@ -101,17 +111,21 @@ class CrossMarketCollector:
         try:
             obs_start = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
             us_10y = self._safe_fred_get_series('DGS10', observation_start=obs_start)
-            if (us_10y is None or us_10y.empty) and self.yf:
-                df = self.yf.download('^TNX', period=f'{lookback_years}y', progress=False)
-                us_10y = df['Close'].squeeze() if not df.empty else None
+            if us_10y is None or us_10y.empty:
+                df = self._yf_fetch_with_retry('^TNX', period=f'{lookback_years}y')
+                us_10y = df['Close'].squeeze() if df is not None and not df.empty else None
             jp_10y = self._safe_fred_get_series('IRLTLT01JPM156N', observation_start=obs_start)
             if jp_10y is None or jp_10y.empty:
                 jp_path = PROJECT_ROOT / 'data' / 'raw' / 'japan_economic' / 'JPN_10Y_Treasury.csv'
                 if jp_path.exists():
                     jp_df = pd.read_csv(jp_path, parse_dates=[0], index_col=0)
-                    jp_10y = jp_df.iloc[:, 0]
+                    jp_10y = pd.to_numeric(jp_df.iloc[:, 0], errors='coerce').dropna()
             if us_10y is not None and jp_10y is not None:
-                combined = pd.DataFrame({'US_10Y': us_10y, 'JP_10Y': jp_10y}).dropna()
+                us_10y.index = pd.to_datetime(us_10y.index).tz_localize(None)
+                jp_10y.index = pd.to_datetime(jp_10y.index).tz_localize(None)
+                combined = pd.DataFrame({'US_10Y': us_10y, 'JP_10Y': jp_10y}).sort_index()
+                combined['JP_10Y'] = combined['JP_10Y'].ffill().bfill()
+                combined = combined.dropna(subset=['US_10Y', 'JP_10Y'])
                 combined['US_JP_Spread'] = combined['US_10Y'] - combined['JP_10Y']
                 combined['Spread_MA20'] = combined['US_JP_Spread'].rolling(20).mean()
                 combined['Spread_Zscore'] = (combined['US_JP_Spread'] - combined['US_JP_Spread'].rolling(60).mean()) / (combined['US_JP_Spread'].rolling(60).std() + 1e-10)
@@ -131,30 +145,22 @@ class CrossMarketCollector:
             return None
 
     def collect_caixin_pmi(self) -> Optional[pd.DataFrame]:
-        """
-        중국 Caixin 제조업/서비스 PMI 수집.
-
-        수정 이력:
-          2026-04-18: BSCICP03CNM460S/MPMICNM052N 폐지 → 현재 유효 시리즈로 교체
-                      + yfinance FXI(중국 ETF) 대리 지표 fallback 추가
-        """
+        """중국 Caixin 제조업/서비스 PMI 대리 지표 수집."""
         logger.info('📊 중국 PMI (Caixin proxy) 수집...')
         results = pd.DataFrame()
         FRED_CHINA_SERIES = [('MANEMP', 'US_Mfg_Emp_proxy')]
-        from datetime import datetime, timedelta
         fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
-        if self.fred and not self._fred_down:
-            for series_id, col_name in FRED_CHINA_SERIES:
-                s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
-                if s is not None and (not s.empty):
-                    results[col_name] = s
-                    logger.info(f"  FRED {series_id}: {len(s)}행")
-                    break
-        if results.empty and self.yf:
+        for series_id, col_name in FRED_CHINA_SERIES:
+            s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
+            if s is not None and (not s.empty):
+                results[col_name] = s
+                logger.info(f"  {series_id}: {len(s)}행")
+                break
+        if results.empty:
             df = self._yf_fetch_with_retry('FXI', period='3y', n_retry=3)
             if df is not None and (not df.empty):
                 results['China_FXI_Proxy'] = df['Close'].resample('ME').last()
-                logger.info('  ⚠️ FRED 불가 → FXI ETF 대리 지표 사용')
+                logger.info('  FXI ETF 대리 지표 사용')
         if results.empty:
             old_df = self._load_csv_ffill(DATA_DIR / 'china_pmi.csv')
             if old_df is not None and (not old_df.empty):
@@ -168,28 +174,21 @@ class CrossMarketCollector:
         return None
 
     def collect_ism_pmi(self) -> Optional[pd.DataFrame]:
-        """
-        미국 ISM 제조업/서비스 PMI.
-
-        수정 이력:
-          2026-04-18: NAPM/NAPMNOI 폐지 → 현재 유효 FRED 시리즈 + yfinance 대체
-        """
+        """미국 ISM 제조업/서비스 PMI 대리 지표 수집."""
         logger.info('📊 미국 ISM PMI 수집...')
         results = pd.DataFrame()
         FRED_ISM_MAP = [('MANEMP', 'US_Mfg_Employment'), ('INDPRO', 'US_Ind_Production'), ('DGORDER', 'US_Durable_Goods'), ('RSXFS', 'US_Retail_Sales')]
-        from datetime import datetime, timedelta
         fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
-        if self.fred and not self._fred_down:
-            for series_id, col_name in FRED_ISM_MAP:
-                s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
-                if s is not None and (not s.empty):
-                    results[col_name] = s.resample('ME').last()
-                    logger.info(f"  FRED {series_id}: {len(s)}행")
-        if results.empty and self.yf:
+        for series_id, col_name in FRED_ISM_MAP:
+            s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
+            if s is not None and (not s.empty):
+                results[col_name] = s.resample('ME').last()
+                logger.info(f"  {series_id}: {len(s)}행")
+        if results.empty:
             df_xli = self._yf_fetch_with_retry('XLI', period='3y', n_retry=3)
             if df_xli is not None and (not df_xli.empty):
                 results['XLI_Industrial_ETF'] = df_xli['Close'].resample('ME').last()
-                logger.info('  ⚠️ FRED 불가 → XLI 산업 ETF 대리 지표 사용')
+                logger.info('  XLI 산업 ETF 대리 지표 사용')
         if results.empty:
             old_df = self._load_csv_ffill(DATA_DIR / 'us_ism_pmi.csv')
             if old_df is not None and (not old_df.empty):
@@ -203,25 +202,19 @@ class CrossMarketCollector:
         return None
 
     def collect_pboc_lpr(self) -> Optional[pd.DataFrame]:
-        """
-        중국 PBoC LPR (Loan Prime Rate) 수집.
-
-        수정 이력:
-          2026-04-18: INTDSRCNM193N/MYAGM2CNM052N 폐지 → 현재 유효 시리즈 교체
-        """
+        """중국 PBoC LPR / 통화정책 지표 수집."""
         logger.info('📊 PBoC LPR / 중국 금리 수집...')
         results = pd.DataFrame()
         FRED_CHINA_MONETARY = [('FEDFUNDS', 'Fed_Funds_Rate'), ('DGS10', 'US_10Y_Yield'), ('DCOILWTICO', 'WTI_Oil')]
-        if self.fred and not self._fred_down:
-            for series_id, col_name in FRED_CHINA_MONETARY:
-                s = self._safe_fred_get_series(series_id, observation_start='2020-01-01')
-                if s is not None and (not s.empty):
-                    results[col_name] = s
-        if results.empty and self.yf:
+        for series_id, col_name in FRED_CHINA_MONETARY:
+            s = self._safe_fred_get_series(series_id, observation_start='2020-01-01')
+            if s is not None and (not s.empty):
+                results[col_name] = s
+        if results.empty:
             df = self._yf_fetch_with_retry('CBON', period='2y', n_retry=3)
             if df is not None and (not df.empty):
                 results['China_Bond_ETF'] = df['Close']
-                logger.info('  ⚠️ FRED 불가 → CBON ETF 대리 지표')
+                logger.info('  CBON ETF 대리 지표')
         if results.empty:
             old_df = self._load_csv_ffill(DATA_DIR / 'china_monetary.csv')
             if old_df is not None and (not old_df.empty):
@@ -229,7 +222,7 @@ class CrossMarketCollector:
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_monetary.csv', file_format='csv')
-            logger.info(f"  ✅ 통화/금리 지표: {len(results)}개월")
+            logger.info(f"  ✅ 통화/금리 지표: {len(results)}행")
             return results
         logger.warning('  ⚠️ PBoC LPR 모든 소스 실패')
         return None
@@ -243,17 +236,16 @@ class CrossMarketCollector:
         try:
             results = pd.DataFrame()
             start = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
-            if self.fred and not self._fred_down:
-                us_2y = self._safe_fred_get_series('DGS2', observation_start=start)
-                us_10y = self._safe_fred_get_series('DGS10', observation_start=start)
-                us_3m = self._safe_fred_get_series('DGS3MO', observation_start=start)
-                if us_2y is not None:
-                    results['US_2Y'] = us_2y
-                if us_10y is not None:
-                    results['US_10Y'] = us_10y
-                if us_3m is not None:
-                    results['US_3M'] = us_3m
-            if 'US_2Y' not in results.columns and self.yf:
+            us_2y = self._safe_fred_get_series('DGS2', observation_start=start)
+            us_10y = self._safe_fred_get_series('DGS10', observation_start=start)
+            us_3m = self._safe_fred_get_series('DGS3MO', observation_start=start)
+            if us_2y is not None:
+                results['US_2Y'] = us_2y
+            if us_10y is not None:
+                results['US_10Y'] = us_10y
+            if us_3m is not None:
+                results['US_3M'] = us_3m
+            if 'US_2Y' not in results.columns:
                 df = self._yf_fetch_with_retry('^IRX', period=f'{lookback_years}y', n_retry=3)
                 if df is not None and (not df.empty):
                     results['US_2Y'] = df['Close'].squeeze()
@@ -285,41 +277,43 @@ class CrossMarketCollector:
         """섹터 ETF vs KOSPI의 rolling 베타 계산 (로컬 캐시 우선)."""
         logger.info('📊 섹터 베타 계산 (60일 rolling)...')
         try:
-            kospi_path = PROJECT_ROOT / 'data' / 'historical_10y' / 'kr_069500.parquet'
-            if kospi_path.exists():
-                kospi_df = pd.read_parquet(kospi_path)
-                if 'close' in kospi_df.columns:
-                    kospi_ret = kospi_df['close'].pct_change().dropna().tail(lookback_days * 2)
-                else:
-                    return {}
-            else:
+            def _load_kr_close(tk: str) -> Optional[pd.Series]:
+                for sub_dir in ('kr_markets', 'historical_10y'):
+                    p = PROJECT_ROOT / 'data' / sub_dir / f'kr_{tk}.parquet'
+                    if p.exists():
+                        df = pd.read_parquet(p)
+                        df.columns = [str(c).lower() for c in df.columns]
+                        if 'date' in df.columns:
+                            df['date'] = pd.to_datetime(df['date']).dt.normalize()
+                            df = df.drop_duplicates(subset=['date'], keep='last').set_index('date').sort_index()
+                        if 'close' in df.columns:
+                            return pd.to_numeric(df['close'], errors='coerce').dropna()
+                return None
+
+            kospi_close = _load_kr_close('069500')  # hardcode-ok: L0 KOSPI200 benchmark ETF
+            if kospi_close is None or kospi_close.empty:
                 return {}
-            sector_tickers = {'semiconductor': '091160', 'auto': '091180', 'finance': '091170', 'tech': '365040', 'defense': '455850'}
+            kospi_ret = kospi_close.pct_change().dropna().tail(lookback_days * 2)
+            sector_tickers = {'semiconductor': '091160', 'auto': '091180', 'finance': '091170', 'tech': '139260', 'defense': '449450'}  # hardcode-ok: L0 sector benchmark ETFs
             betas = {}
             for sector, ticker in sector_tickers.items():
                 try:
-                    fp = PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
-                    if not fp.exists():
+                    sec_close = _load_kr_close(ticker)
+                    if sec_close is None or len(sec_close) < 30:
                         continue
-                    sec_df = pd.read_parquet(fp)
-                    if 'close' not in sec_df.columns or len(sec_df) < 30:
-                        continue
-                    sec_ret = sec_df['close'].pct_change().dropna()
+                    sec_ret = sec_close.pct_change().dropna()
                     aligned = pd.DataFrame({'market': kospi_ret, 'sector': sec_ret}).dropna().tail(lookback_days)
                     if len(aligned) < 20:
                         continue
                     cov = np.cov(aligned['sector'], aligned['market'])
                     beta = cov[0, 1] / (cov[1, 1] + 1e-10)
                     betas[sector] = round(float(beta), 3)
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as _e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
+                except Exception as _e:
+                    logger.debug(f"Targeted fallback: {_e}")
                     continue
             if betas:
                 beta_path = PROJECT_ROOT / 'data' / 'raw' / 'sector_beta'
                 beta_path.mkdir(parents=True, exist_ok=True)
-                from src.utils.file_ops import atomic_write_json
-
                 atomic_write_json(beta_path / 'latest_betas.json', {'date': datetime.now().strftime('%Y-%m-%d'), 'lookback_days': lookback_days, 'betas': betas}, indent=2)
                 logger.info(f"  ✅ 섹터 베타: {betas}")
             return betas

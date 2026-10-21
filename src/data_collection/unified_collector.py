@@ -157,9 +157,9 @@ def collect_kr_ohlcv(ticker: str, days: int=60, backfill: bool=False) -> Optiona
     if not df_kis.empty:
         return df_kis
 
-    # 3. pykrx 호출 (최종 Fallback)
+    # 3. pykrx_compat 호출 (최종 Fallback)
     try:
-        from pykrx import stock as pykrx_stock
+        from src.data_collection.pykrx_compat import stock as pykrx_stock
         raw_pykrx = _fetch_kr_ohlcv_with_retry(pykrx_stock, start, end, ticker)
         df_pykrx = _normalize_ohlcv_df(raw_pykrx)
         if not df_pykrx.empty:
@@ -461,24 +461,50 @@ def _save_signal_cache(signals: Dict):
         logger.error(f'  시그널 캐시 저장 실패: {e}', exc_info=True)
 
 def collect_investor_flow() -> Dict:
-    """외국인/기관 순매수 수집."""
-    try:
-        from pykrx import stock as pykrx_stock
-    except ImportError as e:
-        return {}
-    end = datetime.now().strftime('%Y%m%d')
-    start = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+    """외국인/기관 순매수 수집 (KIS API Primary -> pykrx_compat Fallback)."""
     flows = {}
+    out = _DATA_DIR / 'investor_flow_kospi.parquet'
+    _mkt_tk = universe.A1_DIRECTIONAL['KOSPI200'].ticker
     try:
-        time.sleep(_PYKRX_DELAY)
-        try:
-            df = pykrx_stock.get_market_trading_volume_by_date(start, end, 'KOSPI')
-        except Exception as e:
-            logger.warning(f"  [SILENT_BYPASS] pykrx investor flow failed (IP block): {e}")
-            return {}
+        from src.data_collection.kis_data_collector import KISDataCollector
+        kis = KISDataCollector()
+        if kis._ensure_auth():
+            url = f"{kis._base_url}/uapi/domestic-stock/v1/quotations/inquire-investor"
+            data = kis._call(url, 'FHKST01010900', {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': _mkt_tk})
+            rows = (data or {}).get('output', [])
+            records = []
+            for r in rows if isinstance(rows, list) else []:
+                dt_s = str(r.get('stck_bsop_date', '')).strip()
+                if not dt_s:
+                    continue
+                prsn = float(str(r.get('prsn_ntby_tr_pbmn', '0') or '0').replace(',', '')) * 1_000_000
+                frgn = float(str(r.get('frgn_ntby_tr_pbmn', '0') or '0').replace(',', '')) * 1_000_000
+                orgn = float(str(r.get('orgn_ntby_tr_pbmn', '0') or '0').replace(',', '')) * 1_000_000
+                records.append({'날짜': pd.to_datetime(dt_s), '개인': prsn, '외국인합계': frgn, '기관합계': orgn})
+            if records:
+                df_new = pd.DataFrame(records).sort_values('날짜')
+                if out.exists():
+                    try:
+                        df_old = pd.read_parquet(out)
+                        if '날짜' in df_old.columns:
+                            df_old['날짜'] = pd.to_datetime(df_old['날짜'])
+                            df_new = pd.concat([df_old, df_new]).drop_duplicates(subset=['날짜'], keep='last').sort_values('날짜')
+                    except Exception:
+                        pass
+                _DATA_DIR.mkdir(parents=True, exist_ok=True)
+                safe_parquet_write(df_new.reset_index(drop=True), out)
+                flows['kospi_flow_saved'] = len(df_new)
+                logger.info(f'  ✅ KOSPI 수급 (KIS Primary): {len(df_new)}행')
+                return flows
+    except Exception as _kis_e:
+        logger.debug(f'  KIS 수급 수집 스킵: {_kis_e}')
+    try:
+        from src.data_collection.pykrx_compat import stock as pykrx_stock
+        end = datetime.now().strftime('%Y%m%d')
+        start = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+        df = pykrx_stock.get_market_trading_value_by_date(start, end, _mkt_tk)
         if df is not None and (not df.empty):
-            out = _DATA_DIR / 'investor_flow_kospi.parquet'
-            df.reset_index().to_parquet(out, index=False)
+            safe_parquet_write(df.reset_index(), out)
             flows['kospi_flow_saved'] = len(df)
             logger.info(f'  KOSPI 수급: {len(df)}행')
     except Exception as e:
@@ -503,27 +529,23 @@ def _last_business_day() -> str:
         return d.strftime('%Y%m%d')
 
 def update_stock_universe() -> List[str]:
-    """KOSPI200 + KOSDAQ150 유니버스 갱신."""
-    try:
-        from pykrx import stock as pykrx_stock
-    except ImportError as e:
-        return []
+    """KOSPI200 + KOSDAQ150 유니버스 갱신 (FDR 시가총액 상위 Primary)."""
     tickers = set()
-    biz_day = _last_business_day()
     try:
-        time.sleep(_PYKRX_DELAY)
-        kospi_tickers = pykrx_stock.get_index_portfolio_deposit_file('1028', biz_day)
-        if kospi_tickers is not None and len(kospi_tickers) > 0:
-            tickers.update(kospi_tickers)
-            logger.info(f'  KOSPI200: {len(kospi_tickers)}종목')
-        time.sleep(_PYKRX_DELAY)
-        kosdaq_tickers = pykrx_stock.get_index_portfolio_deposit_file('2203', biz_day)
-        if kosdaq_tickers is not None and len(kosdaq_tickers) > 0:
-            tickers.update(kosdaq_tickers)
-            logger.info(f'  KOSDAQ150: {len(kosdaq_tickers)}종목')
+        import FinanceDataReader as fdr
+        df_kp = fdr.StockListing('KOSPI')
+        if df_kp is not None and not df_kp.empty and 'Code' in df_kp.columns:
+            kp_top = df_kp['Code'].dropna().astype(str).str.strip().tolist()[:200]
+            tickers.update(kp_top)
+            logger.info(f'  KOSPI 상위: {len(kp_top)}종목')
+        df_kq = fdr.StockListing('KOSDAQ')
+        if df_kq is not None and not df_kq.empty and 'Code' in df_kq.columns:
+            kq_top = df_kq['Code'].dropna().astype(str).str.strip().tolist()[:150]
+            tickers.update(kq_top)
+            logger.info(f'  KOSDAQ 상위: {len(kq_top)}종목')
     except Exception as e:
         logger.error(f'  유니버스 갱신 실패: {e}', exc_info=True)
-    ticker_list = sorted(tickers)
+    ticker_list = sorted(t for t in tickers if _KR_TICKER_RE.match(t))
     if ticker_list:
         out = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -1065,35 +1087,47 @@ def run_daily(mode: str='full', **kwargs):
 def _collect_evening_signals():
     """이브닝 전용 시그널 수집 (아시아 장 마감 후 확정 지표).
 
-    [Maintenance] 강화된 Fallback 구조:
-      1단: yf.download (최대 2회 retry, 1초 간격)
-      2단: 실패 시 기존 parquet의 마지막 행 ffill 저장
-      → 누락 티커는 WARNING으로 명시 (Fail-silent 방지)
+    1단: Direct Chart REST (fetch_yahoo_chart_ohlcv) / collect_global_macro
+    2단: 실패 시 기존 parquet의 마지막 행 ffill 저장
     """
     from config.universe import Universe
+    from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv, collect_global_macro
     u = Universe()
     failed_tickers = []
     ffill_tickers = []
     for name, yf_ticker in u.SIGNAL_EVENING.items():
         out_file = _SIGNAL_DIR / f'signal_{name.lower()}.parquet'
-        data = None
-        # yfinance 폐기 — KIS / Alpha Vantage 우선 참조
-        data = None
-        if data is not None:
+        data = fetch_yahoo_chart_ohlcv(yf_ticker, range_str='3mo')
+        if data is None or data.empty:
+            macro_q = collect_global_macro([yf_ticker])
+            if yf_ticker in macro_q and macro_q[yf_ticker].get('price', 0) > 0:
+                px = float(macro_q[yf_ticker]['price'])
+                today_dt = pd.Timestamp(datetime.now().date())
+                data = pd.DataFrame([{'date': today_dt, 'open': px, 'high': px, 'low': px, 'close': px, 'volume': 0}]).set_index('date')
+        if data is not None and not data.empty:
             try:
                 _SIGNAL_DIR.mkdir(parents=True, exist_ok=True)
                 df = data.reset_index()
                 df.columns = [c.lower() if isinstance(c, str) else c for c in df.columns]
                 if hasattr(df.columns, 'levels'):
                     df.columns = ['_'.join(c).strip('_') if isinstance(c, tuple) else c for c in df.columns]
+                if out_file.exists():
+                    try:
+                        old_df = pd.read_parquet(out_file)
+                        old_df.columns = [str(c).lower() for c in old_df.columns]
+                        if 'date' in old_df.columns and 'date' in df.columns:
+                            old_df['date'] = pd.to_datetime(old_df['date']).dt.normalize()
+                            df['date'] = pd.to_datetime(df['date']).dt.normalize()
+                            df = pd.concat([old_df, df], ignore_index=True).drop_duplicates(subset=['date'], keep='last').sort_values('date')
+                    except Exception:
+                        pass
                 safe_parquet_write(df, out_file)
-                logger.info(f'  ✅ {name}: {len(df)}행')
+                logger.info(f'  ✅ {name}({yf_ticker}): {len(df)}행 (실시간 1차 수집 성공)')
                 continue
             except Exception as _save_e:
                 logger.error(f'  ⚠️ {name} parquet 저장 실패: {_save_e}', exc_info=True)
         if out_file.exists():
             try:
-                import pandas as pd
                 old_df = pd.read_parquet(out_file)
                 if len(old_df) > 0:
                     last_row = old_df.iloc[[-1]].copy()
@@ -1108,11 +1142,10 @@ def _collect_evening_signals():
             except Exception as _ff_e:
                 logger.error(f'  ⚠️ {name} ffill 실패: {_ff_e}', exc_info=True)
         failed_tickers.append(name)
-        logger.warning(f'  ❌ {name}({yf_ticker}): 실시간 수집 + ffill 모두 실패 — 신호 누락 (네트워크 차단 또는 미상장)')
+        logger.warning(f'  ❌ {name}({yf_ticker}): 실시간 수집 + ffill 모두 실패 — 신호 누락')
     total = len(u.SIGNAL_EVENING)
     ok = total - len(failed_tickers) - len(ffill_tickers)
-    if failed_tickers or ffill_tickers:
-        logger.warning(f'  📊 Evening Signals: 성공={ok}/{total}, ffill={len(ffill_tickers)}, 실패={len(failed_tickers)}' + (f' — 실패 티커: {failed_tickers}' if failed_tickers else ''))
+    logger.info(f'  📊 Evening Signals: 성공={ok}/{total}, ffill={len(ffill_tickers)}, 실패={len(failed_tickers)}')
 
 def collect_us_macro() -> Dict:
     """FRED API 경제지표 수집."""

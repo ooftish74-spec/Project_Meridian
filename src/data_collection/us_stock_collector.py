@@ -171,10 +171,12 @@ class USStockCollector:
             df_kis = df_av = df_yf = df_fred = None
             source = ""
             
+            from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
             if ticker == '^VIX':
-                # VIX: FRED/KIS/Alpha Vantage 우선 참조
-                df_yf = None
-                    
+                # VIX: Direct Chart REST (Primary) -> FRED (Secondary) -> Local Cache
+                df_yf = fetch_yahoo_chart_ohlcv('^VIX', range_str='2y')
+                if df_yf is not None and _process_and_save(df_yf, ticker):
+                    source = "DirectChart (^VIX)"
                 if not source:
                     try:
                         # Fallback to FRED (VIXCLS)
@@ -223,16 +225,19 @@ class USStockCollector:
                         logger.debug(f"FDR fetch failed for KRW=X: {e}")
                         
             elif ticker == '^TNX':
-                # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> FRED (Fallback) -> Local Cache
+                # US 10Y Treasury: AV TREASURY_YIELD (Primary) -> DirectChart (^TNX) -> FRED -> Local Cache
                 df_av = None
                 try:
-                    from src.data_collection.alt_sources.alphavantage_econ import collect_econ_indicator_daily_ohlcv
                     df_av = collect_econ_indicator_daily_ohlcv('TREASURY_YIELD', maturity='10year')
                 except Exception:
                     df_av = None
                 if df_av is not None and _process_and_save(df_av, ticker):
                     source = "AlphaVantage (TREASURY_YIELD)"
-                else:
+                if not source:
+                    df_yf = fetch_yahoo_chart_ohlcv('^TNX', range_str='2y')
+                    if df_yf is not None and _process_and_save(df_yf, ticker):
+                        source = "DirectChart (^TNX)"
+                if not source:
                     try:
                         from src.utils.credential_manager import CredentialManager
                         import requests

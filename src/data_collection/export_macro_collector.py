@@ -52,23 +52,34 @@ def _naver_creds() -> tuple:
     return cm.read_from_env('NAVER_CLIENT_ID') or '', cm.read_from_env('NAVER_CLIENT_SECRET') or ''
 
 def _news_yoy(query: str) -> Optional[float]:
+    import urllib.parse
     cid, sec = _naver_creds()
-    if not (cid and sec): return None
-    try:
-        r = requests.get('https://openapi.naver.com/v1/search/news.json',
-            headers={'X-Naver-Client-Id': cid, 'X-Naver-Client-Secret': sec},
-            params={'query': query, 'display': 5, 'sort': 'date'}, timeout=int(pget('data.http_timeout', 20)))
-        r.raise_for_status()
-        vals = []
-        for it in r.json().get('items', []):
-            text = re.sub(r'<[^>]+>', '', it.get('title','') + ' ' + it.get('description',''))
-            for m in re.finditer(r'([+-]?\d+\.?\d*)\s*%', text):
-                v = float(m.group(1))
-                if -80 < v < 300: vals.append(v)
-        return round(sum(vals)/len(vals), 2) if vals else None
-    except Exception as e:
-        logger.error(f"  [Phase78] news_yoy 실패: {e}", exc_info=True)
-        return None
+    vals = []
+    texts_to_parse = []
+    if cid and sec:
+        try:
+            r = requests.get('https://openapi.naver.com/v1/search/news.json',
+                headers={'X-Naver-Client-Id': cid, 'X-Naver-Client-Secret': sec},
+                params={'query': query, 'display': 5, 'sort': 'date'}, timeout=int(pget('data.http_timeout', 20)))
+            r.raise_for_status()
+            for it in r.json().get('items', []):
+                texts_to_parse.append(re.sub(r'<[^>]+>', '', it.get('title','') + ' ' + it.get('description','')))
+        except Exception as e:
+            logger.debug(f"  [Phase78] OpenAPI news_yoy 스킵: {e}")
+    if not texts_to_parse:
+        try:
+            u_nv = f"https://m.search.naver.com/search.naver?where=m_news&query={urllib.parse.quote(query)}"
+            r_nv = requests.get(u_nv, headers={'User-Agent': 'Mozilla/5.0'}, timeout=int(pget('data.http_timeout', 20)))
+            if r_nv.text:
+                texts_to_parse.append(re.sub(r'<[^>]+>', ' ', r_nv.text)[:8000])
+        except Exception as e_pub:
+            logger.debug(f"  [Phase78] public news_yoy 스킵: {e_pub}")
+    for text in texts_to_parse:
+        for m in re.finditer(r'([+-]?\d{1,2}(?:\.\d+)?)\s*%', text):
+            v = float(m.group(1))
+            if -80 < v < 300 and v != 0:
+                vals.append(v)
+    return round(sum(vals[:10])/len(vals[:10]), 2) if vals else None
 
 class ExportMacroCollector:
     """[Phase 78] 수출 매크로 수집기."""

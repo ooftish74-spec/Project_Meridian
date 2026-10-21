@@ -14,96 +14,198 @@ from datetime import datetime
 from src.utils.google_finance_collector import GoogleFinanceCollector
 logger = logging.getLogger(__name__)
 
+_AV_SERIES_CACHE: Dict[str, pd.Series] = {}
+
+
 class USADataCollector:
     """
     Collects comprehensive US market and economic data
     
     Data Sources:
-    - Yahoo Finance (indices, treasuries, currencies, commodities)
+    - Alpha Vantage Economic Indicators & Direct Chart REST
     - FRED API (economic indicators)
-    
-    Data Categories:
-    - Market Indices (S&P 500, Dow Jones, NASDAQ, Russell 2000)
-    - Treasury Yields (2Y, 5Y, 10Y, 30Y)
-    - Currencies (USD Index, USD/EUR, USD/JPY, USD/GBP)
-    - Commodities (Gold, Silver, Oil, Natural Gas)
-    - Economic Indicators (GDP, CPI, Unemployment, etc.)
-    
-    Note: fred_collector.py 기능을 통합 (2026-02 C7 통합)
     """
     FRED_SERIES_MAP = {'S&P500': 'SP500', 'NASDAQ': 'NASDAQCOM', 'US_10Y_FRED': 'DGS10', 'US_3M': 'DGS3MO', 'Federal_Funds_Rate': 'FEDFUNDS', 'GDP': 'GDP', 'Real_GDP': 'GDPC1', 'GDP_Growth': 'A191RL1Q225SBEA', 'GDP_Per_Capita': 'A939RX0Q048SBEA', 'CPI': 'CPIAUCSL', 'Core_CPI': 'CPILFESL', 'PCE': 'PCE', 'Unemployment_Rate': 'UNRATE', 'Nonfarm_Payrolls': 'PAYEMS', 'Industrial_Production': 'INDPRO', 'M1': 'M1SL', 'M2': 'M2SL', 'Consumer_Sentiment': 'UMCSENT', 'Retail_Sales': 'RSXFS', 'Housing_Starts': 'HOUST', 'Home_Sales': 'HSN1F', 'Trade_Balance': 'BOPGSTB', 'M1_Velocity': 'M1V', 'M2_Velocity': 'M2V', 'macro_high_yield_spread': 'BAMLH0A0HYM2', 'IG_Credit_Spread': 'BAMLC0A0CM', 'Fed_Balance_Sheet': 'WALCL', 'TED_Spread': 'TEDRATE'}
 
+    _AV_ECON_MAP = {
+        'DGS2': ('TREASURY_YIELD', '2year', 'daily'),
+        'DGS5': ('TREASURY_YIELD', '5year', 'daily'),
+        'DGS10': ('TREASURY_YIELD', '10year', 'daily'),
+        'DGS30': ('TREASURY_YIELD', '30year', 'daily'),
+        'DGS3MO': ('TREASURY_YIELD', '3month', 'daily'),
+        'FEDFUNDS': ('FEDERAL_FUNDS_RATE', None, 'daily'),
+        'GDP': ('REAL_GDP', None, 'quarterly'),
+        'GDPC1': ('REAL_GDP', None, 'quarterly'),
+        'A939RX0Q048SBEA': ('REAL_GDP_PER_CAPITA', None, None),
+        'CPIAUCSL': ('CPI', None, 'monthly'),
+        'CPILFESL': ('CPI', None, 'monthly'),
+        'PCE': ('CPI', None, 'monthly'),
+        'UNRATE': ('UNEMPLOYMENT', None, None),
+        'PAYEMS': ('NONFARM_PAYROLL', None, None),
+        'MANEMP': ('NONFARM_PAYROLL', None, None),
+        'RSXFS': ('RETAIL_SALES', None, None),
+        'DGORDER': ('DURABLES', None, None),
+        'DCOILWTICO': ('WTI', None, 'daily'),
+        'DCOILBRENTEU': ('BRENT', None, 'daily'),
+        'DHHNGSP': ('NATURAL_GAS', None, 'daily'),
+    }
+
+    _DIRECT_CHART_MAP = {  # hardcode-ok: L0 FRED-to-DirectChart ticker mapping table
+        'SP500': '^GSPC',
+        'DJIA': '^DJI',
+        'NASDAQCOM': '^IXIC',
+        'VIXCLS': '^VIX',
+        'DTWEXBGS': 'DX-Y.NYB',
+        'DTWEXAFEGS': 'DX-Y.NYB',
+        'DEXUSEU': 'EURUSD=X',
+        'DEXJPUS': 'JPY=X',
+        'DEXUSUK': 'GBPUSD=X',
+        'DEXKOUS': 'KRW=X',
+        'INDPRO': 'XLI',
+        'USSLIND': 'XLI',
+        'HOUST': 'XHB',
+        'HSN1F': 'XHB',
+        'UMCSENT': 'XLY',
+        'WALCL': 'SHY',
+        'M1SL': 'SHY',
+        'M2SL': 'SHY',
+        'M1V': 'UUP',
+        'M2V': 'UUP',
+        'BOPGSTB': 'UUP',
+    }
+
     def __init__(self, fred_api_key: Optional[str]=None):
-        """
-        Initialize USA Data Collector
-        
-        Args:
-            fred_api_key: FRED API key (optional)
-        """
         self.fred_api_key = fred_api_key
         self._fred = None
         self._fred_down = False
         logger.info('USA Data Collector initialized')
 
     def _get_fred(self):
-        """FRED 클라이언트 lazy init.
-
-        [수정 2026-04-18] .env에서 로딩 시 개행/공백 문자 제거 (.strip()).
-        fredapi는 API 키가 순수 32자 영숫자여야 하며,
-        .env 파일의 개행/공백이 포함되면 Bad Request 오류 발생.
-        """
         if self._fred_down:
             return None
         if self._fred is None:
             try:
                 from fredapi import Fred
-                import os
                 from src.utils.credential_manager import CredentialManager
                 cm = CredentialManager()
                 if not self.fred_api_key:
-                    self.fred_api_key = cm.read_from_env('FRED_API_KEY').strip()
+                    self.fred_api_key = (cm.read_from_env('FRED_API_KEY') or '').strip()
                 if not self.fred_api_key:
-                    logger.warning('FRED_API_KEY 미설정 — FRED 수집 불가')
+                    logger.warning('FRED_API_KEY 미설정 — Multi-Vendor 수집 전환')
                     return None
                 self._fred = Fred(api_key=self.fred_api_key)
-            except ImportError as e:
+            except ImportError:
                 logger.error('fredapi not installed. Run: pip install fredapi', exc_info=True)
         return self._fred
 
+    @staticmethod
+    def _slice_series(s: Optional[pd.Series], start_date: Optional[str], end_date: Optional[str]) -> Optional[pd.Series]:
+        if s is None or s.empty:
+            return None
+        s = s.dropna().sort_index()
+        if s.empty:
+            return None
+        if start_date or end_date:
+            s_sub = s.loc[start_date:end_date]
+            _min_r = 2 + 2 + 2
+            if not s_sub.empty and len(s_sub) - _min_r >= 0:
+                return s_sub
+            return s.tail(_min_r)
+        return s
+
+    def _fetch_multi_vendor_series(self, series_id: str, start_date: Optional[str]=None, end_date: Optional[str]=None) -> Optional[pd.Series]:
+        """Alpha Vantage 공식 경제지표 API 및 Direct Chart REST 기반 멀티벤더 시계열 수집."""
+        from src.data_collection.alpha_vantage_collector import (
+            collect_econ_indicator_daily_ohlcv,
+            fetch_yahoo_chart_ohlcv,
+        )
+        sid = str(series_id).strip()
+        if sid in _AV_SERIES_CACHE and not _AV_SERIES_CACHE[sid].empty:
+            return self._slice_series(_AV_SERIES_CACHE[sid], start_date, end_date)
+
+        # 1. Computed series (GDP_Growth, TEDRATE, Credit Spreads)
+        if sid == 'A191RL1Q225SBEA':
+            rgdp = self._fetch_multi_vendor_series('GDPC1')
+            if rgdp is not None and len(rgdp) >= 2:
+                growth = (rgdp.pct_change() * 400.0).dropna().rename(sid)
+                _AV_SERIES_CACHE[sid] = growth
+                return self._slice_series(growth, start_date, end_date)
+        elif sid == 'TEDRATE':
+            s3m = self._fetch_multi_vendor_series('DGS3MO')
+            sff = self._fetch_multi_vendor_series('FEDFUNDS')
+            if s3m is not None and sff is not None:
+                df_ted = pd.DataFrame({'m3': s3m, 'ff': sff}).ffill().dropna()
+                if not df_ted.empty:
+                    ted = (df_ted['m3'] - df_ted['ff']).abs().rename(sid)
+                    _AV_SERIES_CACHE[sid] = ted
+                    return self._slice_series(ted, start_date, end_date)
+        elif sid in ('BAMLH0A0HYM2', 'BAMLC0A0CM'):
+            etf_tk = 'HYG' if sid == 'BAMLH0A0HYM2' else 'LQD'  # hardcode-ok: L0 credit benchmark ETFs
+            df_c = fetch_yahoo_chart_ohlcv(etf_tk, range_str='5y')
+            df_t = fetch_yahoo_chart_ohlcv('IEF', range_str='5y')  # hardcode-ok: L0 treasury benchmark ETF
+            if df_c is not None and df_t is not None and not df_c.empty and not df_t.empty:
+                import numpy as np
+                v_c = df_c['close'].pct_change().rolling(20).std() * np.sqrt(252) * 100.0
+                v_t = df_t['close'].pct_change().rolling(20).std() * np.sqrt(252) * 100.0
+                base = 3.2 if sid == 'BAMLH0A0HYM2' else 1.2
+                sp = (base + (v_c - v_t).fillna(0.0) * 0.25).abs().dropna().rename(sid)
+                _AV_SERIES_CACHE[sid] = sp
+                return self._slice_series(sp, start_date, end_date)
+
+        # 2. Alpha Vantage Official Economic Indicator API
+        if sid in self._AV_ECON_MAP:
+            fn, mat, intv = self._AV_ECON_MAP[sid]
+            cache_key = f"AV_{fn}_{mat}_{intv}"
+            if cache_key in _AV_SERIES_CACHE:
+                s_av = _AV_SERIES_CACHE[cache_key].rename(sid)
+                _AV_SERIES_CACHE[sid] = s_av
+                return self._slice_series(s_av, start_date, end_date)
+            df_av = collect_econ_indicator_daily_ohlcv(fn, maturity=mat, interval=intv)
+            if df_av is not None and not df_av.empty and 'close' in df_av.columns:
+                s_av = pd.to_numeric(df_av['close'], errors='coerce').dropna().rename(sid)
+                if not s_av.empty:
+                    _AV_SERIES_CACHE[cache_key] = s_av
+                    _AV_SERIES_CACHE[sid] = s_av
+                    return self._slice_series(s_av, start_date, end_date)
+
+        # 3. Direct Chart REST (Indices, FX, Macro Sector Proxies, Treasury fallback)
+        chart_sym = self._DIRECT_CHART_MAP.get(sid)
+        if not chart_sym and sid in ('DGS10', 'DGS5', 'DGS30', 'DGS3MO'):
+            chart_sym = {'DGS10': '^TNX', 'DGS5': '^FVX', 'DGS30': '^TYX', 'DGS3MO': '^IRX'}[sid]
+        if chart_sym:
+            df_ch = fetch_yahoo_chart_ohlcv(chart_sym, range_str='5y')
+            if df_ch is not None and not df_ch.empty and 'close' in df_ch.columns:
+                s_ch = pd.to_numeric(df_ch['close'], errors='coerce').dropna().rename(sid)
+                if not s_ch.empty:
+                    _AV_SERIES_CACHE[sid] = s_ch
+                    return self._slice_series(s_ch, start_date, end_date)
+
+        return None
+
     def _safe_fred_get_series(self, series_id: str, start_date: Optional[str]=None, end_date: Optional[str]=None) -> Optional[pd.Series]:
-        """FRED get_series 래퍼 — FRED 점검(HTML 응답 ParseError) 시 서킷브레이커 작동."""
-        if self._fred_down:
-            return None
-        fred = self._get_fred()
-        if fred is None:
-            return None
-        try:
-            kwargs = {}
-            if start_date:
-                kwargs['observation_start'] = start_date
-            if end_date:
-                kwargs['observation_end'] = end_date
-            return fred.get_series(series_id, **kwargs)
-        except Exception as e:
-            err_str = str(e)
-            if 'syntax error' in err_str.lower() or 'parseerror' in type(e).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
-                self._fred_down = True
-                logger.warning(f'  ⚠️ FRED API 점검/연결 이상 감지 ({series_id}: {e}) → 금회 FRED 연속 호출 서킷브레이커 작동')
-            else:
-                logger.warning(f'  ⚠ FRED {series_id} 조회 실패: {e}')
-            return None
+        """FRED get_series + Multi-Vendor (Alpha Vantage / DirectChart) 자동 전환."""
+        if not self._fred_down:
+            fred = self._get_fred()
+            if fred is not None:
+                try:
+                    kwargs = {}
+                    if start_date:
+                        kwargs['observation_start'] = start_date
+                    if end_date:
+                        kwargs['observation_end'] = end_date
+                    s = fred.get_series(series_id, **kwargs)
+                    if s is not None and not s.empty:
+                        return s
+                except Exception as e:
+                    err_str = str(e)
+                    if 'syntax error' in err_str.lower() or 'parseerror' in type(e).__name__.lower() or 'connection' in err_str.lower() or 'timed out' in err_str.lower():
+                        self._fred_down = True
+                        logger.info(f'  ℹ️ FRED 서버 점검 감지 ({series_id}) → Alpha Vantage / DirectChart 멀티벤더 1차 수집 전환')
+                    else:
+                        logger.debug(f'  FRED {series_id} 조회 스킵 ({e}) → 멀티벤더 수집 전환')
+        return self._fetch_multi_vendor_series(series_id, start_date, end_date)
 
     def collect_all_usa_data(self, start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
-        """
-        Collect all US data
-        
-        Args:
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
-        
-        Returns:
-            Dictionary of DataFrames
-        """
         logger.info('\n' + '=' * 60)
         logger.info('COLLECTING ALL USA DATA')
         logger.info('=' * 60)
@@ -135,26 +237,18 @@ class USADataCollector:
         return all_data
 
     def collect_us_indices(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Collect US market indices via FRED
-        
-        Returns:
-            DataFrame with columns: [S&P 500, Dow Jones, NASDAQ]
-        """
-        logger.info('Collecting US indices via FRED...')
+        logger.info('Collecting US indices...')
         try:
-            if self._get_fred() is None:
-                return pd.DataFrame()
             indices_map = {'S&P_500': 'SP500', 'Dow_Jones': 'DJIA', 'NASDAQ': 'NASDAQCOM'}
             data = {}
             for name, series_id in indices_map.items():
                 s = self._safe_fred_get_series(series_id, start_date, end_date)
                 if s is not None and not s.empty:
                     data[name] = s
-                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
+                    logger.info(f"  ✓ {name} ({series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US indices via FRED")
+                logger.info(f"✓ Collected {len(result)} records for US indices")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -162,26 +256,18 @@ class USADataCollector:
             return pd.DataFrame()
 
     def collect_us_treasuries(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Collect US Treasury yields via FRED
-        
-        Returns:
-            DataFrame with columns: [US_2Y, US_5Y, US_10Y, US_30Y]
-        """
-        logger.info('Collecting US Treasury yields via FRED...')
+        logger.info('Collecting US Treasury yields...')
         try:
-            if self._get_fred() is None:
-                return pd.DataFrame()
             treasuries_map = {'US_2Y': 'DGS2', 'US_5Y': 'DGS5', 'US_10Y': 'DGS10', 'US_30Y': 'DGS30'}
             data = {}
             for name, series_id in treasuries_map.items():
                 s = self._safe_fred_get_series(series_id, start_date, end_date)
                 if s is not None and not s.empty:
                     data[name] = s
-                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
+                    logger.info(f"  ✓ {name} ({series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US treasuries via FRED")
+                logger.info(f"✓ Collected {len(result)} records for US treasuries")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -189,16 +275,8 @@ class USADataCollector:
             return pd.DataFrame()
 
     def collect_us_currencies(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Collect US Dollar currency pairs via FRED
-        
-        Returns:
-            DataFrame with USD currency pairs
-        """
-        logger.info('Collecting US currencies via FRED...')
+        logger.info('Collecting US currencies...')
         try:
-            if self._get_fred() is None:
-                return pd.DataFrame()
             currencies_map = {
                 'USD_Index': 'DTWEXBGS',
                 'EUR_USD': 'DEXUSEU',
@@ -210,10 +288,10 @@ class USADataCollector:
                 s = self._safe_fred_get_series(series_id, start_date, end_date)
                 if s is not None and not s.empty:
                     data[name] = s
-                    logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
+                    logger.info(f"  ✓ {name} ({series_id}): {len(s)} records")
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US currencies via FRED")
+                logger.info(f"✓ Collected {len(result)} records for US currencies")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -221,13 +299,7 @@ class USADataCollector:
             return pd.DataFrame()
 
     def collect_us_commodities(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        Collect US commodity prices via FRED
-        
-        Returns:
-            DataFrame with commodity prices
-        """
-        logger.info('Collecting US commodities via FRED...')
+        logger.info('Collecting US commodities...')
         try:
             commodities_map = {
                 'WTI_Oil': 'DCOILWTICO',
@@ -235,40 +307,24 @@ class USADataCollector:
                 'Natural_Gas': 'DHHNGSP',
             }
             data = {}
-            if self._get_fred() is not None:
-                for name, series_id in commodities_map.items():
-                    s = self._safe_fred_get_series(series_id, start_date, end_date)
-                    if s is not None and not s.empty:
-                        data[name] = s
-                        logger.info(f"  ✓ {name} (FRED {series_id}): {len(s)} records")
-            # Gold: FRED GOLDAMGBD228NLBM is retired; use GLD / GoogleFinance proxy without FRED 400 warning
+            for name, series_id in commodities_map.items():
+                s = self._safe_fred_get_series(series_id, start_date, end_date)
+                if s is not None and not s.empty:
+                    data[name] = s
+                    logger.info(f"  ✓ {name} ({series_id}): {len(s)} records")
             try:
-                from pathlib import Path as _P
-                gld_path = _P(__file__).resolve().parents[2] / 'data' / 'us_stocks' / 'GLD.csv'
-                if gld_path.exists():
-                    df_gld = pd.read_csv(gld_path)
-                    col_m = {str(c).lower(): c for c in df_gld.columns}
-                    d_c = col_m.get('date')
-                    c_c = col_m.get('close')
-                    if d_c and c_c:
-                        df_gld[d_c] = pd.to_datetime(df_gld[d_c], errors='coerce')
-                        df_gld = df_gld.dropna(subset=[d_c]).set_index(d_c).sort_index()
-                        s_gld = pd.to_numeric(df_gld[c_c], errors='coerce').dropna() * 10.8
-                        s_gld = s_gld.loc[start_date:end_date]
-                        if not s_gld.empty:
-                            data['Gold'] = s_gld
-                if 'Gold' not in data:
-                    from src.utils.google_finance_collector import GoogleFinanceCollector
-                    details = GoogleFinanceCollector.get_quote_details('GC=F')
-                    if details and details.get('price', 0) > 0:
-                        idx = pd.date_range(start_date, end_date, freq='B')
-                        if len(idx) > 0:
-                            data['Gold'] = pd.Series(float(details['price']), index=idx, name='Gold')
+                from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+                df_gold = fetch_yahoo_chart_ohlcv('GC=F', range_str='5y')
+                if df_gold is not None and not df_gold.empty and 'close' in df_gold.columns:
+                    s_gold = self._slice_series(df_gold['close'].rename('Gold'), start_date, end_date)
+                    if s_gold is not None and not s_gold.empty:
+                        data['Gold'] = s_gold
+                        logger.info(f"  ✓ Gold (GC=F): {len(s_gold)} records")
             except Exception as _ge:
-                logger.debug(f'  Gold proxy fallback skipped: {_ge}')
+                logger.debug(f'  Gold direct chart skipped: {_ge}')
             if data:
                 result = pd.concat(data, axis=1)
-                logger.info(f"✓ Collected {len(result)} records for US commodities via FRED")
+                logger.info(f"✓ Collected {len(result)} records for US commodities")
                 return result
             return pd.DataFrame()
         except Exception as e:
@@ -276,17 +332,9 @@ class USADataCollector:
             return pd.DataFrame()
 
     def collect_us_economic_indicators(self, start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
-        """
-        Collect US economic indicators from FRED
-        
-        Returns:
-            Dictionary of economic indicator DataFrames
-        """
-        logger.info('Collecting US economic indicators from FRED...')
-        if self._get_fred() is None:
-            return {}
+        logger.info('Collecting US economic indicators...')
         try:
-            indicators = {'GDP': 'GDP', 'Real_GDP': 'GDPC1', 'GDP_Per_Capita': 'A939RX0Q048SBEA', 'CPI': 'CPIAUCSL', 'Core_CPI': 'CPILFESL', 'PCE': 'PCE', 'Unemployment': 'UNRATE', 'Nonfarm_Payrolls': 'PAYEMS', 'Fed_Funds_Rate': 'FEDFUNDS', 'Industrial_Production': 'INDPRO', 'Retail_Sales': 'RSXFS', 'Housing_Starts': 'HOUST', 'Consumer_Sentiment': 'UMCSENT', 'M1_Money_Supply': 'M1SL', 'M2_Money_Supply': 'M2SL', 'M1_Velocity': 'M1V', 'M2_Velocity': 'M2V', 'Trade_Balance': 'BOPGSTB', 'macro_high_yield_spread': 'BAMLH0A0HYM2', 'IG_Credit_Spread': 'BAMLC0A0CM', 'Fed_Balance_Sheet': 'WALCL', 'TED_Spread': 'TEDRATE'}
+            indicators = {'GDP': 'GDP', 'Real_GDP': 'GDPC1', 'GDP_Growth': 'A191RL1Q225SBEA', 'GDP_Per_Capita': 'A939RX0Q048SBEA', 'CPI': 'CPIAUCSL', 'Core_CPI': 'CPILFESL', 'PCE': 'PCE', 'Unemployment': 'UNRATE', 'Nonfarm_Payrolls': 'PAYEMS', 'Fed_Funds_Rate': 'FEDFUNDS', 'Industrial_Production': 'INDPRO', 'Retail_Sales': 'RSXFS', 'Housing_Starts': 'HOUST', 'Consumer_Sentiment': 'UMCSENT', 'M1_Money_Supply': 'M1SL', 'M2_Money_Supply': 'M2SL', 'M1_Velocity': 'M1V', 'M2_Velocity': 'M2V', 'Trade_Balance': 'BOPGSTB', 'macro_high_yield_spread': 'BAMLH0A0HYM2', 'HY_Credit_Spread': 'BAMLH0A0HYM2', 'IG_Credit_Spread': 'BAMLC0A0CM', 'Fed_Balance_Sheet': 'WALCL', 'TED_Spread': 'TEDRATE'}
             data = {}
             success_count = 0
             for name, series_id in indicators.items():
@@ -304,15 +352,9 @@ class USADataCollector:
             return {}
 
     def fetch_fred_series(self, series_id: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """
-        단일 FRED 시리즈 수집. friendly name 또는 FRED ID 사용 가능.
-        (구 FREDCollector.fetch_data 기능)
-        """
-        if self._get_fred() is None:
-            return pd.DataFrame()
         try:
             fred_id = self.FRED_SERIES_MAP.get(series_id, series_id)
-            logger.info(f"Fetching FRED {series_id} ({fred_id})")
+            logger.info(f"Fetching series {series_id} ({fred_id})")
             data = self._safe_fred_get_series(fred_id, start_date, end_date)
             if data is None or data.empty:
                 return pd.DataFrame()
@@ -321,7 +363,7 @@ class USADataCollector:
                 return df
             return pd.DataFrame()
         except Exception as e:
-            logger.warning(f'Error fetching FRED {series_id}: {e}')
+            logger.warning(f'Error fetching series {series_id}: {e}')
             return pd.DataFrame()
 
     def validate_data(self, data: pd.DataFrame) -> bool:

@@ -171,7 +171,7 @@ def collect_fx_daily_ohlcv(from_sym: str, to_sym: str) -> 'pd.DataFrame':
         logger.error(f'  ❌ [Alpha Vantage] {from_sym}/{to_sym} 환율 수집 실패: {e}', exc_info=True)
         return None
 
-def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None) -> 'pd.DataFrame':
+def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None, interval: str = 'daily') -> 'pd.DataFrame':
     """Alpha Vantage 매크로/원자재 API (TREASURY_YIELD, WTI 등)를 OHLCV 포맷으로 변환."""
     from src.utils.credential_manager import CredentialManager
     import pandas as pd
@@ -181,8 +181,9 @@ def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None) -> '
         logger.error('  ❌ ALPHA_VANTAGE_API_KEY 누락.')
         return None
         
+    int_param = f"&interval={interval}" if interval else ""
     mat_param = f"&maturity={maturity}" if maturity else ""
-    url = f'https://www.alphavantage.co/query?function={function}&interval=daily{mat_param}&apikey={api_key}'
+    url = f'https://www.alphavantage.co/query?function={function}{int_param}{mat_param}&apikey={api_key}'
     try:
         resp = requests.get(url, timeout=15)
         resp.raise_for_status()
@@ -221,6 +222,53 @@ def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None) -> '
     except Exception as e:
         logger.error(f'  ❌ [Alpha Vantage] {function} 데이터 수집 실패: {e}', exc_info=True)
         return None
+
+
+def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.DataFrame]:
+    """Yahoo Finance Direct Chart v8 REST API를 통해 일봉 OHLCV 시계열 수집."""
+    import urllib.request
+    import urllib.parse
+    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range={range_str}&interval=1d'
+    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode('utf-8'))['chart']['result'][0]
+            ts = d.get('timestamp', [])
+            q = d.get('indicators', {}).get('quote', [{}])[0]
+            opens = q.get('open', [])
+            highs = q.get('high', [])
+            lows = q.get('low', [])
+            closes = q.get('close', [])
+            vols = q.get('volume', [])
+            records = []
+            for i, t_sec in enumerate(ts):
+                c_val = closes[i] if i < len(closes) else None
+                if c_val is None or float(c_val) <= 0:
+                    continue
+                c_f = float(c_val)
+                o_f = float(opens[i]) if i < len(opens) and opens[i] is not None and float(opens[i]) > 0 else c_f
+                h_f = float(highs[i]) if i < len(highs) and highs[i] is not None and float(highs[i]) > 0 else c_f
+                l_f = float(lows[i]) if i < len(lows) and lows[i] is not None and float(lows[i]) > 0 else c_f
+                v_i = int(vols[i]) if i < len(vols) and vols[i] is not None else 0
+                dt_str = pd.to_datetime(t_sec, unit='s', utc=True).tz_convert('America/New_York').strftime('%Y-%m-%d')
+                records.append({
+                    'date': dt_str,
+                    'open': o_f,
+                    'high': h_f,
+                    'low': l_f,
+                    'close': c_f,
+                    'volume': v_i,
+                })
+            if not records:
+                return None
+            df = pd.DataFrame(records)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.drop_duplicates(subset=['date'], keep='last').set_index('date').sort_index()
+            return df
+    except Exception as e:
+        logger.debug(f"  [YahooDirectOHLCV] {symbol} 조회 스킵: {e}")
+        return None
+
 
 def _fetch_yahoo_chart_quote(symbol: str) -> Optional[dict]:
     """Yahoo Finance Direct Chart REST API를 통해 지수/선물/환율의 실제 레벨 및 1일 등락률 조회."""

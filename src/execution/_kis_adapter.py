@@ -338,15 +338,8 @@ class KISTraderAdapter:
 
     @classmethod
     def resolve_overseas_exchange(cls, ticker: str, exchange: str = '') -> str:
-        """해외 거래소 코드 (NASD / NYSE / AMEX) 중앙 단일 결정자."""
+        """해외 거래소 코드 (NASD / NYSE / AMEX) 중앙 단일 결정자 (티커 매핑 최우선)."""
         t_upper = str(ticker).upper().strip()
-        excg_upper = str(exchange).upper().strip()
-        if excg_upper in ('NYSE', 'NYS'):
-            return 'NYSE'
-        if excg_upper in ('AMEX', 'AMS'):
-            return 'AMEX'
-        if excg_upper in ('NASD', 'NAS', 'NASDAQ'):
-            return 'NASD'
 
         try:
             from src.params.tables import load_table
@@ -361,15 +354,37 @@ class KISTraderAdapter:
         except Exception:
             pass
 
-        _AMEX_SET = {'SOXL', 'SOXS', 'UPRO', 'SPXL', 'SPXS', 'TECL', 'WEBL', 'BOIL', 'KOLD', 'SVIX', 'UVIX', 'LABU', 'LABD', 'BULZ', 'CONL', 'MSTX', 'MSTU', 'XBI', 'GLD', 'SLV', 'USO', 'SPY', 'SGOV', 'BIL', 'EWY', 'IWM', 'LIT', 'SLX', 'BDRY', 'URA', 'XLK', 'XLE', 'XLF', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY'}
-        _NYSE_SET = {'TSM', 'CAT', 'KO', 'DIS', 'JNJ', 'PFE', 'UNH', 'JPM', 'BAC', 'V', 'MA', 'WMT'}
-        _NASD_SET = {'SHV', 'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX', 'TLT', 'TMUS', 'IEF', 'SHY'}
+        _AMEX_SET = {  # hardcode-ok: L0 US exchange listing table (NYSE Arca / AMEX)
+            'SOXL', 'SOXS', 'UPRO', 'SPXL', 'SPXS', 'TECL', 'WEBL', 'BOIL', 'KOLD',
+            'SVIX', 'UVIX', 'LABU', 'LABD', 'BULZ', 'CONL', 'MSTX', 'MSTU', 'XBI',
+            'GLD', 'SLV', 'USO', 'SPY', 'SGOV', 'BIL', 'EWY', 'IWM', 'LIT', 'SLX',
+            'BDRY', 'URA', 'XLK', 'XLE', 'XLF', 'XLV', 'XLI', 'XLP', 'XLU', 'XLY',
+            'PSQ', 'SH', 'SDS', 'QID', 'DOG', 'UUP', 'FXI', 'EWJ', 'HYG', 'LQD',
+            'TIP', 'CPER', 'UNG', 'DBA', 'VNQ', 'GDX', 'XHB', 'XME', 'KRE',
+        }
+        _NYSE_SET = {  # hardcode-ok: L0 US exchange listing table (NYSE)
+            'TSM', 'CAT', 'KO', 'PG', 'DIS', 'JNJ', 'PFE', 'MRK', 'ABBV', 'LLY',
+            'UNH', 'JPM', 'BAC', 'V', 'MA', 'WMT', 'XOM', 'CVX', 'NEE', 'LMT', 'RTX',
+        }
+        _NASD_SET = {  # hardcode-ok: L0 US exchange listing table (NASDAQ)
+            'SHV', 'NVDL', 'TQQQ', 'SQQQ', 'TSLL', 'FNGU', 'QQQ', 'NVDA', 'AAPL',
+            'MSFT', 'AVGO', 'TSLA', 'AMZN', 'GOOGL', 'META', 'SOXX', 'SMH', 'TLT',
+            'TMUS', 'IEF', 'SHY', 'PEP', 'COST',
+        }
 
         if t_upper in _AMEX_SET:
             return 'AMEX'
         if t_upper in _NYSE_SET:
             return 'NYSE'
         if t_upper in _NASD_SET:
+            return 'NASD'
+
+        excg_upper = str(exchange).upper().strip()
+        if excg_upper in ('NYSE', 'NYS'):
+            return 'NYSE'
+        if excg_upper in ('AMEX', 'AMS'):
+            return 'AMEX'
+        if excg_upper in ('NASD', 'NAS', 'NASDAQ'):
             return 'NASD'
         return 'NASD'
 
@@ -1360,8 +1375,14 @@ class KISTraderAdapter:
             url = f"{self.base_url}/uapi/overseas-price/v1/quotations/price"
             for excd in excd_candidates:
                 params = {'AUTH': '', 'EXCD': excd, 'SYMB': ticker}
-                resp = requests.get(url, headers=headers, params=params, timeout=5)
-                data = resp.json()
+                data = {}
+                for _attempt in range(3):
+                    resp = requests.get(url, headers=headers, params=params, timeout=5)
+                    data = resp.json()
+                    if data.get('msg_cd') == 'EGW00201':
+                        time.sleep(0.25 * (_attempt + 1))
+                        continue
+                    break
                 if data.get('rt_cd') == '0' and 'output' in data:
                     out = data['output']
                     if ask_side:
@@ -1389,7 +1410,7 @@ class KISTraderAdapter:
         if not tk_str:
             return None
         if not tk_str.isdigit():
-            if self.mode != 'mock' and self._access_token:
+            if self.mode != 'mock' and (self._access_token or self.authenticate()):
                 try:
                     us_px = self.get_live_overseas_price(tk_str, self.resolve_overseas_exchange(tk_str))
                     if us_px and us_px > 0:
@@ -1410,7 +1431,7 @@ class KISTraderAdapter:
                         pass
             return None
 
-        if self.mode != 'mock' and self._access_token:
+        if self.mode != 'mock' and (self._access_token or self.authenticate()):
             try:
                 import requests
                 headers = self._get_headers()
