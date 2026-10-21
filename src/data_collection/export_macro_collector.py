@@ -68,16 +68,18 @@ def _news_yoy(query: str) -> Optional[float]:
             logger.debug(f"  [Phase78] OpenAPI news_yoy 스킵: {e}")
     if not texts_to_parse:
         try:
-            u_nv = f"https://m.search.naver.com/search.naver?where=m_news&query={urllib.parse.quote(query)}"
-            r_nv = requests.get(u_nv, headers={'User-Agent': 'Mozilla/5.0'}, timeout=int(pget('data.http_timeout', 20)))
-            if r_nv.text:
-                texts_to_parse.append(re.sub(r'<[^>]+>', ' ', r_nv.text)[:8000])
+            import html as _html
+            u_gg = f"https://news.google.com/rss/search?q={urllib.parse.quote(query)}&hl=ko&gl=KR&ceid=KR:ko"
+            r_gg = requests.get(u_gg, headers={'User-Agent': 'Mozilla/5.0'}, timeout=int(pget('data.http_timeout', 20)))
+            if r_gg.ok and r_gg.text:
+                for m_t in re.finditer(r'<(?:title|description)>(.*?)</(?:title|description)>', r_gg.text, flags=re.DOTALL):
+                    texts_to_parse.append(re.sub(r'<[^>]+>', ' ', _html.unescape(m_t.group(1))))
         except Exception as e_pub:
             logger.debug(f"  [Phase78] public news_yoy 스킵: {e_pub}")
     for text in texts_to_parse:
         for m in re.finditer(r'([+-]?\d{1,2}(?:\.\d+)?)\s*%', text):
             v = float(m.group(1))
-            if -80 < v < 300 and v != 0:
+            if -80 < v < 100 and v != 0:
                 vals.append(v)
     return round(sum(vals[:10])/len(vals[:10]), 2) if vals else None
 

@@ -464,7 +464,7 @@ def collect_investor_flow() -> Dict:
     """외국인/기관 순매수 수집 (KIS API Primary -> pykrx_compat Fallback)."""
     flows = {}
     out = _DATA_DIR / 'investor_flow_kospi.parquet'
-    _mkt_tk = universe.A1_DIRECTIONAL['KOSPI200'].ticker
+    _mkt_tk = '069500'  # hardcode-ok: L0 KOSPI200 benchmark ETF
     try:
         from src.data_collection.kis_data_collector import KISDataCollector
         kis = KISDataCollector()

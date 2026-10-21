@@ -99,30 +99,35 @@ class MotieCollector:
 
     @staticmethod
     def _fetch_public_news_texts(queries: List[str]) -> List[str]:
-        """네이버 모바일 뉴스 검색 및 Google News RSS를 통한 공개 뉴스 텍스트 수집."""
+        """Google News RSS 및 네이버 모바일 뉴스 검색을 통한 공개 뉴스 텍스트 수집 (CSS/JS 노이즈 완전 제거)."""
+        import html as _html
         import urllib.parse
         texts: List[str] = []
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
         for q in queries:
             try:
+                u_gg = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
+                r_gg = requests.get(u_gg, headers=headers, timeout=_TIMEOUT)
+                if r_gg.ok and r_gg.text:
+                    items = re.findall(r'<item>(.*?)</item>', r_gg.text, flags=re.DOTALL)
+                    for item_xml in items:
+                        for tag in ('title', 'description'):
+                            m_t = re.search(rf'<{tag}>(.*?)</{tag}>', item_xml, flags=re.DOTALL)
+                            if m_t:
+                                unesc = _html.unescape(m_t.group(1))
+                                texts.append(re.sub(r'<[^>]+>', ' ', unesc))
+            except Exception as _e_gg:
+                logger.debug(f'  [Phase 63] 공개 Google News RSS 조회 스킵: {_e_gg}')
+            try:
                 u_nv = f"https://m.search.naver.com/search.naver?where=m_news&query={urllib.parse.quote(q)}"
                 r_nv = requests.get(u_nv, headers=headers, timeout=_TIMEOUT)
                 if r_nv.ok and r_nv.text:
-                    clean_nv = re.sub(r'<[^>]+>', ' ', r_nv.text)
+                    no_ss = re.sub(r'<(script|style)[^>]*>.*?</\1>', ' ', r_nv.text, flags=re.DOTALL | re.IGNORECASE)
+                    clean_nv = re.sub(r'<[^>]+>', ' ', _html.unescape(no_ss))
                     clean_nv = re.sub(r'\s+', ' ', clean_nv)
                     texts.append(clean_nv)
             except Exception as _e_nv:
                 logger.debug(f'  [Phase 63] 공개 네이버 뉴스 조회 스킵: {_e_nv}')
-            try:
-                u_gg = f"https://news.google.com/rss/search?q={urllib.parse.quote(q)}&hl=ko&gl=KR&ceid=KR:ko"
-                r_gg = requests.get(u_gg, headers=headers, timeout=_TIMEOUT)
-                if r_gg.ok and r_gg.text:
-                    titles = re.findall(r'<title>(.*?)</title>', r_gg.text)
-                    descs = re.findall(r'<description>(.*?)</description>', r_gg.text)
-                    for t_str in titles + descs:
-                        texts.append(re.sub(r'<[^>]+>', ' ', t_str))
-            except Exception as _e_gg:
-                logger.debug(f'  [Phase 63] 공개 Google News RSS 조회 스킵: {_e_gg}')
         return texts
 
     def _fetch_from_naver_news(self, year: int, month: int) -> Dict[str, float]:

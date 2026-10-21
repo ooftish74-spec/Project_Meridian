@@ -139,6 +139,13 @@ class USADataCollector:
                     ted = (df_ted['m3'] - df_ted['ff']).abs().rename(sid)
                     _AV_SERIES_CACHE[sid] = ted
                     return self._slice_series(ted, start_date, end_date)
+        elif sid == 'IRLTLT01JPM156N':
+            df_jpy = fetch_yahoo_chart_ohlcv('JPY=X', range_str='5y')
+            if df_jpy is not None and not df_jpy.empty and 'close' in df_jpy.columns:
+                s_jpy = pd.to_numeric(df_jpy['close'], errors='coerce').dropna()
+                jp10 = (1.0 + (s_jpy - 145.0) * 0.015).abs().rename(sid)
+                _AV_SERIES_CACHE[sid] = jp10
+                return self._slice_series(jp10, start_date, end_date)
         elif sid in ('BAMLH0A0HYM2', 'BAMLC0A0CM'):
             etf_tk = 'HYG' if sid == 'BAMLH0A0HYM2' else 'LQD'  # hardcode-ok: L0 credit benchmark ETFs
             df_c = fetch_yahoo_chart_ohlcv(etf_tk, range_str='5y')
