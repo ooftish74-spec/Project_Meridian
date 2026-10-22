@@ -399,7 +399,7 @@ class StreamOrchestrator:
                         holdings[t] = h
                         _qty_h = int(h.get('qty', 0))
                         _cp_h = float(h.get('current_price', 0.0))
-                        _is_us_h = not str(t).isdigit()
+                        _is_us_h = not _is_kr_tk(str(t))
                         _amt_krw = float(h.get('eval_krw', 0.0) or 0.0)
                         _fx_deg_h = False
                         if not _amt_krw:
@@ -1711,7 +1711,7 @@ class StreamOrchestrator:
                                 _exec_price = _PARKING_FALLBACK_PX[_ticker]
                                 logger.info(f"    🛡️ [Step 8.4 Cash Anchor] {_ticker} 파킹 ETF 기준가(₩{_exec_price:,.0f}) 확정")
                         # 6. 인스티튜셔널 브리지 확인 (국내)
-                        if (not _exec_price or _exec_price <= 0) and str(_ticker).isdigit():
+                        if (not _exec_price or _exec_price <= 0) and _is_kr_tk(str(_ticker)):
                             from src.data_collection.pykrx_compat import stock as _pykrx_s8
                             from datetime import date as _d, timedelta as _td
                             _t_str = _d.today().strftime('%Y%m%d')
@@ -1728,6 +1728,8 @@ class StreamOrchestrator:
                 
                 if not _exec_price or _exec_price <= 0:
                     logger.warning(f"    ⚠️ 가격 없음 → 스킵: {o.get('ticker')} ({o.get('stream_id')})")
+                    if o.get('pair_id'):
+                        o['_pair_skipped_s84'] = True
                     continue
                     
                 if o.get('execution_algo', 'market') == 'market':
@@ -1741,6 +1743,8 @@ class StreamOrchestrator:
                 elif _is_us:
                     if not _dyn_fx:
                         logger.error(f"    🛑 [FX Guard] {o.get('ticker')}: USD/KRW 미확보 → 해외 신규 매수 스킵 (fail-closed)")
+                        if o.get('pair_id'):
+                            o['_pair_skipped_s84'] = True
                         continue
                     _cost_per_share_krw = _exec_price * _dyn_fx * margin_rate
                 else:
@@ -1785,7 +1789,26 @@ class StreamOrchestrator:
                         actual_krw_margin += o['required_margin']
                     valid_orders.append(o)
                 else:
+                    if o.get('pair_id'):
+                        o['_pair_skipped_s84'] = True
                     logger.warning(f"    ⚠️ 예산 부족으로 스킵: {o.get('ticker')} (예산: {o.get('amount_krw'):,.0f} < 필요증거금: {_cost_per_share_krw:,.0f})")
+
+            _skipped_s84_pids = {str(_o_s.get('pair_id')) for _o_s in orders if _o_s.get('_pair_skipped_s84') and _o_s.get('pair_id')}
+            if _skipped_s84_pids:
+                _cleaned_valid_s84 = []
+                for _vo in valid_orders:
+                    if str(_vo.get('pair_id', '')) in _skipped_s84_pids:
+                        _rm_m = float(_vo.get('required_margin', 0.0) or 0.0)
+                        actual_total_margin = max(0.0, actual_total_margin - _rm_m)
+                        if _is_kr_tk(str(_vo.get('ticker', ''))):
+                            actual_krw_margin = max(0.0, actual_krw_margin - _rm_m)
+                        logger.info(
+                            f"    ⚖️ [Step 8.4 Pair Atomicity] {_vo.get('ticker')} (pair_id={_vo.get('pair_id')}): "
+                            f"페어 파트너 예산 부족 스킵에 따라 반쪽 레그 동반 제외"
+                        )
+                        continue
+                    _cleaned_valid_s84.append(_vo)
+                valid_orders = _cleaned_valid_s84
 
             orders = valid_orders
             
@@ -1976,7 +1999,7 @@ class StreamOrchestrator:
                                 'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
                                 'trail_activated': bool(hwm_data.get('trail_activated', False)),
                                 'holding_minutes': _h_mins,
-                                'market': h.get('market', 'KR' if t.isdigit() else 'US')
+                                'market': h.get('market', 'KR' if _is_kr_tk(t) else 'US')
                             }
                     except Exception as _kpe:
                         logger.warning(f"kis_portfolio.json 로드 예외: {_kpe}")
@@ -2247,18 +2270,19 @@ class StreamOrchestrator:
                 logger.info(f"    🛑 [Order Netting Drop] {ticker}: 신규 매수 상계 금액(₩{netted_val_krw:,.0f}) < ₩{effective_min_val:,.0f} 미달 스킵")
                 continue
 
+            _all_dom_pairs = bool(dominant_orders) and all(bool(_do.get('pair_partner')) for _do in dominant_orders)
             exec_orders.append({
                 'stream': dominant_stream_id,
                 'stream_id': dominant_stream_id,
                 'contributing_streams': contributing_streams,
                 'ticker': ticker,
-                'pair_id': sample_order.get('pair_id', ''),
-                'pair_partner': sample_order.get('pair_partner', ''),
+                'pair_id': sample_order.get('pair_id', '') if _all_dom_pairs else '',
+                'pair_partner': sample_order.get('pair_partner', '') if _all_dom_pairs else '',
                 'pair_partners': [
                     str(_do.get('pair_partner', '')).strip().upper()
                     for _do in (dominant_orders or [])
                     if _do.get('pair_partner')
-                ],
+                ] if _all_dom_pairs else [],
                 'action': final_action,
                 'direction': 'long' if final_action == 'buy' else 'short',
                 'quantity': abs(net_qty),
@@ -2376,30 +2400,35 @@ class StreamOrchestrator:
         """페어 트레이딩 양방향 동시 매수 원자성(Atomic Pair Guard) 및 동일지수 인버스 중복 매입 방지·병합 가드."""
         _held_qty_by_ticker = held_qty_by_ticker or {}
         # ── ★ [Atomic Pair Integrity Guard] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
-        _active_buy_tks = {
-            str(_eo.get('ticker', '')).strip().upper()
-            for _eo in exec_orders
-            if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
-        }
-        _atomic_filtered = []
-        for _eo in exec_orders:
-            _partners = [p for p in (_eo.get('pair_partners') or []) if p]
-            if not _partners and _eo.get('pair_partner'):
-                _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
-            if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
-                # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
-                _active_partners = [
-                    p for p in _partners
-                    if p in _active_buy_tks
-                ]
-                if not _active_partners:
-                    logger.warning(
-                        f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 동시 매수 부재/절삭 감지 "
-                        f"→ 반쪽짜리 단독 레그 매수 기각"
-                    )
-                    continue
-            _atomic_filtered.append(_eo)
-        exec_orders = _atomic_filtered
+        while True:
+            _active_buy_tks = {
+                str(_eo.get('ticker', '')).strip().upper()
+                for _eo in exec_orders
+                if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
+            }
+            _atomic_filtered = []
+            _dropped_any = False
+            for _eo in exec_orders:
+                _partners = [p for p in (_eo.get('pair_partners') or []) if p]
+                if not _partners and _eo.get('pair_partner'):
+                    _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
+                if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
+                    # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
+                    _active_partners = [
+                        p for p in _partners
+                        if p in _active_buy_tks
+                    ]
+                    if not _active_partners:
+                        logger.warning(
+                            f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 동시 매수 부재/절삭 감지 "
+                            f"→ 반쪽짜리 단독 레그 매수 기각"
+                        )
+                        _dropped_any = True
+                        continue
+                _atomic_filtered.append(_eo)
+            exec_orders = _atomic_filtered
+            if not _dropped_any:
+                break
 
         # ── ★ [Same-Index Inverse Mutual Exclusion & Consolidation Guard] ──
         # 동일 지수 기반 인버스(114800 1X)와 곱버스(252670 2X), 또는 US 인버스(SH/PSQ vs SQQQ)가 동시에 매입·보유되는 현상 원천 차단
@@ -2803,10 +2832,32 @@ class StreamOrchestrator:
 
             # 🎯 [User Rule] 분할매수(DCA) 전면 금지 ➔ 100% 일시불 매수 (dca_days = 1.0)
             dca_days = 1.0
+            _skipped_pair_ids = set()
+
+            def _abort_pair(pid_val: str) -> None:
+                if not pid_val:
+                    return
+                _skipped_pair_ids.add(pid_val)
+                for _prev_o in list(stream_orders.get(stream_id, [])):
+                    if str(_prev_o.get('pair_id', '') or '') == pid_val:
+                        _prev_tk = str(_prev_o.get('ticker', '')).split(':')[-1].upper()
+                        _prev_amt = float(_prev_o.get('amount_krw', 0.0) or 0.0)
+                        _cumulative_ordered_krw_by_ticker[_prev_tk] = max(
+                            0.0,
+                            _cumulative_ordered_krw_by_ticker.get(_prev_tk, 0.0) - _prev_amt,
+                        )
+                        if _prev_o in stream_orders[stream_id]:
+                            stream_orders[stream_id].remove(_prev_o)
+                        if _prev_o in orders:
+                            orders.remove(_prev_o)
 
             for sig in stream_signals:
                 if not sig or sig.get('direction', 'long') != 'long':
                     continue  # 매수 시그널만 처리 (매도는 Exit Manager 담당)
+
+                _sig_pid = str(sig.get('pair_id', '') or '')
+                if _sig_pid and _sig_pid in _skipped_pair_ids:
+                    continue
 
                 # [Phase 46 BugFix] 무조건 스킵하던 로직 제거 -> DCA 갭투자로 변경
                 _t = sig.get('ticker', '')
@@ -2814,6 +2865,7 @@ class StreamOrchestrator:
 
                 size_pct = sig.get('size_pct', 0)
                 if size_pct <= 0:
+                    _abort_pair(_sig_pid)
                     continue
 
                 # 스트림 예산 × size_pct로 "목표(Target)" 금액 계산
@@ -2842,9 +2894,11 @@ class StreamOrchestrator:
                 target_amount = target_amount * _exp_mult_sig * lev_level
 
                 # 현재 보유 금액 및 타 스트림 선행 발주 금액 파악 (중복 매수 방지)
-                current_amount = float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
+                # 단, 마켓뉴트럴 페어(pair_id)의 공유 인버스 헷지 레그(예: 114800, PSQ)는 각 활성 페어의 독립 슬라이스이므로 선행 누적분 차감 면제
+                _is_pair_shared_inv = bool(_sig_pid) and (_t_clean in _inv_set_gen)
+                current_amount = 0.0 if _is_pair_shared_inv else float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
                 current_qty = 0
-                if portfolio:
+                if portfolio and not _is_pair_shared_inv:
                     pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
                     pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
                     for pos in pos_iterable:
@@ -2863,6 +2917,7 @@ class StreamOrchestrator:
                 
                 # 목표 달성 또는 초과 시 매수 스킵 (시그널 소멸 시에도 자동 스킵됨)
                 if gap <= 0:
+                    _abort_pair(_sig_pid)
                     continue
 
                 # [Constantinides-Leland 3제곱근 무거래 영역 & Grinold-Kahn 이산 수량 한계 순효용 검증]
@@ -2882,9 +2937,10 @@ class StreamOrchestrator:
                                 f"    🛡️ [Constantinides No-Trade Band Skip] {_t}: 기보유 ₩{current_amount:,.0f} vs 목표 ₩{target_amount:,.0f} "
                                 f"(괴리 {gap/target_amount*100:.1f}% < 동적 무거래 반폭 {_nt_band*100:.1f}%) ➔ 추가매수 스킵"
                             )
+                            _abort_pair(_sig_pid)
                             continue
                         if _sig_px > 0 and current_qty > 0:
-                            if str(_t_clean).isdigit():
+                            if _is_kr_tk(str(_t_clean)):
                                 _eff_px_krw = _sig_px
                             elif str(_t_clean).endswith('.T'):
                                 _jpy_fx_ord = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
@@ -2897,6 +2953,7 @@ class StreamOrchestrator:
                                     _usd_fx_ord = float(_CDG_ord().get_usdkrw_rate() or 0.0)
                                 if _usd_fx_ord <= 0:
                                     logger.warning(f"    🛑 [FX Guard] {_t}: USD/KRW 미상 → 해외 추가매수 생략")
+                                    _abort_pair(_sig_pid)
                                     continue
                                 _eff_px_krw = _sig_px * _usd_fx_ord
                             _dq_est = max(1, int(gap / max(_eff_px_krw, 1.0)))
@@ -2915,9 +2972,11 @@ class StreamOrchestrator:
                                     f"    🛡️ [Grinold-Kahn Discrete-Lot Skip] {_t}: Δq=+{_dq_est}주 "
                                     f"(한계순효용 {_util_res['net_marginal_utility_pct']:+.3f}%, 사유={_util_res['reason']}) ➔ 추가매수 스킵"
                                 )
+                                _abort_pair(_sig_pid)
                                 continue
                     except Exception:
                         if (gap / target_amount) < 0.20:
+                            _abort_pair(_sig_pid)
                             continue
                     
                 # 🎯 [User Rule] 100% 일시불 즉시 진입 (분할매수/DCA 100% 원천 차단)
@@ -2925,6 +2984,7 @@ class StreamOrchestrator:
 
                 min_trade = pget('a3.min_trade_amount', 10000)
                 if amount_krw < min_trade:
+                    _abort_pair(_sig_pid)
                     continue
 
                 _cumulative_ordered_krw_by_ticker[_t_clean] = _cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0) + amount_krw
@@ -3231,7 +3291,7 @@ class StreamOrchestrator:
                     _p_exit = float(pos.get('current_price', 0.0))
                     _tk_exit = str(pos.get('ticker', pos_key.split(':')[-1]))
                     _is_jp_exit = _tk_exit.upper().endswith('.T')
-                    _is_us_exit = (not _tk_exit.isdigit()) and (not _is_jp_exit)
+                    _is_us_exit = (not _is_kr_tk(_tk_exit)) and (not _is_jp_exit)
                     from src.data_collection.central_data_gateway import CentralDataGateway
                     _dyn_fx_exit = CentralDataGateway().get_usdkrw_rate()
                     _jpy_fx_exit = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)

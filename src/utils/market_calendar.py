@@ -754,6 +754,16 @@ def is_kr_trading_now(now: Optional[datetime] = None) -> Tuple[bool, str]:
     return (False, 'closed')
 
 
+import re as _re_mc
+_KR_TICKER_RE_MC = _re_mc.compile(r'^\d{4}[0-9A-Z]{2}$')
+
+
+def is_kr_ticker(ticker: str) -> bool:
+    """국내 KRX 6자리 종목코드(일반 6자리 숫자 및 우선주/신종증권 영숫자 00680K 등) 판별."""
+    s = str(ticker or '').strip().split(':')[-1].upper()
+    return s.isdigit() or bool(_KR_TICKER_RE_MC.match(s))
+
+
 def is_ticker_tradable_now(ticker: str, now: Optional[datetime] = None) -> Tuple[bool, str]:
     """
     종목의 해당 거래소가 현재 거래 가능한 상태인지 판별.
@@ -761,7 +771,7 @@ def is_ticker_tradable_now(ticker: str, now: Optional[datetime] = None) -> Tuple
     Returns:
         (is_tradable: bool, session_type: str)
     """
-    is_us = not str(ticker).isdigit()
+    is_us = not is_kr_ticker(ticker)
     if is_us:
         return get_us_session_state(now)
     return is_kr_trading_now(now)

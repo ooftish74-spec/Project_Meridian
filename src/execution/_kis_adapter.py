@@ -130,6 +130,15 @@ class AccountInfo:
             except Exception as e:
                 logger.error(f"  ❌ AccountInfo 초기화 오류: {e}")
 
+import re as _re_kis_tk
+_KR_TICKER_RE_KIS = _re_kis_tk.compile(r'^\d{4}[0-9A-Z]{2}$')
+
+
+def _is_kr_tk(ticker: str) -> bool:
+    s = str(ticker or '').strip().split(':')[-1].upper()
+    return s.isdigit() or bool(_KR_TICKER_RE_KIS.match(s))
+
+
 def _snap_to_exchange_tick(price: float, ticker: str, is_etf: bool = False) -> float:
     """Exchange Tick Grid Snapping (KRX & US).
     
@@ -137,7 +146,7 @@ def _snap_to_exchange_tick(price: float, ticker: str, is_etf: bool = False) -> f
     """
     if price <= 0:
         return 0.0
-    is_us = not str(ticker).isdigit()
+    is_us = not _is_kr_tk(ticker)
     if is_us:
         tick = 0.01 if price >= 1.0 else 0.0001
         return round(round(price / tick) * tick, 4)
@@ -414,7 +423,7 @@ class KISTraderAdapter:
                 if (not price or price <= 0) and cur_info and cur_info > 0:
                     order.order_type = 'limit'
                     # 매수 시 최유리 지정가 (해외주식은 소수점 2자리 반올림 적용)
-                    order.price = round(cur_info, 2) if (exchange in ('NYSE', 'NASD', 'AMEX', 'AMS') or not ticker.isdigit()) else cur_info
+                    order.price = round(cur_info, 2) if (exchange in ('NYSE', 'NASD', 'AMEX', 'AMS') or not _is_kr_tk(ticker)) else cur_info
                     logger.info(f"  🎯 [Smart Limit Order Engine] {ticker} 매수 → 실시간 지정가(${order.price:,.2f}) 전환 (시장가 슬리피지 100% 차단)")
                 elif not cur_info or cur_info <= 0:
                     logger.warning(f"  ⚠️ [Smart Limit Engine] {ticker} 현재가 수집 불가 → 안전 지정가 전환 스킵")
@@ -536,7 +545,7 @@ class KISTraderAdapter:
         from config.dynamic_config import DynamicConfig
         
         # 0. Session Gatekeeper & Holdings Clamping
-        is_us = not str(order.ticker).isdigit()
+        is_us = not _is_kr_tk(order.ticker)
         try:
             from src.utils.market_calendar import is_ticker_tradable_now
             is_tradable, session_type = is_ticker_tradable_now(order.ticker)
@@ -675,7 +684,7 @@ class KISTraderAdapter:
             if order.quantity > max_qty:
                 raise ValueError(f"Quantity {order.quantity} exceeds MAX_QTY ({max_qty})")
                 
-            is_us = not str(order.ticker).isdigit()
+            is_us = not _is_kr_tk(order.ticker)
             fx_rate = self._get_live_fx_rate() if is_us else 1.0
             _fx_unknown = is_us and not (fx_rate and float(fx_rate) > 0)
             if _fx_unknown:
@@ -762,7 +771,7 @@ class KISTraderAdapter:
         else:
             acnt = [self.account_no[:8], self.account_no[8:] if len(self.account_no) > 8 else '01']
         headers = self._get_headers()
-        is_us_stock = not order.ticker.isdigit()
+        is_us_stock = not _is_kr_tk(order.ticker)
         if is_us_stock:
             if order.price <= 0:
                 _is_buy_side = (order.side.lower() == 'buy')
@@ -957,10 +966,10 @@ class KISTraderAdapter:
             for o in self.orders:
                 if str(o.order_id).strip() == str(order_no).strip():
                     ticker = o.ticker
-                    is_us = not str(ticker).isdigit()
+                    is_us = not _is_kr_tk(ticker)
                     break
 
-        if is_us or (ticker and not str(ticker).isdigit()):
+        if is_us or (ticker and not _is_kr_tk(ticker)):
             return self.check_us_order_status(str(order_no), ticker=ticker)
         if self.mode == 'mock':
             return {'status': 'filled', 'filled_qty': 0, 'remaining_qty': 0, 'order_no': order_no}
@@ -1174,7 +1183,7 @@ class KISTraderAdapter:
                     ticker = o.ticker
                     break
 
-        if ticker and not str(ticker).isdigit():
+        if ticker and not _is_kr_tk(ticker):
             return self.cancel_us_order(order_no, ticker=ticker)
 
         if self.mode == 'mock':
@@ -1274,7 +1283,7 @@ class KISTraderAdapter:
             fallback = _cfg.get('execution.fill_fallback', 'market') if _cfg else 'market'
         check_interval = pget('execution.fill_check_interval_sec', 5) if _cfg else 5
         start = time.time()
-        is_us = not str(order.ticker).isdigit()
+        is_us = not _is_kr_tk(order.ticker)
         while time.time() - start < timeout_sec:
             result = self.check_order_status(order.order_id, is_us=is_us, ticker=order.ticker)
             status = result.get('status', 'pending')
@@ -1411,7 +1420,7 @@ class KISTraderAdapter:
         tk_str = str(ticker or '').strip()
         if not tk_str:
             return None
-        if not tk_str.isdigit():
+        if not _is_kr_tk(tk_str):
             if self.mode != 'mock' and (self._access_token or self.authenticate()):
                 try:
                     us_px = self.get_live_overseas_price(tk_str, self.resolve_overseas_exchange(tk_str))
@@ -1499,7 +1508,7 @@ class KISTraderAdapter:
     def _estimate_spread_bps(self, ticker: str) -> float:
         """종목별 호가 스프레드(bps) 추정."""
         try:
-            if str(ticker or '').isdigit():
+            if _is_kr_tk(ticker):
                 from src.data_collection.kis_data_collector import KISDataCollector
                 ob = KISDataCollector().get_orderbook(str(ticker))
                 if ob and ob.get('spread_pct') is not None:
@@ -1982,7 +1991,7 @@ class KISTraderAdapter:
                             _active_tickers = list(self.positions.keys())
                             if not us_fetch_ok:
                                 for _existing_tk in _ledger_mgr.load_ledger().keys():
-                                    if not str(_existing_tk).isdigit() and _existing_tk not in _active_tickers:
+                                    if not _is_kr_tk(_existing_tk) and _existing_tk not in _active_tickers:
                                         _active_tickers.append(_existing_tk)
                             _ledger_map = _ledger_mgr.sync_live_positions(_active_tickers)
                             for t, pos in self.positions.items():
@@ -1994,7 +2003,7 @@ class KISTraderAdapter:
                         # ★ Wave 1 Track C: 해외 익스포저가 있는데 환율 미확보 → NAV 원화환산 불가.
                         #   상수 환율로 날조하지 않고 NAV/대사/SSOT 기록을 보류(직전 NAV 유지) + degraded 플래그 + False 반환.
                         #   (수량·원화 현금은 환율과 무관하므로 위에서 정상 갱신됨 → 매도/청산 경로는 영향 없음)
-                        _has_us_exposure = _us_exposure_usd > 0 or any(not str(_t).isdigit() for _t in self.positions)
+                        _has_us_exposure = _us_exposure_usd > 0 or any(not _is_kr_tk(_t) for _t in self.positions)
                         self.nav_fx_degraded = bool(_has_us_exposure and not (fx_rate and fx_rate > 0))
                         if self.nav_fx_degraded:
                             self._last_balance_complete = False
@@ -2015,7 +2024,7 @@ class KISTraderAdapter:
                                 _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
                                 _live_holdings = {}
                                 for _tk, _p in self.positions.items():
-                                    _is_us = not _tk.isdigit()
+                                    _is_us = not _is_kr_tk(_tk)
                                     _fx = fx_rate if _is_us else 1.0
                                     _pnl_pct = round(((float(_p.current_price) / float(_p.avg_price)) - 1.0) * 100.0, 2) if float(_p.avg_price) > 0 else 0.0
                                     _live_holdings[_tk] = {
@@ -2208,7 +2217,7 @@ class KISTraderAdapter:
 
     def _update_account(self):
         _us_cash_usd = float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0)) or 0.0)
-        _has_us = _us_cash_usd > 0 or any((not str(p.ticker).isdigit()) and p.quantity > 0 for p in self.positions.values())
+        _has_us = _us_cash_usd > 0 or any((not _is_kr_tk(p.ticker)) and p.quantity > 0 for p in self.positions.values())
         fx = float(getattr(self, 'fx_rate', 0) or self._get_live_fx_rate() or 0.0) if _has_us else 0.0
         if _has_us and fx <= 0:
             # ★ Wave 1 Track C: 환율 미확보 → 원화 NAV 날조 금지. 직전 평가값 유지 + degraded 플래그.
@@ -2216,9 +2225,9 @@ class KISTraderAdapter:
             logger.critical("  🚨 [Account] USD/KRW 미확보 + 해외 익스포저 → positions_value/total_equity 갱신 보류 (직전 값 유지)")
             return
         self.nav_fx_degraded = False
-        pv = sum((p.current_price * p.quantity * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
+        pv = sum((p.current_price * p.quantity * (1.0 if _is_kr_tk(p.ticker) else fx) for p in self.positions.values()))
         self.account.positions_value = pv
-        self.account.unrealized_pnl = sum((p.unrealized_pnl * (1.0 if str(p.ticker).isdigit() else fx) for p in self.positions.values()))
+        self.account.unrealized_pnl = sum((p.unrealized_pnl * (1.0 if _is_kr_tk(p.ticker) else fx) for p in self.positions.values()))
         us_cash_krw = _us_cash_usd * fx
         self.account.total_equity = self.account.cash + us_cash_krw + pv
 
@@ -2278,7 +2287,7 @@ class KISTraderAdapter:
         if self.mode not in ('live', 'paper'):
             return None
         import requests
-        is_us = not str(order.ticker).isdigit()
+        is_us = not _is_kr_tk(order.ticker)
         want_side = '01' if order.side.lower() in ('sell', 'short') else '02'
         since_hms = (since - timedelta(seconds=5)).strftime('%H%M%S')
         today = datetime.now().strftime('%Y%m%d')
@@ -2330,7 +2339,7 @@ class KISTraderAdapter:
         try:
             import requests
             headers = self._get_headers()
-            is_us = (ticker and not str(ticker).isdigit())
+            is_us = (ticker and not _is_kr_tk(ticker))
             if is_us:
                 headers['tr_id'] = 'VTTS3018R' if self.mode == 'paper' else 'TTTS3018R'
                 acnt = self.account_no.split('-')
@@ -2508,7 +2517,7 @@ class KISTraderAdapter:
             # [Mathematical Dynamic Model] 변동성 및 스프레드 연동 동적 허용 오차
             max_tolerance_bps = max(10.0, min(50.0, 20.0))
             
-        is_overseas = not ticker.isdigit()
+        is_overseas = not _is_kr_tk(ticker)
         if is_overseas:
             cur_p = self.get_live_overseas_price(ticker, 'NYSE') or self.get_live_overseas_price(ticker, 'NASD') or submitted_price
         else:
@@ -2727,7 +2736,7 @@ class KISTraderAdapter:
                 for stream_id, sig_list in signals.items():
                     if sig_list:
                         for s in sig_list:
-                            sig_mkt = s.get('market', 'KR' if s.get('ticker', '').isdigit() else 'US')
+                            sig_mkt = s.get('market', 'KR' if _is_kr_tk(s.get('ticker', '')) else 'US')
                             if sig_mkt == market and s.get('direction') == 'long':
                                 return True
         except Exception:

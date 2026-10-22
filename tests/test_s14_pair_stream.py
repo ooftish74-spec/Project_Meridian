@@ -195,3 +195,53 @@ def test_atomic_pair_metadata_and_bull_guard_suppression(stream):
     signals_bull = stream.generate_signals(regime='bull', market_data=market_data_low_vix)
     assert len(signals_bull) == 0
 
+
+def test_alphanumeric_kr_ticker_and_pair_conflict_exemption():
+    from src.utils.market_calendar import is_kr_ticker
+    from src.execution._kis_adapter import _is_kr_tk
+    from src.execution.intraday_capital_router import IntradayCapitalRouter
+
+    assert is_kr_ticker('00680K') is True
+    assert _is_kr_tk('00680K') is True
+    assert is_kr_ticker('005930') is True
+    assert is_kr_ticker('PSQ') is False
+    assert is_kr_ticker('9432.T') is False
+
+    router = IntradayCapitalRouter()
+    orders = [
+        {
+            'ticker': '252670',
+            'action': 'buy',
+            'stream_id': 'S3',
+            'strategy': 'ActiveMacro',
+            'confidence': 0.85,
+            'amount_krw': 300000,
+        },
+        {
+            'ticker': '091180',
+            'action': 'buy',
+            'stream_id': 'S14_PAIR_ALPHA',
+            'strategy': 'S14_LongLeg_auto',
+            'pair_id': '091180_114800',
+            'pair_partner': '114800',
+            'confidence': 0.72,
+            'amount_krw': 150000,
+        },
+        {
+            'ticker': '114800',
+            'action': 'buy',
+            'stream_id': 'S14_PAIR_ALPHA',
+            'strategy': 'S14_ShortHedge_auto',
+            'pair_id': '091180_114800',
+            'pair_partner': '091180',
+            'confidence': 0.72,
+            'amount_krw': 150000,
+        },
+    ]
+    resolved = router.resolve_signal_conflicts(orders)
+    resolved_tickers = [o['ticker'] for o in resolved]
+    assert '252670' in resolved_tickers
+    assert '091180' in resolved_tickers
+    assert '114800' in resolved_tickers
+
+

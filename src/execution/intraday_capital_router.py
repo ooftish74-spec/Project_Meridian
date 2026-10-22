@@ -173,10 +173,11 @@ class IntradayCapitalRouter:
 
                 # 조건 2: 역방향 ETF 상충 (정적 매핑 + 동일 주식군 내 경험적 베타 부호 반대 β1 * β2 <= -0.75 & 주가지수 상관곱 ρ1 * ρ2 <= -0.55)
                 # 비주식 안전자산(금/채권/원자재 등 safe_havens/cash_equivalents 또는 상관 약한 자산)은 주식 인버스와 다중자산 헤지이므로 제외
+                from src.utils.market_calendar import is_kr_ticker
                 _m1 = _dqe.get_asset_metrics(t1)
                 _m2 = _dqe.get_asset_metrics(t2)
                 _non_eq = _dqe.get_cash_equivalent_tickers() | set((_dqe._classifications or {}).get('safe_havens', set()))
-                _same_mkt = (t1.isalpha() == t2.isalpha()) and (t1 not in _non_eq) and (t2 not in _non_eq)
+                _same_mkt = (is_kr_ticker(t1) == is_kr_ticker(t2)) and (t1 not in _non_eq) and (t2 not in _non_eq)
                 _beta_conflict = (
                     _same_mkt
                     and (_m1.get('beta', 1.0) * _m2.get('beta', 1.0) <= -0.75)
@@ -185,18 +186,24 @@ class IntradayCapitalRouter:
                 inverse_conflict = ((self.INVERSE_PAIR_MAP.get(t1) == t2) or _beta_conflict) and (side1 == 'buy' and side2 == 'buy')
 
                 if same_ticker_conflict or inverse_conflict:
-                    # 마켓-뉴트럴 페어 전략의 인버스 헤지 레그가 방향성 롱 신호를 죽이지 않도록 방어
+                    # 마켓-뉴트럴 페어 전략(S14) 주문은 자체 인버스 헤지 레그와 짝을 이루는 중립 포지션이므로,
+                    # 방향성 주문(S0/S1/S2/S3)이나 페어 파트너와 역방향 상충 상쇄(Smart Netting)하지 않음
                     _strat1 = str(s1.get('strategy', '')).lower()
                     _strat2 = str(s2.get('strategy', '')).lower()
-                    if inverse_conflict and ('pair' in _strat1 or 'pair' in _strat2):
-                        _is_inv1 = (_m1.get('beta', 1.0) < 0) or (t1 in ('114800', '252670', '251340'))
-                        _is_inv2 = (_m2.get('beta', 1.0) < 0) or (t2 in ('114800', '252670', '251340'))
-                        if _is_inv1 and 'pair' in _strat1 and not _is_inv2:
-                            cancelled_indices.add(i)
-                            break
-                        if _is_inv2 and 'pair' in _strat2 and not _is_inv1:
-                            cancelled_indices.add(j)
-                            continue
+                    _is_pair1 = (
+                        ('pair' in _strat1)
+                        or bool(s1.get('pair_id'))
+                        or bool(s1.get('pair_partner'))
+                        or str(s1.get('stream_id', s1.get('stream', ''))).upper() in ('S14', 'S14_PAIR_ALPHA')
+                    )
+                    _is_pair2 = (
+                        ('pair' in _strat2)
+                        or bool(s2.get('pair_id'))
+                        or bool(s2.get('pair_partner'))
+                        or str(s2.get('stream_id', s2.get('stream', ''))).upper() in ('S14', 'S14_PAIR_ALPHA')
+                    )
+                    if inverse_conflict and (_is_pair1 or _is_pair2):
+                        continue
 
                     # 확신도 및 요청 자본에 기반한 유효 노출(Exposure) 연산
                     has_amt1 = 'amount_krw' in s1 or 'target_amount' in s1 or 'size_pct' in s1 or 'weight' in s1
@@ -294,6 +301,7 @@ class IntradayCapitalRouter:
         rem_cash = freed_cash_krw
 
         from src.data_collection.central_data_gateway import CentralDataGateway
+        from src.utils.market_calendar import is_kr_ticker
         dyn_fx = CentralDataGateway().get_usdkrw_rate()
 
         for sig in pending_s11_signals:
@@ -302,7 +310,7 @@ class IntradayCapitalRouter:
             if price <= 0:
                 continue
             target_amount = min(rem_cash, float(sig.get('target_amount', rem_cash)))
-            is_us = not str(ticker).isdigit()
+            is_us = not is_kr_ticker(ticker)
             if is_us and not dyn_fx:
                 logger.error(f"  🛑 [FX Guard] {ticker}: USD/KRW 미확보 → 해외 배분 스킵")
                 continue
@@ -328,6 +336,7 @@ class IntradayCapitalRouter:
         if not portfolio:
             return {}
         
+        from src.utils.market_calendar import is_kr_ticker
         market_data = market_data or {}
         signal_cache = market_data.get('signal_cache', {})
         stock_technicals = signal_cache.get('stock_technicals', {})
@@ -374,7 +383,7 @@ class IntradayCapitalRouter:
                     win_rate -= 0.08
                 else:
                     win_rate += 0.04
-            elif not str(ticker).isdigit():
+            elif not is_kr_ticker(ticker):
                 # US 종목: 나스닥/S&P 500 모멘텀
                 qqq_close = float(signal_cache.get('qqq_close', signal_cache.get('nasdaq', 0.0)) or 0.0)
                 qqq_ma20 = float(signal_cache.get('qqq_ma20', signal_cache.get('nasdaq_ma20', qqq_close)) or qqq_close)
@@ -428,6 +437,8 @@ class IntradayCapitalRouter:
         if not signals:
             return []
 
+        from src.utils.market_calendar import is_kr_ticker
+
         # 1. Step 4: 상충 신호 무효화
         filtered_signals = self.resolve_signal_conflicts(signals)
         if not filtered_signals:
@@ -478,7 +489,7 @@ class IntradayCapitalRouter:
                 continue
 
             # [Cross-Market Inverse Bridge] KRX 휴장 + US 개장 시간대에 발생한 KRX 인버스/곱버스 신호를 US 인버스 ETF(SQQQ/SOXS/SH)로 자동 전환
-            if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and str(ticker).isdigit():
+            if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and is_kr_ticker(ticker):
                 from src.utils.market_calendar import is_ticker_tradable_now
                 _kr_ok, _ = is_ticker_tradable_now(ticker)
                 if not _kr_ok:
@@ -582,7 +593,7 @@ class IntradayCapitalRouter:
                         price = _PARKING_FALLBACK_PX[ticker]
                         logger.info(f"  🛡️ [Router Cash Anchor] {ticker} 파킹 ETF 기준가(₩{price:,.0f}) 확정")
                 # 6. 인스티튜셔널 브리지 확인 (국내)
-                if price <= 1.0 and str(ticker).isdigit():
+                if price <= 1.0 and is_kr_ticker(ticker):
                     try:
                         from src.data_collection.pykrx_compat import stock as _pykrx_s8
                         from datetime import date as _d, timedelta as _td
@@ -607,7 +618,7 @@ class IntradayCapitalRouter:
                     continue
 
             sig['price'] = price
-            is_us = not str(ticker).isdigit()
+            is_us = not is_kr_ticker(ticker)
             if is_us and not dyn_fx:
                 logger.error(f"  🛑 [FX Guard] {ticker}: USD/KRW 미확보 → 해외 라우팅 스킵 (fail-closed)")
                 continue
@@ -629,7 +640,7 @@ class IntradayCapitalRouter:
             else:
                 sig_ev = float(sig.get('ev_adj', 0.5))
                 if holdings_ev:
-                    is_us_candidate = not str(ticker).isdigit()
+                    is_us_candidate = not is_kr_ticker(ticker)
                     eligible_holdings = {}
                     holdings_dict = portfolio.get('holdings') or portfolio.get('positions') or {} if portfolio else {}
 
@@ -641,7 +652,7 @@ class IntradayCapitalRouter:
                     }
 
                     for h_ticker, h_ev in holdings_ev.items():
-                        h_is_us = not str(h_ticker).isdigit()
+                        h_is_us = not is_kr_ticker(h_ticker)
                         if h_is_us == is_us_candidate and h_ticker not in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
                             if enforce_session_gate or market_data.get('enforce_session_gate', False):
                                 h_tradable, _ = is_ticker_tradable_now(h_ticker)
@@ -657,7 +668,7 @@ class IntradayCapitalRouter:
                         lowest_qty = int(lowest_pos.get('qty', lowest_pos.get('quantity', 0)))
                         lowest_price = float(lowest_pos.get('current_price', lowest_pos.get('price', 0.0)))
                         lowest_name = lowest_pos.get('name', lowest_ticker)
-                        lowest_is_us = not str(lowest_ticker).isdigit()
+                        lowest_is_us = not is_kr_ticker(lowest_ticker)
                         lowest_price_krw = (lowest_price * dyn_fx if dyn_fx else 0.0) if lowest_is_us else lowest_price
                         
                         # [Pure Dynamic Math] 실제 마찰비용 및 변동성에 기반한 기본 스왑 허들
