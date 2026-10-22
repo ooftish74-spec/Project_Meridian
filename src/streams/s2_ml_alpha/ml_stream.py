@@ -485,9 +485,9 @@ class S2MLAlphaStream(BaseStream):
                 _gk_alpha = 0.0
                 if _gk_shrunk_ic > 0.0 and _sz_val != 0.0:
                     _gk_alpha = grinold_kahn_expected_alpha(_sz_val, _gk_shrunk_ic, _d_vol)
-                _px_val = float(stock.get('close', stock.get('price', 0.0)) or 0.0)
-                _exp_ret = float(_gk_alpha if _gk_alpha > 0.0 else _ev_val)
-                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6), 'expected_return': round(_exp_ret, 6), 'price': _px_val}
+                _px_val = max(0.0, float(stock.get('close', stock.get('price', 0.0)) or 0.0))
+                _exp_ret = max(float(_gk_alpha), float(_ev_val))
+                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6), 'expected_return': round(_exp_ret, 6), 'expected_value': round(float(_ev_val), 6), 'price': _px_val}
                 if stock.get('conformal_lower') is not None:
                     signal['conformal_lower'] = round(stock['conformal_lower'], 4)
                     signal['conformal_upper'] = round(stock['conformal_upper'], 4)
@@ -619,7 +619,23 @@ class S2MLAlphaStream(BaseStream):
                     feature_dict['macd_signal'] = feature_dict['macd_hist']
                 if 'vol_trend' in feature_dict and 'volume_ratio_20d' not in feature_dict:
                     feature_dict['volume_ratio_20d'] = feature_dict['vol_trend']
-                candidates.append({'ticker': ticker, 'name': ticker, 'features': feature_dict, 'rsi': feature_dict.get('rsi_14', 50), 'bb_position': feature_dict.get('bb_position', 0.5), 'macd_signal': feature_dict.get('macd_signal', 0), 'volume_ratio': feature_dict.get('volume_ratio_20d', 1.0), 'momentum_5d': feature_dict.get('mom_7', 0), 'close': feature_dict.get('rmean_3', 0), 'foreign_net_5d': _flow_by_ticker.get(ticker, {}).get('foreign_net_5d', 0), 'inst_net_5d': _flow_by_ticker.get(ticker, {}).get('inst_net_5d', 0)})
+                _close_px = float(feature_dict.get('close') or feature_dict.get('Close') or 0.0)
+                if _close_px <= 0.0:
+                    for _p_cand in (
+                        _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
+                        _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
+                        _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
+                    ):
+                        if _p_cand.exists():
+                            try:
+                                _df_px = pd.read_parquet(_p_cand)
+                                _c_col = 'close' if 'close' in _df_px.columns else ('Close' if 'Close' in _df_px.columns else None)
+                                if _c_col and not _df_px.empty:
+                                    _close_px = float(_df_px[_c_col].dropna().iloc[-1])
+                                    break
+                            except Exception:
+                                pass
+                candidates.append({'ticker': ticker, 'name': ticker, 'features': feature_dict, 'rsi': feature_dict.get('rsi_14', 50), 'bb_position': feature_dict.get('bb_position', 0.5), 'macd_signal': feature_dict.get('macd_signal', 0), 'volume_ratio': feature_dict.get('volume_ratio_20d', 1.0), 'momentum_5d': feature_dict.get('mom_7', 0), 'close': max(0.0, _close_px), 'foreign_net_5d': _flow_by_ticker.get(ticker, {}).get('foreign_net_5d', 0), 'inst_net_5d': _flow_by_ticker.get(ticker, {}).get('inst_net_5d', 0)})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

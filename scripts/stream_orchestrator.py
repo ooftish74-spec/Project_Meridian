@@ -862,12 +862,11 @@ class StreamOrchestrator:
                                     continue
                                 if _d_act == 'STOP_ALL_NEW_BUYS':
                                     continue
-                                _alpha_s = float(
-                                    _s.get('gk_expected_alpha')
-                                    or _s.get('expected_return')
-                                    or (float(_s.get('expected_return_pct') or 0.0) / 100.0)
-                                    or _s.get('expected_value')
-                                    or 0.0
+                                _alpha_s = max(
+                                    float(_s.get('expected_return') or 0.0),
+                                    float(_s.get('expected_value') or 0.0),
+                                    float(_s.get('gk_expected_alpha') or 0.0),
+                                    float(_s.get('expected_return_pct') or 0.0) / 100.0,
                                 )
                                 _beta_s = float(_s.get('beta') if _s.get('beta') is not None else 1.0)
                                 _gate_sc = scenario_conditional_alpha_survival_gate(
