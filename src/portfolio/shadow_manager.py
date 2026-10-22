@@ -632,21 +632,30 @@ class ShadowPortfolioManager:
             cur = pos.get('current_price', avg)
 
             # market_value
-            if 'market_value' not in pos and cur > 0 and qty > 0:
-                pos['market_value'] = cur * qty
-                changed = True
+            if cur > 0 and qty > 0:
+                _calc_mv = cur * qty
+                if 'market_value' not in pos or abs(float(pos.get('market_value') or 0) - _calc_mv) > 1e-2:
+                    pos['market_value'] = _calc_mv
+                    changed = True
 
             # unrealized_pnl
-            if 'unrealized_pnl' not in pos:
+            if avg > 0 and cur > 0 and qty > 0:
+                _calc_upnl = (cur - avg) * qty
+                if 'unrealized_pnl' not in pos or abs(float(pos.get('unrealized_pnl') or 0) - _calc_upnl) > 1e-2:
+                    pos['unrealized_pnl'] = _calc_upnl
+                    changed = True
+            elif 'unrealized_pnl' not in pos:
                 mv = pos.get('market_value', 0)
                 cost = avg * qty if avg > 0 and qty > 0 else 0
                 pos['unrealized_pnl'] = mv - cost
                 changed = True
 
             # pnl_pct
-            if 'pnl_pct' not in pos and avg > 0 and cur > 0:
-                pos['pnl_pct'] = round((cur - avg) / avg * 100, 2)
-                changed = True
+            if avg > 0 and cur > 0:
+                _calc_pct = round((cur - avg) / avg * 100, 2)
+                if 'pnl_pct' not in pos or abs(float(pos.get('pnl_pct') or 0) - _calc_pct) > 1e-2:
+                    pos['pnl_pct'] = _calc_pct
+                    changed = True
 
             # hwm_price
             if 'hwm_price' not in pos:
@@ -661,6 +670,17 @@ class ShadowPortfolioManager:
 
             if changed:
                 healed += 1
+
+        # ★ Root unrealized_pnl 자가 치유 (보유 포지션 합산 SSoT, USD 포지션은 환율 적용)
+        _fx = float(data.get('cash_usd_fx') or 1325.0)
+        _total_upnl_krw = 0.0
+        for _pk, _p in positions.items():
+            _upnl = float(_p.get('unrealized_pnl', 0.0) or 0.0)
+            _tk = str(_p.get('ticker', _pk.split(':')[-1] if ':' in _pk else _pk))
+            _is_us = (str(_p.get('currency', '')).upper() == 'USD') or (str(_p.get('market', '')).upper() == 'US') or (bool(_tk) and not _tk[0].isdigit())
+            _total_upnl_krw += _upnl * (_fx if _is_us else 1.0)
+        if abs(float(data.get('unrealized_pnl', 0.0) or 0.0) - _total_upnl_krw) > 10.0:
+            data['unrealized_pnl'] = round(_total_upnl_krw, 2)
 
         if healed > 0:
             logger.info(f"  🔧 포지션 자가 치유: {healed}개 정규화")
@@ -3036,13 +3056,15 @@ class ShadowPortfolioManager:
                 break
         daily_return = (nav - prev_nav) / prev_nav * 100 if prev_nav > 0 else 0
 
+        _usd_cash_krw_val = round(float(self.data.get('cash_usd_krw') or 0.0), 0)
         snapshot = {
             'date': _today(),
             'timestamp': datetime.now().isoformat(),
             'nav': nav,
             'nav_source': curr_nav_source,
             'cash': self.data['cash'],
-            'market_value': nav - self.data['cash'],
+            'cash_usd_krw': _usd_cash_krw_val,
+            'market_value': max(0.0, nav - self.data['cash'] - _usd_cash_krw_val),
             'n_positions': len(self.positions),
             'regime': regime,
             'position_scale': position_scale,
@@ -3166,35 +3188,53 @@ class ShadowPortfolioManager:
                 _ic_val = cov / (std_c * std_r) if std_c > 0 and std_r > 0 else 0.0
                 ic_data = {'ic': round(_ic_val, 4), 'n': n, 'method': 'pearson_fallback'}
 
-        # ── [Latency Audit] 동기식 pykrx 벤치마크 조회 완전 삭제 ──
-        # market_data 캐시나 0.0을 사용하여 블로킹 방지
+        # ── 당일 벤치마크 수익률 (069500 / KOSPI) 조회 — 전일 날짜 지연(Lag) 오염 차단 ──
         bench_ret = 0.0
-
-        if bench_ret == 0.0:
+        _root_dir = Path(__file__).resolve().parent.parent.parent
+        for _rel_p in ('data/kr_markets/kr_069500.parquet', 'data/historical_10y/kr_069500.parquet'):
+            if bench_ret != 0.0:
+                break
             try:
-                import json as _json, pandas as _pd
-                _bench_fp = Path(__file__).resolve().parent.parent.parent / 'data' / 'historical_10y' / 'kr_069500.parquet'
+                import pandas as _pd
+                _bench_fp = _root_dir / _rel_p
                 if _bench_fp.exists():
                     _bdf2 = _pd.read_parquet(_bench_fp)
-                    _close = _pd.to_numeric(_bdf2['close'], errors='coerce').dropna().values
-                    if len(_close) >= 2:
-                        bench_ret = round((_close[-1] / _close[-2] - 1) * 100, 4)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
+                    if 'date' in _bdf2.columns:
+                        _last_dt = str(_bdf2['date'].iloc[-1])[:10]
+                    else:
+                        _last_dt = str(_bdf2.index[-1])[:10]
+                    if _last_dt == today_str:
+                        _c_col = 'close' if 'close' in _bdf2.columns else ('Close' if 'Close' in _bdf2.columns else '종가')
+                        _close = _pd.to_numeric(_bdf2[_c_col], errors='coerce').dropna().values
+                        if len(_close) >= 2 and _close[-2] > 0:
+                            bench_ret = round(float((_close[-1] / _close[-2] - 1) * 100), 4)
+            except Exception as e:
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
 
         if bench_ret == 0.0:
             try:
                 import json as _json
-                sc_file = Path(__file__).resolve().parent.parent.parent / 'results' / 'signal_cache.json'
+                sc_file = _root_dir / 'results' / 'signal_cache.json'
                 if sc_file.exists():
                     _sc = _json.loads(sc_file.read_text())
-                    bench_ret = _sc.get('kospi_change_pct', 0)
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
+                    bench_ret = float(_sc.get('kospi_change_1d', _sc.get('kospi_change_pct', 0)) or 0.0)
+            except Exception as e:
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
+
+        if bench_ret == 0.0 and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+            try:
+                from datetime import timedelta as _td
+                from src.data_collection.kis_data_collector import KISDataCollector
+                _s_d = (datetime.now() - _td(days=10)).strftime('%Y%m%d')
+                _e_d = datetime.now().strftime('%Y%m%d')
+                _kdf = KISDataCollector().get_kr_daily_ohlcv('069500', _s_d, _e_d)
+                if _kdf is not None and len(_kdf) >= 2:
+                    _c_col = 'Close' if 'Close' in _kdf.columns else ('close' if 'close' in _kdf.columns else '종가')
+                    _k_closes = _kdf[_c_col].astype(float).values
+                    if _k_closes[-2] > 0:
+                        bench_ret = round(float((_k_closes[-1] / _k_closes[-2] - 1) * 100), 4)
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
 
         alpha_pct = round(daily_return - bench_ret, 4)
 
@@ -3203,6 +3243,7 @@ class ShadowPortfolioManager:
             'virtual_nav': nav,
             'nav': nav,  # ★ MeasurementEngine Risk View 호환
             'cash': self.data['cash'],
+            'cash_usd_krw': _usd_cash_krw_val,
             'n_positions': len(self.positions),
             'n_trades': snapshot['n_buys'] + snapshot['n_sells'],
             'position_scale': position_scale,

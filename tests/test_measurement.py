@@ -150,3 +150,74 @@ class TestMeasurementEngineMetrics:
         me = MeasurementEngine()
         risk = me._compute_risk_view({})
         assert isinstance(risk, dict)
+
+    def test_alpha_accounting_identity_ignores_stale_unrealized_pnl(self, monkeypatch):
+        """유령 unrealized_pnl(+980,495)이 존재해도 alpha_pct와 jensen_alpha_pct는 실제 NAV 수익률 항등식을 따른다."""
+        import pandas as pd
+        from src.measurement.measurement_engine import MeasurementEngine
+        import src.data_collection.pykrx_compat as pk_mod
+
+        def _mock_bench(start, end, ticker):
+            idx = pd.to_datetime(['2026-10-16', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'])
+            return pd.DataFrame({'종가': [88750.0, 89930.0, 86755.0, 89725.0, 86525.0]}, index=idx)
+
+        monkeypatch.setattr(pk_mod.stock, 'get_market_ohlcv_by_date', _mock_bench)
+        monkeypatch.setenv('MERIDIAN_TEST_MODE', '1')
+
+        sp = {
+            'initial_capital': 18_610_659.0,
+            'virtual_nav': 18_268_272.0,
+            'cash': 5_225_450.0,
+            'cash_usd_krw': 6_527_950.0,
+            'realized_pnl': 210_868.49,
+            'unrealized_pnl': 980_495.19,  # 과거 고정된 유령 미실현손익
+            'daily_snapshots': [
+                {'date': '2026-10-19', 'nav': 19_052_453.0, 'cash': 402_111.0, 'n_positions': 6},
+                {'date': '2026-10-20', 'nav': 18_123_583.0, 'cash': 3_068_567.0, 'n_positions': 6},
+                {'date': '2026-10-21', 'nav': 18_658_493.0, 'cash': 3_068_567.0, 'n_positions': 6},
+                {'date': '2026-10-22', 'nav': 18_268_272.0, 'cash': 5_225_450.0, 'n_positions': 8},
+            ],
+            'daily_records': [],
+            'positions': {},
+            'trade_history': [],
+        }
+        pv = MeasurementEngine()._compute_portfolio_view(sp)
+        # 1) 누적수익률 = (18268272 / 18610659 - 1) * 100 = -1.839736% -> -1.84%
+        expected_cum_ret = (18_268_272.0 / 18_610_659.0 - 1.0) * 100.0
+        # 2) 벤치마크(069500): 10/16 기준종가(88,750) -> 10/22 종가(86,525) = -2.507042% -> -2.507%
+        expected_bench_ret = (86525.0 / 88750.0 - 1.0) * 100.0
+        assert pv['cumulative_return_pct'] == pytest.approx(round(expected_cum_ret, 3), abs=1e-3)
+        assert pv['benchmark_return_pct'] == pytest.approx(round(expected_bench_ret, 3), abs=1e-3)
+        # 3) 단순 초과수익(alpha_pct == nav_alpha) = -1.840% - (-2.507%) = +0.667% (절대 +6.638%가 아님!)
+        assert pv['alpha_pct'] == pytest.approx(round(expected_cum_ret - expected_bench_ret, 3), abs=2e-3)
+        assert pv['alpha_pct'] == pv['nav_alpha']
+        # 4) Jensen's Alpha + Allocation Effect == Active Alpha 항등식 검증
+        assert pv['jensen_alpha_pct'] + pv['allocation_effect'] == pytest.approx(pv['alpha_pct'], abs=5e-3)
+        assert pv['jensen_alpha_pct'] < 0.0  # 현금 효과를 제거한 순수 젠센 알파는 음수
+
+    def test_heal_positions_recomputes_root_unrealized_pnl(self):
+        """_heal_positions가 개별 포지션 및 루트 unrealized_pnl을 최신 현재가/환율 기준으로 재계산한다."""
+        from src.portfolio.shadow_manager import ShadowPortfolioManager
+        data = {
+            'cash_usd_fx': 1325.0,
+            'unrealized_pnl': 980495.19,
+            'positions': {
+                'S_RECON:069500': {
+                    'ticker': '069500', 'quantity': 51, 'avg_price': 89476.9608,
+                    'current_price': 86525.0, 'currency': 'KRW', 'market': 'KR',
+                    'unrealized_pnl': 0.0,
+                },
+                'S_RECON:TLT': {
+                    'ticker': 'TLT', 'quantity': 1, 'avg_price': 79.00,
+                    'current_price': 80.00, 'currency': 'USD', 'market': 'US',
+                    'unrealized_pnl': 0.0,
+                },
+            },
+        }
+        ShadowPortfolioManager._heal_positions(data)
+        expected_kr = (86525.0 - 89476.9608) * 51
+        expected_us_usd = (80.00 - 79.00) * 1
+        assert data['positions']['S_RECON:069500']['unrealized_pnl'] == pytest.approx(expected_kr, rel=1e-9)
+        assert data['positions']['S_RECON:TLT']['unrealized_pnl'] == pytest.approx(expected_us_usd, rel=1e-9)
+        assert data['unrealized_pnl'] == pytest.approx(round(expected_kr + expected_us_usd * 1325.0, 2), abs=1e-2)
+

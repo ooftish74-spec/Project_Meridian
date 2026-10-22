@@ -195,7 +195,7 @@ class MeasurementEngine:
         s2_rolling = self._compute_s2_rolling_metrics(sp, target_date=target_date)
         quant = self._compute_quant_metrics(sp, risk)
         ic_ensemble = self._compute_ic_ensemble_view(sp)
-        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict)}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
+        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'jensen_alpha_pct': portfolio.get('jensen_alpha_pct', 0), 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict)}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
         self._save()
         self._log_summary()
         return self.result
@@ -321,6 +321,8 @@ class MeasurementEngine:
         cumulative_return_pct = (virtual_nav / initial_capital - 1) * 100
         bench_pct = 0.0
         try:
+            import os as _os
+            import pandas as _pd
             from src.data_collection.pykrx_compat import stock as _pykrx
             from datetime import datetime as _dt, timedelta as _td
             _bench_tk = cfg.get('measurement.benchmark_ticker', '069500')
@@ -335,14 +337,48 @@ class MeasurementEngine:
             if not _first_date and records:
                 _first_date = records[0].get('date')
             if _first_date:
-                _start = _first_date.replace('-', '')
+                try:
+                    _first_dt = _dt.strptime(_first_date[:10], '%Y-%m-%d')
+                    _query_start = (_first_dt - _td(days=10)).strftime('%Y%m%d')
+                except ValueError:
+                    _query_start = _first_date.replace('-', '')
             else:
-                _start = (_dt.now() - _td(days=60)).strftime('%Y%m%d')
+                _query_start = (_dt.now() - _td(days=60)).strftime('%Y%m%d')
             _end = _dt.now().strftime('%Y%m%d')
-            _bdf = _pykrx.get_market_ohlcv_by_date(_start, _end, _bench_tk)
-            if len(_bdf) >= 2:
-                _base_close = _bdf.iloc[0]['종가']
-                _last_close = _bdf.iloc[-1]['종가']
+            _bdf = _pykrx.get_market_ohlcv_by_date(_query_start, _end, _bench_tk)
+            if _os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                try:
+                    _need_live = (_bdf is None or len(_bdf) < 2)
+                    if not _need_live and len(_bdf) >= 1:
+                        _last_idx_str = str(_bdf.index[-1])[:10].replace('-', '')
+                        if _last_idx_str < _end:
+                            _need_live = True
+                    if _need_live:
+                        from src.data_collection.kis_data_collector import KISDataCollector
+                        _kdf = KISDataCollector().get_kr_daily_ohlcv(_bench_tk, _query_start, _end)
+                        if _kdf is not None and not _kdf.empty:
+                            _c_col = 'Close' if 'Close' in _kdf.columns else ('close' if 'close' in _kdf.columns else '종가')
+                            if _c_col in _kdf.columns:
+                                _kdf_norm = _pd.DataFrame({'종가': _pd.to_numeric(_kdf[_c_col], errors='coerce')}, index=_pd.to_datetime(_kdf.index))
+                                _bdf = _kdf_norm.dropna()
+                except Exception as _ke:
+                    logger.debug(f"  벤치마크 KIS 일봉 보강 스킵: {_ke}")
+            if _bdf is not None and len(_bdf) >= 2:
+                _base_close = float(_bdf.iloc[0]['종가'])
+                if _first_date:
+                    try:
+                        _f_ts = _pd.Timestamp(_first_date[:10])
+                        _bdf_idx = _pd.to_datetime(_bdf.index)
+                        _prior_rows = _bdf[_bdf_idx < _f_ts]
+                        if len(_prior_rows) >= 1:
+                            _base_close = float(_prior_rows.iloc[-1]['종가'])
+                        else:
+                            _on_or_after = _bdf[_bdf_idx >= _f_ts]
+                            if len(_on_or_after) >= 1:
+                                _base_close = float(_on_or_after.iloc[0]['종가'])
+                    except Exception:
+                        _base_close = float(_bdf.iloc[0]['종가'])
+                _last_close = float(_bdf.iloc[-1]['종가'])
                 if _base_close > 0:
                     bench_pct = round((_last_close / _base_close - 1) * 100, 4)
         except Exception as e:  # ★ Track E: 네트워크 예외(requests.ConnectionError 등)가 compute() 전체를 중단시키던 버그
@@ -353,30 +389,36 @@ class MeasurementEngine:
         _total_days = max(len(records), 1)
         _rf_period = _rf_annual / 252 * _total_days
         _invested_days = [r for r in records if r.get('n_positions', 0) >= 1]
+        _sp_usd_cash_krw = float(sp.get('cash_usd_krw', 0.0) or 0.0)
         if _invested_days:
             _avg_invest_pcts = []
             for r in _invested_days:
-                _r_nav = r.get('nav', initial_capital)
-                _r_cash = r.get('cash', _r_nav)
-                _r_invest_pct = 1.0 - _r_cash / _r_nav if _r_nav > 0 else 0
+                _r_nav = float(r.get('nav', initial_capital) or initial_capital)
+                _r_cash = float(r.get('cash', _r_nav) or 0.0)
+                if 'cash_usd_krw' in r:
+                    _r_cash += float(r.get('cash_usd_krw') or 0.0)
+                elif _sp_usd_cash_krw > 0 and _r_cash + _sp_usd_cash_krw <= _r_nav:
+                    # 스냅샷의 cash가 원화 예수금만 기록한 경우 외화 예수금(KRW 환산) 합산
+                    _r_cash += _sp_usd_cash_krw
+                _r_invest_pct = 1.0 - _r_cash / _r_nav if _r_nav > 0 else 0.0
                 _avg_invest_pcts.append(max(0.0, min(1.0, _r_invest_pct)))
             _avg_invest_pct = sum(_avg_invest_pcts) / len(_avg_invest_pcts)
         else:
             _avg_invest_pct = 0.0
-        _realized_pnl_total = sp.get('realized_pnl', 0)
-        _unrealized_pnl_total = sp.get('unrealized_pnl', 0)
-        _total_pnl = _realized_pnl_total + _unrealized_pnl_total
-        _avg_invested_capital = _avg_invest_pct * initial_capital
-        if _avg_invested_capital > 0:
-            _selection_return = _total_pnl / _avg_invested_capital * 100
+        # ★ 회계 항등식(Accounting Identity) 강제:
+        #   과거 가상 포트폴리오의 고정된 유령 unrealized_pnl을 참조하지 않고,
+        #   포트폴리오 실제 누적수익률(cumulative_return_pct = (virtual_nav / initial_capital - 1) * 100)을
+        #   단일 진실 공급원(SSoT)으로 삼아 Brinson-Fachler 분해 및 Jensen's Alpha를 산출한다.
+        _cash_pct = 1.0 - _avg_invest_pct
+        if _avg_invest_pct > 1e-6:
+            _selection_return = (cumulative_return_pct - _cash_pct * _rf_period) / _avg_invest_pct
         else:
             _selection_return = 0.0
         _selection_alpha = _selection_return - bench_pct
-        _cash_pct = 1.0 - _avg_invest_pct
         _allocation_effect = _cash_pct * (_rf_period - bench_pct)
-        _brinson_alpha = _avg_invest_pct * _selection_return + _cash_pct * _rf_period - bench_pct
-        alpha_pct = _brinson_alpha
+        _jensen_alpha = cumulative_return_pct - (_rf_period + _avg_invest_pct * (bench_pct - _rf_period))
         _nav_alpha = cumulative_return_pct - bench_pct
+        alpha_pct = _nav_alpha
         ic_val = None
         ic_p = None
         ic_n = 0
@@ -462,7 +504,7 @@ class MeasurementEngine:
         real_days = (date.today() - _get_launch_date()).days
         if total_days < real_days:
             total_days = real_days
-        return {'da': round(da, 4), 'da_correct': correct, 'da_total': total_signals, 'da_held': da_held, 'da_realized': da_realized, 'rolling_da': round(rolling_da, 4), 'rolling_da_n': rolling_total, 'rolling_da_window': rolling_window, 'alpha_pct': round(alpha_pct, 3), 'cumulative_return_pct': round(cumulative_return_pct, 3), 'benchmark_return_pct': round(bench_pct, 3), 'nav': virtual_nav, 'total_days': total_days, 'ic': ic_val, 'ic_p_value': ic_p, 'ic_n': ic_n, 'ic_method': ic_method, 'realized_pnl_krw': round(realized_pnl), 'realized_win_rate': round(realized_wins / max(realized_total, 1), 3), 'realized_trades': realized_total, 'selection_alpha': round(_selection_alpha, 3), 'selection_return': round(_selection_return, 3), 'allocation_effect': round(_allocation_effect, 3), 'nav_alpha': round(_nav_alpha, 3), 'avg_invest_pct': round(_avg_invest_pct, 4), 'risk_free_rate': _rf_annual, 'da_min_positions': _min_pos_for_da, 'da_valid_days': len(_valid_records)}
+        return {'da': round(da, 4), 'da_correct': correct, 'da_total': total_signals, 'da_held': da_held, 'da_realized': da_realized, 'rolling_da': round(rolling_da, 4), 'rolling_da_n': rolling_total, 'rolling_da_window': rolling_window, 'alpha_pct': round(alpha_pct, 3), 'jensen_alpha_pct': round(_jensen_alpha, 3), 'cumulative_return_pct': round(cumulative_return_pct, 3), 'benchmark_return_pct': round(bench_pct, 3), 'nav': virtual_nav, 'total_days': total_days, 'ic': ic_val, 'ic_p_value': ic_p, 'ic_n': ic_n, 'ic_method': ic_method, 'realized_pnl_krw': round(realized_pnl), 'realized_win_rate': round(realized_wins / max(realized_total, 1), 3), 'realized_trades': realized_total, 'selection_alpha': round(_selection_alpha, 3), 'selection_return': round(_selection_return, 3), 'allocation_effect': round(_allocation_effect, 3), 'nav_alpha': round(_nav_alpha, 3), 'avg_invest_pct': round(_avg_invest_pct, 4), 'risk_free_rate': _rf_annual, 'da_min_positions': _min_pos_for_da, 'da_valid_days': len(_valid_records)}
 
     def _compute_risk_view(self, sp: dict) -> dict:
         """Risk View: Sharpe, Drawdown, Volatility.
@@ -805,7 +847,7 @@ class MeasurementEngine:
                 bench_returns.append(br / 100.0 if abs(br) > 1 else br)
         if not bench_returns or all((b == 0 for b in bench_returns)):
             try:
-                from pykrx import stock as _pykrx
+                from src.data_collection.pykrx_compat import stock as _pykrx
                 from datetime import datetime as _dt, timedelta as _td
                 bench_ticker = cfg.get('measurement.benchmark_ticker', '069500')
                 max_days = 30
@@ -1222,7 +1264,7 @@ class MeasurementEngine:
                 bench_returns.append(bench_ret / 100.0 if abs(bench_ret) > 1 else bench_ret)
         if not bench_returns or all((b == 0 for b in bench_returns)):
             try:
-                from pykrx import stock as _pykrx
+                from src.data_collection.pykrx_compat import stock as _pykrx
                 from datetime import datetime as _dt, timedelta as _td
                 bench_ticker = cfg.get('measurement.benchmark_ticker', '069500')
                 n_days = max(len(daily_returns), 1) + 5
@@ -1456,8 +1498,9 @@ class MeasurementEngine:
             _dar = o.get('da_realized', 'N/A')
             logger.info(f"     ↳ 보유={_dah:.1%}  실현={_dar}")
         _apc = o.get('alpha_pct', 0)
+        _japc = o.get('jensen_alpha_pct', 0)
         _brc = o.get('benchmark_return_pct', 0)
-        logger.info(f"  📈 Alpha:  {_apc:+.2f}% (벤치={_brc:+.2f}%)")
+        logger.info(f"  📈 Alpha:  {_apc:+.2f}% (벤치={_brc:+.2f}%, Jensen α={_japc:+.2f}%)")
         _ic_v = o.get('ic')
         _ic_p = o.get('ic_p_value')
         ic_str = f"{_ic_v:.4f}" if _ic_v is not None else 'N/A'
