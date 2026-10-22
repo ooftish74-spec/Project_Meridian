@@ -90,10 +90,27 @@ class ModelRegistryManager:
             self._promote(new_version_id, registry, 'No active baseline. Auto-promoted.')
             return (True, 'Auto-promoted (No baseline)')
         old_metadata = registry['versions'][active_version].get('metadata', {})
+        new_metadata = registry['versions'][new_version_id].get('metadata', {})
         old_auc = old_metadata.get('val_auc', 0.0)
         improvement = new_auc - old_auc
+        old_pwf = old_metadata.get('purged_wf') or {}
+        new_pwf = new_metadata.get('purged_wf') or {}
+        old_ic = float(old_pwf.get('ic_mean') or 0.0)
+        new_ic = float(new_pwf.get('ic_mean') or 0.0)
+        new_nw_t = float(new_pwf.get('ic_nw_t_stat') or 0.0)
+        old_fc = old_metadata.get('feature_count')
+        new_fc = new_metadata.get('feature_count')
+        _t_gate = 2.0
         if improvement >= min_improvement:
             msg = f'Adopted: old_AUC={old_auc:.4f} → new_AUC={new_auc:.4f} (+{improvement:.4f})'
+            self._promote(new_version_id, registry, msg)
+            return (True, msg)
+        elif new_ic > old_ic and new_nw_t >= _t_gate:
+            msg = f'Adopted (PurgedWF OOS IC): old_IC={old_ic:.4f} → new_IC={new_ic:.4f} (NW t={new_nw_t:.2f})'
+            self._promote(new_version_id, registry, msg)
+            return (True, msg)
+        elif old_fc is not None and new_fc is not None and int(old_fc) != int(new_fc):
+            msg = f'Adopted (Feature Schema Upgrade): {old_fc} → {new_fc} features (new_IC={new_ic:.4f})'
             self._promote(new_version_id, registry, msg)
             return (True, msg)
         else:
