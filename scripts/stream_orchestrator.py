@@ -3071,9 +3071,9 @@ class StreamOrchestrator:
                     pos = {'ticker': pos, 'stream_id': 'UNKNOWN'}
                 stream_id = str(pos.get('stream_id', ''))
                 # S1 Exit 버그 수정: stream_id가 S1인 경우도 L4 Global Exit 대상에 포함
-                if not stream_id or stream_id == 'None' or stream_id == 'UNKNOWN':
+                if not stream_id or stream_id in ('None', 'UNKNOWN', 'S_RECON', 'LIVE_SSOT'):
                     # pos_key 접두어로 추정 (S1:..., S2:... 등)
-                    if ':' in pos_key:
+                    if ':' in pos_key and pos_key.split(':')[0] not in ('S_RECON', 'LIVE_SSOT', 'UNKNOWN', 'None'):
                         stream_id = pos_key.split(':')[0]
                     else:
                         # [SSoT Canonical Mapping] 실계좌 코어 보유자산 스트림 매핑 (S1 오인 방지)
@@ -3201,9 +3201,9 @@ class StreamOrchestrator:
                     urgency = 3
 
                 # ── Time Limit (보유기간 만료 강제 청산) ──
-                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3, S4, S10, S_YIELD, S_BETA)는 면제
+                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3, S4, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
-                    if stream_id in ('S0', 'S3', 'S4', 'S10', 'S10_MEGA_TREND', 'S_YIELD', 'S_BETA'):
+                    if stream_id in ('S0', 'S3', 'S4', 'S10', 'S10_MEGA_TREND', 'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA'):
                         logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 5일 단기 타임리밋 면제")
                     else:
                         reason = f"[L4 Exit] Time Limit: {days_held}일 보유 >= {_max_hold_days}일 제한"
