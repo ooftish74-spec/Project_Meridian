@@ -82,9 +82,13 @@ class S2ETFBasketDecomposer:
         sector_scores: Dict[str, List[float]] = {}
         for stock in scored_stocks:
             raw_sector = stock.get('sector')
-            if not raw_sector or raw_sector == 'unknown':
+            if not raw_sector or str(raw_sector).lower() == 'unknown':
                 raw_sector = market_ctx.get_sector(str(stock.get('ticker', '')))
-            sector = raw_sector if (raw_sector and raw_sector != 'Unknown') else 'IT/Semiconductor'
+            if not raw_sector or str(raw_sector).lower() == 'unknown':
+                continue
+            sector = str(raw_sector)
+            if sector not in sector_etf_map:
+                continue
             score = float(stock.get('up_prob', stock.get('predict_proba', stock.get('score', 0.5))))
             if sector not in sector_scores:
                 sector_scores[sector] = []
@@ -96,8 +100,8 @@ class S2ETFBasketDecomposer:
             if not scores:
                 continue
             mean_score = sum(scores) / len(scores)
-            if mean_score >= min_sector_score:
-                etf_info = sector_etf_map.get(sector, {'ticker': '091160', 'name': 'KODEX 반도체'})
+            if mean_score >= min_sector_score and sector in sector_etf_map:
+                etf_info = sector_etf_map[sector]
                 aggregated_sectors.append({
                     'sector': sector,
                     'score': round(mean_score, 4),

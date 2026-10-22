@@ -369,6 +369,16 @@ class S14SectorPairStream(BaseStream):
             except Exception as _ou_e:
                 logger.debug(f"  [S14 OU StatArb] 동적 페어 탐색 참고: {_ou_e}")
 
+        if signals:
+            _total_raw_sz = sum(max(0.0, float(s.get('size_pct', 0.0) or 0.0)) for s in signals)
+            _mean_noise = max(0.0, min(1.0, (float(noise_us) + float(noise_kr)) / 2.0))
+            if _total_raw_sz > 0.0 and _mean_noise > 0.0:
+                _scale_norm = _mean_noise / _total_raw_sz
+                for _s_item in signals:
+                    _s_item['size_pct'] = round(float(_s_item.get('size_pct', 0.0) or 0.0) * _scale_norm, 4)
+                    _s_item['is_market_neutral'] = True
+                    _s_item['beta'] = 0.0
+
         logger.info(f"  ⚖️ [S14 Sector Pair Stream] {len(signals)}개 마켓 뉴트럴 페어 신호 생성 (KER_US={ker_us:.2f}, KER_KR={ker_kr:.2f})")
         return signals
 

@@ -819,34 +819,72 @@ class StreamOrchestrator:
             else:
                 all_signals.pop('S10', None)
 
-        # ── Step 4.1: 8대 마스터 시나리오 & 블랙스완 즉각 대응 (신호 차단 / 인버스 스위칭) ──
+        # ── Step 4.1: 8대 마스터 시나리오 & 블랙스완 즉각 대응 (시나리오 조건부 기대수익 생존 게이트) ──
         try:
+            import math as _math_sc
             from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_sc
-            _inv_set_sc = set(_get_qe_sc().get_inverse_hedge_tickers())
+            from src.params.dynamic_quant_models import scenario_conditional_alpha_survival_gate
+            _qe_sc = _get_qe_sc()
+            _inv_set_sc = set(_qe_sc.get_inverse_hedge_tickers())
+            _def_set_sc = set(_qe_sc.get_defensive_exempt_tickers())
             _sc_dirs = dict(sc_result.get('stream_directives') or {})
             if bs_result.get('is_unknown_black_swan'):
                 for _bs_sid in list(all_signals.keys()):
                     if _bs_sid not in ('S0', 'S12', 'S_YIELD'):
                         _sc_dirs[_bs_sid] = 'STOP_ALL_NEW_BUYS'
 
+            _sc_cache = (market_data or {}).get('signal_cache') or {}
+            _vix_sc = float((market_data or {}).get('vix') or _sc_cache.get('vix') or 0.0)
+            _ann_days_sc = 252.0
+            _mkt_vol_sc = (_vix_sc / 100.0) / _math_sc.sqrt(_ann_days_sc) if _vix_sc > 0.0 else 0.0
+            _p_crash_sc = float((market_data or {}).get('crash_prob') or _sc_cache.get('crash_prob') or 0.0)
+            _rt_cost_sc = float(pget('a3.roundtrip_cost_pct', 0.36)) / 100.0
+
             for _d_sid, _d_act in _sc_dirs.items():
                 if _d_act in ('BLOCK_LONG_SIGNALS', 'BLOCK_LONG_SNIPING', 'STOP_ALL_NEW_BUYS'):
                     for _match_sid in (_d_sid, 'S10_MEGA_TREND' if _d_sid == 'S10' else _d_sid):
                         if _match_sid in all_signals:
                             _before_n = len(all_signals[_match_sid])
-                            all_signals[_match_sid] = [
-                                _s for _s in all_signals[_match_sid]
-                                if isinstance(_s, dict) and (
+                            _kept_sc = []
+                            for _s in all_signals[_match_sid]:
+                                if not isinstance(_s, dict):
+                                    continue
+                                _tk_sc = str(_s.get('ticker', '')).split(':')[-1].upper()
+                                if (
                                     str(_s.get('direction', '')).lower() == 'exit'
                                     or _s.get('strategy') == '_sys_meta'
-                                    or str(_s.get('ticker', '')).upper() in _inv_set_sc
+                                    or _tk_sc in _inv_set_sc
+                                    or _tk_sc in _def_set_sc
                                     or bool(_s.get('is_hedge', False))
+                                    or bool(_s.get('is_market_neutral', False))
+                                ):
+                                    _kept_sc.append(_s)
+                                    continue
+                                if _d_act == 'STOP_ALL_NEW_BUYS':
+                                    continue
+                                _alpha_s = float(
+                                    _s.get('gk_expected_alpha')
+                                    or _s.get('expected_return')
+                                    or (float(_s.get('expected_return_pct') or 0.0) / 100.0)
+                                    or _s.get('expected_value')
+                                    or 0.0
                                 )
-                            ]
+                                _beta_s = float(_s.get('beta') if _s.get('beta') is not None else 1.0)
+                                _gate_sc = scenario_conditional_alpha_survival_gate(
+                                    expected_alpha=_alpha_s,
+                                    asset_beta=_beta_s,
+                                    scenario_crash_prob=_p_crash_sc,
+                                    market_daily_vol=_mkt_vol_sc,
+                                    round_trip_cost=_rt_cost_sc,
+                                )
+                                if _gate_sc.get('survives', False):
+                                    _kept_sc.append(_s)
+                            all_signals[_match_sid] = _kept_sc
                             if len(all_signals[_match_sid]) < _before_n:
                                 logger.info(
                                     f"    🛡️ [Scenario Directive] {_match_sid} ({_d_act}): "
-                                    f"신규 롱 신호 {_before_n - len(all_signals[_match_sid])}건 차단"
+                                    f"신규 롱 신호 {_before_n - len(all_signals[_match_sid])}건 차단 "
+                                    f"(생존 {len(all_signals[_match_sid])}건)"
                                 )
                 elif _d_act == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH':
                     # V-반등/폭등 시나리오 발동 시 보유 인버스 ETF 즉시 청산 시그널 주입
@@ -1311,12 +1349,28 @@ class StreamOrchestrator:
             logger.info(
                 f"    📉 [Phase 66 Argus] 롱 인플레 삭감 ×{_long_inflation_cut:.2f} 적용 완료")
 
-        # ★ scale_multiplier 적용 (DD 방어선 축소)
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        from src.params.dynamic_quant_models import directional_beta_exposure_multiplier
+        _dqe = get_quant_engine()
+        _dyn_inv_set = set(_dqe.get_inverse_hedge_tickers())
+        _dyn_def_set = _dqe.get_defensive_exempt_tickers()
+
+        # ★ scale_multiplier 적용 (Beta-Convexity DD 방어선: 음의 베타 인버스 및 마켓뉴트럴 페어 면제)
         if scale_multiplier < 1.0:
             for o in orders:
                 if o.get('direction') == 'long' and o.get('strategy') not in ('tail_risk_hedge', 'rebalance'):
-                    o['amount_krw'] = o['amount_krw'] * scale_multiplier
-            logger.info(f"    📉 매수 스케일 {scale_multiplier:.2f} 적용 완료")
+                    _o_tk = str(o.get('ticker', '')).split(':')[-1].upper()
+                    _o_is_hdg = bool(o.get('is_hedge', False)) or (_o_tk in _dyn_inv_set) or (_o_tk in _dyn_def_set)
+                    _o_is_mn = bool(o.get('is_market_neutral', False)) or (o.get('stream_id') in ('S14', 'S14_PAIR_ALPHA', 'S7'))
+                    _o_beta = -1.0 if _o_tk in _dyn_inv_set else float(o.get('beta') if o.get('beta') is not None else 1.0)
+                    _dd_mult = directional_beta_exposure_multiplier(
+                        asset_beta=_o_beta,
+                        max_exposure=scale_multiplier,
+                        is_hedge=_o_is_hdg,
+                        is_market_neutral=_o_is_mn,
+                    )
+                    o['amount_krw'] = o['amount_krw'] * _dd_mult
+            logger.info(f"    📉 매수 스케일 {scale_multiplier:.2f} (Beta-Convexity) 적용 완료")
 
         # ── [Phase 76] Two-Track: MACRO vs MICRO 시그널 필터 ──
         _MICRO_BOUND = set(cfg.get('stream.micro_bound', ['S1', 'S2', 'S5']))
@@ -1324,7 +1378,6 @@ class StreamOrchestrator:
             'stream.macro_bound_streams',
             ['S3', 'S4']
         ))
-        from src.utils.dynamic_quant_engine import get_quant_engine
         _dqe = get_quant_engine()
         _dyn_inv_set = set(_dqe.get_inverse_hedge_tickers())
         _dyn_def_set = _dqe.get_defensive_exempt_tickers()
@@ -2569,7 +2622,11 @@ class StreamOrchestrator:
 
         # [L4 Upgrade] Task 1: 시그널 증발 버그 복구 — S1/S2/S3/S5 시그널 순회 및 주문 생성
         # (S4는 Advisory 전용: 자동 주문 제외)
-        _meta_keys = ['tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days', 'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner']
+        _meta_keys = [
+            'tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days',
+            'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner',
+            'is_hedge', 'is_market_neutral', 'beta', 'gk_expected_alpha', 'score_z',
+        ]
         
         # [Phase 46 BugFix] PositionSizer(EV/SNR 허들) 연결 누락 복구
         try:
@@ -2578,6 +2635,27 @@ class StreamOrchestrator:
         except ImportError as e:
             _sizer_available = False
             logger.error("    ⚠️ PositionSizer 로드 실패: 마찰비용 및 SNR 필터링이 스킵됩니다.", exc_info=True)
+
+        from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_gen
+        from src.params.dynamic_quant_models import (
+            directional_beta_exposure_multiplier,
+            stream_relative_three_sigma_cap,
+        )
+        _qe_gen = _get_qe_gen()
+        _inv_set_gen = set(_qe_gen.get_inverse_hedge_tickers())
+        _def_set_gen = set(_qe_gen.get_defensive_exempt_tickers())
+        _safe_nav_gen = max(1.0, float(nav or 0.0))
+
+        # 포트폴리오 전체 양(+)의 베타 스트림 예산 비중 합산 -> 이중 레짐 페널티 방지 및 정확한 포트폴리오 노출 상한 E_eff 산출
+        _pos_beta_budget_krw = 0.0
+        for _sid_b, _sigs_b in signals.items():
+            if _sid_b in ('S0', 'S14', 'S14_PAIR_ALPHA', 'S7'):
+                continue
+            _b_val = float(stream_budgets.get(_sid_b, 0.0) or 0.0)
+            if _b_val > 0.0 and any(isinstance(_x, dict) and _x.get('direction', 'long') == 'long' for _x in (_sigs_b or [])):
+                _pos_beta_budget_krw += _b_val
+        _pos_beta_share = _pos_beta_budget_krw / _safe_nav_gen
+        _eff_max_exp = min(1.0, float(max_exposure) / _pos_beta_share) if _pos_beta_share > 0.0 else float(max_exposure)
 
         stream_orders = {}
         _cumulative_ordered_krw_by_ticker = {}
@@ -2671,17 +2749,21 @@ class StreamOrchestrator:
             elif _total_size_pct > 0 and _total_size_pct < 1.0:
                 logger.info(f"    [Red Team V5] {stream_id}: 총 비중 {_total_size_pct*100:.1f}% 미달 → 현금 보존(Cash Reserve).")
             
+            _stream_share = float(budget) / _safe_nav_gen
             for _sig_n in valid_signals:
                 # 1. 포트폴리오 예산 초과 방지 (Scale Down Only)
                 _sig_n['size_pct'] = _sig_n['size_pct'] * _scale_factor
                 
-                # 2. 개별 종목 수학적 한도 (3-Sigma 파산 방어선)
-                vol = float(_sig_n.get('daily_vol_pct', 0.02))
-                if vol <= 0: vol = 0.02
+                # 2. 개별 종목 수학적 한도 (차원 일관성 3-Sigma 파산 방어선: (w_s * s_i) * 3 * sigma_i <= L_max)
+                vol = float(_sig_n.get('daily_vol_pct') or 0.0)
+                if vol <= 0.0:
+                    vol = float(self._compute_asset_daily_volatility(str(_sig_n.get('ticker', '')), market_data))
                 
-                # 3-시그마 사건(폭락)이 터졌을 때 포트폴리오 전체 손실이 max_daily_loss 이내가 되도록 비중 제한
-                math_max_weight = max_daily_loss / (3.0 * vol)
-                math_max_weight = min(1.0, math_max_weight) # 예산(1.0) 초과 불가
+                math_max_weight = stream_relative_three_sigma_cap(
+                    max_daily_loss=max_daily_loss,
+                    asset_daily_vol=vol,
+                    stream_budget_share=_stream_share,
+                )
                 
                 if _sig_n['size_pct'] > math_max_weight:
                     logger.info(f"    [Red Team V5] 켈리 비중({_sig_n['size_pct']*100:.1f}%)이 수학적 한계선({math_max_weight*100:.1f}%, Vol:{vol*100:.1f}%) 초과 → 안전 컷오프")
@@ -2708,8 +2790,17 @@ class StreamOrchestrator:
                     budget,             # 스트림 총 예산 상한
                 )
 
-                # 노출도 & 레버리지 반영
-                target_amount = target_amount * max_exposure * lev_level
+                # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어는 롱 노출 상한에서 면제)
+                _sig_is_hdg = bool(sig.get('is_hedge', False)) or (_t_clean in _inv_set_gen) or (_t_clean in _def_set_gen)
+                _sig_is_mn = bool(sig.get('is_market_neutral', False)) or (stream_id in ('S14', 'S14_PAIR_ALPHA', 'S7'))
+                _sig_beta = -1.0 if _t_clean in _inv_set_gen else float(sig.get('beta') if sig.get('beta') is not None else 1.0)
+                _exp_mult_sig = directional_beta_exposure_multiplier(
+                    asset_beta=_sig_beta,
+                    max_exposure=_eff_max_exp,
+                    is_hedge=_sig_is_hdg,
+                    is_market_neutral=_sig_is_mn,
+                )
+                target_amount = target_amount * _exp_mult_sig * lev_level
 
                 # 현재 보유 금액 및 타 스트림 선행 발주 금액 파악 (중복 매수 방지)
                 current_amount = float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))

@@ -582,3 +582,90 @@ def test_model9_avellaneda_stoikov_and_constantinides_leland_closed_form():
     assert gate_outside['should_trade'] is True
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. Model ⑩: Beta-Convexity Exposure Scaling, Stream-Relative 3-Sigma Cap,
+#              Dynamic Grinold-Kahn Signal Capacity, & Scenario-Conditional Gate
+# ─────────────────────────────────────────────────────────────────────────────
+def test_model10_beta_convexity_three_sigma_and_signal_capacity_closed_form():
+    from src.params.dynamic_quant_models import (
+        directional_beta_exposure_multiplier,
+        dynamic_grinold_kahn_signal_capacity,
+        normalize_volatility_parity_pair_weights,
+        scenario_conditional_alpha_survival_gate,
+        stream_relative_three_sigma_cap,
+    )
+
+    # 1. Directional Beta Exposure Multiplier: M_exp(beta_i, E_max) = 1 - beta_i^+ * (1 - E_max)
+    # Inverse 2X ETP (beta = -2.0) under crash E_max = 0.15 => beta^+ = 0 => M_exp = 1.0
+    assert directional_beta_exposure_multiplier(asset_beta=-2.0, max_exposure=0.15) == pytest.approx(1.0, rel=1e-9)
+    # Market-neutral pair (beta = 0.0, is_market_neutral=True) => M_exp = 1.0
+    assert directional_beta_exposure_multiplier(
+        asset_beta=1.0, max_exposure=0.15, is_market_neutral=True
+    ) == pytest.approx(1.0, rel=1e-9)
+    # Low-beta defensive equity (beta = 0.4) under E_max = 0.25 => 1 - 0.4 * (1 - 0.25) = 0.70
+    assert directional_beta_exposure_multiplier(asset_beta=0.4, max_exposure=0.25) == pytest.approx(0.70, rel=1e-9)
+    # Standard long equity (beta = 1.2 -> beta^+ = 1.0) under E_max = 0.25 => 0.25
+    assert directional_beta_exposure_multiplier(asset_beta=1.2, max_exposure=0.25) == pytest.approx(0.25, rel=1e-9)
+
+    # 2. Stream-Relative 3-Sigma Cap: s_{i,max} = min(1.0, L_max / (3 * sigma_i * w_s))
+    # L_max = 0.03, sigma_i = 0.02, w_s = 0.25 => 0.03 / (0.06 * 0.25) = 2.0 -> clamped to 1.0
+    assert stream_relative_three_sigma_cap(
+        max_daily_loss=0.03, asset_daily_vol=0.02, stream_budget_share=0.25
+    ) == pytest.approx(1.0, rel=1e-9)
+    # L_max = 0.03, sigma_i = 0.04, w_s = 0.50 => 0.03 / (0.12 * 0.50) = 0.50
+    assert stream_relative_three_sigma_cap(
+        max_daily_loss=0.03, asset_daily_vol=0.04, stream_budget_share=0.50
+    ) == pytest.approx(0.50, rel=1e-9)
+
+    # 3. Dynamic Grinold-Kahn Signal Capacity:
+    # N_cand = 49 (sqrt = 7.0), gamma_EB = 0.50, VIX = 30.0 (midpoint = 30.0 => D_VIX = 0.50)
+    # K_raw = 7.0 * 0.50 * 0.50 = 1.75 -> floor(1.75 + 0.5) = 2
+    assert dynamic_grinold_kahn_signal_capacity(
+        n_candidates=49, eb_weight_multiplier=0.50, vix=30.0, vix_midpoint=30.0, vix_slope=0.18
+    ) == 2
+    # When gamma_EB = 0.0 (no OOS edge), K_dyn = 0
+    assert dynamic_grinold_kahn_signal_capacity(
+        n_candidates=49, eb_weight_multiplier=0.0, vix=15.0
+    ) == 0
+
+    # 4. Scenario-Conditional Alpha Survival Gate:
+    # alpha = 0.025 (2.5%), beta = 1.0, p_crash = 0.30, sigma_m = 0.015, h = 4 (sqrt(h) = 2.0), c_RT = 0.0036
+    # beta_drag = 1.0 * 0.30 * 0.015 * 2.0 = 0.0090
+    # net_expected_return = 0.025 - 0.0090 - 0.0036 = +0.0124 > 0 => survives = True
+    gate_pass = scenario_conditional_alpha_survival_gate(
+        expected_alpha=0.025,
+        asset_beta=1.0,
+        scenario_crash_prob=0.30,
+        market_daily_vol=0.015,
+        horizon_days=4,
+        round_trip_cost=0.0036,
+    )
+    assert gate_pass['beta_drag'] == pytest.approx(0.0090, rel=1e-9)
+    assert gate_pass['net_expected_return'] == pytest.approx(0.0124, rel=1e-9)
+    assert gate_pass['survives'] is True
+
+    # Weak alpha = 0.008 (0.8%) under same scenario => net = 0.008 - 0.0090 - 0.0036 = -0.0046 <= 0 => survives = False
+    gate_block = scenario_conditional_alpha_survival_gate(
+        expected_alpha=0.008,
+        asset_beta=1.0,
+        scenario_crash_prob=0.30,
+        market_daily_vol=0.015,
+        horizon_days=4,
+        round_trip_cost=0.0036,
+    )
+    assert gate_block['net_expected_return'] == pytest.approx(-0.0046, rel=1e-9)
+    assert gate_block['survives'] is False
+
+    # 5. Volatility-Parity Pair Normalization:
+    # Single pair with vol_long = 0.03, vol_short = 0.01, mean_ker = 0.20 (eta_MR = 0.80)
+    # w_L^0 = 0.01 / 0.04 = 0.25, w_S^0 = 0.03 / 0.04 = 0.75
+    # s_L = 0.80 * 0.25 = 0.20, s_S = 0.80 * 0.75 = 0.60
+    # Exact volatility parity: 0.03 * 0.20 == 0.01 * 0.60 == 0.006
+    pair_norm = normalize_volatility_parity_pair_weights(
+        pair_specs=[{'strength': 2.0, 'vol_long': 0.03, 'vol_short': 0.01}],
+        mean_ker=0.20,
+    )
+    assert len(pair_norm) == 1
+    assert pair_norm[0]['long_size_pct'] == pytest.approx(0.20, rel=1e-9)
+    assert pair_norm[0]['short_size_pct'] == pytest.approx(0.60, rel=1e-9)
+    assert (0.03 * pair_norm[0]['long_size_pct']) == pytest.approx(0.01 * pair_norm[0]['short_size_pct'], rel=1e-9)

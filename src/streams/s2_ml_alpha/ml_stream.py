@@ -405,36 +405,13 @@ class S2MLAlphaStream(BaseStream):
         _p11_prob_ceil = pget('s2.prob_floor_vix_cap', 0.72)
         _p11_vix_adj = (_p11_vix - _p11_vix_neutral) / max(_p11_vix_scale, 1.0)
         min_prob = min(_p11_prob_ceil, _p11_prob_floor + max(0.0, _p11_vix_adj))
-        max_positions = cfg.get(f'a3.regime.{regime}.max_positions', pget('a3.max_positions', 12))
-        logger.info(f'  [Phase 11] S2 신뢰도 동적 바닥: min_prob={min_prob:.3f} (VIX={_p11_vix:.1f}, vix_adj={_p11_vix_adj:+.3f})')
-        qualified = [s for s in scored if s['up_prob'] >= min_prob]
-        qualified.sort(key=lambda x: x['up_prob'], reverse=True)
-        qualified = qualified[:max_positions]
-        qualified = self._enforce_sector_neutrality(qualified)
-        for s in scored:
-            if not s.get('sector') or s.get('sector') == 'unknown':
-                _clean_t = str(s.get('ticker', '')).replace('.KS', '').replace('.KQ', '').zfill(6)
-                if self._sector_map and _clean_t in self._sector_map:
-                    s['sector'] = self._sector_map[_clean_t]
-        vix_ref = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
-        vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
-        use_etf_basket = cfg.get('s2.etf_basket.enabled', True)
-        if use_etf_basket and (qualified or scored):
-            from src.streams.s2_ml_alpha.etf_basket_decomposer import S2ETFBasketDecomposer
-            decomposer = S2ETFBasketDecomposer()
-            etf_sigs = decomposer.decompose_to_etf_signals(qualified if qualified else scored)
-            for es in etf_sigs:
-                es['size_pct'] = round(1.0 / max(1, len(etf_sigs)), 4)
-                es['suggested_weight'] = es['size_pct']
-                es['vix_scale_factor'] = 1.0
-                es['regime'] = regime
-                es['timestamp'] = now_kst().isoformat()
-                signals.append(es)
         _gk_shrunk_ic = 0.0
+        _eb_weight_mult = 1.0
         _score_z_map = {}
         try:
             from src.params.dynamic_quant_models import (
                 cross_sectional_rank_gaussian_transform,
+                dynamic_grinold_kahn_signal_capacity,
                 empirical_bayes_stream_shrinkage,
                 grinold_kahn_expected_alpha,
                 load_latest_purged_wf_oos,
@@ -450,9 +427,43 @@ class S2MLAlphaStream(BaseStream):
                     ic_t_stat=float(_pwf_oos.get('ic_t_stat', 0.0)),
                 )
                 _gk_shrunk_ic = float(_eb_res.shrunk_excess_ic)
+                _eb_weight_mult = float(_eb_res.weight_multiplier)
+            max_positions = dynamic_grinold_kahn_signal_capacity(
+                n_candidates=len(scored),
+                eb_weight_multiplier=_eb_weight_mult,
+                vix=float(_p11_vix),
+            )
         except Exception:
-            pass
+            max_positions = int(pget('a3.max_positions', 12))
+        logger.info(
+            f'  [Phase 11] S2 동적 시그널 용량: min_prob={min_prob:.3f}, '
+            f'max_positions={max_positions} (N={len(scored)}, gamma_EB={_eb_weight_mult:.3f}, VIX={_p11_vix:.1f})'
+        )
+        qualified = [s for s in scored if s['up_prob'] >= min_prob]
+        qualified.sort(key=lambda x: x['up_prob'], reverse=True)
+        qualified = qualified[:max_positions]
+        qualified = self._enforce_sector_neutrality(qualified)
+        for s in scored:
+            if not s.get('sector') or s.get('sector') == 'unknown':
+                _clean_t = str(s.get('ticker', '')).replace('.KS', '').replace('.KQ', '').zfill(6)
+                if self._sector_map and _clean_t in self._sector_map:
+                    s['sector'] = self._sector_map[_clean_t]
+        vix_ref = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
+        vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
+        use_etf_basket = bool(cfg.get('s2.etf_basket.enabled', False))
+        if use_etf_basket and (qualified or scored):
+            from src.streams.s2_ml_alpha.etf_basket_decomposer import S2ETFBasketDecomposer
+            decomposer = S2ETFBasketDecomposer()
+            etf_sigs = decomposer.decompose_to_etf_signals(qualified if qualified else scored)
+            for es in etf_sigs:
+                es['size_pct'] = round(1.0 / max(1, len(etf_sigs)), 4)
+                es['suggested_weight'] = es['size_pct']
+                es['vix_scale_factor'] = 1.0
+                es['regime'] = regime
+                es['timestamp'] = now_kst().isoformat()
+                signals.append(es)
         if not signals:
+            _indiv_sigs = []
             for stock in qualified:
                 tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
                 tp_pct_val = tp_sl_meta['tp_pct']
@@ -474,11 +485,21 @@ class S2MLAlphaStream(BaseStream):
                 _gk_alpha = 0.0
                 if _gk_shrunk_ic > 0.0 and _sz_val != 0.0:
                     _gk_alpha = grinold_kahn_expected_alpha(_sz_val, _gk_shrunk_ic, _d_vol)
-                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6)}
+                _px_val = float(stock.get('close', stock.get('price', 0.0)) or 0.0)
+                _exp_ret = float(_gk_alpha if _gk_alpha > 0.0 else _ev_val)
+                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6), 'expected_return': round(_exp_ret, 6), 'price': _px_val}
                 if stock.get('conformal_lower') is not None:
                     signal['conformal_lower'] = round(stock['conformal_lower'], 4)
                     signal['conformal_upper'] = round(stock['conformal_upper'], 4)
-                signals.append(signal)
+                _indiv_sigs.append(signal)
+            _raw_kelly_sum = sum(float(s.get('size_pct', 0.0)) for s in _indiv_sigs)
+            if _raw_kelly_sum > 0.0:
+                for _sig_item in _indiv_sigs:
+                    _v_scale = min(1.0, float(_sig_item.get('vix_scale_factor', 1.0)))
+                    _norm_w = (float(_sig_item.get('size_pct', 0.0)) / _raw_kelly_sum) * _v_scale
+                    _sig_item['size_pct'] = round(max(float(_sig_item.get('size_pct', 0.0)), _norm_w), 4)
+                    _sig_item['suggested_weight'] = _sig_item['size_pct']
+            signals.extend(_indiv_sigs)
         if scored:
             try:
                 _bear_candidates = [s for s in scored if s['up_prob'] < 0.5]
@@ -568,7 +589,7 @@ class S2MLAlphaStream(BaseStream):
         parquets = sorted(_FEATURE_STORE_DIR.glob('*.parquet'))
         seen_tickers = set()
         for pf in parquets:
-            ticker = pf.stem.replace('kr_', '').replace('_features', '')
+            ticker = pf.stem.removeprefix('kr_').removeprefix('us_').removesuffix('_features')
             if ticker in seen_tickers:
                 continue
             if universe and ticker not in universe:

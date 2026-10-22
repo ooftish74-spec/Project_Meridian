@@ -1108,3 +1108,162 @@ def constantinides_leland_no_trade_gate(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Model ⑩: Beta-Convexity Exposure Scaling, Stream-Relative 3-Sigma Cap,
+#           Dynamic Grinold-Kahn Signal Capacity, & Scenario-Conditional Gate
+# ─────────────────────────────────────────────────────────────────────────────
+def directional_beta_exposure_multiplier(
+    asset_beta: float,
+    max_exposure: float,
+    is_hedge: bool = False,
+    is_market_neutral: bool = False,
+) -> float:
+    """Compute beta-convexity exposure / drawdown multiplier M_exp(beta_i, E_max):
+        beta_i^+              = 0 if (is_hedge or is_market_neutral or beta_i <= 0) else clip(beta_i, 0, 1)
+        M_exp(beta_i, E_max)  = 1 - beta_i^+ * (1 - clip(E_max, 0, 1))
+
+    Properties:
+      - Negative-beta inverse / 2X inverse ETPs (beta_i <= 0) and zero-beta market-neutral pairs:
+        beta_i^+ = 0 => M_exp = 1.0 (never suppressed by long-equity crash exposure caps).
+      - Standard long equity (beta_i >= 1):
+        beta_i^+ = 1 => M_exp = clip(E_max, 0, 1).
+      - Low-beta defensive equity (0 < beta_i < 1):
+        Continuous linear interpolation between 1.0 and E_max.
+    """
+    e_cap = _clamp(float(max_exposure) if math.isfinite(float(max_exposure)) else 1.0, 0.0, 1.0)
+    if bool(is_hedge) or bool(is_market_neutral):
+        return 1.0
+    b_val = float(asset_beta) if math.isfinite(float(asset_beta)) else 1.0
+    if b_val <= 0.0:
+        return 1.0
+    pos_beta = _clamp(b_val, 0.0, 1.0)
+    return 1.0 - pos_beta * (1.0 - e_cap)
+
+
+def stream_relative_three_sigma_cap(
+    max_daily_loss: float,
+    asset_daily_vol: float,
+    stream_budget_share: float,
+) -> float:
+    """Compute within-stream 3-sigma single-position weight cap s_{i,max} in [0, 1]:
+        (w_s * s_i) * 3 * sigma_i <= L_max
+        => s_{i,max} = min(1.0, L_max / (3 * sigma_i * max(w_s, eps)))
+
+    where w_s = B_s / max(NAV, eps) is stream s's share of total portfolio NAV.
+    """
+    loss_lim = max(0.0, float(max_daily_loss)) if math.isfinite(float(max_daily_loss)) else 0.0
+    sig = max(_EPS, float(asset_daily_vol)) if math.isfinite(float(asset_daily_vol)) else _EPS
+    w_s = max(_EPS, float(stream_budget_share)) if math.isfinite(float(stream_budget_share)) else 1.0
+    if loss_lim <= 0.0:
+        return 0.0
+    raw_cap = loss_lim / (_THREE * sig * w_s)
+    return _clamp(raw_cap, 0.0, 1.0)
+
+
+def dynamic_grinold_kahn_signal_capacity(
+    n_candidates: int,
+    eb_weight_multiplier: float,
+    vix: float,
+    vix_midpoint: float = 30.0,
+    vix_slope: float = 0.18,
+) -> int:
+    """Compute dynamic active signal breadth K_dyn from Grinold-Kahn Law,
+    Empirical-Bayes OOS IC significance multiplier gamma_EB in [0, 1],
+    and continuous logistic volatility survival factor D_VIX:
+        D_VIX = 1 / (1 + exp(k_v * (VIX - v_0)))
+        K_raw = sqrt(max(0, N_cand)) * clip(gamma_EB, 0, 1) * D_VIX
+        K_dyn = 0 if (N_cand <= 0 or gamma_EB <= 0) else clip(floor(K_raw + 0.5), 1, N_cand)
+    """
+    n_cand = max(0, int(n_candidates))
+    gamma_eb = _clamp(float(eb_weight_multiplier) if math.isfinite(float(eb_weight_multiplier)) else 0.0, 0.0, 1.0)
+    if n_cand <= 0 or gamma_eb <= _EPS:
+        return 0
+    vix_val = max(0.0, float(vix)) if math.isfinite(float(vix)) else float(vix_midpoint)
+    v_mid = float(vix_midpoint) if math.isfinite(float(vix_midpoint)) else 0.0
+    slope = max(0.0, float(vix_slope)) if math.isfinite(float(vix_slope)) else 0.0
+
+    logit_arg = _clamp(slope * (vix_val - v_mid), -_EXP_CAP, _EXP_CAP)
+    d_vix = 1.0 / (1.0 + math.exp(logit_arg))
+    k_raw = math.sqrt(float(n_cand)) * gamma_eb * d_vix
+    k_int = int(math.floor(k_raw + _HALF))
+    return max(1, min(n_cand, k_int))
+
+
+def scenario_conditional_alpha_survival_gate(
+    expected_alpha: float,
+    asset_beta: float,
+    scenario_crash_prob: float,
+    market_daily_vol: float,
+    horizon_days: int = 5,
+    round_trip_cost: float = 0.0036,
+) -> Dict[str, Any]:
+    """Evaluate scenario-conditional net expected return for a candidate signal:
+        E[R_{i,net} | Scenario] = alpha_i - max(0, beta_i) * p_crash * sigma_m * sqrt(h) - C_RT
+        survives = (E[R_{i,net} | Scenario] > 0)
+    """
+    alpha = float(expected_alpha) if math.isfinite(float(expected_alpha)) else 0.0
+    beta_val = float(asset_beta) if math.isfinite(float(asset_beta)) else 1.0
+    pos_beta = max(0.0, beta_val)
+    p_crash = _clamp(float(scenario_crash_prob) if math.isfinite(float(scenario_crash_prob)) else 0.0, 0.0, 1.0)
+    sig_m = max(0.0, float(market_daily_vol)) if math.isfinite(float(market_daily_vol)) else 0.0
+    h_days = max(1, int(horizon_days))
+    c_rt = max(0.0, float(round_trip_cost)) if math.isfinite(float(round_trip_cost)) else 0.0
+
+    beta_drag = pos_beta * p_crash * sig_m * math.sqrt(float(h_days))
+    net_expected_return = alpha - beta_drag - c_rt
+    survives = bool(net_expected_return > 0.0)
+    return {
+        'survives': survives,
+        'net_expected_return': net_expected_return,
+        'expected_alpha': alpha,
+        'beta_drag': beta_drag,
+        'round_trip_cost': c_rt,
+        'positive_beta': pos_beta,
+    }
+
+
+def normalize_volatility_parity_pair_weights(
+    pair_specs: Sequence[Dict[str, Any]],
+    mean_ker: float,
+) -> List[Dict[str, Any]]:
+    """Compute within-stream normalized volatility-parity leg weights for market-neutral pairs:
+        eta_MR    = clip(1 - mean_KER, 0, 1)
+        w_{p,L}^0 = sigma_{p,S} / (sigma_{p,L} + sigma_{p,S})
+        w_{p,S}^0 = sigma_{p,L} / (sigma_{p,L} + sigma_{p,S})
+        s_{p,L}   = eta_MR * (c_p / sum_q c_q) * w_{p,L}^0
+        s_{p,S}   = eta_MR * (c_p / sum_q c_q) * w_{p,S}^0
+    Guarantees exact volatility parity (sigma_{p,L} * s_{p,L} == sigma_{p,S} * s_{p,S})
+    and sum_p (s_{p,L} + s_{p,S}) == eta_MR.
+    """
+    if not pair_specs:
+        return []
+    ker = _clamp(float(mean_ker) if math.isfinite(float(mean_ker)) else 0.0, 0.0, 1.0)
+    eta_mr = _clamp(1.0 - ker, 0.0, 1.0)
+    if eta_mr <= _EPS:
+        return []
+
+    strengths: List[float] = []
+    for sp in pair_specs:
+        raw_c = float(sp.get('strength', 1.0) or 0.0)
+        strengths.append(max(_EPS, raw_c if math.isfinite(raw_c) else 1.0))
+    total_strength = sum(strengths)
+    if total_strength <= _EPS:
+        return []
+
+    results: List[Dict[str, Any]] = []
+    for sp, c_p in zip(pair_specs, strengths):
+        pair_share = eta_mr * (c_p / total_strength)
+        vol_l = max(_EPS, float(sp.get('vol_long', 1.0) or _EPS))
+        vol_s = max(_EPS, float(sp.get('vol_short', 1.0) or _EPS))
+        vol_sum = vol_l + vol_s
+        w_l0 = vol_s / vol_sum
+        w_s0 = vol_l / vol_sum
+        results.append({
+            'pair_share': pair_share,
+            'long_size_pct': pair_share * w_l0,
+            'short_size_pct': pair_share * w_s0,
+            'long_vol_parity': w_l0,
+            'short_vol_parity': w_s0,
+            'eta_mr': eta_mr,
+        })
+    return results
