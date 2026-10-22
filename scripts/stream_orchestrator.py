@@ -1083,6 +1083,31 @@ class StreamOrchestrator:
 
         # ★ [SSOT Wiring Fix] all_signals를 _stream_signals로 주입하여 섹터 한도(_enforce_sector_limits) 및 직교화 활성화
         stream_metrics['_stream_signals'] = all_signals
+        for _sid_er, _sigs_er in all_signals.items():
+            if not isinstance(_sigs_er, list):
+                continue
+            _er_num = 0.0
+            _er_den = 0.0
+            for _s_er in _sigs_er:
+                if not isinstance(_s_er, dict) or _s_er.get('strategy') == '_sys_meta' or _s_er.get('direction') == 'exit':
+                    continue
+                _w_er = max(0.0, float(_s_er.get('size_pct', 0.0) or 0.0))
+                if _w_er <= 0.0:
+                    continue
+                _r_er = max(
+                    float(_s_er.get('expected_return') or 0.0),
+                    float(_s_er.get('expected_value') or 0.0),
+                    float(_s_er.get('gk_expected_alpha') or 0.0),
+                    float(_s_er.get('expected_return_pct') or 0.0) / 100.0,
+                )
+                if _r_er > 0.0:
+                    _er_num += _w_er * _r_er
+                    _er_den += _w_er
+            if _er_den > 0.0:
+                stream_metrics.setdefault(_sid_er, {})
+                if isinstance(stream_metrics[_sid_er], dict):
+                    stream_metrics[_sid_er]['expected_return'] = _er_num / _er_den
+
         if '_s2_oos_validation' not in stream_metrics:
             try:
                 from src.params.dynamic_quant_models import load_latest_purged_wf_oos
@@ -2756,7 +2781,7 @@ class StreamOrchestrator:
                 # 2. 개별 종목 수학적 한도 (차원 일관성 3-Sigma 파산 방어선: (w_s * s_i) * 3 * sigma_i <= L_max)
                 vol = float(_sig_n.get('daily_vol_pct') or 0.0)
                 if vol <= 0.0:
-                    vol = float(self._compute_asset_daily_volatility(str(_sig_n.get('ticker', '')), market_data))
+                    vol = float(_compute_asset_daily_volatility(str(_sig_n.get('ticker', '')), market_data))
                 
                 math_max_weight = stream_relative_three_sigma_cap(
                     max_daily_loss=max_daily_loss,
