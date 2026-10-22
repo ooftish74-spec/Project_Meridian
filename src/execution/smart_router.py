@@ -103,7 +103,17 @@ class SmartOrderRouter:
         if len(available_venues) == 1:
             venue = available_venues[0]
             cost = self._estimate_cost(venue, order_amount, market_data)
-            return {'venue': venue, 'reason': f"{session} 세션 → {venue} 전용", 'estimated_cost_bps': round(cost, 2), 'split_recommendation': None, 'scores': {venue: 1.0}}
+            quote = self.compute_passive_limit_quote(order, venue, market_data)
+            return {
+                'venue': venue,
+                'reason': f"{session} 세션 → {venue} 전용",
+                'estimated_cost_bps': round(cost, 2),
+                'split_recommendation': None,
+                'scores': {venue: 1.0},
+                'recommended_limit_price': quote['limit_price'],
+                'passive_offset_bps': quote['passive_offset_bps'],
+                'tick_size': quote['tick_size'],
+            }
         venue_costs = {}
         venue_scores = {}
         for venue in available_venues:
@@ -116,7 +126,47 @@ class SmartOrderRouter:
         best_cost = venue_costs[best_venue]
         split = self._split_recommendation(best_venue, order_amount, market_data, available_venues)
         reason = self._build_reason(best_venue, session, order_amount, venue_scores, venue_costs)
-        return {'venue': best_venue, 'reason': reason, 'estimated_cost_bps': round(best_cost, 2), 'split_recommendation': split, 'scores': {v: round(s, 4) for v, s in venue_scores.items()}}
+        quote = self.compute_passive_limit_quote(order, best_venue, market_data)
+        return {
+            'venue': best_venue,
+            'reason': reason,
+            'estimated_cost_bps': round(best_cost, 2),
+            'split_recommendation': split,
+            'scores': {v: round(s, 4) for v, s in venue_scores.items()},
+            'recommended_limit_price': quote['limit_price'],
+            'passive_offset_bps': quote['passive_offset_bps'],
+            'tick_size': quote['tick_size'],
+        }
+
+    def compute_passive_limit_quote(self, order: Dict, venue: str, market_data: Dict) -> Dict:
+        """Avellaneda-Stoikov 최적 메이커 지정가 및 L0 호가단위 라운딩 산출."""
+        from src.params.dynamic_quant_models import avellaneda_stoikov_passive_limit_price
+        tk = str(order.get('ticker', '') or '').strip()
+        _kr_len = 6
+        is_kr = bool(len(tk) == _kr_len and tk[0].isdigit()) if tk else True
+        is_etp = bool(order.get('is_etp', False))
+        p_mid = float(order.get('price', 0.0) or 0.0)
+        side = str(order.get('action', order.get('side', 'buy')) or 'buy')
+        urg = str(order.get('urgency', 'normal') or 'normal')
+        exit_only = bool(order.get('exit_only', False))
+        v_low = str(venue or 'krx').lower()
+        _def_spr = 3.5
+        spr_bps = float(market_data.get(f'spread_{v_low}_bps', _def_spr) or _def_spr)
+        _def_alp = 30.0
+        alp_bps = float(order.get('alpha_bps', _def_alp) or _def_alp)
+        _def_sig = 0.02
+        sig_d = float(order.get('sigma_daily', _def_sig) or _def_sig)
+        return avellaneda_stoikov_passive_limit_price(
+            mid_price=p_mid,
+            side=side,
+            spread_bps=spr_bps,
+            alpha_bps=alp_bps,
+            sigma_daily=sig_d,
+            urgency=urg,
+            is_kr=is_kr,
+            is_etp=is_etp,
+            exit_only=exit_only,
+        )
 
     def _current_session(self) -> str:
         """현재 거래 세션 판별."""

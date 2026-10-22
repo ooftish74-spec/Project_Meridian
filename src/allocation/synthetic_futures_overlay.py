@@ -30,16 +30,62 @@ class SyntheticFuturesOverlay:
         self.us_margin_ratio = cfg.get('futures.us_margin_ratio', us_margin_ratio)
         self.kofr_annual_rate = cfg.get('futures.kofr_annual_rate', kofr_annual_rate)
 
-    def compute_dynamic_futures_leverage(self, vix_z_score: float) -> float:
+    def compute_dynamic_futures_leverage(
+        self,
+        vix_z_score: float,
+        mu_excess_annual: Optional[float] = None,
+        sigma_annual: Optional[float] = None,
+    ) -> float:
         """
-        저변동성 강세장(vix_z_score < -0.5) 시 Micro Futures 동적 레버리지 증폭.
-        수식: leverage = min(1.8, 1.0 + max(0.0, -0.8 * vix_z_score))
+        저변동성 강세장(vix_z_score < -0.5) 또는 양(+)의 초과 기대수익 환경에서
+        Itô 변동성 드래그 보정 최적 목표 레버리지(Lambda_t^*) 산출.
         """
-        if vix_z_score < -0.5:
-            leverage = min(1.8, 1.0 + max(0.0, -0.8 * vix_z_score))
+        if mu_excess_annual is not None and sigma_annual is not None:
+            from src.params.dynamic_quant_models import ito_optimal_target_leverage
+            _max_lev = 1.8
+            _min_lev = 1.0
+            res = ito_optimal_target_leverage(
+                mu_excess_annual=float(mu_excess_annual),
+                sigma_annual=float(sigma_annual),
+                max_leverage=_max_lev,
+                min_leverage=_min_lev,
+            )
+            return float(res.optimal_leverage)
+        _z_thr = -0.5
+        _max_lev_vix = 1.8
+        _slope_vix = -0.8
+        if vix_z_score < _z_thr:
+            leverage = min(_max_lev_vix, 1.0 + max(0.0, _slope_vix * vix_z_score))
             logger.info(f"🚀 [DynamicMicroFuturesLeverage] Bull Regime (VIX Z={vix_z_score:.2f}) → Leverage={leverage:.2f}x")
             return float(leverage)
         return 1.0
+
+    def compute_cash_account_convexity_overlay(
+        self,
+        target_leverage: float,
+        base_risky_weight: float,
+        etp_leverage_k: float = 2.0,
+        max_single_day_loss_budget: float = 0.03,
+        daily_benchmark_vol: float = 0.012,
+    ) -> Dict[str, float]:
+        """현물 100% 위탁계좌(Cash-Only)에서 1x 현물 비중 일부를 kx 레버리지 ETP로 대체하여
+        무차입 상태에서 유효 베타 Lambda_t^*를 달성하는 정확 해 산출.
+        """
+        from src.params.dynamic_quant_models import cash_account_convexity_substitution
+        sub = cash_account_convexity_substitution(
+            target_leverage=target_leverage,
+            base_risky_weight=base_risky_weight,
+            etp_leverage_k=etp_leverage_k,
+            max_single_day_loss_budget=max_single_day_loss_budget,
+            daily_benchmark_vol=daily_benchmark_vol,
+        )
+        return {
+            'weight_1x': round(sub.weight_1x, 6),
+            'weight_kx': round(sub.weight_kx, 6),
+            'effective_exposure': round(sub.effective_exposure, 6),
+            'total_cash_weight': round(sub.total_cash_weight, 6),
+            'tail_cap_kx': round(sub.tail_cap_kx, 6),
+        }
 
     def calculate_futures_overlay(
         self,
@@ -77,11 +123,18 @@ class SyntheticFuturesOverlay:
             total_required_margin += req_margin
             stream_contracts[stream_id] = int(effective_notional / max(1.0, req_margin)) if req_margin > 0 else 0
 
-        unlocked_cash = max(0.0, sum(spot_notional_allocations.values()) - total_required_margin)
+        total_spot = sum(spot_notional_allocations.values())
+        unlocked_cash = max(0.0, total_spot - total_required_margin)
         
         # 유휴 현금의 70%는 KOFR 무위험 이자 상품 파킹, 30%는 마진콜 예비 유동성 유지
-        kofr_amount = unlocked_cash * 0.70
+        _kofr_ratio = 0.70
+        kofr_amount = unlocked_cash * _kofr_ratio
         free_margin_ratio = max(0.0, (total_account_equity - total_required_margin) / total_account_equity)
+        base_risky_w = min(1.0, max(0.0, total_spot / total_account_equity))
+        convexity_sub = self.compute_cash_account_convexity_overlay(
+            target_leverage=leverage_multiplier,
+            base_risky_weight=base_risky_w,
+        )
 
         return {
             'required_margin': round(total_required_margin, 2),
@@ -89,7 +142,8 @@ class SyntheticFuturesOverlay:
             'kofr_yield_harvesting_amount': round(kofr_amount, 2),
             'stream_futures_contracts': stream_contracts,
             'free_margin_ratio': round(free_margin_ratio, 4),
-            'applied_leverage': round(leverage_multiplier, 2)
+            'applied_leverage': round(leverage_multiplier, 2),
+            'cash_convexity_substitution': convexity_sub,
         }
 
     def evaluate_3tier_margin_safety(

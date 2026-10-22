@@ -1410,13 +1410,14 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     n_models = len(model_names)
 
     if weighting_method in ('oos_auc', 'eb_ic', 'oos_ic') and n_models > 0:
+        from src.params.dynamic_quant_models import james_stein_ic_ensemble_weights
         _half = 0.5
         _eb_prior = 0.70
-        edges = np.array([max(0.0, float(model_aucs[m]) - _half) for m in model_names], dtype=float)
-        if np.sum(edges) > 1e-9:
-            w_edge = (edges ** 2) / float(np.sum(edges ** 2))
-        else:
-            w_edge = np.ones(n_models, dtype=float) / float(n_models)
+        _n_eval_eff = max(1.0, float(len(eval_y)) / 50.0)
+        _sub_ics = {m: 2.0 * max(0.0, float(model_aucs[m]) - _half) for m in model_names}
+        _sub_ts = {m: _sub_ics[m] * np.sqrt(_n_eval_eff) for m in model_names}
+        _js_w_map = james_stein_ic_ensemble_weights(_sub_ics, _sub_ts)
+        w_edge = np.array([float(_js_w_map.get(m, 0.0)) for m in model_names], dtype=float)
         if 'eb_ic' in model_names:
             w_prior = np.array([1.0 if m == 'eb_ic' else 0.0 for m in model_names], dtype=float)
             weights = _eb_prior * w_prior + (1.0 - _eb_prior) * w_edge
@@ -2188,8 +2189,9 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     import joblib
     cfg = DynamicConfig()
     _cv_method = _resolve_cv_method(cfg, cv_method)
+    _default_win = 950
     if window_days is None:
-        window_days = cfg.get('train.window_days', 730)
+        window_days = cfg.get('train.window_days', _default_win)
         
     alpha_model = None
     if enable_automl:
@@ -2548,8 +2550,9 @@ def run_regime_split_training(window_days: int = None,
     from config.dynamic_config import DynamicConfig
     _cfg = DynamicConfig()
 
+    _default_win = 950
     if window_days is None:
-        window_days = _cfg.get('train.window_days', 730)
+        window_days = _cfg.get('train.window_days', _default_win)
 
     logger.info('═' * 60)
     logger.info('[Phase 10: Alpha Breakthrough] 레짐 분리 학습 시작')

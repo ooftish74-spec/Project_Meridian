@@ -263,11 +263,24 @@ class AlphaAllocator:
 
         if use_softmax:
             import math
-            temp = max(float(pget('allocator.softmax_temperature', 0.005)), 1e-4)
-            max_ev = max(ev_scores.values()) if ev_scores else 0.0
-            exp_evs = {k: math.exp((v - max_ev) / temp) for k, v in ev_scores.items()}
-            total_exp = max(sum(exp_evs.values()), 1e-9)
-            final_weights = {k: round((v / total_exp) * golden_bull_mult, 4) for k, v in exp_evs.items()}
+            _min_temp = 1e-4
+            _eps_exp = 1e-9
+            temp = max(float(pget('allocator.softmax_temperature', 0.005)), _min_temp)
+            _reg_probs = (market_data or {}).get('regime_probs') or ((market_data or {}).get('signal_cache') or {}).get('regime_probs')
+            if isinstance(_reg_probs, dict) and _reg_probs:
+                from src.params.dynamic_quant_models import continuous_regime_kl_softmax_kelly_allocation
+                _kl_w = continuous_regime_kl_softmax_kelly_allocation(
+                    regime_probs=_reg_probs,
+                    regime_matrix=self._default_regime_weights(),
+                    stream_kelly_scores=ev_scores,
+                    kl_temperature=temp,
+                )
+                final_weights = {k: round(float(_kl_w.get(k, 0.0)) * golden_bull_mult, 4) for k in self.STREAMS}
+            else:
+                max_ev = max(ev_scores.values()) if ev_scores else 0.0
+                exp_evs = {k: math.exp((v - max_ev) / temp) for k, v in ev_scores.items()}
+                total_exp = max(sum(exp_evs.values()), _eps_exp)
+                final_weights = {k: round((v / total_exp) * golden_bull_mult, 4) for k, v in exp_evs.items()}
             logger.info(f"  📊 [Competitive EV Softmax] 유연 분할 배분 확정 (Golden Multiplier={golden_bull_mult}x): {final_weights}")
         elif best_ev > 0:
             final_weights[best_stream] = round(1.0 * golden_bull_mult, 4)

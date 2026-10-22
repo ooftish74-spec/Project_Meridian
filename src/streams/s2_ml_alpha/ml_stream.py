@@ -430,6 +430,28 @@ class S2MLAlphaStream(BaseStream):
                 es['regime'] = regime
                 es['timestamp'] = now_kst().isoformat()
                 signals.append(es)
+        _gk_shrunk_ic = 0.0
+        _score_z_map = {}
+        try:
+            from src.params.dynamic_quant_models import (
+                cross_sectional_rank_gaussian_transform,
+                empirical_bayes_stream_shrinkage,
+                grinold_kahn_expected_alpha,
+                load_latest_purged_wf_oos,
+            )
+            if scored:
+                _z_list = cross_sectional_rank_gaussian_transform([float(s.get('up_prob', 0.0)) for s in scored])
+                for _s_item, _z_val in zip(scored, _z_list):
+                    _score_z_map[str(_s_item.get('ticker', ''))] = float(_z_val)
+            _pwf_oos = load_latest_purged_wf_oos(_PROJECT_ROOT / 'results' / 'ml_validation')
+            if _pwf_oos:
+                _eb_res = empirical_bayes_stream_shrinkage(
+                    ic_mean=float(_pwf_oos.get('ic_mean', 0.0)),
+                    ic_t_stat=float(_pwf_oos.get('ic_t_stat', 0.0)),
+                )
+                _gk_shrunk_ic = float(_eb_res.shrunk_excess_ic)
+        except Exception:
+            pass
         if not signals:
             for stock in qualified:
                 tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
@@ -445,7 +467,14 @@ class S2MLAlphaStream(BaseStream):
                 suggested_weight = round(size * _p11_combined_scale, 4)
                 _up_pr = stock.get('up_prob', 0)
                 _ev_val = stock.get('expected_value', 0)
-                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source']}
+                _tk_str = str(stock.get('ticker', ''))
+                _sz_val = float(_score_z_map.get(_tk_str, 0.0))
+                _def_vol = 0.02
+                _d_vol = float(stock.get('volatility_20d') or _def_vol)
+                _gk_alpha = 0.0
+                if _gk_shrunk_ic > 0.0 and _sz_val != 0.0:
+                    _gk_alpha = grinold_kahn_expected_alpha(_sz_val, _gk_shrunk_ic, _d_vol)
+                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6)}
                 if stock.get('conformal_lower') is not None:
                     signal['conformal_lower'] = round(stock['conformal_lower'], 4)
                     signal['conformal_upper'] = round(stock['conformal_upper'], 4)

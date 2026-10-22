@@ -344,3 +344,241 @@ def test_real_data_datetime_index_and_live_l2_mode(tmp_path: Path):
     svc = DynamicParameterService(audit_path=tmp_path / 'audit.jsonl', config_getter=lambda k, d: d)
     assert svc.l2_mode() == 'live'
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6. Model ⑥: Cross-Sectional Rank-Gaussianization, Beta-Residualized Excess Return,
+#             James-Stein IC-Weighted Ensemble, & Grinold-Kahn Expected Alpha
+# ─────────────────────────────────────────────────────────────────────────────
+def test_model6_cross_sectional_rank_gaussian_and_grinold_kahn_closed_form():
+    from statistics import NormalDist
+    from src.params.dynamic_quant_models import (
+        beta_residualized_excess_return,
+        cross_sectional_rank_gaussian_transform,
+        grinold_kahn_expected_alpha,
+        james_stein_ic_ensemble_weights,
+    )
+    nd = NormalDist(0.0, 1.0)
+
+    # 1. Cross-sectional Van der Waerden rank-Gaussian transform
+    # 3 distinct elements: ranks = [1, 2, 3], N = 3 -> u = [0.25, 0.50, 0.75]
+    z3 = cross_sectional_rank_gaussian_transform([10.0, 20.0, 30.0])
+    assert z3[0] == pytest.approx(nd.inv_cdf(0.25), rel=1e-9)
+    assert z3[1] == pytest.approx(0.0, abs=1e-12)
+    assert z3[2] == pytest.approx(nd.inv_cdf(0.75), rel=1e-9)
+
+    # Ties: [10.0, 20.0, 20.0, 40.0] -> ranks = [1.0, 2.5, 2.5, 4.0], denom = 5.0 -> u = [0.2, 0.5, 0.5, 0.8]
+    z_tie = cross_sectional_rank_gaussian_transform([10.0, 20.0, 20.0, 40.0])
+    assert z_tie[0] == pytest.approx(nd.inv_cdf(0.20), rel=1e-9)
+    assert z_tie[1] == pytest.approx(0.0, abs=1e-12)
+    assert z_tie[2] == pytest.approx(0.0, abs=1e-12)
+    assert z_tie[3] == pytest.approx(nd.inv_cdf(0.80), rel=1e-9)
+
+    # Constant cross-section -> all 0.0
+    assert cross_sectional_rank_gaussian_transform([5.0, 5.0, 5.0]) == [0.0, 0.0, 0.0]
+
+    # 2. Beta-residualized excess return
+    # R = [0.05, 0.02, -0.01], R_b = 0.02, beta = [1.5, 1.0, 0.5]
+    # eps = [0.05 - 0.03, 0.02 - 0.02, -0.01 - 0.01] = [0.02, 0.00, -0.02], mean_eps = 0.0
+    res_ret = beta_residualized_excess_return([0.05, 0.02, -0.01], benchmark_return=0.02, betas=[1.5, 1.0, 0.5])
+    assert res_ret[0] == pytest.approx(0.02, rel=1e-9)
+    assert res_ret[1] == pytest.approx(0.0, abs=1e-12)
+    assert res_ret[2] == pytest.approx(-0.02, rel=1e-9)
+
+    # 3. James-Stein IC-shrunk ensemble weights
+    # Model A: IC=0.04, t=2.50 -> js_A = 1 - (Z_95 / 2.50)^2 = 0.567113046321814, shrunk_A = 0.04 * js_A
+    # Model B: IC=0.02, t=2.00 -> js_B = 1 - (Z_95 / 2.00)^2 = 0.3236141499809594, shrunk_B = 0.02 * js_B
+    # Model C: IC=0.03, t=1.20 <= Z_95 -> js_C = 0.0, shrunk_C = 0.0
+    js_a = 1.0 - (Z_95 / 2.50) ** 2
+    js_b = 1.0 - (Z_95 / 2.00) ** 2
+    sh_a = 0.04 * js_a
+    sh_b = 0.02 * js_b
+    w_js = james_stein_ic_ensemble_weights(
+        {'A': 0.04, 'B': 0.02, 'C': 0.03},
+        {'A': 2.50, 'B': 2.00, 'C': 1.20},
+        z_crit=Z_95,
+    )
+    assert w_js['A'] == pytest.approx(sh_a / (sh_a + sh_b), rel=1e-9)
+    assert w_js['B'] == pytest.approx(sh_b / (sh_a + sh_b), rel=1e-9)
+    assert w_js['C'] == pytest.approx(0.0, abs=1e-12)
+
+    # 4. Grinold-Kahn expected alpha: E[r] = IC_shrunk * sigma_daily * sqrt(h) * z_score
+    # score_z = 1.5, shrunk_ic = 0.035, vol = 0.02, h = 4 -> 0.035 * 0.02 * 2.0 * 1.5 = 0.0021
+    gk = grinold_kahn_expected_alpha(score_z=1.5, shrunk_ic=0.035, cross_sectional_vol=0.02, horizon_days=4)
+    assert gk == pytest.approx(0.0021, rel=1e-9)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. Model ⑦: Ito Volatility-Drag Optimal Leverage & Cash-Account Convexity Substitution
+# ─────────────────────────────────────────────────────────────────────────────
+def test_model7_ito_leverage_and_cash_convexity_substitution_closed_form():
+    from src.params.dynamic_quant_models import (
+        cash_account_convexity_substitution,
+        ito_optimal_target_leverage,
+    )
+
+    # 1. Ito optimal leverage:
+    # mu_excess = 0.20, sigma = 0.20 (var = 0.04), jump_intensity = 0.5, jump_loss = 0.04 (lambda_J*L_J = 0.02)
+    # k_etp = 2.0 -> etp_decay = 0.5 * (2 - 1) * 0.04 = 0.02
+    # mu_net = 0.20 - 0.02 - 0.02 = 0.16
+    # raw_kelly (kappa=0.5) = 0.5 * (0.16 / 0.04) = 2.0 -> clamped to max_leverage = 1.60
+    # vol_drag = 0.5 * (1.60^2) * 0.04 = 0.0512
+    # geo_growth = 1.60 * (0.20 - 0.02) - 0.0512 = 0.288 - 0.0512 = 0.2368
+    ito = ito_optimal_target_leverage(
+        mu_excess_annual=0.20,
+        sigma_annual=0.20,
+        jump_intensity_annual=0.50,
+        jump_loss_mean=0.04,
+        fractional_kelly=0.50,
+        max_leverage=1.60,
+        min_leverage=0.0,
+        k_etp=2.0,
+    )
+    assert ito.mu_net_annual == pytest.approx(0.16, rel=1e-9)
+    assert ito.raw_kelly_leverage == pytest.approx(2.0, rel=1e-9)
+    assert ito.optimal_leverage == pytest.approx(1.60, rel=1e-9)
+    assert ito.volatility_drag_annual == pytest.approx(0.0512, rel=1e-9)
+    assert ito.expected_geometric_growth == pytest.approx(0.2368, rel=1e-9)
+
+    # 2. Cash-account 1x -> kx convexity substitution:
+    # target_leverage = 1.35, base_risky_weight = 0.90, k = 2.0
+    # uncapped w_2x = (1.35 - 0.90) / (2.0 - 1.0) = 0.45
+    # tail_cap = 0.03 / (3 * 2.0 * 0.01) = 0.50 -> w_2x^* = min(0.45, 0.50) = 0.45
+    # w_1x^* = 0.90 - 0.45 = 0.45
+    # effective_exposure = 0.45 + 2.0 * 0.45 = 1.35, total_cash_weight = 0.90 <= 1.0
+    sub = cash_account_convexity_substitution(
+        target_leverage=1.35,
+        base_risky_weight=0.90,
+        etp_leverage_k=2.0,
+        max_single_day_loss_budget=0.03,
+        daily_benchmark_vol=0.01,
+    )
+    assert sub.weight_kx == pytest.approx(0.45, rel=1e-9)
+    assert sub.weight_1x == pytest.approx(0.45, rel=1e-9)
+    assert sub.effective_exposure == pytest.approx(1.35, rel=1e-9)
+    assert sub.total_cash_weight == pytest.approx(0.90, rel=1e-9)
+    assert sub.tail_cap_kx == pytest.approx(0.50, rel=1e-9)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Model ⑧: Continuous Regime-Posterior Mixture Prior & KL-Entropy Softmax-Kelly
+# ─────────────────────────────────────────────────────────────────────────────
+def test_model8_continuous_regime_kl_softmax_kelly_closed_form():
+    from src.params.dynamic_quant_models import continuous_regime_kl_softmax_kelly_allocation
+
+    regime_matrix = {
+        'bull': {'S1': 0.60, 'S2': 0.30, 'S0': 0.10},
+        'bear': {'S1': 0.10, 'S2': 0.20, 'S0': 0.70},
+    }
+    regime_probs = {'bull': 0.75, 'bear': 0.25}
+    # Continuous prior:
+    # w_prior(S1) = 0.75*0.60 + 0.25*0.10 = 0.475
+    # w_prior(S2) = 0.75*0.30 + 0.25*0.20 = 0.275
+    # w_prior(S0) = 0.75*0.10 + 0.25*0.70 = 0.250
+    w_prior_only = continuous_regime_kl_softmax_kelly_allocation(
+        regime_probs=regime_probs,
+        regime_matrix=regime_matrix,
+        stream_kelly_scores=None,
+    )
+    assert w_prior_only['S1'] == pytest.approx(0.475, rel=1e-9)
+    assert w_prior_only['S2'] == pytest.approx(0.275, rel=1e-9)
+    assert w_prior_only['S0'] == pytest.approx(0.250, rel=1e-9)
+
+    # With Kelly scores f = {'S1': 0.10, 'S2': 0.20, 'S0': 0.00} and tau_KL = 0.10:
+    # Tilted unnormalized:
+    # t(S1) = 0.475 * exp((0.10 - 0.20) / 0.10) = 0.475 * exp(-1.0)
+    # t(S2) = 0.275 * exp((0.20 - 0.20) / 0.10) = 0.275 * 1.0
+    # t(S0) = 0.250 * exp((0.00 - 0.20) / 0.10) = 0.250 * exp(-2.0)
+    t_s1 = 0.475 * math.exp(-1.0)
+    t_s2 = 0.275 * 1.0
+    t_s0 = 0.250 * math.exp(-2.0)
+    t_sum = t_s1 + t_s2 + t_s0
+    w_tilted = continuous_regime_kl_softmax_kelly_allocation(
+        regime_probs=regime_probs,
+        regime_matrix=regime_matrix,
+        stream_kelly_scores={'S1': 0.10, 'S2': 0.20, 'S0': 0.00},
+        kl_temperature=0.10,
+    )
+    assert w_tilted['S1'] == pytest.approx(t_s1 / t_sum, rel=1e-9)
+    assert w_tilted['S2'] == pytest.approx(t_s2 / t_sum, rel=1e-9)
+    assert w_tilted['S0'] == pytest.approx(t_s0 / t_sum, rel=1e-9)
+    assert sum(w_tilted.values()) == pytest.approx(1.0, rel=1e-9)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. Model ⑨: Avellaneda-Stoikov Passive Limit Price & Constantinides-Leland Gate
+# ─────────────────────────────────────────────────────────────────────────────
+def test_model9_avellaneda_stoikov_and_constantinides_leland_closed_form():
+    from src.params.dynamic_quant_models import (
+        avellaneda_stoikov_passive_limit_price,
+        constantinides_leland_no_trade_gate,
+        krx_us_statutory_tick_size,
+    )
+
+    # 1. L0 Statutory Tick Sizes
+    assert krx_us_statutory_tick_size(75_000.0, is_kr=True, is_etp=False) == pytest.approx(100.0, rel=1e-9)
+    assert krx_us_statutory_tick_size(35_000.0, is_kr=True, is_etp=True) == pytest.approx(5.0, rel=1e-9)
+    assert krx_us_statutory_tick_size(125.50, is_kr=False, is_etp=False) == pytest.approx(0.01, rel=1e-9)
+
+    # 2. Avellaneda-Stoikov passive limit quote (Normal buy on KRX stock @ 80,000 KRW, tick=100)
+    # spread_bps = 20.0, alpha_bps = 100.0, sigma_daily = 0.02 (200 bps)
+    # u_alpha = 100 / 200 = 0.5 -> capture_frac = 0.5 * (1 - 0.25) = 0.375
+    # delta_bps = 0.375 * 20.0 = 7.5 bps
+    # raw_p = 80,000 * (1 - 0.00075) = 79,940.0 -> floor to 100 KRW tick = 79,900.0
+    q_buy = avellaneda_stoikov_passive_limit_price(
+        mid_price=80_000.0,
+        side='buy',
+        spread_bps=20.0,
+        alpha_bps=100.0,
+        sigma_daily=0.02,
+        urgency='normal',
+        is_kr=True,
+        is_etp=False,
+    )
+    assert q_buy['capture_fraction'] == pytest.approx(0.375, rel=1e-9)
+    assert q_buy['passive_offset_bps'] == pytest.approx(7.5, rel=1e-9)
+    assert q_buy['limit_price'] == pytest.approx(79_900.0, rel=1e-9)
+    assert q_buy['bypassed_passive'] is False
+
+    # Invariant 4 Guard: urgency='panic' or 'stop' or exit_only sell MUST bypass passive offset!
+    q_panic = avellaneda_stoikov_passive_limit_price(
+        mid_price=80_000.0,
+        side='sell',
+        spread_bps=20.0,
+        alpha_bps=100.0,
+        sigma_daily=0.02,
+        urgency='panic',
+        is_kr=True,
+        is_etp=False,
+    )
+    assert q_panic['passive_offset_bps'] == pytest.approx(0.0, abs=1e-12)
+    assert q_panic['limit_price'] == pytest.approx(80_000.0, rel=1e-9)
+    assert q_panic['bypassed_passive'] is True
+
+    # 3. Constantinides-Leland Cube-Root No-Trade Gate:
+    # c_RT = 0.002 (20 bps), sigma = 0.02 (var = 0.0004), w_target = 0.10, gamma = 1.5
+    # numerator = 3 * 0.002 * 0.0004 * 0.10 = 2.4e-7, denominator = 3.0 -> ratio = 8e-8
+    # cube_root(8e-8) = 2e-8^(1/3) = 0.002 * (100)^(1/3)... wait: (8 * 10^-9 * 10)^(1/3) = (8e-8)^(1/3)
+    expected_band = (8.0e-8) ** (1.0 / 3.0)
+    gate_inside = constantinides_leland_no_trade_gate(
+        current_weight=0.099,
+        target_weight=0.100,
+        round_trip_cost_rate=0.002,
+        sigma_daily=0.02,
+        risk_aversion_gamma=1.5,
+        expected_alpha_edge=0.010,
+    )
+    assert gate_inside['no_trade_half_width'] == pytest.approx(expected_band, rel=1e-9)
+    assert gate_inside['should_trade'] is False  # |0.100 - 0.099| = 0.001 < 0.004308869
+
+    gate_outside = constantinides_leland_no_trade_gate(
+        current_weight=0.080,
+        target_weight=0.100,
+        round_trip_cost_rate=0.002,
+        sigma_daily=0.02,
+        risk_aversion_gamma=1.5,
+        expected_alpha_edge=0.010,
+    )
+    assert gate_outside['no_trade_half_width'] == pytest.approx(expected_band, rel=1e-9)
+    assert gate_outside['should_trade'] is True
+
+
