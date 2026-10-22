@@ -52,6 +52,9 @@ _MIN_SPLIT_ROWS = 4
 _MIN_LEAF_ROWS = 20
 _MAX_LEAF_ROWS = 400
 _MIN_TREE_ROWS = 500
+_TIE_ROUND_DECIMALS = 5
+_TIE_TOP_K = 5
+_TIE_MASS_THRESHOLD = 0.08
 
 
 def cross_sectional_rank_z_matrix(
@@ -166,11 +169,11 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
 
     def __init__(
         self,
-        n_blocks: int = 5,
+        n_blocks: int = 10,
         top_k: int = 8,
-        ortho_strength: float = 0.95,
+        ortho_strength: float = 0.50,
         crowd_threshold: float = 0.35,
-        tree_blend: float = 0.25,
+        tree_blend: float = 0.15,
         vol_cols: Tuple[int, ...] = (4, 10, 18),
         random_state: int = 42,
     ):
@@ -190,7 +193,7 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
         return tags
 
     def fit(self, X: np.ndarray, y: np.ndarray, sample_weight: Optional[np.ndarray] = None):
-        X_arr = np.nan_to_num(np.asarray(X, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
+        X_arr = np.nan_to_num(np.asarray(X, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0).copy()
         y_arr = np.asarray(y, dtype=int)
         n, p = X_arr.shape
         self.classes_ = np.array([0, 1], dtype=int)
@@ -202,6 +205,17 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
             self.feature_importances_ = np.zeros(p, dtype=np.float64)
             self.tree_ = None
             return self
+
+        min_rows_for_tie_filter = int(_MIN_TREE_ROWS)
+        if n >= min_rows_for_tie_filter:
+            tie_dec = int(_TIE_ROUND_DECIMALS)
+            tie_k = int(_TIE_TOP_K)
+            tie_thr = float(_TIE_MASS_THRESHOLD)
+            for j in range(p):
+                _, counts = np.unique(np.round(X_arr[:, j], tie_dec), return_counts=True)
+                top_mass = float(np.sum(np.sort(counts)[-tie_k:])) / float(n)
+                if top_mass > tie_thr:
+                    X_arr[:, j] = 0.0
 
         sign_y = 2.0 * y_arr.astype(np.float64) - 1.0
         if sample_weight is not None and len(sample_weight) == n:

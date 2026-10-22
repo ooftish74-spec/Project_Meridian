@@ -1325,8 +1325,8 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             i for i, fn in enumerate(active_features or [])
             if fn in _vol_names
         ) or (4, 10, 18)
-        _def_blocks, _def_topk = 5, 8
-        _def_ortho, _def_crowd, _def_blend = 0.95, 0.35, 0.25
+        _def_blocks, _def_topk = 10, 8
+        _def_ortho, _def_crowd, _def_blend = 0.50, 0.35, 0.15
         _eb_blocks = int(cfg.get('ml.eb.n_blocks') or _def_blocks)
         _eb_topk = int(cfg.get('ml.eb.top_k') or _def_topk)
         _eb_ortho = float(cfg.get('ml.eb.ortho_strength') or _def_ortho)
@@ -1540,8 +1540,8 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
 
     def _eb_ic():
         from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
-        _def_blocks, _def_topk = 5, 8
-        _def_ortho, _def_crowd, _def_blend = 0.95, 0.35, 0.25
+        _def_blocks, _def_topk = 10, 8
+        _def_ortho, _def_crowd, _def_blend = 0.50, 0.35, 0.15
         return CrossSectionalEBClassifier(
             n_blocks=int(cfg_obj.get('ml.eb.n_blocks') or _def_blocks),
             top_k=int(cfg_obj.get('ml.eb.top_k') or _def_topk),
@@ -2249,7 +2249,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         try:
             _rep, _rep_path = run_purged_wf_report(
                 ds_meta['panel'], ds_meta['panel_features'], cfg_obj=cfg,
-                forward_days=ds_meta['forward_days'], calendar=ds_meta['calendar'])
+                forward_days=ds_meta['forward_days'], calendar=None)
             _ic = (_rep.get('oos') or {}).get('ic', {})
             purged_wf_summary = {
                 'report_path': str(_rep_path) if _rep_path else None,
@@ -2815,14 +2815,14 @@ if __name__ == '__main__':
         logger.warning(f"Freshness Gate 검증 중 오류: {e}")
 
     if args.trigger:
-        effective_window = 180 if args.trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
+        effective_window = args.window
         run_training(window_days=effective_window, trigger=args.trigger, cv_method=args.cv_method)
-    elif args.force:
+    elif args.force or args.window is not None:
         run_training(window_days=args.window, trigger='manual', cv_method=args.cv_method)
     else:
         needed, trigger = should_retrain()
         if needed:
-            effective_window = 180 if trigger in ('vix_spike', 'regime_change', 'da_failure') else args.window
+            effective_window = args.window
             logger.info(f"  ⚡ Dynamic Retraining Window 적용: trigger={trigger} ➔ window={effective_window}d")
             run_training(window_days=effective_window, trigger=trigger, cv_method=args.cv_method)
         else:
