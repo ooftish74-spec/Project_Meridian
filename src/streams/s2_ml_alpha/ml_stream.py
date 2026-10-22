@@ -490,8 +490,7 @@ class S2MLAlphaStream(BaseStream):
             _raw_kelly_sum = sum(float(s.get('size_pct', 0.0)) for s in _indiv_sigs)
             if _raw_kelly_sum > 0.0:
                 for _sig_item in _indiv_sigs:
-                    _v_scale = min(1.0, float(_sig_item.get('vix_scale_factor', 1.0)))
-                    _norm_w = (float(_sig_item.get('size_pct', 0.0)) / _raw_kelly_sum) * _v_scale
+                    _norm_w = float(_sig_item.get('size_pct', 0.0)) / _raw_kelly_sum
                     _sig_item['size_pct'] = round(max(float(_sig_item.get('size_pct', 0.0)), _norm_w), 4)
                     _sig_item['suggested_weight'] = _sig_item['size_pct']
             signals.extend(_indiv_sigs)

@@ -1521,12 +1521,17 @@ class StreamOrchestrator:
         elif isinstance(positions_source, list):
             positions_list = positions_source
 
-        # [Strict Domestic Isolation] 국내 파킹 자산 자동 매도는 오직 '국내 원화 주식(digit ticker)' 매수 주문이 있고,
+        # [Strict Domestic Isolation] 국내 파킹 자산 자동 매도는 오직 '국내 원화 주식(KR ticker)' 매수 주문이 있고,
         # 원화 현금이 실제 부족할 때만 허용! (해외/미국 주식 매수 주문으로 인한 국내 파킹 매도 100% 금지)
+        from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_ORCH
+        def _is_kr_tk(tk_val: str) -> bool:
+            s = str(tk_val or '').strip().upper()
+            return s.isdigit() or bool(_KR_RE_ORCH.match(s))
+
         kr_buy_amount = sum(
             float(o.get('amount_krw', o.get('amount', 0.0)) or 0.0)
             for o in orders
-            if str(o.get('ticker', '')).isdigit() and
+            if _is_kr_tk(o.get('ticker', '')) and
             (str(o.get('action', '')).lower() in ('buy', 'long') or str(o.get('direction', '')).lower() in ('long', 'buy'))
         )
         current_kr_cash = float(portfolio.get('cash', 0.0) or 0.0)
@@ -1640,7 +1645,7 @@ class StreamOrchestrator:
                         _p = float(o['price'])
                         _tk_str = str(o.get('ticker', '')).strip()
                         _is_jp = _tk_str.upper().endswith('.T')
-                        _is_us = (not _tk_str.isdigit()) and (not _is_jp)
+                        _is_us = (not _is_kr_tk(_tk_str)) and (not _is_jp)
                         if _is_us and not _dyn_fx:
                             logger.error(f"    🛑 [FX Guard] {_tk_str}: USD/KRW 미확보 → 금액 기반 매도수량 산출 불가, 스킵")
                             continue
@@ -1652,7 +1657,7 @@ class StreamOrchestrator:
                 _exec_price = o.get('price', 0)
                 _tk_str_b = str(o.get('ticker', '')).strip()
                 _is_jp = _tk_str_b.upper().endswith('.T')
-                _is_us = (not _tk_str_b.isdigit()) and (not _is_jp)
+                _is_us = (not _is_kr_tk(_tk_str_b)) and (not _is_jp)
                 if not _exec_price or _exec_price <= 0:
                     _raw_tk = str(o.get('ticker', '')).strip()
                     from src.utils.ticker_canonical import canonical_ticker
@@ -2118,7 +2123,7 @@ class StreamOrchestrator:
             if not qty and price > 0:
                 _tk_s = str(ticker).strip()
                 is_jp_stock = _tk_s.upper().endswith('.T')
-                is_us_stock = (not _tk_s.isdigit()) and (not is_jp_stock)
+                is_us_stock = (not _is_kr_tk(_tk_s)) and (not is_jp_stock)
                 if is_jp_stock:
                     eff_price_krw = price * _jpy_fx_net
                     qty = int(amount_krw / eff_price_krw) if eff_price_krw > 0 else 0
@@ -2216,7 +2221,7 @@ class StreamOrchestrator:
             # 소액 잔챙이 상계 주문 차단 (50만 원 미만)
             _tk_net_s = str(ticker).strip()
             is_jp_net = _tk_net_s.upper().endswith('.T')
-            is_us_net = (not _tk_net_s.isdigit()) and (not is_jp_net)
+            is_us_net = (not _is_kr_tk(_tk_net_s)) and (not is_jp_net)
             if is_jp_net:
                 _net_fx = _jpy_fx_net
                 netted_val_krw = final_price * _net_fx * abs(net_qty)
@@ -2817,15 +2822,22 @@ class StreamOrchestrator:
                     budget,             # 스트림 총 예산 상한
                 )
 
-                # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어는 롱 노출 상한에서 면제)
+                # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어는 롱 노출 상한에서 면제,
+                # 또한 스트림 배분 단계에서 이미 롱 예산 비중이 max_exposure 이하로 축소된 경우 중복 감산 방지)
                 _sig_is_hdg = bool(sig.get('is_hedge', False)) or (_t_clean in _inv_set_gen) or (_t_clean in _def_set_gen)
                 _sig_is_mn = bool(sig.get('is_market_neutral', False)) or (stream_id in ('S14', 'S14_PAIR_ALPHA', 'S7'))
-                _sig_beta = -1.0 if _t_clean in _inv_set_gen else float(sig.get('beta') if sig.get('beta') is not None else 1.0)
+                _raw_b_gen = sig.get('beta') if sig.get('beta') is not None else _qe_gen.get_asset_metrics(_t_clean).get('beta', 1.0)
+                _sig_beta = -1.0 if _t_clean in _inv_set_gen else float(_raw_b_gen if _raw_b_gen is not None else 1.0)
+                _long_budget_share = sum(
+                    float(stream_budgets.get(_lk, 0.0) or 0.0)
+                    for _lk in ('S2', 'S3', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S13_JAPAN_ALPHA')
+                ) / _safe_nav_gen
                 _exp_mult_sig = directional_beta_exposure_multiplier(
                     asset_beta=_sig_beta,
                     max_exposure=_eff_max_exp,
                     is_hedge=_sig_is_hdg,
                     is_market_neutral=_sig_is_mn,
+                    long_budget_share=_long_budget_share,
                 )
                 target_amount = target_amount * _exp_mult_sig * lev_level
 
@@ -3390,11 +3402,13 @@ class StreamOrchestrator:
             if len(orders) != _before:
                 logger.warning(f"  🛑 [Final Gate] DATA_NOGO 종목 매수 {_before - len(orders)}건 제거: {sorted(_nogo_t)}")
 
+        from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_FG
         def _ccy(o):
-            t = str(o.get('ticker', '')).strip()
-            if t.upper().endswith('.T'):
+            t = str(o.get('ticker', '')).strip().upper()
+            if t.endswith('.T'):
                 return 'JPY'
-            return 'KRW' if t.isdigit() else 'USD'
+            is_kr = t.isdigit() or bool(_KR_RE_FG.match(t))
+            return 'KRW' if is_kr else 'USD'
 
         def _px(o):
             p = float(o.get('price', 0) or 0)

@@ -1117,27 +1117,31 @@ def directional_beta_exposure_multiplier(
     max_exposure: float,
     is_hedge: bool = False,
     is_market_neutral: bool = False,
+    long_budget_share: float = 1.0,
 ) -> float:
-    """Compute beta-convexity exposure / drawdown multiplier M_exp(beta_i, E_max):
+    """Compute beta-convexity exposure / drawdown multiplier M_exp(beta_i, E_max, B_long):
         beta_i^+              = 0 if (is_hedge or is_market_neutral or beta_i <= 0) else clip(beta_i, 0, 1)
-        M_exp(beta_i, E_max)  = 1 - beta_i^+ * (1 - clip(E_max, 0, 1))
+        E_eff                 = clip(E_max / max(B_long, eps), 0, 1)
+        M_exp(beta_i, E_max)  = 1 - beta_i^+ * (1 - E_eff)
 
     Properties:
       - Negative-beta inverse / 2X inverse ETPs (beta_i <= 0) and zero-beta market-neutral pairs:
         beta_i^+ = 0 => M_exp = 1.0 (never suppressed by long-equity crash exposure caps).
-      - Standard long equity (beta_i >= 1):
+      - Standard long equity (beta_i >= 1) with B_long = 1.0:
         beta_i^+ = 1 => M_exp = clip(E_max, 0, 1).
-      - Low-beta defensive equity (0 < beta_i < 1):
-        Continuous linear interpolation between 1.0 and E_max.
+      - When long stream budget share B_long <= E_max (allocator already reduced long streams):
+        E_eff = 1.0 => M_exp = 1.0 (prevents quadruple-counting of exposure reduction).
     """
     e_cap = _clamp(float(max_exposure) if math.isfinite(float(max_exposure)) else 1.0, 0.0, 1.0)
+    w_long = _clamp(float(long_budget_share) if math.isfinite(float(long_budget_share)) else 1.0, _EPS, 1.0)
+    e_eff = _clamp(e_cap / w_long, 0.0, 1.0)
     if bool(is_hedge) or bool(is_market_neutral):
         return 1.0
     b_val = float(asset_beta) if math.isfinite(float(asset_beta)) else 1.0
     if b_val <= 0.0:
         return 1.0
     pos_beta = _clamp(b_val, 0.0, 1.0)
-    return 1.0 - pos_beta * (1.0 - e_cap)
+    return 1.0 - pos_beta * (1.0 - e_eff)
 
 
 def stream_relative_three_sigma_cap(

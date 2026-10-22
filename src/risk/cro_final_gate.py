@@ -107,7 +107,10 @@ class CROFinalGate:
                 raw_dir = order.get('action', order.get('direction', 1))
                 sign = -1.0 if str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit') else 1.0
                 price = float(order.get('price', 0.0) or 0.0)
-                fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not str(t).isdigit() else 1.0
+                from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_CRO
+                _ts_cro = str(t).strip().upper()
+                _is_kr_cro = _ts_cro.isdigit() or bool(_KR_RE_CRO.match(_ts_cro))
+                fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not _is_kr_cro else 1.0
                 price_krw = price * fx_rate
                 qty = float(order.get('net_shares', order.get('quantity', 0)) or 0)
                 amt = float(order.get('net_amount', order.get('amount_krw', qty * price_krw)) or 0.0)
@@ -214,7 +217,10 @@ class CROFinalGate:
             t = order.get('ticker', '')
             scaled_shares = int(raw_shares * final_scaling_factor)
             price = float(order.get('price', 0.0) or 0.0)
-            fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not str(t).isdigit() else 1.0
+            from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_CRO2
+            _ts_cro2 = str(t).strip().upper()
+            _is_kr_cro2 = _ts_cro2.isdigit() or bool(_KR_RE_CRO2.match(_ts_cro2))
+            fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not _is_kr_cro2 else 1.0
             if fx_rate <= 0:
                 # ★ Wave 1: 환율 미상 → 해외 매수의 원화 리스크 산정 불가 → 매수 제외(fail-closed)
                 _blocked = dict(order)
