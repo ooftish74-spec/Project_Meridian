@@ -2399,36 +2399,42 @@ class StreamOrchestrator:
     ) -> List[Dict]:
         """페어 트레이딩 양방향 동시 매수 원자성(Atomic Pair Guard) 및 동일지수 인버스 중복 매입 방지·병합 가드."""
         _held_qty_by_ticker = held_qty_by_ticker or {}
-        # ── ★ [Atomic Pair Integrity Guard] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
-        while True:
-            _active_buy_tks = {
-                str(_eo.get('ticker', '')).strip().upper()
-                for _eo in exec_orders
-                if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
-            }
-            _atomic_filtered = []
-            _dropped_any = False
-            for _eo in exec_orders:
-                _partners = [p for p in (_eo.get('pair_partners') or []) if p]
-                if not _partners and _eo.get('pair_partner'):
-                    _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
-                if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
-                    # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
-                    _active_partners = [
-                        p for p in _partners
-                        if p in _active_buy_tks
-                    ]
-                    if not _active_partners:
-                        logger.warning(
-                            f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 동시 매수 부재/절삭 감지 "
-                            f"→ 반쪽짜리 단독 레그 매수 기각"
-                        )
-                        _dropped_any = True
-                        continue
-                _atomic_filtered.append(_eo)
-            exec_orders = _atomic_filtered
-            if not _dropped_any:
-                break
+
+        def _run_atomic_pair_guard(orders_in: List[Dict]) -> List[Dict]:
+            cur_orders = list(orders_in)
+            while True:
+                _active_buy_tks = {
+                    str(_eo.get('ticker', '')).strip().upper()
+                    for _eo in cur_orders
+                    if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
+                }
+                _atomic_filtered = []
+                _dropped_any = False
+                for _eo in cur_orders:
+                    _partners = [p for p in (_eo.get('pair_partners') or []) if p]
+                    if not _partners and _eo.get('pair_partner'):
+                        _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
+                    if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
+                        # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
+                        _active_partners = [
+                            p for p in _partners
+                            if p in _active_buy_tks
+                        ]
+                        if not _active_partners:
+                            logger.warning(
+                                f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 동시 매수 부재/절삭 감지 "
+                                f"→ 반쪽짜리 단독 레그 매수 기각"
+                            )
+                            _dropped_any = True
+                            continue
+                    _atomic_filtered.append(_eo)
+                cur_orders = _atomic_filtered
+                if not _dropped_any:
+                    break
+            return cur_orders
+
+        # ── ★ [Atomic Pair Integrity Guard - Pass 1] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
+        exec_orders = _run_atomic_pair_guard(exec_orders)
 
         # ── ★ [Same-Index Inverse Mutual Exclusion & Consolidation Guard] ──
         # 동일 지수 기반 인버스(114800 1X)와 곱버스(252670 2X), 또는 US 인버스(SH/PSQ vs SQQQ)가 동시에 매입·보유되는 현상 원천 차단
@@ -2509,6 +2515,9 @@ class StreamOrchestrator:
                             f"  🛡️ [Inverse Mutex Guard] 기보유 인버스({_held_siblings}) 존재 → 중복 인버스({_buy_tk}, ₩{_buy_notional:,.0f}) 신규 매수 차단"
                         )
                         exec_orders = [_eo for _eo in exec_orders if _eo is not _buy_eo]
+
+        # ── ★ [Atomic Pair Integrity Guard - Pass 2] 인버스 중복 기각 후 남은 반쪽 페어 레그 제거 ──
+        exec_orders = _run_atomic_pair_guard(exec_orders)
 
         return exec_orders
 
