@@ -277,15 +277,10 @@ class S2MLAlphaStream(BaseStream):
             return pickle.load(f)
 
     def is_active(self, current_time: Optional[datetime]=None) -> bool:
-        """08:00~20:00 활성 (개별종목 프리마켓~에프터마켓)."""
+        """글로벌(KRX + US) 피처 스토어 및 24시간 파이프라인 상시 활성."""
         if not self._enabled:
             return False
-        if current_time is None:
-            current_time = now_kst()
-        t = current_time.time()
-        pre_market_open = time(pget('s2.pre_market_hour', 8), 0)
-        after_market_close = time(pget('s2.after_market_hour', 20), 0)
-        return pre_market_open <= t <= after_market_close
+        return True
 
     def generate_signals(self, regime: str, market_data: Dict) -> List[Dict]:
         """ML 기반 개별주 매매 신호 생성.

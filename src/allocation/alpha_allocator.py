@@ -265,7 +265,10 @@ class AlphaAllocator:
             import math
             _min_temp = 1e-4
             _eps_exp = 1e-9
-            temp = max(float(pget('allocator.softmax_temperature', 0.005)), _min_temp)
+            _base_temp = max(float(pget('allocator.softmax_temperature', 0.005)), _min_temp)
+            _ev_vals = [float(v) for v in ev_scores.values() if math.isfinite(float(v))]
+            _ev_std = float(np.std(_ev_vals)) if len(_ev_vals) >= 2 else 0.0
+            temp = max(_base_temp, _ev_std, _min_temp)
             _reg_probs = (market_data or {}).get('regime_probs') or ((market_data or {}).get('signal_cache') or {}).get('regime_probs')
             if isinstance(_reg_probs, dict) and _reg_probs:
                 from src.params.dynamic_quant_models import continuous_regime_kl_softmax_kelly_allocation

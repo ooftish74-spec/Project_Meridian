@@ -868,7 +868,10 @@ class StreamOrchestrator:
                                     float(_s.get('gk_expected_alpha') or 0.0),
                                     float(_s.get('expected_return_pct') or 0.0) / 100.0,
                                 )
-                                _beta_s = float(_s.get('beta') if _s.get('beta') is not None else 1.0)
+                                _beta_raw = _s.get('beta')
+                                if _beta_raw is None:
+                                    _beta_raw = _qe_sc.get_asset_metrics(_tk_sc).get('beta', 1.0)
+                                _beta_s = float(_beta_raw if _beta_raw is not None else 1.0)
                                 _gate_sc = scenario_conditional_alpha_survival_gate(
                                     expected_alpha=_alpha_s,
                                     asset_beta=_beta_s,
