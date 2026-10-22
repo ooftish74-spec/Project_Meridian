@@ -360,7 +360,9 @@ def main():
 
                 if not hasattr(main, '_last_exit_scan_ts'):
                     main._last_exit_scan_ts = 0.0
-                if time.time() - main._last_exit_scan_ts >= 30.0:
+                # ★ 장전 동시호가(08:30~09:00) 및 장마감 동시호가(15:20~15:30) 구간에서는 일반 체결이 불가능하므로
+                # 정규 접속매매 시간(09:00~15:20, 540 <= t_mins <= 920)에만 실시간 손절/Time-Decay 시장가 청산을 집행하여 동시호가 무한 취소·재발주 루프 차단
+                if (540 <= t_mins <= 920) and time.time() - main._last_exit_scan_ts >= 30.0:
                     main._last_exit_scan_ts = time.time()
                     try:
                         from src.risk.universal_exit_engine import UniversalExitEngine
@@ -461,9 +463,14 @@ def main():
                                 _exec = ExecutionEngine(mode='live')
                                 _exec_res = _exec.execute(_exit_orders)
                                 _filled_tks = {str(_f.get('ticker')) for _f in getattr(_exec_res, 'fills', [])}
+                                _submitted_tks = {
+                                    str(_o.get('ticker') if isinstance(_o, dict) else getattr(_o, 'ticker', ''))
+                                    for _o in getattr(_exec_res, 'orders', [])
+                                    if (str(_o.get('status', '') if isinstance(_o, dict) else getattr(_o, 'status', '')) in ('filled', 'submitted', 'submitted_market_fallback', 'filled_market_fallback'))
+                                }
                                 for _eo in _exit_orders:
                                     _tk = str(_eo.get('ticker'))
-                                    if _tk in _filled_tks or getattr(_exec_res, 'n_filled', 0) > 0:
+                                    if _tk in _filled_tks or _tk in _submitted_tks or getattr(_exec_res, 'n_filled', 0) > 0:
                                         main._exit_orders_in_flight[_tk] = _now_ts
                                         if _eo.get('exit_type') in ('scale_out_50pct', 'time_decay_exit'):
                                             ledger_mgr.mark_scaled_out(_tk)

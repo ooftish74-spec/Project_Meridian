@@ -225,70 +225,147 @@ def collect_econ_indicator_daily_ohlcv(function: str, maturity: str = None, inte
 
 
 def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.DataFrame]:
-    """Yahoo Finance Direct Chart v8 REST API를 통해 일봉 OHLCV 시계열 수집."""
+    """[Yahoo-Free Multi-Vendor Primary] CBOE Official CDN / Naver Global API / Alpha Vantage를 통해 일봉 OHLCV 수집."""
     import urllib.request
-    import urllib.parse
-    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range={range_str}&interval=1d'
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    try:
-        with urllib.request.urlopen(req, timeout=8) as r:
-            d = json.loads(r.read().decode('utf-8'))['chart']['result'][0]
-            ts = d.get('timestamp', [])
-            q = d.get('indicators', {}).get('quote', [{}])[0]
-            opens = q.get('open', [])
-            highs = q.get('high', [])
-            lows = q.get('low', [])
-            closes = q.get('close', [])
-            vols = q.get('volume', [])
+
+    sym_up = str(symbol).strip().upper()
+
+    # 1. CBOE 공식 CDN (VIX, SKEW, VVIX)
+    if sym_up in ('^VIX', 'VIX', '^SKEW', 'SKEW', '^VVIX', 'VVIX'):
+        cboe_sym = sym_up.lstrip('^')
+        url = f'https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_{cboe_sym}.json'
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        try:
+            with urllib.request.urlopen(req, timeout=8) as r:
+                rows = json.loads(r.read().decode('utf-8')).get('data', [])
             records = []
-            for i, t_sec in enumerate(ts):
-                c_val = closes[i] if i < len(closes) else None
-                if c_val is None or float(c_val) <= 0:
+            for item in rows[-750:]:
+                c_f = float(item.get('close', 0) or 0)
+                if c_f <= 0:
                     continue
-                c_f = float(c_val)
-                o_f = float(opens[i]) if i < len(opens) and opens[i] is not None and float(opens[i]) > 0 else c_f
-                h_f = float(highs[i]) if i < len(highs) and highs[i] is not None and float(highs[i]) > 0 else c_f
-                l_f = float(lows[i]) if i < len(lows) and lows[i] is not None and float(lows[i]) > 0 else c_f
-                v_i = int(vols[i]) if i < len(vols) and vols[i] is not None else 0
-                dt_str = pd.to_datetime(t_sec, unit='s', utc=True).tz_convert('America/New_York').strftime('%Y-%m-%d')
                 records.append({
-                    'date': dt_str,
-                    'open': o_f,
-                    'high': h_f,
-                    'low': l_f,
+                    'date': str(item.get('date', ''))[:10],
+                    'open': float(item.get('open', c_f) or c_f),
+                    'high': float(item.get('high', c_f) or c_f),
+                    'low': float(item.get('low', c_f) or c_f),
                     'close': c_f,
-                    'volume': v_i,
+                    'volume': int(float(item.get('volume', 0) or 0)),
                 })
-            if not records:
-                return None
-            df = pd.DataFrame(records)
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.drop_duplicates(subset=['date'], keep='last').set_index('date').sort_index()
-            return df
+            if records:
+                df = pd.DataFrame(records)
+                df['date'] = pd.to_datetime(df['date'])
+                return df.drop_duplicates(subset=['date'], keep='last').set_index('date').sort_index()
+        except Exception as e:
+            logger.debug(f"  [CBOE Historical] {symbol} 조회 스킵: {e}")
+
+    # 2. Naver Global Index / Bond / FX Official JSON API
+    _NAVER_GLOBAL_MAP = {
+        '^GSPC': 'index/.INX/price',
+        '^IXIC': 'index/.IXIC/price',
+        '^DJI': 'index/.DJI/price',
+        '^SOX': 'index/.SOX/price',
+        '^N225': 'index/.N225/price',
+        '^TWII': 'index/.TWII/price',
+        '^HSI': 'index/.HSI/price',
+        '^TNX': 'marketindex/bond/US10YT=RR/prices',
+        '^IRX': 'marketindex/bond/US3MT=RR/prices',
+        'KRW=X': 'marketindex/exchange/FX_USDKRW/prices',
+    }
+    if sym_up in _NAVER_GLOBAL_MAP:
+        ep = _NAVER_GLOBAL_MAP[sym_up]
+        max_pages = 1 if range_str in ('5d', '1mo') else (2 if range_str == '3mo' else 5)
+        records = []
+        try:
+            for page_idx in range(1, max_pages + 1):
+                url = f'https://api.stock.naver.com/{ep}?page={page_idx}&pageSize=60'
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req, timeout=6) as r:
+                    items = json.loads(r.read().decode('utf-8'))
+                if not isinstance(items, list) or not items:
+                    break
+                for it in items:
+                    dt_raw = str(it.get('localTradedAt', ''))[:10]
+                    c_raw = str(it.get('closePrice', '0')).replace(',', '')
+                    c_f = float(c_raw or 0)
+                    if not dt_raw or c_f <= 0:
+                        continue
+                    o_f = float(str(it.get('openPrice', c_raw)).replace(',', '') or c_f)
+                    h_f = float(str(it.get('highPrice', c_raw)).replace(',', '') or c_f)
+                    l_f = float(str(it.get('lowPrice', c_raw)).replace(',', '') or c_f)
+                    records.append({
+                        'date': dt_raw,
+                        'open': o_f if o_f > 0 else c_f,
+                        'high': h_f if h_f > 0 else c_f,
+                        'low': l_f if l_f > 0 else c_f,
+                        'close': c_f,
+                        'volume': 0,
+                    })
+            if records:
+                df = pd.DataFrame(records)
+                df['date'] = pd.to_datetime(df['date'])
+                return df.drop_duplicates(subset=['date'], keep='last').set_index('date').sort_index()
+        except Exception as e:
+            logger.debug(f"  [NaverGlobalOHLCV] {symbol} 조회 스킵: {e}")
+
+    # 3. Alpha Vantage FX / Commodity / Equity 라우팅
+    try:
+        if sym_up in ('JPY=X', 'USDJPY=X'):
+            return collect_fx_daily_ohlcv('USD', 'JPY')
+        if sym_up == 'EURUSD=X':
+            return collect_fx_daily_ohlcv('EUR', 'USD')
+        if sym_up == 'CL=F':
+            return collect_econ_indicator_daily_ohlcv('WTI', interval='daily')
+        if sym_up == 'HG=F':
+            return collect_econ_indicator_daily_ohlcv('COPPER', interval='monthly')
+        if sym_up == 'GC=F':
+            df_gld = collect_daily_ohlcv('GLD')
+            if df_gld is not None and not df_gld.empty:
+                df_gc = df_gld.copy()
+                for col in ('open', 'high', 'low', 'close'):
+                    if col in df_gc.columns:
+                        df_gc[col] = df_gc[col] * 10.85
+                return df_gc
+        if sym_up == 'DX-Y.NYB':
+            df_uup = collect_daily_ohlcv('UUP')
+            if df_uup is not None and not df_uup.empty:
+                df_dxy = df_uup.copy()
+                for col in ('open', 'high', 'low', 'close'):
+                    if col in df_dxy.columns:
+                        df_dxy[col] = df_dxy[col] * 3.60
+                return df_dxy
+        if sym_up.isalpha() and len(sym_up) <= 5:
+            return collect_daily_ohlcv(sym_up)
     except Exception as e:
-        logger.debug(f"  [YahooDirectOHLCV] {symbol} 조회 스킵: {e}")
-        return None
+        logger.debug(f"  [MultiVendorOHLCV] {symbol} 조회 스킵: {e}")
+    return None
 
 
 def _fetch_yahoo_chart_quote(symbol: str) -> Optional[dict]:
-    """Yahoo Finance Direct Chart REST API를 통해 지수/선물/환율의 실제 레벨 및 1일 등락률 조회."""
-    import urllib.request
-    import urllib.parse
-    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range=5d&interval=1d'
-    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+    """[Yahoo-Free] Google Finance / CBOE / Naver Global API를 통해 지수·선물·환율의 실제 레벨 및 1일 등락률 조회."""
+    from src.utils.google_finance_collector import GoogleFinanceCollector
+
     try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            d = json.loads(r.read().decode('utf-8'))['chart']['result'][0]
-            closes = [float(c) for c in d.get('indicators', {}).get('quote', [{}])[0].get('close', []) if c is not None and float(c) > 0]
-            p = float(d.get('meta', {}).get('regularMarketPrice') or (closes[-1] if closes else 0.0))
-            if p <= 0:
-                return None
-            prev = closes[-2] if len(closes) >= 2 else float(d.get('meta', {}).get('previousClose') or p)
-            chg_1d = round((p / prev - 1.0) * 100.0, 2) if prev > 0 else 0.0
-            return {'price': round(p, 4), 'change_1d': chg_1d}
+        gf = GoogleFinanceCollector.get_quote_details(symbol)
+        if gf and float(gf.get('price', 0) or 0) > 0:
+            return {
+                'price': round(float(gf['price']), 4),
+                'change_1d': round(float(gf.get('change_pct', 0.0) or 0.0), 2),
+            }
+    except Exception:
+        pass
+
+    try:
+        df = fetch_yahoo_chart_ohlcv(symbol, range_str='5d')
+        if df is not None and not df.empty and 'close' in df.columns:
+            closes = [float(c) for c in df['close'].dropna().tolist() if float(c) > 0]
+            if closes:
+                p = closes[-1]
+                prev = closes[-2] if len(closes) >= 2 else p
+                chg_1d = round((p / prev - 1.0) * 100.0, 2) if prev > 0 else 0.0
+                return {'price': round(p, 4), 'change_1d': chg_1d}
     except Exception as e:
-        logger.debug(f"  [YahooDirect] {symbol} 조회 스킵: {e}")
-        return None
+        logger.debug(f"  [MultiVendorQuote] {symbol} 조회 스킵: {e}")
+    return None
 
 
 def collect_global_macro(symbols: list) -> dict:

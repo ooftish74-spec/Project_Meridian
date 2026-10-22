@@ -2191,30 +2191,8 @@ class StreamOrchestrator:
         # ── ★ Wave 0 Final Gate (S2 Exit-Only + S5 Global Cash Constraint) ──
         exec_orders = self._apply_final_execution_gate(exec_orders, portfolio, market_data)
 
-        # ── ★ [Atomic Pair Integrity Guard] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
-        _active_buy_tks = {
-            str(_eo.get('ticker', '')).strip().upper()
-            for _eo in exec_orders
-            if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
-        }
-        _atomic_filtered = []
-        for _eo in exec_orders:
-            _partners = [p for p in (_eo.get('pair_partners') or []) if p]
-            if not _partners and _eo.get('pair_partner'):
-                _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
-            if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
-                _active_partners = [
-                    p for p in _partners
-                    if p in _active_buy_tks or _held_qty_by_ticker.get(p, 0) > 0
-                ]
-                if not _active_partners:
-                    logger.warning(
-                        f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 미체결/절삭 감지 "
-                        f"→ 반쪽짜리 방향성 노출 방지를 위해 단독 레그 매수 기각"
-                    )
-                    continue
-            _atomic_filtered.append(_eo)
-        exec_orders = _atomic_filtered
+        # ── ★ [Atomic Pair Integrity Guard + Same-Index Inverse Mutual Exclusion & Consolidation Guard] ──
+        exec_orders = self._enforce_pair_and_inverse_mutex_guards(exec_orders, _held_qty_by_ticker)
 
         # ── Step 9.1: Global Cross-Venue Netting & Dark Pool RPI Routing ──
         try:
@@ -2304,6 +2282,121 @@ class StreamOrchestrator:
         logger.info("=" * 60)
 
         return result
+
+    @staticmethod
+    def _enforce_pair_and_inverse_mutex_guards(
+        exec_orders: List[Dict],
+        held_qty_by_ticker: Dict[str, int] = None,
+    ) -> List[Dict]:
+        """페어 트레이딩 양방향 동시 매수 원자성(Atomic Pair Guard) 및 동일지수 인버스 중복 매입 방지·병합 가드."""
+        _held_qty_by_ticker = held_qty_by_ticker or {}
+        # ── ★ [Atomic Pair Integrity Guard] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
+        _active_buy_tks = {
+            str(_eo.get('ticker', '')).strip().upper()
+            for _eo in exec_orders
+            if str(_eo.get('action', '')).lower() in ('buy', 'add_on') and int(_eo.get('quantity', 0) or 0) >= 1
+        }
+        _atomic_filtered = []
+        for _eo in exec_orders:
+            _partners = [p for p in (_eo.get('pair_partners') or []) if p]
+            if not _partners and _eo.get('pair_partner'):
+                _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
+            if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
+                # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
+                _active_partners = [
+                    p for p in _partners
+                    if p in _active_buy_tks
+                ]
+                if not _active_partners:
+                    logger.warning(
+                        f"  ⚖️ [Atomic Pair Guard] {_eo.get('ticker')}: 페어 파트너({','.join(_partners)}) 동시 매수 부재/절삭 감지 "
+                        f"→ 반쪽짜리 단독 레그 매수 기각"
+                    )
+                    continue
+            _atomic_filtered.append(_eo)
+        exec_orders = _atomic_filtered
+
+        # ── ★ [Same-Index Inverse Mutual Exclusion & Consolidation Guard] ──
+        # 동일 지수 기반 인버스(114800 1X)와 곱버스(252670 2X), 또는 US 인버스(SH/PSQ vs SQQQ)가 동시에 매입·보유되는 현상 원천 차단
+        _INVERSE_MUTEX_GROUPS = [
+            ('114800', '252670'),
+            ('SH', 'PSQ', 'SQQQ'),
+        ]
+        _active_sell_tks = {
+            str(_eo.get('ticker', '')).strip().upper()
+            for _eo in exec_orders
+            if str(_eo.get('action', '')).lower() == 'sell' and int(_eo.get('quantity', 0) or 0) >= 1
+        }
+        for _inv_grp in _INVERSE_MUTEX_GROUPS:
+            _grp_set = set(_inv_grp)
+            _grp_buys = [
+                _eo for _eo in exec_orders
+                if str(_eo.get('ticker', '')).strip().upper() in _grp_set
+                and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+            ]
+            if len(_grp_buys) > 1:
+                # 동일 배치 내 복수 인버스 매수 시 주문 금액(quantity * price)이 가장 큰 주력 1종목만 유지
+                _primary_inv = max(
+                    _grp_buys,
+                    key=lambda x: float(x.get('quantity', 0) or 0) * float(x.get('price', 0.0) or 0.0),
+                )
+                _keep_tk = str(_primary_inv.get('ticker', '')).strip().upper()
+                _dropped_tks = [str(x.get('ticker', '')).strip().upper() for x in _grp_buys if str(x.get('ticker', '')).strip().upper() != _keep_tk]
+                logger.warning(
+                    f"  🛡️ [Inverse Mutex Guard] 동일 지수 인버스 중복 매수 감지({_dropped_tks} vs {_keep_tk}) "
+                    f"→ 주력 종목({_keep_tk})만 유지하고 중복 인버스 매수 기각"
+                )
+                exec_orders = [
+                    _eo for _eo in exec_orders
+                    if not (
+                        str(_eo.get('ticker', '')).strip().upper() in _grp_set
+                        and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+                        and str(_eo.get('ticker', '')).strip().upper() != _keep_tk
+                    )
+                ]
+                _grp_buys = [_primary_inv]
+
+            if len(_grp_buys) == 1:
+                _buy_eo = _grp_buys[0]
+                _buy_tk = str(_buy_eo.get('ticker', '')).strip().upper()
+                _buy_notional = float(_buy_eo.get('quantity', 0) or 0) * float(_buy_eo.get('price', 0.0) or 0.0) * float(_buy_eo.get('_fx', 1.0) or 1.0)
+                _held_siblings = [
+                    _stk for _stk in _inv_grp
+                    if _stk != _buy_tk and _held_qty_by_ticker.get(_stk, 0) > 0 and _stk not in _active_sell_tks
+                ]
+                if _held_siblings:
+                    # 만약 고배율 주력 인버스(252670/SQQQ) 매수 진입 시 소액 1X 인버스(114800/SH/PSQ)가 기보유 중이면 1X 인버스 자동 교체 매도(Consolidation)
+                    if _buy_tk in ('252670', 'SQQQ'):
+                        for _stk in _held_siblings:
+                            _s_qty = int(_held_qty_by_ticker.get(_stk, 0) or 0)
+                            if _s_qty > 0:
+                                logger.warning(
+                                    f"  🔄 [Inverse Consolidation] 주력 곱버스({_buy_tk}) 진입에 따라 기보유 중복 인버스({_stk} {_s_qty}주) 자동 청산 병합"
+                                )
+                                exec_orders.insert(0, {
+                                    'stream': 'EXIT_MANAGER',
+                                    'stream_id': 'EXIT_MANAGER',
+                                    'contributing_streams': ['EXIT_MANAGER'],
+                                    'ticker': _stk,
+                                    'action': 'sell',
+                                    'direction': 'short',
+                                    'quantity': _s_qty,
+                                    'price': 0.0,
+                                    'execution_algo': 'market',
+                                    'strategy': 'inverse_consolidation_exit',
+                                    'reason': f"Inverse Consolidation: replacing {_stk} with {_buy_tk}",
+                                    'urgency': 'high',
+                                    'exit_reason': f"Inverse Consolidation into {_buy_tk}",
+                                })
+                                _active_sell_tks.add(_stk)
+                    else:
+                        # 이미 곱버스(252670/SQQQ) 또는 다른 인버스를 보유 중인데 1X 인버스(114800 등)가 추가로 들어오면 신규 매수 차단
+                        logger.warning(
+                            f"  🛡️ [Inverse Mutex Guard] 기보유 인버스({_held_siblings}) 존재 → 중복 인버스({_buy_tk}, ₩{_buy_notional:,.0f}) 신규 매수 차단"
+                        )
+                        exec_orders = [_eo for _eo in exec_orders if _eo is not _buy_eo]
+
+        return exec_orders
 
     def _detect_regime(self, market_data: Dict) -> str:
         """레짐 감지 — RegimeDetector 위임."""

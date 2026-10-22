@@ -249,10 +249,6 @@ class ResilientFetcher:
             if av_price and av_price > 0:
                 return av_price
 
-        # Tier 3 (Universal): yfinance FastInfo Hot-Failover
-        price = self._yf_current(ticker)
-        if price and price > 0:
-            return price
         if self._fmp_key:
             price = self._fmp_current(ticker)
             if price and price > 0:

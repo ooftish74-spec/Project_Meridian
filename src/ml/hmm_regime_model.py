@@ -5,10 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
-try:
-    import yfinance as yf
-except ImportError:
-    yf = None
+yf = None
 
 # hmmlearn이 없을 경우를 대비한 방어적 import
 try:

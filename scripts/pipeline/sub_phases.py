@@ -2537,7 +2537,7 @@ def _phase_call_auction_0830():
             _release_enabled = False
         if total_qty > 0 and not _release_enabled:
             logger.info("  ⏸️ [08:30 CallAuction] KODEX 200 자본 해제(리밸런싱 매도) 비활성 (call_auction.kodex_release_enabled=false)")
-        if total_qty > 0 and _release_enabled:
+        elif total_qty > 0 and _release_enabled:
             total_nav = float(getattr(cam.adapter.account, 'total_asset', getattr(cam.adapter.account, 'total_equity', 0.0)) or 0.0)
             kodex_price = float(kodex_pos.current_price or 0.0)
             if total_nav <= 0 or kodex_price <= 0:

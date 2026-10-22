@@ -347,6 +347,9 @@ class MarketDataBridge:
                 signal['kospi'] = fresh_kospi
                 signal['kospi_close'] = fresh_kospi
                 signal['kospi_ma20'] = float(kospi.get('ma20', fresh_kospi) or fresh_kospi)
+                if kospi.get('change_1d') is not None:
+                    signal['kospi_change_1d'] = float(kospi['change_1d'])
+                    signal['kospi_change_pct'] = float(kospi['change_1d'])
             elif cached_kospi and cached_kospi > 1000:
                 signal['kospi'] = cached_kospi
                 signal['kospi_close'] = float(self._cache.get('kospi_close', cached_kospi) or cached_kospi)
@@ -382,6 +385,9 @@ class MarketDataBridge:
                 signal['kospi'] = fresh_kospi
                 signal['kospi_close'] = fresh_kospi
                 signal['kospi_ma20'] = float(kospi.get('ma20', fresh_kospi) or fresh_kospi)
+                if kospi.get('change_1d') is not None:
+                    signal['kospi_change_1d'] = float(kospi['change_1d'])
+                    signal['kospi_change_pct'] = float(kospi['change_1d'])
             elif cached_kospi and cached_kospi > 1000:
                 signal['kospi'] = cached_kospi
                 signal['kospi_close'] = float(self._cache.get('kospi_close', cached_kospi) or cached_kospi)
@@ -630,24 +636,23 @@ class MarketDataBridge:
         except Exception as e:
             logger.debug(f"  [VIX Google Finance Fetch] 예외: {e}")
 
-        # 2. 2순위: Yahoo Direct Live REST API 실시간 수집 시도 (백업)
+        # 2. 2순위: CBOE Official CDN VIX 실시간/최근 수집 시도 (백업)
         try:
             import requests
             headers = {'User-Agent': 'Mozilla/5.0'}
-            url = 'https://query1.finance.yahoo.com/v8/finance/chart/^VIX?interval=1m&range=1d'
+            url = 'https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_VIX.json'
             resp = requests.get(url, headers=headers, timeout=5)
             if resp.status_code == 200:
-                data = resp.json()
-                chart = data.get('chart', {}).get('result', [{}])[0]
-                meta = chart.get('meta', {})
-                price = meta.get('regularMarketPrice')
-                if price and float(price) > 0:
-                    live_vix = float(price)
-                    self._field_quality['vix'] = 1.0
-                    logger.info(f"  ✅ [VIX Live Feed] Yahoo REST API 백업 VIX 채택: {live_vix:.2f}")
-                    return live_vix
+                rows_cboe = resp.json().get('data', [])
+                if rows_cboe:
+                    price = rows_cboe[-1].get('close')
+                    if price and float(price) > 0:
+                        live_vix = float(price)
+                        self._field_quality['vix'] = 1.0
+                        logger.info(f"  ✅ [VIX Live Feed] CBOE Official CDN 백업 VIX 채택: {live_vix:.2f}")
+                        return live_vix
         except Exception as e:
-            logger.debug(f"  [VIX Live Fetch] 예외: {e}")
+            logger.debug(f"  [VIX CBOE Fetch] 예외: {e}")
 
         # 2. 2순위: OIS JSON 최근 수집 피드 (overnight_macro & overnight_intel 둘 다 탐색)
         for ois_dir in [_DATA_DIR / 'raw' / 'overnight_macro', _DATA_DIR / 'raw' / 'overnight_intel']:
@@ -995,8 +1000,9 @@ class MarketDataBridge:
                         if len(cs) >= 20 and float(cs.iloc[-1]) > 1000 and float(cs.iloc[-1]) < 10000:
                             curr = float(cs.iloc[-1])
                             ma20 = float(cs.tail(20).mean())
+                            chg_1d = round((curr / float(cs.iloc[-2]) - 1.0) * 100.0, 4) if len(cs) >= 2 and float(cs.iloc[-2]) > 0 else None
                             self._field_quality['kospi'] = 0.9
-                            return {'close': curr, 'ma20': ma20}
+                            return {'close': curr, 'ma20': ma20, 'change_1d': chg_1d}
                 except Exception:
                     pass
 
@@ -1013,8 +1019,9 @@ class MarketDataBridge:
                     if len(cs) >= 1 and 1000.0 < float(cs.iloc[-1]) < 10000.0:
                         curr = float(cs.iloc[-1])
                         ma20 = float(cs.tail(20).mean()) if len(cs) >= 5 else curr
+                        chg_1d = round((curr / float(cs.iloc[-2]) - 1.0) * 100.0, 4) if len(cs) >= 2 and float(cs.iloc[-2]) > 0 else None
                         self._field_quality['kospi'] = 0.95
-                        return {'close': curr, 'ma20': ma20}
+                        return {'close': curr, 'ma20': ma20, 'change_1d': chg_1d}
         except Exception as e_kis:
             logger.debug(f"  KOSPI KIS Sector API 수집 실패: {e_kis}")
 
@@ -1027,8 +1034,9 @@ class MarketDataBridge:
                 if len(cs) >= 1 and 1000.0 < float(cs.iloc[-1]) < 10000.0:
                     curr = float(cs.iloc[-1])
                     ma20 = float(cs.tail(20).mean()) if len(cs) >= 5 else curr
+                    chg_1d = round((curr / float(cs.iloc[-2]) - 1.0) * 100.0, 4) if len(cs) >= 2 and float(cs.iloc[-2]) > 0 else None
                     self._field_quality['kospi'] = 0.9
-                    return {'close': curr, 'ma20': ma20}
+                    return {'close': curr, 'ma20': ma20, 'change_1d': chg_1d}
         except Exception as e_idx:
             logger.debug(f"  KOSPI pykrx_compat 지수 수집 실패: {e_idx}")
 

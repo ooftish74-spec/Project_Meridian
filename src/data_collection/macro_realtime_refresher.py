@@ -192,16 +192,17 @@ class MacroRealtimeRefresher:
 
                 if 'vix' not in updates:
                     try:
-                        import urllib.request, re
-                        req = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=1d&interval=1m', headers={'User-Agent': 'Mozilla/5.0'})
+                        import urllib.request
+                        req = urllib.request.Request('https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_VIX.json', headers={'User-Agent': 'Mozilla/5.0'})
                         with urllib.request.urlopen(req, timeout=5) as resp:
-                            body = resp.read().decode('utf-8')
-                        m = re.search(r'"regularMarketPrice":\s*([0-9.]+)', body)
-                        if m:
-                            updates['vix'] = round(float(m.group(1)), 2)
-                            logger.info(f"  🟢 Live VIX real-time tick updated via Yahoo Direct REST: {updates['vix']}")
+                            rows_cboe = json.loads(resp.read().decode('utf-8')).get('data', [])
+                        if rows_cboe:
+                            c_last = float(rows_cboe[-1].get('close', 0) or 0)
+                            if c_last > 0:
+                                updates['vix'] = round(c_last, 2)
+                                logger.info(f"  🟢 Live VIX updated via CBOE Official CDN: {updates['vix']}")
                     except Exception as _ve:
-                        logger.warning(f"  ⚠️ Live VIX fetch exception: {_ve}")
+                        logger.warning(f"  ⚠️ CBOE VIX fetch exception: {_ve}")
 
                 if 'vix' not in updates:
                     logger.warning(f"🚨 VIX 수집 실패! Intelligent Fallback 가동: {fallback_vix}")
@@ -211,14 +212,14 @@ class MacroRealtimeRefresher:
                 vix_hist_raw = self._cache.get('vix_history', [])
                 if not isinstance(vix_hist_raw, list):
                     vix_hist_raw = []
-                # vix_history가 20일 미만이면 Yahoo Direct / 로컬 cross_vix.parquet에서 1개월 일봉 히스토리 백필
+                # vix_history가 20일 미만이면 CBOE Official CDN / 로컬 cross_vix.parquet에서 1개월 일봉 히스토리 백필
                 if len(vix_hist_raw) < vix_window:
                     try:
                         import urllib.request
-                        req_vh = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?range=3mo&interval=1d', headers={'User-Agent': 'Mozilla/5.0'})
+                        req_vh = urllib.request.Request('https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/_VIX.json', headers={'User-Agent': 'Mozilla/5.0'})
                         with urllib.request.urlopen(req_vh, timeout=5) as r_vh:
-                            d_vh = json.loads(r_vh.read().decode('utf-8'))['chart']['result'][0]
-                            closes_vh = [round(float(c), 2) for c in d_vh.get('indicators', {}).get('quote', [{}])[0].get('close', []) if c is not None and 5.0 <= float(c) <= 120.0]
+                            rows_vh = json.loads(r_vh.read().decode('utf-8')).get('data', [])
+                            closes_vh = [round(float(it.get('close', 0) or 0), 2) for it in rows_vh[-252:] if 5.0 <= float(it.get('close', 0) or 0) <= 120.0]
                             if len(closes_vh) >= vix_window:
                                 vix_hist_raw = closes_vh[-252:]
                     except Exception:
@@ -608,18 +609,19 @@ class MacroRealtimeRefresher:
 
     @staticmethod
     def _fetch_usdkrw_naver() -> Optional[float]:
-        """Yahoo Direct REST 단건 호출로 USDKRW 우회 제공."""
+        """Naver FX 공식 REST API 단건 호출로 USDKRW 제공."""
         try:
-            import urllib.request, re
-            req = urllib.request.Request('https://query1.finance.yahoo.com/v8/finance/chart/KRW=X?range=1d&interval=1m', headers={'User-Agent': 'Mozilla/5.0'})
+            import urllib.request
+            req = urllib.request.Request('https://api.stock.naver.com/marketindex/exchange/FX_USDKRW/prices?page=1&pageSize=5', headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=5) as resp:
-                body = resp.read().decode('utf-8')
-            m = re.search(r'"regularMarketPrice":\s*([0-9.]+)', body)
-            if m:
-                return float(m.group(1))
+                items = json.loads(resp.read().decode('utf-8'))
+            if isinstance(items, list) and items:
+                val = float(str(items[0].get('closePrice', '0')).replace(',', '') or 0)
+                if val > 0:
+                    return val
         except Exception as e:
             import logging
-            logging.getLogger(__name__).debug(f"Yahoo Direct KRW=X fetch failed: {e}")
+            logging.getLogger(__name__).debug(f"Naver FX_USDKRW fetch failed: {e}")
         return None
 
     @staticmethod

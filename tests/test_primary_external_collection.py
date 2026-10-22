@@ -89,3 +89,92 @@ def test_motie_collector_public_news_fallback_without_naver_creds(monkeypatch):
     assert res["export_yoy_pct"] == pytest.approx(11.4, rel=1e-9)
     assert res["trade_balance_usd"] == pytest.approx(65.2, rel=1e-9)
     assert res["semi_yoy_pct"] == pytest.approx(28.5, rel=1e-9)
+
+
+def test_atomic_pair_guard_rejects_orphan_inverse_on_preheld_partner():
+    """S14 114800 buy must be rejected when its long partner 305720 is only pre-held and not bought in the same batch."""
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    orphan_orders = [
+        {
+            "stream": "S14_PAIR_ALPHA",
+            "stream_id": "S14_PAIR_ALPHA",
+            "ticker": "114800",
+            "pair_partner": "305720",
+            "pair_partners": ["305720"],
+            "action": "buy",
+            "direction": "long",
+            "quantity": 12,
+            "price": 1209.0,
+        }
+    ]
+    # Even though 305720 has 84 pre-held shares, 305720 is NOT in active buy orders -> 114800 must be dropped
+    filtered = StreamOrchestrator._enforce_pair_and_inverse_mutex_guards(
+        orphan_orders, held_qty_by_ticker={"305720": 84}
+    )
+    assert filtered == []
+
+    # When both 305720 and 114800 are actively bought in the same batch, both survive
+    paired_orders = [
+        {
+            "stream": "S14_PAIR_ALPHA",
+            "stream_id": "S14_PAIR_ALPHA",
+            "ticker": "305720",
+            "pair_partner": "114800",
+            "pair_partners": ["114800"],
+            "action": "buy",
+            "direction": "long",
+            "quantity": 2,
+            "price": 14160.0,
+        },
+        {
+            "stream": "S14_PAIR_ALPHA",
+            "stream_id": "S14_PAIR_ALPHA",
+            "ticker": "114800",
+            "pair_partner": "305720",
+            "pair_partners": ["305720"],
+            "action": "buy",
+            "direction": "long",
+            "quantity": 12,
+            "price": 1209.0,
+        },
+    ]
+    filtered_both = StreamOrchestrator._enforce_pair_and_inverse_mutex_guards(
+        paired_orders, held_qty_by_ticker={}
+    )
+    assert [o["ticker"] for o in filtered_both] == ["305720", "114800"]
+
+
+def test_inverse_mutex_and_consolidation_guard():
+    """114800 (1X Inverse) and 252670 (2X Inverse) must never be bought or held simultaneously."""
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    # Case 1: Both 114800 and 252670 in same batch -> only larger notional (252670) survives
+    batch = [
+        {"ticker": "114800", "action": "buy", "quantity": 12, "price": 1209.0},
+        {"ticker": "252670", "action": "buy", "quantity": 2571, "price": 105.0},
+    ]
+    res1 = StreamOrchestrator._enforce_pair_and_inverse_mutex_guards(batch, held_qty_by_ticker={})
+    assert len(res1) == 1
+    assert res1[0]["ticker"] == "252670"
+    assert res1[0]["quantity"] * res1[0]["price"] == pytest.approx(269955.0, rel=1e-9)
+
+    # Case 2: 114800 (12 shares) already held, 252670 buy arrives -> auto-inserts sell order for 114800 (12 shares)
+    batch2 = [{"ticker": "252670", "action": "buy", "quantity": 2571, "price": 105.0}]
+    res2 = StreamOrchestrator._enforce_pair_and_inverse_mutex_guards(
+        batch2, held_qty_by_ticker={"114800": 12}
+    )
+    assert len(res2) == 2
+    assert res2[0]["ticker"] == "114800"
+    assert res2[0]["action"] == "sell"
+    assert res2[0]["quantity"] == 12
+    assert res2[1]["ticker"] == "252670"
+    assert res2[1]["action"] == "buy"
+
+    # Case 3: 252670 already held, 114800 buy arrives -> 114800 buy is blocked
+    batch3 = [{"ticker": "114800", "action": "buy", "quantity": 12, "price": 1209.0}]
+    res3 = StreamOrchestrator._enforce_pair_and_inverse_mutex_guards(
+        batch3, held_qty_by_ticker={"252670": 2571}
+    )
+    assert res3 == []
+

@@ -1797,7 +1797,7 @@
     "SOXX",
     "XBI"
   ],
-  "universe.us_data_source": "yfinance",
+  "universe.us_data_source": "kis",
   "universe.us_fx_hedge": true,
   "slippage.base_bps": 3.0,
   "slippage.impact_coefficient": 10.0,
