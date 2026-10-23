@@ -111,13 +111,14 @@ def main():
 
             today_str = now.strftime('%Y-%m-%d')
             time_str = now.strftime('%H:%M:%S')
+            t_mins = now.hour * 60 + now.minute
 
             # 주말(토=5, 일=6) 및 KRX/US 영업일 판별
+            from src.utils.market_calendar import get_us_market_open_time, is_kr_ticker
             is_kr_trading = cal.is_trading_day(today_str)
             is_kr_session = is_kr_trading and ((now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30))
 
             # Lever 3: US 장 확장 관제 (월~금 야간 18:00~24:00 KST 및 화~토 새벽 정규장 종료 시각까지: EDT 05:00 / EST 06:00 KST)
-            from src.utils.market_calendar import get_us_market_open_time
             _us_open_h_chk, _ = get_us_market_open_time()
             _us_close_h_chk = 5 if _us_open_h_chk == 22 else 6
             is_us_evening = (now.weekday() in (0, 1, 2, 3, 4)) and (now.hour >= 18)
@@ -149,7 +150,7 @@ def main():
             # ── KRX Call Auction & Market Open Time Triggers (1회성 Latch: 5분 창 + 디스크 영속) ──
             # ★ Wave 0 O3: 기존 '분==30 AND 초<20'(20초 창) + 최대 30초 sleep → 약 1/3 확률 미발동, 재시작 시 래치 소실
             if is_kr_trading:
-                _hm = now.hour * 60 + now.minute
+                _hm = t_mins
                 if 8 * 60 + 30 <= _hm < 8 * 60 + 35:
                     if _latch_try_acquire(results_dir, today_str, 'call_auction_0830'):
                         logger.info(f"  🔔 [{time_str}] [08:30 CallAuction Trigger] KRX 장전 동시호가 매도 파이프라인 1회 자율 집행!")
@@ -163,6 +164,10 @@ def main():
                     if _latch_try_acquire(results_dir, today_str, 'market_open_0900'):
                         logger.info(f"  🚀 [{time_str}] [09:00 MarketOpen Trigger] 정규장 개장 직후 1회 집행")
                         run_pipeline(phase="market_open_0900")
+                if 9 * 60 <= _hm < 9 * 60 + 30:
+                    if _latch_try_acquire(results_dir, today_str, 'market_open_main_exec'):
+                        logger.info(f"  🚀 [{time_str}] [KRX Market Phase Trigger] 정규장 메인 포트폴리오 최적화 및 알파 오케스트레이터 1회 집행!")
+                        run_pipeline(phase="market")
 
             if is_kr_session:
                 logger.info(f"  ⚡ [{time_str}] KRX 실시간 장중 호가/수급 관제 중...")
@@ -174,7 +179,7 @@ def main():
                         _kr_held_cnt = 0
                         if _kp_check.exists():
                             _kp_c_data = json.loads(_kp_check.read_text(encoding='utf-8'))
-                            _kr_held_cnt = sum(1 for _tk_c, _hv_c in (_kp_c_data.get('holdings') or {}).items() if str(_tk_c).isdigit() and int(_hv_c.get('qty', 0) or 0) > 0)
+                            _kr_held_cnt = sum(1 for _tk_c, _hv_c in (_kp_c_data.get('holdings') or {}).items() if is_kr_ticker(str(_tk_c)) and int(_hv_c.get('qty', 0) or 0) > 0)
                         if _ls_file.exists() and _kr_held_cnt == 0:
                             with open(_ls_file, encoding='utf-8') as f:
                                 _ls_data = json.load(f)
@@ -377,7 +382,7 @@ def main():
                             _PARKING_TICKERS = {'459580', '423160', '449170', '430740', '357870', '357330', '130730', 'SHV', 'SGOV', 'BIL'} | get_quant_engine().get_cash_equivalent_tickers()
                             for _t, _h in _kp_data.get('holdings', {}).items():
                                 # KRX 장중에는 국내 종목만 손절/익절 감시 (미국 종목은 US 세션에서 감시, 파킹형 ETF 제외)
-                                if not str(_t).isdigit() or _t in _PARKING_TICKERS:
+                                if not is_kr_ticker(str(_t)) or _t in _PARKING_TICKERS:
                                     continue
                                 _cp = float(_h.get('current_price', 0.0))
                                 _avg = float(_h.get('avg_price', 0.0))
@@ -576,7 +581,7 @@ def main():
                                     _now_us_ts = time.time()
                                     main._exit_orders_in_flight = {
                                         _k: _ts for _k, _ts in main._exit_orders_in_flight.items()
-                                        if (_now_us_ts - _ts) < 300.0 and (_k in _held_us_tickers or _k.isdigit())
+                                        if (_now_us_ts - _ts) < 300.0 and (_k in _held_us_tickers or is_kr_ticker(str(_k)))
                                     }
                                     exit_orders = us_engine.update_trailing_stop(curr_prices)
                                     for eo in exit_orders:
