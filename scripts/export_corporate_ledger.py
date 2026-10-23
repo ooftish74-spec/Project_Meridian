@@ -222,6 +222,8 @@ def record_daily_nav_snapshot(target_date: Optional[str] = None) -> Dict[str, An
     nav_krw = round(reported_nav_krw if reported_nav_krw > 0 else computed_nav_krw, 0)
     unrealized_pnl_krw = round((kr_eq_krw - kr_cost_krw) + (us_eq_usd - us_cost_usd) * fx_rate, 0)
 
+    _reg_raw = kp.get("regime")
+    _reg_str = str(_reg_raw.get("regime", "unknown")) if isinstance(_reg_raw, dict) else str(_reg_raw or "unknown")
     snapshot_row = {
         "date": dt_str,
         "recorded_at": datetime.now().isoformat(),
@@ -235,7 +237,7 @@ def record_daily_nav_snapshot(target_date: Optional[str] = None) -> Dict[str, An
         "us_equity_in_krw": us_eq_in_krw,
         "unrealized_pnl_krw": unrealized_pnl_krw,
         "holdings_count": n_holdings,
-        "regime": str((kp.get("regime") or {}).get("regime", "unknown")),
+        "regime": _reg_str,
     }
 
     def _mutate_journal(state: dict) -> dict:
