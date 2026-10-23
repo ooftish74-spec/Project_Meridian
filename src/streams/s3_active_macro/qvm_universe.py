@@ -64,13 +64,27 @@ class QVMUniverse:
         if not _FINANCIALS_DIR.exists():
             logger.warning(f"  재무제표 디렉토리 없음: {_FINANCIALS_DIR}")
             return []
+        try:
+            from src.analysis.fundamental_filter import MeridianFundamentalFilter
+            _norm_fn = MeridianFundamentalFilter._normalize_fin_record
+        except Exception:
+            _norm_fn = None
         for fp in sorted(_FINANCIALS_DIR.glob('*.json')):
             ticker = fp.stem
             try:
                 data = json.loads(fp.read_text())
-                annual = data if isinstance(data, list) else data.get('annual', [])
-                if not annual:
+                raw_annual = data if isinstance(data, list) else data.get('annual', [])
+                if not raw_annual:
                     continue
+                if _norm_fn is not None:
+                    annual = []
+                    _p_rec = None
+                    for _r in raw_annual:
+                        _nr = _norm_fn(_r, _p_rec)
+                        annual.append(_nr)
+                        _p_rec = _nr
+                else:
+                    annual = raw_annual
                 latest = annual[-1]
                 prev = annual[-2] if len(annual) >= 2 else {}
                 equity = float(latest.get('total_equity', 0) or 0)

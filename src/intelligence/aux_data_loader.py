@@ -415,14 +415,36 @@ class AuxDataLoader:
                 logger.warning('[SILENT_BYPASS] Suppressed exception at aux_data_loader.py:454', exc_info=True)
 
     def _load_financials(self):
-        """data/financials_history/{ticker}.json 로드."""
+        """data/financials_history/{ticker}.json 로드 (회계 항등식 정규화 포함)."""
         fh_dir = _DATA_DIR / 'financials_history'
         if not fh_dir.exists():
             return
+        try:
+            from src.analysis.fundamental_filter import MeridianFundamentalFilter
+            _norm_fn = MeridianFundamentalFilter._normalize_fin_record
+        except Exception:
+            _norm_fn = None
         for fh_file in fh_dir.glob('*.json'):
             ticker = fh_file.stem
             try:
                 data = json.loads(fh_file.read_text())
+                if _norm_fn is not None and isinstance(data, dict) and isinstance(data.get('annual'), list):
+                    norm_annual = []
+                    prev_r = None
+                    for r in data['annual']:
+                        nr = _norm_fn(r, prev_r)
+                        norm_annual.append(nr)
+                        prev_r = nr
+                    data = dict(data)
+                    data['annual'] = norm_annual
+                    if norm_annual and isinstance(data.get('computed'), dict):
+                        comp = dict(data['computed'])
+                        if norm_annual[-1].get('debt_ratio') is not None:
+                            comp['debt_ratio_latest'] = norm_annual[-1]['debt_ratio']
+                        roes = [float(x['roe']) for x in norm_annual[-2:] if x.get('roe') is not None]
+                        if roes:
+                            comp['roe_2yr_avg'] = round(sum(roes) / len(roes), 4)
+                        data['computed'] = comp
                 self._financials[ticker] = data
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging

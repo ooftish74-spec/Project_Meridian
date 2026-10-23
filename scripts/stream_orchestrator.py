@@ -2488,8 +2488,9 @@ class StreamOrchestrator:
         # ── ★ [Atomic Pair Integrity Guard - Pass 1] 마켓 뉴트럴 페어(S14_PAIR_ALPHA 등) 반쪽 체결 방지 ──
         exec_orders = _run_atomic_pair_guard(exec_orders)
 
-        # ── ★ [Same-Index Inverse Mutual Exclusion & Consolidation Guard] ──
-        # 동일 지수 기반 인버스(114800 1X)와 곱버스(252670 2X), 또는 US 인버스(SH/PSQ vs SQQQ)가 동시에 매입·보유되는 현상 원천 차단
+        # ── ★ [Same-Index Inverse Mutual Exclusion, Flip-Flop Prevention & Consolidation Guard] ──
+        # 동일 지수 기반 인버스(114800 1X)와 곱버스(252670 2X), 또는 US 인버스(SH/PSQ vs SQQQ)가 동시에 매입·보유되거나
+        # 한쪽 인버스 청산(손절/트레일링)과 동시에 다른 배율 인버스를 매수하는 Flip-Flop 교차매매 원천 차단
         _INVERSE_MUTEX_GROUPS = [
             ('114800', '252670'),
             ('SH', 'PSQ', 'SQQQ'),
@@ -2499,8 +2500,38 @@ class StreamOrchestrator:
             for _eo in exec_orders
             if str(_eo.get('action', '')).lower() == 'sell' and int(_eo.get('quantity', 0) or 0) >= 1
         }
+        _non_consolidation_sell_tks = {
+            str(_eo.get('ticker', '')).strip().upper()
+            for _eo in exec_orders
+            if str(_eo.get('action', '')).lower() == 'sell'
+            and int(_eo.get('quantity', 0) or 0) >= 1
+            and str(_eo.get('strategy', '')) != 'inverse_consolidation_exit'
+        }
         for _inv_grp in _INVERSE_MUTEX_GROUPS:
             _grp_set = set(_inv_grp)
+            # 1) 동일 지수 인버스 그룹 내 한 종목이 청산(손절/트레일링/시그널)되는 배치에서 다른 배율 인버스 신규 매수(Flip-Flop) 금지
+            _exiting_in_grp = _grp_set.intersection(_non_consolidation_sell_tks)
+            if _exiting_in_grp:
+                _flip_buys = [
+                    str(_eo.get('ticker', '')).strip().upper()
+                    for _eo in exec_orders
+                    if str(_eo.get('ticker', '')).strip().upper() in _grp_set
+                    and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+                ]
+                if _flip_buys:
+                    logger.warning(
+                        f"  🛑 [Inverse Flip-Flop Guard] 동일 지수 인버스 청산({_exiting_in_grp}) 진행 중 "
+                        f"→ 교차 인버스 신규 매수({_flip_buys}) 즉시 차단 (거래비용 낭비 방지)"
+                    )
+                    exec_orders = [
+                        _eo for _eo in exec_orders
+                        if not (
+                            str(_eo.get('ticker', '')).strip().upper() in _grp_set
+                            and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+                        )
+                    ]
+                    continue
+
             _grp_buys = [
                 _eo for _eo in exec_orders
                 if str(_eo.get('ticker', '')).strip().upper() in _grp_set
@@ -2567,6 +2598,63 @@ class StreamOrchestrator:
                             f"  🛡️ [Inverse Mutex Guard] 기보유 인버스({_held_siblings}) 존재 → 중복 인버스({_buy_tk}, ₩{_buy_notional:,.0f}) 신규 매수 차단"
                         )
                         exec_orders = [_eo for _eo in exec_orders if _eo is not _buy_eo]
+
+        # ── ★ [Long-Index vs Short-Index ETF Mutual Exclusion Guard] ──
+        # 동일 시장 대표지수 롱 ETF(069500/122630, 229200/233740, SPY/QQQ/TQQQ, SOXX/SOXL)와
+        # 인버스/곱버스 ETF(114800/252670, 251340, SH/PSQ/SQQQ, SOXS)의 동시 매수 및 동시 보유(자전 상쇄) 원천 차단
+        _OPPOSITE_INDEX_GROUPS = [
+            ({'069500', '122630'}, {'114800', '252670'}),
+            ({'229200', '233740'}, {'251340'}),
+            ({'SPY', 'QQQ', 'TQQQ'}, {'SH', 'PSQ', 'SQQQ'}),
+            ({'SOXX', 'SOXL'}, {'SOXS'}),
+        ]
+        for _long_idx_set, _short_idx_set in _OPPOSITE_INDEX_GROUPS:
+            _l_buys = [
+                _eo for _eo in exec_orders
+                if str(_eo.get('ticker', '')).strip().upper() in _long_idx_set
+                and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+            ]
+            _s_buys = [
+                _eo for _eo in exec_orders
+                if str(_eo.get('ticker', '')).strip().upper() in _short_idx_set
+                and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+            ]
+            # 1) 동일 배치에서 롱 지수 ETF와 인버스 지수 ETF가 동시에 매수 요청된 경우: 주문 금액 우세 방향만 남기고 반대 방향 기각
+            if _l_buys and _s_buys:
+                _l_val = sum(float(x.get('quantity', 0) or 0) * float(x.get('price', 0.0) or 0) for x in _l_buys)
+                _s_val = sum(float(x.get('quantity', 0) or 0) * float(x.get('price', 0.0) or 0) for x in _s_buys)
+                if _s_val >= _l_val:
+                    logger.warning(
+                        f"  🛑 [Long/Inverse Index Mutex] 동일 지수 롱({_long_idx_set}) vs 인버스({_short_idx_set}) 동시 매수 충돌 "
+                        f"→ 인버스 우세로 롱 지수 매수 기각"
+                    )
+                    exec_orders = [_eo for _eo in exec_orders if _eo not in _l_buys]
+                    _l_buys = []
+                else:
+                    logger.warning(
+                        f"  🛑 [Long/Inverse Index Mutex] 동일 지수 롱({_long_idx_set}) vs 인버스({_short_idx_set}) 동시 매수 충돌 "
+                        f"→ 롱 우세로 인버스 매수 기각"
+                    )
+                    exec_orders = [_eo for _eo in exec_orders if _eo not in _s_buys]
+                    _s_buys = []
+
+            # 2) 기보유 중인 인버스 지수 ETF가(매도 예정 없이) 존재할 때 동일 지수 롱 ETF(069500/122630 등) 신규 매수 차단
+            _held_short_idx = [tk for tk in _short_idx_set if _held_qty_by_ticker.get(tk, 0) > 0 and tk not in _active_sell_tks]
+            if _held_short_idx and _l_buys:
+                logger.warning(
+                    f"  🛑 [Long/Inverse Index Mutex] 기보유 인버스({_held_short_idx}) 존재 → 반대 방향 지수 롱 ETF({[x.get('ticker') for x in _l_buys]}) 신규 매수 차단"
+                )
+                exec_orders = [_eo for _eo in exec_orders if _eo not in _l_buys]
+
+            # 3) 기보유 중인 지수 롱 ETF가(매도 예정 없이) 존재할 때 단독(비페어) 인버스 지수 ETF 신규 매수 시 롱 ETF 선청산 또는 인버스 차단
+            _held_long_idx = [tk for tk in _long_idx_set if _held_qty_by_ticker.get(tk, 0) > 0 and tk not in _active_sell_tks]
+            if _held_long_idx and _s_buys:
+                _unpaired_s_buys = [x for x in _s_buys if not (x.get('pair_partner') or x.get('pair_partners'))]
+                if _unpaired_s_buys:
+                    logger.warning(
+                        f"  🛑 [Long/Inverse Index Mutex] 기보유 지수 롱({_held_long_idx}) 존재 → 자전 상쇄 방지를 위해 단독 인버스({[x.get('ticker') for x in _unpaired_s_buys]}) 신규 매수 차단"
+                    )
+                    exec_orders = [_eo for _eo in exec_orders if _eo not in _unpaired_s_buys]
 
         # ── ★ [Atomic Pair Integrity Guard - Pass 2] 인버스 중복 기각 후 남은 반쪽 페어 레그 제거 ──
         exec_orders = _run_atomic_pair_guard(exec_orders)

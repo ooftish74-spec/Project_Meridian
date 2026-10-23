@@ -341,3 +341,84 @@ def test_volume_weighted_hwm_conservation_on_scale_in(tmp_path):
     assert h2["peak_pnl_pct"] == pytest.approx(expected_blended_peak_pnl, rel=1e-9)
     assert h2["peak_price"] == pytest.approx(expected_blended_peak_px, rel=1e-9)
     assert h2["trail_activated"] is False
+
+
+def test_fundamental_filter_accounting_identity_and_beneish_tata():
+    """Verify DART XBRL accounting identity restoration (TA = TL + EQ, Revenue = COGS + GP, CA >= Cash + Inv)
+    and Beneish (1999) 8-variable M-Score so 005930, 000660, 009150, 042700, 003230 pass passes_hard_filter().
+    """
+    import pytest
+    from src.analysis.fundamental_filter import MeridianFundamentalFilter
+
+    filt = MeridianFundamentalFilter()
+    # 1. SK Hynix (000660): High SGI (+46.8% YoY) with strong negative accruals (CFO > NI -> TATA < 0)
+    sc_hynix = filt._score_ticker("000660")
+    assert sc_hynix is not None
+    assert sc_hynix["m_score"] == pytest.approx(-2.3954, rel=1e-4)
+    assert filt.passes_hard_filter("000660", "crash") is True
+
+    # 2. Samsung Electronics (005930): DART revenue reconstructed from COGS + GP -> OPM ~13.07%, M-score < -1.78
+    sc_sec = filt._score_ticker("005930")
+    assert sc_sec is not None
+    assert 10.0 < sc_sec["opm"] < 20.0
+    assert sc_sec["m_score"] == pytest.approx(-2.6507, rel=1e-4)
+    assert filt.passes_hard_filter("005930", "crash") is True
+
+    # 3. Samsung Electro-Mechanics (009150): Missing current_assets reconstructed from cash + inventory -> O-Score P_default ~2.49%
+    sc_semco = filt._score_ticker("009150")
+    assert sc_semco is not None
+    assert sc_semco["p_default"] == pytest.approx(0.0249, rel=1e-3)
+    assert filt.passes_hard_filter("009150", "crash") is True
+
+    # 4. Hanmi Semiconductor (042700) & Samyang Foods (003230): TL = TA - EQ restoration fixes O-Score & Beneish
+    assert filt.passes_hard_filter("042700", "crash") is True
+    assert filt.passes_hard_filter("003230", "crash") is True
+
+
+def test_inverse_flip_flop_and_long_short_index_mutex():
+    """Verify:
+    1) LeverageJudge.check_etf_stops does NOT fire Trailing Stop when pnl_pct <= 0 (e.g. 252670 avg=116.56, curr=114, peak=119).
+    2) StreamOrchestrator._enforce_pair_and_inverse_mutex_guards blocks buying 114800 in the same batch where 252670 is exiting.
+    3) StreamOrchestrator._enforce_pair_and_inverse_mutex_guards blocks buying 069500/122630 when 114800/252670 is held.
+    """
+    from src.risk.leverage_judge import LeverageJudge
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    judge = LeverageJudge()
+    exits = judge.check_etf_stops(
+        {
+            "252670": {
+                "ticker": "252670",
+                "name": "KODEX 200선물인버스2X",
+                "quantity": 11456,
+                "avg_price": 116.5567,
+                "current_price": 114.0,
+                "peak_price": 119.0,
+                "entry_date": "2026-10-23",
+            }
+        },
+        {"date": "2026-10-23", "signal_cache": {"vix": 20.47, "vkospi": 24.5}},
+        regime="crash",
+    )
+    assert exits == []
+
+    orch = StreamOrchestrator.__new__(StreamOrchestrator)
+    # Flip-flop batch: selling 252670 while buying 114800 -> 114800 buy must be dropped
+    batch_flip = [
+        {"ticker": "252670", "action": "sell", "quantity": 11456, "price": 114.0, "strategy": "etf_dynamic_exit"},
+        {"ticker": "114800", "action": "buy", "quantity": 346, "price": 1265.0, "strategy": "s11_buy"},
+    ]
+    res_flip = orch._enforce_pair_and_inverse_mutex_guards(batch_flip, {"252670": 11456})
+    assert len(res_flip) == 1
+    assert res_flip[0]["ticker"] == "252670"
+    assert res_flip[0]["action"] == "sell"
+
+    # Opposite index mutex: holding 252670 blocks buying 069500 / 122630
+    batch_opp = [
+        {"ticker": "069500", "action": "buy", "quantity": 10, "price": 85000.0},
+        {"ticker": "122630", "action": "buy", "quantity": 20, "price": 18000.0},
+    ]
+    res_opp = orch._enforce_pair_and_inverse_mutex_guards(batch_opp, {"252670": 5000})
+    assert res_opp == []
+
+

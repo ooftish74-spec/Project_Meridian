@@ -361,7 +361,7 @@ class LeverageJudge:
             dynamic_hard_sl = min(dynamic_hard_sl, pget('leverage_judge.hard_sl_cap_pct', -2.0), -(2.0 + 2.0 + 1.0) * tick_pct)
             dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)
             dynamic_trail_stop = max(dynamic_trail_stop, pget('leverage_judge.trail_stop_floor_pct', 1.5), (2.0 + 2.0 + 1.0) * tick_pct)
-            trail_activate_min_pct = max((2.0 + 1.0) * tick_pct, 1.0 / 2.0)
+            trail_activate_min_pct = max((2.0 + 1.0) * tick_pct, pget('leverage_judge.trail_stop_floor_pct', 1.5) * 2.0)
 
             # 인버스 헤지는 bear/crash 레짐이거나 변동성 스트레스가 caution 분위수 이상일 때 보유기한 만료(Decay) 면제
             effective_max_hold = base_max_hold if (is_inverse_pos and (is_bear_or_crash or effective_vol_index >= dynamic_vix_caution)) else long_dynamic_max_hold
@@ -370,7 +370,7 @@ class LeverageJudge:
             if pnl_pct <= dynamic_hard_sl:
                 reason = f'[ETF Stop] Hard SL (ATR 기반): 손실률 {pnl_pct:.2f}% (<= {dynamic_hard_sl:.2f}%)'
                 urgency = 3
-            elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price and peak_pnl_pct >= trail_activate_min_pct:
+            elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price and peak_pnl_pct >= trail_activate_min_pct and pnl_pct > 0:
                 reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
             elif is_inverse_pos and (not is_bear_or_crash) and (effective_vol_index < dynamic_vix_caution) and (pnl_pct <= 0):

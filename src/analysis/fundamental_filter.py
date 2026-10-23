@@ -106,6 +106,100 @@ class MeridianFundamentalFilter:
             pass
         return None
 
+    @staticmethod
+    def _normalize_fin_record(rec: Optional[Dict], prev_rec: Optional[Dict] = None) -> Dict:
+        """DART XBRL 계정 매핑 누락 및 왜곡 보정 (회계 항등식 기반 복원).
+
+        1. 재무상태표 항등식: Total Assets ≡ Total Liabilities + Total Equity
+           - DART XBRL에서 '부채와자본총계'가 total_liabilities로 오매핑되어 TL == TA가 된 경우 TL = TA - EQ로 복원.
+           - total_equity 또는 total_liabilities가 누락된 경우 상호 차감 및 유동부채+장기차입금 합산으로 복원.
+        2. 손익계산서 항등식: Revenue ≡ COGS + Gross Profit (≥ Operating Income + SGA)
+           - DART XBRL에서 세부 항목이 revenue로 매핑되어 매출액 < 영업이익이 된 경우 복원.
+        3. 유동자산 항등식: Current Assets ≥ Cash + Short-Term Investments + Accounts Receivable + Inventory
+        """
+        if not rec or not isinstance(rec, dict):
+            return {}
+        out = dict(rec)
+        ta = float(out.get('total_assets', 0) or 0)
+        tl = float(out.get('total_liabilities', 0) or 0)
+        eq = float(out.get('total_equity', 0) or 0)
+        cl = float(out.get('current_liabilities', 0) or 0)
+        ltd = float(out.get('long_term_debt', 0) or 0)
+        re = float(out.get('retained_earnings', 0) or 0)
+
+        if ta > 0 and eq <= 0:
+            if 0 < tl < ta * 0.98:
+                eq = ta - tl
+            elif cl > 0 and (cl + ltd) < ta:
+                tl = cl + ltd
+                eq = ta - tl
+            elif re > 0:
+                eq = max(re, ta - cl - ltd)
+                tl = max(0.0, ta - eq)
+        if ta > 0 and 0 < eq < ta:
+            if tl <= 0 or abs(tl - ta) / ta < 0.02 or (tl + eq) > 1.3 * ta:
+                tl = max(0.0, ta - eq)
+        out['total_assets'] = ta
+        out['total_liabilities'] = tl
+        out['total_equity'] = eq
+        if eq > 0 and tl >= 0:
+            out['debt_ratio'] = round(tl / eq * 100.0, 2)
+
+        rev = float(out.get('revenue', 0) or 0)
+        cogs = float(out.get('cost_of_goods_sold', 0) or 0)
+        gp = float(out.get('gross_profit', 0) or 0)
+        op_inc = float(out.get('operating_income', 0) or 0)
+        sga = max(0.0, float(out.get('sga_expense', 0) or 0))
+        if gp <= 0 and op_inc != 0 and sga > 0:
+            gp = op_inc + sga
+            out['gross_profit'] = gp
+        if cogs > 0 and gp > 0 and rev < 0.8 * (cogs + gp):
+            rev = cogs + gp
+        elif gp > 0 and rev < gp:
+            rev = (cogs + gp) if cogs > 0 else gp
+        elif op_inc > 0 and rev <= op_inc * 1.05:
+            prev_r = float(out.get('prev_revenue') or (prev_rec.get('revenue') if isinstance(prev_rec, dict) else 0) or 0)
+            prev_op = float(out.get('prev_operating_income') or (prev_rec.get('operating_income') if isinstance(prev_rec, dict) else 0) or 0)
+            if prev_r > op_inc * 1.2 and prev_op > 0:
+                rev = prev_r * (op_inc / prev_op)
+            else:
+                rev = (op_inc + sga) if sga > 0 else (op_inc * 5.0)
+        out['revenue'] = rev
+
+        # prev_* 보조 필드도 동일 항등식으로 보정
+        prev_cogs = float(out.get('prev_cogs', 0) or 0)
+        prev_gp = float(out.get('prev_gross_profit', 0) or 0)
+        prev_rev = float(out.get('prev_revenue', 0) or 0)
+        if prev_cogs > 0 and prev_gp > 0 and prev_rev < 0.8 * (prev_cogs + prev_gp):
+            out['prev_revenue'] = prev_cogs + prev_gp
+
+        ni = float(out.get('net_income', 0) or 0)
+        if ni == 0 and op_inc != 0:
+            tax = float(out.get('income_tax', 0) or 0)
+            interest = float(out.get('interest_expense', 0) or 0)
+            ni = op_inc - interest - tax
+            out['net_income'] = ni
+        if eq > 0 and ni != 0:
+            out['roe'] = round(ni / eq * 100.0, 4)
+        if rev > 0 and op_inc != 0:
+            out['opm'] = round(op_inc / rev * 100.0, 4)
+
+        ca = float(out.get('current_assets', 0) or 0)
+        ppe = float(out.get('ppe_net', 0) or 0)
+        intang = float(out.get('intangible_assets', 0) or 0)
+        cash = float(out.get('cash', 0) or 0)
+        st_inv = float(out.get('short_term_investments', 0) or 0)
+        ar = float(out.get('accounts_receivable', 0) or 0)
+        inv = float(out.get('inventory', 0) or 0)
+        ca_components = cash + st_inv + ar + inv
+        if ca <= 0:
+            if ca_components > 0:
+                ca = ca_components
+            elif ta > 0 and ppe > 0 and ta > ppe + intang:
+                ca = ta - ppe - intang
+            out['current_assets'] = ca
+        return out
+
     def _score_ticker(self, ticker: str) -> Optional[Dict]:
         """종목의 QV/F-Score/재무건전성 통합 분석 (캐시 사용)."""
         if ticker in self._cache:
@@ -122,8 +216,8 @@ class MeridianFundamentalFilter:
                 has_any = True
         financials = self._load_financials(ticker)
         if financials and len(financials) >= 1:
-            latest = financials[-1]
-            prev = financials[-2] if len(financials) >= 2 else {}
+            prev = self._normalize_fin_record(financials[-2]) if len(financials) >= 2 else {}
+            latest = self._normalize_fin_record(financials[-1], prev)
             ta = float(latest.get('total_assets', 0) or 0)
             tl = float(latest.get('total_liabilities', 0) or 0)
             eq = float(latest.get('total_equity', 0) or 0)
@@ -162,6 +256,8 @@ class MeridianFundamentalFilter:
 
     def _compute_oscore(self, curr: Dict, prev: Dict) -> Optional[float]:
         """Ohlson O-Score 부도 확률 계산."""
+        prev = self._normalize_fin_record(prev) if prev else {}
+        curr = self._normalize_fin_record(curr, prev)
         ta = float(curr.get('total_assets', 0) or 0)
         if ta <= 0:
             return None
@@ -174,11 +270,16 @@ class MeridianFundamentalFilter:
         ni_p = float(prev.get('net_income', 0) or 0) if prev else 0.0
         SIZE = math.log(max(ta / 1000000000.0, 0.001))
         TLTA = tl / ta
-        WCTA = (ca - cl) / ta
-        CLCA = cl / max(ca, 1.0)
+        if ca > 0:
+            WCTA = (ca - cl) / ta
+            CLCA = min(cl / ca, 10.0)
+        else:
+            # 유동자산 XBRL 계정 미제공 시 분모 1.0원 왜곡 방지
+            WCTA = 0.0
+            CLCA = min(cl / max(ta * 0.5, 1.0), 5.0)
         OENEG = 1.0 if eq < 0 else 0.0
         NITA = ni / ta
-        FUTL = cfo / max(tl, 1.0)
+        FUTL = cfo / max(tl, 1.0) if tl > 0 else (1.0 if cfo > 0 else 0.0)
         INTWO = 1.0 if ni < 0 and ni_p < 0 else 0.0
         ni_sum = abs(ni) + abs(ni_p)
         CHIN = (ni - ni_p) / ni_sum if ni_sum > 0 else 0.0
@@ -190,36 +291,68 @@ class MeridianFundamentalFilter:
         return round(p_default, 4)
 
     def _compute_beneish(self, curr: Dict, prev: Dict) -> Optional[float]:
-        """Simplified Beneish M-Score (5-variable model)."""
+        """Beneish (1999) 8-Variable M-Score (exact coefficients with TATA, SGAI, LVGI, DEPI)."""
         try:
+            prev = self._normalize_fin_record(prev) if prev else {}
+            curr = self._normalize_fin_record(curr, prev)
             rev = float(curr.get('revenue', 0) or 0)
-            prev_rev = float(prev.get('revenue', prev.get('prev_revenue', 0)) or 0)
+            prev_rev = float(prev.get('revenue', curr.get('prev_revenue', 0)) or 0)
             ar = float(curr.get('accounts_receivable', 0) or 0)
-            prev_ar = float(prev.get('accounts_receivable', prev.get('prev_accounts_receivable', 0)) or 0)
+            prev_ar = float(prev.get('accounts_receivable', curr.get('prev_accounts_receivable', 0)) or 0)
             gp = float(curr.get('gross_profit', 0) or 0)
-            prev_gp = float(prev.get('gross_profit', prev.get('prev_gross_profit', 0)) or 0)
+            prev_gp = float(prev.get('gross_profit', curr.get('prev_gross_profit', 0)) or 0)
             ta = float(curr.get('total_assets', 0) or 0)
             prev_ta = float(prev.get('total_assets', 0) or 0)
+            tl = float(curr.get('total_liabilities', 0) or 0)
+            prev_tl = float(prev.get('total_liabilities', 0) or 0)
             sga = float(curr.get('sga_expense', 0) or 0)
-            prev_sga = float(prev.get('sga_expense', prev.get('prev_sga', 0)) or 0)
-            if prev_rev <= 0 or prev_ta <= 0 or ta <= 0:
+            prev_sga = float(prev.get('sga_expense', curr.get('prev_sga', 0)) or 0)
+            ni = float(curr.get('net_income', 0) or 0)
+            cfo = float(curr.get('cash_from_operations', 0) or 0)
+            if prev_rev <= 0 or prev_ta <= 0 or ta <= 0 or rev <= 0:
                 return None
-            dsri = ar / rev / max(prev_ar / prev_rev, 1e-10) if prev_ar > 0 and rev > 0 else 1.0
+            dsri_raw = (ar / rev) / max(prev_ar / prev_rev, 1e-10) if prev_ar > 0 and rev > 0 else 1.0
             gm = gp / rev if rev > 0 else 0
             prev_gm = prev_gp / prev_rev if prev_rev > 0 else 0
-            gmi = prev_gm / max(gm, 1e-10) if gm > 0 else 1.0
+            gmi_raw = prev_gm / max(gm, 1e-10) if gm > 0 and prev_gm > 0 else 1.0
             ca = float(curr.get('current_assets', 0) or 0)
             ppe = float(curr.get('ppe_net', 0) or 0)
-            prev_ca = float(prev.get('current_assets', prev.get('prev_current_assets', 0)) or 0)
-            prev_ppe = float(prev.get('ppe_net', prev.get('prev_ppe_net', 0)) or 0)
-            aqi_curr = 1 - (ca + ppe) / ta if ta > 0 else 0
-            aqi_prev = 1 - (prev_ca + prev_ppe) / prev_ta if prev_ta > 0 else 0
-            aqi = aqi_curr / max(aqi_prev, 1e-10) if aqi_prev > 0 else 1.0
-            sgi = rev / prev_rev
-            sgai_curr = sga / rev if rev > 0 else 0
-            sgai_prev = prev_sga / prev_rev if prev_rev > 0 else 0
-            sgai = sgai_curr / max(sgai_prev, 1e-10) if sgai_prev > 0 else 1.0
-            m_score = -4.84 + 0.92 * dsri + 0.528 * gmi + 0.404 * aqi + 0.892 * sgi + 0.115 * sgai
+            prev_ca = float(prev.get('current_assets', curr.get('prev_current_assets', 0)) or 0)
+            prev_ppe = float(prev.get('ppe_net', curr.get('prev_ppe_net', 0)) or 0)
+            aqi_curr = max(0.0, 1.0 - (ca + ppe) / ta) if ta > 0 and (ca + ppe) > 0 else 0.0
+            aqi_prev = max(0.0, 1.0 - (prev_ca + prev_ppe) / prev_ta) if prev_ta > 0 and (prev_ca + prev_ppe) > 0 else 0.0
+            # Laplace regularizer (+0.10) prevents near-zero non-current asset denominator explosion
+            aqi_raw = (aqi_curr + 0.10) / (aqi_prev + 0.10) if (aqi_curr > 0 or aqi_prev > 0) else 1.0
+            sgi_raw = rev / prev_rev
+            sgai_curr = sga / rev if rev > 0 and sga > 0 else 0
+            sgai_prev = prev_sga / prev_rev if prev_rev > 0 and prev_sga > 0 else 0
+            sgai_raw = sgai_curr / max(sgai_prev, 1e-10) if sgai_prev > 0 and sgai_curr > 0 else 1.0
+            lvg_curr = tl / ta if ta > 0 and tl > 0 else 0.0
+            lvg_prev = prev_tl / prev_ta if prev_ta > 0 and prev_tl > 0 else 0.0
+            lvgi_raw = (lvg_curr + 0.05) / (lvg_prev + 0.05) if (lvg_curr > 0 or lvg_prev > 0) else 1.0
+            depi = 1.0
+            # XBRL 계정 분류 변경에 따른 이상치 캡핑 (Winsorization)
+            dsri = max(0.3, min(2.5, dsri_raw))
+            gmi = max(0.3, min(2.5, gmi_raw))
+            aqi = max(0.3, min(2.5, aqi_raw))
+            sgi = max(0.3, min(2.5, sgi_raw))
+            sgai = max(0.3, min(2.5, sgai_raw))
+            lvgi = max(0.3, min(2.5, lvgi_raw))
+            # Beneish (1999) 핵심 발생액 변수: TATA = (Net Income - CFO) / Total Assets
+            tata = max(-0.5, min(0.5, (ni - cfo) / ta)) if (ni != 0 or cfo != 0) else 0.0
+            # Beneish (1999, Table 3) 8-Variable Model:
+            # M = -4.84 + 0.920*DSRI + 0.528*GMI + 0.404*AQI + 0.892*SGI + 0.115*DEPI - 0.172*SGAI + 4.679*TATA - 0.327*LVGI
+            m_score = (
+                -4.84
+                + 0.920 * dsri
+                + 0.528 * gmi
+                + 0.404 * aqi
+                + 0.892 * sgi
+                + 0.115 * depi
+                - 0.172 * sgai
+                + 4.679 * tata
+                - 0.327 * lvgi
+            )
             return round(m_score, 4)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
             import logging
@@ -229,6 +362,8 @@ class MeridianFundamentalFilter:
     def _compute_fscore(self, curr: Dict, prev: Dict) -> Optional[int]:
         """Simplified Piotroski F-Score (9-point)."""
         try:
+            prev = self._normalize_fin_record(prev) if prev else {}
+            curr = self._normalize_fin_record(curr, prev)
             ni = float(curr.get('net_income', 0) or 0)
             cfo = float(curr.get('cash_from_operations', 0) or 0)
             ta = float(curr.get('total_assets', 1) or 1)
@@ -238,12 +373,12 @@ class MeridianFundamentalFilter:
             prev_tl = float(prev.get('total_liabilities', 0) or 0) if prev else 0
             ca = float(curr.get('current_assets', 0) or 0)
             cl = float(curr.get('current_liabilities', 0) or 0)
-            prev_ca = float(prev.get('current_assets', prev.get('prev_current_assets', 0)) or 0) if prev else 0
-            prev_cl = float(prev.get('current_liabilities', prev.get('prev_current_liabilities', 0)) or 0) if prev else 0
+            prev_ca = float(prev.get('current_assets', curr.get('prev_current_assets', 0)) or 0) if prev else 0
+            prev_cl = float(prev.get('current_liabilities', curr.get('prev_current_liabilities', 0)) or 0) if prev else 0
             rev = float(curr.get('revenue', 0) or 0)
-            prev_rev = float(prev.get('revenue', prev.get('prev_revenue', 0)) or 0) if prev else 0
+            prev_rev = float(prev.get('revenue', curr.get('prev_revenue', 0)) or 0) if prev else 0
             gp = float(curr.get('gross_profit', 0) or 0)
-            prev_gp = float(prev.get('gross_profit', prev.get('prev_gross_profit', 0)) or 0) if prev else 0
+            prev_gp = float(prev.get('gross_profit', curr.get('prev_gross_profit', 0)) or 0) if prev else 0
             f = 0
             if ni > 0:
                 f += 1
