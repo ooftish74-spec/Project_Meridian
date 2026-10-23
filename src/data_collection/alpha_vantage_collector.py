@@ -318,7 +318,7 @@ def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.D
         if sym_up == 'HG=F':
             return collect_econ_indicator_daily_ohlcv('COPPER', interval='monthly')
         if sym_up == 'GC=F':
-            df_gld = collect_daily_ohlcv('GLD')
+            df_gld = collect_us_daily_ohlcv('GLD')
             if df_gld is not None and not df_gld.empty:
                 df_gc = df_gld.copy()
                 for col in ('open', 'high', 'low', 'close'):
@@ -326,7 +326,7 @@ def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.D
                         df_gc[col] = df_gc[col] * 10.85
                 return df_gc
         if sym_up == 'DX-Y.NYB':
-            df_uup = collect_daily_ohlcv('UUP')
+            df_uup = collect_us_daily_ohlcv('UUP')
             if df_uup is not None and not df_uup.empty:
                 df_dxy = df_uup.copy()
                 for col in ('open', 'high', 'low', 'close'):
@@ -334,7 +334,7 @@ def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.D
                         df_dxy[col] = df_dxy[col] * 3.60
                 return df_dxy
         if sym_up.isalpha() and len(sym_up) <= 5:
-            return collect_daily_ohlcv(sym_up)
+            return collect_us_daily_ohlcv(sym_up)
     except Exception as e:
         logger.debug(f"  [MultiVendorOHLCV] {symbol} 조회 스킵: {e}")
     return None

@@ -130,12 +130,6 @@ class UniversalExitEngine:
         
         # [Pure Dynamic Math] VIX 분위수 및 레짐 기반 확률과정 최적 정지(Optimal Stopping) 엔진 연동
         _dqe = get_quant_engine()
-        _vq = _dqe.get_vix_regime_quantiles((market_data or {}).get('signal_cache'))
-        _vix = float(
-            (market_data or {}).get('vix')
-            or (market_data or {}).get('signal_cache', {}).get('vix')
-            or _vq.get('baseline', 16.5)
-        )
         _sc_dict = (market_data or {}).get('signal_cache') or {}
         if not _sc_dict:
             try:
@@ -144,6 +138,11 @@ class UniversalExitEngine:
                     _sc_dict = json.loads(_sc_p.read_text(encoding='utf-8'))
             except Exception:
                 _sc_dict = {}
+        _vq = _dqe.get_vix_regime_quantiles(_sc_dict)
+        _vix_raw_uee = (market_data or {}).get('vix') or _sc_dict.get('vix')
+        if isinstance(_vix_raw_uee, dict):
+            _vix_raw_uee = _vix_raw_uee.get('current', _vix_raw_uee.get('close'))
+        _vix = float(_vix_raw_uee or _vq.get('baseline', 16.5))
         # ★ Wave 1 Track C: 리터럴 1334.3 제거. 환율은 청산 판단 자체가 아니라 Almgren-Chriss 주문규모 입력에만 쓰임 →
         #   미확보 시 해외 종목은 기존 하한(500,000원) 주문규모로 평가(충격비용 최소 → 장벽 가장 타이트 = 청산 우선).
         #   청산 경로 지연 방지를 위해 네트워크 조회는 추가하지 않음.
@@ -186,14 +185,17 @@ class UniversalExitEngine:
             atr_pct = self.compute_ticker_atr(ticker)
 
             # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
+            # compute_ticker_atr는 True Range(ATR = sqrt(8/π) * σ_d ≈ 1.2533 * σ_d)를 반환하므로,
+            # 가우시안 일간 표준편차(σ_d)를 입력받는 compute_optimal_stopping_params 호출 시 sqrt(8/π)로 정규화하여 중복 팽창 방지
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
+            _sigma_from_atr = atr_pct / math.sqrt(8.0 / math.pi)
             _opt = _dqe.compute_optimal_stopping_params(
                 ticker=str(ticker),
                 regime=regime,
                 vix_level=_vix,
                 order_value_krw=max(order_val_krw, 500_000.0),
                 price=price,
-                atr_pct=atr_pct,
+                atr_pct=_sigma_from_atr,
             )
             min_holding_required = _opt['min_holding_minutes']
             holding_minutes = float(pos.get('holding_minutes', pos.get('holding_time_min', min_holding_required * 2.0)))

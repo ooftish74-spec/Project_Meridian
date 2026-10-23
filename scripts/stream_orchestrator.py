@@ -52,6 +52,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 from config.dynamic_config import DynamicConfig
+from src.utils.market_calendar import is_kr_ticker as _is_kr_tk
 from src.streams.s0_beta.beta_stream import S0BetaStream
 from src.streams.s1_edge.etf_sniper_stream import S1ETFSniperStream
 from src.streams.s10_mega_trend.mega_trend_stream import S10MegaTrendStream
@@ -1523,11 +1524,6 @@ class StreamOrchestrator:
 
         # [Strict Domestic Isolation] 국내 파킹 자산 자동 매도는 오직 '국내 원화 주식(KR ticker)' 매수 주문이 있고,
         # 원화 현금이 실제 부족할 때만 허용! (해외/미국 주식 매수 주문으로 인한 국내 파킹 매도 100% 금지)
-        from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_ORCH
-        def _is_kr_tk(tk_val: str) -> bool:
-            s = str(tk_val or '').strip().upper()
-            return s.isdigit() or bool(_KR_RE_ORCH.match(s))
-
         kr_buy_amount = sum(
             float(o.get('amount_krw', o.get('amount', 0.0)) or 0.0)
             for o in orders
@@ -2099,7 +2095,13 @@ class StreamOrchestrator:
             if isinstance(_pv_h, dict):
                 _tk_h = str(_pv_h.get('ticker') or str(_pk_h).split(':')[-1])
                 _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0))
-        if not _held_qty_by_ticker and getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
+        import os as _os_s9
+        _in_pytest_s9 = bool(_os_s9.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_s9.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
+        if (
+            getattr(self, 'exec_mode', 'live') == 'live'
+            and (_ROOT / 'results' / 'kis_portfolio.json').exists()
+            and (not _in_pytest_s9 or not _held_qty_by_ticker)
+        ):
             try:
                 _kp_net = json.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
                 for _kt_n, _kh_n in (_kp_net.get('holdings') or {}).items():
@@ -2657,6 +2659,31 @@ class StreamOrchestrator:
 
         # ★ [Dynamic Budget Recycling + Capital Conservation Identity]
         # 시그널이 없는 스트림의 유휴 예산에서 이미 S_RECON 등으로 실계좌에 투입된 자본(_unattributed_held_krw)을 우선 차감하여 이중 계상 원천 차단
+        # 또한 장중(08:00~15:10 KST)에는 _kis_adapter.py의 Yield Harvester가 국내 파킹 ETF(459580 등) 일반 매수를 차단하므로,
+        # S5 등 파킹 ETF 매수 시그널이 유휴 예산 재분배와 [Final Gate S5] 원화 매수 한도를 잠식하지 않도록 사전 제외
+        import os as _os_gen
+        from datetime import time as _dtime_gen
+        _in_pytest_gen = bool(_os_gen.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_gen.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
+        _now_t_gen = datetime.now().time()
+        _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}
+        if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and (_dtime_gen(8, 0) <= _now_t_gen <= _dtime_gen(15, 10)):
+            for _p_sid in list(signals.keys()):
+                _before_p = len(signals[_p_sid] or [])
+                signals[_p_sid] = [
+                    _s for _s in (signals[_p_sid] or [])
+                    if not (
+                        isinstance(_s, dict)
+                        and str(_s.get('ticker', '')).split(':')[-1].strip() in _INTRADAY_PARKING_BLOCK_TKS
+                        and str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy')
+                        and not bool(_s.get('is_yield_sweep', False))
+                    )
+                ]
+                if len(signals[_p_sid]) < _before_p:
+                    logger.info(
+                        f"  🏦 [Intraday Parking Crowd-Out Guard] {_p_sid}: 장중({_now_t_gen.strftime('%H:%M')}) 파킹 ETF 매수 시그널 "
+                        f"{_before_p - len(signals[_p_sid])}건 사전 제외 → 예산을 활성 알파/인버스 스트림으로 100% 전환"
+                    )
+
         _idle_budget = 0.0
         _active_streams_with_buys = []
         _seen_canonical = set()
@@ -3470,6 +3497,28 @@ class StreamOrchestrator:
             orders = [o for o in orders if not (is_buy(o) and str(o.get('ticker', '')).strip() in _nogo_t)]
             if len(orders) != _before:
                 logger.warning(f"  🛑 [Final Gate] DATA_NOGO 종목 매수 {_before - len(orders)}건 제거: {sorted(_nogo_t)}")
+
+        # ★ 장중(08:00~15:10 KST) 파킹 ETF 일반 매수 주문이 Final Gate S5 현금 비례축소(s = avail/need) 모수를 부풀리지 않도록 사전 제외
+        import os as _os_fg
+        from datetime import time as _dtime_fg
+        _in_pytest_fg = bool(_os_fg.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_fg.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
+        _now_t_fg = datetime.now().time()
+        _FG_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}
+        if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (not _in_pytest_fg or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and (_dtime_fg(8, 0) <= _now_t_fg <= _dtime_fg(15, 10)):
+            _before_fg = len(orders)
+            orders = [
+                o for o in orders
+                if not (
+                    is_buy(o)
+                    and str(o.get('ticker', '')).strip() in _FG_PARKING_BLOCK_TKS
+                    and not bool(o.get('is_yield_sweep', False))
+                )
+            ]
+            if len(orders) < _before_fg:
+                logger.info(
+                    f"  🏦 [Final Gate Parking Filter] 장중({_now_t_fg.strftime('%H:%M')}) 파킹 ETF 일반 매수 "
+                    f"{_before_fg - len(orders)}건 제외 → 활성 알파 주문 비례축소 방지"
+                )
 
         from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_FG
         def _ccy(o):

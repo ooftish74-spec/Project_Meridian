@@ -440,7 +440,19 @@ def main():
                                     'entry_date': _entry_date,
                                     'market': 'KR'
                                 }
-                            _cur_regime = str(_kp_data.get('regime', 'caution') or 'caution')
+                            _cur_regime = str(_kp_data.get('regime', '') or '').strip().lower()
+                            if not _cur_regime:
+                                for _reg_f in (results_dir / 'current_regime.json', results_dir / 'pipeline_state.json'):
+                                    if _reg_f.exists():
+                                        try:
+                                            _reg_d = json.loads(_reg_f.read_text(encoding='utf-8'))
+                                            _cur_regime = str(_reg_d.get('regime') or _reg_d.get('kr_regime') or '').strip().lower()
+                                            if _cur_regime:
+                                                break
+                                        except Exception:
+                                            pass
+                            if not _cur_regime:
+                                _cur_regime = 'caution'
                             _exit_res = UniversalExitEngine().evaluate_all_positions(_exit_positions, regime=_cur_regime)
                             _raw_exit_orders = _exit_res.get('exit_orders', [])
                             _exit_orders = []

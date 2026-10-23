@@ -252,3 +252,56 @@ def test_realtime_data_bus_skips_krx_endpoints_for_us_tickers():
     assert bus.get_foreign_flow("NVDA") is None
     assert bus.get_institutional_flow("SOXS") is None
 
+
+def test_universal_exit_normalizes_true_range_atr_by_sqrt_8_over_pi():
+    """UniversalExitEngine must normalize True Range ATR by sqrt(8/pi) before computing optimal stopping barriers."""
+    import math
+    import numpy as np
+    import pytest
+    from src.risk.universal_exit_engine import UniversalExitEngine
+    from src.utils.dynamic_quant_engine import get_quant_engine
+
+    ue = UniversalExitEngine()
+    ue._atr_cache["305720"] = 0.0614911218724778
+    dqe = get_quant_engine()
+    sigma_from_atr = 0.0614911218724778 / math.sqrt(8.0 / math.pi)
+    expected_opt = dqe.compute_optimal_stopping_params(
+        ticker="305720",
+        regime="crash",
+        vix_level=20.47,
+        order_value_krw=1_139_880.0,
+        price=13570.0,
+        atr_pct=sigma_from_atr,
+    )
+    vq = dqe.get_vix_regime_quantiles()
+    v_base = max(vq["baseline"], 10.0)
+    kappa_v = math.sqrt(float(np.clip(20.47 / v_base, 0.65, 2.25)))
+    kappa_r = math.exp(-0.60)
+    c_rt = dqe.compute_roundtrip_friction_pct("305720", order_value_krw=1_139_880.0, price=13570.0)
+    closed_form_sl = round(-(c_rt + 1.95996 * (sigma_from_atr * 100.0) * kappa_v * kappa_r), 4)
+    assert expected_opt["hard_sl_limit_pct"] == pytest.approx(closed_form_sl, rel=1e-9)
+
+    res = ue.evaluate_all_positions(
+        {
+            "LIVE_SSOT:305720": {
+                "ticker": "305720",
+                "stream_id": "LIVE_SSOT",
+                "quantity": 84,
+                "entry_price": 14704.119,
+                "current_price": 13570.0,
+                "unrealized_pnl_pct": -7.71,
+                "peak_pnl_pct": -7.71,
+                "holding_minutes": 1440.0,
+                "market": "KR",
+            }
+        },
+        market_data={"vix": 20.47, "signal_cache": {"vix": 20.47}},
+        regime="crash",
+    )
+    assert len(res["exit_orders"]) == 1
+    assert res["exit_orders"][0]["ticker"] == "305720"
+    assert res["exit_orders"][0]["action"] == "sell"
+    assert res["exit_orders"][0]["quantity"] == 84
+
+
+
