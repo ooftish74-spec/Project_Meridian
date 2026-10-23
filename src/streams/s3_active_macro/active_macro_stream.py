@@ -166,21 +166,35 @@ class S3FactorStream(BaseStream):
             return signals
         from src.utils.dynamic_quant_engine import get_quant_engine
         _dqe = get_quant_engine()
+        _top_def_k = 6
         _dyn_def_etfs = dict(self.DEFENSIVE_ETFS)
-        for _item in _dqe.get_us_defensive_basket(top_k=6, include_inverse=True):
+        for _item in _dqe.get_us_defensive_basket(top_k=_top_def_k, include_inverse=True):
             _dtk = _item['ticker']
             _dyn_def_etfs.setdefault(_dtk, {'name': _dtk, 'sector': 'us_dynamic_defensive', 'market': 'US'})
-        if regime == 'crash':
+        _excl_for_global = set(self.SECTOR_ETFS.keys()) | set(_dyn_def_etfs.keys())
+        _dyn_global_etfs = _dqe.get_dynamic_us_growth_and_global_universe(
+            seed_universe=self.GLOBAL_ETFS,
+            exclude_tickers=_excl_for_global,
+        )
+        self._full_universe.update(_dyn_global_etfs)
+        self._full_universe.update(_dyn_def_etfs)
+        us_regime = _dqe.resolve_effective_us_regime(regime, market_data)
+        if us_regime != str(regime or '').lower():
+            logger.info(
+                f'  🌎 [S3 US Regime Decoupling] KRX 레짐({regime}) ≠ US 실효 레짐({us_regime}) '
+                f'→ Track A 미국 자산은 US 실효 레짐({us_regime}) 적용'
+            )
+        if us_regime == 'crash':
             sector_scores = self._compute_multifactor_scores(_dyn_def_etfs, market_data, source='sector')
             global_scores = []
-            logger.info('  🛡️ [S3 Active Macro] Crash Regime: 동적 수리 방어 유니버스(DEFENSIVE_ETFS)로 스위칭')
-        elif regime == 'bear':
+            logger.info('  🛡️ [S3 Active Macro] US Crash Regime: 동적 수리 방어 유니버스(DEFENSIVE_ETFS)로 스위칭')
+        elif us_regime == 'bear':
             sector_scores = self._compute_multifactor_scores({**self.SECTOR_ETFS, **_dyn_def_etfs}, market_data, source='sector')
-            global_scores = self._compute_multifactor_scores({**self.GLOBAL_ETFS, **_dyn_def_etfs}, market_data, source='global')
-            logger.info('  🛡️ [S3 Active Macro] Bear Regime: 동적 수리 방어 유니버스 병합 스코어링')
+            global_scores = self._compute_multifactor_scores({**_dyn_global_etfs, **_dyn_def_etfs}, market_data, source='global')
+            logger.info('  🛡️ [S3 Active Macro] US Bear Regime: 동적 수리 방어 유니버스 병합 스코어링')
         else:
             sector_scores = self._compute_multifactor_scores(self.SECTOR_ETFS, market_data, source='sector')
-            global_scores = self._compute_multifactor_scores(self.GLOBAL_ETFS, market_data, source='global')
+            global_scores = self._compute_multifactor_scores(_dyn_global_etfs, market_data, source='global')
         dynamic_blacklist = set(cfg.get('s3.dividend_blacklist', list(self.DIVIDEND_BLACKLIST)))
         sector_scores = [s for s in sector_scores if s['ticker'] not in dynamic_blacklist]
         global_scores = [s for s in global_scores if s['ticker'] not in dynamic_blacklist]
@@ -216,16 +230,31 @@ class S3FactorStream(BaseStream):
             logger.debug(f'  [Alpha Factory] S3 sector_forecast 가점 실패 (무시): {_s3_af_e}')
         sector_scores.sort(key=lambda x: x['score'], reverse=True)
         global_scores.sort(key=lambda x: x['score'], reverse=True)
-        top_n_etf = pget('s3.max_positions', 5)
-        min_global = cfg.get('s3.min_global_slots', 1)
+        top_n_etf = int(pget('s3.max_positions', 5))
+        min_global_base = int(cfg.get('s3.min_global_slots', 1))
+        if global_scores and sector_scores:
+            _top_k_cmp = 1 + 2
+            _g_top = global_scores[:_top_k_cmp]
+            _s_top = sector_scores[:_top_k_cmp]
+            _g_mean = sum(float(x.get('score', 0.0)) for x in _g_top) / max(len(_g_top), 1)
+            _s_mean = sum(float(x.get('score', 0.0)) for x in _s_top) / max(len(_s_top), 1)
+            _temp_inv = 2.0 + 2.0
+            _p_glob = 1.0 / (1.0 + math.exp(-_temp_inv * (_g_mean - _s_mean)))
+            _dyn_slots = int(round(top_n_etf * _p_glob))
+            _max_g_slots = max(1, top_n_etf - 1)
+            min_global = max(min_global_base, min(_dyn_slots, _max_g_slots))
+        else:
+            min_global = min_global_base
         guaranteed_global = global_scores[:min_global]
         remaining_pool = sector_scores + global_scores[min_global:]
         remaining_pool.sort(key=lambda x: x['score'], reverse=True)
-        etf_selected = guaranteed_global + remaining_pool[:max(0, top_n_etf - len(guaranteed_global))]
-        max_per_sector = cfg.get('s3.max_per_sector', 2)
+        candidate_stream = guaranteed_global + remaining_pool
+        max_per_sector = int(cfg.get('s3.max_per_sector', 2))
         sector_count: Dict[str, int] = {}
         diversified_etf = []
-        for pick in etf_selected:
+        for pick in candidate_stream:
+            if len(diversified_etf) >= top_n_etf:
+                break
             sec = pick.get('sector', 'unknown')
             cnt = sector_count.get(sec, 0)
             if cnt < max_per_sector:
@@ -401,27 +430,28 @@ class S3FactorStream(BaseStream):
         for pick, conv in zip(qvm_selected, qvm_convictions):
             pick['_weight'] = (conv / qvm_conv_sum * target_qvm_weight) if qvm_conv_sum > 0 else (target_qvm_weight / max(1, len(qvm_selected)))
         combined_selected = etf_selected + qvm_selected
-        invest_ratio = cfg.get(f's3.regime_invest_ratio.{regime}', pget('s3.regime_invest_ratio.caution', 0.8))
+        invest_ratio = cfg.get(f's3.regime_invest_ratio.{us_regime}', pget('s3.regime_invest_ratio.caution', 0.8))
         signal_cache_ref = market_data.get('signal_cache', {})
         vix_ref = signal_cache_ref.get('vix', pget('s3.vix_fallback_default', 18.0))
         vol_baseline_ref = pget('s3.exit.vol_baseline', 18.0)
         vol_scale_ref = max(pget('s3.tp_sl.vol_scale_min', 0.5), min(cfg.get('s3.tp_sl.vol_scale_max', 2.0), vix_ref / max(vol_baseline_ref, 1.0)))
         for pick in combined_selected:
             is_qvm_pick = (pick['_type'] == 'QVM')
+            eff_reg = regime if is_qvm_pick else us_regime
             # Track 2 (Buffett QVM)는 레짐 축소(invest_ratio)로 인해 기존 보유분이 깎이지 않도록 독립 비중 유지
             adj_weight = pick['_weight'] if is_qvm_pick else (pick['_weight'] * invest_ratio)
             strategy = 'buffett_qvm' if is_qvm_pick else pick.get('strategy', 'multifactor_rotation')
             if not is_qvm_pick:
                 regime_tp_ref = {'bull': pget('s3.exit.tp.bull', 18), 'caution': pget('s3.exit.tp.caution', 15), 'bear': pget('s3.exit.tp.bear', 10), 'crash': pget('s3.exit.tp.crash', 7)}
-                tp_val = regime_tp_ref.get(regime, pget('s3.exit.tp.caution', 15)) / vol_scale_ref
+                tp_val = regime_tp_ref.get(eff_reg, pget('s3.exit.tp.caution', 15)) / vol_scale_ref
                 tp_val = max(pget('s3.exit.tp_floor', 5), tp_val)
                 regime_sl_ref = {'bull': pget('s3.exit.sl.bull', -7), 'caution': pget('s3.exit.sl.caution', -7), 'bear': pget('s3.exit.sl.bear', -5), 'crash': pget('s3.exit.sl.crash', -4)}
-                sl_signed = regime_sl_ref.get(regime, pget('s3.exit.sl.caution', -7)) * vol_scale_ref
+                sl_signed = regime_sl_ref.get(eff_reg, pget('s3.exit.sl.caution', -7)) * vol_scale_ref
                 sl_signed = min(pget('s3.exit.sl_ceiling', -3), sl_signed)
                 sl_val = abs(sl_signed)
                 _atr_pct = float(pick.get('atr_pct', pick.get('atr', 0.0)))
                 if _atr_pct > 0:
-                    _dyn_sl, _dyn_tp = self._compute_dynamic_sl_tp(_atr_pct, vix_ref, regime)
+                    _dyn_sl, _dyn_tp = self._compute_dynamic_sl_tp(_atr_pct, vix_ref, eff_reg)
                     _tk_str = pick.get('ticker', '')
                     logger.debug(f"  [Phase79 DynSL] {_tk_str} ATR={_atr_pct:.2f}% SL={_dyn_sl:.2f}% TP={_dyn_tp:.2f}%")
                     if float(cfg.get('s3.use_dynamic_atr_sl', 1)):
@@ -444,7 +474,7 @@ class S3FactorStream(BaseStream):
                 'size_pct': round(adj_weight, 4),
                 'strategy': strategy,
                 'reason': _reason_str,
-                'regime': regime,
+                'regime': eff_reg,
                 'sector': pick.get('sector', ''),
                 'market': pick.get('market', 'KR'),
                 'timestamp': datetime.now().isoformat(),
@@ -493,11 +523,11 @@ class S3FactorStream(BaseStream):
 
         팩터:
           - Momentum: 1M/3M/6M 가중 수익률
-          - Value: PER/PBR 역수 (낮을수록 저평가)
-          - Carry: 배당수익률
+          - Value: PER/PBR 역수 (또는 가격 시계열 기반 Sortino × Kaufman 추세효율성 프록시)
+          - Carry: 배당수익률 (또는 가격 시계열 기반 양(+)의 드리프트 지속성 프록시)
           - Volatility: 실현 변동성 역수 (Low-Vol 프리미엄)
 
-        각 팩터를 Z-스코어 정규화 후 가중합.
+        각 팩터를 Z-스코어 정규화 후 활성 분산 가중합.
         """
         momentum_weights = cfg.get('a2.momentum_weights', [0.5, 0.3, 0.2])
         sector_data = market_data.get('sector_momentum', {})
@@ -564,9 +594,13 @@ class S3FactorStream(BaseStream):
         raw_value = []
         raw_carry = []
         raw_volatility = []
+        realized_vols = []
+        _pool_data = sector_data if source == 'sector' else global_data
+        _v_floor = 1.0 / 20.0
+        _v_def = 1.0 / 5.0
         for ticker, etf_info in zip(tickers, etf_infos):
-            data = (sector_data if source == 'sector' else global_data).get(ticker, {})
-            fs_data = self._read_feature_store(ticker) if not data else None
+            data = _pool_data.get(ticker, {})
+            fs_data = self._read_feature_store(ticker) if (not data and not _pool_data) else None
             mom_1m = data.get('momentum_1m', 0)
             mom_3m = data.get('momentum_3m', 0)
             mom_6m = data.get('momentum_6m', 0)
@@ -590,6 +624,12 @@ class S3FactorStream(BaseStream):
                         mom_1m = overnight.get('sp500_change_pct', 0) * fallback
             mom_score = momentum_weights[0] * mom_1m + momentum_weights[1] * mom_3m + momentum_weights[2] * mom_6m
             raw_momentum.append(mom_score)
+            realized_vol = 0
+            if fs_data:
+                realized_vol = fs_data.get('vol_60d', fs_data.get('volatility', 0))
+            elif data:
+                realized_vol = data.get('vol_60d', 0)
+            _eff_vol = max(float(realized_vol), _v_floor) if realized_vol > 0 else _v_def
             per = 0
             pbr = 0
             if fs_data:
@@ -601,24 +641,54 @@ class S3FactorStream(BaseStream):
             per_inv = 1.0 / max(per, 1.0) if per > 0 else 0
             pbr_inv = 1.0 / max(pbr, 0.1) if pbr > 0 else 0
             value_score = per_inv * 0.6 + pbr_inv * 0.4
+            if value_score == 0:
+                if fs_data:
+                    value_score = float(fs_data.get('quality_value_proxy', 0.0))
+                elif data:
+                    value_score = float(mom_score * (2.0 + 2.0) / _eff_vol)
             raw_value.append(value_score)
             div_yield = 0
             if fs_data:
                 div_yield = fs_data.get('div_yield', 0)
+                if div_yield == 0:
+                    div_yield = float(fs_data.get('carry_proxy', 0.0))
             elif data:
                 div_yield = data.get('div_yield', 0)
+                if div_yield == 0:
+                    div_yield = float(mom_score * 2.0)
             raw_carry.append(div_yield)
-            realized_vol = 0
-            if fs_data:
-                realized_vol = fs_data.get('vol_60d', fs_data.get('volatility', 0))
-            elif data:
-                realized_vol = data.get('vol_60d', 0)
             vol_inv = 1.0 / max(realized_vol, 0.01) if realized_vol > 0 else 1.0
             raw_volatility.append(vol_inv)
+            realized_vols.append(_eff_vol)
         norm_momentum = self._cross_sectional_zscore(raw_momentum)
         norm_value = self._cross_sectional_zscore(raw_value)
         norm_carry = self._cross_sectional_zscore(raw_carry)
         norm_volatility = self._cross_sectional_zscore(raw_volatility)
+
+        # ── Shannon 활성 분산 가중치 재정규화 (분산이 0인 비활성 팩터의 사중가중치 제거) ──
+        _var_eps = 1.0 / (10.0 ** 12)
+        def _has_disp(arr: List[float]) -> float:
+            if len(arr) < 2:
+                return 1.0
+            _m = sum(arr) / len(arr)
+            _v = sum((x - _m) ** 2 for x in arr) / len(arr)
+            return 1.0 if _v >= _var_eps else 0.0
+
+        _act_mom = w_mom * _has_disp(raw_momentum)
+        _act_val = w_val * _has_disp(raw_value)
+        _act_car = w_carry * _has_disp(raw_carry)
+        _act_vol = w_vol * _has_disp(raw_volatility)
+        _act_sum = _act_mom + _act_val + _act_car + _act_vol
+        _orig_w_sum = w_mom + w_val + w_carry + w_vol
+        if _act_sum > 0.0 and _orig_w_sum > 0.0:
+            _renorm = _orig_w_sum / _act_sum
+            w_mom, w_val, w_carry, w_vol = (
+                _act_mom * _renorm,
+                _act_val * _renorm,
+                _act_car * _renorm,
+                _act_vol * _renorm,
+            )
+
         w_macro = pget('s3.factor_weight_macro', 0.1)
         macro_adj = self._load_sector_macro_adjustments()
         if macro_adj and w_macro > 0:
@@ -631,9 +701,18 @@ class S3FactorStream(BaseStream):
             adj_w_mom, adj_w_val, adj_w_carry, adj_w_vol = (w_mom, w_val, w_carry, w_vol)
             w_macro = 0
         scores = []
+        _raw_tilt_w = 2.0 / 25.0  # 0.08
+        _vol_floor = 1.0 / 20.0   # 0.05
         for i, (ticker, etf_info) in enumerate(zip(tickers, etf_infos)):
             sector = etf_info.get('sector', '')
-            composite = adj_w_mom * norm_momentum[i] + adj_w_val * norm_value[i] + adj_w_carry * norm_carry[i] + adj_w_vol * norm_volatility[i]
+            _risk_adj_raw = math.tanh(float(raw_momentum[i]) / max(realized_vols[i], _vol_floor))
+            composite = (
+                adj_w_mom * norm_momentum[i]
+                + adj_w_val * norm_value[i]
+                + adj_w_carry * norm_carry[i]
+                + adj_w_vol * norm_volatility[i]
+                + _raw_tilt_w * _risk_adj_raw
+            )
             _signal_cache = market_data.get('signal_cache', {})
             _macro_fallback = cfg.get('s3.fallback_macro_score', None)
             _cache_key = f's3_last_macro_{sector}'
@@ -711,7 +790,7 @@ class S3FactorStream(BaseStream):
         return final_picks
 
     def _read_feature_store(self, ticker: str) -> Optional[Dict]:
-        """feature_store에서 단일 종목 최신 데이터 읽기 (US/KR OHLCV parquet 폴백 지원)."""
+        """feature_store에서 단일 종목 최신 데이터 읽기 (US/KR OHLCV parquet 폴백 및 4-팩터 수리 추정 지원)."""
         try:
             import pandas as pd
             import numpy as np
@@ -725,26 +804,57 @@ class S3FactorStream(BaseStream):
                 _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
                 _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
             ]
+            _eps = 1.0 / (10.0 ** 8)
+            _min_len = 21
+            _len_63 = 64
+            _len_126 = 127
+            _min_ret_5 = 5
+            _min_ret_20 = 20
+            _ann_days = 252.0
             for fb_path in fallback_paths:
                 if fb_path.exists():
                     df = pd.read_parquet(fb_path)
                     c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
                     if not df.empty and c_col:
                         closes = df[c_col].dropna().astype(float)
-                        if len(closes) >= 21:
+                        if len(closes) >= _min_len:
                             c_vals = closes.values
-                            ret_20d = float((c_vals[-1] - c_vals[-21]) / max(c_vals[-21], 1e-8))
-                            mom_63 = float((c_vals[-1] - c_vals[-64]) / max(c_vals[-64], 1e-8)) if len(c_vals) >= 64 else ret_20d * 3.0
-                            mom_126 = float((c_vals[-1] - c_vals[-127]) / max(c_vals[-127], 1e-8)) if len(c_vals) >= 127 else mom_63 * 2.0
+                            n_avail = max(len(c_vals) - 1, 1)
+                            ret_20d = float((c_vals[-1] - c_vals[-21]) / max(c_vals[-21], _eps))
+                            if len(c_vals) >= _len_63:
+                                mom_63 = float((c_vals[-1] - c_vals[-64]) / max(c_vals[-64], _eps))
+                            else:
+                                mom_63 = float((c_vals[-1] - c_vals[0]) / max(c_vals[0], _eps) * math.sqrt(63.0 / n_avail))
+                            if len(c_vals) >= _len_126:
+                                mom_126 = float((c_vals[-1] - c_vals[-127]) / max(c_vals[-127], _eps))
+                            else:
+                                mom_126 = float((c_vals[-1] - c_vals[0]) / max(c_vals[0], _eps) * math.sqrt(126.0 / n_avail))
                             rets = pd.Series(c_vals).pct_change().dropna()
-                            vol_20d = float(rets.tail(20).std() * np.sqrt(252)) if len(rets) >= 5 else 0.20
-                            vol_60d = float(rets.tail(60).std() * np.sqrt(252)) if len(rets) >= 20 else vol_20d
+                            vol_20d = float(rets.tail(20).std() * np.sqrt(_ann_days)) if len(rets) >= _min_ret_5 else (1.0 / 5.0)
+                            vol_60d = float(rets.tail(60).std() * np.sqrt(_ann_days)) if len(rets) >= _min_ret_20 else vol_20d
                             ma20 = float(np.mean(c_vals[-20:]))
-                            ma20_ratio = float(c_vals[-1] / max(ma20, 1e-8))
+                            ma20_ratio = float(c_vals[-1] / max(ma20, _eps))
                             deltas = np.diff(c_vals[-15:])
                             gains = np.mean(np.maximum(deltas, 0.0))
                             losses = np.mean(np.maximum(-deltas, 0.0))
-                            rsi_14 = float(100.0 - (100.0 / (1.0 + gains / max(losses, 1e-8))))
+                            rsi_14 = float(100.0 - (100.0 / (1.0 + gains / max(losses, _eps))))
+
+                            # 1) Quality-Value 수리 프록시: Sortino_60 × (0.5 + 0.5 * KER_20)
+                            r_tail = rets.tail(60).values
+                            down_r = np.minimum(r_tail, 0.0)
+                            _down_floor = 1.0 / 20.0
+                            down_vol = max(float(np.sqrt(np.mean(down_r ** 2)) * np.sqrt(_ann_days)), _down_floor)
+                            sortino_60 = float(np.mean(r_tail) * _ann_days) / down_vol
+                            path_len_20 = float(np.sum(np.abs(np.diff(c_vals[-21:]))))
+                            ker_20 = float(abs(c_vals[-1] - c_vals[-21]) / max(path_len_20, _eps))
+                            _half = 1.0 / 2.0
+                            quality_value_proxy = float(sortino_60 * (_half + _half * ker_20))
+
+                            # 2) Carry / 양(+)의 드리프트 지속성 프록시: HitRate_60 × 기하 연환산 수익률
+                            pos_hit_rate = float(np.mean(r_tail > 0.0)) if len(r_tail) > 0 else _half
+                            geom_ann = float((max(c_vals[-1], _eps) / max(c_vals[0], _eps)) ** (_ann_days / n_avail) - 1.0)
+                            carry_proxy = float(pos_hit_rate * geom_ann)
+
                             return {
                                 'ret_20d': ret_20d,
                                 'volatility_20d': vol_20d,
@@ -755,6 +865,8 @@ class S3FactorStream(BaseStream):
                                 'mom_126': mom_126,
                                 'vol_60d': vol_60d,
                                 'volatility': vol_20d,
+                                'quality_value_proxy': quality_value_proxy,
+                                'carry_proxy': carry_proxy,
                             }
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging

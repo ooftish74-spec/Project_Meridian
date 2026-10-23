@@ -166,3 +166,71 @@ def test_s3_track_c_3x_etf_intraday_reversal_veto():
     assert "SQQQ" not in tickers
 
 
+def test_s3_us_regime_decoupling_from_kr_crash():
+    from src.utils.dynamic_quant_engine import get_quant_engine
+
+    dqe = get_quant_engine()
+    vix_hist = [16.5, 17.0, 17.2, 16.8, 17.5, 18.0, 17.8, 17.1, 16.9, 17.4] * 3
+    # 1) KRX is in 'crash' (VKOSPI=31.35), but US market is 'neutral' (VIX=19.05, score=-0.1757)
+    eff_reg_neutral = dqe.resolve_effective_us_regime(
+        "crash",
+        market_data={
+            "signal_cache": {"vix": 19.05, "vkospi": 31.35, "vix_history": vix_hist},
+            "us_market_regime": {"regime": "neutral", "score": -0.1757, "raw": {"vix": 19.05}},
+        },
+    )
+    assert eff_reg_neutral == "caution"
+
+    # 2) US market is genuinely in 'crisis' (VIX=32.0, score=-0.75) -> resolves to 'crash'
+    eff_reg_crisis = dqe.resolve_effective_us_regime(
+        "caution",
+        market_data={
+            "signal_cache": {"vix": 32.0, "vix_history": vix_hist},
+            "us_market_regime": {"regime": "crisis", "score": -0.75, "raw": {"vix": 32.0}},
+        },
+    )
+    assert eff_reg_crisis == "crash"
+
+    # 3) US market is in 'bull' (VIX=15.5, score=+0.45) -> resolves to 'bull'
+    eff_reg_bull = dqe.resolve_effective_us_regime(
+        "bear",
+        market_data={
+            "signal_cache": {"vix": 15.5, "vix_history": vix_hist},
+            "us_market_regime": {"regime": "bull", "score": 0.45, "raw": {"vix": 15.5}},
+        },
+    )
+    assert eff_reg_bull == "bull"
+
+
+def test_s3_dynamic_us_tech_ai_universe_and_active_4factor_selection():
+    from src.streams.s3_active_macro.active_macro_stream import S3FactorStream
+
+    s3 = S3FactorStream()
+    assert "CRM" in s3.GLOBAL_ETFS
+    assert "AAPL" in s3.GLOBAL_ETFS
+    assert "MSFT" in s3.GLOBAL_ETFS
+    assert "GOOGL" in s3.GLOBAL_ETFS
+    assert "AVGO" in s3.GLOBAL_ETFS
+
+    vix_hist = [16.5, 17.0, 17.2, 16.8, 17.5, 18.0, 17.8, 17.1, 16.9, 17.4] * 3
+    m_data = {
+        "signal_cache": {"vix": 19.05, "vkospi": 31.35, "vix_history": vix_hist},
+        "us_market_regime": {"regime": "neutral", "score": -0.1757, "raw": {"vix": 19.05}},
+        "global_momentum": {
+            "CRM": {"momentum_1m": 0.053, "momentum_3m": 0.339, "momentum_6m": 0.45, "vol_60d": 0.28},
+            "AAPL": {"momentum_1m": 0.013, "momentum_3m": 0.118, "momentum_6m": 0.24, "vol_60d": 0.167},
+            "MSFT": {"momentum_1m": 0.008, "momentum_3m": 0.114, "momentum_6m": 0.22, "vol_60d": 0.197},
+            "TSLA": {"momentum_1m": 0.019, "momentum_3m": 0.218, "momentum_6m": 0.30, "vol_60d": 0.366},
+        },
+        "sector_momentum": {
+            "XLE": {"momentum_1m": 0.092, "momentum_3m": 0.168, "momentum_6m": 0.15, "vol_60d": 0.232},
+            "XLK": {"momentum_1m": -0.025, "momentum_3m": -0.010, "momentum_6m": 0.05, "vol_60d": 0.220},
+        },
+    }
+    sigs = s3.generate_signals(regime="crash", market_data=m_data)
+    s3_a_tickers = {s["ticker"] for s in sigs if s.get("stream_id") == "S3_A"}
+    # Despite KRX regime='crash', US effective regime is 'caution' so top US Tech/AI leaders (CRM, AAPL) are selected!
+    assert len(s3_a_tickers & {"CRM", "AAPL", "MSFT", "TSLA"}) >= 1
+    assert "CRM" in s3_a_tickers
+
+

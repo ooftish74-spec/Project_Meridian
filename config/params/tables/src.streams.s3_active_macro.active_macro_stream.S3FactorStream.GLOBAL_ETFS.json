@@ -14,14 +14,94 @@
   "sector": "us_semiconductor",
   "market": "US"
  },
+ "AAPL": {
+  "name": "Apple Inc",
+  "sector": "us_tech",
+  "market": "US"
+ },
+ "MSFT": {
+  "name": "Microsoft Corporation",
+  "sector": "ai_infra",
+  "market": "US"
+ },
+ "GOOGL": {
+  "name": "Alphabet Inc",
+  "sector": "ai_infra",
+  "market": "US"
+ },
+ "AMZN": {
+  "name": "Amazon.com Inc",
+  "sector": "ai_infra",
+  "market": "US"
+ },
+ "META": {
+  "name": "Meta Platforms Inc",
+  "sector": "ai",
+  "market": "US"
+ },
+ "AVGO": {
+  "name": "Broadcom Inc",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "CRM": {
+  "name": "Salesforce Inc",
+  "sector": "ai",
+  "market": "US"
+ },
  "TSLA": {
   "name": "Tesla Inc",
   "sector": "us_auto",
   "market": "US"
  },
+ "AMD": {
+  "name": "Advanced Micro Devices Inc",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "ORCL": {
+  "name": "Oracle Corporation",
+  "sector": "ai_infra",
+  "market": "US"
+ },
+ "QCOM": {
+  "name": "Qualcomm Inc",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "MU": {
+  "name": "Micron Technology Inc",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "TSM": {
+  "name": "Taiwan Semiconductor Manufacturing",
+  "sector": "us_semiconductor",
+  "market": "US"
+ },
+ "NFLX": {
+  "name": "Netflix Inc",
+  "sector": "us_tech",
+  "market": "US"
+ },
  "TMUS": {
   "name": "T-Mobile US Inc",
   "sector": "us_telecom",
+  "market": "US"
+ },
+ "LLY": {
+  "name": "Eli Lilly and Company",
+  "sector": "us_healthcare",
+  "market": "US"
+ },
+ "V": {
+  "name": "Visa Inc",
+  "sector": "us_financials",
+  "market": "US"
+ },
+ "COST": {
+  "name": "Costco Wholesale Corporation",
+  "sector": "us_consumer",
   "market": "US"
  }
 }
