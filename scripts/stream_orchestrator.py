@@ -451,6 +451,8 @@ class StreamOrchestrator:
                             'peak_price': float(_hwm_orch.get('peak_price', h.get('peak_price', _cp_h)) or _cp_h),
                             'trail_activated': bool(_hwm_orch.get('trail_activated', h.get('trail_activated', False))),
                             'entry_date': _ed_orch or h.get('entry_date'),
+                            'stream_id': str(h.get('stream_id') or _hwm_orch.get('stream_id') or ''),
+                            'track': str(h.get('track') or _hwm_orch.get('track') or ''),
                             'market': h.get('market', 'US' if _is_us_h else 'KR')
                         }
                         if _fx_deg_h:
@@ -924,28 +926,39 @@ class StreamOrchestrator:
                     if _inv_ratio > 0 and not all_signals.get(_s12_canon) and not all_signals.get('S12'):
                         _s12_tk = getattr(self.s12, 'ticker_inv_2x', getattr(self.s0, 'TICKER_INVERSE_2X', ''))
                         if _s12_tk:
-                            _s12_tp_pct = float(pget('s12.default_tp_pct', 8.0))
-                            _s12_sl_pct = float(pget('s12.default_sl_pct', 3.5))
-                            _s12_conf = float(sc_result.get('composite_crash_prob', 1.0))
-                            _s12_ev = (_s12_tp_pct / 100.0) * max(_s12_conf, 1.0 / 2.0)
-                            all_signals[_s12_canon] = [{
-                                'stream_id': _s12_canon,
-                                'ticker': _s12_tk,
-                                'direction': 'long',
-                                'action': 'buy',
-                                'is_hedge': True,
-                                'size_pct': _inv_ratio,
-                                'confidence': _s12_conf,
-                                'sl_pct': _s12_sl_pct,
-                                'tp_pct': _s12_tp_pct,
-                                'expected_return': round(_s12_ev, 4),
-                                'expected_return_pct': round(_s12_ev * 100.0, 2),
-                                'strategy': 'master_scenario_inverse_squeeze',
-                                'reason': f"MasterScenario {sc_result.get('active_scenarios')} immediate inverse hedge",
-                            }]
-                            logger.warning(
-                                f"    🛡️ [Scenario Inverse] {_s12_canon} {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
-                            )
+                            _ok_s12_inv = True
+                            _veto_s12_inv = ''
+                            if hasattr(self, 's0') and hasattr(self.s0, '_evaluate_intraday_tape_and_gap_guard'):
+                                _ok_s12_inv, _veto_s12_inv = self.s0._evaluate_intraday_tape_and_gap_guard(
+                                    _s12_tk, is_inverse=True, market_data=market_data
+                                )
+                            if not _ok_s12_inv:
+                                logger.warning(
+                                    f"    🛑 [Scenario Inverse Tape/Gap Guard] {_s12_canon} {_s12_tk} 즉각 헤지 진입 차단: {_veto_s12_inv}"
+                                )
+                            else:
+                                _s12_tp_pct = float(pget('s12.default_tp_pct', 8.0))
+                                _s12_sl_pct = float(pget('s12.default_sl_pct', 3.5))
+                                _s12_conf = float(sc_result.get('composite_crash_prob', 1.0))
+                                _s12_ev = (_s12_tp_pct / 100.0) * max(_s12_conf, 1.0 / 2.0)
+                                all_signals[_s12_canon] = [{
+                                    'stream_id': _s12_canon,
+                                    'ticker': _s12_tk,
+                                    'direction': 'long',
+                                    'action': 'buy',
+                                    'is_hedge': True,
+                                    'size_pct': _inv_ratio,
+                                    'confidence': _s12_conf,
+                                    'sl_pct': _s12_sl_pct,
+                                    'tp_pct': _s12_tp_pct,
+                                    'expected_return': round(_s12_ev, 4),
+                                    'expected_return_pct': round(_s12_ev * 100.0, 2),
+                                    'strategy': 'master_scenario_inverse_squeeze',
+                                    'reason': f"MasterScenario {sc_result.get('active_scenarios')} immediate inverse hedge",
+                                }]
+                                logger.warning(
+                                    f"    🛡️ [Scenario Inverse] {_s12_canon} {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
+                                )
         except Exception as _sc_dir_e:
             logger.error(f"    ⚠️ [Step 4.1] 시나리오 디렉티브 적용 예외: {_sc_dir_e}", exc_info=True)
 
@@ -983,10 +996,13 @@ class StreamOrchestrator:
                 for _kt, _kh in (_kp_data.get('holdings') or {}).items():
                     if isinstance(_kh, dict) and float(_kh.get('qty', _kh.get('quantity', 0)) or 0) > 0:
                         _tk_up = str(_kt).upper()
-                        _sid = 'S3' if _tk_up in ('NVDA', 'QQQ', 'SOXX', 'XLK', '091160', 'MSFT', 'AAPL', 'TSLA') else ('S0' if _tk_up in ('069500', '229200') else 'S3')
+                        _sid = str(_kh.get('stream_id') or '').strip()
+                        if not _sid:
+                            _sid = 'S0' if _tk_up in ('069500', '229200', '252670', '114800') else 'S3'
                         _all_positions[f"{_sid}:{_tk_up}"] = {
                             'ticker': _tk_up,
                             'stream_id': _sid,
+                            'track': str(_kh.get('track') or ''),
                             'qty': _kh.get('qty', _kh.get('quantity', 0)),
                             'amount': float(_kh.get('qty', 0) or 0) * float(_kh.get('current_price', 0.0) or 0.0),
                             'current_price': float(_kh.get('current_price', 0.0) or 0.0),
@@ -1001,13 +1017,16 @@ class StreamOrchestrator:
                             _all_positions[str(_pk)] = _pv if isinstance(_pv, dict) else {'ticker': str(_pk).split(':')[-1], 'qty': getattr(_pv, 'quantity', 0)}
                         else:
                             _tk_up = str(getattr(_pv, 'ticker', _pk) or _pk).upper()
-                            _sid = 'S3' if _tk_up in ('NVDA', 'QQQ', 'SOXX', 'XLK', '091160', 'MSFT', 'AAPL', 'TSLA') else ('S0' if _tk_up in ('069500', '229200') else 'S3')
+                            _sid = str((_pv.get('stream_id') if isinstance(_pv, dict) else getattr(_pv, 'stream_id', '')) or '').strip()
+                            if not _sid:
+                                _sid = 'S0' if _tk_up in ('069500', '229200', '252670', '114800') else 'S3'
                             _qty_val = getattr(_pv, 'quantity', _pv.get('qty', 0) if isinstance(_pv, dict) else 0)
                             _amt_val = getattr(_pv, 'amount', _pv.get('amount', 0) if isinstance(_pv, dict) else 0)
                             _prc_val = getattr(_pv, 'current_price', _pv.get('current_price', 0.0) if isinstance(_pv, dict) else 0.0)
                             _p_dict = {
                                 'ticker': _tk_up,
                                 'stream_id': _sid,
+                                'track': str((_pv.get('track') if isinstance(_pv, dict) else getattr(_pv, 'track', '')) or ''),
                                 'qty': _qty_val,
                                 'amount': _amt_val,
                                 'current_price': _prc_val,
@@ -1444,10 +1463,15 @@ class StreamOrchestrator:
                 or _ord.get('strategy') in ('sys_tactical_hedge', 'tail_risk_hedge', 'beta_directional_short_v4')
             )
             
-            # [Phase 80] Short-term AlphaStreams (S1, S8) 및 HEDGE/EXIT는 필터 면제
-            _is_alpha_exempt = _stream in ('S1', 'S2', 'S10') and not _is_exit and not _is_hedge
+            # [Phase 80 + Track 2 Isolation] Short-term AlphaStreams (S1, S2, S10), Track 2 Buffett QVM (S3_B) 및 HEDGE/EXIT는 필터 면제
+            _is_track2_ord = (
+                _stream == 'S3_B'
+                or _ord.get('track') == 'TRACK_2_BUFFETT_QVM'
+                or _ord.get('strategy') in ('buffett_qvm', 'qvm_value')
+            )
+            _is_alpha_exempt = (_stream in ('S1', 'S2', 'S10', 'S3_B') or _is_track2_ord) and not _is_exit and not _is_hedge
 
-            # EXIT / HEDGE 는 항상 통과
+            # EXIT / HEDGE / Track 2 Buffett QVM 은 항상 통과
             if _is_exit or _is_hedge or _is_alpha_exempt:
                 _filtered_orders.append(_ord)
                 continue
@@ -1671,6 +1695,11 @@ class StreamOrchestrator:
                 _tk_str_b = str(o.get('ticker', '')).strip()
                 _is_jp = _tk_str_b.upper().endswith('.T')
                 _is_us = (not _is_kr_tk(_tk_str_b)) and (not _is_jp)
+                if not self._is_ticker_session_open_for_live_exit(_tk_str_b, market_data):
+                    logger.debug(f"    ⏭️ [Step 8.4 Session Gate] {_tk_str_b}: 현재 거래 세션 외 신규 매수 주문 스킵")
+                    if o.get('pair_id'):
+                        o['_pair_skipped_s84'] = True
+                    continue
                 if not _exec_price or _exec_price <= 0:
                     _raw_tk = str(o.get('ticker', '')).strip()
                     from src.utils.ticker_canonical import canonical_ticker
@@ -2009,7 +2038,9 @@ class StreamOrchestrator:
                                     _h_mins = 0.0
                             all_positions[f"LIVE_SSOT:{t}"] = {
                                 'ticker': t,
-                                'stream_id': 'LIVE_SSOT',
+                                'stream_id': h.get('stream_id') or hwm_data.get('stream_id') or 'LIVE_SSOT',
+                                'strategy': h.get('strategy') or hwm_data.get('strategy') or '',
+                                'track': h.get('track') or hwm_data.get('track') or '',
                                 'quantity': h.get('qty', 0),
                                 'entry_price': h.get('avg_price', 0.0),
                                 'current_price': curr_p,
@@ -2087,12 +2118,35 @@ class StreamOrchestrator:
                     continue
                 if _is_buy_o and _otk in same_day_exit_details:
                     _ex_info = same_day_exit_details[_otk]
+                    _prev_pnl = float(_ex_info.get('realized_pnl_pct', 0.0) or 0.0)
+                    _ex_reason_l = str(_ex_info.get('reason', '') or '').lower()
+                    _lev_inv_set = set(cfg.get('leverage_judge.etf_tickers', [])) | set(cfg.get('leverage_judge.inverse_tickers', []))
+                    for _attr_tk in (
+                        getattr(getattr(self, 's0', None), 'TICKER_INVERSE_2X', ''),
+                        getattr(getattr(self, 's0', None), 'TICKER_LEVERAGE_2X', ''),
+                        getattr(getattr(self, 's0', None), 'TICKER_INVERSE_TECH', ''),
+                        getattr(getattr(self, 's0', None), 'TICKER_INVERSE_KQ', ''),
+                        getattr(getattr(self, 's12', None), 'ticker_inv_2x', ''),
+                    ):
+                        if _attr_tk:
+                            _lev_inv_set.add(str(_attr_tk).upper())
+                    _is_stop_exit = _prev_pnl < 0 or any(
+                        kw in _ex_reason_l for kw in ('stop', 'sl', '손절', 'trailing', 'etf stop', 'etf_dynamic_exit')
+                    )
+                    if _is_stop_exit or _otk in _lev_inv_set:
+                        logger.warning(
+                            f"  🛑 [Same-Day Stop/Inverse Lockout] {_otk}: 당일 손절/레버리지·인버스 청산 이력 존재 "
+                            f"(PnL={_prev_pnl:+.2f}%, 사유={_ex_info.get('reason', '')}) ➔ 당일 재매수 원천 차단"
+                        )
+                        _vetoed_tickers.add(_otk)
+                        if _opid:
+                            _vetoed_pair_ids.add(_opid)
+                        continue
                     try:
                         _ex_dt = datetime.fromisoformat(str(_ex_info.get('exited_at', ''))).replace(tzinfo=None)
                         _elapsed_m = max(0.0, (datetime.now().replace(tzinfo=None) - _ex_dt).total_seconds() / 60.0)
                     except Exception:
                         _elapsed_m = 0.0
-                    _prev_pnl = float(_ex_info.get('realized_pnl_pct', 0.0) or 0.0)
                     _ord_val = float(o.get('amount_krw', 2_500_000.0) or 2_500_000.0)
                     _ord_px = float(o.get('price', 0.0) or 0.0)
                     _hurdle_pct = _dqe_step9.compute_reentry_hurdle_pct(
@@ -2137,14 +2191,30 @@ class StreamOrchestrator:
         all_candidate_orders = orders + dynamic_exit_orders
         min_order_krw = float(cfg.get('execution.min_order_value_krw', 500000.0) or 500000.0)
         _held_qty_by_ticker = {}
+        _track2_held_tickers = set()
         for _pk_h, _pv_h in (portfolio.get('positions', {}) if portfolio else {}).items():
             if isinstance(_pv_h, dict):
                 _tk_h = str(_pv_h.get('ticker') or str(_pk_h).split(':')[-1])
-                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0))
+                _q_h = int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0)
+                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), _q_h)
+                if _q_h > 0 and (
+                    _pv_h.get('stream_id') == 'S3_B'
+                    or _pv_h.get('track') == 'TRACK_2_BUFFETT_QVM'
+                    or _pv_h.get('strategy') in ('buffett_qvm', 'qvm_value')
+                    or str(_pk_h).startswith('S3_B:')
+                ):
+                    _track2_held_tickers.add(_tk_h)
         for _pk_h, _pv_h in (portfolio.get('holdings', {}) if portfolio else {}).items():
             if isinstance(_pv_h, dict):
                 _tk_h = str(_pv_h.get('ticker') or str(_pk_h).split(':')[-1])
-                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0))
+                _q_h = int(_pv_h.get('quantity', _pv_h.get('qty', 0)) or 0)
+                _held_qty_by_ticker[_tk_h] = max(_held_qty_by_ticker.get(_tk_h, 0), _q_h)
+                if _q_h > 0 and (
+                    _pv_h.get('stream_id') == 'S3_B'
+                    or _pv_h.get('track') == 'TRACK_2_BUFFETT_QVM'
+                    or _pv_h.get('strategy') in ('buffett_qvm', 'qvm_value')
+                ):
+                    _track2_held_tickers.add(_tk_h)
         import os as _os_s9
         _in_pytest_s9 = bool(_os_s9.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_s9.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
         if (
@@ -2156,7 +2226,27 @@ class StreamOrchestrator:
                 _kp_net = json.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
                 for _kt_n, _kh_n in (_kp_net.get('holdings') or {}).items():
                     if isinstance(_kh_n, dict):
-                        _held_qty_by_ticker[str(_kt_n)] = max(_held_qty_by_ticker.get(str(_kt_n), 0), int(_kh_n.get('qty', _kh_n.get('quantity', 0)) or 0))
+                        _q_kn = int(_kh_n.get('qty', _kh_n.get('quantity', 0)) or 0)
+                        _held_qty_by_ticker[str(_kt_n)] = max(_held_qty_by_ticker.get(str(_kt_n), 0), _q_kn)
+                        if _q_kn > 0 and (
+                            _kh_n.get('stream_id') == 'S3_B'
+                            or _kh_n.get('track') == 'TRACK_2_BUFFETT_QVM'
+                            or _kh_n.get('strategy') in ('buffett_qvm', 'qvm_value')
+                        ):
+                            _track2_held_tickers.add(str(_kt_n))
+            except Exception:
+                pass
+        if not _in_pytest_s9:
+            try:
+                from src.execution.position_ledger import PositionLedgerManager as _PLM_Net
+                for _tk_ln, _meta_ln in (_PLM_Net().load_ledger() or {}).items():
+                    if isinstance(_meta_ln, dict) and _held_qty_by_ticker.get(str(_tk_ln), 0) > 0:
+                        if (
+                            _meta_ln.get('stream_id') == 'S3_B'
+                            or _meta_ln.get('track') == 'TRACK_2_BUFFETT_QVM'
+                            or _meta_ln.get('strategy') in ('buffett_qvm', 'qvm_value')
+                        ):
+                            _track2_held_tickers.add(str(_tk_ln))
             except Exception:
                 pass
 
@@ -2230,6 +2320,16 @@ class StreamOrchestrator:
                 if _max_sell_q <= 0:
                     logger.warning(f"    🛑 [Cash-Account Short Guard] {ticker}: 미보유 종목(0주) 매도/공매도 차단 ({o.get('stream_id', o.get('stream', ''))})")
                     continue
+                if str(ticker) in _track2_held_tickers:
+                    _o_sid = str(o.get('stream_id', o.get('stream', '')))
+                    _o_trk = str(o.get('track', ''))
+                    _o_str = str(o.get('strategy', ''))
+                    if _o_sid != 'S3_B' and _o_trk != 'TRACK_2_BUFFETT_QVM' and _o_str not in ('buffett_qvm', 'qvm_value'):
+                        logger.warning(
+                            f"    🛡️ [Track 2 Non-Interference Guard] {ticker}: Track 2 (S3_B Buffett QVM) 장기 보유 종목에 대한 "
+                            f"Track 1({_o_sid}/{_o_str}) 매도 간섭 원천 차단!"
+                        )
+                        continue
 
             if ticker not in netted_orders_map:
                 netted_orders_map[ticker] = {
@@ -2323,9 +2423,18 @@ class StreamOrchestrator:
                 continue
 
             _all_dom_pairs = bool(dominant_orders) and all(bool(_do.get('pair_partner')) for _do in dominant_orders)
+            _dom_track = sample_order.get('track') or ('TRACK_2_BUFFETT_QVM' if dominant_stream_id == 'S3_B' else '')
+            _sell_pnl_pct = 0.0
+            if final_action == 'sell':
+                for _so_p in ndata['sell_orders']:
+                    _cand_p = float(_so_p.get('pnl_pct', _so_p.get('unrealized_pnl_pct', 0.0)) or 0.0)
+                    if _cand_p != 0.0:
+                        _sell_pnl_pct = _cand_p
+                        break
             exec_orders.append({
                 'stream': dominant_stream_id,
                 'stream_id': dominant_stream_id,
+                'track': _dom_track,
                 'contributing_streams': contributing_streams,
                 'ticker': ticker,
                 'pair_id': sample_order.get('pair_id', '') if _all_dom_pairs else '',
@@ -2345,6 +2454,8 @@ class StreamOrchestrator:
                 'reason': f"OrderNetting (Buy:{ndata['buy_qty']}, Sell:{ndata['sell_qty']} -> Net:{net_qty}, Streams:{','.join(contributing_streams)})",
                 'urgency': _sell_urg if final_action == 'sell' else 'normal',
                 'exit_reason': ' | '.join(str(_so.get('reason', '') or _so.get('exit_type', '')) for _so in ndata['sell_orders'])[:300] if final_action == 'sell' else '',
+                'pnl_pct': _sell_pnl_pct,
+                'unrealized_pnl_pct': _sell_pnl_pct,
                 '_min_lot_sweep': _is_min_lot,
                 '_fx': _net_fx,
             })
@@ -2861,6 +2972,8 @@ class StreamOrchestrator:
             'tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days',
             'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner',
             'is_hedge', 'is_market_neutral', 'beta', 'gk_expected_alpha', 'score_z',
+            'track', 'noise_stop_loss_exempt', 'margin_of_safety_pct', 'f_score',
+            'ohlson_prob', 'roic_wacc_spread_pct',
         ]
         
         # [Phase 46 BugFix] PositionSizer(EV/SNR 허들) 연결 누락 복구
@@ -3063,10 +3176,14 @@ class StreamOrchestrator:
                     budget,             # 스트림 총 예산 상한
                 )
 
-                # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어는 롱 노출 상한에서 면제,
-                # 또한 스트림 배분 단계에서 이미 롱 예산 비중이 max_exposure 이하로 축소된 경우 중복 감산 방지)
+                # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어, 그리고 Track 2 버핏 해자 복리 슬리브 S3_B는 롱 노출 상한 감산에서 면제)
                 _sig_is_hdg = bool(sig.get('is_hedge', False)) or (_t_clean in _inv_set_gen) or (_t_clean in _def_set_gen)
-                _sig_is_mn = bool(sig.get('is_market_neutral', False)) or (stream_id in ('S14', 'S14_PAIR_ALPHA', 'S7'))
+                _sig_is_mn = (
+                    bool(sig.get('is_market_neutral', False))
+                    or (stream_id in ('S14', 'S14_PAIR_ALPHA', 'S7'))
+                    or str(sig.get('stream_id', '')).upper() == 'S3_B'
+                    or str(sig.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM'
+                )
                 _raw_b_gen = sig.get('beta') if sig.get('beta') is not None else _qe_gen.get_asset_metrics(_t_clean).get('beta', 1.0)
                 _sig_beta = -1.0 if _t_clean in _inv_set_gen else float(_raw_b_gen if _raw_b_gen is not None else 1.0)
                 _long_budget_share = sum(
@@ -3179,7 +3296,7 @@ class StreamOrchestrator:
                 _cumulative_ordered_krw_by_ticker[_t_clean] = _cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0) + amount_krw
 
                 order = {
-                    'stream_id': stream_id,
+                    'stream_id': str(sig.get('stream_id') or stream_id),
                     'ticker': sig.get('ticker', ''),
                     'name': sig.get('name', sig.get('ticker', '')),
                     'direction': 'long',
@@ -3203,8 +3320,9 @@ class StreamOrchestrator:
 
         # 각 스트림별로 독립적으로 포지션 스케일링
         for sid in list(stream_orders.keys()):
-            _n = sum(1 for o in orders if o.get('stream_id') == sid)
-            _amt = sum(o['amount_krw'] for o in orders if o.get('stream_id') == sid)
+            _s_ords = stream_orders.get(sid, [])
+            _n = len(_s_ords)
+            _amt = sum(o['amount_krw'] for o in _s_ords)
             _bgt = stream_budgets.get(sid, 0)
             if _n > 0:
                 logger.info(
@@ -3243,6 +3361,9 @@ class StreamOrchestrator:
                         current_pnl_pct=curr_ret,
                         avg_price=float(h.get('avg_price', 0.0) or 0.0),
                         quantity=float(h.get('qty', h.get('quantity', 0)) or 0.0),
+                        stream_id=str(h.get('stream_id', '') or ''),
+                        strategy=str(h.get('strategy', '') or ''),
+                        track=str(h.get('track', '') or ''),
                     )
                     positions[t] = {
                         'ticker': t,
@@ -3257,7 +3378,10 @@ class StreamOrchestrator:
                         'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
                         'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
                         'trail_activated': bool(hwm_data.get('trail_activated', False)),
-                        'market': h.get('market', 'KR')
+                        'market': h.get('market', 'KR'),
+                        'stream_id': str(h.get('stream_id') or hwm_data.get('stream_id', '') or ''),
+                        'strategy': str(h.get('strategy') or hwm_data.get('strategy', '') or ''),
+                        'track': str(h.get('track') or hwm_data.get('track', '') or ''),
                     }
             else:
                 import json as _json_exit
@@ -3277,18 +3401,25 @@ class StreamOrchestrator:
                     for _pk_e, _pv_e in list(positions.items()):
                         if isinstance(_pv_e, dict):
                             _tk_e = str(_pv_e.get('ticker', _pk_e.split(':')[-1] if ':' in str(_pk_e) else _pk_e)).strip()
-                            if _tk_e and ('peak_pnl_pct' not in _pv_e or 'entry_date' not in _pv_e):
+                            if _tk_e:
                                 _hwm_e = _ledger_enrich.get_hwm(_tk_e)
-                                _cp_e = float(_pv_e.get('current_price', 0.0) or 0.0)
-                                _cr_e = float(_pv_e.get('unrealized_pnl_pct', _pv_e.get('pnl_pct', 0.0)) or 0.0)
-                                _hwm_pk_pnl = float(_hwm_e['peak_pnl_pct']) if _hwm_e.get('peak_pnl_pct') is not None else _cr_e
-                                _hwm_pk_px = float(_hwm_e['peak_price']) if (_hwm_e.get('peak_price') or 0.0) > 0 else _cp_e
-                                _pv_e.setdefault('peak_pnl_pct', max(_cr_e, _hwm_pk_pnl))
-                                _pv_e.setdefault('peak_price', max(_cp_e, _hwm_pk_px))
-                                _pv_e.setdefault('trail_activated', bool(_hwm_e.get('trail_activated', False)))
-                                _ed_e = _ledger_enrich.get_entry_date(_tk_e)
-                                if _ed_e:
-                                    _pv_e.setdefault('entry_date', _ed_e)
+                                if 'peak_pnl_pct' not in _pv_e or 'entry_date' not in _pv_e:
+                                    _cp_e = float(_pv_e.get('current_price', 0.0) or 0.0)
+                                    _cr_e = float(_pv_e.get('unrealized_pnl_pct', _pv_e.get('pnl_pct', 0.0)) or 0.0)
+                                    _hwm_pk_pnl = float(_hwm_e['peak_pnl_pct']) if _hwm_e.get('peak_pnl_pct') is not None else _cr_e
+                                    _hwm_pk_px = float(_hwm_e['peak_price']) if (_hwm_e.get('peak_price') or 0.0) > 0 else _cp_e
+                                    _pv_e.setdefault('peak_pnl_pct', max(_cr_e, _hwm_pk_pnl))
+                                    _pv_e.setdefault('peak_price', max(_cp_e, _hwm_pk_px))
+                                    _pv_e.setdefault('trail_activated', bool(_hwm_e.get('trail_activated', False)))
+                                    _ed_e = _ledger_enrich.get_entry_date(_tk_e)
+                                    if _ed_e:
+                                        _pv_e.setdefault('entry_date', _ed_e)
+                                if not _pv_e.get('stream_id') and _hwm_e.get('stream_id'):
+                                    _pv_e['stream_id'] = str(_hwm_e['stream_id'])
+                                if not _pv_e.get('strategy') and _hwm_e.get('strategy'):
+                                    _pv_e['strategy'] = str(_hwm_e['strategy'])
+                                if not _pv_e.get('track') and _hwm_e.get('track'):
+                                    _pv_e['track'] = str(_hwm_e['track'])
                 except Exception:
                     pass
 
@@ -3339,6 +3470,8 @@ class StreamOrchestrator:
                             stream_id = 'S0'
                         elif _tk_up in ('459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV'):
                             stream_id = 'S_YIELD'
+                        elif str(pos.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM' or str(pos.get('strategy', '')).lower() in ('buffett_qvm', 'qvm_value'):
+                            stream_id = 'S3_B'
                         else:
                             stream_id = 'S3'  # 기본값을 단기 S1이 아닌 중기 S3로 안전하게 지정
 
@@ -3351,12 +3484,17 @@ class StreamOrchestrator:
                 if not self._is_ticker_session_open_for_live_exit(_pos_ticker_up, market_data):
                     continue
 
-                # ── S10 등 스트림 명시적 Exit 시그널(direction='exit') 우선 점검 ──
+                # ── S10 및 S3_B 등 스트림 명시적 Exit 시그널(direction='exit') 우선 점검 ──
                 _explicit_exit_info = _explicit_exit_map.get(_pos_ticker_up)
 
-                # ── S_BETA (포트폴리오 헷지) 및 S10 (메가 트렌드)는 L4 Global Exit(개별 종목 TP/SL)에서 제외 (단, 명시적 exit 시그널은 허용) ──
-                if stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD') and not _explicit_exit_info:
-                    continue  # S10 및 S_YIELD는 단기 TP/SL 대상에서 제외
+                # ── S_BETA, S10, S_YIELD, 그리고 Track 2 버핏 해자 복리 슬리브(S3_B / TRACK_2_BUFFETT_QVM)는 단기 L4 TP/SL/Trail에서 완전 면제 (단, 명시적 4대 법칙 exit 시그널은 즉시 집행) ──
+                _is_track2_pos = (
+                    stream_id in ('S3_B', 'TRACK_2_BUFFETT_QVM')
+                    or str(pos.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM'
+                    or str(pos.get('strategy', '')).lower() in ('buffett_qvm', 'qvm_value')
+                )
+                if (stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD') or _is_track2_pos) and not _explicit_exit_info:
+                    continue  # Track 2 및 코어 슬리브는 단기 TP/SL 대상에서 제외
 
                 pnl_pct = pos.get('unrealized_pnl_pct', pos.get('pnl_pct', 0))
                 tp_pct = pos.get('tp_pct')
@@ -3456,9 +3594,9 @@ class StreamOrchestrator:
                     urgency = 3
 
                 # ── Time Limit (보유기간 만료 강제 청산) ──
-                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3, S4, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
+                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3, S3_B, S4, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
-                    if stream_id in ('S0', 'S3', 'S4', 'S10', 'S10_MEGA_TREND', 'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA'):
+                    if stream_id in ('S0', 'S3', 'S3_B', 'S4', 'S10', 'S10_MEGA_TREND', 'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA'):
                         logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 5일 단기 타임리밋 면제")
                     else:
                         reason = f"[L4 Exit] Time Limit: {days_held}일 보유 >= {_max_hold_days}일 제한"
@@ -3573,7 +3711,9 @@ class StreamOrchestrator:
             active_pos = [
                 p for p in pos_list
                 if isinstance(p, dict) and p.get('quantity', p.get('qty', 0)) > 0
-                and str(p.get('stream_id')) not in ('S1', 'S2', 'S5', 'S_BETA', 'BETA', 'S_YIELD')
+                and str(p.get('stream_id')) not in ('S1', 'S2', 'S3_B', 'S5', 'S_BETA', 'BETA', 'S_YIELD')
+                and str(p.get('track', '')).upper() != 'TRACK_2_BUFFETT_QVM'
+                and str(p.get('strategy', '')).lower() not in ('buffett_qvm', 'qvm_value')
                 and self._is_ticker_session_open_for_live_exit(p.get('ticker', ''), None)
             ]
             

@@ -20,7 +20,7 @@ Version 4 Upgrade Features:
 
 import math
 import logging
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import numpy as np
 
 from src.streams.base_stream import BaseStream
@@ -180,37 +180,49 @@ class S0BetaStream(BaseStream):
         signals: List[Dict[str, Any]] = []
 
         if is_bull and not is_alert_zone:
-            z_val = self._z_score_of(bull_prob, self._bull_history)
-            signals.append({
-                'ticker': leverage_ticker,
-                'name': 'KODEX 레버리지',
-                'strategy': 'beta_directional_long',
-                'confidence': bull_prob,
-                'predict_proba': bull_prob,
-                'direction': 'long',
-                'size_pct': 1.0,
-                'trigger_cash_sweep': True,
-                'target_sweep_ratio': sweep_bull,
-                'expected_return': exp_bull,
-                'reason': f'V4 Bull | D_macro={d_macro:.2f} | Kelly={sweep_bull:.1%} | Z={z_val:.2f}'
-            })
+            _ok_bull, _veto_bull = self._evaluate_intraday_tape_and_gap_guard(
+                leverage_ticker, is_inverse=False, market_data=market_data, dqe=_dqe
+            )
+            if _ok_bull:
+                z_val = self._z_score_of(bull_prob, self._bull_history)
+                signals.append({
+                    'ticker': leverage_ticker,
+                    'name': 'KODEX 레버리지',
+                    'strategy': 'beta_directional_long',
+                    'confidence': bull_prob,
+                    'predict_proba': bull_prob,
+                    'direction': 'long',
+                    'size_pct': 1.0,
+                    'trigger_cash_sweep': True,
+                    'target_sweep_ratio': sweep_bull,
+                    'expected_return': exp_bull,
+                    'reason': f'V4 Bull | D_macro={d_macro:.2f} | Kelly={sweep_bull:.1%} | Z={z_val:.2f}'
+                })
+            else:
+                logger.warning(f"  🛑 [S0 Tape/Gap Guard] {leverage_ticker} 진입 차단: {_veto_bull}")
 
         elif v4_enabled and is_alert_zone and not is_trigger_zone:
             # ── [Module 3 Step 1] Alert Zone: 예수금 3% 인버스 ETF 사전 헤지 매수 ──
-            opt_budget = _f('s0_beta.alert_option_budget_pct', 0.03)
-            _alert_conf = round(float(1.0 / (1.0 + math.exp(-(d_macro - alert_thresh + 0.8)))), 4)
-            signals.append({
-                'ticker': self.TICKER_INVERSE_2X,
-                'name': 'KODEX 200선물인버스2X (Alert Zone 헤지)',
-                'strategy': 'beta_convexity_hedge_alert',
-                'confidence': _alert_conf,
-                'predict_proba': _alert_conf,
-                'direction': 'long',
-                'size_pct': opt_budget,
-                'target_sweep_ratio': opt_budget,
-                'expected_return': round(0.05 * d_macro, 4),
-                'reason': f'🛡️ [Alert Zone] D_macro={d_macro:.2f} >= {alert_thresh} -> 예수금 {opt_budget:.0%} 인버스2X 사전 헤지'
-            })
+            _ok_al, _veto_al = self._evaluate_intraday_tape_and_gap_guard(
+                self.TICKER_INVERSE_2X, is_inverse=True, market_data=market_data, dqe=_dqe
+            )
+            if _ok_al:
+                opt_budget = _f('s0_beta.alert_option_budget_pct', 0.03)
+                _alert_conf = round(float(1.0 / (1.0 + math.exp(-(d_macro - alert_thresh + 0.8)))), 4)
+                signals.append({
+                    'ticker': self.TICKER_INVERSE_2X,
+                    'name': 'KODEX 200선물인버스2X (Alert Zone 헤지)',
+                    'strategy': 'beta_convexity_hedge_alert',
+                    'confidence': _alert_conf,
+                    'predict_proba': _alert_conf,
+                    'direction': 'long',
+                    'size_pct': opt_budget,
+                    'target_sweep_ratio': opt_budget,
+                    'expected_return': round(0.05 * d_macro, 4),
+                    'reason': f'🛡️ [Alert Zone] D_macro={d_macro:.2f} >= {alert_thresh} -> 예수금 {opt_budget:.0%} 인버스2X 사전 헤지'
+                })
+            else:
+                logger.warning(f"  🛑 [S0 Tape/Gap Guard] {self.TICKER_INVERSE_2X} Alert 헤지 진입 차단: {_veto_al}")
 
         elif is_crash_ or is_vix_spike or is_trigger_zone:
             # ── [Module 2] 다중 하방 자산 라우터 집행 (연속 로지스틱 확신도 및 켈리 스윕) ──
@@ -235,19 +247,25 @@ class S0BetaStream(BaseStream):
                 target_name = 'KOSDAQ 150선물인버스2X'
                 sweep *= 0.80
 
-            signals.append({
-                'ticker': target_ticker,
-                'name': target_name,
-                'strategy': 'beta_directional_short_v4',
-                'confidence': conf,
-                'predict_proba': conf,
-                'direction': 'long',
-                'size_pct': 1.0,
-                'trigger_cash_sweep': True,
-                'target_sweep_ratio': sweep,
-                'expected_return': exp_crash if exp_crash > 0 else round(0.03 * conf, 4),
-                'reason': f'📉 [S0 V4 Downside Router] {target_name} ({target_ticker}) | D_macro={d_macro:.2f} | Kelly={sweep:.1%}'
-            })
+            _ok_inv, _veto_inv = self._evaluate_intraday_tape_and_gap_guard(
+                target_ticker, is_inverse=True, market_data=market_data, dqe=_dqe
+            )
+            if _ok_inv:
+                signals.append({
+                    'ticker': target_ticker,
+                    'name': target_name,
+                    'strategy': 'beta_directional_short_v4',
+                    'confidence': conf,
+                    'predict_proba': conf,
+                    'direction': 'long',
+                    'size_pct': 1.0,
+                    'trigger_cash_sweep': True,
+                    'target_sweep_ratio': sweep,
+                    'expected_return': exp_crash if exp_crash > 0 else round(0.03 * conf, 4),
+                    'reason': f'📉 [S0 V4 Downside Router] {target_name} ({target_ticker}) | D_macro={d_macro:.2f} | Kelly={sweep:.1%}'
+                })
+            else:
+                logger.warning(f"  🛑 [S0 Tape/Gap Guard] {target_ticker} ({target_name}) 진입 차단: {_veto_inv}")
 
         if base_enabled and not signals:
             _park_m = _dqe.get_asset_metrics(base_ticker)
@@ -387,4 +405,131 @@ class S0BetaStream(BaseStream):
     def record_trade_result(self, pnl_ratio: float) -> None:
         """청산 수익률 기록 (Shadow/Live Manager 호환 인터페이스)."""
         self._pnl_history.append(float(pnl_ratio))
+
+    def _evaluate_intraday_tape_and_gap_guard(
+        self,
+        ticker: str,
+        is_inverse: bool,
+        market_data: Optional[Dict[str, Any]] = None,
+        dqe: Any = None,
+    ) -> Tuple[bool, str]:
+        """[Intraday Tape & Gap-Exhaustion Guard] 레버리지/인버스 ETF 진입 전 3중 수학적 방어 게이트:
+        1) Same-Day Stop/Exit Lockout: 당일 이미 손절·트레일링 청산된 레버리지/인버스 ETF 당일 재진입 100% 차단.
+        2) Intraday Rebound / Tape Disconfirmation: 인버스 진입 시 장중 지수가 이미 반등 전환되었거나
+           ETF 현재가가 시초가 대비 유의미하게 이탈(장중 V자 숏스퀴즈 진행 중)한 경우 역추세 진입 차단.
+        3) Opening Gap-Exhaustion Chase Veto: 전일 종가 대비 이미 1.5*sigma 이상 과열 갭상승한 상태에서
+           고점 추격 매수 차단.
+        """
+        import os
+        tk = str(ticker or '').strip().upper()
+        if not tk:
+            return True, ''
+        md = market_data if isinstance(market_data, dict) else {}
+        in_test = bool(
+            os.environ.get('PYTEST_CURRENT_TEST')
+            or os.environ.get('MERIDIAN_TEST_MODE') == '1'
+            or md.get('_test_mode')
+        )
+
+        # 1) Same-Day Exit Lockout
+        daily_exits = md.get('daily_exit_details')
+        if daily_exits is None and not in_test:
+            try:
+                from src.execution.position_ledger import PositionLedgerManager
+                daily_exits = PositionLedgerManager().get_daily_exit_details()
+            except Exception:
+                daily_exits = {}
+        if isinstance(daily_exits, dict) and tk in daily_exits:
+            ex_info = daily_exits.get(tk) or {}
+            return (
+                False,
+                f"Same-Day Exit Lockout ({tk} 당일 청산 이력 존재: "
+                f"PnL={float(ex_info.get('realized_pnl_pct', 0.0) or 0.0):+.2f}%, "
+                f"reason={ex_info.get('reason', 'intraday_exit')})",
+            )
+
+        # 2) Intraday Index Tape Disconfirmation
+        sc = md.get('signal_cache') if isinstance(md.get('signal_cache'), dict) else {}
+        kospi_chg_1d = sc.get('kospi_change_1d', sc.get('kospi_change_pct'))
+        kosdaq_chg_1d = sc.get('kosdaq_change_pct', sc.get('kosdaq_change_1d'))
+        if is_inverse:
+            if kospi_chg_1d is not None and float(kospi_chg_1d) >= 0.40:
+                return False, f"Intraday Index Rebound Veto (kospi_1d={float(kospi_chg_1d):+.2f}% >= +0.40%)"
+            if (
+                kospi_chg_1d is not None
+                and kosdaq_chg_1d is not None
+                and float(kospi_chg_1d) >= -0.15
+                and float(kosdaq_chg_1d) >= 1.50
+            ):
+                return (
+                    False,
+                    f"Intraday Broad Short-Squeeze Veto (kospi_1d={float(kospi_chg_1d):+.2f}%, "
+                    f"kosdaq_1d={float(kosdaq_chg_1d):+.2f}% >= +1.50%)",
+                )
+        else:
+            if kospi_chg_1d is not None and float(kospi_chg_1d) <= -0.60:
+                return False, f"Intraday Index Dump Veto (kospi_1d={float(kospi_chg_1d):+.2f}% <= -0.60%)"
+
+        # 3) Intraday OHLC & Gap-Exhaustion Check (LeverageJudge와 동일한 ATR 척도 공유)
+        sigma_daily = 0.025
+        try:
+            from src.execution.risk_params import _estimate_atr_pct
+            _atr_d = float(_estimate_atr_pct(tk, md) or 0.0)
+            if _atr_d > 0.005:
+                sigma_daily = _atr_d
+        except Exception:
+            if dqe is not None:
+                try:
+                    v_d = float((dqe.get_asset_metrics(tk) or {}).get('vol_daily', 0.0) or 0.0)
+                    if v_d > 0.005:
+                        sigma_daily = min(v_d, 0.030)
+                except Exception:
+                    pass
+        sigma_pct = max(1.5, min(3.5, sigma_daily * 100.0))
+
+        ohlc = (md.get('intraday_ohlc') or {}).get(tk) if isinstance(md.get('intraday_ohlc'), dict) else None
+        if ohlc is None and not in_test and tk.isdigit():
+            try:
+                from pathlib import Path
+                import pandas as pd
+                pq_path = Path('data/kr_markets') / f'kr_{tk}.parquet'
+                if pq_path.exists():
+                    df_pq = pd.read_parquet(pq_path)
+                    if len(df_pq) >= 2:
+                        last_r = df_pq.iloc[-1]
+                        prev_r = df_pq.iloc[-2]
+                        ohlc = {
+                            'prev_close': float(prev_r.get('close', prev_r.get('Close', 0.0)) or 0.0),
+                            'open': float(last_r.get('open', last_r.get('Open', 0.0)) or 0.0),
+                            'high': float(last_r.get('high', last_r.get('High', 0.0)) or 0.0),
+                            'low': float(last_r.get('low', last_r.get('Low', 0.0)) or 0.0),
+                            'close': float(last_r.get('close', last_r.get('Close', 0.0)) or 0.0),
+                        }
+            except Exception:
+                ohlc = None
+
+        if isinstance(ohlc, dict):
+            prev_close = float(ohlc.get('prev_close', 0.0) or 0.0)
+            open_px = float(ohlc.get('open', 0.0) or 0.0)
+            curr_px = float(ohlc.get('close', ohlc.get('current_price', 0.0)) or 0.0)
+            if open_px > 0 and curr_px > 0:
+                intra_ret_pct = (curr_px / open_px - 1.0) * 100.0
+                if intra_ret_pct <= -0.60 * sigma_pct:
+                    return (
+                        False,
+                        f"Intraday Candle Reversal Veto (open={open_px:.0f} -> curr={curr_px:.0f}, "
+                        f"intra={intra_ret_pct:+.2f}% <= {-0.60 * sigma_pct:.2f}%)",
+                    )
+            if prev_close > 0 and open_px > 0 and curr_px > 0:
+                gap_pct = (open_px / prev_close - 1.0) * 100.0
+                ext_pct = (curr_px / prev_close - 1.0) * 100.0
+                gap_limit_pct = 1.5 * sigma_pct
+                if gap_pct >= sigma_pct and ext_pct >= gap_limit_pct:
+                    return (
+                        False,
+                        f"Opening Gap-Exhaustion Chase Veto (prev={prev_close:.0f}, open={open_px:.0f} [{gap_pct:+.2f}%], "
+                        f"curr={curr_px:.0f} [{ext_pct:+.2f}%] >= 1.5*sigma [{gap_limit_pct:.2f}%])",
+                    )
+
+        return True, ''
 

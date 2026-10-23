@@ -883,7 +883,7 @@ class ExecutionEngine:
             order = res['order']
             ticker = order.get('ticker', '?')
             action = order.get('action', 'buy')
-            stream_id = order.get('stream', '')
+            stream_id = order.get('stream_id') or order.get('stream', '')
             if res['status'] == 'failed' or res['status'] == 'rejected' or res['status'] == 'error':
                 result.n_rejected += 1
                 _err_r = res.get('error', 'Failed')
@@ -905,6 +905,18 @@ class ExecutionEngine:
                         amount = fill.filled_price * fill.filled_quantity
                         if action in ('buy', 'add_on'):
                             result.total_buy_amount += amount
+                            if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                                try:
+                                    from src.execution.position_ledger import PositionLedgerManager
+                                    PositionLedgerManager().record_entry(
+                                        str(ticker),
+                                        entry_price=float(fill.filled_price or order.get('price', 0.0) or 0.0),
+                                        stream_id=str(stream_id or ''),
+                                        strategy=str(order.get('strategy') or ''),
+                                        track=str(order.get('track') or ''),
+                                    )
+                                except Exception as _led_b_err:
+                                    logger.debug(f"  [PositionLedger] record_entry skip ({ticker}): {_led_b_err}")
                         else:
                             result.total_sell_amount += amount
                         result.estimated_commission += fill.commission
@@ -913,21 +925,49 @@ class ExecutionEngine:
                         if action not in ('buy', 'add_on') and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                             try:
                                 from src.execution.position_ledger import PositionLedgerManager
-                                PositionLedgerManager().record_daily_exit(
+                                _plm_ex = PositionLedgerManager()
+                                _exit_pnl = float(order.get('pnl_pct', order.get('unrealized_pnl_pct', 0.0)) or 0.0)
+                                if _exit_pnl == 0.0:
+                                    _sell_px = float(fill.filled_price or order.get('price', 0.0) or 0.0)
+                                    _avg_px = float((_plm_ex.get_hwm(str(ticker)) or {}).get('last_avg_price', 0.0) or 0.0)
+                                    if _avg_px <= 0:
+                                        _avg_px = float(order.get('avg_price', order.get('entry_price', 0.0)) or 0.0)
+                                    if _avg_px > 0 and _sell_px > 0:
+                                        _exit_pnl = round((_sell_px / _avg_px - 1.0) * 100.0, 2)
+                                _plm_ex.record_daily_exit(
                                     str(ticker),
                                     reason=str(order.get('exit_reason') or order.get('reason') or order.get('strategy') or 'LiveExecutionSell'),
-                                    realized_pnl_pct=float(order.get('pnl_pct', order.get('unrealized_pnl_pct', 0.0)) or 0.0),
+                                    realized_pnl_pct=_exit_pnl,
                                 )
                             except Exception as _led_err:
                                 logger.debug(f"  [PositionLedger] record_daily_exit skip ({ticker}): {_led_err}")
                     else:
-                        if action not in ('buy', 'add_on') and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                        if action in ('buy', 'add_on') and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                             try:
                                 from src.execution.position_ledger import PositionLedgerManager
-                                PositionLedgerManager().record_daily_exit(
+                                PositionLedgerManager().record_entry(
+                                    str(ticker),
+                                    entry_price=float(fill.filled_price or order.get('price', 0.0) or 0.0),
+                                    stream_id=str(stream_id or ''),
+                                    strategy=str(order.get('strategy') or ''),
+                                    track=str(order.get('track') or ''),
+                                )
+                            except Exception:
+                                pass
+                        elif action not in ('buy', 'add_on') and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                            try:
+                                from src.execution.position_ledger import PositionLedgerManager
+                                _plm_ex_s = PositionLedgerManager()
+                                _exit_pnl_s = float(order.get('pnl_pct', order.get('unrealized_pnl_pct', 0.0)) or 0.0)
+                                if _exit_pnl_s == 0.0:
+                                    _sell_px_s = float(fill.filled_price or order.get('price', 0.0) or 0.0)
+                                    _avg_px_s = float((_plm_ex_s.get_hwm(str(ticker)) or {}).get('last_avg_price', 0.0) or 0.0)
+                                    if _avg_px_s > 0 and _sell_px_s > 0:
+                                        _exit_pnl_s = round((_sell_px_s / _avg_px_s - 1.0) * 100.0, 2)
+                                _plm_ex_s.record_daily_exit(
                                     str(ticker),
                                     reason=str(order.get('exit_reason') or order.get('reason') or order.get('strategy') or 'LiveExecutionSellSubmitted'),
-                                    realized_pnl_pct=float(order.get('pnl_pct', order.get('unrealized_pnl_pct', 0.0)) or 0.0),
+                                    realized_pnl_pct=_exit_pnl_s,
                                 )
                             except Exception:
                                 pass
