@@ -78,7 +78,7 @@ GATE_TESTS=(tests/test_wave0_invariants.py tests/test_redteam_ssot_integrity.py
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
   echo "⚠️  SKIP_TESTS=1 — test gate bypassed explicitly."
 else
-  (cd "$PROJECT_ROOT_DIR" 2>/dev/null || cd "$PROJECT_DIR"; \
+  (cd "$PROJECT_DIR" && \
       "$PROJECT_DIR/venv/bin/python3" scripts/ops/static_contract_audit.py --check > /dev/null && \
       "$PROJECT_DIR/venv/bin/python3" scripts/ops/hardcoding_scan.py --check > /dev/null && \
       "$PROJECT_DIR/venv/bin/python3" -m pytest "${GATE_TESTS[@]}" -q --no-header -p no:cacheprovider \
