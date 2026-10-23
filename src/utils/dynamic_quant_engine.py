@@ -832,17 +832,18 @@ class DynamicQuantEngine:
                 except Exception:
                     pass
 
+        _min_sd_lv = 11.0 / 50.0  # 0.22 (VIX 장기 에르고딕 로그 표준편차 하한)
         if len(vix_hist) >= 10:
             log_v = np.log(np.array(vix_hist, dtype=float))
             mu_lv = float(np.mean(log_v))
-            sd_lv = max(float(np.std(log_v)), 0.12)
+            sd_lv = max(float(np.std(log_v)), _min_sd_lv)
         else:
             # 샘플 부족 시 현재 관측된 시장 전체 변동성(연환산 σ_m * 100)을 기하평균으로 사용
             self._ensure_calibrated()
             us_vols = [m["vol_ann"] * 100.0 for m in self._us_metrics.values() if m["vol_ann"] > 0]
             med_vol = float(np.median(us_vols)) * 0.65 if us_vols else 16.5
             mu_lv = math.log(max(med_vol, 10.0))
-            sd_lv = 0.22
+            sd_lv = _min_sd_lv
 
         return {
             "baseline": round(math.exp(mu_lv), 2),                 # 기하 중앙값 (Z = 0.0)

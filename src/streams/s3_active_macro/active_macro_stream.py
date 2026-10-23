@@ -251,14 +251,19 @@ class S3FactorStream(BaseStream):
         candidate_stream = guaranteed_global + remaining_pool
         max_per_sector = int(cfg.get('s3.max_per_sector', 2))
         sector_count: Dict[str, int] = {}
+        seen_etf_tickers: set = set()
         diversified_etf = []
         for pick in candidate_stream:
             if len(diversified_etf) >= top_n_etf:
                 break
+            _tk = pick.get('ticker', '')
+            if _tk in seen_etf_tickers:
+                continue
             sec = pick.get('sector', 'unknown')
             cnt = sector_count.get(sec, 0)
             if cnt < max_per_sector:
                 diversified_etf.append(pick)
+                seen_etf_tickers.add(_tk)
                 sector_count[sec] = cnt + 1
         etf_selected = self._apply_turnover_constraint(diversified_etf)
         for pick in etf_selected:
@@ -794,11 +799,14 @@ class S3FactorStream(BaseStream):
         try:
             import pandas as pd
             import numpy as np
+            fs_dict: Dict = {}
             pf = _FEATURE_STORE_DIR / f'{ticker}.parquet'
             if pf.exists():
                 df = pd.read_parquet(pf)
                 if not df.empty:
-                    return df.iloc[-1].to_dict()
+                    fs_dict = df.iloc[-1].to_dict()
+                    if 'mom_21' in fs_dict and 'vol_60d' in fs_dict:
+                        return fs_dict
             fallback_paths = [
                 _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
                 _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
@@ -855,7 +863,7 @@ class S3FactorStream(BaseStream):
                             geom_ann = float((max(c_vals[-1], _eps) / max(c_vals[0], _eps)) ** (_ann_days / n_avail) - 1.0)
                             carry_proxy = float(pos_hit_rate * geom_ann)
 
-                            return {
+                            ohlcv_dict = {
                                 'ret_20d': ret_20d,
                                 'volatility_20d': vol_20d,
                                 'rsi_14': rsi_14,
@@ -868,6 +876,9 @@ class S3FactorStream(BaseStream):
                                 'quality_value_proxy': quality_value_proxy,
                                 'carry_proxy': carry_proxy,
                             }
+                            return {**fs_dict, **ohlcv_dict}
+            if fs_dict:
+                return fs_dict
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
