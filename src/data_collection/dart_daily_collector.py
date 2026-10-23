@@ -253,22 +253,33 @@ class DARTDailyCollector:
             path = _DART_DATA_DIR / ticker / 'major_shareholders.csv'
             self._append_csv(path, df)
         return len(records)
-    _ACCOUNT_KEYWORDS = ['매출액', '영업이익', '당기순이익', '총자산', '자산총계', '총부채', '부채총계', '자본총계', '자기자본', '매출총이익']
+    _ACCOUNT_KEYWORDS = [
+        '매출액', '영업수익', '수익(매출액)', '매출원가', '매출총이익', '판매비와관리비',
+        '영업이익', '법인세', '이자비용', '금융원가', '당기순이익',
+        '총자산', '자산총계', '유동자산', '유형자산', '무형자산',
+        '현금및현금성자산', '단기금융상품', '매출채권', '재고자산',
+        '총부채', '부채총계', '유동부채', '단기차입금', '장기차입금', '사채',
+        '자본총계', '자기자본', '이익잉여금',
+        '영업활동', '감가상각비', '유형자산의취득', '유형자산의 취득',
+    ]
 
     def _collect_financials(self, ticker: str, corp_code: str) -> int:
-        """재무제표 요약 수집 (연간/분기).
-
-        ★ 개선사항:
-          Issue 1: 중복 행 방지 (sj_div 기반 필터 + 0값 제거)
-          Issue 2: 자기자본/자본총계 키워드 추가 (PBR/ROE)
-          Issue 3: 은행/금융 — CFS 실패 시 OFS(별도) fallback
-          Issue 5: 연도 범위 5년으로 확대 (이익 안정성 트렌드)
-          Issue 6: 0값 행 필터링
-        """
+        """재무제표 요약 수집 (연간/분기) 및 data/financials_history/{ticker}.json 자동 동기화."""
         records = []
+        fh_path = _PROJECT_ROOT / 'data' / 'financials_history' / f'{ticker}.json'
+        has_historical_fh = False
+        if fh_path.exists():
+            try:
+                _fh_obj = json.loads(fh_path.read_text(encoding='utf-8'))
+                _ann = _fh_obj if isinstance(_fh_obj, list) else _fh_obj.get('annual', [])
+                if len(_ann) >= 3:
+                    has_historical_fh = True
+            except Exception:
+                pass
+        year = datetime.now().year
+        yr_stop = (year - 2) if has_historical_fh else (year - 5)
         for report_code, report_name in [('11011', '연간'), ('11014', '3분기'), ('11012', '반기'), ('11013', '1분기')]:
-            year = datetime.now().year
-            for yr in range(year, year - 5, -1):
+            for yr in range(year, yr_stop, -1):
                 data = None
                 for fs_div in ['CFS', 'OFS']:
                     data = self._api_call('fnlttSinglAcntAll', {'corp_code': corp_code, 'bsns_year': str(yr), 'reprt_code': report_code, 'fs_div': fs_div})
@@ -281,7 +292,6 @@ class DARTDailyCollector:
                 for item in data['list']:
                     account_nm = item.get('account_nm', '').strip()
                     sj_div = item.get('sj_div', '')
-                    sj_nm = item.get('sj_nm', '')
                     current_val = self._parse_num(item.get('thstrm_amount', '0'))
                     previous_val = self._parse_num(item.get('frmtrm_amount', '0'))
                     if not any((k in account_nm for k in self._ACCOUNT_KEYWORDS)):
@@ -301,7 +311,149 @@ class DARTDailyCollector:
             df.drop_duplicates(subset=['year', 'report', 'account'], keep='first', inplace=True)
             path = _DART_DATA_DIR / ticker / 'financial_summary.csv'
             atomic_write_dataframe(df, path, file_format='csv', index=False, encoding='utf-8-sig')
+            try:
+                self._sync_to_financials_history(ticker, records)
+            except Exception as _sync_e:
+                logger.warning(f"  [DART->FH Sync] {ticker} financials_history 동기화 예외: {_sync_e}")
         return len(records)
+
+    @staticmethod
+    def _map_dart_account_to_fh_key(account_nm: str, sj_div: str = '') -> Optional[str]:
+        """DART XBRL 한글 계정명을 financials_history 표준 키로 매핑."""
+        nm = str(account_nm or '').replace(' ', '').strip()
+        if not nm:
+            return None
+        if nm in ('자산총계', '총자산'):
+            return 'total_assets'
+        if nm in ('부채총계', '총부채'):
+            return 'total_liabilities'
+        if nm in ('자본총계', '자기자본'):
+            return 'total_equity'
+        if nm == '유동자산':
+            return 'current_assets'
+        if nm == '유동부채':
+            return 'current_liabilities'
+        if nm in ('유형자산', '유형자산(순액)'):
+            return 'ppe_net'
+        if nm in ('무형자산', '무형자산(순액)'):
+            return 'intangible_assets'
+        if '현금및현금성자산' in nm:
+            return 'cash'
+        if '단기금융상품' in nm or '기타유동금융자산' in nm:
+            return 'short_term_investments'
+        if '매출채권' in nm:
+            return 'accounts_receivable'
+        if '재고자산' in nm:
+            return 'inventory'
+        if '단기차입금' in nm or '유동성장기부채' in nm:
+            return 'short_term_debt'
+        if '장기차입금' in nm or nm == '사채':
+            return 'long_term_debt'
+        if '이익잉여금' in nm or '결손금' in nm:
+            return 'retained_earnings'
+        if nm in ('매출액', '영업수익', '수익(매출액)'):
+            return 'revenue'
+        if nm == '매출원가':
+            return 'cost_of_goods_sold'
+        if nm == '매출총이익':
+            return 'gross_profit'
+        if '판매비와관리비' in nm or '판관비' in nm:
+            return 'sga_expense'
+        if nm == '영업이익' or nm.startswith('영업이익('):
+            return 'operating_income'
+        if '법인세비용' in nm and sj_div in ('IS', 'CIS', ''):
+            return 'income_tax'
+        if nm in ('이자비용', '금융원가') and sj_div in ('IS', 'CIS', ''):
+            return 'interest_expense'
+        if nm == '당기순이익' or nm.startswith('당기순이익('):
+            return 'net_income'
+        if '영업활동현금흐름' in nm or '영업활동으로인한현금흐름' in nm:
+            return 'cash_from_operations'
+        if nm == '감가상각비':
+            return 'depreciation'
+        if '유형자산의취득' in nm:
+            return 'capex'
+        return None
+
+    def _sync_to_financials_history(self, ticker: str, records: List[Dict]) -> None:
+        """DART 수집 레코드를 data/financials_history/{ticker}.json 에 원자적으로 병합·정규화."""
+        if not records:
+            return
+        annual_by_year: Dict[int, Dict] = {}
+        for r in records:
+            if r.get('report') != '연간':
+                continue
+            yr = int(r.get('year', 0) or 0)
+            if yr <= 0:
+                continue
+            fh_key = self._map_dart_account_to_fh_key(r.get('account', ''), r.get('sj_div', ''))
+            if not fh_key:
+                continue
+            curr_v = float(r.get('current', 0) or 0)
+            prev_v = float(r.get('previous', 0) or 0)
+            if fh_key == 'capex':
+                curr_v = abs(curr_v)
+                prev_v = abs(prev_v)
+            rec_yr = annual_by_year.setdefault(yr, {'year': yr})
+            if rec_yr.get(fh_key, 0) == 0 and curr_v != 0:
+                rec_yr[fh_key] = curr_v
+            if prev_v != 0:
+                prev_rec = annual_by_year.setdefault(yr - 1, {'year': yr - 1})
+                if prev_rec.get(fh_key, 0) == 0:
+                    prev_rec[fh_key] = prev_v
+
+        if not annual_by_year:
+            return
+
+        fh_dir = _PROJECT_ROOT / 'data' / 'financials_history'
+        fh_dir.mkdir(parents=True, exist_ok=True)
+        fh_path = fh_dir / f'{ticker}.json'
+        try:
+            from src.analysis.fundamental_filter import MeridianFundamentalFilter
+            norm_fn = MeridianFundamentalFilter._normalize_fin_record
+        except Exception:
+            norm_fn = None
+
+        from src.utils.file_ops import safe_json_update
+
+        def _mutator(existing):
+            is_list = isinstance(existing, list)
+            obj = {'ticker': ticker, 'annual': list(existing)} if is_list else (dict(existing) if isinstance(existing, dict) else {'ticker': ticker, 'annual': []})
+            ann_list = list(obj.get('annual', []))
+            by_yr: Dict[int, Dict] = {}
+            last_shares = 0
+            for item in ann_list:
+                if isinstance(item, dict) and item.get('year'):
+                    y = int(item['year'])
+                    by_yr[y] = dict(item)
+                    if float(item.get('shares_outstanding', 0) or 0) > 0:
+                        last_shares = item['shares_outstanding']
+            for y, new_fields in sorted(annual_by_year.items()):
+                merged = dict(by_yr.get(y, {'year': y}))
+                for k, v in new_fields.items():
+                    if v != 0 or k not in merged:
+                        merged[k] = v
+                if not merged.get('shares_outstanding') and last_shares > 0:
+                    merged['shares_outstanding'] = last_shares
+                by_yr[y] = merged
+            sorted_yrs = sorted(by_yr.keys())
+            normalized_list = []
+            prev_r = None
+            for y in sorted_yrs:
+                cur_r = by_yr[y]
+                if float(cur_r.get('total_assets', 0) or 0) <= 0 and float(cur_r.get('revenue', 0) or 0) <= 0:
+                    continue
+                if norm_fn is not None:
+                    cur_r = norm_fn(cur_r, prev_r)
+                normalized_list.append(cur_r)
+                prev_r = cur_r
+            if is_list:
+                return normalized_list
+            obj['annual'] = normalized_list
+            obj['updated_at'] = datetime.now().isoformat()
+            return obj
+
+        safe_json_update(fh_path, _mutator, strict=True)
 
     def _update_daily_signal(self, ticker: str):
         """개별 데이터를 종합하여 일별 시그널 시계열 생성."""

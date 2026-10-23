@@ -105,7 +105,7 @@ def locked_read_json(filepath: Union[str, Path], default: Any = None, timeout: i
 
 
 def safe_json_update(filepath: Union[str, Path], mutator, default: Any = None, timeout: int = 30,
-                     indent: int = 2, **dump_kwargs) -> Any:
+                     indent: int = 2, strict: bool = True, **dump_kwargs) -> Any:
     """★ Wave 1: 교차 프로세스 안전 read-modify-write.
 
     1) strict 락 획득(실패 시 FileLockTimeout — 쓰지 않음)
@@ -116,7 +116,7 @@ def safe_json_update(filepath: Union[str, Path], mutator, default: Any = None, t
     import copy
     path = Path(filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with file_lock_transaction(path, timeout=timeout, strict=True):
+    with file_lock_transaction(path, timeout=timeout, strict=strict):
         if path.exists():
             try:
                 with open(path, 'r', encoding='utf-8') as f:

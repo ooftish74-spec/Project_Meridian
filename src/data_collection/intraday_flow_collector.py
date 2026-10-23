@@ -68,18 +68,40 @@ class IntradayFlowCollector:
                 if not today_rows.empty:
                     row = today_rows.iloc[0]
 
+                    def _safe_int(v: Any) -> int:
+                        if v is None or pd.isna(v):
+                            return 0
+                        s = str(v).strip().replace(',', '')
+                        if not s or s in ('-', '+'):
+                            return 0
+                        try:
+                            return int(float(s))
+                        except (ValueError, TypeError):
+                            return 0
+
+                    def _safe_float(v: Any) -> float:
+                        if v is None or pd.isna(v):
+                            return 0.0
+                        s = str(v).strip().replace(',', '')
+                        if not s or s in ('-', '+'):
+                            return 0.0
+                        try:
+                            return float(s)
+                        except (ValueError, TypeError):
+                            return 0.0
+
                     def _get_qty(r: pd.Series, prefix: str) -> int:
                         keys = [f"{prefix}_ntby_qty", f"{prefix}_ntby_quantity", f"{prefix}_ntby_vol"]
                         for k in keys:
                             if k in r and (not pd.isna(r[k])):
-                                return int(r[k] or 0)
+                                return _safe_int(r[k])
                         logger.warning(f"[Flow Error] 필드값 오류: {prefix} 수급 필드가 없습니다! API 명세 변경 의심. Keys: {list(r.keys())}")
                         return 0
                     inst_net_qty = _get_qty(row, 'orgn')
                     frgn_net_qty = _get_qty(row, 'frgn')
                     scale = 1000000 / flow_unit
-                    inst_net_krw = float(row.get('orgn_ntby_tr_pbmn', 0) or 0) * scale
-                    frgn_net_krw = float(row.get('frgn_ntby_tr_pbmn', 0) or 0) * scale
+                    inst_net_krw = _safe_float(row.get('orgn_ntby_tr_pbmn', 0)) * scale
+                    frgn_net_krw = _safe_float(row.get('frgn_ntby_tr_pbmn', 0)) * scale
         except Exception as e:
             logger.warning('[Flow] %s 수급 조회 실패: %s', ticker, e, exc_info=True)
         cur_px: int = 0
@@ -88,9 +110,15 @@ class IntradayFlowCollector:
         vol_ratio: float = 0.0
         try:
             price_data = kis.get_current_price(ticker) or {}
-            cur_px = int(price_data.get('price', price_data.get('stck_prpr', price_data.get('current_price', 0))) or 0)
-            today_vol = int(price_data.get('volume', price_data.get('acml_vol', 0)) or 0)
-            prev_vol = int(price_data.get('prdy_vol', price_data.get('prev_volume', 0)) or 0)
+            def _px_int(v: Any) -> int:
+                s = str(v if v is not None else 0).strip().replace(',', '')
+                try:
+                    return int(float(s)) if s and s not in ('-', '+') else 0
+                except (ValueError, TypeError):
+                    return 0
+            cur_px = _px_int(price_data.get('price', price_data.get('stck_prpr', price_data.get('current_price', 0))))
+            today_vol = _px_int(price_data.get('volume', price_data.get('acml_vol', 0)))
+            prev_vol = _px_int(price_data.get('prdy_vol', price_data.get('prev_volume', 0)))
             vol_ratio = round(today_vol / prev_vol, 4) if prev_vol > 0 else 0.0
         except Exception as e:
             logger.warning('[Flow] %s 현재가 조회 실패: %s', ticker, e, exc_info=True)
@@ -106,6 +134,7 @@ class IntradayFlowCollector:
         max_tickers = int(self._cfg('intraday.max_batch_tickers'))
         flow_unit = int(self._cfg('intraday.flow_unit_krw'))
         result: Dict[str, Any] = {'timestamp': datetime.now().isoformat(), 'market_date': date.today().strftime('%Y%m%d'), 'flow_unit_krw': flow_unit, 'tickers': {}}
+        tickers = [str(t).strip() for t in (tickers or []) if len(str(t).strip()) == 6 and str(t).strip()[0].isdigit()]
         if not tickers:
             logger.warning('[Flow] 조회 대상 티커 없음')
             self._save_cache(result)

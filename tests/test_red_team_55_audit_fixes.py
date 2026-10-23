@@ -118,3 +118,51 @@ def test_l4_05_cro_final_gate_buy_only_exposure_and_usd_fx():
     assert abs(meta["proposed_exposure_pct"] - (276_000.0 / nav)) < 1e-4
     tlt_order = [o for o in scaled_orders if o["ticker"] == "TLT"][0]
     assert abs(tlt_order["amount_krw"] - 276_000.0) < 1.0
+
+
+def test_wave2_inverse_intraday_tape_and_gap_guard_closed_form():
+    from src.streams.s0_beta.beta_stream import S0BetaStream
+
+    bs = S0BetaStream()
+    # Case 1: KOSPI rebounding intraday (+0.85% >= +0.40%) -> blocked
+    passed_rebound, reason_rebound = bs._evaluate_intraday_tape_and_gap_guard(
+        ticker="252670",
+        is_inverse=True,
+        market_data={
+            "_test_mode": True,
+            "signal_cache": {"kospi_change_pct": 0.85},
+        },
+    )
+    assert passed_rebound is False
+    assert "Rebound Veto" in reason_rebound
+
+    # Case 2: KOSPI falling (-1.40%) and 252670 not over-gapped -> approved
+    passed_ok, reason_ok = bs._evaluate_intraday_tape_and_gap_guard(
+        ticker="252670",
+        is_inverse=True,
+        market_data={
+            "_test_mode": True,
+            "signal_cache": {"kospi_change_pct": -1.40},
+        },
+    )
+    assert passed_ok is True
+    assert reason_ok == ""
+
+
+def test_s3_track_c_3x_etf_intraday_reversal_veto():
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+
+    sleeve = S3CrossAssetSleeve()
+    # Even if 5d return of SQQQ is +9.61% in bear regime, a negative 1d return (-2.5%) must block SQQQ entry
+    sigs = sleeve.generate_track_c_signals(
+        regime="bear",
+        market_data={
+            "spy_return_5d": -0.03,
+            "sqqq_return_5d": 0.0961,
+            "sqqq_return_1d": -0.025,
+        },
+    )
+    tickers = [s["ticker"] for s in sigs]
+    assert "SQQQ" not in tickers
+
+

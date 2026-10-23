@@ -431,7 +431,9 @@ def main():
                                         _hold_mins = 0.0
                                 _exit_positions[f"LIVE_SSOT:{_t}"] = {
                                     'ticker': _t,
-                                    'stream_id': _h.get('stream_id', 'LIVE_SSOT'),
+                                    'stream_id': _h.get('stream_id') or _hwm.get('stream_id') or 'LIVE_SSOT',
+                                    'strategy': _h.get('strategy') or _hwm.get('strategy') or '',
+                                    'track': _h.get('track') or _hwm.get('track') or '',
                                     'quantity': _h.get('qty', 0),
                                     'entry_price': _avg,
                                     'current_price': _cp,

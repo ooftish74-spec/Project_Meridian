@@ -1529,33 +1529,43 @@ class KISTraderAdapter:
         """
         try:
             from config.dynamic_config import DynamicConfig as _DC
-            _exempt = _DC().get('kill_switch.panic_sell_exempt_streams', ['S4'])
+            _exempt = list(_DC().get('kill_switch.panic_sell_exempt_streams', ['S4', 'S3_B']) or ['S4', 'S3_B'])
+            if 'S3_B' not in _exempt:
+                _exempt.append('S3_B')
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            _exempt = ['S4']
+            _exempt = ['S4', 'S3_B']
         logger.critical('  🚨 [PANIC SELL] 전 종목 시장가 긴급 매도 절차 개시!')
         if _exempt:
             logger.critical(f"  🛡️  [PANIC SELL] 패닉셀 면제 스트림: {_exempt} (장기 보유 전략 — 포지션 유지)")
         panic_orders = []
         kept_positions = []
+        _s4_tickers = set()
         try:
             import json as _j
             from pathlib import Path as _P
             _sp_path = _P(__file__).resolve().parents[2] / 'results' / 'shadow_portfolio.json'
             if _sp_path.exists():
                 _sp = _j.loads(_sp_path.read_text())
-                _s4_tickers = set()
                 for _pk, _pos in _sp.get('positions', {}).items():
                     _sid = _pk.split(':')[0] if ':' in _pk else _pos.get('stream_id', '')
-                    if _sid in _exempt:
+                    if _sid in _exempt or _pos.get('track') == 'TRACK_2_BUFFETT_QVM':
                         _s4_tickers.add(_pos.get('ticker', _pk.split(':')[-1]))
-            else:
-                _s4_tickers = set()
+            _kp_path_ex = _P(__file__).resolve().parents[2] / 'results' / 'kis_portfolio.json'
+            if _kp_path_ex.exists():
+                _kp_ex = _j.loads(_kp_path_ex.read_text())
+                for _tk_ex, _h_ex in (_kp_ex.get('holdings') or {}).items():
+                    if isinstance(_h_ex, dict) and (_h_ex.get('stream_id') in _exempt or _h_ex.get('track') == 'TRACK_2_BUFFETT_QVM'):
+                        _s4_tickers.add(str(_tk_ex))
+            from src.execution.position_ledger import PositionLedgerManager as _PLM_Ex
+            _led_ex = _PLM_Ex().load_ledger()
+            for _tk_l, _meta_l in (_led_ex or {}).items():
+                if isinstance(_meta_l, dict) and (_meta_l.get('stream_id') in _exempt or _meta_l.get('track') == 'TRACK_2_BUFFETT_QVM'):
+                    _s4_tickers.add(str(_tk_l))
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            _s4_tickers = set()
         # [Red Team V6] 좀비 포지션 완벽 척결을 위해 로컬 DB(self.positions) 대신 KIS 실계좌 잔고를 직접 긁어옴
         live_positions = self.fetch_live_positions() or {}
         if not getattr(self, '_last_positions_complete', False):
@@ -1574,7 +1584,7 @@ class KISTraderAdapter:
         for ticker in tickers:
             qty = live_positions[ticker]
             if ticker in _s4_tickers:
-                logger.critical(f"  🛡️  [S4] {ticker} 패닉셀 면제 (qty={qty}) — 포지션 유지")
+                logger.critical(f"  🛡️  [Exempt {_exempt}] {ticker} 패닉셀 면제 (qty={qty}) — 장기 해자 복리 포지션 유지")
                 kept_positions.append(ticker)
                 continue
             if qty > 0:
@@ -2021,13 +2031,16 @@ class KISTraderAdapter:
                         if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST'):
                             try:
                                 from src.utils.file_ops import safe_json_update
+                                from src.execution.position_ledger import PositionLedgerManager as _PLM_Sync
+                                _plm_sync = _PLM_Sync()
                                 _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
                                 _live_holdings = {}
                                 for _tk, _p in self.positions.items():
                                     _is_us = not _is_kr_tk(_tk)
                                     _fx = fx_rate if _is_us else 1.0
                                     _pnl_pct = round(((float(_p.current_price) / float(_p.avg_price)) - 1.0) * 100.0, 2) if float(_p.avg_price) > 0 else 0.0
-                                    _live_holdings[_tk] = {
+                                    _p_meta = _plm_sync.get_position_meta(_tk)
+                                    _h_entry = {
                                         'name': getattr(_p, 'name', _tk),
                                         'qty': int(_p.quantity),
                                         'avg_price': float(_p.avg_price),
@@ -2036,8 +2049,15 @@ class KISTraderAdapter:
                                         'pnl_pct': _pnl_pct,
                                         'return_pct': _pnl_pct,
                                         'currency': 'USD' if _is_us else 'KRW',
-                                        'entry_date': getattr(_p, 'entry_date', '')
+                                        'entry_date': getattr(_p, 'entry_date', '') or _p_meta.get('entry_date', ''),
                                     }
+                                    if _p_meta.get('stream_id'):
+                                        _h_entry['stream_id'] = _p_meta['stream_id']
+                                    if _p_meta.get('strategy'):
+                                        _h_entry['strategy'] = _p_meta['strategy']
+                                    if _p_meta.get('track'):
+                                        _h_entry['track'] = _p_meta['track']
+                                    _live_holdings[_tk] = _h_entry
                                 _acct_patch = {
                                     'nav': round(float(self.account.total_equity)),
                                     'total_equity': round(float(self.account.total_equity)),
@@ -2050,9 +2070,17 @@ class KISTraderAdapter:
                                 }
 
                                 def _kp_mutator(_kp_data):
-                                    # ★ Wave 1 Track C: 잠금 하 read-modify-write (스키마 불변)
+                                    # ★ Wave 1 Track C: 잠금 하 read-modify-write (스키마 불변 + Track 1/2 메타 보존)
                                     if not isinstance(_kp_data, dict):
                                         _kp_data = {}
+                                    _prev_h = _kp_data.get('holdings') if isinstance(_kp_data.get('holdings'), dict) else {}
+                                    for _tk_m, _h_m in _live_holdings.items():
+                                        _old_m = _prev_h.get(_tk_m) if isinstance(_prev_h.get(_tk_m), dict) else {}
+                                        for _mk in ('stream_id', 'strategy', 'track'):
+                                            if not _h_m.get(_mk) and _old_m.get(_mk):
+                                                _h_m[_mk] = _old_m[_mk]
+                                        if _h_m.get('stream_id') == 'S3_B' or _h_m.get('strategy') == 'buffett_qvm':
+                                            _h_m['track'] = 'TRACK_2_BUFFETT_QVM'
                                     _kp_data['kis_mode'] = 'live'
                                     _kp_data['updated_at'] = datetime.now().isoformat()
                                     _kp_data['holdings'] = _live_holdings

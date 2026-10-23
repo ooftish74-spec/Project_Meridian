@@ -84,14 +84,32 @@ class PositionLedgerManager:
                 return info.get("entry_date")
             return None
 
-    def record_entry(self, ticker: str, entry_date: Optional[str] = None, entry_price: float = 0.0, quantity: float = 0.0):
-        """신규 포지션 진입일 및 초기 HWM 기록."""
+    def record_entry(
+        self,
+        ticker: str,
+        entry_date: Optional[str] = None,
+        entry_price: float = 0.0,
+        quantity: float = 0.0,
+        stream_id: Optional[str] = None,
+        strategy: Optional[str] = None,
+        track: Optional[str] = None,
+    ):
+        """신규 포지션 진입일, 초기 HWM 및 소속 스트림/트랙(Track 1 vs Track 2) 영구 기록."""
         if not entry_date:
             entry_date = datetime.now().strftime("%Y-%m-%d")
 
+        resolved_stream = str(stream_id or "").strip()
+        resolved_strategy = str(strategy or "").strip()
+        resolved_track = str(track or "").strip()
+        if not resolved_track and resolved_stream:
+            if resolved_stream.upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") or "qvm" in resolved_strategy.lower() or "buffett" in resolved_strategy.lower():
+                resolved_track = "TRACK_2_BUFFETT_QVM"
+            else:
+                resolved_track = "TRACK_1_TACTICAL"
+
         with self._lock:
             ledger = self._load_file_unlocked()
-            if ticker not in ledger:
+            if ticker not in ledger or not isinstance(ledger.get(ticker), dict):
                 ledger[ticker] = {
                     "entry_date": entry_date,
                     "created_at": datetime.now().isoformat(),
@@ -104,9 +122,34 @@ class PositionLedgerManager:
                     "scaled_out": False,
                     "last_avg_price": float(entry_price),
                     "last_qty": float(quantity),
+                    "stream_id": resolved_stream or "LIVE_SSOT",
+                    "strategy": resolved_strategy,
+                    "track": resolved_track or "TRACK_1_TACTICAL",
                 }
                 self._save_file_unlocked(ledger)
-                logger.info(f"  📌 [PositionLedger] 신규 진입일 등록: {ticker} -> {entry_date}")
+                logger.info(f"  📌 [PositionLedger] 신규 진입일 등록: {ticker} -> {entry_date} (stream={resolved_stream}, track={resolved_track})")
+            else:
+                updated = False
+                if resolved_stream and ledger[ticker].get("stream_id") in (None, "", "LIVE_SSOT", "S3") and resolved_stream != ledger[ticker].get("stream_id"):
+                    ledger[ticker]["stream_id"] = resolved_stream
+                    updated = True
+                if resolved_strategy and not ledger[ticker].get("strategy"):
+                    ledger[ticker]["strategy"] = resolved_strategy
+                    updated = True
+                if resolved_track and (not ledger[ticker].get("track") or resolved_track == "TRACK_2_BUFFETT_QVM"):
+                    ledger[ticker]["track"] = resolved_track
+                    updated = True
+                if updated:
+                    self._save_file_unlocked(ledger)
+
+    def get_position_meta(self, ticker: str) -> Dict[str, Any]:
+        """특정 종목의 소속 스트림/트랙/진입일 메타데이터 조회."""
+        with self._lock:
+            ledger = self._load_file_unlocked()
+            info = ledger.get(ticker)
+            if info and isinstance(info, dict):
+                return dict(info)
+            return {}
 
     def record_daily_exit(
         self,
@@ -136,6 +179,8 @@ class PositionLedgerManager:
                 prev_entry = day_map.get(tk_key)
                 history = []
                 first_exited_at = now_iso
+                _idem_sec = 60.0
+                _eps = 1e-6
                 if isinstance(prev_entry, dict):
                     first_exited_at = prev_entry.get("first_exited_at") or prev_entry.get("exited_at") or now_iso
                     if isinstance(prev_entry.get("history"), list):
@@ -151,10 +196,10 @@ class PositionLedgerManager:
                     if prev_ex_str:
                         try:
                             prev_dt = datetime.fromisoformat(prev_ex_str).replace(tzinfo=None)
-                            if abs((now_dt.replace(tzinfo=None) - prev_dt).total_seconds()) < 60.0:
+                            if abs((now_dt.replace(tzinfo=None) - prev_dt).total_seconds()) < _idem_sec:
                                 if reason and prev_entry.get("reason") in ("", "Position closed on live balance sync"):
                                     prev_entry["reason"] = reason
-                                if abs(float(realized_pnl_pct or 0.0)) > 1e-6:
+                                if abs(float(realized_pnl_pct or 0.0)) > _eps:
                                     prev_entry["realized_pnl_pct"] = float(realized_pnl_pct)
                                 day_map[tk_key] = prev_entry
                                 data[date_str] = day_map
@@ -279,6 +324,9 @@ class PositionLedgerManager:
         trail_activate_threshold: Optional[float] = None,
         avg_price: Optional[float] = None,
         quantity: Optional[float] = None,
+        stream_id: Optional[str] = None,
+        strategy: Optional[str] = None,
+        track: Optional[str] = None,
     ) -> Dict[str, Any]:
         """포지션의 최고가(HWM), 최저가 및 최고 수익률 영구 갱신 및 조회 (실측 기반, 물타기/불타기 수량 가중 보존)."""
         if not date_str:
@@ -294,8 +342,7 @@ class PositionLedgerManager:
 
         with self._lock:
             ledger = self._load_file_unlocked()
-            
-            # 신규 진입 시 현재 실측 가격/수익률 기준으로만 초기화
+
             if ticker not in ledger or not isinstance(ledger.get(ticker), dict):
                 ledger[ticker] = {
                     "entry_date": date_str,
@@ -309,13 +356,15 @@ class PositionLedgerManager:
                     "scaled_out": False,
                     "last_avg_price": float(avg_price or 0.0),
                     "last_quantity": float(quantity or 0.0),
+                    "stream_id": str(stream_id or "LIVE_SSOT"),
+                    "strategy": str(strategy or ""),
+                    "track": str(track or ("TRACK_2_BUFFETT_QVM" if str(stream_id or "").upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") else "TRACK_1_TACTICAL")),
                 }
 
             info = ledger[ticker]
             entry_dt = str(info.get("entry_date", date_str))[:10]
             peak_dt = str(info.get("peak_date", entry_dt))[:10]
 
-            # 만약 과거 잔재로 인해 peak_date가 entry_date보다 과거이거나 비정상인 경우 즉시 현재 실측치로 리셋
             if peak_dt < entry_dt:
                 info["peak_price"] = float(current_price or 0.0)
                 info["lowest_price"] = float(current_price or 0.0)
@@ -324,17 +373,24 @@ class PositionLedgerManager:
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
 
             updated = False
+            if stream_id and info.get("stream_id") in (None, "", "LIVE_SSOT", "S3") and str(stream_id) != info.get("stream_id"):
+                info["stream_id"] = str(stream_id)
+                updated = True
+            if strategy and not info.get("strategy"):
+                info["strategy"] = str(strategy)
+                updated = True
+            if track and (not info.get("track") or str(track) == "TRACK_2_BUFFETT_QVM"):
+                info["track"] = str(track)
+                updated = True
+
             prev_qty = float(info.get("last_quantity", 0.0) or 0.0)
             prev_avg_px = float(info.get("last_avg_price", 0.0) or 0.0)
             curr_qty = float(quantity or 0.0)
             curr_avg_px = float(avg_price or 0.0)
+            _qty_eps = 1e-6
+            _pnl_eps = 1e-4
 
-            # [수량 가중 HWM 보존 법칙 (Scale-In Phantom Drawdown 차단)]
-            # 기존 보유 수량(Q_old)에 신규 수량(ΔQ = Q_new - Q_old)이 불타기/물타기(Scale-In)로 추가될 때,
-            # 기존 고점 수익률(peak_pnl_pct)을 그대로 유지하면 평단가(avg_price) 상승으로 인해 체결 직후
-            # 가짜 고점 대비 낙폭(Phantom Drawdown)이 발생하여 즉시 오발동 손절/익절된다.
-            # 따라서 통합 포지션의 고점 가격(P_peak)과 경과 보유시간을 수량 비율(w_old = Q_old / Q_new)로 정확히 가중 결합한다.
-            if curr_qty > 0 and prev_qty > 0 and curr_qty > prev_qty + 1e-6 and current_price > 0:
+            if curr_qty > 0 and prev_qty > 0 and curr_qty > prev_qty + _qty_eps and current_price > 0:
                 w_old = prev_qty / curr_qty
                 old_pk_px = float(info.get("peak_price", current_price) or current_price)
                 blended_peak_px = max(float(current_price), w_old * old_pk_px + (1.0 - w_old) * float(current_price))
@@ -358,7 +414,6 @@ class PositionLedgerManager:
                     info["created_at"] = datetime.now().isoformat()
                 updated = True
             elif curr_avg_px > 0 and prev_avg_px > 0 and abs(curr_avg_px - prev_avg_px) * 100.0 > prev_avg_px / 2.0 and current_price > 0:
-                # 수량 미전달 상태에서 평단가가 0.5% 이상 변동한 경우 새 평단가 기준으로 peak_pnl_pct 재정규화
                 old_pk_px = max(float(info.get("peak_price", current_price) or current_price), float(current_price))
                 reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), ((old_pk_px - curr_avg_px) / curr_avg_px) * 100.0)
                 info["peak_pnl_pct"] = round(reanchored_pnl, 6)
@@ -378,7 +433,6 @@ class PositionLedgerManager:
             raw_peak_pnl = info.get("peak_pnl_pct", None)
             prev_peak_pnl = float(raw_peak_pnl) if (raw_peak_pnl is not None and raw_peak_price) else float(current_pnl_pct or 0.0)
 
-            # 신규 고점 갱신 (초기 peak_price == 0.0 상태 포함, 가격 또는 수익률 기준)
             if (not raw_peak_price) or current_price > prev_peak_price or current_pnl_pct > prev_peak_pnl:
                 info["peak_price"] = max(prev_peak_price, float(current_price or 0.0))
                 info["peak_pnl_pct"] = max(prev_peak_pnl, float(current_pnl_pct or 0.0))
@@ -392,7 +446,6 @@ class PositionLedgerManager:
                     info["peak_pnl_pct"] = prev_peak_pnl
                     updated = True
 
-            # 최저가(lowest_price) 및 분할매도 플래그(scaled_out) 보전/갱신
             if current_price > 0 and (prev_lowest_price <= 0 or current_price < prev_lowest_price):
                 info["lowest_price"] = float(current_price)
                 updated = True
@@ -404,11 +457,10 @@ class PositionLedgerManager:
                 info["scaled_out"] = False
                 updated = True
 
-            if abs(float(current_pnl_pct or 0.0) - float(info.get("last_pnl_pct", 0.0) or 0.0)) > 1e-4:
+            if abs(float(current_pnl_pct or 0.0) - float(info.get("last_pnl_pct", 0.0) or 0.0)) > _pnl_eps:
                 info["last_pnl_pct"] = float(current_pnl_pct or 0.0)
                 updated = True
 
-            # 트레일링 발동 조건 돌파 이력 체크
             if info.get("peak_pnl_pct", 0.0) >= trail_activate_threshold:
                 if not info.get("trail_activated", False):
                     info["trail_activated"] = True
@@ -420,7 +472,7 @@ class PositionLedgerManager:
             return dict(info)
 
     def get_hwm(self, ticker: str) -> Dict[str, Any]:
-        """특정 종목의 HWM 메타데이터 조회."""
+        """특정 종목의 HWM 및 스트림/트랙 메타데이터 조회."""
         with self._lock:
             ledger = self._load_file_unlocked()
             info = ledger.get(ticker)
@@ -433,6 +485,9 @@ class PositionLedgerManager:
                     "trail_activated": bool(info.get("trail_activated", False)),
                     "scaled_out": bool(info.get("scaled_out", False)),
                     "created_at": info.get("created_at"),
+                    "stream_id": info.get("stream_id"),
+                    "strategy": info.get("strategy"),
+                    "track": info.get("track"),
                 }
             return {
                 "peak_price": 0.0,
@@ -442,6 +497,9 @@ class PositionLedgerManager:
                 "trail_activated": False,
                 "scaled_out": False,
                 "created_at": None,
+                "stream_id": None,
+                "strategy": None,
+                "track": None,
             }
 
     def sync_live_positions(self, active_tickers: List[str], current_date_str: Optional[str] = None) -> Dict[str, str]:

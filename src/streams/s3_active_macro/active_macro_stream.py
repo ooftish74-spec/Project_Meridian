@@ -235,15 +235,16 @@ class S3FactorStream(BaseStream):
         for pick in etf_selected:
             pick['_type'] = 'ETF'
         qvm_safe = []
-        top_n_qvm = pget('s3.qvm_max_positions', 5)
+        qvm_exit_signals = []
+        top_n_qvm = int(pget('s3.buffett.max_positions', 5) or pget('s3.qvm_max_positions', 5))
         allow_kr_qvm = bool(cfg.get('s3.qvm.allow_kr_stocks', False))
         if not allow_kr_qvm:
             qvm_selected = []
+            new_qvm_picks = []
             logger.info('  🛡️ [S3 Active Macro] Track B (KR QVM) 비활성화 (s3.qvm.allow_kr_stocks=False) — Track A US ETF 100% 집중')
-        elif regime == 'crash':
-            qvm_selected = []
-            logger.info('  🛡️ [S3 Active Macro] Crash Regime: Track B (QVM) 작동 중지 (주식 100% 매도)')
         else:
+            from src.streams.s3_active_macro.qvm_strategic_sleeve import StrategicQVMCompoundingSleeve
+            _buffett_sleeve = StrategicQVMCompoundingSleeve()
             qvm_raw = self._qvm_universe.build_universe()
             qvm_scored = self._qvm_scorer.score_universe(qvm_raw)
             try:
@@ -253,34 +254,127 @@ class S3FactorStream(BaseStream):
                 log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
                 logger.debug(f'  [Track B] ICIR 팩터 검증 실패: {e}')
             qvm_safe = self._qvm_scorer.screen_value_traps(qvm_scored)
-        if allow_kr_qvm and regime != 'crash':
-            current_qvm_tickers = {h['ticker'] for h in self._current_holdings if h.get('_type') == 'QVM'}
-            held_qvm_picks = []
-            qvm_dict = {s['ticker']: s for s in qvm_safe}
-            for ticker in current_qvm_tickers:
-                if ticker in qvm_dict:
-                    stock = qvm_dict[ticker]
-                    if stock.get('margin_of_safety_pct', 0) < 0:
-                        _nm = stock.get('name', ticker)
-                        logger.info(f"  [Track B] {_nm} 매도: 안전마진 소진 (고평가)")
+            qvm_scored_dict = {s['ticker']: s for s in qvm_scored}
+
+            # 1) 현재 보유 중인 Track 2 (S3_B / TRACK_2_BUFFETT_QVM) 포지션 식별 (메모리 + 원장 + 포트폴리오 SSOT)
+            current_qvm_meta: Dict[str, Dict] = {}
+            for h in self._current_holdings:
+                if h.get('_type') == 'QVM' or h.get('stream_id') == 'S3_B' or h.get('track') == 'TRACK_2_BUFFETT_QVM':
+                    _tk_h = str(h.get('ticker', '')).strip()
+                    if _tk_h:
+                        current_qvm_meta[_tk_h] = dict(h)
+            try:
+                from src.execution.position_ledger import PositionLedgerManager
+                _plm_qvm = PositionLedgerManager()
+                _led_all = _plm_qvm.load_ledger()
+                _kp_file = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+                _kp_holdings = {}
+                if _kp_file.exists():
+                    _kp_holdings = (_json.loads(_kp_file.read_text(encoding='utf-8')).get('holdings') or {})
+                for _tk_k, _h_k in _kp_holdings.items():
+                    if not isinstance(_h_k, dict):
                         continue
-                    held_qvm_picks.append(stock)
+                    _l_meta = _led_all.get(_tk_k, {}) if isinstance(_led_all.get(_tk_k), dict) else {}
+                    _sid_k = _h_k.get('stream_id') or _l_meta.get('stream_id', '')
+                    _trk_k = _h_k.get('track') or _l_meta.get('track', '')
+                    _str_k = _h_k.get('strategy') or _l_meta.get('strategy', '')
+                    if _sid_k == 'S3_B' or _trk_k == 'TRACK_2_BUFFETT_QVM' or _str_k in ('buffett_qvm', 'qvm_value'):
+                        current_qvm_meta[str(_tk_k)] = {
+                            'ticker': str(_tk_k),
+                            'entry_price': float(_h_k.get('avg_price', _l_meta.get('entry_price', 0.0)) or 0.0),
+                            'current_price': float(_h_k.get('current_price', 0.0) or 0.0),
+                            'highest_price': float(_l_meta.get('highest_price', _h_k.get('current_price', 0.0)) or 0.0),
+                            'pnl_pct': float(_h_k.get('pnl_pct', 0.0) or 0.0),
+                        }
+            except Exception as _qvm_pos_e:
+                logger.debug(f'  [Track B] 보유 포지션 메타 로드 스킵: {_qvm_pos_e}')
+
+            current_qvm_tickers = set(current_qvm_meta.keys())
+
+            # 2) Buffett 4-Pillar Moat Gate 통과 후보군 선별
+            moat_candidates = []
+            for s in qvm_safe:
+                gate_res = _buffett_sleeve.evaluate_buffett_moat_gate(s, regime=regime)
+                if gate_res.get('passed', False):
+                    s_copy = dict(s)
+                    s_copy['_buffett_gate'] = gate_res
+                    moat_candidates.append(s_copy)
+            moat_candidates.sort(key=lambda x: float(x.get('qvm_score', 0.0) or 0.0), reverse=True)
+            best_new_candidate = next((c for c in moat_candidates if c['ticker'] not in current_qvm_tickers), None)
+
+            # 3) 기존 보유 종목에 대해 Buffett 4대 매도 헌법(Exit Laws 1~4) 평가
+            held_qvm_picks = []
+            _zero_slots = 0
+            for ticker in sorted(current_qvm_tickers):
+                pos_info = current_qvm_meta.get(ticker, {'ticker': ticker})
+                stock_m = qvm_scored_dict.get(ticker)
+                if stock_m is not None:
+                    # Punch-Card 교체(Exit Law 4)는 포트폴리오 슬롯이 가득 찬 경우에만 평가
+                    _is_full = len(current_qvm_tickers) >= top_n_qvm
+                    _cand_for_swap = best_new_candidate if _is_full else None
+                    exit_eval = _buffett_sleeve.evaluate_buffett_exit_laws(
+                        stock_data=stock_m,
+                        holding_info=pos_info,
+                        top_unheld_candidate=_cand_for_swap,
+                        is_sleeve_full=_is_full,
+                    )
+                    if exit_eval and (exit_eval.get('exit_law') or exit_eval.get('should_exit', False)):
+                        _nm = stock_m.get('name', ticker)
+                        _ex_reason = exit_eval.get('reason', 'Buffett Exit Law Triggered')
+                        _ex_type = exit_eval.get('exit_law') or exit_eval.get('exit_type', 'BUFFETT_EXIT')
+                        logger.info(f"  🔔 [Track 2 Buffett Exit] {_nm}({ticker}) 매도 결정 [{_ex_type}]: {_ex_reason}")
+                        qvm_exit_signals.append({
+                            'stream_id': 'S3_B',
+                            'track': 'TRACK_2_BUFFETT_QVM',
+                            'ticker': ticker,
+                            'name': _nm,
+                            'direction': 'exit',
+                            'action': 'sell',
+                            'confidence': 1.0,
+                            'size_pct': 0.0,
+                            'strategy': 'buffett_qvm',
+                            'exit_type': _ex_type,
+                            'reason': _ex_reason,
+                            'regime': regime,
+                            'sector': stock_m.get('sector', ''),
+                            'market': 'KR',
+                            'timestamp': datetime.now().isoformat(),
+                            '_type': 'QVM',
+                        })
+                        continue
+                    held_qvm_picks.append(stock_m)
                 else:
-                    logger.info(f'  [Track B] {ticker} 매도: 유니버스/안전성 이탈')
-            new_qvm_needed = max(0, top_n_qvm - len(held_qvm_picks))
+                    logger.info(f'  [Track 2 Buffett QVM] {ticker} 유니버스 재무데이터 미확인 — 4대 매도법칙 외 강제매도 금지(보유 유지)')
+
+            # 4) 신규 편입 (섹터당 최대 2종목 분산 + Buffett 4-Pillar 통과 종목만)
+            new_qvm_needed = max(_zero_slots, top_n_qvm - len(held_qvm_picks))
             new_qvm_picks = []
-            if new_qvm_needed > 0:
-                candidates = [s for s in qvm_safe if s['ticker'] not in current_qvm_tickers]
-                candidates.sort(key=lambda x: x['qvm_score'], reverse=True)
-                new_qvm_picks = candidates[:new_qvm_needed]
-                for pick in new_qvm_picks:
-                    _nm = pick.get('name', '')
-                    _qvm_sc = pick.get('qvm_score', 0)
-                    logger.info(f"  [Track B] {_nm} 신규 편입: QVM={_qvm_sc}")
+            if new_qvm_needed > _zero_slots:
+                _sec_counts: Dict[str, int] = {}
+                _max_per_sec = 2
+                for _hp in held_qvm_picks:
+                    _hsec = str(_hp.get('sector') or '기타')
+                    _sec_counts[_hsec] = _sec_counts.get(_hsec, 0) + 1
+                for cand in moat_candidates:
+                    if len(new_qvm_picks) >= new_qvm_needed:
+                        break
+                    if cand['ticker'] in current_qvm_tickers:
+                        continue
+                    _csec = str(cand.get('sector') or '기타')
+                    if _sec_counts.get(_csec, 0) >= _max_per_sec:
+                        continue
+                    new_qvm_picks.append(cand)
+                    _sec_counts[_csec] = _sec_counts.get(_csec, 0) + 1
+                    _nm = cand.get('name', '')
+                    _qvm_sc = cand.get('qvm_score', 0)
+                    _mos_sc = cand.get('margin_of_safety_pct', cand.get('_buffett_gate', {}).get('mos_pct', 0))
+                    cand['margin_of_safety_pct'] = float(_mos_sc)
+                    _roic_sp = cand.get('roic_wacc_spread_pct', 0)
+                    logger.info(
+                        f"  🏰 [Track 2 Buffett QVM] {_nm}({cand['ticker']}) 신규 편입 승인: "
+                        f"QVM={_qvm_sc:.1f}, MoS={_mos_sc:+.1f}%, ROIC-WACC={_roic_sp:+.1f}%p"
+                    )
             qvm_selected = held_qvm_picks + new_qvm_picks
-        else:
-            new_qvm_picks = []
-            qvm_selected = []
         for pick in qvm_selected:
             pick['_type'] = 'QVM'
             pick['score'] = pick.get('qvm_score', 0) / 100.0
@@ -288,19 +382,24 @@ class S3FactorStream(BaseStream):
             target_qvm_weight = 0.0
         else:
             target_qvm_weight = pget('s3.allocation.qvm_base_weight', 0.5)
-            if len(new_qvm_picks) >= top_n_qvm and all((s.get('margin_of_safety_pct', 0) > 50 for s in new_qvm_picks)):
+            _deep_mos_thr = 50.0
+            if len(new_qvm_picks) >= top_n_qvm and all((s.get('margin_of_safety_pct', 0) > _deep_mos_thr for s in new_qvm_picks)):
                 target_qvm_weight = pget('s3.allocation.qvm_max_weight', 0.7)
                 logger.info('  [하이브리드] 딥 밸류장 감지: QVM 비중 70%로 확대')
             elif regime in ['bear', 'crash']:
                 target_qvm_weight = pget('s3.allocation.qvm_min_weight', 0.3)
-                logger.info(f'  [하이브리드] {regime} 레짐 감지: QVM 방어적 축소 (30%)')
+                logger.info(f'  [하이브리드] {regime} 레짐 감지: QVM 신규배분 방어적 조율 (30%)')
         target_etf_weight = 1.0 - target_qvm_weight
         etf_sum = sum((max(0.01, p['score']) for p in etf_selected))
         for pick in etf_selected:
             pick['_weight'] = max(0.01, pick['score']) / etf_sum * target_etf_weight if etf_sum > 0 else 0
-        qvm_count = len(qvm_selected)
-        for pick in qvm_selected:
-            pick['_weight'] = target_qvm_weight / max(1, qvm_count)
+        qvm_convictions = [
+            max(0.01, float(p.get('score', 0.5)) * (1.0 + min(1.0, max(0.0, float(p.get('margin_of_safety_pct', 0.0) or 0.0)) / 100.0)))
+            for p in qvm_selected
+        ]
+        qvm_conv_sum = sum(qvm_convictions)
+        for pick, conv in zip(qvm_selected, qvm_convictions):
+            pick['_weight'] = (conv / qvm_conv_sum * target_qvm_weight) if qvm_conv_sum > 0 else (target_qvm_weight / max(1, len(qvm_selected)))
         combined_selected = etf_selected + qvm_selected
         invest_ratio = cfg.get(f's3.regime_invest_ratio.{regime}', pget('s3.regime_invest_ratio.caution', 0.8))
         signal_cache_ref = market_data.get('signal_cache', {})
@@ -308,9 +407,11 @@ class S3FactorStream(BaseStream):
         vol_baseline_ref = pget('s3.exit.vol_baseline', 18.0)
         vol_scale_ref = max(pget('s3.tp_sl.vol_scale_min', 0.5), min(cfg.get('s3.tp_sl.vol_scale_max', 2.0), vix_ref / max(vol_baseline_ref, 1.0)))
         for pick in combined_selected:
-            adj_weight = pick['_weight'] * invest_ratio
-            strategy = 'qvm_value' if pick['_type'] == 'QVM' else pick.get('strategy', 'multifactor_rotation')
-            if pick['_type'] == 'ETF':
+            is_qvm_pick = (pick['_type'] == 'QVM')
+            # Track 2 (Buffett QVM)는 레짐 축소(invest_ratio)로 인해 기존 보유분이 깎이지 않도록 독립 비중 유지
+            adj_weight = pick['_weight'] if is_qvm_pick else (pick['_weight'] * invest_ratio)
+            strategy = 'buffett_qvm' if is_qvm_pick else pick.get('strategy', 'multifactor_rotation')
+            if not is_qvm_pick:
                 regime_tp_ref = {'bull': pget('s3.exit.tp.bull', 18), 'caution': pget('s3.exit.tp.caution', 15), 'bear': pget('s3.exit.tp.bear', 10), 'crash': pget('s3.exit.tp.crash', 7)}
                 tp_val = regime_tp_ref.get(regime, pget('s3.exit.tp.caution', 15)) / vol_scale_ref
                 tp_val = max(pget('s3.exit.tp_floor', 5), tp_val)
@@ -333,11 +434,38 @@ class S3FactorStream(BaseStream):
             _type_str = pick['_type']
             _score_val = pick['score']
             _reason_str = pick.get('reason', f"{_type_str} Score={_score_val:.3f}")
-            signals.append({'stream_id': 'S3_B' if pick['_type'] == 'QVM' else 'S3_A', 'ticker': pick['ticker'], 'name': pick['name'], 'direction': 'long', 'confidence': round(max(0, min(1.0, pick['score'])), 3), 'size_pct': round(adj_weight, 4), 'strategy': strategy, 'reason': _reason_str, 'regime': regime, 'sector': pick.get('sector', ''), 'market': pick.get('market', 'KR'), 'timestamp': datetime.now().isoformat(), '_type': pick['_type'], 'tp_pct': round(tp_val, 2), 'sl_pct': round(sl_val, 2)})
+            _sig_item = {
+                'stream_id': 'S3_B' if is_qvm_pick else 'S3_A',
+                'track': 'TRACK_2_BUFFETT_QVM' if is_qvm_pick else 'TRACK_1_TACTICAL',
+                'ticker': pick['ticker'],
+                'name': pick['name'],
+                'direction': 'long',
+                'confidence': round(max(0, min(1.0, pick['score'])), 3),
+                'size_pct': round(adj_weight, 4),
+                'strategy': strategy,
+                'reason': _reason_str,
+                'regime': regime,
+                'sector': pick.get('sector', ''),
+                'market': pick.get('market', 'KR'),
+                'timestamp': datetime.now().isoformat(),
+                '_type': pick['_type'],
+                'tp_pct': round(tp_val, 2),
+                'sl_pct': round(sl_val, 2),
+                'noise_stop_loss_exempt': bool(is_qvm_pick),
+            }
+            if is_qvm_pick:
+                _sig_item['expected_return_pct'] = round(max(float(pick.get('margin_of_safety_pct', 20.0) or 20.0), 20.0), 2)
+                _sig_item['margin_of_safety_pct'] = float(pick.get('margin_of_safety_pct', 0.0) or 0.0)
+                _sig_item['f_score'] = int(pick.get('f_score', 6) or 6)
+                _sig_item['ohlson_prob'] = float(pick.get('ohlson_prob', 0.0) or 0.0)
+                _sig_item['roic_wacc_spread_pct'] = float(pick.get('roic_wacc_spread_pct', 0.0) or 0.0)
+            signals.append(_sig_item)
+        if qvm_exit_signals:
+            signals.extend(qvm_exit_signals)
         if signals:
-            self._current_holdings = [{'ticker': s['ticker'], 'score': s['confidence'], '_type': s['_type']} for s in signals]
-            self._rebalance_history.append({'date': datetime.now().isoformat(), 'regime': regime, 'selected': [s['ticker'] for s in signals], 'source': 'hybrid_rotation'})
-            self._log_event('REBALANCE', {'stream': 'S3', 'sectors': [s['ticker'] for s in signals], 'qvm_weight': target_qvm_weight, 'etf_weight': target_etf_weight, 'regime': regime})
+            self._current_holdings = [{'ticker': s['ticker'], 'score': s['confidence'], '_type': s['_type'], 'stream_id': s.get('stream_id', ''), 'track': s.get('track', '')} for s in signals if s.get('direction') == 'long']
+            self._rebalance_history.append({'date': datetime.now().isoformat(), 'regime': regime, 'selected': [s['ticker'] for s in signals if s.get('direction') == 'long'], 'source': 'hybrid_rotation'})
+            self._log_event('REBALANCE', {'stream': 'S3', 'sectors': [s['ticker'] for s in signals if s.get('direction') == 'long'], 'qvm_weight': target_qvm_weight, 'etf_weight': target_etf_weight, 'regime': regime})
         # ── [Alpha 4: Track C Cross-Asset Sleeve Integration] ──
         try:
             from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
@@ -704,29 +832,34 @@ class S3FactorStream(BaseStream):
         return self._current_holdings
 
     def evaluate_exit_rules(self, positions: Dict, market_data: Dict, regime: str) -> List[Dict]:
-        """S3 ETF 포지션 동적 TP/SL + 모멘텀 반전 조기 청산.
-
-        모든 임계값 DynamicConfig 동적 로드.
-        변동성 기반 동적 조정.
-        """
+        """S3 ETF 포지션 동적 TP/SL + Track 2 (S3_B) Buffett 4대 매도 헌법 분리 평가."""
         exits = []
         signal_cache = market_data.get('signal_cache', {})
         vix = signal_cache.get('vix', pget('s3.vix_fallback_default', 18.0))
         vol_baseline = pget('s3.exit.vol_baseline', 18.0)
         vol_scale = max(0.5, min(2.0, vix / vol_baseline))
         for key, pos in positions.items():
-            if pos.get('stream') not in ('S3', 'S3_A', 'S3_B'):
+            _sid = pos.get('stream_id') or pos.get('stream', '')
+            _trk = pos.get('track', '')
+            if _sid not in ('S3', 'S3_A', 'S3_B') and _trk != 'TRACK_2_BUFFETT_QVM':
                 continue
             pnl_pct = pos.get('pnl_pct', 0)
             days_held = pos.get('days_held', 0)
             strategy = pos.get('strategy', '')
             reason = None
             urgency = 0
-            if strategy == 'qvm_value':
-                qvm_disaster_sl = pget('s3.exit.qvm_disaster_sl', -30.0)
-                if pnl_pct <= qvm_disaster_sl:
-                    reason = f'QVM 재난 SL: {pnl_pct:+.1f}% <= {qvm_disaster_sl}%'
-                    urgency = 3
+            is_track2 = (_sid == 'S3_B' or _trk == 'TRACK_2_BUFFETT_QVM' or strategy in ('qvm_value', 'buffett_qvm'))
+            if is_track2:
+                from src.streams.s3_active_macro.qvm_strategic_sleeve import StrategicQVMCompoundingSleeve
+                _b_eval = StrategicQVMCompoundingSleeve().evaluate_buffett_exit_laws(
+                    stock_data=pos.get('stock_metrics', pos),
+                    holding_info=pos,
+                    top_unheld_candidate=pos.get('best_candidate'),
+                    is_sleeve_full=bool(pos.get('is_sleeve_full', False)),
+                )
+                if _b_eval and (_b_eval.get('exit_law') or _b_eval.get('should_exit', False)):
+                    reason = _b_eval.get('reason', 'Buffett Exit Law')
+                    urgency = 2
             else:
                 regime_tp = {'bull': pget('s3.exit.tp.bull', 18), 'caution': pget('s3.exit.tp.caution', 15), 'bear': pget('s3.exit.tp.bear', 10), 'crash': pget('s3.exit.tp.crash', 7)}
                 tp = regime_tp.get(regime, 15) / vol_scale
@@ -735,17 +868,18 @@ class S3FactorStream(BaseStream):
                 sl = regime_sl.get(regime, -7) * vol_scale
                 sl = min(pget('s3.exit.sl_ceiling', -3), sl)
                 early_trigger = pget('s3.exit.early_rebalance_pct', -5)
+                _early_max_days = 20
                 if pnl_pct >= tp:
                     reason = f'TP: {pnl_pct:+.1f}% >= {tp:.1f}%'
                     urgency = 2
                 elif pnl_pct <= sl:
                     reason = f'SL: {pnl_pct:+.1f}% <= {sl:.1f}%'
                     urgency = 3
-                elif pnl_pct <= early_trigger and days_held < 20:
+                elif pnl_pct <= early_trigger and days_held < _early_max_days:
                     reason = f'조기 리밸런싱: {pnl_pct:+.1f}% <= {early_trigger}% (보유 {days_held}일)'
                     urgency = 1
             if reason:
-                exits.append({'ticker': pos.get('ticker', ''), 'name': pos.get('name', ''), 'action': 'SELL', 'reason': reason, 'urgency': urgency, 'pnl_pct': pnl_pct, 'stream': 'S3'})
+                exits.append({'ticker': pos.get('ticker', ''), 'name': pos.get('name', ''), 'action': 'SELL', 'reason': reason, 'urgency': urgency, 'pnl_pct': pnl_pct, 'stream': 'S3_B' if is_track2 else 'S3'})
         return exits
 
     def get_performance(self) -> Dict:
@@ -753,7 +887,8 @@ class S3FactorStream(BaseStream):
         n = len(self._daily_returns)
         cum_ret = sum(self._daily_returns) if n > 0 else 0
         sharpe = None
-        if n >= 5:
+        _min_perf_days = 5
+        if n >= _min_perf_days:
             mean_r = sum(self._daily_returns) / n
             var = sum(((r - mean_r) ** 2 for r in self._daily_returns)) / n
             std = math.sqrt(var) if var > 0 else 0

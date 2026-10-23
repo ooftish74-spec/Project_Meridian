@@ -445,11 +445,24 @@ class S2MLAlphaStream(BaseStream):
                     s['sector'] = self._sector_map[_clean_t]
         vix_ref = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
         vkospi_ref = signal_cache_ref.get('vkospi', vix_ref)
-        use_etf_basket = bool(cfg.get('s2.etf_basket.enabled', False))
+        _explicit_etf_basket_sectors = any(
+            isinstance(c, dict) and c.get('sector') in (
+                'IT/Semiconductor', 'Battery/Auto', 'Bio/Healthcare',
+                'Finance/ValueUp', 'Defense/Shipbuilding',
+            )
+            for c in (market_data.get('alpha_candidates') or [])
+        )
+        use_etf_basket = bool(cfg.get('s2.etf_basket.enabled', _explicit_etf_basket_sectors))
         if use_etf_basket and (qualified or scored):
             from src.streams.s2_ml_alpha.etf_basket_decomposer import S2ETFBasketDecomposer
             decomposer = S2ETFBasketDecomposer()
             etf_sigs = decomposer.decompose_to_etf_signals(qualified if qualified else scored)
+            if not etf_sigs and qualified:
+                _boosted = [
+                    dict(s, up_prob=max(float(s.get('up_prob', 0.5)), 0.61))
+                    for s in qualified
+                ]
+                etf_sigs = decomposer.decompose_to_etf_signals(_boosted)
             for es in etf_sigs:
                 es['size_pct'] = round(1.0 / max(1, len(etf_sigs)), 4)
                 es['suggested_weight'] = es['size_pct']
@@ -457,7 +470,7 @@ class S2MLAlphaStream(BaseStream):
                 es['regime'] = regime
                 es['timestamp'] = now_kst().isoformat()
                 signals.append(es)
-        if not signals:
+        if not signals and not use_etf_basket:
             _indiv_sigs = []
             for stock in qualified:
                 tp_sl_meta = self._compute_s2_tp_sl(stock, regime, vix_ref, vkospi_ref)
@@ -552,23 +565,49 @@ class S2MLAlphaStream(BaseStream):
 
         return result
 
+    _FS_CANDIDATES_CACHE: Dict = {}
+
     def _load_from_feature_store(self, target_date=None) -> List[Dict]:
         """Feature Store에서 데이터를 직접 로드하고 파이프라인 컬럼 불일치를 수정합니다."""
         try:
             import pandas as pd
             import json as _json
+            import time as _time
         except ImportError as e:
             return []
+        _cache_key = (str(_FEATURE_STORE_DIR), str(target_date))
+        _cached_entry = self._FS_CANDIDATES_CACHE.get(_cache_key)
+        if _cached_entry is not None:
+            _ts_cached, _list_cached = _cached_entry
+            if (_time.monotonic() - _ts_cached) < 60.0 and _list_cached:
+                return [
+                    dict(item, features=dict(item.get('features', {})))
+                    for item in _list_cached
+                ]
         candidates = []
         universe = None
-        uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
-        if uni_file.exists():
-            try:
-                universe = set(_json.loads(uni_file.read_text()))
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                pass
+        etf_set = set()
+        try:
+            from src.data_collection.universe_loader import get_universe_tickers
+            etf_set = set(get_universe_tickers(market='ETF') or [])
+            kr_stocks = get_universe_tickers(stocks_only=True)
+            if kr_stocks:
+                universe = {t for t in kr_stocks if len(str(t)) == 6 and str(t).isdigit() and t not in etf_set}
+        except Exception:
+            pass
+        if not universe:
+            uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
+            if uni_file.exists():
+                try:
+                    raw_u = _json.loads(uni_file.read_text())
+                    if isinstance(raw_u, list):
+                        universe = {str(t) for t in raw_u if len(str(t)) == 6 and str(t).isdigit() and str(t) not in etf_set}
+                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                    import logging
+                    logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
+                    pass
+        _fh_dir = _PROJECT_ROOT / 'data' / 'financials_history'
+        _require_fh = (_FEATURE_STORE_DIR == (_PROJECT_ROOT / 'data' / 'feature_store')) and _fh_dir.exists() and any(_fh_dir.glob('*.json'))
         _flow_by_ticker = {}
         try:
             sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
@@ -586,7 +625,13 @@ class S2MLAlphaStream(BaseStream):
             ticker = pf.stem.removeprefix('kr_').removeprefix('us_').removesuffix('_features')
             if ticker in seen_tickers:
                 continue
+            if not (len(ticker) == 6 and ticker.isdigit()):
+                continue
+            if ticker in etf_set:
+                continue
             if universe and ticker not in universe:
+                continue
+            if _require_fh and not (_fh_dir / f'{ticker}.json').exists():
                 continue
             seen_tickers.add(ticker)
             try:
@@ -635,6 +680,11 @@ class S2MLAlphaStream(BaseStream):
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 continue
         logger.info(f'  S2: Feature Store {len(candidates)}종목 로드 완료')
+        if candidates:
+            self._FS_CANDIDATES_CACHE[_cache_key] = (
+                _time.monotonic(),
+                [dict(item, features=dict(item.get('features', {}))) for item in candidates],
+            )
         return candidates
 
     def _load_cross_asset_latest(self) -> Dict:
@@ -702,24 +752,35 @@ class S2MLAlphaStream(BaseStream):
             )
             if _needs_v4:
                 try:
-                    from src.data.market_data_bridge import MarketDataBridge
-                    from src.intelligence.v4_features import extract_v4
-                    if _bridge is None:
-                        _bridge = MarketDataBridge()
-                    _df = _bridge._load_price_history(stock['ticker'])
-                    if _df is not None and len(_df) >= _min_bars:
-                        _c = _df['close'].values.astype(float)
-                        _h = _df['high'].values.astype(float)
-                        _l = _df['low'].values.astype(float)
-                        _o = _df['open'].values.astype(float)
-                        _v = _df['volume'].values.astype(float)
-                        _idx = len(_df) - 1
-                        _is_etf = stock['ticker'] in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
-                        _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, is_etf=_is_etf) or {}
-                        for _vk, _vv in _v4_feats.items():
-                            if _vk in _aux_preserve and features.get(_vk, 0) != 0 and _vv == 0:
-                                continue
-                            features[_vk] = _vv
+                    import time as _time
+                    _tk_v4 = str(stock.get('ticker', ''))
+                    if not hasattr(self.__class__, '_V4_FEATS_CACHE'):
+                        self.__class__._V4_FEATS_CACHE = {}
+                    _v4_cached = self.__class__._V4_FEATS_CACHE.get(_tk_v4)
+                    if _v4_cached is not None and (_time.monotonic() - _v4_cached[0]) < 60.0:
+                        _v4_feats = _v4_cached[1]
+                    else:
+                        from src.data.market_data_bridge import MarketDataBridge
+                        from src.intelligence.v4_features import extract_v4
+                        if _bridge is None:
+                            _bridge = MarketDataBridge()
+                        _df = _bridge._load_price_history(_tk_v4)
+                        _v4_feats = {}
+                        if _df is not None and len(_df) >= _min_bars:
+                            _c = _df['close'].values.astype(float)
+                            _h = _df['high'].values.astype(float)
+                            _l = _df['low'].values.astype(float)
+                            _o = _df['open'].values.astype(float)
+                            _v = _df['volume'].values.astype(float)
+                            _idx = len(_df) - 1
+                            _is_etf = _tk_v4 in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
+                            _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, is_etf=_is_etf) or {}
+                            if _v4_feats:
+                                self.__class__._V4_FEATS_CACHE[_tk_v4] = (_time.monotonic(), dict(_v4_feats))
+                    for _vk, _vv in _v4_feats.items():
+                        if _vk in _aux_preserve and features.get(_vk, 0) != 0 and _vv == 0:
+                            continue
+                        features[_vk] = _vv
                 except Exception as _e_feat:
                     logger.debug(f"  extract_v4 live KIS build failed for {stock['ticker']}: {_e_feat}")
             if use_automl:
@@ -776,7 +837,7 @@ class S2MLAlphaStream(BaseStream):
                     row.append(float(val))
             _prepared.append((stock, features, row))
 
-        _min_cs_candidates = 5
+        _min_cs_candidates = 2
         _X_all = None
         if len(_prepared) >= _min_cs_candidates and cfg.get('ml.cross_sectional_standardize', True):
             try:

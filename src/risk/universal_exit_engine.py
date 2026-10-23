@@ -21,7 +21,7 @@ import math
 import numpy as np
 import pandas as pd
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from config.dynamic_config import DynamicConfig
 from src.utils.dynamic_quant_engine import get_quant_engine
@@ -154,10 +154,18 @@ class UniversalExitEngine:
         _dyn_cash_eq = _dqe.get_cash_equivalent_tickers()
         _PARKING_EXEMPT = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'} | _dyn_cash_eq
         from src.utils.market_calendar import is_kr_ticker as _is_kr_uee
+        try:
+            from src.execution.position_ledger import PositionLedgerManager as _PLM_Uee
+            _plm_uee = _PLM_Uee()
+        except Exception:
+            _plm_uee = None
 
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
-            stream_id = pos.get('stream_id', pos_key.split(':')[0] if ':' in pos_key else 'S4')
+            _l_meta = _plm_uee.get_position_meta(str(ticker)) if _plm_uee is not None else {}
+            stream_id = pos.get('stream_id') or pos.get('stream') or _l_meta.get('stream_id') or (pos_key.split(':')[0] if ':' in pos_key else 'S4')
+            pos_track = pos.get('track') or _l_meta.get('track', '')
+            pos_strategy = pos.get('strategy') or _l_meta.get('strategy', '')
             qty = float(pos.get('quantity', pos.get('qty', 0)))
             
             if qty <= 0:
@@ -180,6 +188,30 @@ class UniversalExitEngine:
                     pass
                 if price <= 0:
                     price = entry_px if entry_px > 0 else 1.0
+
+            # ── [Track 2 Isolation] Buffett-Moat QVM (S3_B) 전용 4대 매도 헌법 라우팅 ──
+            # 단기 노이즈 손절(-2.5%~-5%), 본전 보존(Profit-Lock), 샹들리에 추적손절, 3~5일 시간감쇠 청산을 100% 차단하고
+            # 오직 해자 훼손(Exit 1), 극단적 과열(Exit 2), 구조적 대세 추세 붕괴(Exit 3), 기회비용 교체(Exit 4)만 평가.
+            is_track2_buffett = (
+                stream_id == 'S3_B'
+                or pos_track == 'TRACK_2_BUFFETT_QVM'
+                or pos_strategy in ('buffett_qvm', 'qvm_value')
+                or bool(pos.get('noise_stop_loss_exempt', False))
+            )
+            if is_track2_buffett:
+                _t2_order = self._evaluate_buffett_track2_exit(
+                    ticker=str(ticker),
+                    pos=pos,
+                    price=price,
+                    entry_px=entry_px,
+                    qty=qty,
+                    ledger_meta=_l_meta,
+                    market_data=market_data,
+                )
+                if _t2_order is not None:
+                    exit_orders.append(_t2_order)
+                continue
+
             pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
             peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
             atr_pct = self.compute_ticker_atr(ticker)
@@ -223,6 +255,7 @@ class UniversalExitEngine:
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
+                    'exit_type': 'hard_stop_loss',
                     'reason': detail
                 })
                 continue
@@ -237,6 +270,7 @@ class UniversalExitEngine:
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
+                    'exit_type': 'catastrophic_peak_stop',
                     'reason': detail
                 })
                 continue
@@ -257,6 +291,7 @@ class UniversalExitEngine:
                 exit_orders.append({
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
+                    'exit_type': 'chandelier_trailing',
                     'reason': detail
                 })
                 continue
@@ -318,3 +353,104 @@ class UniversalExitEngine:
 
         logger.info(f"  🛡️ [Universal Exit SSOT] 전사 포지션({len(positions)}개) 평가 ➔ 체결/손절 주문 {len(exit_orders)}건 발화")
         return {'exit_orders': exit_orders, 'evaluated_count': len(positions)}
+
+    def _evaluate_buffett_track2_exit(
+        self,
+        ticker: str,
+        pos: Dict[str, Any],
+        price: float,
+        entry_px: float,
+        qty: float,
+        ledger_meta: Optional[Dict[str, Any]] = None,
+        market_data: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Track 2 (S3_B / TRACK_2_BUFFETT_QVM) 전용 4대 매도 헌법 평가기.
+
+        Track 1의 단기 가격 손절(-2.5%~-5%), Profit-Lock 본전 청산, 단기 샹들리에 추적손절,
+        3~5일 Time-Decay 반토막 청산을 100% 배제하고 오직 Buffett 4대 매도 법칙만 적용합니다.
+        """
+        try:
+            from src.streams.s3_active_macro.qvm_strategic_sleeve import StrategicQVMCompoundingSleeve
+            _l_meta = ledger_meta or {}
+            _hwm = float(pos.get('highest_price', _l_meta.get('highest_price', 0.0)) or 0.0)
+            _zero = 0.0
+            if _hwm <= _zero:
+                _hwm = max(price, entry_px)
+            else:
+                _hwm = max(_hwm, price)
+            _pnl_pct = float(
+                pos.get(
+                    'unrealized_pnl_pct',
+                    pos.get(
+                        'pnl_pct',
+                        pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > _zero and price > _zero else 0.0),
+                    ),
+                )
+            )
+            pos_merged = dict(pos)
+            pos_merged.update({
+                'ticker': ticker,
+                'stream_id': 'S3_B',
+                'track': 'TRACK_2_BUFFETT_QVM',
+                'current_price': price,
+                'entry_price': entry_px,
+                'highest_price': _hwm,
+                'pnl_pct': _pnl_pct,
+            })
+
+            stock_metrics = dict(pos.get('stock_metrics') if isinstance(pos.get('stock_metrics'), dict) else pos)
+            stock_metrics.setdefault('current_price', price)
+            if float(stock_metrics.get('ma200', 0.0) or 0.0) <= _zero:
+                try:
+                    import numpy as _np_t2
+                    import pandas as _pd_t2
+                    _kr_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
+                    if not _kr_pq.exists():
+                        _kr_pq = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
+                    if _kr_pq.exists():
+                        _df_p = _pd_t2.read_parquet(_kr_pq)
+                        _c_col = 'close' if 'close' in _df_p.columns else ('Close' if 'Close' in _df_p.columns else None)
+                        if _c_col is not None:
+                            _cs = _df_p[_c_col].dropna().astype(float)
+                            _min_c = 20
+                            if len(_cs) >= _min_c:
+                                stock_metrics.setdefault('ma20', float(_cs.tail(20).mean()))
+                                stock_metrics.setdefault('ma60', float(_cs.tail(min(60, len(_cs))).mean()))
+                                stock_metrics.setdefault('ma200', float(_cs.tail(min(200, len(_cs))).mean()))
+                                _rets = _cs.pct_change().dropna().tail(20)
+                                _min_r = 5
+                                if len(_rets) >= _min_r:
+                                    stock_metrics.setdefault('daily_vol_20d', float(_rets.std()))
+                                _hwm_60 = float(_cs.tail(min(60, len(_cs))).max())
+                                if _hwm_60 > _hwm:
+                                    pos_merged['highest_price'] = _hwm_60
+                except Exception:
+                    pass
+
+            sleeve = StrategicQVMCompoundingSleeve()
+            res = sleeve.evaluate_buffett_exit_laws(
+                stock_data=stock_metrics,
+                holding_info=pos_merged,
+                top_unheld_candidate=pos.get('best_candidate'),
+                is_sleeve_full=bool(pos.get('is_sleeve_full', False)),
+            )
+            if res and (res.get('exit_law') or res.get('should_exit', False)):
+                _ex_type = str(res.get('exit_law') or res.get('exit_type') or 'BUFFETT_EXIT')
+                _reason = str(res.get('reason') or f'🏰 [Buffett Exit] {ticker} ({_ex_type})')
+                logger.warning(f"  🏰 [Track 2 Buffett Exit 발화] {ticker} (S3_B): {_reason}")
+                return {
+                    'stream_id': 'S3_B',
+                    'track': 'TRACK_2_BUFFETT_QVM',
+                    'ticker': ticker,
+                    'direction': 'short',
+                    'action': 'sell',
+                    'quantity': qty,
+                    'price': price,
+                    'execution_algo': 'market',
+                    'exit_type': _ex_type,
+                    'reason': _reason,
+                }
+        except Exception as _t2_err:
+            logger.debug(f"  [Track 2 Buffett Exit] 평가 스킵 ({ticker}): {_t2_err}")
+        return None
+

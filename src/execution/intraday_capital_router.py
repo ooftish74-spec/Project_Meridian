@@ -186,21 +186,27 @@ class IntradayCapitalRouter:
                 inverse_conflict = ((self.INVERSE_PAIR_MAP.get(t1) == t2) or _beta_conflict) and (side1 == 'buy' and side2 == 'buy')
 
                 if same_ticker_conflict or inverse_conflict:
-                    # 마켓-뉴트럴 페어 전략(S14) 주문은 자체 인버스 헤지 레그와 짝을 이루는 중립 포지션이므로,
-                    # 방향성 주문(S0/S1/S2/S3)이나 페어 파트너와 역방향 상충 상쇄(Smart Netting)하지 않음
+                    # 마켓-뉴트럴 페어 전략(S14) 및 Track 2 장기 해자 복리 슬리브(S3_B / TRACK_2_BUFFETT_QVM) 주문은
+                    # Track 1 단기 방향성/인버스 헤지 주문과 역방향 상충 상쇄(Smart Netting)하지 않음
                     _strat1 = str(s1.get('strategy', '')).lower()
                     _strat2 = str(s2.get('strategy', '')).lower()
+                    _sid1 = str(s1.get('stream_id', s1.get('stream', ''))).upper()
+                    _sid2 = str(s2.get('stream_id', s2.get('stream', ''))).upper()
                     _is_pair1 = (
                         ('pair' in _strat1)
                         or bool(s1.get('pair_id'))
                         or bool(s1.get('pair_partner'))
-                        or str(s1.get('stream_id', s1.get('stream', ''))).upper() in ('S14', 'S14_PAIR_ALPHA')
+                        or _sid1 in ('S14', 'S14_PAIR_ALPHA', 'S3_B')
+                        or s1.get('track') == 'TRACK_2_BUFFETT_QVM'
+                        or _strat1 in ('buffett_qvm', 'qvm_value')
                     )
                     _is_pair2 = (
                         ('pair' in _strat2)
                         or bool(s2.get('pair_id'))
                         or bool(s2.get('pair_partner'))
-                        or str(s2.get('stream_id', s2.get('stream', ''))).upper() in ('S14', 'S14_PAIR_ALPHA')
+                        or _sid2 in ('S14', 'S14_PAIR_ALPHA', 'S3_B')
+                        or s2.get('track') == 'TRACK_2_BUFFETT_QVM'
+                        or _strat2 in ('buffett_qvm', 'qvm_value')
                     )
                     if inverse_conflict and (_is_pair1 or _is_pair2):
                         continue
@@ -347,11 +353,26 @@ class IntradayCapitalRouter:
         raw_holdings = portfolio.get('holdings') or portfolio.get('positions') or {}
         holdings_ev = {}
 
+        try:
+            from src.execution.position_ledger import PositionLedgerManager as _PLM_Ev
+            _plm_ev = _PLM_Ev()
+        except Exception:
+            _plm_ev = None
+
         for key, pos in raw_holdings.items():
             ticker = pos.get('ticker') or (key.split(':')[-1] if ':' in key else key)
             if not ticker:
                 continue
-            
+
+            # [Track 2 Isolation] Buffett-Moat QVM (S3_B / TRACK_2_BUFFETT_QVM) 장기 복리 종목은
+            # 단기 전술 스트림(Track 1)의 Cross-Asset Alpha Swap 자금원(강제 편출 대상)에서 100% 제외
+            _l_meta_ev = _plm_ev.get_position_meta(str(ticker)) if _plm_ev is not None else {}
+            _sid_ev = pos.get('stream_id') or pos.get('stream') or _l_meta_ev.get('stream_id', '')
+            _trk_ev = pos.get('track') or _l_meta_ev.get('track', '')
+            _str_ev = pos.get('strategy') or _l_meta_ev.get('strategy', '')
+            if _sid_ev == 'S3_B' or _trk_ev == 'TRACK_2_BUFFETT_QVM' or _str_ev in ('buffett_qvm', 'qvm_value'):
+                continue
+
             # 현금성 자산(KOFR, CD금리, 단기채)은 스왑 편출 우선순위 최하위 또는 별도 안전자산으로 보호
             if ticker in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
                 holdings_ev[ticker] = 0.50 # 안전자산 기본 중립값
@@ -652,6 +673,13 @@ class IntradayCapitalRouter:
                     }
 
                     for h_ticker, h_ev in holdings_ev.items():
+                        h_pos_info = holdings_dict.get(h_ticker) if isinstance(holdings_dict, dict) else {}
+                        if isinstance(h_pos_info, dict) and (
+                            h_pos_info.get('stream_id') == 'S3_B'
+                            or h_pos_info.get('track') == 'TRACK_2_BUFFETT_QVM'
+                            or h_pos_info.get('strategy') in ('buffett_qvm', 'qvm_value')
+                        ):
+                            continue
                         h_is_us = not is_kr_ticker(h_ticker)
                         if h_is_us == is_us_candidate and h_ticker not in ('459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'):
                             if enforce_session_gate or market_data.get('enforce_session_gate', False):
