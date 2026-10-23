@@ -876,6 +876,19 @@ def _phase_aftermarket():
     except Exception as e:
         logger.error(f"  유니버스 갱신 실패: {e}", exc_info=True)
 
+    # 5. ★ 법인 세무·회계 일별 자산 스냅샷 및 체결원장 누적 기록 (Daily Corporate Ledger Snapshot)
+    try:
+        from scripts.export_corporate_ledger import record_daily_nav_snapshot, sync_and_load_broker_fills
+        _snap = record_daily_nav_snapshot()
+        _fills = sync_and_load_broker_fills(fetch_live=True, lookback_days=14)
+        logger.info(
+            f"  📒 [Daily Corporate Ledger] 일별 자산 스냅샷 기록 완료 "
+            f"(date={_snap.get('date')}, NAV=₩{_snap.get('nav_krw', 0):,.0f}, 누적체결={len(_fills)}건)"
+        )
+    except Exception as _cl_e:
+        logger.error(f"  ❌ Daily Corporate Ledger snapshot 실패: {_cl_e}", exc_info=True)
+
+
 
 # ═══════════════════════════════════════════════════════
 # Phase AFT-TRADE: AFTERMARKET TRADE (NXT 15:30~20:00)
@@ -1754,22 +1767,30 @@ def _phase_intraday():
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
 
             if _now_ts - _last_ts >= _flow_interval_sec:
-                # 현재 보유 종목 + S1 관심 유니버스 대상 수집
+                # 현재 보유 종목 + S1 관심 유니버스 대상 수집 (KRX 6자리 종목만)
                 _flow_tickers = set()
                 try:
+                    _kis_f = _RESULTS_DIR / "kis_portfolio.json"
+                    if _kis_f.exists():
+                        _kp_data = json.loads(_kis_f.read_text())
+                        for _tk in (_kp_data.get("holdings") or {}).keys():
+                            if len(str(_tk)) == 6 and str(_tk)[0].isdigit():
+                                _flow_tickers.add(str(_tk))
                     _shadow_f = _RESULTS_DIR / "shadow_portfolio.json"
                     if _shadow_f.exists():
                         _sp_data = json.loads(_shadow_f.read_text())
                         for _pv in _sp_data.get("positions", {}).values():
-                            _tk = _pv.get("ticker", "")
-                            if _tk:
+                            _tk = str(_pv.get("ticker", "")).strip()
+                            if len(_tk) == 6 and _tk[0].isdigit():
                                 _flow_tickers.add(_tk)
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                 # 핵심 SS-ETF 기초자산 추가
                 _default_tickers = cfg.get("intraday.default_watch_tickers", [])
-                _flow_tickers.update(_default_tickers)
+                for _dtk in (_default_tickers or []):
+                    if len(str(_dtk)) == 6 and str(_dtk)[0].isdigit():
+                        _flow_tickers.add(str(_dtk))
                 # 최대 종목 수: config 기반 동적 제한 (하드코딩 제거)
                 _max_flow_tickers = int(pget('intraday.max_batch_tickers', 20))
                 _flow_tickers = list(_flow_tickers)[:_max_flow_tickers]
