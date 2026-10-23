@@ -1420,3 +1420,6 @@ class S2MLAlphaStream(BaseStream):
         except Exception as e:
             logger.debug(f'  Kelly 재보정 실패: {e}')
             return pget('sizer.kelly_fraction', 0.65)
+
+
+MLStream = S2MLAlphaStream

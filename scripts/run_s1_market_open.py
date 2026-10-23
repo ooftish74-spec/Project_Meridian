@@ -12,7 +12,6 @@
   - S1 장중 Exit은 daily_pipeline.py intraday phase에서 pykrx 실시간 가격으로 체크됩니다.
 
 대안:
-  python3 scripts/run_virtual_trading.py          # 전체 실행 (매수+매도)
   python3 scripts/daily_pipeline.py market         # 파이프라인 market phase
 """
 

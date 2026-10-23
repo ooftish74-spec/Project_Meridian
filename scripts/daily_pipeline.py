@@ -1967,6 +1967,14 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             if ckpt:
                 ckpt.mark_failed(name, str(e))
 
+    _PHASE_ALIASES = {
+        'midday': 'intraday',
+        'market_close': 'closing',
+        'us_regular_market': 'us_regular',
+        'us_market_close': 'us_aftermarket',
+    }
+    phase = _PHASE_ALIASES.get(phase, phase)
+
     if phase == 'all':
         for name, func in phases.items():
             logger.info(f"\n{'─'*40}")
@@ -1974,7 +1982,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             _run_with_checkpoint(name, func)
     elif ',' in phase:
         for p in phase.split(','):
-            p = p.strip()
+            p = _PHASE_ALIASES.get(p.strip(), p.strip())
             if p in phases:
                 _run_with_checkpoint(p, phases[p])
     elif phase in phases:

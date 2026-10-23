@@ -243,6 +243,13 @@ class Universe:
         return None
 
 
+_DEFAULT_UNIVERSE_OBJ = Universe()
+UNIVERSE: Dict[str, List[str]] = {
+    'kr_stocks': _DEFAULT_UNIVERSE_OBJ.get_all_kr_tickers(),
+    'sector_etfs': _DEFAULT_UNIVERSE_OBJ.get_sector_tickers(),
+}
+
+
 if __name__ == '__main__':
     u = Universe()
     print(f"A1 Bull ETFs: {[e.name for e in u.get_a1_etfs('bull')]}")

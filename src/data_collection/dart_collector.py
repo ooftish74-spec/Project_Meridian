@@ -234,3 +234,18 @@ class DARTCollector:
             return int(str(s).replace(',', '').replace(' ', ''))
         except (ValueError, TypeError):
             return 0
+
+
+def run_dart_collection(tickers: Optional[List[str]] = None) -> Dict[str, Dict]:
+    """DART 상세 공시 시그널 배치 수집 엔트리포인트."""
+    collector = DARTCollector()
+    if not collector.api_key:
+        return {}
+    target_tickers = tickers or list(collector._load_ticker_names().keys())[:20]
+    results: Dict[str, Dict] = {}
+    for tk in target_tickers:
+        try:
+            results[tk] = collector.collect_signals(tk)
+        except Exception as e:
+            logger.debug(f"DART collect_signals skip ({tk}): {e}")
+    return results

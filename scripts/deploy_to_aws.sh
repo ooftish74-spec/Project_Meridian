@@ -67,18 +67,23 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 # ── [2] Gate: local pytest must be green (Standing Rule) ──────────────
-echo "[1/6] Local test gate (pytest)..."
+echo "[1/6] Local test gate (pytest + static contract & hardcoding audit)..."
 # Deterministic money-path gate (offline, no env dependency). Full suite: TEST_SCOPE=full.
 GATE_TESTS=(tests/test_wave0_invariants.py tests/test_redteam_ssot_integrity.py
+            tests/test_static_contract_and_phase_replay.py
+            tests/test_scenario_and_alpha_harmony.py
             "tests/test_intraday_capital_router.py::TestIntradayCapitalRouter::test_resolve_signal_conflicts_same_ticker"
             "tests/test_live_execution_guards.py::test_holdings_guard_allows_buy_and_blocks_unheld_sell")
 [ "${TEST_SCOPE:-gate}" = "full" ] && GATE_TESTS=(tests/)
 if [ "${SKIP_TESTS:-0}" = "1" ]; then
   echo "⚠️  SKIP_TESTS=1 — test gate bypassed explicitly."
 else
-  (cd "$PROJECT_DIR" && "$PROJECT_DIR/venv/bin/python3" -m pytest "${GATE_TESTS[@]}" -q --no-header -p no:cacheprovider \
+  (cd "$PROJECT_ROOT_DIR" 2>/dev/null || cd "$PROJECT_DIR"; \
+      "$PROJECT_DIR/venv/bin/python3" scripts/ops/static_contract_audit.py --check > /dev/null && \
+      "$PROJECT_DIR/venv/bin/python3" scripts/ops/hardcoding_scan.py --check > /dev/null && \
+      "$PROJECT_DIR/venv/bin/python3" -m pytest "${GATE_TESTS[@]}" -q --no-header -p no:cacheprovider \
       -o addopts="" --timeout=120) \
-    || { echo "❌ pytest failed — deployment aborted."; exit 1; }
+    || { echo "❌ Static audit or pytest failed — deployment aborted."; exit 1; }
 fi
 if [ "$GIT_DIRTY" != "0" ]; then
   echo "⚠️  Working tree has $GIT_DIRTY uncommitted code files. Commit before deploying for traceability."

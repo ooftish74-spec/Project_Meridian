@@ -53,8 +53,13 @@ def send_message(text: str):
 def handle_kill():
     send_message("🚨 [Kill Switch] 가동 시작. 모든 매매 파이프라인을 중지합니다.")
     try:
-        subprocess.run([get_python_cmd(), "scripts/execute_hard_exit.py"], check=False)
-        send_message("✅ [Kill Switch] 시스템 셧다운 완료.")
+        from src.utils.file_ops import atomic_write_json
+        results_dir = _PROJECT_ROOT / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        payload = {"reason": "Telegram /kill command", "engaged_at": time.strftime("%Y-%m-%dT%H:%M:%S"), "cleared_by": "MANUAL_ONLY"}
+        atomic_write_json(results_dir / "KILL_SWITCH.flag", payload, indent=2, ensure_ascii=False)
+        atomic_write_json(results_dir / "EXIT_ONLY.flag", payload, indent=2, ensure_ascii=False)
+        send_message("✅ [Kill Switch] KILL_SWITCH.flag 및 EXIT_ONLY.flag 활성화 완료.")
     except Exception as e:
         send_message(f"❌ [Kill Switch] 실패: {e}")
 

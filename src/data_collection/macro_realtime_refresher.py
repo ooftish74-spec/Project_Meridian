@@ -723,7 +723,7 @@ class MacroRealtimeRefresher:
     _INDEX_SANITY_BOUNDS = {
         'sp500': (2000.0, 20000.0), 'SP500': (2000.0, 20000.0),
         'nasdaq': (5000.0, 60000.0), 'NASDAQ': (5000.0, 60000.0),
-        'sox': (1500.0, 30000.0), 'SOX': (1500.0, 30000.0),
+        'sox': (2500.0, 30000.0), 'SOX': (2500.0, 30000.0),
         'dji': (15000.0, 100000.0), 'DJI': (15000.0, 100000.0),
         'dxy': (70.0, 160.0), 'DXY': (70.0, 160.0),
         'gold_us': (1000.0, 10000.0), 'GOLD_US': (1000.0, 10000.0),
@@ -758,15 +758,22 @@ class MacroRealtimeRefresher:
                         if not (_lo <= float(existing[_ek]) <= _hi):
                             existing.pop(_ek, None)
 
-                # --- Z-Score / Threshold Sanity Check (르네상스 스타일 교차검증 방어막) ---
+                # --- Z-Score / Threshold Sanity Check (Level vs Rate-of-Change 분리 방어막) ---
                 safe_updates = {}
+                _max_rate_abs = 35.0
                 for k, v in updates.items():
                     if k in bounds_map and isinstance(v, (int, float)):
                         _lo, _hi = bounds_map[k]
                         if not (_lo <= float(v) <= _hi):
                             logger.warning(f"  ⚠️ [Sanity Bounds] {k}={v} 정상 범위({_lo}~{_hi}) 이탈 — 기각")
                             continue
-                    if isinstance(v, (int, float)) and not k.endswith('_ts') and not k.endswith('_1d') and 'history' not in k and 'ma' not in k and 'std' not in k and 'z_score' not in k and 'gex' not in k:
+                    # 1. 등락률/변동폭(%pt) 변수: 0 교차 가능하므로 상대 비율 대신 절대 %pt 범위 검사
+                    if isinstance(v, (int, float)) and (k.endswith('_1d') or k.endswith('_change_pct') or k == 'intraday_range_pct'):
+                        if abs(float(v)) > _max_rate_abs:
+                            logger.warning(f"  ⚠️ [Sanity Rate Bounds] {k}={v}% 비정상 등락률 이탈 — 기각")
+                            continue
+                    # 2. 가격/지수/금리/환율 Level 변수(bounds_map 등록 키): 상대 변동률 스파이크 검사
+                    elif k in bounds_map and isinstance(v, (int, float)):
                         prev = existing.get(k)
                         if prev and isinstance(prev, (int, float)) and prev > 0:
                             jump_pct = abs(v - prev) / prev

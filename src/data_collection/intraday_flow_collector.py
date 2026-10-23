@@ -169,15 +169,15 @@ class IntradayFlowCollector:
     def load_cache(results_dir: Optional[Path]=None) -> Dict[str, Any]:
         """intraday_flow_cache.json 로드 (파일 없으면 {} 반환)."""
         cache_path = (results_dir or _RESULTS_DIR) / 'intraday_flow_cache.json'
+        if not cache_path.exists():
+            logger.debug('[Flow] 캐시 없음 — 정적 Trailing Stop 사용')
+            return {}
         try:
             raw = json.loads(cache_path.read_text(encoding='utf-8'))
             logger.debug('[Flow] 캐시 로드: %s', cache_path.name)
             return raw
-        except FileNotFoundError:
-            logger.warning('[Flow] 캐시 없음 — 정적 Trailing Stop 사용', exc_info=True)
-            return {}
         except Exception as e:
-            logger.warning('[Flow] 캐시 로드 실패: %s', e, exc_info=True)
+            logger.warning('[Flow] 캐시 로드 실패: %s', e)
             return {}
 
     @staticmethod

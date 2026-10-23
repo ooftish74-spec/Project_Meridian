@@ -328,3 +328,17 @@ class PnLAttribution:
             'best_trade': round(max(pnls), 0) if pnls else 0,
             'worst_trade': round(min(pnls), 0) if pnls else 0,
         }
+
+
+def compute_attribution_view(sp: Optional[Dict] = None) -> Dict:
+    """MeasurementEngine 호환용 Attribution View 반환 래퍼."""
+    attr = PnLAttribution(auto_load=True)
+    report = attr.generate_report()
+    return {
+        'daily': report.get('summary', {}),
+        'cumulative_30d': report.get('stream_attribution', {}),
+        'sleeve_alpha': report.get('strategy_attribution', {}),
+        'history_days': report.get('summary', {}).get('n_days', 0),
+        'source': 'PnLAttribution',
+    }
+

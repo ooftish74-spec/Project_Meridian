@@ -34,20 +34,22 @@ RESULTS = PROJECT_ROOT / 'results'
 CONFIG = PROJECT_ROOT / 'config'
 from .event_calendar import EventCalendar, IntradayEventDetector
 from .market_shock_detector import MarketShockDetector
-try:
-    from .defensive_alpha import DefensiveAlphaFinder, QualityGrowthDiscount, SectorRotationDetector
-except ImportError:
-    class DefensiveAlphaFinder:
-        def find_dip_buying_candidates(self, **kwargs):
-            return []
-        def find_defensive_stocks(self, **kwargs):
-            return []
 
-    class QualityGrowthDiscount:
-        def screen(self, **kwargs):
-            return []
 
-    class SectorRotationDetector:
+class DefensiveAlphaFinder:
+    def find_dip_buying_candidates(self, **kwargs):
+        return []
+
+    def find_defensive_stocks(self, **kwargs):
+        return []
+
+
+class QualityGrowthDiscount:
+    def screen(self, **kwargs):
+        return []
+
+
+class SectorRotationDetector:
         def detect_rotation_phase(self):
             return {'phase': 'unknown', 'signal': '', 'recommendation': 'hold'}
 

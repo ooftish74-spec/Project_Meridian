@@ -119,8 +119,10 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
         kis = KISDataCollector()
         vix_records = kis.get_vix_series(window=window)
         if not vix_records:
-            from src.data_collection.fred_collector import FREDCollector
-            vix_records = FREDCollector().get_vix_series(window=window)
+            from src.utils.google_finance_collector import GoogleFinanceCollector
+            _live_vix = GoogleFinanceCollector.get_vix()
+            if _live_vix and _live_vix > 0:
+                vix_records = [{'date': today_kst().isoformat(), 'close': float(_live_vix)}]
         latest_vix = vix_records[-1]['close'] if vix_records else 14.92
         cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'KIS_FRED_SSOT', 'n_rows': len(vix_records), 'latest_vix': round(latest_vix, 4), 'vix_values': [r['close'] for r in vix_records], 'vix_records': vix_records}
         _atomic_write_json(VIX_CACHE, cache_data)

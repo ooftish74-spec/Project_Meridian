@@ -25,14 +25,11 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / 'data' / 'raw'
 from .realtime_constants import _load_api_key, NEWS_API_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, KR_SECTOR_STOCKS, US_SECTOR_STOCKS, NEWS_KEYWORDS_EN, NEWS_KEYWORDS_KR, KR_POSITIVE_WORDS, KR_NEGATIVE_WORDS, KR_POSITIVE_PHRASES, KR_NEGATIVE_PHRASES, KR_RSS_FEEDS, NEWS_KEYWORDS
-try:
-    from .realtime_news_sentiment import NewsSentimentMixin
-except ImportError:
-    class NewsSentimentMixin:  # type: ignore[no-redef]
-        """Fallback mixin when legacy realtime_news_sentiment module is removed."""
+class NewsSentimentMixin:
+    """Fallback mixin when legacy realtime_news_sentiment module is removed."""
 
-        def collect_news_dual(self, sectors: Optional[list] = None) -> Dict:
-            return {s: {'score': 50.0, 'articles': 0, 'signal': 'NEUTRAL'} for s in (sectors or [])}
+    def collect_news_dual(self, sectors: Optional[list] = None) -> Dict:
+        return {s: {'score': 50.0, 'articles': 0, 'signal': 'NEUTRAL'} for s in (sectors or [])}
 
 class RealtimeCollector(NewsSentimentMixin):
     """Module 2 실시간 수집기 — 분석 시점에 호출

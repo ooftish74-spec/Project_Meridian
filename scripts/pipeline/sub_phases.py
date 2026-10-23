@@ -2145,22 +2145,13 @@ def _phase_evening_data():
     # 한국 장 마감 후 ETF 거래량 확정 시점에 실행
     def _run_ss_etf_risk_collection():
         logger.info('  📊 [Phase 55] SS-ETF 단일종목 파생 리스크 수집 실행')
-        import subprocess
         try:
-            _result = subprocess.run(
-                [sys.executable,
-                 str(_PROJECT_ROOT / 'scripts' / 'generate_ss_etf_risk.py')],
-                capture_output=True, text=True, check=True, timeout=120,
-            )
-            if _result.stdout:
-                logger.debug(f'  SS-ETF stdout: {_result.stdout[:200]}')
-            logger.info('  ✅ [Phase 55] SS-ETF 리스크 갱신 완료')
-        except subprocess.TimeoutExpired:
-            logger.error('  ⚠️ SS-ETF 리스크 수집 타임아웃 (120s)', exc_info=True)
-        except subprocess.CalledProcessError as _cpe:
-            logger.error(f'  ⚠️ SS-ETF 리스크 갱신 실패: {_cpe.stderr[:300]}', exc_info=True)
+            from src.data_collection.ss_etf_feature_engine import SSETFFeatureEngine
+            _ss_engine = SSETFFeatureEngine()
+            _ss_res = _ss_engine.compute('005930')
+            logger.info(f"  ✅ [Phase 55] SS-ETF 리스크 갱신 완료: {_ss_res}")
         except Exception as _exc:
-            logger.error(f'  ⚠️ SS-ETF 리스크 예외: {_exc}', exc_info=True)
+            logger.warning(f'  ⚠️ SS-ETF 리스크 예외: {_exc}')
 
     _run_ss_etf_risk_collection()
 

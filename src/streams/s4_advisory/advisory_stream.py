@@ -420,3 +420,6 @@ class S4AdvisoryStream(BaseStream):
         n = len(self._daily_returns)
         tax_savings = self.get_tax_savings_estimate()
         return {'stream_id': 'S4', 'name': self.name, 'daily_returns': self._daily_returns[-30:], 'cumulative_return_pct': sum(self._daily_returns) if n > 0 else 0, 'sharpe': None, 'max_drawdown_pct': 0, 'win_rate': 0, 'total_trades': 0, 'active_positions': 0, 'tax_savings': tax_savings, 'drip_projections': self._drip_projections, 'n_days': n}
+
+
+AdvisoryStream = S4AdvisoryStream
