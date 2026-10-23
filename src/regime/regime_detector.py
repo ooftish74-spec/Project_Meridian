@@ -492,9 +492,17 @@ class RegimeDetector:
         kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
         kospi_rets = market_data.get('kospi_returns', [])
         _recent_5 = kospi_rets[-5:] if len(kospi_rets) >= 5 else []
+        _recent_6 = kospi_rets[-6:] if len(kospi_rets) >= 6 else _recent_5
         _cum_5d_pct = sum(_recent_5) * 100.0 if _recent_5 else 0.0
+        _cum_6d_pct = sum(_recent_6) * 100.0 if _recent_6 else _cum_5d_pct
+        _pos_5d = sum((1 for r in _recent_5 if r > 0))
         _last_1d_pct = float(kospi_rets[-1]) * 100.0 if kospi_rets else float(parse_metric(signal, 'kospi_change_1d', parse_metric(signal, 'kospi_change_pct', 0.0)) or 0.0)
-        _short_term_stabilized = bool(_recent_5 and _cum_5d_pct >= -1.0 and _last_1d_pct >= 0.0 and vix < vix_caution)
+        _short_term_stabilized = bool(
+            _recent_5
+            and (_cum_5d_pct >= -2.5 or _cum_6d_pct >= -0.5 or _pos_5d >= 3)
+            and _last_1d_pct >= -0.5
+            and vix < vix_caution
+        )
         _rebound_active = (ois >= 60.0 and vix < vix_caution) or _short_term_stabilized
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
@@ -558,6 +566,8 @@ class RegimeDetector:
             regime = 'crash'
         if force_regime:
             regime = force_regime
+            if force_regime == 'caution' and score < caution_threshold:
+                score = float(caution_threshold)
         argus_scitech = parse_metric(signal, 'argus_scitech', 1.0)
         ois_stress = max(0.0, min(1.0, (50 - ois) / 30))
         fx_stress = max(0.0, min(1.0, fx_change / 2.0))
