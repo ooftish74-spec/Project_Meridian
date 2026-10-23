@@ -84,7 +84,7 @@ class PositionLedgerManager:
                 return info.get("entry_date")
             return None
 
-    def record_entry(self, ticker: str, entry_date: Optional[str] = None, entry_price: float = 0.0):
+    def record_entry(self, ticker: str, entry_date: Optional[str] = None, entry_price: float = 0.0, quantity: float = 0.0):
         """신규 포지션 진입일 및 초기 HWM 기록."""
         if not entry_date:
             entry_date = datetime.now().strftime("%Y-%m-%d")
@@ -102,6 +102,8 @@ class PositionLedgerManager:
                     "peak_date": entry_date,
                     "trail_activated": False,
                     "scaled_out": False,
+                    "last_avg_price": float(entry_price),
+                    "last_qty": float(quantity),
                 }
                 self._save_file_unlocked(ledger)
                 logger.info(f"  📌 [PositionLedger] 신규 진입일 등록: {ticker} -> {entry_date}")
@@ -274,9 +276,11 @@ class PositionLedgerManager:
         current_price: float,
         current_pnl_pct: float,
         date_str: Optional[str] = None,
-        trail_activate_threshold: Optional[float] = None
+        trail_activate_threshold: Optional[float] = None,
+        avg_price: Optional[float] = None,
+        quantity: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """포지션의 최고가(HWM), 최저가 및 최고 수익률 영구 갱신 및 조회 (실측 기반, 유령 고점 주입 제거)."""
+        """포지션의 최고가(HWM), 최저가 및 최고 수익률 영구 갱신 및 조회 (실측 기반, 물타기/불타기 수량 가중 보존)."""
         if not date_str:
             date_str = datetime.now().strftime("%Y-%m-%d")
         if trail_activate_threshold is None:
@@ -303,6 +307,8 @@ class PositionLedgerManager:
                     "peak_date": date_str,
                     "trail_activated": bool(float(current_pnl_pct or 0.0) >= trail_activate_threshold),
                     "scaled_out": False,
+                    "last_avg_price": float(avg_price or 0.0),
+                    "last_quantity": float(quantity or 0.0),
                 }
 
             info = ledger[ticker]
@@ -317,13 +323,61 @@ class PositionLedgerManager:
                 info["peak_date"] = date_str
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
 
+            updated = False
+            prev_qty = float(info.get("last_quantity", 0.0) or 0.0)
+            prev_avg_px = float(info.get("last_avg_price", 0.0) or 0.0)
+            curr_qty = float(quantity or 0.0)
+            curr_avg_px = float(avg_price or 0.0)
+
+            # [수량 가중 HWM 보존 법칙 (Scale-In Phantom Drawdown 차단)]
+            # 기존 보유 수량(Q_old)에 신규 수량(ΔQ = Q_new - Q_old)이 불타기/물타기(Scale-In)로 추가될 때,
+            # 기존 고점 수익률(peak_pnl_pct)을 그대로 유지하면 평단가(avg_price) 상승으로 인해 체결 직후
+            # 가짜 고점 대비 낙폭(Phantom Drawdown)이 발생하여 즉시 오발동 손절/익절된다.
+            # 따라서 통합 포지션의 고점 가격(P_peak)과 경과 보유시간을 수량 비율(w_old = Q_old / Q_new)로 정확히 가중 결합한다.
+            if curr_qty > 0 and prev_qty > 0 and curr_qty > prev_qty + 1e-6 and current_price > 0:
+                w_old = prev_qty / curr_qty
+                old_pk_px = float(info.get("peak_price", current_price) or current_price)
+                blended_peak_px = max(float(current_price), w_old * old_pk_px + (1.0 - w_old) * float(current_price))
+                info["peak_price"] = round(blended_peak_px, 6)
+                if curr_avg_px > 0:
+                    blended_peak_pnl = max(float(current_pnl_pct or 0.0), ((blended_peak_px - curr_avg_px) / curr_avg_px) * 100.0)
+                else:
+                    old_pk_pnl = float(info.get("peak_pnl_pct", current_pnl_pct) or current_pnl_pct)
+                    blended_peak_pnl = max(float(current_pnl_pct or 0.0), w_old * old_pk_pnl + (1.0 - w_old) * float(current_pnl_pct or 0.0))
+                info["peak_pnl_pct"] = round(max(0.0, blended_peak_pnl), 6)
+                info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
+                try:
+                    now_naive = datetime.now().replace(tzinfo=None)
+                    old_c_dt = datetime.fromisoformat(str(info.get("created_at", "")).replace("Z", "+00:00")).replace(tzinfo=None)
+                    old_elapsed_s = max(0.0, (now_naive - old_c_dt).total_seconds())
+                    from datetime import timedelta as _td_hwm
+                    info["created_at"] = (now_naive - _td_hwm(seconds=w_old * old_elapsed_s)).isoformat()
+                    if w_old * 2.0 < 1.0:
+                        info["entry_date"] = date_str
+                except Exception:
+                    info["created_at"] = datetime.now().isoformat()
+                updated = True
+            elif curr_avg_px > 0 and prev_avg_px > 0 and abs(curr_avg_px - prev_avg_px) * 100.0 > prev_avg_px / 2.0 and current_price > 0:
+                # 수량 미전달 상태에서 평단가가 0.5% 이상 변동한 경우 새 평단가 기준으로 peak_pnl_pct 재정규화
+                old_pk_px = max(float(info.get("peak_price", current_price) or current_price), float(current_price))
+                reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), ((old_pk_px - curr_avg_px) / curr_avg_px) * 100.0)
+                info["peak_pnl_pct"] = round(reanchored_pnl, 6)
+                info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
+                updated = True
+
+            if curr_qty > 0 and curr_qty != prev_qty:
+                info["last_quantity"] = curr_qty
+                updated = True
+            if curr_avg_px > 0 and curr_avg_px != prev_avg_px:
+                info["last_avg_price"] = curr_avg_px
+                updated = True
+
             raw_peak_price = float(info.get("peak_price", 0.0) or 0.0)
             prev_peak_price = raw_peak_price or float(current_price or 0.0)
             prev_lowest_price = float(info.get("lowest_price", current_price) or current_price)
             raw_peak_pnl = info.get("peak_pnl_pct", None)
             prev_peak_pnl = float(raw_peak_pnl) if (raw_peak_pnl is not None and raw_peak_price) else float(current_pnl_pct or 0.0)
 
-            updated = False
             # 신규 고점 갱신 (초기 peak_price == 0.0 상태 포함, 가격 또는 수익률 기준)
             if (not raw_peak_price) or current_price > prev_peak_price or current_pnl_pct > prev_peak_pnl:
                 info["peak_price"] = max(prev_peak_price, float(current_price or 0.0))

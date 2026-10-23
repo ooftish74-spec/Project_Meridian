@@ -265,10 +265,14 @@ class InvestorFlowCollector:
         return feat.dropna()
 
     def collect_batch_features(self, tickers: List[str]) -> Dict[str, pd.DataFrame]:
-        """여러 종목 일괄 피처 생성."""
+        """여러 종목 일괄 피처 생성 (KRX 6자리 종목 전용)."""
+        from src.utils.market_calendar import is_kr_ticker
         results = {}
         for ticker in tickers:
-            feat = self.generate_features(ticker)
+            tk_clean = str(ticker or '').split(':')[-1].strip()
+            if not is_kr_ticker(tk_clean):
+                continue
+            feat = self.generate_features(tk_clean)
             if feat is not None and len(feat) > 0:
-                results[ticker] = feat
+                results[tk_clean] = feat
         return results

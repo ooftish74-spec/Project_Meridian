@@ -1945,18 +1945,29 @@ def _phase_collect_flow():
         from src.data_collection.investor_flow_collector import InvestorFlowCollector
         collector = InvestorFlowCollector()
 
-        # ★ 포트폴리오 보유 종목 + 주요 지수 ETF 대상 배치 수집
+        # ★ 포트폴리오 보유 종목 + 주요 지수 ETF 대상 배치 수집 (KRX 6자리 종목 전용)
+        from src.utils.market_calendar import is_kr_ticker
         tickers = set()
+        _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+        if _kis_f.exists():
+            try:
+                _kp = json.loads(_kis_f.read_text(encoding='utf-8'))
+                for _tk_k, _pos_k in (_kp.get('holdings') or {}).items():
+                    _tk_c = str((_pos_k.get('ticker') if isinstance(_pos_k, dict) else _tk_k) or _tk_k).split(':')[-1].strip()
+                    if is_kr_ticker(_tk_c):
+                        tickers.add(_tk_c)
+            except Exception:
+                pass
         _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
         if _shadow_f.exists():
             _sp = json.loads(_shadow_f.read_text())
             for pos in _sp.get('positions', {}).values():
-                tk = pos.get('ticker', '')
-                if tk:
+                tk = str(pos.get('ticker', '') or '').split(':')[-1].strip()
+                if is_kr_ticker(tk):
                     tickers.add(tk)
         # 주요 ETF 추가 (DynamicConfig)
         _core_flow_etfs = cfg.get('flow.core_etf_tickers', ['069500', '122630', '252670', '133690'])
-        tickers.update(_core_flow_etfs)
+        tickers.update(t for t in _core_flow_etfs if is_kr_ticker(str(t)))
         _max_batch = pget('flow.max_batch_tickers', 20)
         tickers = list(tickers)[:_max_batch]
 

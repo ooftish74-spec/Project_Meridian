@@ -354,19 +354,46 @@ class KISDataCollector:
             if not dt:
                 continue
 
+            def _safe_int(val_raw) -> int:
+                if val_raw is None:
+                    return 0
+                s = str(val_raw).strip()
+                if not s:
+                    return 0
+                try:
+                    return int(float(s))
+                except (ValueError, TypeError):
+                    return 0
+
             def _get_q(row: dict, prefix: str) -> int:
                 keys = [f"{prefix}_ntby_qty", f"{prefix}_ntby_quantity", f"{prefix}_ntby_vol"]
+                key_present = False
                 for k in keys:
-                    val = row.get(k)
-                    if val is not None and str(val).strip() != '':
-                        try:
-                            return int(float(str(val).strip()))
-                        except (ValueError, TypeError):
-                            from src.utils.error_logger import log_error_rate_limited
-                            logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-                logger.warning(f"[KIS Error] 필드값 오류: {prefix} 수급 필드({keys[0]})가 없습니다! API 명세 변경 의심. Keys: {list(row.keys())[:10]}")
+                    if k in row:
+                        key_present = True
+                        val = row.get(k)
+                        if val is not None and str(val).strip() != '':
+                            return _safe_int(val)
+                if not key_present:
+                    logger.warning(f"[KIS Error] 필드값 오류: {prefix} 수급 필드({keys[0]})가 없습니다! API 명세 변경 의심. Keys: {list(row.keys())[:10]}")
                 return 0
-            records.append({'date': dt, 'close': int(r.get('stck_clpr', 0)), 'prsn_ntby_qty': _get_q(r, 'prsn'), 'frgn_ntby_qty': _get_q(r, 'frgn'), 'orgn_ntby_qty': _get_q(r, 'orgn'), 'prsn_ntby_tr_pbmn': int(r.get('prsn_ntby_tr_pbmn', 0)), 'frgn_ntby_tr_pbmn': int(r.get('frgn_ntby_tr_pbmn', 0)), 'orgn_ntby_tr_pbmn': int(r.get('orgn_ntby_tr_pbmn', 0)), 'prsn_shnu_vol': int(r.get('prsn_shnu_vol', 0)), 'frgn_shnu_vol': int(r.get('frgn_shnu_vol', 0)), 'orgn_shnu_vol': int(r.get('orgn_shnu_vol', 0)), 'prsn_seln_vol': int(r.get('prsn_seln_vol', 0)), 'frgn_seln_vol': int(r.get('frgn_seln_vol', 0)), 'orgn_seln_vol': int(r.get('orgn_seln_vol', 0))})
+
+            records.append({
+                'date': dt,
+                'close': _safe_int(r.get('stck_clpr', 0)),
+                'prsn_ntby_qty': _get_q(r, 'prsn'),
+                'frgn_ntby_qty': _get_q(r, 'frgn'),
+                'orgn_ntby_qty': _get_q(r, 'orgn'),
+                'prsn_ntby_tr_pbmn': _safe_int(r.get('prsn_ntby_tr_pbmn', 0)),
+                'frgn_ntby_tr_pbmn': _safe_int(r.get('frgn_ntby_tr_pbmn', 0)),
+                'orgn_ntby_tr_pbmn': _safe_int(r.get('orgn_ntby_tr_pbmn', 0)),
+                'prsn_shnu_vol': _safe_int(r.get('prsn_shnu_vol', 0)),
+                'frgn_shnu_vol': _safe_int(r.get('frgn_shnu_vol', 0)),
+                'orgn_shnu_vol': _safe_int(r.get('orgn_shnu_vol', 0)),
+                'prsn_seln_vol': _safe_int(r.get('prsn_seln_vol', 0)),
+                'frgn_seln_vol': _safe_int(r.get('frgn_seln_vol', 0)),
+                'orgn_seln_vol': _safe_int(r.get('orgn_seln_vol', 0)),
+            })
         if not records:
             return None
         df = pd.DataFrame(records)

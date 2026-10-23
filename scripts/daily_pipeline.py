@@ -2232,7 +2232,17 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 # ═══════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    phase = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith('--') else 'all'
+    phase = 'all'
+    for _idx, _arg in enumerate(sys.argv[1:], start=1):
+        if _arg == '--phase' and _idx + 1 < len(sys.argv):
+            phase = sys.argv[_idx + 1]
+            break
+        if _arg.startswith('--phase='):
+            phase = _arg.split('=', 1)[1]
+            break
+        if not _arg.startswith('--') and (_idx == 1 or sys.argv[_idx - 1] != '--phase'):
+            phase = _arg
+            break
     force = '--force' in sys.argv
     run_pipeline(phase, force=force)
 

@@ -838,12 +838,22 @@ class StreamOrchestrator:
             _vix_sc = float((market_data or {}).get('vix') or _sc_cache.get('vix') or 0.0)
             _ann_days_sc = 252.0
             _mkt_vol_sc = (_vix_sc / 100.0) / _math_sc.sqrt(_ann_days_sc) if _vix_sc > 0.0 else 0.0
-            _p_crash_sc = float((market_data or {}).get('crash_prob') or _sc_cache.get('crash_prob') or 0.0)
+            _p_crash_sc = max(
+                float(sc_result.get('composite_crash_prob', 0.0) or 0.0),
+                float((market_data or {}).get('crash_prob') or _sc_cache.get('crash_prob') or 0.0),
+            )
             _rt_cost_sc = float(pget('a3.roundtrip_cost_pct', 0.36)) / 100.0
+            _SC_CANON_MAP = {
+                'S10': 'S10_MEGA_TREND',
+                'S11': 'S11_HIGHBETA_SNIPER',
+                'S12': 'S12_DERIVATIVE_SQUEEZE',
+                'S13': 'S13_JAPAN_ALPHA',
+                'S14': 'S14_PAIR_ALPHA',
+            }
 
             for _d_sid, _d_act in _sc_dirs.items():
                 if _d_act in ('BLOCK_LONG_SIGNALS', 'BLOCK_LONG_SNIPING', 'STOP_ALL_NEW_BUYS'):
-                    for _match_sid in (_d_sid, 'S10_MEGA_TREND' if _d_sid == 'S10' else _d_sid):
+                    for _match_sid in dict.fromkeys((_d_sid, _SC_CANON_MAP.get(_d_sid, _d_sid))):
                         if _match_sid in all_signals:
                             _before_n = len(all_signals[_match_sid])
                             _kept_sc = []
@@ -910,24 +920,31 @@ class StreamOrchestrator:
                             logger.info(f"    🚀 [Scenario V-Rebound] 보유 인버스 {_htk} 전량 즉시 청산 시그널 주입")
                 elif _d_act in ('FORCE_2X_INVERSE_MAX_BUDGET', 'FORCE_INVERSE_HEDGE', 'MAX_INVERSE_SQUEEZE'):
                     _inv_ratio = float(sc_result.get('target_inverse_hedge_ratio', 0.0))
-                    if _inv_ratio > 0 and not all_signals.get('S12'):
+                    _s12_canon = getattr(getattr(self, 's12', None), 'stream_id', 'S12_DERIVATIVE_SQUEEZE')
+                    if _inv_ratio > 0 and not all_signals.get(_s12_canon) and not all_signals.get('S12'):
                         _s12_tk = getattr(self.s12, 'ticker_inv_2x', getattr(self.s0, 'TICKER_INVERSE_2X', ''))
                         if _s12_tk:
-                            all_signals['S12'] = [{
-                                'stream_id': 'S12',
+                            _s12_tp_pct = float(pget('s12.default_tp_pct', 8.0))
+                            _s12_sl_pct = float(pget('s12.default_sl_pct', 3.5))
+                            _s12_conf = float(sc_result.get('composite_crash_prob', 1.0))
+                            _s12_ev = (_s12_tp_pct / 100.0) * max(_s12_conf, 1.0 / 2.0)
+                            all_signals[_s12_canon] = [{
+                                'stream_id': _s12_canon,
                                 'ticker': _s12_tk,
                                 'direction': 'long',
                                 'action': 'buy',
                                 'is_hedge': True,
                                 'size_pct': _inv_ratio,
-                                'confidence': float(sc_result.get('composite_crash_prob', 1.0)),
-                                'sl_pct': float(pget('s12.default_sl_pct', 3.5)),
-                                'tp_pct': float(pget('s12.default_tp_pct', 8.0)),
+                                'confidence': _s12_conf,
+                                'sl_pct': _s12_sl_pct,
+                                'tp_pct': _s12_tp_pct,
+                                'expected_return': round(_s12_ev, 4),
+                                'expected_return_pct': round(_s12_ev * 100.0, 2),
                                 'strategy': 'master_scenario_inverse_squeeze',
                                 'reason': f"MasterScenario {sc_result.get('active_scenarios')} immediate inverse hedge",
                             }]
                             logger.warning(
-                                f"    🛡️ [Scenario Inverse] S12 {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
+                                f"    🛡️ [Scenario Inverse] {_s12_canon} {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
                             )
         except Exception as _sc_dir_e:
             logger.error(f"    ⚠️ [Step 4.1] 시나리오 디렉티브 적용 예외: {_sc_dir_e}", exc_info=True)
@@ -1971,7 +1988,13 @@ class StreamOrchestrator:
                                 continue
                             curr_p = float(h.get('current_price', 0.0))
                             curr_ret = float(h.get('return_pct', 0.0))
-                            hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                            hwm_data = ledger_mgr.update_hwm(
+                                t,
+                                current_price=curr_p,
+                                current_pnl_pct=curr_ret,
+                                avg_price=float(h.get('avg_price', 0.0) or 0.0),
+                                quantity=float(h.get('qty', h.get('quantity', 0)) or 0.0),
+                            )
                             _ed_str = str(h.get('entry_date') or hwm_data.get('entry_date') or '')[:10]
                             _today_s = datetime.now().strftime('%Y-%m-%d')
                             if 'holding_minutes' in h:
@@ -2050,11 +2073,17 @@ class StreamOrchestrator:
             from src.utils.dynamic_quant_engine import get_quant_engine
             _dqe_step9 = get_quant_engine()
             filtered_orders = []
+            _vetoed_pair_ids = set()
+            _vetoed_tickers = set()
             for o in orders:
                 _otk = str(o.get('ticker', '')).upper()
+                _opid = str(o.get('pair_id', '') or '').strip()
                 _is_buy_o = o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long')
                 if _is_buy_o and _otk in exit_tickers:
                     logger.warning(f"  🛑 [Risk Exit Veto] {_otk} 동시 청산 발화 중 ➔ 신규 매수 시그널({o.get('stream_id', o.get('stream', ''))}) 취소")
+                    _vetoed_tickers.add(_otk)
+                    if _opid:
+                        _vetoed_pair_ids.add(_opid)
                     continue
                 if _is_buy_o and _otk in same_day_exit_details:
                     _ex_info = same_day_exit_details[_otk]
@@ -2078,8 +2107,29 @@ class StreamOrchestrator:
                             f"  🛑 [Sunk-Cost Re-Entry Hurdle Veto] {_otk}: 기대수익({_sig_ev_pct:.2f}%) < "
                             f"매몰비용·변동성 감쇠 허들({_hurdle_pct:.2f}%, 경과 {_elapsed_m:.0f}m) ➔ 재매수 기각"
                         )
+                        _vetoed_tickers.add(_otk)
+                        if _opid:
+                            _vetoed_pair_ids.add(_opid)
                         continue
                 filtered_orders.append(o)
+            if _vetoed_pair_ids or _vetoed_tickers:
+                _pair_safe_orders = []
+                for o in filtered_orders:
+                    _otk = str(o.get('ticker', '')).upper()
+                    _opid = str(o.get('pair_id', '') or '').strip()
+                    _opartner = str(o.get('pair_partner', '') or '').split(':')[-1].strip().upper()
+                    _osid = str(o.get('stream_id', o.get('stream', '')) or '')
+                    _is_buy_o = o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long')
+                    if _is_buy_o and (
+                        (_opid and _opid in _vetoed_pair_ids)
+                        or (_opartner and _opartner in _vetoed_tickers and (_opid or _osid in ('S14', 'S14_PAIR_ALPHA', 'S7')))
+                    ):
+                        logger.warning(
+                            f"  🛑 [Atomic Pair Leg Veto] {_otk} ({_osid}): 파트너 헤지 레그({_opartner or _opid}) 기각으로 인한 단방향(One-Legged) 롱 진입 원천 차단"
+                        )
+                        continue
+                    _pair_safe_orders.append(o)
+                filtered_orders = _pair_safe_orders
             orders = filtered_orders
 
         # [Red Team Fix] 주문 충돌 방지 (Order Netting): 우세 방향 가격/메타데이터 정밀 상계 및 50만 원 미만 잔챙이 차단
@@ -2665,7 +2715,7 @@ class StreamOrchestrator:
         from datetime import time as _dtime_gen
         _in_pytest_gen = bool(_os_gen.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_gen.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
         _now_t_gen = datetime.now().time()
-        _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}
+        _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}  # hardcode-ok: L0 KRX parking ETF codes
         if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and (_dtime_gen(8, 0) <= _now_t_gen <= _dtime_gen(15, 10)):
             for _p_sid in list(signals.keys()):
                 _before_p = len(signals[_p_sid] or [])
@@ -2823,6 +2873,21 @@ class StreamOrchestrator:
                     if isinstance(s, dict) and s.get('_orig_stream_size_pct', 0.0) > 0:
                         s['nav_probe_size_pct'] = s.get('size_pct', 0.0)
                         s['size_pct'] = s['_orig_stream_size_pct']
+                # [Pair Atomic Integrity] filter_by_friction 단계에서 페어 중 한쪽 레그만 탈락한 경우, 남은 단방향 레그도 원자적으로 제거
+                _pid_counts = {}
+                for _ps in stream_signals:
+                    if isinstance(_ps, dict) and _ps.get('pair_id') and _ps.get('size_pct', 0) > 0:
+                        _pid_k = str(_ps['pair_id']).strip()
+                        _pid_counts[_pid_k] = _pid_counts.get(_pid_k, 0) + 1
+                if any(_cnt < 2 for _cnt in _pid_counts.values()):
+                    stream_signals = [
+                        _ps for _ps in stream_signals
+                        if not (
+                            isinstance(_ps, dict)
+                            and _ps.get('pair_id')
+                            and _pid_counts.get(str(_ps['pair_id']).strip(), 0) < 2
+                        )
+                    ]
 
             # [Symmetric Normalization & 3-Sigma Cap] 기보유 종목(existing_tickers)과 신규 종목 구분 없이 동일한 리스크 상한 적용
             valid_signals = [
@@ -3084,7 +3149,13 @@ class StreamOrchestrator:
                 for t, h in _kp.get('holdings', {}).items():
                     curr_p = float(h.get('current_price', 0.0))
                     curr_ret = float(h.get('return_pct', 0.0))
-                    hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
+                    hwm_data = ledger_mgr.update_hwm(
+                        t,
+                        current_price=curr_p,
+                        current_pnl_pct=curr_ret,
+                        avg_price=float(h.get('avg_price', 0.0) or 0.0),
+                        quantity=float(h.get('qty', h.get('quantity', 0)) or 0.0),
+                    )
                     positions[t] = {
                         'ticker': t,
                         'name': h.get('name', t),

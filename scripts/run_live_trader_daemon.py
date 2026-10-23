@@ -399,7 +399,13 @@ def main():
                                 except Exception as _p_err:
                                     logger.debug(f"  {_t} 실시간 시세 조회 폴백: {_p_err}")
 
-                                _hwm = ledger_mgr.update_hwm(_t, current_price=_cp, current_pnl_pct=_ret)
+                                _hwm = ledger_mgr.update_hwm(
+                                    _t,
+                                    current_price=_cp,
+                                    current_pnl_pct=_ret,
+                                    avg_price=_avg,
+                                    quantity=float(_h.get('qty', _h.get('quantity', 0)) or 0),
+                                )
                                 _entry_date = _h.get('entry_date') or ledger_mgr.get_entry_date(_t) or today_str
                                 try:
                                     from datetime import timedelta as _td

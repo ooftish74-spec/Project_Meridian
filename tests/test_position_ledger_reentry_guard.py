@@ -304,4 +304,40 @@ def test_universal_exit_normalizes_true_range_atr_by_sqrt_8_over_pi():
     assert res["exit_orders"][0]["quantity"] == 84
 
 
+def test_volume_weighted_hwm_conservation_on_scale_in(tmp_path):
+    """When scaling into an existing position (e.g. 114800 from 12 shares @ 1209 to 358 shares @ 1263.12),
+    peak_pnl_pct and peak_price must be diluted by w_old = 12/358 so UniversalExitEngine does not see
+    a phantom 6.95% Chandelier drawdown 19 seconds after the buy.
+    """
+    ledger_file = tmp_path / "position_entry_ledger.json"
+    mgr = PositionLedgerManager(ledger_path=str(ledger_file))
 
+    # Initial 12-share position @ 1209 reaching peak 1293 (+6.95%)
+    mgr.record_entry("114800", entry_date="2026-10-19", entry_price=1209.0, quantity=12.0)
+    h1 = mgr.update_hwm(
+        "114800",
+        current_price=1293.0,
+        current_pnl_pct=6.95,
+        trail_activate_threshold=2.0,
+        avg_price=1209.0,
+        quantity=12.0,
+    )
+    assert h1["trail_activated"] is True
+    assert h1["peak_pnl_pct"] == pytest.approx(6.95, rel=1e-9)
+
+    # Scale in: +346 shares @ 1265 -> total 358 shares, new avg_price = 1263.12, current_price = 1263.12 (0.0% PnL)
+    h2 = mgr.update_hwm(
+        "114800",
+        current_price=1263.12,
+        current_pnl_pct=0.0,
+        trail_activate_threshold=2.0,
+        avg_price=1263.12,
+        quantity=358.0,
+    )
+    w_old = 12.0 / 358.0
+    expected_blended_peak_px = round(w_old * 1293.0 + (1.0 - w_old) * 1263.12, 6)
+    expected_blended_peak_pnl = round(((expected_blended_peak_px - 1263.12) / 1263.12) * 100.0, 6)
+
+    assert h2["peak_pnl_pct"] == pytest.approx(expected_blended_peak_pnl, rel=1e-9)
+    assert h2["peak_price"] == pytest.approx(expected_blended_peak_px, rel=1e-9)
+    assert h2["trail_activated"] is False

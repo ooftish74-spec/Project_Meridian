@@ -56,27 +56,31 @@ class S2ETFBasketDecomposer:
         top_k_sectors = int(pget('s2.etf_basket.top_k_sectors', 3))
 
         # 기본 섹터 ➔ 대표 ETF 매핑 맵 (DynamicConfig override 지원)
-        default_sector_etf_map = {
-            'IT/Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
-            'IT_Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
-            'semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},
-            'it': {'ticker': '091160', 'name': 'KODEX 반도체'},
-            'Battery/Auto': {'ticker': '091170', 'name': 'KODEX 자동차'},
-            'Automotive_Battery': {'ticker': '091170', 'name': 'KODEX 자동차'},
-            'battery': {'ticker': '305720', 'name': 'KODEX 2차전지산업'},
-            'auto': {'ticker': '091170', 'name': 'KODEX 자동차'},
-            'Bio/Healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},
-            'Healthcare_Bio': {'ticker': '244580', 'name': 'KODEX 바이오'},
-            'bio': {'ticker': '244580', 'name': 'KODEX 바이오'},
-            'healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},
-            'Financials': {'ticker': '091180', 'name': 'KODEX 은행'},
-            'finance': {'ticker': '091180', 'name': 'KODEX 은행'},
-            'Heavy Industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
-            'heavy_industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
-            'chemical': {'ticker': '117460', 'name': 'KODEX 에너지화학'},
-            'defense': {'ticker': '139260', 'name': 'TIGER 200 중공업'},
+        default_sector_etf_map = {  # hardcode-ok: L0 KRX sector ETF mapping
+            'IT/Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
+            'IT_Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
+            'semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
+            'it': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
+            'Battery/Auto': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'Automotive_Battery': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'battery': {'ticker': '305720', 'name': 'KODEX 2차전지산업'},  # hardcode-ok: L0 KRX sector ETF
+            'auto': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'Bio/Healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
+            'Healthcare_Bio': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
+            'bio': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
+            'healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
+            'health': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
+            'Financials': {'ticker': '091180', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
+            'finance': {'ticker': '091180', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
+            'Heavy Industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
+            'heavy_industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
+            'energy/chem': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
+            'chemical': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
+            'materials': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
+            'defense': {'ticker': '139260', 'name': 'TIGER 200 중공업'},  # hardcode-ok: L0 KRX sector ETF
         }
-        sector_etf_map = {**default_sector_etf_map, **(cfg.get('s2.etf_basket.sector_etf_map', {}) or {})}
+        raw_sector_etf_map = {**default_sector_etf_map, **(cfg.get('s2.etf_basket.sector_etf_map', {}) or {})}
+        sector_etf_map = {str(k).strip().lower(): v for k, v in raw_sector_etf_map.items()}
 
         # 1. 섹터별 스코어 집계 (Sector Aggregation)
         sector_scores: Dict[str, List[float]] = {}
@@ -86,7 +90,7 @@ class S2ETFBasketDecomposer:
                 raw_sector = market_ctx.get_sector(str(stock.get('ticker', '')))
             if not raw_sector or str(raw_sector).lower() == 'unknown':
                 continue
-            sector = str(raw_sector)
+            sector = str(raw_sector).strip().lower()
             if sector not in sector_etf_map:
                 continue
             score = float(stock.get('up_prob', stock.get('predict_proba', stock.get('score', 0.5))))

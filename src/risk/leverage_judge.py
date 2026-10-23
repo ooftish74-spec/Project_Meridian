@@ -309,10 +309,19 @@ class LeverageJudge:
             pnl_pct = (current_price / entry_price - 1) * 100
             if ledger_mgr is not None and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                 try:
-                    ledger_mgr.update_hwm(ticker, current_price=state['hwm'], current_pnl_pct=pnl_pct)
+                    hwm_updated = ledger_mgr.update_hwm(
+                        ticker,
+                        current_price=current_price,
+                        current_pnl_pct=pnl_pct,
+                        avg_price=entry_price,
+                        quantity=float(qty),
+                    )
+                    if float(hwm_updated.get('peak_price', 0.0) or 0.0) > 0:
+                        state['hwm'] = float(hwm_updated['peak_price'])
                 except Exception:
                     pass
             drawdown_from_hwm = (state['hwm'] - current_price) / state['hwm'] * 100 if state['hwm'] > 0 else 0
+            peak_pnl_pct = (state['hwm'] / entry_price - 1) * 100 if entry_price > 0 and state['hwm'] > 0 else 0.0
             try:
                 import pandas as pd
                 entry_dt = pd.to_datetime(state['entry_date']).date()
@@ -337,10 +346,22 @@ class LeverageJudge:
             if atr_pct <= 0:
                 atr_pct = max(pget('leverage_judge.atr_proxy_floor', 0.01), effective_vol_index / (100.0 * 15.87))
 
+            # [이산 호가 양자화 노이즈 하한 (Discrete Tick Quantization Floor)]
+            # 저가형 ETF(예: 252670 ₩114, 1호가=₩1=0.88%)에서 2~3틱 호가 진동만으로 트레일링 스탑이 오발동하지 않도록
+            # KRX 법정 호가단위(tick_pct)의 최소 6틱을 손절/트레일링 폭 하한으로 보장하고, 최소 3틱 이상 수익 구간 진입 후에만 트레일링 활성화
+            tick_pct = 0.0
+            if current_price > 0 and str(ticker).isdigit():
+                try:
+                    tick_sz = float(dqe.get_krx_tick_size(current_price)) if (dqe is not None and hasattr(dqe, 'get_krx_tick_size')) else 1.0
+                    tick_pct = (tick_sz / current_price) * 100.0
+                except Exception:
+                    tick_pct = 0.0
+
             dynamic_hard_sl = -abs(atr_pct * 100 * atr_sl_mult)
-            dynamic_hard_sl = min(dynamic_hard_sl, pget('leverage_judge.hard_sl_cap_pct', -2.0))
+            dynamic_hard_sl = min(dynamic_hard_sl, pget('leverage_judge.hard_sl_cap_pct', -2.0), -(2.0 + 2.0 + 1.0) * tick_pct)
             dynamic_trail_stop = abs(atr_pct * 100 * atr_trail_mult)
-            dynamic_trail_stop = max(dynamic_trail_stop, pget('leverage_judge.trail_stop_floor_pct', 1.5))
+            dynamic_trail_stop = max(dynamic_trail_stop, pget('leverage_judge.trail_stop_floor_pct', 1.5), (2.0 + 2.0 + 1.0) * tick_pct)
+            trail_activate_min_pct = max((2.0 + 1.0) * tick_pct, 1.0 / 2.0)
 
             # 인버스 헤지는 bear/crash 레짐이거나 변동성 스트레스가 caution 분위수 이상일 때 보유기한 만료(Decay) 면제
             effective_max_hold = base_max_hold if (is_inverse_pos and (is_bear_or_crash or effective_vol_index >= dynamic_vix_caution)) else long_dynamic_max_hold
@@ -349,7 +370,7 @@ class LeverageJudge:
             if pnl_pct <= dynamic_hard_sl:
                 reason = f'[ETF Stop] Hard SL (ATR 기반): 손실률 {pnl_pct:.2f}% (<= {dynamic_hard_sl:.2f}%)'
                 urgency = 3
-            elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price:
+            elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price and peak_pnl_pct >= trail_activate_min_pct:
                 reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
             elif is_inverse_pos and (not is_bear_or_crash) and (effective_vol_index < dynamic_vix_caution) and (pnl_pct <= 0):
@@ -360,9 +381,6 @@ class LeverageJudge:
                 urgency = 2
             elif allow_time_decay_exit and days_held >= effective_max_hold:
                 reason = f'[ETF Stop] Medallion Decay: {days_held}일 보유 >= 동적 임계값 {effective_max_hold}일 (Vol={effective_vol_index:.1f})'
-                urgency = 2
-            elif drawdown_from_hwm >= dynamic_trail_stop:
-                reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
                 urgency = 2
 
             if reason:
