@@ -558,6 +558,8 @@ class DynamicQuantEngine:
         beta_q50 = float(np.quantile(us_betas, q50_thr)) if len(us_betas) >= 4 else 1.0
         broad_corr_thr = 4.0 / 5.0
         broad_beta_tol = 1.0 / 5.0
+        min_eq_beta = 7.0 / 20.0
+        min_eq_corr = 1.0 / 4.0
 
         scored_candidates: List[Tuple[str, float]] = []
         for tk, m in self._us_metrics.items():
@@ -572,6 +574,10 @@ class DynamicQuantEngine:
                     pass
             vol_ann = float(m.get("vol_ann", 0.0))
             if vol_ann < min_vol:
+                continue
+            beta_cand = float(m.get("beta", 1.0))
+            corr_cand = float(m.get("corr", 0.0))
+            if beta_cand < min_eq_beta or corr_cand < min_eq_corr:
                 continue
             vol_d = max(float(m.get("vol_daily", 0.0)), eps)
             r20 = float(m.get("ret_20d", 0.0))
