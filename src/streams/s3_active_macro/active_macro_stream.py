@@ -190,6 +190,9 @@ class S3FactorStream(BaseStream):
         self._full_universe.update(_dyn_global_etfs)
         self._full_universe.update(_dyn_def_etfs)
         us_regime = _dqe.resolve_effective_us_regime(regime, market_data)
+        if isinstance(market_data, dict):
+            market_data.setdefault('regime', regime)
+            market_data.setdefault('us_regime', us_regime)
         if us_regime != str(regime or '').lower():
             logger.info(
                 f'  🌎 [S3 US Regime Decoupling] KRX 레짐({regime}) ≠ US 실효 레짐({us_regime}) '
@@ -597,7 +600,11 @@ class S3FactorStream(BaseStream):
         w_vol = pget('s3.factor_weight_volatility', 0.2)
         _regime_weights_enabled = cfg.get('s3.regime_factor_weights_enabled', True)
         if _regime_weights_enabled:
-            _current_regime = self._detect_current_regime(market_data)
+            _current_regime = (
+                self._normalize_regime(str(market_data.get('us_regime') or ''))
+                if source == 'global' and isinstance(market_data, dict) and market_data.get('us_regime')
+                else self._detect_current_regime(market_data)
+            )
             if _current_regime:
                 w_mom = cfg.get(f's3.regime_factor_weights.{_current_regime}.momentum', w_mom)
                 w_val = cfg.get(f's3.regime_factor_weights.{_current_regime}.value', w_val)
@@ -1210,7 +1217,7 @@ class S3FactorStream(BaseStream):
             _cache_path = _project_root / 'results' / 'signal_cache.json'
             if _cache_path.exists():
                 _cache = _json.loads(_cache_path.read_text(encoding='utf-8'))
-                regime = _cache.get('regime', _cache.get('market_regime', ''))
+                regime = _cache.get('kr_regime', _cache.get('regime', _cache.get('market_regime', '')))
                 if regime:
                     return self._normalize_regime(regime)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:

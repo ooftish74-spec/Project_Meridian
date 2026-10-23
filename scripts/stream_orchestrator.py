@@ -1366,6 +1366,20 @@ class StreamOrchestrator:
                 except Exception:
                     pass
             _PARKING_SWAP_SKIP = {'459580', '449170', '423160', '430740', '357870', '357330', 'SHV', 'SGOV', 'BIL'}
+            _swap_lockout_set = {
+                str(eo.get('ticker', '')).upper()
+                for eo in exit_orders
+                if eo.get('ticker')
+            }
+            if getattr(self, 'exec_mode', 'live') == 'live':
+                try:
+                    from src.execution.position_ledger import PositionLedgerManager as _PLM_Swap
+                    _swap_lockout_set |= {str(k).upper() for k in (_PLM_Swap().get_daily_exit_details() or {}).keys()}
+                except Exception:
+                    pass
+            from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_swap
+            _us_eff_reg_swap = _get_qe_swap().resolve_effective_us_regime(regime, market_data)
+            _US_INV_SWAP_BLOCK = {'SOXS', 'SQQQ', 'PSQ', 'SH', 'SDOW', 'SPXS', 'SPXU', 'QID'} if _us_eff_reg_swap not in ('bear', 'crash') else set()
             _candidate_sigs = []
             for _sid, _sigs in all_signals.items():
                 if _sid in ('S0', 'S4', 'S5', 'S_YIELD'):
@@ -1379,6 +1393,8 @@ class StreamOrchestrator:
                         and _tk not in _ordered_tickers
                         and _tk.upper() not in _held_swap_set
                         and _tk.upper() not in _PARKING_SWAP_SKIP
+                        and _tk.upper() not in _swap_lockout_set
+                        and _tk.upper() not in _US_INV_SWAP_BLOCK
                         and _s.get('direction', _s.get('action', 'long')) in ('long', 'buy', 'BUY')
                     ):
                         _candidate_sigs.append(_s)
@@ -2205,6 +2221,11 @@ class StreamOrchestrator:
                         continue
                 filtered_orders.append(o)
             if _vetoed_pair_ids or _vetoed_tickers:
+                _has_remaining_swap_buy = any(
+                    o.get('strategy') == 'cross_alpha_swap_buy'
+                    and (o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long'))
+                    for o in filtered_orders
+                )
                 _pair_safe_orders = []
                 for o in filtered_orders:
                     _otk = str(o.get('ticker', '')).upper()
@@ -2212,6 +2233,11 @@ class StreamOrchestrator:
                     _opartner = str(o.get('pair_partner', '') or '').split(':')[-1].strip().upper()
                     _osid = str(o.get('stream_id', o.get('stream', '')) or '')
                     _is_buy_o = o.get('action') in ('buy', 'long') or o.get('direction') in ('buy', 'long')
+                    if o.get('strategy') == 'cross_alpha_swap_sell' and not _has_remaining_swap_buy:
+                        logger.warning(
+                            f"  🛑 [Atomic Swap Leg Veto] {_otk}: 교체 매수 대상(Swap Buy) 기각으로 인한 단독 스왑 매도 원천 취소"
+                        )
+                        continue
                     if _is_buy_o and (
                         (_opid and _opid in _vetoed_pair_ids)
                         or (_opartner and _opartner in _vetoed_tickers and (_opid or _osid in ('S14', 'S14_PAIR_ALPHA', 'S7')))
