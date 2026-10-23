@@ -347,9 +347,13 @@ def _fetch_yahoo_chart_quote(symbol: str) -> Optional[dict]:
     try:
         gf = GoogleFinanceCollector.get_quote_details(symbol)
         if gf and float(gf.get('price', 0) or 0) > 0:
+            gf_p = float(gf['price'])
+            gf_prev = float(gf.get('prev_close', 0.0) or 0.0)
+            gf_chg = float(gf.get('change_pct', 0.0) or 0.0)
             return {
-                'price': round(float(gf['price']), 4),
-                'change_1d': round(float(gf.get('change_pct', 0.0) or 0.0), 2),
+                'price': round(gf_p, 4),
+                'prev_close': round(gf_prev, 4),
+                'change_1d': round(gf_chg, 2),
             }
     except Exception:
         pass
@@ -422,8 +426,13 @@ def collect_global_macro(symbols: list) -> dict:
             route, param = mapping.get(symbol, ('ETF', symbol))
             price = None
 
-            # [1] 실제 US 주식/ETF 라우팅 (EWY, FLKR, FXI 등)
+            # [1] 실제 US 주식/ETF 라우팅 (EWY, FLKR, FXI 등 — 장중 실시간 시세 우선 조회)
             if route == 'ETF':
+                yd = _fetch_yahoo_chart_quote(symbol)
+                if yd and yd.get('price', 0) > 0:
+                    results[symbol] = yd
+                    logger.info(f"  🌍 [GlobalMacro Live] {symbol} 수집 성공: {yd['price']} ({yd['change_1d']:+.2f}%)")
+                    continue
                 url = f'https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={param}&apikey={api_key}'
                 resp = requests.get(url, timeout=10).json()
                 if 'Global Quote' in resp and '05. price' in resp['Global Quote']:
@@ -431,11 +440,6 @@ def collect_global_macro(symbols: list) -> dict:
                     chg_pct = float(resp['Global Quote'].get('10. change percent', '0%').replace('%', ''))
                     results[symbol] = {'price': price, 'change_1d': chg_pct}
                     logger.info(f"  🌍 [Alpha Vantage] {symbol} 수집 성공: {price} ({chg_pct:+.2f}%)")
-                else:
-                    yd = _fetch_yahoo_chart_quote(symbol)
-                    if yd and yd.get('price', 0) > 0:
-                        results[symbol] = yd
-                        logger.info(f"  🌍 [GlobalMacro Fallback] {symbol} 수집 성공: {yd['price']} ({yd['change_1d']:+.2f}%)")
 
             # [2] WTI (원유) 라우팅
             elif route == 'WTI':

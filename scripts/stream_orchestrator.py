@@ -1509,23 +1509,25 @@ class StreamOrchestrator:
                 _filtered_orders.append(_ord)
                 continue
 
-            # MACRO_BOUND BUY → caution/bear/crash 시 기각 (동적 완화, 방어형 ETF 면제 및 S3 불타기 허용)
+            # MACRO_BOUND BUY → caution/bear/crash 시 기각 (동적 완화, 방어형 ETF 면제 및 US 실효 레짐 디커플링)
             _DEFENSIVE_TICKERS = {'TLT', 'GLD', 'UUP', 'SHV', 'SGOV', 'BIL', 'SH', 'SQQQ', 'SOXS', '114800', '252670', '251340', '459580', '449170'} | _dyn_def_set
+            _ord_regime = _curr_regime if _is_kr_tk(_tk_u) else _dqe.resolve_effective_us_regime(_curr_regime, market_data)
             if _stream in _MACRO_BOUND and _action in ('BUY', 'LONG', '') and _tk_u not in _DEFENSIVE_TICKERS:
                 _conf = float(_ord.get('confidence', 0.0))
-                _macro_caution_pass_conf = float(cfg.get('risk.macro_guard_caution_pass_conf', _dyn_caution_cut))
+                _ord_caution_cut = _dyn_caution_cut if _ord_regime == _curr_regime else _dqe.compute_dynamic_confidence_cutoff(_all_confs, regime=_ord_regime)
+                _macro_caution_pass_conf = float(cfg.get('risk.macro_guard_caution_pass_conf', _ord_caution_cut))
                 # caution 장세라도 확신도가 동적 분위수 임계값 이상이면 진입 허용
-                if _curr_regime == 'caution' and _conf >= _macro_caution_pass_conf:
-                    logger.info(f"  [Phase 76 MacroGuard] {_stream} BUY 통과 (regime=caution 이나 confidence={_conf:.2f}>={_macro_caution_pass_conf:.2f})")
-                elif _curr_regime in ('caution', 'bear', 'crash'):
+                if _ord_regime == 'caution' and _conf >= _macro_caution_pass_conf:
+                    logger.info(f"  [Phase 76 MacroGuard] {_stream}({_tk_u}) BUY 통과 (regime=caution 이나 confidence={_conf:.2f}>={_macro_caution_pass_conf:.2f})")
+                elif _ord_regime in ('caution', 'bear', 'crash'):
                     logger.info(
-                        f"  [Phase 76 MacroGuard] {_stream} BUY 기각 "
-                        f"(regime={_curr_regime}, conf={_conf:.2f})"
+                        f"  [Phase 76 MacroGuard] {_stream}({_tk_u}) BUY 기각 "
+                        f"(regime={_ord_regime}, conf={_conf:.2f})"
                     )
                     continue
 
             # [Task 2] S3 Pyramiding (불타기) 허용
-            if _stream == 'S3' and _action in ('BUY', 'LONG'):
+            if _stream in ('S3', 'S3_A') and _action in ('BUY', 'LONG'):
                 _conf = float(_ord.get('confidence', 0.0))
                 _pyramid_conf_th  = float(cfg.get('s3.pyramiding_conf_threshold', max(0.65, _dyn_caution_cut + 0.10)))
                 _pyramid_scale    = float(cfg.get('s3.pyramiding_scale_factor',   2.00))  # (conf-th)*scale = max boost
@@ -1533,7 +1535,7 @@ class StreamOrchestrator:
                     _pyramid_mult = 1.0 + (_conf - _pyramid_conf_th) * _pyramid_scale
                     if 'amount_krw' in _ord:
                         _ord['amount_krw'] = _ord['amount_krw'] * _pyramid_mult
-                        logger.info(f"  🔥 [Pyramiding] S3 강한 확신(conf={_conf:.2f}): 투자 스케일 {_pyramid_mult:.2f}x 확대")
+                        logger.info(f"  🔥 [Pyramiding] {_stream} 강한 확신(conf={_conf:.2f}): 투자 스케일 {_pyramid_mult:.2f}x 확대")
 
 
             # MICRO_BOUND BUY → regime 무관, IntradayMicroGuard만 체크
@@ -1541,7 +1543,7 @@ class StreamOrchestrator:
                 try:
                     from src.risk.intraday_micro_guard import IntradayMicroGuard
                     _mg = IntradayMicroGuard()
-                    _mg_ok, _mg_reason = _mg.check()
+                    _mg_ok, _mg_reason = _mg.check(market_data)
                     if not _mg_ok:
                         logger.warning(
                             f"  [Phase 76 MicroGuard] {_stream} BUY 일시정지: {_mg_reason}"
@@ -1549,7 +1551,7 @@ class StreamOrchestrator:
                         continue
                     logger.info(
                         f"  [Phase 76 MicroGuard] {_stream} BUY 통과 "
-                        f"(regime={_curr_regime}, 거시무관)"
+                        f"(regime={_ord_regime}, 거시무관)"
                     )
                 except Exception as _mge:  # noqa: BLE001
                     logger.error(f"  [Phase 76 MicroGuard] 체크 실패, 통과: {_mge}", exc_info=True)
@@ -2845,15 +2847,28 @@ class StreamOrchestrator:
             signal_cache_path=str(_ROOT / 'results' / 'signal_cache.json'),
             portfolio_path=str(_ROOT / 'results' / 'shadow_portfolio.json'),
         )
+        import os as _os_gen
+        from datetime import time as _dtime_gen
+        _in_pytest_gen = bool(_os_gen.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_gen.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
+        _now_t_gen = datetime.now().time()
+        _is_us_window_gen = (not _in_pytest_gen) and (_now_t_gen >= _dtime_gen(20, 0) or _now_t_gen <= _dtime_gen(6, 30))
+
         if _kelly_active:
             target_cash_ratio = float(cfg.get('kelly.booster_cash_ratio', 0.0))
             logger.info(f"  🚀 [Phase 37] Kelly Booster ON: Cash Ratio → {target_cash_ratio:.0%}")
         else:
-            # [Pure Dynamic Math] 레짐 및 시장 거시 변동성에 연동된 동적 현금 비축 비율 (15% 하드코딩 완전 폐지)
+            # [Pure Dynamic Math] 레짐 및 시장 거시 변동성에 연동된 동적 현금 비축 비율 (미국 정규장 세션은 US 실효 레짐 연동)
             _vix_cash = float(market_data.get('vix', 18.0) if market_data else 18.0)
-            if regime == 'bull':
+            _cash_reg = regime
+            if _is_us_window_gen:
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_cash
+                    _cash_reg = _get_qe_cash().resolve_effective_us_regime(regime, market_data)
+                except Exception:
+                    _cash_reg = regime
+            if _cash_reg in ('bull', 'neutral'):
                 target_cash_ratio = round(max(0.03, min(0.12, _vix_cash / 180.0)), 4)
-            elif regime == 'caution':
+            elif _cash_reg == 'caution':
                 target_cash_ratio = round(max(0.08, min(0.20, _vix_cash / 120.0)), 4)
             else:
                 target_cash_ratio = round(max(0.20, min(0.50, _vix_cash / 60.0)), 4)
@@ -2930,7 +2945,7 @@ class StreamOrchestrator:
                 if _t:
                     existing_tickers.add(str(_t).split(':')[-1])
 
-                _pos_val = float(_pv.get('amount', 0.0) or _pv.get('market_value', 0.0) or 0.0)
+                _pos_val = float(_pv.get('eval_amount_krw', 0.0) or _pv.get('amount', 0.0) or _pv.get('market_value', 0.0) or 0.0)
                 if _pos_val <= 0:
                     _pos_val = float(_pv.get('quantity', _pv.get('qty', 0)) or 0.0) * float(
                         _pv.get('current_price', 0.0) or _pv.get('avg_price', 0.0) or _pv.get('entry_price', 0.0) or 0.0
@@ -2948,10 +2963,6 @@ class StreamOrchestrator:
         # 시그널이 없는 스트림의 유휴 예산에서 이미 S_RECON 등으로 실계좌에 투입된 자본(_unattributed_held_krw)을 우선 차감하여 이중 계상 원천 차단
         # 또한 장중(08:00~15:10 KST)에는 _kis_adapter.py의 Yield Harvester가 국내 파킹 ETF(459580 등) 일반 매수를 차단하므로,
         # S5 등 파킹 ETF 매수 시그널이 유휴 예산 재분배와 [Final Gate S5] 원화 매수 한도를 잠식하지 않도록 사전 제외
-        import os as _os_gen
-        from datetime import time as _dtime_gen
-        _in_pytest_gen = bool(_os_gen.environ.get('MERIDIAN_TEST_MODE') == '1' or _os_gen.environ.get('PYTEST_CURRENT_TEST') or (market_data or {}).get('_test_mode', False))
-        _now_t_gen = datetime.now().time()
         _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}  # hardcode-ok: L0 KRX parking ETF codes
         if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and (_dtime_gen(8, 0) <= _now_t_gen <= _dtime_gen(15, 10)):
             for _p_sid in list(signals.keys()):
@@ -2969,6 +2980,40 @@ class StreamOrchestrator:
                     logger.info(
                         f"  🏦 [Intraday Parking Crowd-Out Guard] {_p_sid}: 장중({_now_t_gen.strftime('%H:%M')}) 파킹 ETF 매수 시그널 "
                         f"{_before_p - len(signals[_p_sid])}건 사전 제외 → 예산을 활성 알파/인버스 스트림으로 100% 전환"
+                    )
+
+        # ★ [US Session Closed-Market Signal Crowd-Out Guard]
+        # 미국 정규장/프리마켓 세션(국내 KRX 휴장 시간대)에 S5(459580), S0(252670), S3_B(국내 QVM), S14(국내 페어) 등
+        # 비개장 시장(KRX) 매수 시그널이 예산을 선점한 뒤 Step 8.4 Session Gate에서 증발하여 통합증거금(USD/KRW)이 유휴화되는 현상 원천 차단
+        if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (_is_us_window_gen or bool((market_data or {}).get('enforce_session_gate', False))):
+            for _p_sid in list(signals.keys()):
+                _orig_sigs = signals[_p_sid] or []
+                _before_s = len(_orig_sigs)
+                _kept_sigs = []
+                for _s in _orig_sigs:
+                    if not isinstance(_s, dict):
+                        continue
+                    _dir_s = str(_s.get('direction', _s.get('action', 'long'))).lower()
+                    _tk_s = str(_s.get('ticker', '')).split(':')[-1].strip()
+                    if _dir_s in ('long', 'buy') and _tk_s and not _tk_s.startswith('_'):
+                        if not self._is_ticker_session_open_for_live_exit(_tk_s, market_data):
+                            continue
+                    _kept_sigs.append(_s)
+                if len(_kept_sigs) < _before_s:
+                    _open_buys = [
+                        _x for _x in _kept_sigs
+                        if isinstance(_x, dict) and str(_x.get('direction', _x.get('action', 'long'))).lower() in ('long', 'buy')
+                    ]
+                    if _open_buys:
+                        _sum_open_sz = sum(float(_x.get('size_pct', 0.0) or 0.0) for _x in _open_buys)
+                        if 0.0 < _sum_open_sz < 0.70:
+                            _rescale = min(2.5, 0.85 / _sum_open_sz)
+                            for _x in _open_buys:
+                                _x['size_pct'] = round(float(_x.get('size_pct', 0.0) or 0.0) * _rescale, 4)
+                    signals[_p_sid] = _kept_sigs
+                    logger.info(
+                        f"  🌎 [Session Crowd-Out Guard] {_p_sid}: 비개장 세션 매수 시그널 {_before_s - len(_kept_sigs)}건 사전 제외 "
+                        f"→ 개장 세션(US 통합증거금) 활성 시그널({len(_open_buys)}건)로 예산 100% 전환"
                     )
 
         _idle_budget = 0.0

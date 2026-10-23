@@ -490,7 +490,12 @@ class RegimeDetector:
             score -= pcr_risk_penalty
         kospi = parse_metric(signal, 'kospi', parse_metric(signal, 'kospi_close', 0.0))
         kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
-        _rebound_active = (ois >= 60.0 and vix < vix_caution)
+        kospi_rets = market_data.get('kospi_returns', [])
+        _recent_5 = kospi_rets[-5:] if len(kospi_rets) >= 5 else []
+        _cum_5d_pct = sum(_recent_5) * 100.0 if _recent_5 else 0.0
+        _last_1d_pct = float(kospi_rets[-1]) * 100.0 if kospi_rets else float(parse_metric(signal, 'kospi_change_1d', parse_metric(signal, 'kospi_change_pct', 0.0)) or 0.0)
+        _short_term_stabilized = bool(_recent_5 and _cum_5d_pct >= -1.0 and _last_1d_pct >= 0.0 and vix < vix_caution)
+        _rebound_active = (ois >= 60.0 and vix < vix_caution) or _short_term_stabilized
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
             # [Quant Institutional Patch] 0.5 ~ 2.0 스케일 범위 검증 및 HMM/Ensemble 연속 레짐 스코어링
@@ -513,14 +518,13 @@ class RegimeDetector:
                     score += 10
             else:
                 logger.warning(f"  ⚠️ KOSPI vs MA20 괴리율 비정상(ratio={trend_ratio:.2f}). 스케일 오염으로 간주하여 패널티 무시.")
-        kospi_rets = market_data.get('kospi_returns', [])
         if len(kospi_rets) >= 10:
             recent_10 = kospi_rets[-10:]
             neg_count = sum((1 for r in recent_10 if r < 0))
             cum_ret_10d = sum(recent_10) * 100
             if neg_count >= 8 or cum_ret_10d < -6.0:
                 if _rebound_active:
-                    logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 야간/프리마켓 반등(OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
+                    logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 단기 안정화/반등(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%, OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
                     score -= 15
                     force_regime = 'caution'
                     crash_type = 'rebound_from_bleed'

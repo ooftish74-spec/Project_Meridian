@@ -88,6 +88,15 @@ class S3CrossAssetSleeve:
             key_1d = f"{tk.lower()}_return_1d"
             if key_1d in market_data:
                 return float(market_data.get(key_1d, 0.0) or 0.0)
+            import os as _os_tc
+            if not _os_tc.environ.get('PYTEST_CURRENT_TEST') and not _os_tc.environ.get('MERIDIAN_TEST_MODE'):
+                try:
+                    from src.utils.google_finance_collector import GoogleFinanceCollector
+                    gf_q = GoogleFinanceCollector.get_quote_details(tk)
+                    if isinstance(gf_q, dict) and gf_q.get('change_pct') is not None and float(gf_q.get('price', 0) or 0) > 0:
+                        return float(gf_q['change_pct']) / 100.0
+                except Exception:
+                    pass
             try:
                 from pathlib import Path
                 import pandas as pd
@@ -103,6 +112,7 @@ class S3CrossAssetSleeve:
                 pass
             return 0.0
 
+        sc_tc = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
         has_explicit_returns = ('spy_return_5d' in market_data) or ('sp500_return_5d' in market_data) or ('asset_returns' in market_data)
         signals = []
         if has_explicit_returns:
@@ -125,6 +135,16 @@ class S3CrossAssetSleeve:
             spread = asset_ret - spy_return
 
             if is_inv_hedge:
+                idx_chg = 0.0
+                if ticker == 'SOXS':
+                    idx_chg = float(sc_tc.get('sox_change_1d', sc_tc.get('soxx_change_1d', 0.0)) or 0.0)
+                elif ticker in ('SQQQ', 'PSQ'):
+                    idx_chg = float(sc_tc.get('nasdaq_change_1d', sc_tc.get('ixic_change_1d', 0.0)) or 0.0)
+                elif ticker == 'SH':
+                    idx_chg = float(sc_tc.get('sp500_change_1d', sc_tc.get('spx_change_1d', 0.0)) or 0.0)
+                if idx_chg > 0.0:
+                    logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 기초지수 당일 등락률({idx_chg:+.2f}%) 양수 반등 중 — 역방향 인버스 매수 차단")
+                    continue
                 ret_1d = _get_live_1d_return(ticker)
                 if ret_1d < 0.0:
                     logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 당일/1일 수익률({ret_1d:+.2%}) 음수 전환 — 역방향 추격 매수 차단")

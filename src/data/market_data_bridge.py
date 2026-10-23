@@ -421,6 +421,9 @@ class MarketDataBridge:
         for _k_nf in ('ois_details', 'night_futures', 'daytime_futures', 'night_futures_change_1d'):
             if _k_nf not in signal and self._cache.get(_k_nf) is not None:
                 signal[_k_nf] = self._cache[_k_nf]
+        if getattr(self, '_last_vix_prev', 0) and float(getattr(self, '_last_vix_prev', 0)) > 0:
+            signal['vix_prev'] = float(self._last_vix_prev)
+            signal['vix_change_1d'] = float(getattr(self, '_last_vix_chg_1d', 0.0))
         signal['timestamp'] = datetime.now().isoformat()
         try:
             _alpha_path = _PROJECT_ROOT / 'results' / 'discovered_alphas.json'
@@ -628,6 +631,16 @@ class MarketDataBridge:
         # 1. 최우선: Google Finance Live Collector 실시간 수집 시도 (1순위 SSOT)
         try:
             from src.utils.google_finance_collector import GoogleFinanceCollector
+            gf_det = GoogleFinanceCollector.get_quote_details('VIX')
+            if isinstance(gf_det, dict) and float(gf_det.get('price', 0) or 0) > 0:
+                gf_vix = round(float(gf_det['price']), 2)
+                gf_prev = float(gf_det.get('prev_close', 0) or 0)
+                if gf_prev > 0:
+                    self._last_vix_prev = round(gf_prev, 2)
+                    self._last_vix_chg_1d = round((gf_vix / gf_prev - 1.0) * 100.0, 2)
+                self._field_quality['vix'] = 1.0
+                logger.info(f"  ✅ [VIX Live Feed] Google Finance 실시간 VIX 100% 채택: {gf_vix:.2f} (prev={gf_prev:.2f})")
+                return gf_vix
             gf_vix = GoogleFinanceCollector.get_vix()
             if gf_vix > 0:
                 self._field_quality['vix'] = 1.0
@@ -801,11 +814,15 @@ class MarketDataBridge:
                 close = df['종가'].dropna().tail(20)
                 if len(close) >= 20:
                     rets = close.pct_change().dropna()
-                    # Huber/MAD Robust Volatility (단일 이상치로 인한 20일간의 VKOSPI>45 고착 오발화 차단)
+                    # Huber/MAD Robust Volatility + 5일 단기 실현 변동성 (과거 충격 소멸 후 VKOSPI 고착 오발화 차단)
                     med_r = float(rets.median())
                     mad_sigma = float((rets - med_r).abs().median() * 1.4826 * np.sqrt(252) * 100.0)
                     ewma_sigma = float(rets.ewm(span=7).std().iloc[-1] * np.sqrt(252) * 100.0)
+                    rv_5d = float(rets.tail(5).std() * np.sqrt(252) * 100.0) if len(rets) >= 5 else ewma_sigma
+                    ret_5d_sum = float(rets.tail(5).sum()) if len(rets) >= 5 else 0.0
                     robust_rv = 0.65 * mad_sigma + 0.35 * min(ewma_sigma, mad_sigma * 1.5)
+                    if ret_5d_sum >= 0.0 and rv_5d < mad_sigma:
+                        robust_rv = min(robust_rv, 0.5 * rv_5d + 0.5 * ewma_sigma)
                     vix_ref = 0.0
                     try:
                         from src.utils.google_finance_collector import GoogleFinanceCollector
@@ -813,6 +830,8 @@ class MarketDataBridge:
                     except Exception:
                         vix_ref = float(self._cache.get('vix', 0.0) or 0.0)
                     if 5.0 <= vix_ref <= 100.0:
+                        if ret_5d_sum >= 0.0:
+                            robust_rv = min(robust_rv, vix_ref * 1.5)
                         estimated = round(0.55 * (vix_ref * 1.05) + 0.45 * robust_rv, 2)
                     else:
                         estimated = round(robust_rv * 1.05, 2)
@@ -1582,6 +1601,8 @@ class MarketDataBridge:
                 data['cross_asset_direction'] = 'risk_off' if (_sp_c < -0.3 and _gd_c >= 0) else ('risk_on' if _sp_c > 0.3 else 'neutral')
             _vh = data.get('vix_history')
             if isinstance(_vh, list) and len(_vh) >= 2:
+                if float(_vh[-2]) > 0 and not getattr(self, '_last_vix_prev', 0):
+                    data['vix_prev'] = round(float(_vh[-2]), 2)
                 if not data.get('vix_change_1d') and float(_vh[-2]) > 0:
                     data['vix_change_1d'] = round((float(_vh[-1]) / float(_vh[-2]) - 1.0) * 100.0, 2)
                 if not data.get('vix_change_1m') and len(_vh) >= 21 and float(_vh[-21]) > 0:

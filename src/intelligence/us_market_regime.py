@@ -120,13 +120,15 @@ class USMarketRegimeEngine:
             return {}
 
     def _f1_spy_qqq_trend(self) -> Tuple[float, Dict]:
-        """SPY + QQQ 단기 추세 (20일 수익률)."""
+        """SPY + QQQ 단기 추세 (실시간 signal_cache 우선 + 5일 시계열 추세 결합)."""
         us = self.oi.get('us_market', {})
         sc = {}
+        sc_is_newer = False
         try:
             sc_file = RESULTS / 'signal_cache.json'
             if sc_file.exists():
                 sc = json.loads(sc_file.read_text())
+                sc_is_newer = (not OI_PATH.exists()) or (sc_file.stat().st_mtime >= OI_PATH.stat().st_mtime)
         except Exception:
             pass
 
@@ -134,15 +136,47 @@ class USMarketRegimeEngine:
         qqq_sc = float(sc.get('nasdaq_change_1d', sc.get('ixic_change_1d', 0.0)) or 0.0) / 100.0
         sox_sc = float(sc.get('sox_change_1d', sc.get('soxx_change_1d', 0.0)) or 0.0) / 100.0
 
-        spy_ret = float(us.get('us_spy', {}).get('ret_1d', 0)) or spy_sc
-        qqq_ret = float(us.get('us_qqq', {}).get('ret_1d', 0)) or qqq_sc
-        sox_ret = float(us.get('us_soxx', {}).get('ret_1d', 0)) or sox_sc
+        oi_spy = float(us.get('us_spy', {}).get('ret_1d', 0) or 0.0)
+        oi_qqq = float(us.get('us_qqq', {}).get('ret_1d', 0) or 0.0)
+        oi_sox = float(us.get('us_soxx', {}).get('ret_1d', 0) or 0.0)
 
-        hist_spy = [float(h.get('us_market', {}).get('us_spy', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [spy_ret]
-        hist_qqq = [float(h.get('us_market', {}).get('us_qqq', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [qqq_ret]
+        if sc_is_newer:
+            spy_ret = spy_sc if sc.get('sp500_change_1d') is not None else oi_spy
+            qqq_ret = qqq_sc if sc.get('nasdaq_change_1d') is not None else oi_qqq
+            sox_ret = sox_sc if sc.get('sox_change_1d') is not None else oi_sox
+        else:
+            spy_ret = oi_spy or spy_sc
+            qqq_ret = oi_qqq or qqq_sc
+            sox_ret = oi_sox or sox_sc
+
+        def _load_pq_5d_rets(sym: str, latest_ret: float):
+            try:
+                import pandas as pd
+                pq = PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{sym}.parquet'
+                if pq.exists():
+                    df = pd.read_parquet(pq)
+                    c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if c_col and len(df) >= 6:
+                        rets = df[c_col].dropna().pct_change().dropna().tail(5).tolist()
+                        if rets:
+                            rets[-1] = latest_ret
+                            return [float(r) for r in rets]
+            except Exception:
+                pass
+            return [latest_ret]
+
+        if self.hist:
+            hist_spy = [float(h.get('us_market', {}).get('us_spy', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [spy_ret]
+            hist_qqq = [float(h.get('us_market', {}).get('us_qqq', {}).get('ret_1d', 0)) for h in self.hist[-5:]] + [qqq_ret]
+        else:
+            hist_spy = _load_pq_5d_rets('SPY', spy_ret)
+            hist_qqq = _load_pq_5d_rets('QQQ', qqq_ret)
+
         trend_spy = sum(hist_spy) / len(hist_spy) if hist_spy else spy_ret
         trend_qqq = sum(hist_qqq) / len(hist_qqq) if hist_qqq else qqq_ret
-        composite = trend_spy * 0.4 + trend_qqq * 0.4 + sox_ret * 0.2
+        eff_spy = spy_ret * 0.6 + trend_spy * 0.4
+        eff_qqq = qqq_ret * 0.6 + trend_qqq * 0.4
+        composite = eff_spy * 0.4 + eff_qqq * 0.4 + sox_ret * 0.2
         score = max(-1.0, min(1.0, composite * 20))
         return (score, {'spy_1d': round(spy_ret, 4), 'qqq_1d': round(qqq_ret, 4), 'sox_1d': round(sox_ret, 4), 'trend_5d_spy': round(trend_spy, 4), 'trend_5d_qqq': round(trend_qqq, 4), 'score': round(score, 3)})
 
@@ -164,22 +198,25 @@ class USMarketRegimeEngine:
         return (score, {'vix': round(vix, 2), 'vix_ts_ratio': round(vix_ts, 3), 'vix_level_score': round(vix_level_score, 3), 'ts_score': round(ts_score, 3), 'score': round(score, 3)})
 
     def _f3_overnight_mom(self) -> Tuple[float, Dict]:
-        """Overnight 모멘텀 복합 신호."""
+        """Overnight 모멘텀 복합 신호 (장중 최신 signal_cache 우선)."""
         sc = {}
+        sc_is_newer = False
         try:
             sc_file = RESULTS / 'signal_cache.json'
             if sc_file.exists():
                 sc = json.loads(sc_file.read_text())
+                sc_is_newer = (not OI_PATH.exists()) or (sc_file.stat().st_mtime >= OI_PATH.stat().st_mtime)
         except Exception:
             pass
         oi_score = float(self.oi.get('overnight_score', {}).get('score', 0))
         oi_conf = float(self.oi.get('overnight_score', {}).get('confidence', 0))
-        if oi_score == 0 and sc.get('ois') is not None:
-            oi_score = max(-1.0, min(1.0, (float(sc.get('ois', 50.0)) - 50.0) / 50.0))
+        if (oi_score == 0 or sc_is_newer) and sc.get('ois') is not None:
+            sc_ois_score = max(-1.0, min(1.0, (float(sc.get('ois', 50.0)) - 50.0) / 50.0))
+            oi_score = sc_ois_score if sc_is_newer else (oi_score or sc_ois_score)
             if oi_conf == 0:
                 oi_conf = 0.5
         ewy_ret = float((self.oi.get('korea_overnight', {}) or {}).get('ewy', {}).get('ret_1d', 0))
-        if ewy_ret == 0 and sc.get('ewy_change_1d') is not None:
+        if (ewy_ret == 0 or sc_is_newer) and sc.get('ewy_change_1d') is not None:
             ewy_ret = float(sc.get('ewy_change_1d', 0.0) or 0.0) / 100.0
         ewy_score = max(-1.0, min(1.0, ewy_ret * 15))
         score = oi_score * 0.6 + ewy_score * 0.4
@@ -211,9 +248,22 @@ class USMarketRegimeEngine:
 
     def _f5_streak(self) -> Tuple[float, Dict]:
         """3일 연속 방향성."""
-        if len(self.hist) < 2:
+        daily_rets = []
+        if len(self.hist) >= 2:
+            daily_rets = [float(h.get('us_market', {}).get('us_spy', {}).get('ret_1d', 0)) for h in self.hist[-3:]]
+        else:
+            try:
+                import pandas as pd
+                pq = PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / 'SPY.parquet'
+                if pq.exists():
+                    df = pd.read_parquet(pq)
+                    c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if c_col and len(df) >= 4:
+                        daily_rets = [float(r) for r in df[c_col].dropna().pct_change().dropna().tail(3).tolist()]
+            except Exception:
+                daily_rets = []
+        if not daily_rets:
             return (0.0, {'streak': 0, 'score': 0.0})
-        daily_rets = [float(h.get('us_market', {}).get('us_spy', {}).get('ret_1d', 0)) for h in self.hist[-3:]]
         streak = 0
         for ret in daily_rets:
             if ret > 0.002:

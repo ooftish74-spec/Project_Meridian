@@ -162,11 +162,14 @@ class S3FactorStream(BaseStream):
         signals = []
         rebalance_day = cfg.get('a2.rebalance_day', 1)
         today = now_kst().day
+        from src.utils.dynamic_quant_engine import get_quant_engine
+        _dqe = get_quant_engine()
+        us_regime = _dqe.resolve_effective_us_regime(regime, market_data)
         if today != rebalance_day and self._current_holdings:
             try:
                 from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
                 _tc_eng = S3CrossAssetSleeve()
-                for _cs in _tc_eng.generate_track_c_signals(regime, market_data):
+                for _cs in _tc_eng.generate_track_c_signals(us_regime, market_data):
                     _cs['_type'] = 'TRACK_C'
                     _cs.setdefault('tp_pct', float(pget('s3.track_c.tp_pct', 5.0)))
                     _cs.setdefault('sl_pct', float(pget('s3.track_c.sl_pct', 2.5)))
@@ -174,8 +177,6 @@ class S3FactorStream(BaseStream):
             except Exception as _tc_early_e:
                 logger.debug(f"  [Alpha 4 Track C] 비리밸런싱일 슬리브 스킵: {_tc_early_e}")
             return signals
-        from src.utils.dynamic_quant_engine import get_quant_engine
-        _dqe = get_quant_engine()
         _top_def_k = 6
         _dyn_def_etfs = dict(self.DEFENSIVE_ETFS)
         for _item in _dqe.get_us_defensive_basket(top_k=_top_def_k, include_inverse=True):
@@ -515,7 +516,7 @@ class S3FactorStream(BaseStream):
         try:
             from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
             track_c_engine = S3CrossAssetSleeve()
-            track_c_signals = track_c_engine.generate_track_c_signals(regime, market_data)
+            track_c_signals = track_c_engine.generate_track_c_signals(us_regime, market_data)
             for c_sig in track_c_signals:
                 c_sig['_type'] = 'TRACK_C'
                 c_sig['tp_pct'] = float(pget('s3.track_c.tp_pct', 5.0))
@@ -523,6 +524,48 @@ class S3FactorStream(BaseStream):
                 signals.append(c_sig)
         except Exception as _tc_e:
             logger.warning(f"  ⚠️ [Alpha 4 Track C] 대체자산 슬리 발화 예외 (무시): {_tc_e}")
+
+        # ── [US Inverse Regime-Invalidation & Underlying Rebound Exit] ──
+        # 보유 중인 미국 인버스 ETF(SOXS, PSQ, SQQQ, SH)가 US 레짐 완화(caution/bull) 또는 기초지수 양전으로 인해
+        # 신규 롱 시그널에서 제외된 경우, 즉시 청산(exit) 시그널을 방출하여 역방향 손실 고착을 원천 차단
+        try:
+            import os as _os_inv_ex
+            if not _os_inv_ex.environ.get('PYTEST_CURRENT_TEST') and not _os_inv_ex.environ.get('MERIDIAN_TEST_MODE'):
+                _kp_inv_file = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+                if _kp_inv_file.exists():
+                    _kp_inv_holdings = (_json.loads(_kp_inv_file.read_text(encoding='utf-8')).get('holdings') or {})
+                    _selected_long_tks = {str(s.get('ticker', '')).upper() for s in signals if s.get('direction') == 'long'}
+                    _sc_inv = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
+                    _us_inv_map = {
+                        'SOXS': float(_sc_inv.get('sox_change_1d', _sc_inv.get('soxx_change_1d', 0.0)) or 0.0),
+                        'SQQQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
+                        'PSQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
+                        'SH': float(_sc_inv.get('sp500_change_1d', _sc_inv.get('spx_change_1d', 0.0)) or 0.0),
+                    }
+                    for _inv_tk, _idx_chg_1d in _us_inv_map.items():
+                        _h_inv = _kp_inv_holdings.get(_inv_tk)
+                        if isinstance(_h_inv, dict) and float(_h_inv.get('qty', _h_inv.get('quantity', 0)) or 0) > 0:
+                            if _inv_tk not in _selected_long_tks and (us_regime not in ('bear', 'crash') or _idx_chg_1d > 0.0):
+                                _inv_reason = f"US Inverse Invalidation Exit ({_inv_tk}: us_regime={us_regime}, index_1d={_idx_chg_1d:+.2f}%)"
+                                logger.info(f"  🔔 [S3 Inverse Exit] {_inv_reason}")
+                                signals.append({
+                                    'stream_id': str(_h_inv.get('stream_id') or 'S3_C'),
+                                    'ticker': _inv_tk,
+                                    'name': str(_h_inv.get('name') or _inv_tk),
+                                    'direction': 'exit',
+                                    'action': 'sell',
+                                    'confidence': 1.0,
+                                    'size_pct': 0.0,
+                                    'strategy': 's3_inverse_regime_invalidation',
+                                    'exit_type': 'REGIME_INVALIDATION',
+                                    'reason': _inv_reason,
+                                    'regime': us_regime,
+                                    'market': 'US',
+                                    'timestamp': datetime.now().isoformat(),
+                                    '_type': 'TRACK_C',
+                                })
+        except Exception as _inv_ex_e:
+            logger.debug(f"  [S3 Inverse Exit] 체크 스킵: {_inv_ex_e}")
 
         if self._regime_detector and signals:
             intraday = self._regime_detector.detect(market_data)
@@ -873,7 +916,24 @@ class S3FactorStream(BaseStream):
                             geom_ann = float((max(c_vals[-1], _eps) / max(c_vals[0], _eps)) ** (_ann_days / n_avail) - 1.0)
                             carry_proxy = float(pos_hit_rate * geom_ann)
 
+                            # 3) 구조적 우상향(3M/6M 양수) 우량 성장·AI·반도체 주의 단기 과매도(RSI<35) 장중 양전 반등 수리 보정
+                            ret_1d = float((c_vals[-1] - c_vals[-2]) / max(c_vals[-2], _eps)) if len(c_vals) >= 2 else 0.0
+                            o_col = 'open' if 'open' in df.columns else ('Open' if 'Open' in df.columns else None)
+                            intraday_rev = 0.0
+                            if o_col:
+                                opens = df[o_col].dropna().astype(float)
+                                if len(opens) > 0 and float(opens.iloc[-1]) > 0.0:
+                                    intraday_rev = float((c_vals[-1] - float(opens.iloc[-1])) / max(float(opens.iloc[-1]), _eps))
+                            _rsi_os_th = float(_min_ret_20 + _min_len - _min_ret_5 - 1)  # 35.0
+                            _rev_impulse = max(ret_1d, intraday_rev)
+                            if rsi_14 < _rsi_os_th and (mom_63 > 0.0 or mom_126 > 0.0) and _rev_impulse > 0.0:
+                                _os_depth = (_rsi_os_th - rsi_14) / _rsi_os_th
+                                _reb_boost = float(_os_depth * ((1.0 / float(_min_ret_5)) + float(_min_ret_5) * _rev_impulse))
+                                ret_20d = float(ret_20d + _reb_boost)
+                                quality_value_proxy = float(quality_value_proxy + _reb_boost * float(_min_ret_5))
+
                             ohlcv_dict = {
+                                'ret_1d': ret_1d,
                                 'ret_20d': ret_20d,
                                 'volatility_20d': vol_20d,
                                 'rsi_14': rsi_14,

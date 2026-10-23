@@ -146,3 +146,40 @@ def test_intraday_regime_detector_reaches_recovery_branch(tmp_path, monkeypatch)
     res = det.judge(measurement)
     assert res["regime"] == "recovery"
     assert res["recovery"]["detected"] is True
+
+
+def test_regime_and_inverse_guards_eradicate_false_crash_and_wrong_way_inverse():
+    """Verify ^IXIC symbol mapping, post-shock 5D stabilization in RegimeDetector, and Track C inverse guard."""
+    from src.utils.google_finance_collector import GoogleFinanceCollector
+    from src.regime.regime_detector import RegimeDetector
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+
+    # 1. Google Finance official NASDAQ Composite ticker mapping
+    assert GoogleFinanceCollector.TICKER_MAP["^IXIC"] == ".IXIC:INDEXNASDAQ"
+    assert GoogleFinanceCollector.TICKER_MAP["NASDAQ"] == ".IXIC:INDEXNASDAQ"
+
+    # 2. RegimeDetector: 10-day drop (-16.95%) with recent 5-day stabilization (+0.15%, today +0.30%) -> caution
+    det = RegimeDetector()
+    stabilized_rets = [-0.04, -0.05, -0.045, -0.036, 0.00, 0.001, -0.002, 0.001, -0.0015, 0.003]
+    sig_stab = {"vix": 20.25, "vkospi": 21.5, "usdkrw": 1384.0, "kospi": 2690.0, "kospi_ma20": 3070.0, "ois": 51.0}
+    rule_stab = det._rule_based(sig_stab, {"kospi_returns": stabilized_rets})
+    assert rule_stab["regime"] == "caution"
+    assert rule_stab["crash_type"] == "rebound_from_bleed"
+
+    # Active crash (recent 5D still plunging) -> crash
+    active_crash_rets = [-0.01, -0.01, -0.01, -0.01, -0.01, -0.02, -0.025, -0.015, -0.02, -0.025]
+    rule_crash = det._rule_based(sig_stab, {"kospi_returns": active_crash_rets})
+    assert rule_crash["regime"] == "crash"
+
+    # 3. S3CrossAssetSleeve: block SOXS when underlying SOX index is rallying (+1.51%)
+    sleeve = S3CrossAssetSleeve()
+    md = {
+        "spy_return_5d": -0.02,
+        "soxs_return_5d": 0.12,
+        "soxs_return_1d": 0.01,  # even if stale parquet showed +1%, live SOX index +1.51% blocks entry
+        "signal_cache": {"sox_change_1d": 1.51, "nasdaq_change_1d": 0.29, "sp500_change_1d": -0.19},
+    }
+    sigs = sleeve.generate_track_c_signals("bear", md)
+    emitted_tks = {s["ticker"] for s in sigs}
+    assert "SOXS" not in emitted_tks
+
