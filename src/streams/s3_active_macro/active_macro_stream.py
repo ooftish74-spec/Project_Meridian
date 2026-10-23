@@ -163,6 +163,16 @@ class S3FactorStream(BaseStream):
         rebalance_day = cfg.get('a2.rebalance_day', 1)
         today = now_kst().day
         if today != rebalance_day and self._current_holdings:
+            try:
+                from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+                _tc_eng = S3CrossAssetSleeve()
+                for _cs in _tc_eng.generate_track_c_signals(regime, market_data):
+                    _cs['_type'] = 'TRACK_C'
+                    _cs.setdefault('tp_pct', float(pget('s3.track_c.tp_pct', 5.0)))
+                    _cs.setdefault('sl_pct', float(pget('s3.track_c.sl_pct', 2.5)))
+                    signals.append(_cs)
+            except Exception as _tc_early_e:
+                logger.debug(f"  [Alpha 4 Track C] 비리밸런싱일 슬리브 스킵: {_tc_early_e}")
             return signals
         from src.utils.dynamic_quant_engine import get_quant_engine
         _dqe = get_quant_engine()

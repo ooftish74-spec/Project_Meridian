@@ -100,11 +100,12 @@ class MasterScenarioEngine:
         hmm_trans = (
             pipeline_state.get('hmm_transition')
             or signal_cache.get('regime_probabilities')
+            or signal_cache.get('hmm_transition_probs')
             or {}
         )
-        p_bull_trans = _safe_float(pred_override.get('p_bull_trans', hmm_trans.get('bull')))
-        p_bear_trans = _safe_float(pred_override.get('p_bear_trans', hmm_trans.get('bear')))
-        p_crash_trans = _safe_float(pred_override.get('p_crash_trans', hmm_trans.get('crash')))
+        p_bull_trans = _safe_float(pred_override.get('p_bull_trans', hmm_trans.get('bull', hmm_trans.get('bull_prob'))))
+        p_bear_trans = _safe_float(pred_override.get('p_bear_trans', hmm_trans.get('bear', hmm_trans.get('bear_prob'))))
+        p_crash_trans = _safe_float(pred_override.get('p_crash_trans', hmm_trans.get('crash', hmm_trans.get('crash_prob'))))
 
         _def_conf = float(pget('scenarios.default_regime_conf', 0.50))
         _def_bull_p = float(pget('scenarios.default_bull_prior', 0.25))
@@ -136,10 +137,12 @@ class MasterScenarioEngine:
             if len(v_arr) >= _min_vix_len:
                 try:
                     from src.params.dynamic_quant_models import ou_kalman_vix_state
-                    ou_res = ou_kalman_vix_state(v_arr.tolist())
+                    _lr_vix = float(np.median(v_arr[:-1])) if len(v_arr) > 1 else float(v_arr[-1])
+                    ou_res = ou_kalman_vix_state(last_vix=float(v_arr[-1]), long_run_vix=_lr_vix)
                     if ou_res is not None and ou_drift_z is None:
                         v_std = max(float(np.std(v_arr, ddof=1)), _EPS)
-                        ou_drift_z = float((ou_res.filtered_vix - ou_res.long_run_mean) / v_std)
+                        _filt_vix = float(math.exp(ou_res.posterior_mean_log_vix))
+                        ou_drift_z = float((_filt_vix - _lr_vix) / v_std)
                 except Exception:
                     pass
 
@@ -347,7 +350,7 @@ class MasterScenarioEngine:
         # Scenario 2: Semiconductor Crash (Crash) vs Global Tech Gamma Surge (Surge)
         # ══════════════════════════════════════════════════════════════════
         foreign_futures_flow = _safe_float(
-            signal_cache.get('foreign_futures_flow', signal_cache.get('foreign_futures_net_krw'))
+            signal_cache.get('foreign_futures_flow', signal_cache.get('foreign_futures_net_krw', signal_cache.get('frgn_fut_net_buy')))
         ) or 0.0
         semi_ofi_z = _safe_float(signal_cache.get('semi_ofi_z'))
         sox_chg_1d = _safe_float(signal_cache.get('sox_change_1d', signal_cache.get('soxx_change_1d'))) or 0.0
@@ -680,8 +683,13 @@ class MasterScenarioEngine:
                         stream_directives[norm_sid] = act_str
                     elif act_str == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH' and not crash_scenarios:
                         stream_directives[norm_sid] = act_str
-                    elif act_str in ('SHORT_100', 'HOLD_INVERSE_AND_DEFENSE') and crash_scenarios:
+                        stream_directives['S12'] = act_str
+                    elif act_str in ('TECH_GAMMA_SURGE_LONG', 'VKOSPI_MEAN_REVERSION_LEVERAGE_SWITCH', 'LONG_100') and not crash_scenarios:
+                        stream_directives[norm_sid] = act_str
+                    elif act_str in ('SHORT_100', 'HOLD_INVERSE_AND_DEFENSE', 'GAMMA_ALPHA') and crash_scenarios:
                         stream_directives['S12'] = 'FORCE_2X_INVERSE_MAX_BUDGET'
+                    elif act_str in ('REDUCE_CAP', 'SHUTDOWN_KOFR_ISOLATION', 'CANCEL_UNFILLED_AND_FREEZE_BUY_15MIN'):
+                        stream_directives[norm_sid] = act_str
 
         if active_scenarios:
             for sc in active_scenarios:

@@ -54,10 +54,37 @@ class S0BetaStream(BaseStream):
         signal_cache = market_data.get('signal_cache', {})
         features = market_data.get('features', {})
 
-        z_skew = float(signal_cache.get('z_skew', market_data.get('z_skew', 0.0)))
-        z_credit = float(signal_cache.get('z_credit', features.get('z_credit', 0.0)))
-        z_breadth = float(signal_cache.get('z_breadth', features.get('z_breadth', 0.0)))
-        z_vpin = float(signal_cache.get('z_vpin', features.get('z_vpin', 0.0)))
+        raw_skew = signal_cache.get('z_skew', market_data.get('z_skew'))
+        if raw_skew is not None:
+            z_skew = float(raw_skew)
+        else:
+            pcr_val = float(signal_cache.get('options_pcr', signal_cache.get('put_call_ratio', 1.0)) or 1.0)
+            pcr_scale = 1.0 / 4.0
+            z_skew = max(0.0, (pcr_val - 1.0) / pcr_scale)
+
+        raw_credit = signal_cache.get('z_credit', features.get('z_credit'))
+        if raw_credit is not None:
+            z_credit = float(raw_credit)
+        else:
+            hy_norm = signal_cache.get('fred_hy_spread')
+            z_credit = max(0.0, -float(hy_norm) * 2.0) if hy_norm is not None else 0.0
+
+        raw_breadth = signal_cache.get('z_breadth', features.get('z_breadth'))
+        if raw_breadth is not None:
+            z_breadth = float(raw_breadth)
+        else:
+            k_chg = float(signal_cache.get('kospi_change_pct', 0.0) or 0.0)
+            k_scale = 3.0 / 2.0
+            z_breadth = max(0.0, -k_chg / k_scale)
+
+        raw_vpin = signal_cache.get('z_vpin', features.get('z_vpin'))
+        if raw_vpin is not None:
+            z_vpin = float(raw_vpin)
+        else:
+            vp_val = float(signal_cache.get('vpin', 0.0) or 0.0)
+            vp_base = 1.0 / 2.0
+            vp_scale = 3.0 / 20.0
+            z_vpin = max(0.0, (vp_val - vp_base) / vp_scale) if vp_val > vp_base else 0.0
 
         d_macro = (w_skew * z_skew) + (w_credit * z_credit) + (w_breadth * z_breadth) + (w_vpin * z_vpin)
         metrics = {'z_skew': z_skew, 'z_credit': z_credit, 'z_breadth': z_breadth, 'z_vpin': z_vpin}

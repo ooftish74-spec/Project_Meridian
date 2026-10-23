@@ -34,6 +34,7 @@ class S12DerivativeSqueezeStream(BaseStream):
     def __init__(self, stream_id: str = "S12_DERIVATIVE_SQUEEZE", name: str = "Derivative Squeeze Short Alpha"):
         super().__init__(stream_id=stream_id, name=name)
         self.inverse_2x_ticker = str(cfg.get('s12.inverse_2x_ticker', '252670'))
+        self.ticker_inv_2x = self.inverse_2x_ticker
         self.inverse_1x_ticker = str(cfg.get('s12.inverse_1x_ticker', '114800'))
         self.z_skew_threshold = float(pget('s12.z_skew_threshold', 1.5))       # Skew Z-Score >= +1.5
         self.z_flow_threshold = float(pget('s12.z_flow_threshold', 1.5))       # Foreign Futures Net Sell Z-Score >= +1.5
@@ -67,7 +68,7 @@ class S12DerivativeSqueezeStream(BaseStream):
         z_skew = self.compute_z_score(skew_val, skew_mean, skew_std)
 
         # (2) 외국인 선물 누적 순매도 수급 (Foreign Futures Net Flow)
-        foreign_futures_flow = float(signal_cache.get('foreign_futures_net_contracts', signal_cache.get('FOREIGN_FUTURES_NET_CONTRACTS', 0.0)))
+        foreign_futures_flow = float(signal_cache.get('foreign_futures_net_contracts', signal_cache.get('FOREIGN_FUTURES_NET_CONTRACTS', signal_cache.get('frgn_fut_net_buy', 0.0))))
         flow_mean = float(signal_cache.get('foreign_futures_net_mean_20d', 0.0))
         flow_std = float(signal_cache.get('foreign_futures_net_std_20d', 3000.0))
         z_flow_sell = self.compute_z_score(-foreign_futures_flow, -flow_mean, flow_std)
@@ -89,7 +90,7 @@ class S12DerivativeSqueezeStream(BaseStream):
 
         # ── 3. 숏 알파 신호 발화 ──
         if skew_trigger and flow_trigger and basis_trigger:
-            target_ticker = self.inverse_2x_ticker if regime.lower() in ('crash', 'crisis', 'bear', 'caution', 'bull') else self.inverse_1x_ticker
+            target_ticker = self.inverse_2x_ticker if regime.lower() in ('crash', 'crisis', 'bear', 'bull') else self.inverse_1x_ticker
             confidence = min(1.0, max(0.60, 0.50 + 0.10 * (z_skew + z_flow_sell) / 2.0))
 
             reason = (

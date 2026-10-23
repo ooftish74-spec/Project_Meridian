@@ -111,8 +111,8 @@ class S11HighBetaSniperStream(BaseStream):
         _s11_cfg = DynamicConfig()
         vix_shock_val = float(signal_cache.get('vix', signal_cache.get('VIX', pget('crash.default_vix', 20.0))))
         vix_evt_threshold = float(_s11_cfg.get('sizer.vix_shock_threshold', signal_cache.get('vix_evt_95_pct', pget('scenarios.s3.vkospi_threshold', 35.0))))
-        if vix_shock_val >= vix_evt_threshold:
-            logger.warning(f"  🚨 [Red Team Shock Guard] VIX={vix_shock_val:.1f} >= EVT한계({vix_evt_threshold:.1f}) 블랙스완 과열 감지 -> 주식 진입 셧다운 (SGOV/현금 보존)")
+        if vix_shock_val >= vix_evt_threshold and direction == "long":
+            logger.warning(f"  🚨 [Red Team Shock Guard] VIX={vix_shock_val:.1f} >= EVT한계({vix_evt_threshold:.1f}) 블랙스완 과열 감지 -> 롱 진입 셧다운 (인버스 스나이핑은 허용)")
             return signals
 
         trigger_go = False

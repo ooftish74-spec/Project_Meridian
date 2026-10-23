@@ -257,9 +257,12 @@ class S5OvernightStream(BaseStream):
             return signals
 
         best_parking = parking_etfs[0]
-        signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': 1.0, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': 99.0, 'sl_pct': -99.0, 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
-        _bp_nm = best_parking.get('name', '')
-        logger.info(f"  🌙 S5 파킹 스윕: {_bp_nm} 순수익 검증 완수 후 잔여 자본 배정")
+        _used_s5_pct = sum(float(s.get('size_pct', 0.0) or 0.0) for s in signals)
+        _resid_s5_pct = round(max(0.0, 1.0 - _used_s5_pct), 3)
+        if _resid_s5_pct > 0.0:
+            signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': _resid_s5_pct, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': 99.0, 'sl_pct': -99.0, 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
+            _bp_nm = best_parking.get('name', '')
+            logger.info(f"  🌙 S5 파킹 스윕: {_bp_nm} 순수익 검증 완수 후 잔여 자본({_resid_s5_pct:.0%}) 배정")
         return signals
 
     def get_performance(self) -> dict:

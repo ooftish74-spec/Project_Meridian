@@ -174,7 +174,7 @@ class MarketShockDetector:
                     if sp_1d is None and sc.get('sp500_change_1m'):
                         sp_1d = float(sc['sp500_change_1m']) / 21.0
                     if sp_1d:
-                        sp_ret = float(sp_1d) / 100.0 if abs(float(sp_1d)) > 0.3 else float(sp_1d)
+                        sp_ret = float(sp_1d) / 100.0
                         if sp_ret < self.THRESHOLDS['us_sp500_severe']:
                             scores.append(40)
                             self.shock_signals.append(f"S&P500 {sp_ret * 100:+.1f}% (SEVERE)")
@@ -185,7 +185,7 @@ class MarketShockDetector:
                     if nq_1d is None and sc.get('nasdaq_change_1m'):
                         nq_1d = float(sc['nasdaq_change_1m']) / 21.0
                     if nq_1d:
-                        nq_ret = float(nq_1d) / 100.0 if abs(float(nq_1d)) > 0.3 else float(nq_1d)
+                        nq_ret = float(nq_1d) / 100.0
                         if nq_ret < self.THRESHOLDS['us_nasdaq_severe']:
                             scores.append(35)
                             self.shock_signals.append(f"NASDAQ {nq_ret * 100:+.1f}% (SEVERE)")
@@ -284,11 +284,14 @@ class MarketShockDetector:
                     sc = json.loads(sc_path.read_text())
                     oi = sc.get('overnight_intel', {})
                     night_ret = sc.get(
-                        'night_futures_change_pct',
-                        oi.get('night_futures_change_pct', sc.get('ewy_change_1d', 0)),
+                        'night_futures_change_1d',
+                        sc.get(
+                            'night_futures_change_pct',
+                            oi.get('night_futures_change_pct', sc.get('ewy_change_1d', 0)),
+                        ),
                     )
                     if night_ret:
-                        night_ret = float(night_ret) / 100.0 if abs(float(night_ret)) > 0.3 else float(night_ret)
+                        night_ret = float(night_ret) / 100.0
                         if night_ret < self.THRESHOLDS['futures_severe']:
                             scores.append(25)
                             self.shock_signals.append(f"야간선물 {night_ret * 100:+.1f}% (SEVERE)")

@@ -429,8 +429,9 @@ class AlphaAllocator:
                 logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
             logger.info(f"  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})")
         try:
+            _crisis_exempt = {'S0', 'S5', 'S_YIELD', 'S12', 'S12_DERIVATIVE_SQUEEZE', 'S14', 'S14_PAIR_ALPHA', 'S7', 'S7_PAIR'}
             _micro_bound = set(cfg.get('allocator.micro_bound_streams', ['S1', 'S2']))
-            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound and sid not in ('S5', 'S_YIELD')))
+            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound and sid not in _crisis_exempt))
             _crowding_active = False
             try:
                 import json as _json

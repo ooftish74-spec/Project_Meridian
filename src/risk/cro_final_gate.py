@@ -100,24 +100,31 @@ class CROFinalGate:
         weights_vec = np.zeros(n_tickers)
         buy_exposure_pct = 0.0
 
+        from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_cro
+        _inv_cro_set = set(_get_qe_cro().get_inverse_hedge_tickers())
         for order in orders:
             t = order['ticker']
             if t in ticker_order_map:
                 idx = ticker_order_map[t]
                 raw_dir = order.get('action', order.get('direction', 1))
-                sign = -1.0 if str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit') else 1.0
-                price = float(order.get('price', 0.0) or 0.0)
+                is_sell_act = str(raw_dir).lower() in ('-1', 'sell', 'short', 'exit')
                 from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_CRO
                 _ts_cro = str(t).strip().upper()
                 _is_kr_cro = _ts_cro.isdigit() or bool(_KR_RE_CRO.match(_ts_cro))
+                _is_inv_cro = bool(order.get('is_hedge')) or (_ts_cro in _inv_cro_set)
+                sign = (-1.0 if not is_sell_act else 1.0) if _is_inv_cro else (-1.0 if is_sell_act else 1.0)
+                price = float(order.get('price', 0.0) or 0.0)
                 fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not _is_kr_cro else 1.0
                 price_krw = price * fx_rate
                 qty = float(order.get('net_shares', order.get('quantity', 0)) or 0)
                 amt = float(order.get('net_amount', order.get('amount_krw', qty * price_krw)) or 0.0)
                 w = (sign * amt) / max(portfolio_value, 1.0)
                 weights_vec[idx] += w
-                if sign > 0:
-                    buy_exposure_pct += amt / max(portfolio_value, 1.0)
+                if not is_sell_act:
+                    if _is_inv_cro:
+                        buy_exposure_pct = max(0.0, buy_exposure_pct - (amt / max(portfolio_value, 1.0)))
+                    else:
+                        buy_exposure_pct += amt / max(portfolio_value, 1.0)
 
         proposed_exposure_pct = float(buy_exposure_pct)
         proposed_var_krw, proposed_var_pct = self.compute_parametric_var(weights_vec, cov_matrix, portfolio_value)

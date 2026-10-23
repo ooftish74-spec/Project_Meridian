@@ -779,9 +779,12 @@ class StreamOrchestrator:
                 f"(P={float(sc_result.get('composite_crash_prob', 0.0)):.1%}) → max_exposure={max_exposure:.0%}"
             )
         elif sc_result.get('status') == 'V_REBOUND_SURGE_TRIGGERED':
+            _sc_surge_exp = float(sc_result.get('recommended_max_exposure') or 1.0)
+            if _sc_surge_exp > max_exposure:
+                max_exposure = _sc_surge_exp
             logger.info(
                 f"  🚀 [MasterScenario] V-Rebound/Surge 시나리오 포착 "
-                f"({sc_result.get('active_scenarios')}, P={float(sc_result.get('composite_surge_prob', 0.0)):.1%})"
+                f"({sc_result.get('active_scenarios')}, P={float(sc_result.get('composite_surge_prob', 0.0)):.1%}) → max_exposure={max_exposure:.0%}"
             )
 
         logger.info(f"  📊 최대 노출도: {max_exposure:.0%}, DD Scale: {scale_multiplier:.2f}, DD Action: {dd_action}")
@@ -902,7 +905,7 @@ class StreamOrchestrator:
                                     f"(생존 {len(all_signals[_match_sid])}건)"
                                 )
                 elif _d_act == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH':
-                    # V-반등/폭등 시나리오 발동 시 보유 인버스 ETF 즉시 청산 시그널 주입
+                    # V-반등/폭등 시나리오 발동 시 보유 인버스 ETF 즉시 청산 시그널 주입 및 레버리지 스위칭
                     _held_for_inv = {}
                     if portfolio and isinstance(portfolio, dict):
                         _held_for_inv.update(portfolio.get('positions') or portfolio.get('holdings') or {})
@@ -920,6 +923,36 @@ class StreamOrchestrator:
                                 'reason': f"MasterScenario V-Rebound ({sc_result.get('active_scenarios')}) inverse harvest",
                             })
                             logger.info(f"    🚀 [Scenario V-Rebound] 보유 인버스 {_htk} 전량 즉시 청산 시그널 주입")
+                    _lev_tk_sc = str(getattr(getattr(self, 's0', None), 'TICKER_LEVERAGE_2X', '') or '').strip().upper()
+                    _existing_s0_tks = {
+                        str(_x.get('ticker', '')).split(':')[-1].upper()
+                        for _x in (all_signals.get('S0') or [])
+                        if isinstance(_x, dict) and str(_x.get('direction', '')).lower() == 'long'
+                    }
+                    if _lev_tk_sc and _lev_tk_sc not in _existing_s0_tks:
+                        _ok_s0_lev = True
+                        _veto_s0_lev = ''
+                        if hasattr(self, 's0') and hasattr(self.s0, '_evaluate_intraday_tape_and_gap_guard'):
+                            _ok_s0_lev, _veto_s0_lev = self.s0._evaluate_intraday_tape_and_gap_guard(
+                                _lev_tk_sc, is_inverse=False, market_data=market_data
+                            )
+                        if _ok_s0_lev:
+                            _half_sz = 1.0 / 2.0
+                            _lev_sz = float(sc_result.get('recommended_max_exposure') or _half_sz)
+                            _lev_conf = float(sc_result.get('composite_surge_prob') or 1.0)
+                            all_signals.setdefault('S0', []).append({
+                                'stream_id': 'S0',
+                                'ticker': _lev_tk_sc,
+                                'direction': 'long',
+                                'action': 'buy',
+                                'size_pct': _lev_sz,
+                                'confidence': _lev_conf,
+                                'strategy': 'scenario_v_rebound_leverage_switch',
+                                'reason': f"MasterScenario V-Rebound ({sc_result.get('active_scenarios')}) leverage switch",
+                            })
+                            logger.info(f"    🚀 [Scenario V-Rebound] 레버리지 스위칭 {_lev_tk_sc} 매수 시그널 주입 (size_pct={_lev_sz:.2f})")
+                        else:
+                            logger.info(f"    🛡️ [Scenario V-Rebound] 레버리지 스위칭 {_lev_tk_sc} 갭/테이프 가드 유예: {_veto_s0_lev}")
                 elif _d_act in ('FORCE_2X_INVERSE_MAX_BUDGET', 'FORCE_INVERSE_HEDGE', 'MAX_INVERSE_SQUEEZE'):
                     _inv_ratio = float(sc_result.get('target_inverse_hedge_ratio', 0.0))
                     _s12_canon = getattr(getattr(self, 's12', None), 'stream_id', 'S12_DERIVATIVE_SQUEEZE')
@@ -1524,10 +1557,10 @@ class StreamOrchestrator:
             _filtered_orders.append(_ord)
         # ★ [SSoT Live Order Policy] 허용 스트림 및 모든 청산/교체매매(Swap) 주문 통과
         _ORDER_PERMITTED_STREAMS = {
-            'S0', 'S1', 'S2', 'S3', 'S3_A', 'S3_B', 'S4', 'S5', 'S6', 'S10', 'S11', 'S12', 'S13', 'S14',
+            'S0', 'S1', 'S2', 'S3', 'S3_A', 'S3_B', 'S3_C', 'S4', 'S5', 'S6', 'S10', 'S11', 'S12', 'S13', 'S14',
             'S0_BETA', 'S1_EDGE', 'S2_ML_ALPHA', 'S3_ACTIVE_MACRO', 'S10_MEGA_TREND',
             'S11_HIGH_BETA', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA',
-            'S_BETA', 'S_YIELD', 'EXIT_MANAGER', 'SYS_SWAP', 'SYS_NET', 'SYS_KILL', 'TACTIC_D', 'TACTIC_E'
+            'S_BETA', 'S_YIELD', 'EXIT_MANAGER', 'SYS_SWAP', 'SYS_NET', 'SYS_KILL', 'SYS_HEDGE', 'TACTIC_D', 'TACTIC_E'
         }
         orders = [
             o for o in _filtered_orders
@@ -2133,7 +2166,10 @@ class StreamOrchestrator:
                     _is_stop_exit = _prev_pnl < 0 or any(
                         kw in _ex_reason_l for kw in ('stop', 'sl', '손절', 'trailing', 'etf stop', 'etf_dynamic_exit')
                     )
-                    if _is_stop_exit or _otk in _lev_inv_set:
+                    _is_profit_harvest = _prev_pnl > 0 and any(
+                        kw in _ex_reason_l for kw in ('scale_out', 'harvest', 'tp', '익절')
+                    )
+                    if _is_stop_exit or (_otk in _lev_inv_set and not _is_profit_harvest):
                         logger.warning(
                             f"  🛑 [Same-Day Stop/Inverse Lockout] {_otk}: 당일 손절/레버리지·인버스 청산 이력 존재 "
                             f"(PnL={_prev_pnl:+.2f}%, 사유={_ex_info.get('reason', '')}) ➔ 당일 재매수 원천 차단"
@@ -2647,6 +2683,7 @@ class StreamOrchestrator:
                 _eo for _eo in exec_orders
                 if str(_eo.get('ticker', '')).strip().upper() in _grp_set
                 and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+                and not (bool(_eo.get('pair_id')) and str(_eo.get('stream_id', '')).upper().startswith('S14'))
             ]
             if len(_grp_buys) > 1:
                 # 동일 배치 내 복수 인버스 매수 시 주문 금액(quantity * price)이 가장 큰 주력 1종목만 유지
@@ -2665,6 +2702,7 @@ class StreamOrchestrator:
                     if not (
                         str(_eo.get('ticker', '')).strip().upper() in _grp_set
                         and str(_eo.get('action', '')).lower() in ('buy', 'add_on')
+                        and not (bool(_eo.get('pair_id')) and str(_eo.get('stream_id', '')).upper().startswith('S14'))
                         and str(_eo.get('ticker', '')).strip().upper() != _keep_tk
                     )
                 ]

@@ -131,6 +131,9 @@ class IntradayRegimeDetector:
         elif cum_ret < stress_threshold:
             regime = 'stress'
             trigger = f'cum_ret={cum_ret:.3f}'
+        elif recovery.get('detected'):
+            regime = 'recovery'
+            trigger = f"recovery: {recovery.get('reason', 'intraday_rebound')}"
         else:
             regime = 'normal'
         exposure_adj_map = {'normal': 1.0, 'recovery': pget('regime.intraday_recovery_exposure', 1.15) if _cfg else 1.15, 'stress': pget('regime.intraday_stress_exposure', 0.7) if _cfg else 0.7, 'high_vol': pget('regime.intraday_highvol_exposure', 0.5) if _cfg else 0.5, 'crisis': pget('regime.intraday_crisis_exposure', 0.2) if _cfg else 0.2}
