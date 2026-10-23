@@ -38,11 +38,12 @@ class AccountReconciler:
     def reconcile(self, adapter) -> ReconciledAccountState:
         """KISTraderAdapter 어댑터 원장과 실시간 호가/환율 기반 1:1 바텀업 교정."""
         with adapter._lock:
+            from src.utils.market_calendar import is_kr_ticker
             cash_krw = float(getattr(adapter.account, 'cash', 0.0) or 0.0)
             cash_usd = float(getattr(adapter, 'us_cash_usd', 0.0) or 0.0)
             fx_rate = adapter._get_live_fx_rate()
             # ★ Wave 1: 1353.63 날조 제거. 환율 미상 + 해외 익스포저 존재 → 교정 불가(fail-closed, 호출자는 직전 상태 유지)
-            _has_us = cash_usd > 0 or any(not str(t).isdigit() for t in (adapter.positions or {}).keys())
+            _has_us = cash_usd > 0 or any(not is_kr_ticker(str(t)) for t in (adapter.positions or {}).keys())
             if not fx_rate or fx_rate <= 0:
                 if _has_us:
                     raise ValueError("FX_UNKNOWN: USD/KRW unavailable — reconcile refused (no fabricated rate)")
@@ -64,7 +65,7 @@ class AccountReconciler:
                 cur_price = float(pos.current_price or pos.avg_price or 0.0)
                 avg_price = float(pos.avg_price or cur_price)
 
-                if ticker.isdigit():
+                if is_kr_ticker(str(ticker)):
                     # 🇰🇷 국내 주식
                     val_krw = qty * cur_price
                     kr_positions_krw += val_krw

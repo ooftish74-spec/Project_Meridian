@@ -44,8 +44,9 @@ class UniversalExitEngine:
         # 1. 역사적 일봉 데이터(data/historical_10y/)에서 14일 실시간 ATR 산출
         try:
             from pathlib import Path
+            from src.utils.market_calendar import is_kr_ticker as _is_kr_atr
             data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
-            p_file = data_dir / f"kr_{ticker}.parquet" if ticker.isdigit() else data_dir / f"us_{ticker}.parquet"
+            p_file = data_dir / f"kr_{ticker}.parquet" if _is_kr_atr(str(ticker)) else data_dir / f"us_{ticker}.parquet"
             if p_file.exists():
                 import pandas as pd
                 df = pd.read_parquet(p_file)
@@ -153,6 +154,7 @@ class UniversalExitEngine:
             _fx_rate = None
         _dyn_cash_eq = _dqe.get_cash_equivalent_tickers()
         _PARKING_EXEMPT = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'} | _dyn_cash_eq
+        from src.utils.market_calendar import is_kr_ticker as _is_kr_uee
 
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
@@ -168,9 +170,10 @@ class UniversalExitEngine:
 
             price = float(pos.get('current_price', 0.0) or 0.0)
             entry_px = float(pos.get('entry_price', pos.get('avg_price', 0.0)) or 0.0)
+            is_kr_tk = _is_kr_uee(str(ticker))
             if price <= 0:
                 try:
-                    _pq_p = _PROJECT_ROOT / 'data' / 'historical_10y' / (f"kr_{ticker}.parquet" if str(ticker).isdigit() else f"us_{ticker}.parquet")
+                    _pq_p = _PROJECT_ROOT / 'data' / 'historical_10y' / (f"kr_{ticker}.parquet" if is_kr_tk else f"us_{ticker}.parquet")
                     if _pq_p.exists():
                         import pandas as _pd_ex
                         price = float(_pd_ex.read_parquet(_pq_p)['close'].dropna().iloc[-1])
@@ -183,7 +186,6 @@ class UniversalExitEngine:
             atr_pct = self.compute_ticker_atr(ticker)
 
             # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
-            is_kr_tk = str(ticker).isdigit()
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
             _opt = _dqe.compute_optimal_stopping_params(
                 ticker=str(ticker),

@@ -66,8 +66,10 @@ def load_live_portfolio() -> dict:
 
 def categorize_asset(ticker: str, info: dict) -> tuple[str, str]:
     """Returns (asset_class, currency)"""
+    from src.utils.market_calendar import is_kr_ticker
     name = info.get("name", ticker).upper()
-    market = info.get("market", "US" if not ticker.isdigit() else "KR")
+    _is_kr = is_kr_ticker(str(ticker))
+    market = info.get("market", "US" if not _is_kr else "KR")
 
     if ticker == "CASH" or "CASH" in ticker.upper():
         return "현금", ("USD" if "USD" in ticker.upper() else "KRW")
@@ -77,7 +79,7 @@ def categorize_asset(ticker: str, info: dict) -> tuple[str, str]:
         "SOXX", "QQQ", "XLK", "SHV", "SPY", "TLT", "TQQQ", "SQQQ", "IVV", "VOO", "IWM"
     ])
 
-    if market == "KR" or ticker.isdigit() or ticker.startswith("KRX:"):
+    if market == "KR" or _is_kr or ticker.startswith("KRX:"):
         return ("국내ETF" if is_etf else "국내주식"), "KRW"
     else:
         return ("해외ETF" if is_etf else "해외주식"), "USD"
@@ -85,6 +87,7 @@ def categorize_asset(ticker: str, info: dict) -> tuple[str, str]:
 
 def get_stream_strategy_info(ticker: str, info: dict = None) -> tuple[str, str]:
     """Returns (stream_name, strategy_desc) for a given position ticker."""
+    from src.utils.market_calendar import is_kr_ticker
     t_upper = ticker.upper()
     if t_upper == "USD_CASH":
         return "S0 Cash Anchor (USD)", "외화(USD) 예수금 및 글로벌 통합증거금 안전 파킹"
@@ -109,7 +112,7 @@ def get_stream_strategy_info(ticker: str, info: dict = None) -> tuple[str, str]:
     elif "233740" in t_upper or "TQQQ" in t_upper:
         return "S5 High-Beta Breakout", "고베타 모멘텀 변동성 돌파"
     else:
-        if ticker.isdigit() or ticker.startswith("KRX:"):
+        if is_kr_ticker(str(ticker)) or ticker.startswith("KRX:"):
             return "S3 QVM Value", "K-PER 내재가치 펀더멘털 가치주 스크리닝"
         else:
             return "S3 Active Macro", "멀티팩터 글로벌 섹터/자산 로테이션"
@@ -253,13 +256,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         holdings_data = []
         item_currencies = []
 
+        from src.utils.market_calendar import is_kr_ticker as _is_kr_rep
         for idx, (ticker, info) in enumerate(items):
             r = r_start + idx
             asset_class, curr = categorize_asset(ticker, info)
             item_currencies.append(curr)
             
             gf_ticker = ticker
-            if curr == "KRW" and ticker.isdigit() and not ticker.startswith("KRX:"):
+            if curr == "KRW" and _is_kr_rep(str(ticker)) and not ticker.startswith("KRX:"):
                 gf_ticker = f"KRX:{ticker}"
 
             name = info.get("name", ticker)
@@ -346,7 +350,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             if ticker == "CASH" or "CASH" in ticker.upper():
                 continue
             asset_class, curr = categorize_asset(ticker, info)
-            gf_ticker = ticker if not (curr == "KRW" and ticker.isdigit() and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
+            gf_ticker = ticker if not (curr == "KRW" and _is_kr_rep(str(ticker)) and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
             name = info.get("name", ticker)
             avg_price = info.get("avg_price", 0)
 
@@ -532,7 +536,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             if ticker == "CASH" or "CASH" in ticker.upper():
                 continue
             asset_class, curr = categorize_asset(ticker, info)
-            gf_ticker = ticker if not (ticker.isdigit() and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
+            gf_ticker = ticker if not (_is_kr_rep(str(ticker)) and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
             name = info.get("name", ticker)
             qty = info.get("qty", 1)
             avg_price = info.get("avg_price", 0)

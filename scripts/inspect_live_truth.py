@@ -59,7 +59,8 @@ def inspect_live_truth(as_json: bool = False):
                 c_price = float(pos.current_price) if pos.current_price > 0 else float(pos.avg_price)
                 a_price = float(pos.avg_price) if pos.avg_price > 0 else c_price
                 ret_pct = round((c_price / a_price - 1.0) * 100.0, 2) if a_price > 0 else 0.0
-                mkt = 'KR' if ticker.isdigit() else 'US'
+                from src.utils.market_calendar import is_kr_ticker
+                mkt = 'KR' if is_kr_ticker(str(ticker)) else 'US'
                 prod_name = pos.name or resolve_name(ticker)
                 live_holdings[ticker] = {
                     'name': prod_name,

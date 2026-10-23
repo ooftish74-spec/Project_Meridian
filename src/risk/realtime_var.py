@@ -312,10 +312,11 @@ class RealtimeVaR:
 
     def _load_returns(self, tickers, lookback):
         """일별 수익률 행렬 (로컬 Parquet 및 실시간 OpenAPI 지원)."""
+        from src.utils.market_calendar import is_kr_ticker as _is_kr_var
         data = {}
         self._matched_tickers = []
         for t in tickers:
-            is_us_tk = not str(t).isdigit()
+            is_us_tk = not _is_kr_var(str(t))
             fp = _DATA_DIR / (f'us_{t}.parquet' if is_us_tk else f'kr_{t}.parquet')
             if not fp.exists() and not is_us_tk:
                 fp_alt = _PROJECT_ROOT / 'data' / 'kr_markets' / f'{t}.parquet'
@@ -362,6 +363,7 @@ class RealtimeVaR:
 
     def _load_positions(self) -> Optional[Dict]:
         """Live SSOT kis_portfolio.json 및 Shadow Portfolio에서 포지션 로드."""
+        from src.utils.market_calendar import is_kr_ticker as _is_kr_var_pos
         # 1. Live SSOT kis_portfolio.json 우선 확인
         try:
             kis_path = _RESULTS / 'kis_portfolio.json'
@@ -384,7 +386,7 @@ class RealtimeVaR:
                     for ticker, h_info in holdings.items():
                         qty = float(h_info.get('qty', 0))
                         p = float(h_info.get('current_price', 0.0))
-                        is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not str(ticker).isdigit()
+                        is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not _is_kr_var_pos(str(ticker))
                         if is_us and fx_rate <= 0:
                             # 환율 미확보: 스냅샷 시점 실환산값(eval_krw)만 사용, 없으면 US 성분 제외 + degraded 표시
                             pos_v = float(h_info.get('eval_krw', 0.0) or 0.0)
@@ -402,7 +404,7 @@ class RealtimeVaR:
                         positions = {}
                         for ticker, pos_v in vals.items():
                             h_info = holdings[ticker]
-                            is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not str(ticker).isdigit()
+                            is_us = h_info.get('market') == 'US' or h_info.get('currency') == 'USD' or not _is_kr_var_pos(str(ticker))
                             positions[ticker] = {
                                 'weight': pos_v / tot_val,
                                 'market': 'US' if is_us else 'KR',

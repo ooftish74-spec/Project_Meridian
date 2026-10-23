@@ -157,8 +157,9 @@ class USNightExecutionEngine:
                 ledger_mgr = PositionLedgerManager()
                 kp = json.loads(kp_path.read_text(encoding='utf-8'))
                 today_str = datetime.now().strftime('%Y-%m-%d')
+                from src.utils.market_calendar import is_kr_ticker
                 for t, h in kp.get('holdings', {}).items():
-                    if not t.isdigit():  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
+                    if not is_kr_ticker(str(t)):  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
                         entry_p = float(h.get('avg_price', 0.0) or 0.0)
                         curr_p = float(h.get('current_price', 0.0) or 0.0)
                         curr_ret = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
@@ -232,6 +233,7 @@ class USNightExecutionEngine:
 
         logger.info(f"🇺🇸 [USNightEngine] 야간 운용 가동 (동적 예산 캡 {self.max_exposure_pct*100:.0f}%: ₩{us_budget:,.0f}, 사용 가능: ₩{available_us_cash_krw:,.0f}, 환율: ₩{fx_rate:,.2f})")
 
+        from src.utils.market_calendar import is_kr_ticker as _is_kr_usn
         seen_us_tickers = set()
         for sig in s3_signals:
             raw_ticker = str(sig.get('ticker', '')).strip()
@@ -241,7 +243,7 @@ class USNightExecutionEngine:
                 us_ticker = 'SOXS'
             else:
                 us_ticker = _US_TICKER_MAP.get(raw_ticker, raw_ticker)
-            if not us_ticker or str(us_ticker).isdigit():
+            if not us_ticker or _is_kr_usn(str(us_ticker)):
                 continue
             if us_ticker in seen_us_tickers:
                 continue
