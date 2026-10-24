@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class VirtualAccountManager:
 
-    def __init__(self, state_file: str='results/virtual_ledger.json', total_master_capital: float=200000000.0):
+    def __init__(self, state_file: str='results/virtual_ledger.json', total_master_capital: float=20000000.0):
         self._project_root = Path(__file__).resolve().parent.parent.parent
         self.state_file = self._project_root / state_file
         self.total_master_capital = total_master_capital
@@ -28,7 +28,12 @@ class VirtualAccountManager:
                 from src.utils.file_ops import atomic_write_json
 
                 with open(self.state_file, 'r', encoding='utf-8') as f:
-                    self.ledger = json.load(f)
+                    loaded = json.load(f)
+                loaded_cash = float(loaded.get('master_cash', 0.0) or 0.0)
+                if self.total_master_capital > 0 and loaded_cash <= self.total_master_capital * 3:
+                    self.ledger = loaded
+                else:
+                    self._save_ledger()
             except Exception as e:
                 logger.critical(f'가상 장부 로드 실패: {e}. 기본값 사용.', exc_info=True)
         else:

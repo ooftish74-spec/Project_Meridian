@@ -216,7 +216,7 @@ def main():
                 if not _bench_prices:
                     try:
                         import pandas as _pd_w
-                        _pq_069500 = _PROJECT_ROOT / 'data' / 'historical_10y' / 'kr_069500.parquet'
+                        _pq_069500 = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
                         if _pq_069500.exists():
                             _bench_prices = _pd_w.read_parquet(_pq_069500)['close'].dropna().tail(25).astype(float).tolist()
                     except Exception:

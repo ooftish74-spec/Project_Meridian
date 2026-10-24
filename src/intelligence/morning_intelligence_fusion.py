@@ -230,7 +230,9 @@ class MorningIntelligenceFusion:
         """signal parquet에서 최신 변동률."""
         try:
             import pandas as pd
-            path = _PROJECT_ROOT / 'data' / 'historical_10y' / f'signal_{name.lower()}.parquet'
+            path = _PROJECT_ROOT / 'data' / 'signals' / f'signal_{name.lower()}.parquet'
+            if not path.exists():
+                path = _PROJECT_ROOT / 'data' / 'kr_markets' / f'signal_{name.lower()}.parquet'
             if not path.exists():
                 path = _PROJECT_ROOT / 'data' / 'feature_store' / f'signal_{name.lower()}.parquet'
             if path.exists():

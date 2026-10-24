@@ -372,7 +372,6 @@ class QVMScorer:
         """Load OHLCV DataFrame (requiring 'close'/'Close') from kr_markets, historical_10y, or feature_store."""
         candidates = [
             _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
-            _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
             _FEATURE_STORE_DIR / f'{ticker}.parquet',
         ]
         for p in candidates:
@@ -1008,7 +1007,7 @@ class QVMScorer:
         forward_days = pget('s3.icir_forward_days', 5)
         for stock in scored_universe:
             ticker = stock['ticker']
-            pf = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
+            pf = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
             if not pf.exists():
                 continue
             try:

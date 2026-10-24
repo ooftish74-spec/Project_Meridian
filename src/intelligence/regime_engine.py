@@ -467,9 +467,14 @@ class RegimeEngine:
                 existing = existing if isinstance(existing, dict) else {}
                 existing['kr_prev_regime'] = existing.get('kr_regime')
                 existing['kr_regime'] = _clean['regime']
+                existing['regime'] = _clean['regime']
                 existing['kr_regime_confidence'] = _clean['confidence']
                 existing['kr_regime_scores'] = _clean['scores']
                 existing['kr_regime_measurements'] = _clean.get('measurements', {})
+                _ois_val = (_clean.get('measurements', {}) or {}).get('ois') or (_clean.get('kr_regime_measurements', {}) or {}).get('ois')
+                if _ois_val is not None:
+                    existing['ois'] = _ois_val
+                existing['hmm_transition'] = _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or {}
                 existing['kr_regime_updated_at'] = datetime.now().isoformat()
                 existing['kr_regime_updated_by'] = 'regime_engine'
                 existing['operating_regime'] = self._compute_operating_regime(existing)
@@ -480,7 +485,7 @@ class RegimeEngine:
             logger.warning(f'  레짐 저장 실패: {e}', exc_info=True)
         try:
             regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
-            regime_out = {'regime': _clean['regime'], 'confidence': _clean['confidence'], 'scores': _clean['scores'], 'method': 'regime_engine_ssot', 'measurements': _clean.get('measurements', {}), 'macro_composite': (_clean.get('measurements', {}) or {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
+            regime_out = {'regime': _clean['regime'], 'confidence': _clean['confidence'], 'scores': _clean['scores'], 'hmm_transition': _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or {}, 'method': 'regime_engine_ssot', 'measurements': _clean.get('measurements', {}), 'macro_composite': (_clean.get('measurements', {}) or {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
 
             def _mutate_regime(cur):
                 cur = cur if isinstance(cur, dict) else {}
@@ -505,7 +510,7 @@ class RegimeEngine:
 
     def _read_price_series(self, ticker: str) -> Optional[pd.Series]:
         """parquet에서 가격 시리즈 읽기."""
-        parquet = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
+        parquet = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
         if parquet.exists():
             try:
                 df = pd.read_parquet(parquet)

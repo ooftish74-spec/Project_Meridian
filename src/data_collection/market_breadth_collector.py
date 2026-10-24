@@ -135,7 +135,6 @@ class MarketBreadthCollector:
             for pq_path in [
                 _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet',
                 _PROJECT_ROOT / 'data' / 'korea_stocks' / 'prices' / '069500.parquet',
-                _PROJECT_ROOT / 'data' / 'historical_10y' / 'kr_069500.parquet',
             ]:
                 if pq_path.exists():
                     df = pd.read_parquet(pq_path)

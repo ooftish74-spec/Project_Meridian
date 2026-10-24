@@ -82,7 +82,7 @@ def _estimate_atr_pct(ticker: str, market_data: Optional[Dict]=None) -> float:
         import pandas as pd
         from pathlib import Path
         _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-        search_dirs = [_PROJECT_ROOT / 'data' / 'historical_10y', _PROJECT_ROOT / 'data' / 'parquet', _PROJECT_ROOT / 'data']
+        search_dirs = [_PROJECT_ROOT / 'data' / 'kr_markets', _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices', _PROJECT_ROOT / 'data' / 'parquet', _PROJECT_ROOT / 'data']
         for data_dir in search_dirs:
             if not data_dir.exists():
                 continue

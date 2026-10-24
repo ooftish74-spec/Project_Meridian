@@ -278,7 +278,7 @@ class CrossMarketCollector:
         logger.info('📊 섹터 베타 계산 (60일 rolling)...')
         try:
             def _load_kr_close(tk: str) -> Optional[pd.Series]:
-                for sub_dir in ('kr_markets', 'historical_10y'):
+                for sub_dir in ('kr_markets',):
                     p = PROJECT_ROOT / 'data' / sub_dir / f'kr_{tk}.parquet'
                     if p.exists():
                         df = pd.read_parquet(p)

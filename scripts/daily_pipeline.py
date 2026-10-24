@@ -265,17 +265,19 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         # Live SSOT / Shadow NAV 로드
         _current_nav = None
         _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
-        if exec_mode == 'live' and _kis_f.exists():
-            try:
-                _kis_d = json.loads(_kis_f.read_text(encoding='utf-8'))
-                _current_nav = _kis_d.get('nav') or _kis_d.get('account', {}).get('total_equity')
-            except Exception:
-                pass
-        _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-        if not _current_nav and _shadow_f.exists():
-            import json as _json
-            _shadow_data = _json.loads(_shadow_f.read_text())
-            _current_nav = _shadow_data.get('nav', _shadow_data.get('total_value', _shadow_data.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
+        if exec_mode == 'live':
+            if _kis_f.exists():
+                try:
+                    _kis_d = json.loads(_kis_f.read_text(encoding='utf-8'))
+                    _current_nav = _kis_d.get('nav') or _kis_d.get('account', {}).get('total_equity')
+                except Exception:
+                    pass
+        else:
+            _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
+            if _shadow_f.exists():
+                import json as _json
+                _shadow_data = _json.loads(_shadow_f.read_text())
+                _current_nav = _shadow_data.get('nav', _shadow_data.get('total_value', _shadow_data.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
         if _current_nav:
             _kill_switch_result = ks.check(float(_current_nav))
             _fo = _kill_switch_result.get('forward_override', {})
@@ -325,16 +327,18 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         from src.risk.drawdown_guard import DrawdownGuard
         _nav = None
         _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
-        if exec_mode == 'live' and _kis_f.exists():
-            try:
-                _kd = json.loads(_kis_f.read_text(encoding='utf-8'))
-                _nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
-            except Exception:
-                pass
-        _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-        if not _nav and _shadow_f.exists():
-            _sd = json.loads(_shadow_f.read_text())
-            _nav = _sd.get('nav', _sd.get('total_value', _sd.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
+        if exec_mode == 'live':
+            if _kis_f.exists():
+                try:
+                    _kd = json.loads(_kis_f.read_text(encoding='utf-8'))
+                    _nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+                except Exception:
+                    pass
+        else:
+            _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
+            if _shadow_f.exists():
+                _sd = json.loads(_shadow_f.read_text())
+                _nav = _sd.get('nav', _sd.get('total_value', _sd.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
         if _nav:
             _dd = DrawdownGuard().check(float(_nav))
             _dd_exposure = _dd.get('exposure', 1.0)
@@ -1172,9 +1176,10 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 if '_ret' in dir():
                     _summary_parts.append(f"수익: {_ret:+.2f}%")
                 try:
-                    _sp_data = json.loads(
-                        (_PROJECT_ROOT / 'results' / 'shadow_portfolio.json').read_text())
-                    _n_pos = len(_sp_data.get('positions', {}))
+                    _exec_m_tg = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live'))
+                    _pf_tg_path = _PROJECT_ROOT / 'results' / ('kis_portfolio.json' if _exec_m_tg == 'live' else 'shadow_portfolio.json')
+                    _sp_data = json.loads(_pf_tg_path.read_text())
+                    _n_pos = len(_sp_data.get('holdings' if _exec_m_tg == 'live' else 'positions', _sp_data.get('positions', {})))
                     _summary_parts.append(f"포지션: {_n_pos}건")
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
@@ -1225,19 +1230,20 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         try:
             from src.risk.drawdown_guard import DrawdownGuard
             _ddg = DrawdownGuard()
-            _exec_m = cfg.get('execution.current_mode', cfg.get('execution.mode', 'shadow'))
+            _exec_m = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live'))
             _current_nav = None
             _kis_p = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
-            if _exec_m == 'live' and _kis_p.exists():
-                try:
-                    _kd = json.loads(_kis_p.read_text(encoding='utf-8'))
-                    _current_nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
-                except Exception:
-                    pass
-            if not _current_nav:
+            if _exec_m == 'live':
+                if _kis_p.exists():
+                    try:
+                        _kd = json.loads(_kis_p.read_text(encoding='utf-8'))
+                        _current_nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+                    except Exception:
+                        pass
+            else:
                 _sp_data = json.loads((_PROJECT_ROOT / 'results' / 'shadow_portfolio.json').read_text())
                 _current_nav = _sp_data.get('nav', _sp_data.get('total_value', cfg.get('portfolio.initial_capital')))
-            _dd_status = _ddg.check(nav=float(_current_nav))
+            _dd_status = _ddg.check(nav=float(_current_nav or 0.0))
 
             # pipeline_state.json에 직접 기록
             _ps_path = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
@@ -1493,7 +1499,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                                 _aux_dg = AuxDataLoader()
                                 _today_str = datetime.now().strftime('%Y-%m-%d')
                                 _rows = []
-                                _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+                                _data_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
                                 _kr_mkt_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
                                 _parquets = sorted(_kr_mkt_dir.glob('kr_*.parquet')) if _kr_mkt_dir.exists() else []
                                 if len(_parquets) < 30 and _data_dir.exists():
@@ -1803,8 +1809,8 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             _shap_path = _PROJECT_ROOT / 'results' / 'shap_analysis.json'
             if _ens_path.exists():
                 try:
-                    from src.streams.s2_ml_alpha.ml_stream import MLStream
-                    _pkg = MLStream._safe_pickle_load(_ens_path)
+                    from src.streams.s2_ml_alpha.ml_stream import S2MLAlphaStream
+                    _pkg = S2MLAlphaStream._safe_pickle_load(_ens_path)
                 except Exception:
                     with open(_ens_path, 'rb') as _f:
                         _pkg = _pkl_shap.load(_f)

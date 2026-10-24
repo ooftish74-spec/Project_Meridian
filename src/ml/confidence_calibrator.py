@@ -115,15 +115,18 @@ class ConfidenceCalibrator:
     def _collect_prediction_verification(self) -> List[Tuple[float, int]]:
         """Source 1: Prediction 역검증.
 
-        predictions/YYYY-MM-DD.json의 시그널을 다음 거래일 가격과 비교.
+        predictions/YYYY-MM-DD.json (최근 30일 이내)의 시그널을 data/kr_markets/kr_{ticker}.parquet 다음 거래일 가격과 비교.
         """
+        from datetime import timedelta
+        import pandas as pd
         pairs = []
         pred_dir = PROJECT_ROOT / 'data' / 'paper_trading' / 'predictions'
-        ver_dir = PROJECT_ROOT / 'data' / 'versions'
-        if not pred_dir.exists() or not ver_dir.exists():
+        kr_dir = PROJECT_ROOT / 'data' / 'kr_markets'
+        if not pred_dir.exists() or not kr_dir.exists():
             return pairs
-        pred_files = sorted((f.stem for f in pred_dir.iterdir() if f.suffix == '.json'))
-        all_ver_dates = sorted((d.name for d in ver_dir.iterdir() if d.is_dir() and d.name.startswith('2026-')))
+        cutoff_dt = (now_kst() - timedelta(days=30)).strftime('%Y-%m-%d')
+        pred_files = sorted((f.stem for f in pred_dir.iterdir() if f.suffix == '.json' and f.stem >= cutoff_dt))
+        close_cache: Dict[str, pd.Series] = {}
         for dt in pred_files:
             try:
                 data = json.loads((pred_dir / f"{dt}.json").read_text())
@@ -132,27 +135,41 @@ class ConfidenceCalibrator:
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 continue
             signals = data.get('signals', {})
-            price_dir_today = ver_dir / dt / 'historical' / 'korea_stocks'
-            next_dates = [d for d in all_ver_dates if d > dt]
-            if not next_dates:
-                continue
-            next_dt = next_dates[0]
-            price_dir_next = ver_dir / next_dt / 'historical' / 'korea_stocks'
-            if not price_dir_today.exists() or not price_dir_next.exists():
-                continue
             for ticker, sig in signals.items():
                 if ticker.startswith('KOSPI'):
                     continue
                 up_prob = sig.get('up_probability', 0)
                 if up_prob < 0.5:
                     continue
-                today_f = price_dir_today / f'{ticker}.csv'
-                next_f = price_dir_next / f'{ticker}.csv'
-                if not today_f.exists() or not next_f.exists():
+                if ticker not in close_cache:
+                    pq_path = kr_dir / f'kr_{ticker}.parquet'
+                    if not pq_path.exists():
+                        close_cache[ticker] = pd.Series(dtype=float)
+                    else:
+                        try:
+                            df_px = pd.read_parquet(pq_path)
+                            c_col = 'close' if 'close' in df_px.columns else ('Close' if 'Close' in df_px.columns else None)
+                            if c_col is not None and not df_px.empty:
+                                if 'date' in df_px.columns:
+                                    idx = pd.to_datetime(df_px['date'], errors='coerce').dt.strftime('%Y-%m-%d')
+                                else:
+                                    idx = pd.to_datetime(df_px.index, errors='coerce').strftime('%Y-%m-%d')
+                                s_px = pd.Series(pd.to_numeric(df_px[c_col], errors='coerce').values, index=idx).dropna()
+                                close_cache[ticker] = s_px[~s_px.index.isna()].sort_index()
+                            else:
+                                close_cache[ticker] = pd.Series(dtype=float)
+                        except Exception:
+                            close_cache[ticker] = pd.Series(dtype=float)
+                s_close = close_cache[ticker]
+                if s_close.empty:
                     continue
                 try:
-                    today_close = self._last_close(today_f)
-                    next_close = self._last_close(next_f)
+                    past_s = s_close[s_close.index <= dt]
+                    future_s = s_close[s_close.index > dt]
+                    if past_s.empty or future_s.empty:
+                        continue
+                    today_close = float(past_s.iloc[-1])
+                    next_close = float(future_s.iloc[0])
                     if today_close > 0 and next_close > 0:
                         ret = (next_close - today_close) / today_close
                         pairs.append((up_prob, 1 if ret > 0 else 0))

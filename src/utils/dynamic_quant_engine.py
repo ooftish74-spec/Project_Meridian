@@ -204,29 +204,35 @@ class DynamicQuantEngine:
         kr_rets: Dict[str, pd.Series] = {}
         kr_adt: Dict[str, float] = {}
 
-        # 1) KR 시계열 수집 (data/kr_markets 및 data/historical_10y, kr_ 접두사 호환)
+        # 1) KR 시계열 수집 (data/kr_markets 최우선, kr_ 접두사 호환)
         kr_files: Dict[str, Path] = {}
-        for d_name in ("historical_10y", "kr_markets"):
+        for d_name in ("kr_markets", "historical_10y"):
             d_path = _DATA_DIR / d_name
             if d_path.exists():
                 for p in d_path.glob("*.parquet"):
                     raw_tk = p.stem[3:] if p.stem.startswith("kr_") else p.stem
                     if len(raw_tk) == 6 and raw_tk.isalnum():
-                        kr_files[raw_tk.upper()] = p
+                        kr_files.setdefault(raw_tk.upper(), p)
 
         # dynamic_universe.json의 ETF 및 주요 종목을 최우선 로드 후 나머지 보강
         priority_krs: List[str] = []
-        du_file = _DATA_DIR / "universe" / "dynamic_universe.json"
-        if du_file.exists():
-            try:
-                du_obj = json.loads(du_file.read_text(encoding="utf-8"))
-                for k_list in ("kr_etfs", "kr_stocks"):
-                    for item in du_obj.get(k_list, []):
-                        tk_c = str(item.get("ticker", "")).upper()
-                        if tk_c in kr_files and tk_c not in priority_krs:
-                            priority_krs.append(tk_c)
-            except Exception:
-                pass
+        for du_file in (_RESULTS_DIR / "dynamic_universe.json", _DATA_DIR / "universe" / "dynamic_universe.json"):
+            if du_file.exists():
+                try:
+                    du_obj = json.loads(du_file.read_text(encoding="utf-8"))
+                    if isinstance(du_obj, list):
+                        for item in du_obj:
+                            tk_c = str(item).strip().upper()
+                            if tk_c in kr_files and tk_c not in priority_krs:
+                                priority_krs.append(tk_c)
+                    elif isinstance(du_obj, dict):
+                        for k_list in ("kr_etfs", "kr_stocks"):
+                            for item in du_obj.get(k_list, []):
+                                tk_c = str(item.get("ticker", "") if isinstance(item, dict) else item).upper()
+                                if tk_c in kr_files and tk_c not in priority_krs:
+                                    priority_krs.append(tk_c)
+                except Exception:
+                    pass
         for tk_c in kr_files:
             if tk_c not in priority_krs:
                 priority_krs.append(tk_c)
@@ -719,7 +725,7 @@ class DynamicQuantEngine:
         for tk in candidates:
             p = None
             if market.upper() == "KR":
-                for d_name in ("historical_10y", "kr_markets"):
+                for d_name in ("kr_markets", "historical_10y"):
                     for fname in (f"kr_{tk}.parquet", f"{tk}.parquet"):
                         cand_p = _DATA_DIR / d_name / fname
                         if cand_p.exists():
@@ -826,15 +832,6 @@ class DynamicQuantEngine:
                     vh = sc.get("vix_history", [])
                     if isinstance(vh, list):
                         vix_hist = [float(x) for x in vh if x is not None and float(x) > 0]
-                except Exception:
-                    pass
-        if len(vix_hist) < 10:
-            vix_path = _DATA_DIR / "macro" / "vix_data.json"
-            if vix_path.exists():
-                try:
-                    vd = json.loads(vix_path.read_text(encoding="utf-8")).get("vix", {})
-                    cur_v = float(vd.get("current", 16.5) or 16.5)
-                    vix_hist = [cur_v]
                 except Exception:
                     pass
 

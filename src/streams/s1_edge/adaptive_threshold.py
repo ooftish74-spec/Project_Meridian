@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 _cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _RESULTS = _PROJECT_ROOT / 'results'
-_DATA_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+_DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 _STATE_FILE = _RESULTS / 'adaptive_threshold_state.json'
 
 class AdaptiveThreshold:

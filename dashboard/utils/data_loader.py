@@ -487,7 +487,11 @@ def load_signal_model_data() -> Dict:
         "shap_analysis": load_json("shap_analysis.json"),
         "shap_history": load_json("shap_history.json"),
         "icir_validation": load_json("icir_validation.json"),
-        "walk_forward": load_json("walk_forward_results.json"),
+        "walk_forward": (
+            load_json("walk_forward_results.json")
+            if (RESULTS_DIR / "walk_forward_results.json").exists()
+            else load_json("walk_forward_daily.json")
+        ),
         "alpha_decay": load_json("alpha_decay_history.json"),
         "qvm_ic_history": load_json("qvm_ic_history.json"),
         "medallion_validation": load_json("medallion_validation.json"),

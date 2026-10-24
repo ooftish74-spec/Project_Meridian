@@ -189,7 +189,7 @@ def _load_vix_history(window: int=252) -> List[float]:
 
     [Root Cause Fix] 우선순위:
       1순위: data/cache/vix_daily.json (아침 pre-fetch 참조)
-      2순위: results/overnight_intelligence_history.json
+      2순위: results/overnight_signals.json
     yfinance 직접 호출은 이 함수에서 하지 않음
     (→ DynamicVIXThreshold.from_history의 fallback 단에서만)
     """
@@ -207,7 +207,7 @@ def _load_vix_history(window: int=252) -> List[float]:
         except (OSError, json.JSONDecodeError, TypeError):
             from src.utils.error_logger import log_error_rate_limited
             logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-    hist_file = results / 'overnight_intelligence_history.json'
+    hist_file = results / 'overnight_signals.json'
     if not hist_file.exists():
         return []
     try:
@@ -220,7 +220,11 @@ def _load_vix_history(window: int=252) -> List[float]:
     except json.JSONDecodeError as e:
         logger.warning(f'  VIX 이력 JSON 파싱 실패: {e}')
         return []
-    history = data.get('history', [])
+    if isinstance(data, dict) and isinstance(data.get('vix_history'), list):
+        vix_vals = [float(x) for x in data['vix_history'][-window:] if x and float(x) > 0]
+        if vix_vals:
+            return vix_vals
+    history = data.get('history', []) if isinstance(data, dict) else []
     if not history:
         logger.debug("  VIX 이력 'history' 키 비어있음")
         return []

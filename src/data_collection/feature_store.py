@@ -493,24 +493,6 @@ class FeatureStore:
         
         output_path = date_dir / f'{ticker}_features.parquet'
         atomic_write_parquet(df, str(output_path))
-        
-        # latest 심볼릭 링크 업데이트 (ml_stream.py 호환용)
-        latest_dir = base_dir / 'latest'
-        if latest_dir.exists() or latest_dir.is_symlink():
-            try:
-                latest_dir.unlink()
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                import shutil
-                shutil.rmtree(latest_dir, ignore_errors=True)
-        try:
-            latest_dir.symlink_to(date_dir.resolve())
-        except OSError:
-            # 심볼릭 링크 실패 시(Windows 등) 강제 복사
-            import shutil
-            shutil.copytree(str(date_dir), str(latest_dir), dirs_exist_ok=True)
-            
         logger.info(f"  📤 {ticker}: {len(df)}행 → {output_path} (Time-travel Partitioned)")
         return str(output_path)
 

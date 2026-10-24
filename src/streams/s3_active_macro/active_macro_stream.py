@@ -974,8 +974,9 @@ class S3FactorStream(BaseStream):
         """
         import json as _json
         import math as _math
+        import time as _time
         alpha_file = _PROJECT_ROOT / 'data' / 'alpha_signal.json'
-        if not alpha_file.exists():
+        if not alpha_file.exists() or (_time.time() - alpha_file.stat().st_mtime) > 86400 * 3:
             return None
         try:
             alpha_data = _json.loads(alpha_file.read_text())
@@ -1331,6 +1332,9 @@ class S3FactorStream(BaseStream):
                     logger.debug('  ML predictions 파일 없음')
                     return None
                 latest_file = pred_files[0]
+            import time as _time_pred
+            if (_time_pred.time() - latest_file.stat().st_mtime) > 86400 * 3:
+                return None
             predictions: Dict[str, Dict] = {}
             min_prob = pget('s3.ml_rank_min_prob', 0.45)
             with open(latest_file, 'r', encoding='utf-8') as f:

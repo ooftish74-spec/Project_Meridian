@@ -254,7 +254,6 @@ class KRXApiClient:
         for cache_path in (
             base_data / 'kr_markets' / f'kr_{ticker}.parquet',
             base_data / 'kr_markets' / f'{ticker}.parquet',
-            base_data / 'historical_10y' / f'kr_{ticker}.parquet',
         ):
             if cache_path.exists():
                 try:
@@ -356,7 +355,7 @@ class KRXApiClient:
         효율성을 위해 로컬 parquet 캐시를 먼저 확인합니다.
         """
         from datetime import datetime, timedelta
-        cache_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'historical_10y'
+        cache_dir = Path(__file__).resolve().parent.parent.parent / 'data' / 'kr_markets'
         cache_path = cache_dir / f'kr_{ticker}.parquet'
         if cache_path.exists():
             try:

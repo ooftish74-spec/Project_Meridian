@@ -186,10 +186,10 @@ class USNightExecutionEngine:
                             'amount': float(h.get('qty', 0)) * curr_p,
                             'entry_date': ledger_mgr.get_entry_date(t) or today_str
                         })
-                if self.holdings:
-                    return
+                return
             except Exception as e:
                 logger.warning(f"  [USNightEngine] KIS 실계좌 로드 예외: {e}")
+                return
 
         # 폴백: us_night_holdings.json 파일
         if _US_HOLDINGS_FILE.exists():

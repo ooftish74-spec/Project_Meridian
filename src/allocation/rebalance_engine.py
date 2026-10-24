@@ -140,16 +140,12 @@ class RebalanceEngine:
         tgat_score = 0.0
         try:
             mcap_cache = _PROJECT_ROOT / 'data' / 'market_cap_cache.json'
-            alpha_path = _PROJECT_ROOT / 'data' / 'alpha_signal.json'
             if mcap_cache.exists():
                 mcaps = json.loads(mcap_cache.read_text())
                 sorted_mcaps = sorted([(k, float(v.get('market_cap', v) if isinstance(v, dict) else v)) for k, v in mcaps.items() if v], key=lambda x: x[1], reverse=True)
                 top_50_tickers = {k for k, _ in sorted_mcaps[:50]}
-            if alpha_path.exists():
-                alpha_data = json.loads(alpha_path.read_text())
-                tgat_score = float(alpha_data.get('S2_signal', {}).get('pysr_macro_feature_value', 0.0))
         except Exception as e:
-            logger.critical(f"  Alpha Factory/MCAP 데이터 로드 실패: {e}", exc_info=True)
+            logger.critical(f"  MCAP 데이터 로드 실패: {e}", exc_info=True)
         for ticker, info in all_candidates.items():
             score = self._compute_alpha_score(ticker=ticker, stream_id=stream_id, confidence=info.get('confidence', 0.5), is_held=info.get('is_held', False), cost_hurdle=cost_hurdle, is_large_cap=ticker in top_50_tickers, tgat_score=tgat_score)
             scores[ticker] = score
@@ -396,7 +392,7 @@ class RebalanceEngine:
         try:
             import pandas as pd
             for pattern in [f"kr_{ticker}.parquet", f"{ticker}.parquet"]:
-                pq = _PROJECT_ROOT / 'data' / 'historical_10y' / pattern
+                pq = _PROJECT_ROOT / 'data' / 'kr_markets' / pattern
                 if pq.exists():
                     df = pd.read_parquet(pq)
                     if 'close' in df.columns and len(df) > 1:
@@ -415,8 +411,14 @@ class RebalanceEngine:
         sid = stream_id.lower()
         total_budget = _cfg_get(f"{sid}.budget", _cfg_get(f"allocation.{sid}_budget", 0))
         try:
+            _is_live_re = _cfg_get('execution.current_mode', _cfg_get('execution.mode', 'live')) == 'live'
+            _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            if _is_live_re and _kp_path.exists():
+                kp = json.loads(_kp_path.read_text())
+                held = sum((float(pv.get('eval_krw', pv.get('amount', 0)) or 0) for pk, pv in (kp.get('holdings') or {}).items() if str(pv.get('stream_id', '')) == stream_id or pk.startswith(f"{stream_id}:")))
+                return max(total_budget - held, 0)
             sp_path = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-            if sp_path.exists():
+            if not _is_live_re and sp_path.exists():
                 sp = json.loads(sp_path.read_text())
                 held = sum((pv.get('amount', 0) for pk, pv in sp.get('positions', {}).items() if pk.startswith(f"{stream_id}:")))
                 return max(total_budget - held, 0)

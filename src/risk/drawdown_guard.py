@@ -34,6 +34,7 @@ from typing import Any, Dict, List
 from config.dynamic_config import DynamicConfig
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
+_RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / 'results'
 
 class DrawdownGuard:
     """6단계 Drawdown 방어 (측정/판정 완전 분리).
@@ -54,16 +55,27 @@ class DrawdownGuard:
         Returns:
             측정 결과 (수치만, 판정 없음)
         """
-        initial_capital = portfolio.get('initial_capital', cfg.get('portfolio.initial_capital'))
-        total_nav = portfolio.get('total_nav', initial_capital)
-        hwm = portfolio.get('hwm', max(total_nav, initial_capital))
+        _is_live = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
+        _kp_data = {}
+        if _is_live and ('initial_capital' not in portfolio or 'hwm' not in portfolio):
+            try:
+                import json as _json_dd_k
+                _kp_path = _RESULTS_DIR / 'kis_portfolio.json'
+                if _kp_path.exists():
+                    _kp_data = _json_dd_k.loads(_kp_path.read_text())
+            except Exception:
+                _kp_data = {}
+        _kp_nav_val = _kp_data.get('nav') or (_kp_data.get('account', {}) or {}).get('total_equity')
+        total_nav = portfolio.get('total_nav', _kp_nav_val if (_is_live and _kp_nav_val) else cfg.get('portfolio.initial_capital'))
+        initial_capital = portfolio.get('initial_capital', (_kp_data.get('initial_capital') or total_nav) if _is_live else cfg.get('portfolio.initial_capital'))
+        hwm = portfolio.get('hwm', (_kp_data.get('hwm') or total_nav) if _is_live else max(total_nav, initial_capital))
         total_dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
         sleeve_a_nav = portfolio.get('sleeve_a_nav')
         sleeve_a_hwm = portfolio.get('sleeve_a_hwm')
-        if sleeve_a_nav is None or sleeve_a_hwm is None:
+        if not _is_live and (sleeve_a_nav is None or sleeve_a_hwm is None):
             try:
                 import json as _json_dd
-                _sp_path = Path(__file__).resolve().parent.parent.parent / 'results' / 'shadow_portfolio.json'
+                _sp_path = _RESULTS_DIR / 'shadow_portfolio.json'
                 if _sp_path.exists():
                     _sp = _json_dd.loads(_sp_path.read_text())
                     sleeve_a_nav = _sp.get('sleeve_a_nav') or _sp.get('alpha_nav')
@@ -75,9 +87,9 @@ class DrawdownGuard:
         if sleeve_a_nav is None:
             _default_ratio = float(pget('portfolio.sleeve_a_ratio', 0.6))
             sleeve_a_nav = total_nav * _default_ratio
-            logger.debug(f"  DrawdownGuard: sleeve_a_nav fallback 추정 사용 ({_default_ratio * 100:.0f}% of NAV={sleeve_a_nav:,.0f}) — shadow_portfolio 데이터 확인 권장")
+            logger.debug(f"  DrawdownGuard: sleeve_a_nav fallback 추정 사용 ({_default_ratio * 100:.0f}% of NAV={sleeve_a_nav:,.0f})")
         if sleeve_a_hwm is None:
-            sleeve_a_hwm = sleeve_a_nav
+            sleeve_a_hwm = (hwm * float(pget('portfolio.sleeve_a_ratio', 0.6))) if (_is_live and hwm) else sleeve_a_nav
         sleeve_a_dd = (sleeve_a_nav / sleeve_a_hwm - 1) * 100 if sleeve_a_hwm and sleeve_a_hwm > 0 else 0
         daily_returns = portfolio.get('daily_returns', [])
         consecutive_loss = 0
@@ -173,17 +185,33 @@ class DrawdownGuard:
         """
         portfolio = None
         _sp_initial = None
+        _is_live = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
         try:
             import json as _json
-            _sp_file = Path(__file__).resolve().parent.parent.parent / 'results' / 'shadow_portfolio.json'
-            if _sp_file.exists():
-                _sp = _json.loads(_sp_file.read_text())
-                _sp_initial = _sp.get('initial_capital')
-                portfolio = {'total_nav': nav, 'initial_capital': _sp_initial or cfg.get('portfolio.initial_capital'), 'hwm': _sp.get('hwm', max(nav, _sp_initial or cfg.get('portfolio.initial_capital'))), 'daily_returns': _sp.get('daily_returns', [])}
+            _res_dir = _RESULTS_DIR
+            if _is_live:
+                _kp_file = _res_dir / 'kis_portfolio.json'
+                if _kp_file.exists():
+                    _kp = _json.loads(_kp_file.read_text())
+                    _kp_nav = _kp.get('nav') or (_kp.get('account', {}) or {}).get('total_equity') or nav
+                    _kp_init = _kp.get('initial_capital') or _kp_nav
+                    _kp_hwm = _kp.get('hwm') or (_kp.get('account', {}) or {}).get('hwm') or _kp_nav
+                    portfolio = {
+                        'total_nav': nav or _kp_nav,
+                        'initial_capital': _kp_init,
+                        'hwm': max(nav or _kp_nav, _kp_hwm),
+                        'daily_returns': _kp.get('daily_returns', []),
+                    }
+            else:
+                _sp_file = _res_dir / 'shadow_portfolio.json'
+                if _sp_file.exists():
+                    _sp = _json.loads(_sp_file.read_text())
+                    _sp_initial = _sp.get('initial_capital')
+                    portfolio = {'total_nav': nav, 'initial_capital': _sp_initial or cfg.get('portfolio.initial_capital'), 'hwm': _sp.get('hwm', max(nav, _sp_initial or cfg.get('portfolio.initial_capital'))), 'daily_returns': _sp.get('daily_returns', [])}
         except Exception as _e0:
             logger.critical(f'  [drawdown_guard] DrawdownGuard 상태 저장: {_e0}', exc_info=True)
         if portfolio is None:
-            initial_capital = cfg.get('portfolio.initial_capital')
+            initial_capital = nav if _is_live else cfg.get('portfolio.initial_capital')
             portfolio = {'total_nav': nav, 'initial_capital': initial_capital, 'hwm': max(nav, initial_capital) if initial_capital else nav, 'daily_returns': []}
         if portfolio is None:
             logger.error('  DrawdownGuard.check(): portfolio 데이터 없음 — assess 스킵')

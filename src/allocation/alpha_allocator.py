@@ -141,10 +141,17 @@ class AlphaAllocator:
             import json as _j
             _PROJECT_ROOT = _Path(__file__).resolve().parent.parent.parent
             dg = DrawdownGuard()
-            _sp = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
+            _is_live_aa = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
+            _kp = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            _sp = _kp if (_is_live_aa or _kp.exists()) else (_PROJECT_ROOT / 'results' / 'shadow_portfolio.json')
             if _sp.exists():
                 _sp_data = _j.loads(_sp.read_text())
-                _nav = _sp_data.get('total_nav', cfg.get('portfolio.initial_capital', 0))
+                _nav = (
+                    _sp_data.get('nav')
+                    or (_sp_data.get('account', {}) or {}).get('total_equity')
+                    or _sp_data.get('total_nav')
+                    or cfg.get('portfolio.initial_capital', 0)
+                )
                 dd_result = dg.check(_nav)
                 dd_stage = dd_result.get('dd_stage', 0)
                 hard_stop_stage = int(pget('filter.hard_stop_dd_stage', 5))

@@ -174,18 +174,6 @@ class S4AdvisoryStream(BaseStream):
         risky_total = 0.0
         is_contagion = False
         contagion_severity = 1.0
-        try:
-            alpha_path = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'alpha_signal.json'
-            if alpha_path.exists():
-                alpha_data = json.loads(alpha_path.read_text())
-                if alpha_data.get('S1_signal', {}).get('contagion_alert') == 'CRITICAL':
-                    is_contagion = True
-                    tgat_val = abs(float(alpha_data.get('S2_signal', {}).get('pysr_macro_feature_value', 1.0)))
-                    contagion_severity = max(1.0, tgat_val)
-        except Exception as e:
-            from src.utils.error_logger import log_error_rate_limited
-            log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
-            logger.debug(f"  Alpha Factory 신호 로드 실패: {e}")
         is_retirement_acct = account in ('IRP', 'PENSION')
         max_bond_ratio = pget('s4.max_bond_ratio', 0.3)
         bond_total = 0.0

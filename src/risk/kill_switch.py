@@ -162,7 +162,8 @@ class KillSwitch:
             return daily_returns
         max_gap_days = pget('kill_switch.system_gap_max_days', 3)
         try:
-            _sp_file = _RESULTS / 'shadow_portfolio.json'
+            _is_live_gap = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
+            _sp_file = _RESULTS / ('kis_portfolio.json' if _is_live_gap else 'shadow_portfolio.json')
             if not _sp_file.exists():
                 return daily_returns
             _sp = _json.loads(_sp_file.read_text())
@@ -419,14 +420,16 @@ class KillSwitch:
                     _confs = [s.get('confidence', 0) for s in _all_sigs if s.get('confidence') is not None]
                     forward['signal_avg_confidence'] = sum(_confs) / len(_confs) if _confs else 0
                     forward['n_signals'] = len(_all_sigs)
+            _sc_data = {}
             _sc = _RESULTS / 'signal_cache.json'
             if _sc.exists():
-                _d = _fj.loads(_sc.read_text())
-                forward['news_sentiment'] = _d.get('news_sentiment', 0)
+                _sc_data = _fj.loads(_sc.read_text())
+                forward['news_sentiment'] = _sc_data.get('news_sentiment', 0)
             _ps = _RESULTS / 'pipeline_state.json'
             if _ps.exists():
                 _d = _fj.loads(_ps.read_text())
-                forward['ois_score'] = _d.get('ois', pget('kill_switch.ois_missing_default', 50.0))
+                _ois_val = (_d.get('kr_regime_measurements', {}) or {}).get('ois') or _d.get('ois') or _sc_data.get('ois')
+                forward['ois_score'] = _ois_val if _ois_val is not None else pget('kill_switch.ois_missing_default', 50.0)
             _me = _RESULTS / 'measurement_engine.json'
             if _me.exists():
                 _d = _fj.loads(_me.read_text())
@@ -437,7 +440,8 @@ class KillSwitch:
                 _risk = _views.get('risk', {})
                 forward['bench_alpha_5d'] = _risk.get('recent_alpha_5d', 0)
             if forward['bench_alpha_5d'] == 0:
-                _sp = _RESULTS / 'shadow_portfolio.json'
+                _is_live_fwd = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
+                _sp = _RESULTS / ('kis_portfolio.json' if _is_live_fwd else 'shadow_portfolio.json')
                 if _sp.exists():
                     _d = _fj.loads(_sp.read_text())
                     _records = _d.get('daily_records', [])[-5:]
@@ -684,26 +688,28 @@ class KillSwitch:
         Returns:
             {'triggered': bool, 'can_buy': bool, 'position_scale': float, 'reason': str}
         """
+        _is_live_chk = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
         _sp_initial = None
         try:
             import json as _j2
-            _sp_f = _RESULTS / 'shadow_portfolio.json'
+            _sp_f = _RESULTS / ('kis_portfolio.json' if _is_live_chk else 'shadow_portfolio.json')
             if _sp_f.exists():
                 _sp_data = _j2.loads(_sp_f.read_text())
-                _sp_initial = _sp_data.get('initial_capital')
+                _sp_initial = _sp_data.get('initial_capital') or (_sp_data.get('nav') or (_sp_data.get('account', {}) or {}).get('total_equity') if _is_live_chk else None)
         except Exception as _e3:
             logger.critical(f"  [kill_switch] Kill Switch 상태 저장 1: {_e3}", exc_info=True)
-        initial_capital = _sp_initial if _sp_initial is not None else cfg.get('portfolio.initial_capital')
+        initial_capital = _sp_initial if _sp_initial is not None else (nav if _is_live_chk and nav else cfg.get('portfolio.initial_capital'))
         portfolio = {'total_nav': nav, 'initial_capital': initial_capital, 'hwm': max(nav, initial_capital), 'daily_returns': [], 'active_positions': 0}
         try:
             import json as _json2
-            _sp_file = _RESULTS / 'shadow_portfolio.json'
+            _sp_file = _RESULTS / ('kis_portfolio.json' if _is_live_chk else 'shadow_portfolio.json')
             if _sp_file.exists():
                 _sp = _json2.loads(_sp_file.read_text())
-                sp_hwm = _sp.get('hwm', portfolio['hwm'])
+                _kp_nav = _sp.get('nav') or (_sp.get('account', {}) or {}).get('total_equity') or nav
+                sp_hwm = _sp.get('hwm') or (_sp.get('account', {}) or {}).get('hwm') or (_kp_nav if _is_live_chk else portfolio['hwm'])
                 # ★ Wave 0 E8: HWM 자동 리셋(1.35×) 제거 — 부분 NAV 방어는 measure_metrics의 NAV 교차검증이 담당
                 portfolio['hwm'] = sp_hwm
-                portfolio['active_positions'] = len(_sp.get('positions', {}))
+                portfolio['active_positions'] = len(_sp.get('holdings' if _is_live_chk else 'positions', _sp.get('positions', {})))
                 _dr = _sp.get('daily_returns', [])
                 if not _dr:
                     _snaps = _sp.get('daily_snapshots', [])

@@ -19,9 +19,11 @@ from config.dynamic_config import DynamicConfig
 
 logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+MODEL_PATH = Path(__file__).resolve().parent.parent.parent / 'results' / 'models' / 'hmm_regime_model.pkl'
 
 class PredictiveHMMRegimeModel:
+    MODEL_PATH = MODEL_PATH
     """
     [Phase 89] HMM 기반 선제적 레짐 예측 모델
     기존의 단순 수익률/변동성 기반 HMM을 넘어, 
@@ -217,7 +219,7 @@ class PredictiveHMMRegimeModel:
             return
         import pickle
         if path is None:
-            path = _PROJECT_ROOT / 'results' / 'models' / 'hmm_regime.pkl'
+            path = MODEL_PATH
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             
         with open(path, 'wb') as f:
@@ -231,7 +233,7 @@ class PredictiveHMMRegimeModel:
     def load_model(self, path: str = None) -> bool:
         import pickle
         if path is None:
-            path = _PROJECT_ROOT / 'results' / 'models' / 'hmm_regime.pkl'
+            path = MODEL_PATH if MODEL_PATH.exists() else (_PROJECT_ROOT / 'results' / 'models' / 'hmm_regime.pkl')
             
         if not Path(path).exists():
             return False

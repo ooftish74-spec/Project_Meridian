@@ -1149,30 +1149,12 @@ class ExecutionEngine:
     def _estimate_price(self, ticker: str) -> float:
         """종목 현재가 추정 (data/ 디렉토리에서)."""
         import pandas as pd
-        krx_dir = _PROJECT_ROOT / 'data' / 'raw' / 'krx_stock_daily'
-        if krx_dir.exists():
-            try:
-                csv_files = sorted(krx_dir.glob('kospi_*.csv'), reverse=True)
-                for csv_file in csv_files[:3]:
-                    df = pd.read_csv(csv_file)
-                    for col in _KRX_TICKER_COLUMNS:
-                        if col in df.columns:
-                            df[col] = df[col].astype(str).str.zfill(6)
-                            row = df[df[col] == ticker]
-                            if not row.empty:
-                                for pc in _KRX_CLOSE_COLUMNS:
-                                    if pc in row.columns:
-                                        p = float(row[pc].iloc[0])
-                                        if p > 0:
-                                            return p
-                            break
-            except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError):
-                from src.utils.error_logger import log_error_rate_limited
-                logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
-            except Exception as e:
-                logger.error(f"  가격 추정(CSV) 중 에러: {e}")
-        for pattern in [f"kr_{ticker}.parquet", f"{ticker}.parquet", f"us_stocks/{ticker}.parquet", f"us_stocks/{ticker.upper()}.parquet"]:
-            pq = _PROJECT_ROOT / 'data' / 'historical_10y' / pattern
+        for pq in (
+            _PROJECT_ROOT / 'data' / 'kr_markets' / f"kr_{ticker}.parquet",
+            _PROJECT_ROOT / 'data' / 'kr_markets' / f"{ticker}.parquet",
+            _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f"{ticker}.parquet",
+            _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f"{str(ticker).upper()}.parquet",
+        ):
             if pq.exists():
                 try:
                     df = pd.read_parquet(pq)

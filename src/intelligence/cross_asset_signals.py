@@ -150,7 +150,7 @@ class CrossAssetSignalEngine:
           4. ★ signal_cache.json + us_market_regime.json (항상 존재)
         """
         result = {}
-        oi_file = RESULTS / 'overnight_intelligence.json'
+        oi_file = RESULTS / 'overnight_signals.json'
         if oi_file.exists():
             try:
                 oi = json.loads(oi_file.read_text())
@@ -162,25 +162,26 @@ class CrossAssetSignalEngine:
                         result[asset] = markets[asset.lower()]
             except Exception as _e:
                 logger.warning(f'  Unexpected: {_e}', exc_info=True)
-        cm_file = DATA / 'cross_market' / 'latest.json'
-        if cm_file.exists():
-            try:
-                cm = json.loads(cm_file.read_text())
-                for asset in GLOBAL_ASSETS:
-                    if asset not in result and asset in cm:
-                        result[asset] = cm[asset]
-            except Exception as _e:
-                logger.warning(f'  Unexpected: {_e}', exc_info=True)
-        usa_file = DATA / 'cross_market' / 'us_market_data.json'
-        if usa_file.exists():
-            try:
-                usa = json.loads(usa_file.read_text())
-                etfs = usa.get('etf_data', {})
-                for asset in GLOBAL_ASSETS:
-                    if asset not in result and asset in etfs:
-                        result[asset] = etfs[asset]
-            except Exception as _e:
-                logger.warning(f'  Unexpected: {_e}', exc_info=True)
+        for cm_file in (DATA / 'raw' / 'cross_market' / 'cross_market_latest.json', DATA / 'cross_market' / 'latest.json'):
+            if cm_file.exists():
+                try:
+                    cm = json.loads(cm_file.read_text())
+                    cm_src = cm.get('etf_data', cm) if isinstance(cm, dict) else {}
+                    for asset in GLOBAL_ASSETS:
+                        if asset not in result and asset in cm_src:
+                            result[asset] = cm_src[asset]
+                except Exception as _e:
+                    logger.warning(f'  Unexpected: {_e}', exc_info=True)
+        for usa_file in (DATA / 'raw' / 'cross_market' / 'cross_market_latest.json', DATA / 'cross_market' / 'us_market_data.json'):
+            if usa_file.exists():
+                try:
+                    usa = json.loads(usa_file.read_text())
+                    etfs = usa.get('etf_data', usa) if isinstance(usa, dict) else {}
+                    for asset in GLOBAL_ASSETS:
+                        if asset not in result and asset in etfs:
+                            result[asset] = etfs[asset]
+                except Exception as _e:
+                    logger.warning(f'  Unexpected: {_e}', exc_info=True)
         if len(result) < 3:
             result = self._fallback_from_pipeline(result)
         return result

@@ -564,17 +564,28 @@ def _common_sample_dates(calendar, forward_days: int, sample_interval: int):
     return set(cal[anchor::-int(sample_interval)])
 
 
+_EXCLUDED_US_SYMBOLS = {'BTC', 'ETH', 'VIX', 'SOX', 'NDX', 'SPX', 'DXY'}
+
+
+def _is_valid_equity_ticker(t: str) -> bool:
+    t = str(t or '').strip()
+    return (len(t) == 6 and t.isdigit()) or (
+        1 <= len(t) <= 5 and t.isalpha() and t.isupper() and t not in _EXCLUDED_US_SYMBOLS
+    )
+
+
 def _load_ticker_ohlcv(ticker: str, min_rows: int = 80):
     """종목 OHLCV 로드 → (close, high, low, open, volume, dates) numpy 튜플 또는 None.
 
     OHLCV/date 를 행 단위로 함께 dropna + 날짜 정렬/중복 제거 (컬럼별 dropna 시 시점 어긋남 방지).
     """
+    if not _is_valid_equity_ticker(ticker):
+        return None
+    _data_root = DATA_DIR if (DATA_DIR / 'kr_markets').exists() else _PROJECT_ROOT / 'data'
     candidates = [
-        DATA_DIR / f'kr_{ticker}.parquet',
-        _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
-        _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
-        _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
-        _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
+        _data_root / 'kr_markets' / f'kr_{ticker}.parquet',
+        _data_root / 'kr_markets' / f'{ticker}.parquet',
+        _data_root / 'us_stocks' / 'prices' / f'{ticker}.parquet',
     ]
     fp = next((c for c in candidates if c.exists()), None)
     if fp is None:
@@ -647,6 +658,7 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     logger.info(f"═══ Rolling Window 데이터셋 (최근 {window_days}일, "
                 f"embargo={embargo_days}일) ═══")
 
+    _data_root = DATA_DIR if (DATA_DIR / 'kr_markets').exists() else _PROJECT_ROOT / 'data'
     uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
     universe = []
     if uni_file.exists():
@@ -655,10 +667,11 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
         except Exception:
             universe = []
     if not universe:
-        for _sd in [_PROJECT_ROOT / 'data' / 'kr_markets', _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices', _PROJECT_ROOT / 'data' / 'historical_10y', DATA_DIR]:
+        for _sd in [_data_root / 'kr_markets', _data_root / 'us_stocks' / 'prices']:
             if _sd.exists():
-                universe.extend([f.stem.replace('kr_', '') for f in _sd.glob('*.parquet')])
+                universe.extend([f.stem.removeprefix('kr_') for f in _sd.glob('*.parquet')])
         universe = list(set(universe))
+    universe = [t for t in universe if _is_valid_equity_ticker(t)]
     
     # [WAVE3 Track D] 레버리지/인버스 ETP 는 횡단면 학습 유니버스에서 제외
     # (수익률이 기초지수의 ±k배 → 횡단면 순위/라벨 분포를 왜곡). 상한 적용 전에 제외.

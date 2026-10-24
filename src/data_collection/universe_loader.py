@@ -104,62 +104,7 @@ def _ensure_loaded():
     etfs = []
     us = []
     meta = {}
-    dyn_path = _PROJECT_ROOT / 'data' / 'universe' / 'dynamic_universe.json'
-    if dyn_path.exists():
-        try:
-            u = json.loads(dyn_path.read_text())
-            for s in u.get('kr_stocks', []):
-                t = str(s.get('ticker', ''))
-                if t:
-                    tickers.append(t)
-                    stocks.append(t)
-                    names[t] = s.get('name', t)
-                    meta[t] = {'market': 'KR', 'type': 'stock', 'mktcap': s.get('mktcap')}
-            for s in u.get('kr_etfs', []):
-                t = str(s.get('ticker', ''))
-                if t:
-                    tickers.append(t)
-                    etfs.append(t)
-                    names[t] = s.get('name', t)
-                    meta[t] = {'market': 'KRX', 'type': s.get('type', 'etf'), 'underlying': s.get('underlying'), 'region': s.get('region')}
-            for s in u.get('us_stocks', []):
-                t = str(s.get('ticker', ''))
-                if t:
-                    tickers.append(t)
-                    us.append(t)
-                    names[t] = s.get('name', t)
-                    meta[t] = {'market': 'US', 'type': 'us_stock', 'sector': s.get('sector')}
-            if not us:
-                us_prices_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
-                if us_prices_dir.exists():
-                    for pf in sorted(us_prices_dir.glob('*.parquet')):
-                        tk_us = pf.stem.strip().upper()
-                        if tk_us and not tk_us.startswith('^') and tk_us not in us:
-                            us.append(tk_us)
-                            names.setdefault(tk_us, tk_us)
-                            meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
-                us_map_path = _PROJECT_ROOT / 'config' / 'params' / 'tables' / 'src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP.json'
-                if us_map_path.exists():
-                    try:
-                        us_map_obj = json.loads(us_map_path.read_text())
-                        for tk_us in (us_map_obj.get('value', us_map_obj) or {}).keys():
-                            tk_us = str(tk_us).strip().upper()
-                            if tk_us and tk_us not in us:
-                                us.append(tk_us)
-                                names.setdefault(tk_us, tk_us)
-                                meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
-                    except Exception:
-                        pass
-            if tickers:
-                built = u.get('built_at', '') or 'dynamic'
-                total_kr = len(stocks)
-                total_etf = len(etfs)
-                total_us = len(us)
-                logger.info(f'  유니버스 (dynamic): KR {total_kr} + ETF {total_etf} + US {total_us}종목 [{built}]')
-                _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                return
-        except Exception as _e:
-            logger.error(f'  dynamic_universe 로드 실패: {_e}', exc_info=True)
+
     try:
         from config.universe import Universe
         univ = Universe()
@@ -177,12 +122,39 @@ def _ensure_loaded():
                     tickers.append(tk)
                 names[tk] = getattr(item, 'name', tk)
                 meta[tk] = {'market': 'KRX', 'type': 'etf'}
+    except Exception as _e:
+        logger.debug(f'  Universe ETF preload note: {_e}')
 
-        res_dyn = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
-        if res_dyn.exists():
-            raw_list = json.loads(res_dyn.read_text())
-            if isinstance(raw_list, list):
-                for tk in raw_list:
+    def _populate_us_fallbacks():
+        if not us:
+            us_prices_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
+            if us_prices_dir.exists():
+                for pf in sorted(us_prices_dir.glob('*.parquet')):
+                    tk_us = pf.stem.strip().upper()
+                    if 1 <= len(tk_us) <= 5 and tk_us.isalpha() and tk_us not in us:
+                        us.append(tk_us)
+                        names.setdefault(tk_us, tk_us)
+                        meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
+            us_map_path = _PROJECT_ROOT / 'config' / 'params' / 'tables' / 'src.data_collection.kis_data_collector.KISDataCollector.US_EXCHANGE_MAP.json'
+            if us_map_path.exists():
+                try:
+                    us_map_obj = json.loads(us_map_path.read_text())
+                    for tk_us in (us_map_obj.get('value', us_map_obj) or {}).keys():
+                        tk_us = str(tk_us).strip().upper()
+                        if tk_us and tk_us not in us:
+                            us.append(tk_us)
+                            names.setdefault(tk_us, tk_us)
+                            meta.setdefault(tk_us, {'market': 'US', 'type': 'us_stock'})
+                except Exception:
+                    pass
+
+    # Priority #1: results/dynamic_universe.json
+    res_dyn = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
+    if res_dyn.exists():
+        try:
+            raw_u = json.loads(res_dyn.read_text())
+            if isinstance(raw_u, list):
+                for tk in raw_u:
                     tk_str = str(tk).strip()
                     if not tk_str:
                         continue
@@ -191,12 +163,87 @@ def _ensure_loaded():
                             stocks.append(tk_str)
                         if tk_str not in tickers:
                             tickers.append(tk_str)
-                    elif tk_str.isalpha():
+                        names.setdefault(tk_str, tk_str)
+                        meta.setdefault(tk_str, {'market': 'KR', 'type': 'stock'})
+                    elif 1 <= len(tk_str) <= 5 and tk_str.isalpha() and tk_str.isupper():
                         if tk_str not in us:
                             us.append(tk_str)
                         if tk_str not in tickers:
                             tickers.append(tk_str)
+                        names.setdefault(tk_str, tk_str)
+                        meta.setdefault(tk_str, {'market': 'US', 'type': 'us_stock'})
+            elif isinstance(raw_u, dict):
+                for s in raw_u.get('kr_stocks', []):
+                    t = str(s.get('ticker', '') if isinstance(s, dict) else s)
+                    if t:
+                        if t not in tickers:
+                            tickers.append(t)
+                        if t not in etfs and t not in stocks:
+                            stocks.append(t)
+                        names[t] = s.get('name', t) if isinstance(s, dict) else t
+                        meta[t] = {'market': 'KR', 'type': 'stock', 'mktcap': s.get('mktcap') if isinstance(s, dict) else None}
+                for s in raw_u.get('kr_etfs', []):
+                    t = str(s.get('ticker', '') if isinstance(s, dict) else s)
+                    if t:
+                        if t not in tickers:
+                            tickers.append(t)
+                        if t not in etfs:
+                            etfs.append(t)
+                        names[t] = s.get('name', t) if isinstance(s, dict) else t
+                        meta[t] = {'market': 'KRX', 'type': s.get('type', 'etf') if isinstance(s, dict) else 'etf'}
+                for s in raw_u.get('us_stocks', []):
+                    t = str(s.get('ticker', '') if isinstance(s, dict) else s)
+                    if t:
+                        if t not in tickers:
+                            tickers.append(t)
+                        if t not in us:
+                            us.append(t)
+                        names[t] = s.get('name', t) if isinstance(s, dict) else t
+                        meta[t] = {'market': 'US', 'type': 'us_stock', 'sector': s.get('sector') if isinstance(s, dict) else None}
+        except Exception as _e:
+            logger.error(f'  results/dynamic_universe.json 로드 실패: {_e}', exc_info=True)
 
+    # Priority #2: data/universe/dynamic_universe.json (fallback or metadata enrichment)
+    dyn_path = _PROJECT_ROOT / 'data' / 'universe' / 'dynamic_universe.json'
+    if dyn_path.exists():
+        try:
+            u = json.loads(dyn_path.read_text())
+            _need_stocks = not stocks
+            for s in u.get('kr_stocks', []):
+                t = str(s.get('ticker', ''))
+                if t:
+                    if _need_stocks:
+                        if t not in tickers:
+                            tickers.append(t)
+                        if t not in stocks:
+                            stocks.append(t)
+                    if t in tickers:
+                        names[t] = s.get('name', names.get(t, t))
+                        meta[t] = {'market': 'KR', 'type': 'stock', 'mktcap': s.get('mktcap')}
+            for s in u.get('kr_etfs', []):
+                t = str(s.get('ticker', ''))
+                if t:
+                    if t not in tickers:
+                        tickers.append(t)
+                    if t not in etfs:
+                        etfs.append(t)
+                    names[t] = s.get('name', t)
+                    meta[t] = {'market': 'KRX', 'type': s.get('type', 'etf'), 'underlying': s.get('underlying'), 'region': s.get('region')}
+            for s in u.get('us_stocks', []):
+                t = str(s.get('ticker', ''))
+                if t:
+                    if t not in tickers:
+                        tickers.append(t)
+                    if t not in us:
+                        us.append(t)
+                    names[t] = s.get('name', t)
+                    meta[t] = {'market': 'US', 'type': 'us_stock', 'sector': s.get('sector')}
+        except Exception as _e:
+            logger.error(f'  dynamic_universe 로드 실패: {_e}', exc_info=True)
+
+    _populate_us_fallbacks()
+
+    if not stocks:
         kr_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
         if kr_dir.exists():
             for pf in sorted(kr_dir.glob('kr_*.parquet')):
@@ -207,19 +254,20 @@ def _ensure_loaded():
                     if tk_str not in tickers:
                         tickers.append(tk_str)
 
-        if stocks and etfs:
-            logger.debug(f'  유니버스 (merged): KR {len(stocks)} + ETF {len(etfs)} + US {len(us)}종목')
-            _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-            return
-    except Exception as _e:
-        logger.warning(f'  suppressed: {_e}', exc_info=True)
+    if stocks:
+        logger.info(f'  유니버스 (dynamic): KR {len(stocks)} + ETF {len(etfs)} + US {len(us)}종목')
+        _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
+        return
+
     path0 = _PROJECT_ROOT / 'results' / 'kospi200_universe.json'
     if path0.exists():
         try:
-            u = json.load(open(path0))
+            u = json.loads(path0.read_text())
             for t, name in u.get('tickers', {}).items():
-                tickers.append(t)
-                stocks.append(t)
+                if t not in tickers:
+                    tickers.append(t)
+                if t not in stocks:
+                    stocks.append(t)
                 names[t] = name
             if tickers:
                 logger.debug(f'  유니버스: kospi200_universe.json ({len(tickers)}종목)')
@@ -227,74 +275,7 @@ def _ensure_loaded():
                 return
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
-    path1 = _PROJECT_ROOT / 'data' / 'korean_stocks' / '_universe.json'
-    if path1.exists():
-        try:
-            u = json.load(open(path1))
-            for t, info in u.get('stocks', {}).items():
-                tickers.append(t)
-                stocks.append(t)
-                names[t] = info.get('name', t)
-            for t, info in u.get('etfs', {}).items():
-                tickers.append(t)
-                etfs.append(t)
-                names[t] = info.get('name', t)
-            if tickers:
-                logger.debug(f'  유니버스: _universe.json ({len(tickers)}종목)')
-                _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                return
-        except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
-    path2 = _PROJECT_ROOT / 'data' / 'universe_cache.json'
-    if path2.exists():
-        try:
-            cache = json.load(open(path2))
-            for t, info in cache.get('universe', {}).items():
-                tickers.append(t)
-                names[t] = info.get('name', t)
-                if info.get('type') in ('etf', 'bond_etf'):
-                    etfs.append(t)
-                else:
-                    stocks.append(t)
-            if tickers:
-                logger.debug(f'  유니버스: universe_cache.json ({len(tickers)}종목)')
-                _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                return
-        except Exception as _e:
-            logger.warning(f'  suppressed: {_e}', exc_info=True)
-    universe_dir = _PROJECT_ROOT / 'data' / 'universe'
-    if universe_dir.exists():
-        csvs = sorted(universe_dir.glob('universe_*.csv'), reverse=True)
-        if csvs:
-            try:
-                import pandas as pd
-                df = pd.read_csv(csvs[0])
-                if 'ticker' in df.columns:
-                    for _, row in df.iterrows():
-                        t = str(row['ticker']).zfill(6)
-                        tickers.append(t)
-                        names[t] = str(row.get('name', t))
-                        if row.get('type') in ('etf', 'bond_etf'):
-                            etfs.append(t)
-                        else:
-                            stocks.append(t)
-                if tickers:
-                    logger.debug(f'  유니버스: {csvs[0].name} ({len(tickers)}종목)')
-                    _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                    return
-            except Exception as _e:
-                logger.warning(f'  suppressed: {_e}', exc_info=True)
-    versions_dir = _PROJECT_ROOT / 'data' / 'versions'
-    if versions_dir.exists():
-        for vd in sorted(versions_dir.iterdir(), reverse=True):
-            ks_dir = vd / 'historical' / 'korea_stocks'
-            if ks_dir.exists():
-                tickers = [f.stem for f in ks_dir.glob('*.csv') if _KR_TICKER_RE.match(f.stem)]
-                if tickers:
-                    stocks = tickers[:]
-                    logger.debug(f'  유니버스: versions ({len(tickers)}종목)')
-                    _cache.update(tickers=tickers, names=names, stocks=stocks, etfs=etfs, us=us, meta=meta)
-                    return
+
     _cache.update(tickers=_FALLBACK_TICKERS, names={}, stocks=_FALLBACK_TICKERS, etfs=[], us=[], meta={})
 
 def reload():

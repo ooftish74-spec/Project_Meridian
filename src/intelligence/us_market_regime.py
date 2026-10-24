@@ -47,7 +47,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 RESULTS = PROJECT_ROOT / 'results'
 CONFIG = PROJECT_ROOT / 'config'
 OUT_FILE = RESULTS / 'us_market_regime.json'
-OI_PATH = RESULTS / 'overnight_intelligence.json'
+OI_PATH = RESULTS / 'overnight_signals.json'
 OI_HIST_PATH = RESULTS / 'overnight_intelligence_history.json'
 
 def vix_tier(vix: float) -> str:
@@ -95,12 +95,14 @@ class USMarketRegimeEngine:
         self.cfg = self._load_cfg()
 
     def _load_oi(self) -> Dict:
-        try:
-            return json.loads(OI_PATH.read_text())
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
-            return {}
+        for _cand in (OI_PATH, RESULTS / 'signal_cache.json'):
+            if _cand.exists():
+                try:
+                    return json.loads(_cand.read_text())
+                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
+                    import logging
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
+        return {}
 
     def _load_hist(self):
         try:

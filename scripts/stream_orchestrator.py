@@ -386,79 +386,88 @@ class StreamOrchestrator:
             total_nav = float(acct.get('total_equity', initial))
             cash = float(acct.get('cash', initial))
 
-            if getattr(self, 'exec_mode', 'live') == 'live' and kis_path.exists():
-                try:
-                    kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
-                    raw_holdings = kis_data.get('holdings', {})
-                    acct_data = kis_data.get('account', {})
-                    total_nav = float(acct_data.get('total_equity') or kis_data.get('nav') or acct_data.get('nav', total_nav))
-                    cash = float(acct_data.get('cash', cash))
-                    # ★ Wave 1 Track C: 리터럴 1334.3 제거 — 스냅샷 환율 → (필요 시) 게이트웨이(신선도 한도 내) → 미확보
-                    _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 0.0) or None
-                    _fx_orch_tried = False
-                    for t, h in raw_holdings.items():
-                        holdings[t] = h
-                        _qty_h = int(h.get('qty', 0))
-                        _cp_h = float(h.get('current_price', 0.0))
-                        _is_us_h = not _is_kr_tk(str(t))
-                        _amt_krw = float(h.get('eval_krw', 0.0) or 0.0)
-                        _fx_deg_h = False
-                        if not _amt_krw:
-                            if _is_us_h:
-                                if _fx_orch is None and not _fx_orch_tried:
-                                    _fx_orch_tried = True
-                                    try:
-                                        from src.data_collection.central_data_gateway import get_central_data_gateway
-                                        _r_orch = get_central_data_gateway().get_usdkrw_rate()
-                                        _fx_orch = float(_r_orch) if _r_orch is not None and float(_r_orch) > 0 else None
-                                    except Exception as _fx_o_err:
-                                        logger.error(f"  ❌ [FX] 포트폴리오 평가용 USD/KRW 조회 예외: {_fx_o_err}")
-                                if _fx_orch is None:
-                                    # 환율 미확보: 원화 평가액 날조 금지 → 0 + degraded 표시 (해외 신규 매수는 FX Guard가 별도 차단)
-                                    _fx_deg_h = True
-                                    logger.critical(f"  🚨 [FX] {t}: USD/KRW 미확보 + eval_krw 없음 → 원화 평가액 미산출(degraded)")
+            if getattr(self, 'exec_mode', 'live') == 'live':
+                _kis_loaded = False
+                if kis_path.exists():
+                    try:
+                        kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
+                        raw_holdings = kis_data.get('holdings', {})
+                        acct_data = kis_data.get('account', {})
+                        total_nav = float(acct_data.get('total_equity') or kis_data.get('nav') or acct_data.get('nav', total_nav))
+                        cash = float(acct_data.get('cash', cash))
+                        # ★ Wave 1 Track C: 리터럴 1334.3 제거 — 스냅샷 환율 → (필요 시) 게이트웨이(신선도 한도 내) → 미확보
+                        _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 0.0) or None
+                        _fx_orch_tried = False
+                        for t, h in raw_holdings.items():
+                            holdings[t] = h
+                            _qty_h = int(h.get('qty', 0))
+                            _cp_h = float(h.get('current_price', 0.0))
+                            _is_us_h = not _is_kr_tk(str(t))
+                            _amt_krw = float(h.get('eval_krw', 0.0) or 0.0)
+                            _fx_deg_h = False
+                            if not _amt_krw:
+                                if _is_us_h:
+                                    if _fx_orch is None and not _fx_orch_tried:
+                                        _fx_orch_tried = True
+                                        try:
+                                            from src.data_collection.central_data_gateway import get_central_data_gateway
+                                            _r_orch = get_central_data_gateway().get_usdkrw_rate()
+                                            _fx_orch = float(_r_orch) if _r_orch is not None and float(_r_orch) > 0 else None
+                                        except Exception as _fx_o_err:
+                                            logger.error(f"  ❌ [FX] 포트폴리오 평가용 USD/KRW 조회 예외: {_fx_o_err}")
+                                    if _fx_orch is None:
+                                        # 환율 미확보: 원화 평가액 날조 금지 → 0 + degraded 표시 (해외 신규 매수는 FX Guard가 별도 차단)
+                                        _fx_deg_h = True
+                                        logger.critical(f"  🚨 [FX] {t}: USD/KRW 미확보 + eval_krw 없음 → 원화 평가액 미산출(degraded)")
+                                    else:
+                                        _amt_krw = _qty_h * _cp_h * _fx_orch
                                 else:
-                                    _amt_krw = _qty_h * _cp_h * _fx_orch
-                            else:
-                                _amt_krw = _qty_h * _cp_h
-                        _ret_h = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
-                        _hwm_orch = {}
-                        _ed_orch = h.get('entry_date')
-                        try:
-                            from src.execution.position_ledger import PositionLedgerManager
-                            _plm_orch = PositionLedgerManager()
-                            if self._is_ticker_session_open_for_live_exit(t, market_data):
-                                _hwm_orch = _plm_orch.update_hwm(t, current_price=_cp_h, current_pnl_pct=_ret_h) or {}
-                            else:
-                                _hwm_orch = _plm_orch.get_hwm(t) or {}
-                            if not _ed_orch:
-                                _ed_orch = _plm_orch.get_entry_date(t)
-                        except Exception:
-                            pass
-                        positions[t] = {
-                            'ticker': t,
-                            'name': h.get('name', t),
-                            'quantity': _qty_h,
-                            'qty': _qty_h,
-                            'avg_price': float(h.get('avg_price', 0.0)),
-                            'current_price': _cp_h,
-                            'amount': _amt_krw,
-                            'market_value': _amt_krw,
-                            'unrealized_pnl_pct': _ret_h,
-                            'pnl_pct': _ret_h,
-                            'return_pct': _ret_h,
-                            'peak_pnl_pct': float(_hwm_orch.get('peak_pnl_pct', h.get('peak_pnl_pct', _ret_h)) or _ret_h),
-                            'peak_price': float(_hwm_orch.get('peak_price', h.get('peak_price', _cp_h)) or _cp_h),
-                            'trail_activated': bool(_hwm_orch.get('trail_activated', h.get('trail_activated', False))),
-                            'entry_date': _ed_orch or h.get('entry_date'),
-                            'stream_id': str(h.get('stream_id') or _hwm_orch.get('stream_id') or ''),
-                            'track': str(h.get('track') or _hwm_orch.get('track') or ''),
-                            'market': h.get('market', 'US' if _is_us_h else 'KR')
-                        }
-                        if _fx_deg_h:
-                            positions[t]['fx_degraded'] = True
-                except Exception as _k_err:
-                    logger.warning(f"kis_portfolio.json 로드 예외: {_k_err}")
+                                    _amt_krw = _qty_h * _cp_h
+                            _ret_h = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
+                            _hwm_orch = {}
+                            _ed_orch = h.get('entry_date')
+                            try:
+                                from src.execution.position_ledger import PositionLedgerManager
+                                _plm_orch = PositionLedgerManager()
+                                if self._is_ticker_session_open_for_live_exit(t, market_data):
+                                    _hwm_orch = _plm_orch.update_hwm(t, current_price=_cp_h, current_pnl_pct=_ret_h) or {}
+                                else:
+                                    _hwm_orch = _plm_orch.get_hwm(t) or {}
+                                if not _ed_orch:
+                                    _ed_orch = _plm_orch.get_entry_date(t)
+                            except Exception:
+                                pass
+                            positions[t] = {
+                                'ticker': t,
+                                'name': h.get('name', t),
+                                'quantity': _qty_h,
+                                'qty': _qty_h,
+                                'avg_price': float(h.get('avg_price', 0.0)),
+                                'current_price': _cp_h,
+                                'amount': _amt_krw,
+                                'market_value': _amt_krw,
+                                'unrealized_pnl_pct': _ret_h,
+                                'pnl_pct': _ret_h,
+                                'return_pct': _ret_h,
+                                'peak_pnl_pct': float(_hwm_orch.get('peak_pnl_pct', h.get('peak_pnl_pct', _ret_h)) or _ret_h),
+                                'peak_price': float(_hwm_orch.get('peak_price', h.get('peak_price', _cp_h)) or _cp_h),
+                                'trail_activated': bool(_hwm_orch.get('trail_activated', h.get('trail_activated', False))),
+                                'entry_date': _ed_orch or h.get('entry_date'),
+                                'stream_id': str(h.get('stream_id') or _hwm_orch.get('stream_id') or ''),
+                                'track': str(h.get('track') or _hwm_orch.get('track') or ''),
+                                'market': h.get('market', 'US' if _is_us_h else 'KR')
+                            }
+                            if _fx_deg_h:
+                                positions[t]['fx_degraded'] = True
+                        _kis_loaded = True
+                    except Exception as _k_err:
+                        logger.warning(f"kis_portfolio.json 로드 예외: {_k_err}")
+                if not _kis_loaded:
+                    total_nav = 0.0
+                    cash = 0.0
+                    positions = {}
+                    holdings = {}
+                    self._data_quality_exit_only = True
             elif shadow_path.exists():
                 try:
                     sp_data = json.loads(shadow_path.read_text(encoding='utf-8'))
@@ -482,14 +491,21 @@ class StreamOrchestrator:
                     positions = raw_pos
                     holdings = raw_pos
 
-            # ★ Wave 0 E8: HWM = 추적된 자산 고점(shadow hwm)과 현재 NAV의 최대값.
-            #   (기존: 설정 초기자본이 NAV보다 4% 크면 hwm=nav로 리셋 → live에서 DD가 항상 0)
+            # ★ Wave 0 E8: HWM = 추적된 자산 고점과 현재 NAV의 최대값 (Live 모드는 kis_portfolio.json 격리).
             _tracked_hwm = 0.0
             try:
-                if shadow_path.exists():
+                if getattr(self, 'exec_mode', 'live') == 'live':
+                    if kis_path.exists():
+                        _kp_hwm_data = json.loads(kis_path.read_text(encoding='utf-8'))
+                        _tracked_hwm = float(
+                            _kp_hwm_data.get('hwm')
+                            or (_kp_hwm_data.get('account', {}) or {}).get('hwm')
+                            or 0.0
+                        )
+                elif shadow_path.exists():
                     _tracked_hwm = float(json.loads(shadow_path.read_text(encoding='utf-8')).get('hwm') or 0.0)
             except Exception as _hwm_err:
-                logger.error(f"  [HWM] shadow hwm 로드 실패: {_hwm_err}")
+                logger.error(f"  [HWM] hwm 로드 실패: {_hwm_err}")
             _live_hwm = max(_tracked_hwm, total_nav)
 
             _cash_usd = 0.0
@@ -2873,10 +2889,13 @@ class StreamOrchestrator:
         # ★ Medallion-Grade Waterfall Allocation (S4 제외, 종합계좌 통합 배분)
         # 1. 현금 비중 확보
         # [Phase 37: Moonshot Booster] Kelly Booster 발동 조건 확인 + 현금 비율 오버라이드
+        _kelly_pf_path = str(
+            _ROOT / 'results' / ('kis_portfolio.json' if getattr(self, 'exec_mode', 'live') == 'live' else 'shadow_portfolio.json')
+        )
         _kelly_active = _is_kelly_booster_active(
             regime=regime,
             signal_cache_path=str(_ROOT / 'results' / 'signal_cache.json'),
-            portfolio_path=str(_ROOT / 'results' / 'shadow_portfolio.json'),
+            portfolio_path=_kelly_pf_path,
         )
         import os as _os_gen
         from datetime import time as _dtime_gen
@@ -2913,7 +2932,7 @@ class StreamOrchestrator:
         _kelly_max_positions = None
         if _kelly_active:
             _kelly_max_positions = _compute_kelly_max_positions(
-                portfolio_path=str(_ROOT / 'results' / 'shadow_portfolio.json')
+                portfolio_path=_kelly_pf_path
             )
             logger.info(f"  [Phase 37] Kelly 압축: S2/S3 최대 {_kelly_max_positions}종목")
 
@@ -3480,11 +3499,14 @@ class StreamOrchestrator:
                 positions = portfolio['positions']
             elif portfolio and 'holdings' in portfolio:
                 positions = portfolio['holdings']
-            elif getattr(self, 'exec_mode', 'live') == 'live' and (_ROOT / 'results' / 'kis_portfolio.json').exists():
+            elif getattr(self, 'exec_mode', 'live') == 'live':
+                _kis_exit_path = _ROOT / 'results' / 'kis_portfolio.json'
+                if not _kis_exit_path.exists():
+                    return exit_orders
                 import json as _json_exit
                 from src.execution.position_ledger import PositionLedgerManager
                 ledger_mgr = PositionLedgerManager()
-                _kp = _json_exit.loads((_ROOT / 'results' / 'kis_portfolio.json').read_text(encoding='utf-8'))
+                _kp = _json_exit.loads(_kis_exit_path.read_text(encoding='utf-8'))
                 for t, h in _kp.get('holdings', {}).items():
                     curr_p = float(h.get('current_price', 0.0))
                     curr_ret = float(h.get('return_pct', 0.0))
@@ -3834,7 +3856,7 @@ class StreamOrchestrator:
         try:
             import json
             positions = (portfolio or {}).get('positions') or (portfolio or {}).get('holdings') or {}
-            if not positions:
+            if not positions and getattr(self, 'exec_mode', 'live') != 'live':
                 sp_path = _ROOT / 'results' / 'shadow_portfolio.json'
                 if not sp_path.exists():
                     return orders
@@ -4091,7 +4113,7 @@ def _is_kelly_booster_active(regime, signal_cache_path, portfolio_path):
         if not sp_path.exists():
             return False
         sp = json.loads(sp_path.read_text(encoding='utf-8'))
-        positions = sp.get('positions', {})
+        positions = sp.get('positions') or sp.get('holdings') or {}
         conf_vals = [
             float(v.get('ml_confidence', 0) or v.get('confidence', 0))
             for v in positions.values()

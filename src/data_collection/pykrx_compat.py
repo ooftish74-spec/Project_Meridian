@@ -346,7 +346,7 @@ class _PykrxCompatStock:
             logger.error(f'get_market_ticker_list API: {e}', exc_info=True)
         try:
             base_data = Path(__file__).resolve().parent.parent.parent / 'data'
-            for sub in ('kr_markets', 'historical_10y'):
+            for sub in ('kr_markets',):
                 data_dir = base_data / sub
                 if data_dir.exists():
                     tickers = [f.stem.replace('kr_', '') for f in data_dir.glob('*.parquet')]

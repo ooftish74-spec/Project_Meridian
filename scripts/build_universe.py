@@ -34,23 +34,41 @@ logger = logging.getLogger('universe_builder')
 cfg = DynamicConfig()
 _RESULTS = _ROOT / 'results'
 _FEATURE_STORE = _ROOT / 'data' / 'feature_store'
-_HIST_10Y = _ROOT / 'data' / 'kr_markets'
+_KR_MARKETS = _ROOT / 'data' / 'kr_markets'
+_US_PRICES = _ROOT / 'data' / 'us_stocks' / 'prices'
+_EXCLUDED_US_SYMBOLS = {'BTC', 'ETH', 'VIX', 'SOX', 'NDX', 'SPX', 'DXY'}
+
+
+def _is_valid_kr_ticker(t: str) -> bool:
+    return len(t) == 6 and t.isdigit()
+
+
+def _is_valid_us_ticker(t: str) -> bool:
+    return 1 <= len(t) <= 5 and t.isalpha() and t.isupper() and t not in _EXCLUDED_US_SYMBOLS
 
 
 def get_feature_store_tickers() -> Set[str]:
     """가용한 데이터 디렉토리에서 종목 목록 도출."""
     tickers = set()
-    for d in [_HIST_10Y, _ROOT / 'data' / 'us_stocks' / 'prices', _FEATURE_STORE, _ROOT / 'data' / 'historical_10y']:
+    for d in [_KR_MARKETS, _FEATURE_STORE]:
         if d.exists():
             for p in d.glob('*.parquet'):
-                t = p.stem.replace('kr_', '').replace('_features', '')
-                if t and not t.startswith('cross_') and not t.startswith('signal_'):
+                if p.stem.startswith('us_'):
+                    continue
+                t = p.stem.removeprefix('kr_').removesuffix('_features')
+                if _is_valid_kr_ticker(t):
                     tickers.add(t)
+    if _US_PRICES.exists():
+        for p in _US_PRICES.glob('*.parquet'):
+            t = p.stem
+            if _is_valid_us_ticker(t):
+                tickers.add(t)
     try:
         from src.data_collection.universe_loader import get_universe_tickers
         for t in get_universe_tickers(market='KR+ETF'):
-            if t and not t.startswith('cross_') and not t.startswith('signal_'):
-                tickers.add(t)
+            t_str = str(t).strip()
+            if _is_valid_kr_ticker(t_str) or _is_valid_us_ticker(t_str):
+                tickers.add(t_str)
     except Exception:
         pass
     return tickers
@@ -59,28 +77,28 @@ def get_feature_store_tickers() -> Set[str]:
 def compute_liquidity(ticker: str, lookback_days: int = 20) -> float:
     """최근 N일 평균 거래대금 (원) 계산."""
     search_paths = [
-        _HIST_10Y / f'kr_{ticker}.parquet',
-        _HIST_10Y / f'{ticker}.parquet',
-        _ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
-        _ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
-        _ROOT / 'data' / f'kr_{ticker}.parquet'
+        _KR_MARKETS / f'kr_{ticker}.parquet',
+        _KR_MARKETS / f'{ticker}.parquet',
+        _US_PRICES / f'{ticker}.parquet',
     ]
     for fp in search_paths:
         if fp.exists():
             try:
                 df = pd.read_parquet(fp)
+                if df is None or df.empty:
+                    return 0.0
                 df.columns = [str(c).lower() for c in df.columns]
                 if 'volume' not in df.columns or 'close' not in df.columns:
-                    return 10000000000.0  # US stocks / ETFs default fallback liquidity
+                    return 0.0
                 recent = df.tail(lookback_days)
                 volume = pd.to_numeric(recent['volume'], errors='coerce').fillna(0)
                 close = pd.to_numeric(recent['close'], errors='coerce').fillna(0)
                 turnover = (volume * close).mean()
-                return float(turnover) if turnover > 0 else 10000000000.0
+                return float(turnover) if pd.notna(turnover) and turnover > 0 else 0.0
             except Exception as e:
                 logger.debug(f"Liquidity fallback for {ticker}: {e}")
-                return 10000000000.0
-    return 10000000000.0
+                return 0.0
+    return 0.0
 
 
 def build_universe(min_turnover_억: float = 10.0,

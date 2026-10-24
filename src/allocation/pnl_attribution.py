@@ -164,11 +164,19 @@ class PnLAttributor:
         return {}
 
     def _load_portfolio_value(self) -> float:
+        _is_live_pa = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
         try:
-            sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
-            nav = sp.get('nav', 0) or sp.get('total_value', 0)
-            if nav > 0:
-                return float(nav)
+            _kp_f = _RESULTS / 'kis_portfolio.json'
+            if _kp_f.exists():
+                _kp = json.loads(_kp_f.read_text())
+                _nav_k = _kp.get('nav', 0) or (_kp.get('account', {}) or {}).get('total_equity', 0)
+                if _nav_k and float(_nav_k) > 0:
+                    return float(_nav_k)
+            if not _is_live_pa:
+                sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
+                nav = sp.get('nav', 0) or sp.get('total_value', 0)
+                if nav > 0:
+                    return float(nav)
         except Exception as _e1:
             logger.critical(f'  [pnl_attribution] PnL attribution 섹션 2: {_e1}', exc_info=True)
         return float(cfg.get('portfolio.initial_capital'))

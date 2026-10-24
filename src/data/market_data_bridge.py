@@ -44,7 +44,7 @@ def _load_alpha_signals_fallback(project_root: Path) -> Dict:
     alpha_signal.json (Subscriber가 쓰는 캐시) → discovered_alphas.json 순으로 시도.
     두 파일 모두 없거나 파싱 실패해도 크래시 없이 빈 dict 반환.
     """
-    for _candidate in [project_root / 'results' / 'alpha_signal.json', project_root / 'data' / 'alpha_signal.json']:
+    for _candidate in [project_root / 'results' / 'alpha_signal.json']:
         if _candidate.exists():
             try:
                 _data = json.loads(_candidate.read_text())
@@ -595,7 +595,7 @@ class MarketDataBridge:
             }
         """
         result = {'vix_history': [], 'kospi_returns': []}
-        for vix_pq in [_DATA_DIR / 'kr_markets' / 'cross_vix.parquet', _DATA_DIR / 'global_markets' / 'us_stocks' / '^VIX.parquet', _DATA_DIR / 'kr_markets' / 'VIX.parquet']:
+        for vix_pq in [_DATA_DIR / 'kr_markets' / 'cross_vix.parquet', _DATA_DIR / 'us_stocks' / 'prices' / '^VIX.parquet', _DATA_DIR / 'kr_markets' / 'VIX.parquet']:
             if vix_pq.exists():
                 try:
                     df = pd.read_parquet(vix_pq)
@@ -1178,7 +1178,7 @@ class MarketDataBridge:
         fs_dir = _DATA_DIR / 'feature_store'
         for ticker in sector_etf_tickers:
             close = None
-            for path in [fs_dir / f"{ticker}.parquet", _DATA_DIR / 'kr_markets' / f"kr_{ticker}.parquet", _DATA_DIR / 'kr_markets' / f"{ticker}.parquet"]:
+            for path in [_DATA_DIR / 'kr_markets' / f"kr_{ticker}.parquet", _DATA_DIR / 'kr_markets' / f"{ticker}.parquet", _DATA_DIR / 'us_stocks' / 'prices' / f"{ticker}.parquet", fs_dir / f"{ticker}.parquet"]:
                 if path.exists():
                     try:
                         df = pd.read_parquet(path)
@@ -1268,8 +1268,6 @@ class MarketDataBridge:
         paths_to_check = [
             _DATA_DIR / 'us_stocks' / 'prices' / f'{symbol}.parquet',
             _DATA_DIR / 'us_stocks' / 'prices' / f'{etf_alt}.parquet',
-            _DATA_DIR / 'global_markets' / 'us_stocks' / f'{symbol}.parquet', 
-            _DATA_DIR / 'global_markets' / 'us_stocks' / f'{etf_alt}.parquet',
             _DATA_DIR / 'us_stocks' / 'prices' / f'{symbol}.csv',
             _DATA_DIR / 'us_stocks' / 'prices' / f'{etf_alt}.csv',
         ]
@@ -1320,11 +1318,9 @@ class MarketDataBridge:
         is_us = not str(ticker).isdigit()
         if is_us:
             us_paths = [
-                _DATA_DIR / 'us_stocks' / f"{ticker}.csv",
-                _DATA_DIR / 'us_stocks' / f"{ticker}.parquet",
-                _DATA_DIR / 'us_stocks' / 'prices' / f"{ticker}.csv",
                 _DATA_DIR / 'us_stocks' / 'prices' / f"{ticker}.parquet",
-                _DATA_DIR / 'global_markets' / 'us_stocks' / f"{ticker}.parquet"
+                _DATA_DIR / 'us_stocks' / 'prices' / f"{ticker}.csv",
+                _DATA_DIR / 'us_stocks' / f"{ticker}.parquet",
             ]
             for path in us_paths:
                 if path.exists():
@@ -1335,6 +1331,8 @@ class MarketDataBridge:
                             df = pd.read_parquet(path)
                         if df is not None and len(df) > 0:
                             df.columns = [c.lower() for c in df.columns]
+                            last_date = pd.to_datetime(df['date'].iloc[-1] if 'date' in df.columns else df.index[-1])
+                            self._check_staleness(last_date, 'US', path.name)
                             return df
                     except Exception as _e_us_load:
                         logger.debug(f"US price load note: {_e_us_load}")

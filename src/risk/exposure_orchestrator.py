@@ -438,7 +438,7 @@ class ExposureOrchestrator:
         target_beta = self._compute_dynamic_target_beta(regime)
         long_exposure, current_hedge_amount, current_hedge_ticker = self._read_portfolio_exposure()
         sp = self._load_shadow_portfolio()
-        total_nav = float(sp.get('total_nav', sp.get('total_value', long_exposure)))
+        total_nav = float(sp.get('total_nav', sp.get('nav', sp.get('total_value', long_exposure))))
         if long_exposure <= 0 and target_beta >= 0:
             if current_hedge_amount > 0:
                 return self._build_hedge_result('SELL', current_hedge_ticker, 0, 0, target_beta, long_exposure, 0, current_hedge_amount, regime, reason='Long exposure=0 → 헤지 해제')
@@ -447,11 +447,12 @@ class ExposureOrchestrator:
         try:
             from src.risk.beta_hedge import BetaHedge
             _bh = BetaHedge()
-            _sp_path = _RESULTS / 'shadow_portfolio.json'
+            _is_live_eo = (_cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live')) == 'live') if _cfg else True
+            _sp_path = _RESULTS / ('kis_portfolio.json' if _is_live_eo else 'shadow_portfolio.json')
             if _sp_path.exists():
                 try:
                     _sp_raw = json.loads(_sp_path.read_text())
-                    _positions = _sp_raw.get('positions', {})
+                    _positions = _sp_raw.get('holdings' if _is_live_eo else 'positions', _sp_raw.get('positions', {}))
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
                     import logging
                     logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
@@ -556,23 +557,27 @@ class ExposureOrchestrator:
         return result
 
     def _read_portfolio_exposure(self):
-        """shadow_portfolio.json에서 S2~S4 long + H: 헤지 현황 읽기."""
+        """포트폴리오(live: kis_portfolio.json, shadow: shadow_portfolio.json)에서 S2~S4 long + H: 헤지 현황 읽기."""
         long_exposure = 0
         current_hedge_amount = 0
         current_hedge_ticker = '114800'
         try:
-            pf_path = _RESULTS / 'shadow_portfolio.json'
+            _is_live_exp = (_cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live')) == 'live') if _cfg else True
+            pf_path = _RESULTS / ('kis_portfolio.json' if _is_live_exp else 'shadow_portfolio.json')
             if pf_path.exists():
                 pf = json.loads(pf_path.read_text())
-                positions = pf.get('positions', {})
+                positions = pf.get('holdings' if _is_live_exp else 'positions', pf.get('positions', {}))
                 for pk, pos in positions.items():
-                    sid = pk.split(':')[0] if ':' in pk else ''
-                    mv = pos.get('market_value', pos.get('amount', 0))
-                    if sid in ('S2', 'S3', 'S4'):
-                        long_exposure += mv
-                    elif sid == 'H':
+                    sid = (pk.split(':')[0] if ':' in pk else '') or str(pos.get('stream_id', ''))
+                    tk = (pk.split(':')[1] if ':' in pk else pk) or str(pos.get('ticker', ''))
+                    mv = pos.get('market_value', pos.get('eval_krw', pos.get('amount', 0)))
+                    if not mv and pos.get('qty') and pos.get('current_price'):
+                        mv = float(pos.get('qty', 0)) * float(pos.get('current_price', 0))
+                    if sid in ('H', 'SYS_HEDGE') or tk in ('114800', '252670', 'SQQQ', 'SH', 'PSQ'):
                         current_hedge_amount += mv
-                        current_hedge_ticker = pk.split(':')[1] if ':' in pk else '114800'
+                        current_hedge_ticker = tk or '114800'
+                    elif sid in ('S2', 'S3', 'S4') or (_is_live_exp and mv > 0):
+                        long_exposure += mv
         except Exception as e:
             logger.critical(f'포트폴리오 읽기 실패: {e}', exc_info=True)
         return (long_exposure, current_hedge_amount, current_hedge_ticker)
@@ -687,28 +692,53 @@ class ExposureOrchestrator:
 
     def _load_shadow_portfolio(self) -> Dict:
         """실시간 계좌 상태 동기화 (Live 모드 시 shadow_portfolio.json 우회 배제)."""
-        try:
-            from src.execution._kis_adapter import KISTraderAdapter
-            adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=True)
-            if adapter.mode == 'live':
-                adapter.fetch_live_account_balance()
-                positions_dict = {}
-                for t, p in adapter.positions.items():
-                    positions_dict[f"LIVE:{t}"] = {
-                        'ticker': t,
-                        'quantity': p.quantity,
-                        'avg_price': p.avg_price,
-                        'current_price': p.current_price,
-                        'market_value': p.quantity * (p.current_price or p.avg_price or 0.0)
+        _is_live = (_cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live')) == 'live') if _cfg else True
+        if _is_live:
+            try:
+                from src.execution._kis_adapter import KISTraderAdapter
+                adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=True)
+                if adapter.mode == 'live':
+                    adapter.fetch_live_account_balance()
+                    positions_dict = {}
+                    for t, p in adapter.positions.items():
+                        positions_dict[f"LIVE:{t}"] = {
+                            'ticker': t,
+                            'quantity': p.quantity,
+                            'avg_price': p.avg_price,
+                            'current_price': p.current_price,
+                            'market_value': p.quantity * (p.current_price or p.avg_price or 0.0)
+                        }
+                    return {
+                        'nav': adapter.account.total_equity,
+                        'total_nav': adapter.account.total_equity,
+                        'cash': adapter.account.cash,
+                        'positions': positions_dict,
+                        'is_live_ssot': True
                     }
-                return {
-                    'nav': adapter.account.total_equity,
-                    'cash': adapter.account.cash,
-                    'positions': positions_dict,
-                    'is_live_ssot': True
-                }
-        except Exception as _e_live:
-            logger.debug(f"Live SSoT query fallback in exposure_orchestrator: {_e_live}")
+            except Exception as _e_live:
+                logger.debug(f"Live SSoT query fallback in exposure_orchestrator: {_e_live}")
+            try:
+                kis_path = _RESULTS / 'kis_portfolio.json'
+                if kis_path.exists():
+                    kp = json.loads(kis_path.read_text())
+                    acct = kp.get('account', {}) or {}
+                    nav_val = kp.get('nav') or acct.get('total_equity') or kp.get('total_value') or 0.0
+                    cash_val = kp.get('cash') or acct.get('cash') or 0.0
+                    holdings = kp.get('holdings') or kp.get('positions') or {}
+                    return {
+                        'nav': nav_val,
+                        'total_nav': nav_val,
+                        'cash': cash_val,
+                        'positions': holdings,
+                        'holdings': holdings,
+                        'hwm': kp.get('hwm') or acct.get('hwm') or nav_val,
+                        'daily_snapshots': kp.get('daily_snapshots', []),
+                        'daily_returns': kp.get('daily_returns', []),
+                        'is_live_ssot': True
+                    }
+            except Exception as _e_kp:
+                logger.error(f"kis_portfolio 로드 실패: {_e_kp}")
+            return {}
 
         try:
             path = _RESULTS / 'shadow_portfolio.json'

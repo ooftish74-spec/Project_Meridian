@@ -286,15 +286,17 @@ class S1InclusionValidator:
         return result
 
     def _load_portfolio(self) -> Dict:
-        """shadow_portfolio.json 로드."""
-        f = _RESULTS / 'shadow_portfolio.json'
-        if f.exists():
-            try:
-                return json.loads(f.read_text())
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                return {}
+        """포트폴리오(kis_portfolio.json 우선, shadow_portfolio.json 폴백) 로드."""
+        for fname in ('kis_portfolio.json', 'shadow_portfolio.json'):
+            f = _RESULTS / fname
+            if f.exists():
+                try:
+                    data = json.loads(f.read_text())
+                    if data.get('trade_history') or fname == 'shadow_portfolio.json':
+                        return data
+                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
+                    import logging
+                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
         return {}
 
     def _extract_s1_trades(self, portfolio: Dict) -> List[Dict]:

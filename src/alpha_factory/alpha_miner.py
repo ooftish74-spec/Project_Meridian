@@ -625,7 +625,7 @@ class AlphaMiner:
         df_list = []
         sample_tickers = _dc('alpha_factory.sample_tickers', ['005930', '000660', '035420', '005380', '051910'])
         for ticker in sample_tickers:
-            for pattern in [_FEATURE_STORE / f"kr_{ticker}_features.parquet", _FEATURE_STORE / f"{ticker}.parquet", _DATA_DIR / 'historical_10y' / f"kr_{ticker}.parquet"]:
+            for pattern in [_DATA_DIR / 'kr_markets' / f"kr_{ticker}.parquet", _FEATURE_STORE / f"{ticker}.parquet"]:
                 if pattern.exists():
                     try:
                         df = pd.read_parquet(pattern)

@@ -170,13 +170,15 @@ class StreamCorrelationMonitor:
         """
         import pandas as pd
         cfg = _cfg
+        _is_live_sc = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
         try:
-            sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
+            _pf_file = _RESULTS / ('kis_portfolio.json' if _is_live_sc else 'shadow_portfolio.json')
+            sp = json.loads(_pf_file.read_text())
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
             return self._fallback_concentration()
-        positions = sp.get('positions', {})
+        positions = sp.get('holdings') or sp.get('positions') or {}
         if len(positions) < 3:
             return self._fallback_concentration()
         tickers = []
@@ -185,10 +187,13 @@ class StreamCorrelationMonitor:
             tickers.append(ticker)
         tickers = list(set(tickers))
         lookback = pget('risk.corr_lookback', 60) if cfg else 60
-        data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+        data_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+        us_dir = _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices'
         returns_data = {}
         for ticker in tickers:
             fp = data_dir / f'kr_{ticker}.parquet'
+            if not fp.exists():
+                fp = us_dir / f'{ticker}.parquet'
             if not fp.exists():
                 continue
             try:

@@ -1430,7 +1430,7 @@ class KISTraderAdapter:
                     logger.debug(f"  KIS 해외 현재가 조회 폴백 ({tk_str}): {_us_e}")
             for _us_pq in (
                 _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{tk_str}.parquet',
-                _PROJECT_ROOT / 'data' / 'historical_10y' / f'{tk_str}.parquet',
+                _PROJECT_ROOT / 'data' / 'kr_markets' / f'{tk_str}.parquet',
             ):
                 if _us_pq.exists():
                     try:
@@ -1486,7 +1486,7 @@ class KISTraderAdapter:
                 import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
-        for _dir_name in ('kr_markets', 'historical_10y'):
+        for _dir_name in ('kr_markets',):
             for pattern in [f"kr_{tk_str}.parquet", f"{tk_str}.parquet"]:
                 pq = _PROJECT_ROOT / 'data' / _dir_name / pattern
                 if pq.exists():
@@ -1545,19 +1545,20 @@ class KISTraderAdapter:
         try:
             import json as _j
             from pathlib import Path as _P
-            _sp_path = _P(__file__).resolve().parents[2] / 'results' / 'shadow_portfolio.json'
-            if _sp_path.exists():
-                _sp = _j.loads(_sp_path.read_text())
-                for _pk, _pos in _sp.get('positions', {}).items():
-                    _sid = _pk.split(':')[0] if ':' in _pk else _pos.get('stream_id', '')
-                    if _sid in _exempt or _pos.get('track') == 'TRACK_2_BUFFETT_QVM':
-                        _s4_tickers.add(_pos.get('ticker', _pk.split(':')[-1]))
             _kp_path_ex = _P(__file__).resolve().parents[2] / 'results' / 'kis_portfolio.json'
             if _kp_path_ex.exists():
                 _kp_ex = _j.loads(_kp_path_ex.read_text())
                 for _tk_ex, _h_ex in (_kp_ex.get('holdings') or {}).items():
                     if isinstance(_h_ex, dict) and (_h_ex.get('stream_id') in _exempt or _h_ex.get('track') == 'TRACK_2_BUFFETT_QVM'):
                         _s4_tickers.add(str(_tk_ex))
+            elif self.mode != 'live':
+                _sp_path = _P(__file__).resolve().parents[2] / 'results' / 'shadow_portfolio.json'
+                if _sp_path.exists():
+                    _sp = _j.loads(_sp_path.read_text())
+                    for _pk, _pos in _sp.get('positions', {}).items():
+                        _sid = _pk.split(':')[0] if ':' in _pk else _pos.get('stream_id', '')
+                        if _sid in _exempt or _pos.get('track') == 'TRACK_2_BUFFETT_QVM':
+                            _s4_tickers.add(_pos.get('ticker', _pk.split(':')[-1]))
             from src.execution.position_ledger import PositionLedgerManager as _PLM_Ex
             _led_ex = _PLM_Ex().load_ledger()
             for _tk_l, _meta_l in (_led_ex or {}).items():

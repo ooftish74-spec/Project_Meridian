@@ -1279,13 +1279,15 @@ def _phase_overnight():
         engine = CrossAssetSignalEngine()
         signals = engine.generate_signals()
         if signals:
+            _ca_dir = signals.get('regime_adjustment', signals.get('direction', 'neutral'))
+            _ca_score = float(signals.get('composite_signal', signals.get('score', 0.0)) or 0.0)
             _update_signal_cache({
-                'cross_asset_direction': signals.get('direction', 'neutral'),
-                'cross_asset_score': signals.get('score', 0),
+                'cross_asset_direction': _ca_dir,
+                'cross_asset_score': _ca_score,
             })
-            results['cross_asset'] = signals.get('direction', 'neutral')
-            logger.info(f"  ✅ Cross-Asset: {signals.get('direction')} "
-                        f"(score={signals.get('score', 0):.2f})")
+            results['cross_asset'] = _ca_dir
+            logger.info(f"  ✅ Cross-Asset: {_ca_dir} "
+                        f"(score={_ca_score:.2f})")
     except ImportError as e:
         logger.error("  cross_asset_signals import 실패", exc_info=True)
     except Exception as e:
@@ -1350,8 +1352,12 @@ def _phase_overnight():
             'updated_by': 'daily_pipeline.overnight',
         }
 
-        # 하위 호환: 'regime' 키 유지 (기존 소비자용)
-        pipeline_state['regime'] = current_us_regime
+        # 하위 호환: 'regime' 키 유지 (KR 레짐 우선 보존, US neutral 덮어쓰기 금지)
+        pipeline_state['us_regime'] = current_us_regime
+        if kr_regime or prev_state.get('regime'):
+            pipeline_state['regime'] = kr_regime or prev_state.get('regime')
+        else:
+            pipeline_state['regime'] = current_us_regime
 
         atomic_write_json(state_file, pipeline_state, indent=2)
 
@@ -1652,13 +1658,21 @@ def _phase_intraday():
             try:
                 from src.data_collection.kis_websocket import start_realtime_streaming
                 ws_tickers = set()
-                _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-                if _shadow_f.exists():
-                    _sp = json.loads(_shadow_f.read_text())
-                    for pos in _sp.get('positions', {}).values():
-                        tk = pos.get('ticker', '')
-                        if tk:
-                            ws_tickers.add(tk)
+                _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+                if _kis_f.exists():
+                    _kp = json.loads(_kis_f.read_text())
+                    for tk, pos in (_kp.get('holdings') or {}).items():
+                        _tk_s = (pos.get('ticker') if isinstance(pos, dict) else None) or tk
+                        if _tk_s:
+                            ws_tickers.add(str(_tk_s))
+                else:
+                    _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
+                    if _shadow_f.exists():
+                        _sp = json.loads(_shadow_f.read_text())
+                        for pos in _sp.get('positions', {}).values():
+                            tk = pos.get('ticker', '')
+                            if tk:
+                                ws_tickers.add(tk)
                 _ws_core_etfs = cfg.get('ws.core_etf_tickers',
                                         ['069500', '122630', '252670', '114800'])
                 ws_tickers.update(_ws_core_etfs)
@@ -1676,13 +1690,21 @@ def _phase_intraday():
         try:
             from src.data_collection.kis_websocket import start_realtime_streaming
             ws_tickers = set()
-            _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-            if _shadow_f.exists():
-                _sp = json.loads(_shadow_f.read_text())
-                for pos in _sp.get('positions', {}).values():
-                    tk = pos.get('ticker', '')
-                    if tk:
-                        ws_tickers.add(tk)
+            _kis_f = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            if _kis_f.exists():
+                _kp = json.loads(_kis_f.read_text())
+                for tk, pos in (_kp.get('holdings') or {}).items():
+                    _tk_s = (pos.get('ticker') if isinstance(pos, dict) else None) or tk
+                    if _tk_s:
+                        ws_tickers.add(str(_tk_s))
+            else:
+                _shadow_f = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
+                if _shadow_f.exists():
+                    _sp = json.loads(_shadow_f.read_text())
+                    for pos in _sp.get('positions', {}).values():
+                        tk = pos.get('ticker', '')
+                        if tk:
+                            ws_tickers.add(tk)
             _ws_core_etfs = cfg.get('ws.core_etf_tickers',
                                     ['069500', '122630', '252670', '114800'])
             ws_tickers.update(_ws_core_etfs)
@@ -2527,7 +2549,7 @@ def _phase_weekly_validate():
         logger.info("  ⏭️ 전용 검증 함수 없음 — 데이터 무결성 체크")
         try:
             import pandas as pd
-            data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+            data_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
             parquets = list(data_dir.glob('kr_*.parquet'))
             valid = sum(1 for p in parquets if pd.read_parquet(p).shape[0] > 0)
             logger.info(f"  ✅ 데이터 무결성: {valid}/{len(parquets)} 파일 정상")

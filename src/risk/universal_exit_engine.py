@@ -45,8 +45,11 @@ class UniversalExitEngine:
         try:
             from pathlib import Path
             from src.utils.market_calendar import is_kr_ticker as _is_kr_atr
-            data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
-            p_file = data_dir / f"kr_{ticker}.parquet" if _is_kr_atr(str(ticker)) else data_dir / f"us_{ticker}.parquet"
+            p_file = (
+                (_PROJECT_ROOT / 'data' / 'kr_markets' / f"kr_{ticker}.parquet")
+                if _is_kr_atr(str(ticker))
+                else (_PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f"{ticker}.parquet")
+            )
             if p_file.exists():
                 import pandas as pd
                 df = pd.read_parquet(p_file)
@@ -180,7 +183,11 @@ class UniversalExitEngine:
             is_kr_tk = _is_kr_uee(str(ticker))
             if price <= 0:
                 try:
-                    _pq_p = _PROJECT_ROOT / 'data' / 'historical_10y' / (f"kr_{ticker}.parquet" if is_kr_tk else f"us_{ticker}.parquet")
+                    _pq_p = (
+                        (_PROJECT_ROOT / 'data' / 'kr_markets' / f"kr_{ticker}.parquet")
+                        if is_kr_tk
+                        else (_PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f"{ticker}.parquet")
+                    )
                     if _pq_p.exists():
                         import pandas as _pd_ex
                         price = float(_pd_ex.read_parquet(_pq_p)['close'].dropna().iloc[-1])
@@ -404,9 +411,12 @@ class UniversalExitEngine:
                 try:
                     import numpy as _np_t2
                     import pandas as _pd_t2
-                    _kr_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
-                    if not _kr_pq.exists():
-                        _kr_pq = _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet'
+                    from src.utils.market_calendar import is_kr_ticker as _is_kr_atr
+                    _kr_pq = (
+                        (_PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet')
+                        if _is_kr_atr(str(ticker))
+                        else (_PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet')
+                    )
                     if _kr_pq.exists():
                         _df_p = _pd_t2.read_parquet(_kr_pq)
                         _c_col = 'close' if 'close' in _df_p.columns else ('Close' if 'Close' in _df_p.columns else None)

@@ -206,9 +206,8 @@ def default_sources() -> Dict[str, Callable[[], Optional[SeriesSnapshot]]]:
     return {
         # CBOE VIX daily close. US close 16:00 ET ≈ 21:00 UTC (20:00 in DST; 1h difference is immaterial for τ≥24h).
         'vix_daily': make_file_source(
-            ['data/us_stocks/prices/^VIX.parquet', 'data/kr_markets/us_stocks/^VIX.parquet',
-             'data/lake/indices_us/VIX.csv', 'data/lake/indices_global/VIX.csv',
-             'data/raw_historical/VOL_VIX.csv', 'data/global_markets/us_vix.parquet',
-             'data/kr_markets/cross_vix.parquet', 'data/global_markets/cross_vix.parquet'],
+            ['data/us_stocks/prices/^VIX.parquet', 'data/kr_markets/cross_vix.parquet',
+             'data/kr_markets/us_vix.parquet', 'data/lake/indices_us/VIX.csv',
+             'data/lake/indices_global/VIX.csv'],
             eod_hour_utc=21, min_rows=60),
     }

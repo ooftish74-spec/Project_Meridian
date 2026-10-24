@@ -184,8 +184,8 @@ class InvestorFlowCollector:
         df = None
         try:
             parquet_candidates = [
+                _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
                 _PROJECT_ROOT / 'data' / 'korea_stocks' / 'prices' / f'{ticker}.parquet',
-                _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{ticker}.parquet',
             ]
             for parquet_path in parquet_candidates:
                 if parquet_path.exists():

@@ -81,8 +81,10 @@ class BetaHedge:
         return result
 
     def _load_portfolio(self) -> Optional[Dict]:
-        """shadow_portfolio.json 로드."""
-        p = RESULTS / 'shadow_portfolio.json'
+        """포트폴리오(live: kis_portfolio.json, shadow: shadow_portfolio.json) 로드."""
+        cfg = DynamicConfig()
+        _is_live_bh = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live'
+        p = RESULTS / ('kis_portfolio.json' if _is_live_bh else 'shadow_portfolio.json')
         if p.exists():
             try:
                 return json.loads(p.read_text(encoding='utf-8'))
@@ -171,20 +173,6 @@ class BetaHedge:
                     logger.info(f'  📈 BetaHedge [Phase 90]: 강세장(Bull) 예측 → Target Beta = {target_beta}')
         except Exception as e:
             logger.critical(f'  [BetaHedge] HMM 확률 로드 실패: {e}', exc_info=True)
-        try:
-            alpha_path = PROJECT_ROOT / 'data' / 'alpha_signal.json'
-            if alpha_path.exists():
-                alpha_data = json.loads(alpha_path.read_text())
-                alert = alpha_data.get('S1_signal', {}).get('contagion_alert', 'NORMAL')
-                if alert == 'CRITICAL':
-                    is_contagion = True
-                    beta_multiplier = pget('beta_hedge.contagion_multiplier', 1.5)
-                    min_beta = -1.0
-                    beta = max(beta, 0.2) * beta_multiplier
-                    target_beta = -0.5
-                    logger.warning(f'  🚨 Alpha Factory Contagion CRITICAL 감지: 헤지 증폭 (adjusted_beta={beta:.3f}, target={target_beta})')
-        except Exception as e:
-            logger.critical(f'  Alpha Factory 신호 로드 실패: {e}', exc_info=True)
         beta_diff = beta - target_beta
         if beta_diff <= 0 and (not is_contagion):
             return {'action': 'NONE', 'reason': f'현재 Beta({beta:.3f}) ≤ Target Beta({target_beta:.3f}), 추가 헤지 불필요', 'hedge_ratio': 0}

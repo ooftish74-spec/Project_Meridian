@@ -197,7 +197,7 @@ class QVMUniverse:
         paths = [
             _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
             _PROJECT_ROOT / 'data' / 'feature_store' / f'{ticker}.parquet',
-            _PROJECT_ROOT / 'data' / 'historical_10y' / f'{ticker}.parquet',
+            _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
         ]
         for p in paths:
             if p.exists():

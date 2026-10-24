@@ -479,7 +479,7 @@ class KISWebSocketClient:
         """parquet에서 최근 종가 로드."""
         try:
             import pandas as pd
-            path = _PROJECT_ROOT / 'data' / 'historical_10y' / f"kr_{ticker}.parquet"
+            path = _PROJECT_ROOT / 'data' / 'kr_markets' / f"kr_{ticker}.parquet"
             if path.exists():
                 df = pd.read_parquet(path)
                 return float(df['close'].iloc[-1])

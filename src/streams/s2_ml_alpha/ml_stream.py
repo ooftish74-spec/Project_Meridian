@@ -42,13 +42,8 @@ logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _MODEL_DIR = _PROJECT_ROOT / 'results' / 'models'
-_latest_dir = _PROJECT_ROOT / 'data' / 'feature_store' / 'latest'
-_min_latest_parquets = 20
-if _latest_dir.exists() and len(list(_latest_dir.glob('*.parquet'))) >= _min_latest_parquets:
-    _FEATURE_STORE_DIR = _latest_dir
-else:
-    _FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store'
-_HISTORICAL_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+_FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store'
+_HISTORICAL_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 _SECTOR_MAP_PATH = _PROJECT_ROOT / 'data' / 'sector_map.json'
 try:
     from src.intelligence.v4_features import extract_v4, FEATURE_NAMES_V6
@@ -100,7 +95,6 @@ class S2MLAlphaStream(BaseStream):
         except Exception:
             pass
         ensemble_path = _MODEL_DIR / 'stock_ranker_ensemble.pkl'
-        meta_path = _MODEL_DIR / 'ensemble_meta.json'
         self._fast_corrector = None
         fast_path = _MODEL_DIR / 'fast_corrector.joblib'
         if fast_path.exists():
@@ -109,62 +103,6 @@ class S2MLAlphaStream(BaseStream):
                 self._fast_corrector = FastCorrector.load(fast_path)
             except Exception as e:
                 logger.warning(f'  ⚠️ FastCorrector 로드 실패: {e}')
-        if meta_path.exists():
-            try:
-                import json as _json, joblib as _jl
-                _meta = _json.loads(meta_path.read_text())
-                _model_files = _meta.get('model_files', {})
-                if _model_files:
-                    _models = {}
-                    _loaded = 0
-                    for _mname, _mfile in _model_files.items():
-                        _mpath = _MODEL_DIR / _mfile
-                        if _mpath.exists():
-                            try:
-                                _models[_mname] = _jl.load(_mpath)
-                                _loaded += 1
-                            except Exception as _me:
-                                from src.utils.error_logger import log_error_rate_limited
-                                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_me}", exc_info=True)
-                                logger.debug(f'  S2: {_mname} joblib 로드 실패: {_me}')
-                    if _loaded >= 3:
-                        self._models = _models
-                        from src.intelligence.v4_features import FEATURE_NAMES_V6
-                        self._feature_names = _meta.get('feature_names') or FEATURE_NAMES_V6
-                        self._model_meta = {'val_acc': _meta.get('val_acc', 0), 'val_auc': _meta.get('val_auc', 0), 'train_date': _meta.get('train_date', ''), 'version': _meta.get('version', '')}
-                        self._model_loaded = True
-                        raw_weights = _meta.get('model_weights') or _meta.get('ensemble_weights', {})
-                        if raw_weights:
-                            self._model_weights = raw_weights
-                        self._model_meta['model_weights'] = self._model_weights
-                        feat_means = _meta.get('feature_means')
-                        if feat_means is not None:
-                            self._feature_means = np.array(feat_means)
-                            feat_stds = _meta.get('feature_stds')
-                            self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
-                        raw_feat_means = _meta.get('raw_feature_means')
-                        if raw_feat_means is not None:
-                            self._raw_feature_means = np.array(raw_feat_means, dtype=float)
-                            raw_feat_stds = _meta.get('raw_feature_stds')
-                            self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if raw_feat_stds is not None else np.ones(len(raw_feat_means), dtype=float)
-                        logger.info(f"  S2: joblib 앙상블 로드 완료 ({_loaded}/{len(_model_files)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
-                        conformal_path = _MODEL_DIR / 'conformal_state.pkl'
-                        if conformal_path.exists():
-                            try:
-                                self._conformal_state = self._safe_pickle_load(conformal_path)
-                                logger.info('  S2: Conformal Predictor 로드 완료')
-                            except Exception:
-                                from src.utils.error_logger import log_error_rate_limited
-                                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: (exception variable 없음)", exc_info=True)
-                                logger.debug('  S2: Conformal state 로드 실패 (무시)')
-                        return
-            except ImportError as e:
-                from src.utils.error_logger import log_error_rate_limited
-                log_error_rate_limited(__name__, f'🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}', exc_info=True)
-            except Exception as _je:
-                from src.utils.error_logger import log_error_rate_limited
-                log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {_je}", exc_info=True)
-                logger.debug(f'  S2: joblib 로드 실패, pkl fallback: {_je}')
         if not ensemble_path.exists():
             logger.info('  S2: 앙상블 모델 없음 → Fallback 모드')
             return
@@ -636,11 +574,12 @@ class S2MLAlphaStream(BaseStream):
         logger.info('  S2: Feature Store 데이터 직접 섭취 (중복 연산 제거)')
         parquets = sorted(_FEATURE_STORE_DIR.glob('*.parquet'))
         seen_tickers = set()
+        _ref_ts = pd.Timestamp(target_date).tz_localize(None) if target_date is not None else pd.Timestamp(datetime.now()).tz_localize(None)
         for pf in parquets:
-            ticker = pf.stem.removeprefix('kr_').removeprefix('us_').removesuffix('_features')
-            if ticker in seen_tickers:
+            if not (len(pf.stem) == 6 and pf.stem.isdigit()):
                 continue
-            if not (len(ticker) == 6 and ticker.isdigit()):
+            ticker = pf.stem
+            if ticker in seen_tickers:
                 continue
             if ticker in etf_set:
                 continue
@@ -653,26 +592,42 @@ class S2MLAlphaStream(BaseStream):
                 df = pd.read_parquet(pf)
                 if df.empty:
                     continue
-                if target_date is not None:
+                _cols_lower = {str(c).lower(): c for c in df.columns}
+                _has_date = isinstance(df.index, pd.DatetimeIndex) or ('date' in _cols_lower)
+                _has_close = 'close' in _cols_lower
+                _use_fs_row = False
+                latest = None
+                if _has_date and _has_close:
                     try:
-                        _pit_ts = pd.Timestamp(target_date)
-                        df_pit = df[df.index <= _pit_ts]
-                        if df_pit.empty:
-                            logger.warning(f'  S2 PIT: {ticker} target_date={target_date} 이전 데이터 없음, 스킵')
-                            continue
-                        latest = df_pit.iloc[-1]
+                        _df_work = df
+                        if not isinstance(_df_work.index, pd.DatetimeIndex) and 'date' in _cols_lower:
+                            _dcol = _cols_lower['date']
+                            _df_work = _df_work.assign(_dt=pd.to_datetime(_df_work[_dcol], errors='coerce')).dropna(subset=['_dt']).set_index('_dt').sort_index()
+                        if target_date is not None:
+                            _df_pit = _df_work[_df_work.index.tz_localize(None) <= _ref_ts]
+                            if _df_pit.empty:
+                                logger.warning(f'  S2 PIT: {ticker} target_date={target_date} 이전 데이터 없음, 스킵')
+                                continue
+                            _df_work = _df_pit
+                        if not _df_work.empty:
+                            _last_dt = pd.Timestamp(_df_work.index[-1]).tz_localize(None)
+                            if (_ref_ts - _last_dt).days <= 5:
+                                latest = _df_work.iloc[-1]
+                                _use_fs_row = True
                     except Exception as _pit_slice_e:
-                        logger.warning(f'  S2 PIT: {ticker} PIT 슬라이싱 실패 ({_pit_slice_e}), latest fallback')
-                        latest = df.iloc[-1]
+                        logger.warning(f'  S2 PIT: {ticker} PIT 슬라이싱 실패 ({_pit_slice_e}), fresh OHLCV fallback')
+                        _use_fs_row = False
+                if _use_fs_row and latest is not None:
+                    feature_dict = latest.to_dict()
+                    if 'bb_pctb' in feature_dict and 'bb_position' not in feature_dict:
+                        feature_dict['bb_position'] = feature_dict['bb_pctb']
+                    if 'macd_hist' in feature_dict and 'macd_signal' not in feature_dict:
+                        feature_dict['macd_signal'] = feature_dict['macd_hist']
+                    if 'vol_trend' in feature_dict and 'volume_ratio_20d' not in feature_dict:
+                        feature_dict['volume_ratio_20d'] = feature_dict['vol_trend']
                 else:
-                    latest = df.iloc[-1]
-                feature_dict = latest.to_dict()
-                if 'bb_pctb' in feature_dict and 'bb_position' not in feature_dict:
-                    feature_dict['bb_position'] = feature_dict['bb_pctb']
-                if 'macd_hist' in feature_dict and 'macd_signal' not in feature_dict:
-                    feature_dict['macd_signal'] = feature_dict['macd_hist']
-                if 'vol_trend' in feature_dict and 'volume_ratio_20d' not in feature_dict:
-                    feature_dict['volume_ratio_20d'] = feature_dict['vol_trend']
+                    # RangeIndex without date/close or stale (> 5 days): do NOT bypass extract_v4 with frozen row
+                    feature_dict = {}
                 _close_px = float(feature_dict.get('close') or feature_dict.get('Close') or 0.0)
                 if _close_px <= 0.0:
                     for _p_cand in (
@@ -689,6 +644,8 @@ class S2MLAlphaStream(BaseStream):
                                     break
                             except Exception:
                                 pass
+                if not _use_fs_row and _close_px <= 0.0:
+                    continue
                 candidates.append({'ticker': ticker, 'name': ticker, 'features': feature_dict, 'rsi': feature_dict.get('rsi_14', 50), 'bb_position': feature_dict.get('bb_position', 0.5), 'macd_signal': feature_dict.get('macd_signal', 0), 'volume_ratio': feature_dict.get('volume_ratio_20d', 1.0), 'momentum_5d': feature_dict.get('mom_7', 0), 'close': max(0.0, _close_px), 'foreign_net_5d': _flow_by_ticker.get(ticker, {}).get('foreign_net_5d', 0), 'inst_net_5d': _flow_by_ticker.get(ticker, {}).get('inst_net_5d', 0)})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
@@ -786,7 +743,7 @@ class S2MLAlphaStream(BaseStream):
         if use_automl:
             from src.analysis.automl_feature_generator import AutoMLFeatureGenerator
             from pathlib import Path
-            data_dir = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'historical_10y'
+            data_dir = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'kr_markets'
             automl_gen = AutoMLFeatureGenerator(data_dir)
         _ca_latest = self._load_cross_asset_latest()
         _aux_preserve = {
@@ -829,28 +786,27 @@ class S2MLAlphaStream(BaseStream):
                     else:
                         from src.data.market_data_bridge import MarketDataBridge
                         from src.intelligence.v4_features import extract_v4
-                        if _bridge is None:
-                            _bridge = MarketDataBridge()
                         _df = None
-                        try:
-                            _df = _bridge._load_price_history(_tk_v4)
-                        except Exception:
-                            _df = None
+                        for _pq_cand in (
+                            _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{_tk_v4}.parquet',
+                            _PROJECT_ROOT / 'data' / 'kr_markets' / f'{_tk_v4}.parquet',
+                        ):
+                            if _pq_cand.exists():
+                                try:
+                                    _df_pq = pd.read_parquet(_pq_cand)
+                                    _df_pq.columns = [str(col).lower() for col in _df_pq.columns]
+                                    if len(_df_pq) >= _min_bars and 'close' in _df_pq.columns:
+                                        _df = _df_pq
+                                        break
+                                except Exception:
+                                    continue
                         if _df is None or len(_df) < _min_bars:
-                            for _pq_cand in (
-                                _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{_tk_v4}.parquet',
-                                _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{_tk_v4}.parquet',
-                                _PROJECT_ROOT / 'data' / 'kr_markets' / f'{_tk_v4}.parquet',
-                            ):
-                                if _pq_cand.exists():
-                                    try:
-                                        _df_pq = pd.read_parquet(_pq_cand)
-                                        _df_pq.columns = [str(col).lower() for col in _df_pq.columns]
-                                        if len(_df_pq) >= _min_bars and 'close' in _df_pq.columns:
-                                            _df = _df_pq
-                                            break
-                                    except Exception:
-                                        continue
+                            if _bridge is None:
+                                _bridge = MarketDataBridge()
+                            try:
+                                _df = _bridge._load_price_history(_tk_v4)
+                            except Exception:
+                                _df = None
                         _v4_feats = {}
                         if _df is not None and len(_df) >= _min_bars:
                             _c = _df['close'].values.astype(float)
@@ -1531,13 +1487,28 @@ class S2MLAlphaStream(BaseStream):
             return pget('sizer.kelly_fraction', 0.65)
         try:
             import json
-            pf_path = _PROJECT_ROOT / 'results' / 'shadow_portfolio.json'
-            if not pf_path.exists():
-                return pget('sizer.kelly_fraction', 0.65)
-            pf = json.loads(pf_path.read_text())
-            trades = pf.get('trade_history', [])
-            s2_sells = [t for t in trades if t.get('action') == 'SELL' and t.get('stream_id', t.get('stream', '')) == 'S2']
             min_trades = pget('a3.kelly_recal_min_trades', 50)
+            _is_live = str(cfg.get('execution.current_mode', 'live')).lower() == 'live'
+            _pf_candidates = (
+                [_PROJECT_ROOT / 'results' / 'kis_portfolio.json', _PROJECT_ROOT / 'results' / 'shadow_portfolio.json']
+                if _is_live
+                else [_PROJECT_ROOT / 'results' / 'shadow_portfolio.json', _PROJECT_ROOT / 'results' / 'kis_portfolio.json']
+            )
+            s2_sells = []
+            for pf_path in _pf_candidates:
+                if not pf_path.exists():
+                    continue
+                try:
+                    pf = json.loads(pf_path.read_text())
+                    trades = pf.get('trade_history', [])
+                    cand_sells = [t for t in trades if t.get('action') == 'SELL' and t.get('stream_id', t.get('stream', '')) == 'S2']
+                    if len(cand_sells) >= min_trades:
+                        s2_sells = cand_sells
+                        break
+                    if not s2_sells and cand_sells:
+                        s2_sells = cand_sells
+                except Exception:
+                    continue
             if len(s2_sells) < min_trades:
                 return pget('sizer.kelly_fraction', 0.65)
             recent = s2_sells[-min_trades:]

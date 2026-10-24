@@ -83,8 +83,8 @@ class MLRegimeRouter:
             except Exception:
                 pass
             try:
-                from src.streams.s2_ml_alpha.ml_stream import MLStream
-                model = MLStream._safe_pickle_load(model_file)
+                from src.streams.s2_ml_alpha.ml_stream import S2MLAlphaStream
+                model = S2MLAlphaStream._safe_pickle_load(model_file)
             except Exception:
                 with open(model_file, 'rb') as f:
                     model = pickle.load(f)
@@ -162,40 +162,49 @@ class MLRegimeRouter:
         return self._predict_from_unified_ensemble(X, regime)
 
     def _predict_from_unified_ensemble(self, X: np.ndarray, regime: str) -> float:
-        """기존 통합 앙상블 (ensemble_meta.json) 기반 예측 (fallback).
+        """기존 통합 앙상블 (stock_ranker_ensemble.pkl) 기반 예측 (fallback).
 
         [Phase 10: Alpha Breakthrough]
         """
         try:
-            import joblib
+            from src.streams.s2_ml_alpha.ml_stream import S2MLAlphaStream
+            ensemble_file = _MODEL_DIR / 'stock_ranker_ensemble.pkl'
             meta_file = _MODEL_DIR / 'ensemble_meta.json'
-            if not meta_file.exists():
-                return 0.5
-            meta = json.loads(meta_file.read_text())
-            model_files = meta.get('model_files', {})
-            weights = meta.get('model_weights', {})
-            preds, ws = ([], [])
-            for model_name, mf in model_files.items():
-                mp = Path(mf)
-                if not mp.is_absolute():
-                    mp = _MODEL_DIR / mp
-                if not mp.exists():
-                    continue
+            meta = {}
+            if meta_file.exists():
                 try:
-                    m = joblib.load(mp)
-                    if hasattr(m, 'predict_proba'):
-                        X_in = self._align_features(X, m)
-                        X_in_clean = np.nan_to_num(X_in, nan=0.0)
-                        p = float(m.predict_proba(X_in_clean)[0, 1])
-                        preds.append(p)
-                        ws.append(weights.get(model_name, 1.0))
-                except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                    continue
-            if preds:
-                w_sum = sum(ws)
-                return sum((p * w for p, w in zip(preds, ws))) / max(w_sum, 1e-09)
+                    meta = json.loads(meta_file.read_text())
+                except Exception:
+                    meta = {}
+            if ensemble_file.exists():
+                pkg = S2MLAlphaStream._safe_pickle_load(ensemble_file)
+                if isinstance(pkg, dict):
+                    models = pkg.get('models', {}) or {}
+                    pkg_meta = pkg.get('metadata', {}) or {}
+                    weights = (
+                        pkg.get('model_weights')
+                        or pkg.get('ensemble_weights')
+                        or pkg_meta.get('model_weights')
+                        or pkg_meta.get('ensemble_weights')
+                        or meta.get('model_weights')
+                        or meta.get('ensemble_weights')
+                        or {}
+                    )
+                    preds, ws = ([], [])
+                    for model_name, m in models.items():
+                        try:
+                            if hasattr(m, 'predict_proba'):
+                                X_in = self._align_features(X, m)
+                                X_in_clean = np.nan_to_num(X_in, nan=0.0)
+                                p = float(m.predict_proba(X_in_clean)[0, 1])
+                                preds.append(p)
+                                ws.append(float(weights.get(model_name, 1.0)))
+                        except Exception as e:
+                            logger.debug(f"Targeted fallback: {e}")
+                            continue
+                    if preds:
+                        w_sum = sum(ws)
+                        return sum((p * w for p, w in zip(preds, ws))) / max(w_sum, 1e-09)
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)

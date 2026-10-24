@@ -219,7 +219,7 @@ class CustomsTradeClient:
             return None
         if output_dir is None:
             project_root = Path(__file__).resolve().parent.parent.parent
-            output_dir = project_root / 'data' / 'historical_10y'
+            output_dir = project_root / 'data' / 'kr_markets'
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         now = datetime.now()

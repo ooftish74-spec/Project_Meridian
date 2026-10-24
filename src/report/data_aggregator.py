@@ -18,9 +18,9 @@ class DataAggregator:
         self.macro_data = pd.DataFrame()
 
     def load_meridian_data(self):
-        """Load JSON results from Project Meridian (Strict Physical Real Trade Ledger vs Sandbox Isolation)."""
-        _MERIDIAN_LIVE_RESULTS.mkdir(parents=True, exist_ok=True)
+        """Load JSON results from Project Meridian results/ directory."""
         files_to_load = {
+            'kis_portfolio': 'kis_portfolio.json',
             'trade_ledger': 'trade_ledger.json',
             'shadow_summary': 'shadow_summary.json',
             'shadow_portfolio': 'shadow_portfolio.json',
@@ -31,11 +31,7 @@ class DataAggregator:
             'signal_cache': 'signal_cache.json'
         }
         for key, filename in files_to_load.items():
-            # 1차 시도: results/live/ (실계좌 전용 디렉터리)
-            filepath = _MERIDIAN_LIVE_RESULTS / filename
-            if not filepath.exists():
-                # 2차 폴백: results/
-                filepath = _MERIDIAN_RESULTS / filename
+            filepath = _MERIDIAN_RESULTS / filename
             
             if filepath.exists():
                 try:

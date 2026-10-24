@@ -253,22 +253,17 @@ class MedallionOrchestrator:
 
     def _collect_positions(self) -> Dict:
         positions = {}
+        _is_live_mo = (_cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live')) == 'live') if _cfg else True
         try:
-            sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
-            positions['a3_shadow'] = sp.get('positions', {})
+            _pf_f = _RESULTS / ('kis_portfolio.json' if _is_live_mo else 'shadow_portfolio.json')
+            sp = json.loads(_pf_f.read_text())
+            positions['a3_shadow'] = sp.get('holdings' if _is_live_mo else 'positions', sp.get('positions', {}))
         except (FileNotFoundError, json.JSONDecodeError):
             positions['a3_shadow'] = {}
         except Exception as e:
-            logger.critical(f'A3 shadow 포지션 로드 중 예상치 못한 에러 (fallback 빈 딕셔너리 사용): {e}', exc_info=True)
+            logger.critical(f'포지션 로드 중 예상치 못한 에러 (fallback 빈 딕셔너리 사용): {e}', exc_info=True)
             positions['a3_shadow'] = {}
-        try:
-            adv = json.loads((_RESULTS / 'sleeve_b_advisory.json').read_text())
-            positions['sleeve_b'] = adv.get('positions', {})
-        except (FileNotFoundError, json.JSONDecodeError):
-            positions['sleeve_b'] = {}
-        except Exception as e:
-            logger.critical(f'Sleeve B 포지션 로드 중 예상치 못한 에러 (fallback 빈 딕셔너리 사용): {e}', exc_info=True)
-            positions['sleeve_b'] = {}
+        positions['sleeve_b'] = {}
         return positions
 
     def _get_sentiment(self) -> Dict:

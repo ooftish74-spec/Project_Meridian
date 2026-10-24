@@ -1538,7 +1538,7 @@ class ShadowPortfolioManager:
         _wr_for_trailing = 0.30  # fallback
         try:
             import json as _tj
-            _sp_path = Path(__file__).resolve().parent.parent / 'results' / 'shadow_portfolio.json'
+            _sp_path = getattr(self, 'file_path', Path(__file__).resolve().parent.parent.parent / 'results' / 'shadow_portfolio.json')
             if _sp_path.exists():
                 _sp_data = _tj.loads(_sp_path.read_text())
                 _recent = [t for t in _sp_data.get('trade_history', [])
@@ -1717,7 +1717,7 @@ class ShadowPortfolioManager:
             try:
                 import numpy as _np
                 import pandas as _pd
-                _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+                _data_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
                 for fp in [_data_dir / f"kr_{ticker}.parquet",
                            _data_dir / f"{ticker}.parquet"]:
                     if fp.exists():
@@ -3191,7 +3191,7 @@ class ShadowPortfolioManager:
         # ── 당일 벤치마크 수익률 (069500 / KOSPI) 조회 — 전일 날짜 지연(Lag) 오염 차단 ──
         bench_ret = 0.0
         _root_dir = Path(__file__).resolve().parent.parent.parent
-        for _rel_p in ('data/kr_markets/kr_069500.parquet', 'data/historical_10y/kr_069500.parquet'):
+        for _rel_p in ('data/kr_markets/kr_069500.parquet',):
             if bench_ret != 0.0:
                 break
             try:

@@ -247,7 +247,7 @@ class TransitionSignalDetector:
                     data['vix_history'] = [scalar_vix]
             if len(data['kospi_returns']) < 30:
                 import pandas as pd
-                for pq_rel in ('data/historical_10y/kr_069500.parquet', 'data/kr_markets/kr_069500.parquet', 'data/signals/signal_kospi200.parquet'):
+                for pq_rel in ('data/kr_markets/kr_069500.parquet', 'data/signals/signal_kospi200.parquet'):
                     pq_f = _PROJECT_ROOT / pq_rel
                     if pq_f.exists():
                         k_df = pd.read_parquet(pq_f)

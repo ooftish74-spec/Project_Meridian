@@ -26,10 +26,10 @@ _DEFAULT_ETF_TICKERS = load_table('src.data_collection.market_data_prefetch._DEF
 
 def _get_etf_universe() -> List[str]:
     """
-    [R-03] Universe 동적 로드 — universe_cache.json에서 ETF 타겟 확장.
+    [R-03] Universe 동적 로드 — results/dynamic_universe.json에서 ETF 타겟 확장.
 
     우선순위:
-      1. data/universe_cache.json (type='etf" 또는 관련 타입 필터)
+      1. results/dynamic_universe.json (type='etf' 또는 관련 타입 필터)
       2. results/l1_daytrader_state.json (날마다 다른 ETF만 사용 중일 때)
       3. _DEFAULT_ETF_TICKERS (모듈 기본값 fallback)
 
@@ -39,24 +39,35 @@ def _get_etf_universe() -> List[str]:
         종목코드 리스트 (중복 제거, _DEFAULT_ETF_TICKERS 병합)
     """
     tickers: set = set()
-    cache_file = PROJECT_ROOT / 'data' / 'universe_cache.json'
+    cache_file = PROJECT_ROOT / 'results' / 'dynamic_universe.json'
     if cache_file.exists():
         try:
             raw = json.loads(cache_file.read_text(encoding='utf-8'))
-            universe = raw.get('universe', raw if isinstance(raw, dict) else {})
-            _etf_types = {'etf', 'bond_etf', 'index_etf', 'inverse_etf', 'leveraged_etf', 'ETF', 'KR_ETF'}
-            for ticker, info in universe.items():
-                if isinstance(info, dict):
-                    asset_type = info.get('type', info.get('asset_type', ''))
-                    if asset_type in _etf_types:
+            if isinstance(raw, list):
+                try:
+                    from src.data_collection.universe_loader import get_universe_tickers
+                    etf_set = set(get_universe_tickers(market='ETF') or [])
+                except Exception:
+                    etf_set = set(_DEFAULT_ETF_TICKERS)
+                for item in raw:
+                    tk = str(item).strip()
+                    if tk in etf_set:
+                        tickers.add(tk)
+            elif isinstance(raw, dict):
+                universe = raw.get('universe', raw)
+                _etf_types = {'etf', 'bond_etf', 'index_etf', 'inverse_etf', 'leveraged_etf', 'ETF', 'KR_ETF'}
+                for ticker, info in universe.items():
+                    if isinstance(info, dict):
+                        asset_type = info.get('type', info.get('asset_type', ''))
+                        if asset_type in _etf_types:
+                            tickers.add(ticker.strip())
+                    elif isinstance(info, str) and 'etf' in info.lower():
                         tickers.add(ticker.strip())
-                elif isinstance(info, str) and 'etf' in info.lower():
-                    tickers.add(ticker.strip())
             if tickers:
-                logger.debug(f"  ETF 유니버스 로드 (universe_cache): {len(tickers)}종목")
+                logger.debug(f"  ETF 유니버스 로드 (dynamic_universe): {len(tickers)}종목")
                 return list(tickers | set(_DEFAULT_ETF_TICKERS))
         except Exception as e:
-            logger.error(f"  universe_cache 로드 실패: {e}", exc_info=True)
+            logger.error(f"  dynamic_universe 로드 실패: {e}", exc_info=True)
     state_file = PROJECT_ROOT / 'results' / 'l1_daytrader_state.json'
     if state_file.exists():
         try:
@@ -133,8 +144,8 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
         return _fallback_vix_from_overnight(error=str(e))
 
 def _fallback_vix_from_overnight(error: str='') -> Dict:
-    """overnight_intelligence_history에서 VIX 이력 추출 후 캐시 갱신."""
-    hist_file = PROJECT_ROOT / 'results' / 'overnight_intelligence_history.json'
+    """overnight_signals.json에서 VIX 이력 추출 후 캐시 갱신."""
+    hist_file = PROJECT_ROOT / 'results' / 'overnight_signals.json'
     if not hist_file.exists():
         try:
             cached = json.loads(VIX_CACHE.read_text())

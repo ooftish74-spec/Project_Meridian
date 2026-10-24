@@ -121,17 +121,6 @@ class FactorRiskDecomposer:
                     returns = [d.get('daily_return_pct', 0) / 100 for d in daily[-lookback:]]
                     if len(returns) >= min_obs:
                         return np.array(returns)
-            sp_path = _RESULTS / 'shadow_portfolio.json'
-            if sp_path.exists():
-                sp = json.loads(sp_path.read_text())
-                snaps = sp.get('daily_snapshots', [])
-                if len(snaps) > min_obs:
-                    navs = [s.get('nav', 0) for s in snaps[-(lookback + 1):] if s.get('nav', 0) > 0]
-                    if len(navs) > min_obs:
-                        returns = np.diff(navs) / np.array(navs[:-1])
-                        returns = returns[np.isfinite(returns)]
-                        if len(returns) >= min_obs:
-                            return returns
             kis_path = _RESULTS / 'kis_portfolio.json'
             if kis_path.exists():
                 kis = json.loads(kis_path.read_text())
@@ -170,6 +159,17 @@ class FactorRiskDecomposer:
                             for w, r in zip(weights, series_list):
                                 port_ret += w * r[-min_l:]
                             return port_ret
+            sp_path = _RESULTS / 'shadow_portfolio.json'
+            if sp_path.exists():
+                sp = json.loads(sp_path.read_text())
+                snaps = sp.get('daily_snapshots', [])
+                if len(snaps) > min_obs:
+                    navs = [s.get('nav', 0) for s in snaps[-(lookback + 1):] if s.get('nav', 0) > 0]
+                    if len(navs) > min_obs:
+                        returns = np.diff(navs) / np.array(navs[:-1])
+                        returns = returns[np.isfinite(returns)]
+                        if len(returns) >= min_obs:
+                            return returns
         except Exception as e:
             logger.critical(f'포트폴리오 수익률 로드 실패: {e}', exc_info=True)
         return None

@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_DATA_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
+_DATA_DIR = _PROJECT_ROOT / 'data' / 'kr_markets'
 _RESULTS = _PROJECT_ROOT / 'results'
 try:
     from config.dynamic_config import DynamicConfig
@@ -364,12 +364,15 @@ class RealtimeVaR:
     def _load_positions(self) -> Optional[Dict]:
         """Live SSOT kis_portfolio.json 및 Shadow Portfolio에서 포지션 로드."""
         from src.utils.market_calendar import is_kr_ticker as _is_kr_var_pos
+        is_live = _cfg_get('execution.current_mode', _cfg_get('execution.mode', 'live')) == 'live'
         # 1. Live SSOT kis_portfolio.json 우선 확인
         try:
             kis_path = _RESULTS / 'kis_portfolio.json'
             if kis_path.exists():
                 kis_data = json.loads(kis_path.read_text(encoding='utf-8'))
                 holdings = kis_data.get('holdings', {})
+                if not holdings and is_live:
+                    return {}
                 if holdings:
                     fx_rate = float(kis_data.get('fx_rate') or kis_data.get('account', {}).get('fx_rate') or 0.0)
                     if fx_rate <= 0:
@@ -411,8 +414,12 @@ class RealtimeVaR:
                                 'current_value': pos_v
                             }
                         return positions
+                    if is_live:
+                        return {}
         except Exception as _e_kis:
             logger.debug(f"  [realtime_var] kis_portfolio load note: {_e_kis}")
+        if is_live:
+            return {}
 
         # 2. Shadow Portfolio / trade_ledger.json fallback
         try:
