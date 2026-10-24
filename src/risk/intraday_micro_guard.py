@@ -95,14 +95,37 @@ class IntradayMicroGuard:
     def _load_vix(self, market_data: dict) -> Tuple[float, float]:
         """(vix_current, vix_prev) 로드."""
         # 1. 외부 주입 market_data 우선
-        vix_curr = float(market_data.get('vix', 0.0)) if market_data else 0.0
-        vix_prev = float(market_data.get('vix_prev', 0.0)) if market_data else 0.0
-
-        # 2. signal_cache fallback
-        if vix_curr <= 0:
+        sc = market_data if (market_data and float(market_data.get('vix', 0.0) or 0.0) > 0) else None
+        if sc is not None:
+            vix_curr = float(sc.get('vix', 0.0) or 0.0)
+            vix_prev = float(sc.get('vix_prev', 0.0) or 0.0)
+            vix_chg_1d = sc.get('vix_change_1d')
+            vix_hist = sc.get('vix_history', [])
+            if vix_chg_1d is None and not vix_hist and isinstance(sc.get('signal_cache'), dict):
+                vix_chg_1d = sc['signal_cache'].get('vix_change_1d')
+                vix_hist = sc['signal_cache'].get('vix_history', [])
+        else:
+            # 2. signal_cache fallback
             sc = self._load_signal_cache()
-            vix_curr = float(sc.get('vix', sc.get('VIX', 0.0)))
-            vix_prev = float(sc.get('vix_prev', sc.get('vix_1d', 0.0)))
+            vix_curr = float(sc.get('vix', sc.get('VIX', 0.0)) or 0.0)
+            vix_prev = float(sc.get('vix_prev', sc.get('vix_1d', 0.0)) or 0.0)
+            vix_chg_1d = sc.get('vix_change_1d')
+            vix_hist = sc.get('vix_history', [])
+
+        _tol = float(pget('micro_guard.vix_prev_tol', 0.05))
+        if vix_chg_1d is not None and vix_curr > 0:
+            _denom = 1.0 + float(vix_chg_1d) / 100.0
+            if _denom > 0:
+                implied_prev = vix_curr / _denom
+                if vix_prev <= 0 or abs(vix_prev - implied_prev) / max(implied_prev, 1.0) > _tol:
+                    if isinstance(vix_hist, list) and len(vix_hist) >= 2 and float(vix_hist[-2] or 0.0) > 0:
+                        _hist_prev = float(vix_hist[-2])
+                        vix_prev = _hist_prev if abs(_hist_prev - implied_prev) / max(implied_prev, 1.0) <= _tol else implied_prev
+                    else:
+                        vix_prev = implied_prev
+        elif isinstance(vix_hist, list) and len(vix_hist) >= 2 and float(vix_hist[-2] or 0.0) > 0:
+            if vix_prev <= 0:
+                vix_prev = float(vix_hist[-2])
 
         return vix_curr, vix_prev
 
@@ -114,7 +137,8 @@ class IntradayMicroGuard:
         if vix_curr >= self._vix_halt:
             return False, f'VIX_HALT vix={vix_curr:.1f} >= {self._vix_halt}'
         # 전일 대비 스파이크
-        if vix_prev > 0:
+        _min_spike_lvl = float(pget('micro_guard.vix_spike_min_level', 22.0))
+        if vix_prev > 0 and vix_curr >= _min_spike_lvl:
             spike = (vix_curr - vix_prev) / vix_prev
             if spike >= self._vix_spike:
                 return False, f'VIX_SPIKE +{spike:.1%} (curr={vix_curr:.1f} prev={vix_prev:.1f})'

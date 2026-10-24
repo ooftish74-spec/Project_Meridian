@@ -501,20 +501,34 @@ class RegimeDetector:
             score -= pcr_risk_penalty
         kospi = parse_metric(signal, 'kospi', parse_metric(signal, 'kospi_close', 0.0))
         kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
-        kospi_rets = market_data.get('kospi_returns', [])
-        _recent_5 = kospi_rets[-5:] if len(kospi_rets) >= 5 else []
-        _recent_6 = kospi_rets[-6:] if len(kospi_rets) >= 6 else _recent_5
+        kospi_rets = list(market_data.get('kospi_returns', []) or [])
+        _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
+        _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
+        _pct_unit_min = float(pget('regime.kospi_pct_unit_min', 0.05))
+        if _live_chg_pct != 0.0 and kospi_rets:
+            _live_ret_dec = _live_chg_pct / 100.0 if abs(_live_chg_pct) >= _pct_unit_min else _live_chg_pct
+            if abs(float(kospi_rets[-1]) - _live_ret_dec) > _ret_eps and abs(float(kospi_rets[-1]) - _live_chg_pct) > _ret_eps:
+                kospi_rets.append(_live_ret_dec)
+        _n5 = int(pget('regime.short_window_5d', 5))
+        _n6 = int(pget('regime.short_window_6d', 6))
+        _recent_5 = kospi_rets[-_n5:] if len(kospi_rets) >= _n5 else []
+        _recent_6 = kospi_rets[-_n6:] if len(kospi_rets) >= _n6 else _recent_5
         _cum_5d_pct = sum(_recent_5) * 100.0 if _recent_5 else 0.0
         _cum_6d_pct = sum(_recent_6) * 100.0 if _recent_6 else _cum_5d_pct
         _pos_5d = sum((1 for r in _recent_5 if r > 0))
-        _last_1d_pct = float(kospi_rets[-1]) * 100.0 if kospi_rets else float(parse_metric(signal, 'kospi_change_1d', parse_metric(signal, 'kospi_change_pct', 0.0)) or 0.0)
+        _last_1d_pct = float(kospi_rets[-1]) * 100.0 if kospi_rets else _live_chg_pct
+        _stab_5d_min = float(pget('regime.stabilized_5d_min_pct', -2.5))
+        _stab_1d_min = float(pget('regime.bleed_1d_floor_pct', -0.5))
+        _stab_pos_min = int(pget('regime.stabilized_pos_days_min', 3))
+        _vix_fear = float(pget('regime.stabilized_vix_max', 25.0))
+        _reb_ois_th = float(pget('regime.rebound_ois_min', 60.0))
         _short_term_stabilized = bool(
             _recent_5
-            and (_cum_5d_pct >= -2.5 or _cum_6d_pct >= -0.5 or _pos_5d >= 3)
-            and _last_1d_pct >= -0.5
-            and vix < vix_caution
+            and (_cum_5d_pct >= _stab_5d_min or _cum_6d_pct >= _stab_1d_min or _pos_5d >= _stab_pos_min)
+            and _last_1d_pct >= _stab_1d_min
+            and vix < _vix_fear
         )
-        _rebound_active = (ois >= 60.0 and vix < vix_caution) or _short_term_stabilized
+        _rebound_active = (ois >= _reb_ois_th and vix < _vix_fear) or _short_term_stabilized
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
             # [Quant Institutional Patch] 0.5 ~ 2.0 스케일 범위 검증 및 HMM/Ensemble 연속 레짐 스코어링
@@ -537,22 +551,33 @@ class RegimeDetector:
                     score += 10
             else:
                 logger.warning(f"  ⚠️ KOSPI vs MA20 괴리율 비정상(ratio={trend_ratio:.2f}). 스케일 오염으로 간주하여 패널티 무시.")
-        if len(kospi_rets) >= 10:
-            recent_10 = kospi_rets[-10:]
+        _n10 = int(pget('regime.bleed_window_days', 10))
+        _bleed_neg_crash = int(pget('regime.bleed_neg_days_crash', 8))
+        _bleed_cum_crash = float(pget('regime.bleed_cum_10d_crash_pct', -6.0))
+        _bleed_5d_floor = float(pget('regime.bleed_5d_floor_pct', -3.0))
+        _bleed_1d_floor = float(pget('regime.bleed_1d_floor_pct', -0.5))
+        _bleed_neg_bear = int(pget('regime.bleed_neg_days_bear', 6))
+        if len(kospi_rets) >= _n10:
+            recent_10 = kospi_rets[-_n10:]
             neg_count = sum((1 for r in recent_10 if r < 0))
             cum_ret_10d = sum(recent_10) * 100
-            if neg_count >= 8 or cum_ret_10d < -6.0:
+            if neg_count >= _bleed_neg_crash or cum_ret_10d < _bleed_cum_crash:
                 if _rebound_active:
                     logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 단기 안정화/반등(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%, OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
                     score -= 15
                     force_regime = 'caution'
                     crash_type = 'rebound_from_bleed'
+                elif _cum_5d_pct >= _bleed_5d_floor and _last_1d_pct >= _bleed_1d_floor:
+                    logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 단기 바닥 다지기(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%) 확인 → Bear 전환")
+                    score -= 30
+                    force_regime = 'bear'
+                    crash_type = 'bleed_stabilizing'
                 else:
                     logger.info(f"  [RegimeDetector] Slow Bleed 감지! (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Crash 강제 전환")
                     score -= 50
                     force_regime = 'crash'
                     crash_type = 'slow_bleed'
-            elif neg_count >= 6 or cum_ret_10d < -3.0:
+            elif neg_count >= _bleed_neg_bear or cum_ret_10d < _bleed_5d_floor:
                 logger.info(f"  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환")
                 score -= 30
                 force_regime = force_regime or ('caution' if _rebound_active else 'bear')
@@ -626,6 +651,8 @@ class RegimeDetector:
         _rebound_conf = 0.65
         if crash_type == 'rebound_from_bleed' or (force_regime == 'caution' and regime == 'caution'):
             conf_floor = max(float(conf_floor), _rebound_conf)
+        elif crash_type == 'bleed_stabilizing':
+            confidence = float(pget('regime.bleed_stabilizing_conf', 0.70))
         confidence = max(conf_floor, min(1.0, confidence))
         return {'regime': regime, 'score': round(score, 1), 'confidence': confidence, 'crash_type': crash_type, 'divergence_state': divergence_state, 'prob_flash_crash': prob_flash_crash, 'prob_recession': prob_recession, 'prob_liquidity_rally': prob_liquidity_rally, 'prob_recovery': prob_recovery, 'cross_asset_stress': cross_asset_stress}
 

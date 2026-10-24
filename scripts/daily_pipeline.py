@@ -1467,77 +1467,81 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     _guard = _DG()
                     _ref = _guard._load_reference()
                     if _ref is not None:
-                        # ★ 실제 피처 벡터 구성: 앙상블 feature_names 기반
+                        # ★ 실제 피처 벡터 구성: 앙상블 feature_names 기반 + extract_v4 + Rank-Z 동기화
                         _current_features = None
+                        _feat_names = []
                         try:
                             import numpy as np
-                            import pickle as _pkl_drift
+                            from src.streams.s2_ml_alpha.ml_stream import S2MLAlphaStream
+                            from src.intelligence.v4_features import extract_v4
+                            from src.intelligence.aux_data_loader import AuxDataLoader
+                            _ens_meta_p = _PROJECT_ROOT / 'results' / 'models' / 'ensemble_meta.json'
                             _ens_path = _PROJECT_ROOT / 'results' / 'models' / 'stock_ranker_ensemble.pkl'
-                            if _ens_path.exists():
-                                with open(_ens_path, 'rb') as _ef:
-                                    _ens_pkg = _pkl_drift.load(_ef)
-                                _feat_names = _ens_pkg.get('metadata', {}).get('feature_names', _ens_pkg.get('feature_names', []))
-                                if _feat_names:
-                                    # ── 1차: signal_cache stock_technicals ──
-                                    _sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
-                                    _sc = json.loads(_sc_path.read_text()) if _sc_path.exists() else {}
-                                    _st = _sc.get('stock_technicals', {})
-                                    _rows = []
-                                    for _tk, _td in _st.items():
-                                        if isinstance(_td, dict) and len(_td) >= 5:
-                                            _row = []
-                                            for _fn in _feat_names:
-                                                _row.append(float(_td.get(_fn, 0.0)))
-                                            _rows.append(_row)
+                            if _ens_meta_p.exists():
+                                _em_d = json.loads(_ens_meta_p.read_text())
+                                _feat_names = list(_em_d.get('feature_names') or [])
+                            if not _feat_names and _ens_path.exists():
+                                _ens_pkg = S2MLAlphaStream._safe_pickle_load(_ens_path)
+                                if isinstance(_ens_pkg, dict):
+                                    _feat_names = list(_ens_pkg.get('metadata', {}).get('feature_names') or _ens_pkg.get('feature_names') or [])
+                            if _feat_names:
+                                _sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                                _sc = json.loads(_sc_path.read_text()) if _sc_path.exists() else {}
+                                _st = _sc.get('stock_technicals', {}) if isinstance(_sc, dict) else {}
+                                _s2_tmp = S2MLAlphaStream.__new__(S2MLAlphaStream)
+                                _ca_dg = _s2_tmp._load_cross_asset_latest()
+                                _aux_dg = AuxDataLoader()
+                                _today_str = datetime.now().strftime('%Y-%m-%d')
+                                _rows = []
+                                _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
+                                _kr_mkt_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
+                                _parquets = sorted(_kr_mkt_dir.glob('kr_*.parquet')) if _kr_mkt_dir.exists() else []
+                                if len(_parquets) < 30 and _data_dir.exists():
+                                    _parquets = sorted(list(_parquets) + list(_data_dir.glob('kr_*.parquet')))
+                                _seen_dg_tks = set()
+                                for _pf in _parquets:
+                                    if len(_rows) >= 50:
+                                        break
+                                    _tk = _pf.stem.removeprefix('kr_')
+                                    if _tk in _seen_dg_tks or not (len(_tk) == 6 and _tk.isdigit()):
+                                        continue
+                                    _seen_dg_tks.add(_tk)
+                                    try:
+                                        _pdf = pd.read_parquet(_pf)
+                                        _pdf.columns = [str(_col).lower() for _col in _pdf.columns]
+                                        if len(_pdf) < 65 or 'close' not in _pdf.columns:
+                                            continue
+                                        _c = pd.to_numeric(_pdf['close'], errors='coerce').values.astype(float)
+                                        _h = pd.to_numeric(_pdf.get('high', _pdf['close']), errors='coerce').values.astype(float)
+                                        _l = pd.to_numeric(_pdf.get('low', _pdf['close']), errors='coerce').values.astype(float)
+                                        _o = pd.to_numeric(_pdf.get('open', _pdf['close']), errors='coerce').values.astype(float)
+                                        _v = pd.to_numeric(_pdf.get('volume', pd.Series(0.0, index=_pdf.index)), errors='coerce').fillna(0.0).values.astype(float)
+                                        _aux_f = _aux_dg.get_features(_tk, _today_str)
+                                        _fmap = extract_v4(_c, _h, _l, _o, _v, len(_c) - 1, cross_asset=_ca_dg, aux_data=_aux_f) or {}
+                                        if not _fmap:
+                                            continue
+                                        if isinstance(_st.get(_tk), dict):
+                                            for _k_st, _v_st in _st[_tk].items():
+                                                if _k_st not in _fmap and isinstance(_v_st, (int, float)):
+                                                    _fmap[_k_st] = float(_v_st)
+                                        _row = [float(0.0 if pd.isna(_fmap.get(_fn, 0.0)) else _fmap.get(_fn, 0.0)) for _fn in _feat_names]
+                                        _rows.append(_row)
+                                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                                        logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
+                                        continue
 
-                                    # ── 2차: parquet 기반 피처 추출 (fallback) ──
-                                    if len(_rows) < 20:
-                                        # (pd는 모듈 상단 import 사용 — 지역 import 시 함수 전체에서 UnboundLocalError 유발, ruff F823)
-                                        _data_dir = _PROJECT_ROOT / 'data' / 'historical_10y'
-                                        _kr_mkt_dir = _PROJECT_ROOT / 'data' / 'kr_markets'
-                                        _parquets = sorted(_data_dir.glob('kr_0*.parquet'))
-                                        if len(_parquets) < 20 and _kr_mkt_dir.exists():
-                                            _parquets = sorted(list(_parquets) + list(_kr_mkt_dir.glob('*.parquet')))
-                                        _parquets = _parquets[:50]
-                                        for _pf in _parquets:
-                                            try:
-                                                _pdf = pd.read_parquet(_pf)
-                                                if len(_pdf) < 20 or 'close' not in _pdf.columns:
-                                                    continue
-                                                _close = pd.to_numeric(_pdf['close'], errors='coerce').dropna()
-                                                _vol = pd.to_numeric(_pdf.get('volume', pd.Series(dtype=float)), errors='coerce').fillna(0)
-                                                if len(_close) < 20:
-                                                    continue
-                                                # 기본 피처 동적 계산
-                                                _fmap = {}
-                                                _c = _close.values
-                                                _fmap['rsi_14'] = 50.0  # 간이 RSI
-                                                _delta = np.diff(_c[-15:])
-                                                _gain = np.mean(_delta[_delta > 0]) if np.any(_delta > 0) else 0
-                                                _loss = -np.mean(_delta[_delta < 0]) if np.any(_delta < 0) else 1e-9
-                                                _rs = _gain / max(_loss, 1e-9)
-                                                _fmap['rsi_14'] = 100 - 100 / (1 + _rs)
-                                                _fmap['volume_ratio_20d'] = float(_vol.iloc[-1] / max(_vol.iloc[-20:].mean(), 1))
-                                                _sma20 = _c[-20:].mean()
-                                                _fmap['price_ma_ratio_20_60'] = float(_c[-1] / max(_sma20, 1))
-                                                _fmap['atr_pct'] = float(np.std(_c[-14:]) / max(_c[-1], 1) * 100)
-                                                _fmap['bb_position'] = float((_c[-1] - _sma20) / max(np.std(_c[-20:]) * 2, 1e-9))
-                                                # 피처 벡터 구성
-                                                _row = [float(_fmap.get(_fn, 0.0)) for _fn in _feat_names]
-                                                _rows.append(_row)
-                                            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                                                logging.getLogger(__name__).warning(f'Targeted fallback: {e}', exc_info=True)
-                                                continue
-
-                                    if len(_rows) >= 20:
-                                        _current_features = np.array(_rows)
-                                        logger.info(f"  ✅ DriftGuard: {len(_rows)}행 피처 구성 "
-                                                    f"({len(_feat_names)}차원)")
+                                if len(_rows) >= 20:
+                                    _current_features = np.asarray(_rows, dtype=float)
+                                    if cfg.get('ml.cross_sectional_standardize', True):
+                                        from src.ml.cross_sectional_eb_model import cross_sectional_rank_z_matrix
+                                        _current_features = cross_sectional_rank_z_matrix(_current_features)
+                                    logger.info(f"  ✅ DriftGuard: {len(_rows)}행 피처 구성 "
+                                                f"({len(_feat_names)}차원, Rank-Z 적용)")
                         except Exception as _feat_err:
                             logger.error(f"  DriftGuard 피처 구성 실패: {_feat_err}", exc_info=True)
 
                         if _current_features is not None and len(_current_features) >= 20:
-                            _guard.check(_current_features)
+                            _guard.check(_current_features, feature_names=_feat_names or None)
                             logger.info("  ✅ DriftGuard: check() 실행 → state 갱신")
                         else:
                             # 피처 없어도 timestamp 갱신 (freshness 유지)

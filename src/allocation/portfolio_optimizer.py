@@ -384,14 +384,41 @@ class PortfolioOptimizer:
         returns_list = []
         weight_list = []
         stream_order = []
+        raw_map = stream_metrics.get('raw_data', {}) if isinstance(stream_metrics.get('raw_data'), dict) else {}
         for sid in self.STREAMS:
-            sm = stream_metrics.get(sid, {})
+            sm = stream_metrics.get(sid) or raw_map.get(sid) or {}
+            if not isinstance(sm, dict):
+                sm = {}
             daily_r = sm.get('daily_returns', [])
-            if daily_r:
+            if not daily_r or sum(1 for x in daily_r if x and float(x) != 0.0) < 2:
+                daily_r = (raw_map.get(sid) or {}).get('daily_returns', []) if isinstance(raw_map.get(sid), dict) else []
+            if daily_r and sum(1 for x in daily_r if x and float(x) != 0.0) >= 2:
                 clean_r = np.nan_to_num(np.asarray(daily_r, dtype=float), nan=0.0, posinf=0.0, neginf=0.0).tolist()
                 returns_list.append(clean_r)
                 weight_list.append(weights.get(sid, 0))
                 stream_order.append(sid)
+        if len(returns_list) < 2:
+            try:
+                _proxy_map = {  # hardcode-ok: L0 stream benchmark proxy tickers for CVaR fallback
+                    'S0': '069500', 'S1': '069500', 'S2': '229200', 'S3': '069500',
+                    'S4': 'GLD', 'S5': 'QQQ', 'S10': 'SPY', 'S11': 'SOXX',
+                    'S12': '069500', 'S13': 'SPY', 'S14_PAIR_ALPHA': 'QQQ',
+                }
+                _needed_sids = [sid for sid in self.STREAMS if sid not in stream_order]
+                _tks = list(dict.fromkeys(_proxy_map[sid] for sid in _needed_sids if sid in _proxy_map))
+                _lb_days = int(pget('optimizer.cvar_lookback_days', 60))
+                df_proxy = self.load_aligned_returns(_tks, lookback_days=_lb_days) if _tks else None
+                if df_proxy is not None and not df_proxy.empty:
+                    for sid in _needed_sids:
+                        tk = _proxy_map.get(sid)
+                        if tk and tk in df_proxy.columns:
+                            col_r = np.nan_to_num(df_proxy[tk].values.astype(float), nan=0.0, posinf=0.0, neginf=0.0).tolist()
+                            if sum(1 for x in col_r if x != 0.0) >= 2:
+                                returns_list.append(col_r)
+                                weight_list.append(weights.get(sid, 0))
+                                stream_order.append(sid)
+            except Exception as _proxy_e:
+                logger.debug(f"  [CVaR검사] 프록시 수익률 폴백 예외: {_proxy_e}")
         if len(returns_list) < 2:
             logger.warning(f"  [CVaR검사] 데이터 부족 (stream {len(returns_list)}개 — 최소 2개 필요): CVaR 제약 무력화. 주의 필요.")
             return {'violated': False, 'reason': 'insufficient_data', 'warning': 'cvar_check_skipped_no_data'}
@@ -471,6 +498,13 @@ class PortfolioOptimizer:
             f = _RESULTS / 'stream_metrics.json'
             if f.exists():
                 metrics = json.loads(f.read_text())
+                if isinstance(metrics, dict) and isinstance(metrics.get('raw_data'), dict):
+                    for _sid, _rv in metrics['raw_data'].items():
+                        if isinstance(_rv, dict) and _rv.get('daily_returns'):
+                            if not isinstance(metrics.get(_sid), dict):
+                                metrics[_sid] = dict(_rv)
+                            elif not metrics[_sid].get('daily_returns'):
+                                metrics[_sid]['daily_returns'] = _rv['daily_returns']
         except Exception as _e4:
             logger.critical(f"  [portfolio_optimizer] stream_metrics 로드: {_e4}", exc_info=True)
         try:

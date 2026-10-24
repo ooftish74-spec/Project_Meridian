@@ -184,7 +184,7 @@ class DARTCollector:
         if not data or 'list' not in data:
             return {'active': False, 'signal': 0}
         items = data['list']
-        has_buyback = any(('취득' in str(item.get('acqs_mth', '')) for item in items))
+        has_buyback = any(('취득' in str(item.get('acqs_mth1', '') or item.get('acqs_mth', '')) for item in items))
         return {'active': has_buyback, 'count': len(items), 'signal': 0.8 if has_buyback else 0.0, 'interpretation': '자사주 매입 중 → Buy 시그널' if has_buyback else '자사주 활동 없음'}
 
     def _get_major_shareholders(self, corp_code: str, start: str, end: str) -> Dict:

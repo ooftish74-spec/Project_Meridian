@@ -35,18 +35,6 @@
    "weight": 0.4
   }
  ],
- "healthcare": [
-  {
-   "ticker": "207940",
-   "name": "삼성바이오로직스",
-   "weight": 0.6
-  },
-  {
-   "ticker": "068270",
-   "name": "셀트리온",
-   "weight": 0.4
-  }
- ],
  "defense": [
   {
    "ticker": "012450",
@@ -93,42 +81,6 @@
    "ticker": "055550",
    "name": "신한지주",
    "weight": 0.45
-  }
- ],
- "industrial": [
-  {
-   "ticker": "012450",
-   "name": "한화에어로스페이스",
-   "weight": 0.6
-  },
-  {
-   "ticker": "047810",
-   "name": "한국항공우주",
-   "weight": 0.4
-  }
- ],
- "us_semiconductor": [
-  {
-   "ticker": "005930",
-   "name": "삼성전자",
-   "weight": 0.6
-  },
-  {
-   "ticker": "000660",
-   "name": "SK하이닉스",
-   "weight": 0.4
-  }
- ],
- "us_tech": [
-  {
-   "ticker": "035420",
-   "name": "NAVER",
-   "weight": 0.6
-  },
-  {
-   "ticker": "035720",
-   "name": "카카오",
-   "weight": 0.4
   }
  ]
 }

@@ -150,8 +150,8 @@ class MacroCollector:
             _copper = _copper[~_copper.index.duplicated(keep='last')].sort_index()
             _gold = _gold[~_gold.index.duplicated(keep='last')].sort_index()
             _common_idx = _gold.index.union(_copper.index).sort_values()
-            _c_aligned = _copper.reindex(_common_idx).ffill(limit=5).bfill(limit=5)
-            _g_aligned = _gold.reindex(_common_idx).ffill(limit=5).bfill(limit=5)
+            _c_aligned = _copper.reindex(_common_idx).ffill(limit=5)
+            _g_aligned = _gold.reindex(_common_idx).ffill(limit=5)
             ratio = (_c_aligned / _g_aligned).replace([float('inf'), float('-inf')], float('nan')).dropna()
             return ratio[ratio > 0].rename('copper_gold_ratio')
         except Exception as _e:
@@ -207,7 +207,7 @@ class MacroCollector:
             if not gscpi_sub.empty and len(gscpi_sub) >= _gscpi_min:
                 idx = pd.date_range(start_norm, end_norm, freq='B')
                 combined_idx = gscpi_sub.index.union(idx).sort_values()
-                gscpi_aligned = gscpi_sub.reindex(combined_idx).ffill().bfill().reindex(idx)
+                gscpi_aligned = gscpi_sub.reindex(combined_idx).ffill().reindex(idx)
 
                 logger.info(f'  GSCPI(NY Fed): {len(gscpi_sub)}개 월간 관측치 수집 완료')
                 return gscpi_aligned.rename('gscpi')

@@ -42,8 +42,11 @@ logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _MODEL_DIR = _PROJECT_ROOT / 'results' / 'models'
-_FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store' / 'latest'
-if not _FEATURE_STORE_DIR.exists() or not any(_FEATURE_STORE_DIR.glob('*.parquet')):
+_latest_dir = _PROJECT_ROOT / 'data' / 'feature_store' / 'latest'
+_min_latest_parquets = 20
+if _latest_dir.exists() and len(list(_latest_dir.glob('*.parquet'))) >= _min_latest_parquets:
+    _FEATURE_STORE_DIR = _latest_dir
+else:
     _FEATURE_STORE_DIR = _PROJECT_ROOT / 'data' / 'feature_store'
 _HISTORICAL_DIR = _PROJECT_ROOT / 'data' / 'historical_10y'
 _SECTOR_MAP_PATH = _PROJECT_ROOT / 'data' / 'sector_map.json'
@@ -75,6 +78,8 @@ class S2MLAlphaStream(BaseStream):
         self._model_meta: Dict = {}
         self._feature_means: Optional[np.ndarray] = None
         self._feature_stds: Optional[np.ndarray] = None
+        self._raw_feature_means: Optional[np.ndarray] = None
+        self._raw_feature_stds: Optional[np.ndarray] = None
         self._model_weights: Dict[str, float] = {}
         self._ic_history: Dict[str, List[float]] = {}
         self._fundamental_filter = MeridianFundamentalFilter()
@@ -137,6 +142,11 @@ class S2MLAlphaStream(BaseStream):
                             self._feature_means = np.array(feat_means)
                             feat_stds = _meta.get('feature_stds')
                             self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
+                        raw_feat_means = _meta.get('raw_feature_means')
+                        if raw_feat_means is not None:
+                            self._raw_feature_means = np.array(raw_feat_means, dtype=float)
+                            raw_feat_stds = _meta.get('raw_feature_stds')
+                            self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if raw_feat_stds is not None else np.ones(len(raw_feat_means), dtype=float)
                         logger.info(f"  S2: joblib 앙상블 로드 완료 ({_loaded}/{len(_model_files)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
                         conformal_path = _MODEL_DIR / 'conformal_state.pkl'
                         if conformal_path.exists():
@@ -188,6 +198,11 @@ class S2MLAlphaStream(BaseStream):
                 self._feature_means = np.array(feat_means)
                 self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
                 logger.info('  S2: OOD 탐지용 피처 통계 로드 완료')
+            raw_feat_means = pkg.get('raw_feature_means') if pkg.get('raw_feature_means') is not None else meta.get('raw_feature_means')
+            raw_feat_stds = pkg.get('raw_feature_stds') if pkg.get('raw_feature_stds') is not None else meta.get('raw_feature_stds')
+            if raw_feat_means is not None:
+                self._raw_feature_means = np.array(raw_feat_means, dtype=float)
+                self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if raw_feat_stds is not None else np.ones(len(raw_feat_means), dtype=float)
             logger.info(f"  S2: pkl 앙상블 로드 완료 ({len(self._models)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
             conformal_path = _MODEL_DIR / 'conformal_state.pkl'
             if conformal_path.exists():
@@ -607,7 +622,7 @@ class S2MLAlphaStream(BaseStream):
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                     pass
         _fh_dir = _PROJECT_ROOT / 'data' / 'financials_history'
-        _require_fh = (_FEATURE_STORE_DIR == (_PROJECT_ROOT / 'data' / 'feature_store')) and _fh_dir.exists() and any(_fh_dir.glob('*.json'))
+        _require_fh = False
         _flow_by_ticker = {}
         try:
             sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
@@ -695,25 +710,65 @@ class S2MLAlphaStream(BaseStream):
             sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
             if sc_path.exists():
                 sc = _json.loads(sc_path.read_text())
-                sp500 = sc.get('sp500_change', sc.get('SP500', {}))
-                if isinstance(sp500, dict):
-                    ca['sp500_return'] = float(sp500.get('change_pct', 0))
-                elif isinstance(sp500, (int, float)):
-                    ca['sp500_return'] = float(sp500)
-                vix = sc.get('VIX', sc.get('vix', {}))
-                if isinstance(vix, dict):
-                    ca['vix_close'] = float(vix.get('value', 0))
-                    ca['vix_prev'] = float(vix.get('prev_value', vix.get('value', 0)))
-                elif isinstance(vix, (int, float)):
-                    ca['vix_close'] = float(vix)
-                    ca['vix_prev'] = float(vix)
-                usdkrw = sc.get('usdkrw', sc.get('USDKRW', {}))
-                if isinstance(usdkrw, dict):
-                    ca['usdkrw_close'] = float(usdkrw.get('value', 0))
-                    ca['usdkrw_5d_ago'] = float(usdkrw.get('prev_value', usdkrw.get('value', 0)))
-                elif isinstance(usdkrw, (int, float)):
-                    ca['usdkrw_close'] = float(usdkrw)
-                    ca['usdkrw_5d_ago'] = float(usdkrw)
+                sp500_chg = sc.get('sp500_change_1d', sc.get('spx_change_1d', sc.get('sp500_change')))
+                if isinstance(sp500_chg, (int, float)):
+                    ca['sp500_return'] = float(sp500_chg)
+                elif isinstance(sp500_chg, dict):
+                    ca['sp500_return'] = float(sp500_chg.get('change_pct', 0.0))
+                else:
+                    sp500_obj = sc.get('SP500')
+                    if isinstance(sp500_obj, dict):
+                        ca['sp500_return'] = float(sp500_obj.get('change_pct', 0.0))
+                vix_val = sc.get('vix', sc.get('VIX'))
+                if isinstance(vix_val, dict):
+                    ca['vix_close'] = float(vix_val.get('value', 0.0))
+                    ca['vix_prev'] = float(vix_val.get('prev_value', vix_val.get('value', 0.0)))
+                elif isinstance(vix_val, (int, float)):
+                    ca['vix_close'] = float(vix_val)
+                    vix_prev = sc.get('vix_prev')
+                    vix_chg_1d = sc.get('vix_change_1d')
+                    vix_hist = sc.get('vix_history', [])
+                    if isinstance(vix_prev, (int, float)) and float(vix_prev) > 0.0:
+                        ca['vix_prev'] = float(vix_prev)
+                    elif isinstance(vix_chg_1d, (int, float)) and (1.0 + float(vix_chg_1d) / float(100)) > 0.0:
+                        ca['vix_prev'] = float(vix_val) / (1.0 + float(vix_chg_1d) / float(100))
+                    elif isinstance(vix_hist, list) and len(vix_hist) >= 2 and float(vix_hist[-2]) > 0.0:
+                        ca['vix_prev'] = float(vix_hist[-2])
+                    else:
+                        ca['vix_prev'] = float(vix_val)
+                fx_val = sc.get('usdkrw', sc.get('USDKRW'))
+                if isinstance(fx_val, dict):
+                    ca['usdkrw_close'] = float(fx_val.get('value', 0.0))
+                    ca['usdkrw_5d_ago'] = float(fx_val.get('prev_value', fx_val.get('value', 0.0)))
+                elif isinstance(fx_val, (int, float)):
+                    ca['usdkrw_close'] = float(fx_val)
+                    usdkrw_hist = sc.get('usdkrw_history', [])
+                    _fx_5d = None
+                    if isinstance(usdkrw_hist, list) and len(usdkrw_hist) >= 2:
+                        _fx_5d = float(usdkrw_hist[max(0, len(usdkrw_hist) - 5)])
+                    if _fx_5d is None or _fx_5d <= 0.0:
+                        _fx_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'cross_usdkrw.parquet'
+                        if _fx_pq.exists():
+                            try:
+                                _df_fx = pd.read_parquet(_fx_pq)
+                                _c_fx = _df_fx['close'] if 'close' in _df_fx.columns else (_df_fx['Close'] if 'Close' in _df_fx.columns else _df_fx.iloc[:, 0])
+                                _c_fx_s = pd.to_numeric(_c_fx, errors='coerce').dropna()
+                                if len(_c_fx_s) >= 6:
+                                    _fx_5d = float(_c_fx_s.iloc[-6])
+                                elif len(_c_fx_s) >= 1:
+                                    _fx_5d = float(_c_fx_s.iloc[0])
+                            except Exception:
+                                _fx_5d = None
+                    if (_fx_5d is None or _fx_5d <= 0.0) and isinstance(sc.get('usdkrw_change_1d'), (int, float)):
+                        _fx_chg1 = float(sc['usdkrw_change_1d'])
+                        if (1.0 + _fx_chg1 / float(100)) > 0.0:
+                            _fx_5d = float(fx_val) / (1.0 + _fx_chg1 / float(100))
+                    if _fx_5d is None or _fx_5d <= 0.0:
+                        if isinstance(usdkrw_hist, list) and len(usdkrw_hist) == 1 and float(usdkrw_hist[0]) > 0.0:
+                            _fx_5d = float(usdkrw_hist[0])
+                        else:
+                            _fx_5d = float(fx_val)
+                    ca['usdkrw_5d_ago'] = _fx_5d
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
@@ -736,12 +791,24 @@ class S2MLAlphaStream(BaseStream):
         _ca_latest = self._load_cross_asset_latest()
         _aux_preserve = {
             'foreign_net_buy_norm', 'inst_net_buy_norm', 'retail_contrarian',
-            'flow_divergence', 'per', 'pbr', 'roe', 'debt_ratio_latest',
-            'news_sentiment_mean', 'news_volume', 'sentiment_momentum',
+            'flow_divergence', 'foreign_ratio_feat', 'short_proxy_score',
+            'per', 'pbr', 'roe', 'roe_2yr_avg', 'debt_ratio_latest',
+            'earnings_surprise_latest', 'revenue_yoy_latest',
+            'earnings_surprise', 'revenue_yoy', 'earnings_qoq', 'earnings_momentum',
+            'news_sentiment_mean', 'news_sentiment_std', 'news_count_norm',
+            'news_pos_ratio', 'news_volume', 'sentiment_momentum',
+            'dart_insider_signal', 'dart_buyback_signal', 'dart_composite',
         }
+        _aux_loader = None
+        try:
+            from src.intelligence.aux_data_loader import AuxDataLoader
+            _aux_loader = AuxDataLoader()
+        except Exception:
+            _aux_loader = None
         _bridge = None
         _min_bars = 20
         _prepared = []
+        _date_str_v4 = str(target_date or datetime.now().strftime('%Y-%m-%d'))[:10]
         for stock in candidates:
             features = dict(stock.get('features', {}) or {})
             _needs_v4 = (
@@ -764,7 +831,26 @@ class S2MLAlphaStream(BaseStream):
                         from src.intelligence.v4_features import extract_v4
                         if _bridge is None:
                             _bridge = MarketDataBridge()
-                        _df = _bridge._load_price_history(_tk_v4)
+                        _df = None
+                        try:
+                            _df = _bridge._load_price_history(_tk_v4)
+                        except Exception:
+                            _df = None
+                        if _df is None or len(_df) < _min_bars:
+                            for _pq_cand in (
+                                _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{_tk_v4}.parquet',
+                                _PROJECT_ROOT / 'data' / 'historical_10y' / f'kr_{_tk_v4}.parquet',
+                                _PROJECT_ROOT / 'data' / 'kr_markets' / f'{_tk_v4}.parquet',
+                            ):
+                                if _pq_cand.exists():
+                                    try:
+                                        _df_pq = pd.read_parquet(_pq_cand)
+                                        _df_pq.columns = [str(col).lower() for col in _df_pq.columns]
+                                        if len(_df_pq) >= _min_bars and 'close' in _df_pq.columns:
+                                            _df = _df_pq
+                                            break
+                                    except Exception:
+                                        continue
                         _v4_feats = {}
                         if _df is not None and len(_df) >= _min_bars:
                             _c = _df['close'].values.astype(float)
@@ -774,11 +860,14 @@ class S2MLAlphaStream(BaseStream):
                             _v = _df['volume'].values.astype(float)
                             _idx = len(_df) - 1
                             _is_etf = _tk_v4 in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
-                            _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, is_etf=_is_etf) or {}
+                            _aux_feats = _aux_loader.get_features(_tk_v4, _date_str_v4) if _aux_loader is not None else None
+                            _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, aux_data=_aux_feats, is_etf=_is_etf) or {}
                             if _v4_feats:
                                 self.__class__._V4_FEATS_CACHE[_tk_v4] = (_time.monotonic(), dict(_v4_feats))
                     for _vk, _vv in _v4_feats.items():
                         if _vk in _aux_preserve and features.get(_vk, 0) != 0 and _vv == 0:
+                            continue
+                        if _vk == 'news_sentiment_mean' and features.get(_vk) not in (None, 0, 0.5) and _vv == 0.5:
                             continue
                         features[_vk] = _vv
                 except Exception as _e_feat:
@@ -838,6 +927,7 @@ class S2MLAlphaStream(BaseStream):
             _prepared.append((stock, features, row))
 
         _min_cs_candidates = 2
+        _clip_z = 3
         _X_all = None
         if len(_prepared) >= _min_cs_candidates and cfg.get('ml.cross_sectional_standardize', True):
             try:
@@ -846,6 +936,53 @@ class S2MLAlphaStream(BaseStream):
                 _X_all = cross_sectional_rank_z_matrix(_raw_mat, np.zeros(len(_raw_mat), dtype=int))
             except Exception as _cs_e:
                 logger.debug(f"  S2: 횡단면 Rank-Z 정규화 스킵: {_cs_e}")
+        elif len(_prepared) > 0 and cfg.get('ml.cross_sectional_standardize', True):
+            try:
+                _raw_mat = np.asarray([r for _, _, r in _prepared], dtype=float)
+                _n_feat_in = _raw_mat.shape[1]
+                _rm = self._raw_feature_means
+                _rs = self._raw_feature_stds
+                if _rm is None or _rs is None or len(_rm) != _n_feat_in:
+                    _prior_map = {
+                        'rsi_14': (50, 15),
+                        'volatility_20d': (25, 15),
+                        'return_20d': (0, 10),
+                        'return_5d': (0, 5),
+                        'return_3d': (0, 3),
+                        'return_1d': (0, 2),
+                        'ma5_dist': (0, 3),
+                        'ma20_dist': (0, 5),
+                        'ma60_dist': (0, 10),
+                        'atr_pct': (2, 2),
+                        'high_low_range': (3, 2),
+                        'close_to_high_20d': (-5, 5),
+                        'rsi_slope_5d': (0, 10),
+                        'bb_position': (0.5, 0.5),
+                        'news_sentiment_mean': (0.5, 0.5),
+                        'news_pos_ratio': (0.5, 0.5),
+                        'volume_ratio_20d': (1.0, 1.0),
+                        'volume_trend': (1.0, 1.0),
+                        'vol_ratio_5_20': (1.0, 1.0),
+                        'alpha_vol_term_structure': (1.0, 1.0),
+                    }
+                    _fnames = self._feature_names if (self._feature_names and len(self._feature_names) == _n_feat_in) else [f'f_{i}' for i in range(_n_feat_in)]
+                    _rm = np.array([float(_prior_map.get(fn, (0.0, 1.0))[0]) for fn in _fnames], dtype=float)
+                    _rs = np.array([float(_prior_map.get(fn, (0.0, 1.0))[1]) for fn in _fnames], dtype=float)
+                _safe_rs = np.where(_rs > 1e-08, _rs, 1.0)
+                _X_all = np.clip((_raw_mat - _rm) / _safe_rs, -float(_clip_z), float(_clip_z))
+            except Exception as _ss_e:
+                logger.debug(f"  S2: 단일 종목 정규화 스킵: {_ss_e}")
+
+        if _X_all is None and len(_prepared) > 0:
+            _X_all = np.asarray([r for _, _, r in _prepared], dtype=float)
+
+        _batch_preds: Dict[str, np.ndarray] = {}
+        if _X_all is not None and len(_X_all) > 0:
+            for _mname, _mobj in self._models.items():
+                try:
+                    _batch_preds[_mname] = _mobj.predict_proba(_X_all)[:, 1]
+                except Exception as _be:
+                    logger.debug(f'  S2: {_mname} 배치 예측 실패 (개별 폴백): {_be}')
 
         for _idx_p, (stock, features, row) in enumerate(_prepared):
             try:
@@ -860,7 +997,7 @@ class S2MLAlphaStream(BaseStream):
                     _r_key = (regime or 'caution').lower()
                     _router_info = _router.get_model_info(_r_key)
                     if _router_info.get('model_file_exists'):
-                        _regime_up_prob = _router.predict(X, regime=_r_key)
+                        _regime_up_prob = _router.predict(X, regime=_r_key, feature_names=self._feature_names)
                         logger.debug(f"  [Phase 10] S2 MLRegimeRouter: {stock['ticker']} {_r_key.upper()} 모델 예측={_regime_up_prob:.4f}")
                 except Exception as _re:
                     from src.utils.error_logger import log_error_rate_limited
@@ -870,8 +1007,11 @@ class S2MLAlphaStream(BaseStream):
                 pred_names = []
                 for model_name, model in self._models.items():
                     try:
-                        pp = model.predict_proba(X)[:, 1]
-                        preds.append(pp[0])
+                        if model_name in _batch_preds and len(_batch_preds[model_name]) > _idx_p:
+                            preds.append(float(_batch_preds[model_name][_idx_p]))
+                        else:
+                            pp = model.predict_proba(X)[:, 1]
+                            preds.append(float(pp[0]))
                         pred_names.append(model_name)
                     except Exception as e:
                         logger.error(f"  🚨 S2: {model_name} 예측 에러 ({stock['ticker']}): {e}")

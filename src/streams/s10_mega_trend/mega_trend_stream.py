@@ -102,11 +102,15 @@ class S10MegaTrendStream(BaseStream):
 
         signals: List[Dict] = []
         features = market_data.get('features', {})
+        seen_tickers = set()
 
         for sector in top_sectors:
             stocks = self._sector_map.get(sector, [])
             for stock in stocks:
                 ticker         = stock['ticker']
+                if ticker in seen_tickers:
+                    continue
+                seen_tickers.add(ticker)
                 name           = stock['name']
                 sector_weight  = float(stock.get('weight', 0.5))
                 f_data         = features.get(ticker, features.get(f'kr_{ticker}', {}))

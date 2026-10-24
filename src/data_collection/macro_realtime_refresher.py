@@ -183,10 +183,17 @@ class MacroRealtimeRefresher:
                 # Google Finance 0-Lag 실시간 VIX 1순위 적용
                 try:
                     from src.utils.google_finance_collector import GoogleFinanceCollector
-                    gf_vix = GoogleFinanceCollector.get_vix()
-                    if gf_vix and gf_vix > 0:
-                        updates['vix'] = gf_vix
+                    gf_vix_details = GoogleFinanceCollector.get_quote_details('VIX')
+                    if gf_vix_details and float(gf_vix_details.get('price', 0) or 0) > 0:
+                        updates['vix'] = round(float(gf_vix_details['price']), 2)
+                        if float(gf_vix_details.get('prev_close', 0) or 0) > 0:
+                            updates['vix_prev'] = round(float(gf_vix_details['prev_close']), 2)
                         logger.info(f"  🟢 Live VIX real-time tick captured via Google Finance: {updates['vix']}")
+                    else:
+                        gf_vix = GoogleFinanceCollector.get_vix()
+                        if gf_vix and gf_vix > 0:
+                            updates['vix'] = gf_vix
+                            logger.info(f"  🟢 Live VIX real-time tick captured via Google Finance: {updates['vix']}")
                 except Exception as _gfe:
                     logger.warning(f"  ⚠️ Google Finance VIX fetch exception: {_gfe}")
 
@@ -200,6 +207,10 @@ class MacroRealtimeRefresher:
                             c_last = float(rows_cboe[-1].get('close', 0) or 0)
                             if c_last > 0:
                                 updates['vix'] = round(c_last, 2)
+                                if len(rows_cboe) >= 2:
+                                    c_prev = float(rows_cboe[-2].get('close', 0) or 0)
+                                    if c_prev > 0:
+                                        updates['vix_prev'] = round(c_prev, 2)
                                 logger.info(f"  🟢 Live VIX updated via CBOE Official CDN: {updates['vix']}")
                     except Exception as _ve:
                         logger.warning(f"  ⚠️ CBOE VIX fetch exception: {_ve}")
@@ -255,6 +266,8 @@ class MacroRealtimeRefresher:
                     sigma = _math.sqrt(var) if var > 0 else 0.0
                     updates['vix_ma_20'] = round(mu, 4)
                     updates['vix_std_20'] = round(sigma, 4)
+                    if 'vix_prev' not in updates and vix_hist_raw[-2] > 0:
+                        updates['vix_prev'] = round(float(vix_hist_raw[-2]), 2)
                     if not updates.get('vix_change_1d') and vix_hist_raw[-2] > 0:
                         updates['vix_change_1d'] = round((vix_hist_raw[-1] / vix_hist_raw[-2] - 1.0) * 100.0, 2)
                     if len(vix_hist_raw) >= 21 and vix_hist_raw[-21] > 0:
@@ -602,6 +615,8 @@ class MacroRealtimeRefresher:
                 res = av_results[yf_ticker]
                 updates[cache_key] = res['price']
                 updates[f"{cache_key}_change_1d"] = res['change_1d']
+                if res.get('prev_close') is not None and float(res.get('prev_close', 0) or 0) > 0:
+                    updates[f"{cache_key}_prev"] = float(res['prev_close'])
             else:
                 errors.append(yf_ticker)
                 
@@ -749,8 +764,10 @@ class MacroRealtimeRefresher:
         try:
             from src.infra.safe_io import safe_json_update
             bounds_map = self._INDEX_SANITY_BOUNDS
+            last_safe_updates: Dict[str, Any] = {}
 
             def _apply_updates(existing: dict) -> dict:
+                nonlocal last_safe_updates
                 # 0. 기존 캐시에 남아있는 ETF 가격 오염값(예: sp500=763, nasdaq=709, gold_us=382, dxy=28.9) 사전 제거
                 for _ek in list(existing.keys()):
                     if _ek in bounds_map and isinstance(existing.get(_ek), (int, float)):
@@ -809,13 +826,14 @@ class MacroRealtimeRefresher:
                 safe_updates.setdefault('ofi_z', existing.get('ofi_z', 0.0))
                 safe_updates.setdefault('lead_lag', existing.get('lead_lag', 0.0))
 
+                last_safe_updates = dict(safe_updates)
                 existing.update(safe_updates)
                 existing['timestamp'] = datetime.now().isoformat()
                 return existing
 
             success = safe_json_update(_SIGNAL_CACHE, _apply_updates)
             if success:
-                self._cache.update(updates)
+                self._cache.update(last_safe_updates)
             else:
                 logger.error(f"  ❌ signal_cache 업데이트 실패 (File Lock 획득 실패)")
         except Exception as e:

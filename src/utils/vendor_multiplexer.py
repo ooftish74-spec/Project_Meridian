@@ -253,6 +253,17 @@ class VendorMultiplexer:
                         logger.info(f"[Vendor] Alpha Vantage FX (USDKRW): {rate}")
                         return pd.Series(rate, index=idx, name=ticker)
                     return None
+                if mapped_ticker.startswith('^') or mapped_ticker.endswith('=F') or mapped_ticker.endswith('=X'):
+                    from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+                    df_yc = fetch_yahoo_chart_ohlcv(mapped_ticker, range_str='2y')
+                    if df_yc is not None and not df_yc.empty and 'close' in df_yc.columns:
+                        s_yc = pd.to_numeric(df_yc['close'], errors='coerce').dropna().rename(ticker)
+                        if start and end:
+                            s_sub = s_yc.loc[start:end]
+                            if not s_sub.empty:
+                                s_yc = s_sub
+                        return s_yc
+                    return None
                 from alpha_vantage.timeseries import TimeSeries
                 ts = TimeSeries(key=key, output_format='pandas')
                 data, meta = ts.get_daily(mapped_ticker, outputsize='compact')

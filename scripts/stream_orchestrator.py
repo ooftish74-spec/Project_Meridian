@@ -808,7 +808,12 @@ class StreamOrchestrator:
                 all_signals[stream.stream_id] = []
 
         # ── Step 4.0: S10 Mega-Trend 신호 생성 및 별칭 동기화 ──
-        if 'S10_MEGA_TREND' not in all_signals or not all_signals['S10_MEGA_TREND']:
+        if 'S10' in all_signals:
+            if 'S10_MEGA_TREND' not in all_signals or not all_signals.get('S10_MEGA_TREND'):
+                all_signals['S10_MEGA_TREND'] = all_signals.pop('S10')
+            else:
+                all_signals.pop('S10', None)
+        if 'S10_MEGA_TREND' not in all_signals:
             try:
                 s10_out = self.s10.generate_signals(regime, market_data)
                 s10_signals = s10_out if isinstance(s10_out, list) else s10_out.get('orders', [])
@@ -819,11 +824,11 @@ class StreamOrchestrator:
                 logger.error(f"    ❌ S10_MEGA_TREND 신호 생성 실패: {e}", exc_info=True)
                 all_signals['S10_MEGA_TREND'] = []
                 market_data['s10_status'] = 'neutral'
-        if 'S10' in all_signals:
-            if not all_signals.get('S10_MEGA_TREND'):
-                all_signals['S10_MEGA_TREND'] = all_signals.pop('S10')
+        if 'S13' in all_signals:
+            if 'S13_JAPAN_ALPHA' not in all_signals or not all_signals.get('S13_JAPAN_ALPHA'):
+                all_signals['S13_JAPAN_ALPHA'] = all_signals.pop('S13')
             else:
-                all_signals.pop('S10', None)
+                all_signals.pop('S13', None)
 
         # ── Step 4.1: 8대 마스터 시나리오 & 블랙스완 즉각 대응 (시나리오 조건부 기대수익 생존 게이트) ──
         try:
@@ -2920,18 +2925,18 @@ class StreamOrchestrator:
             w = weights.get(sid, 0.0)
             stream_budgets[sid] = available_capital * w
         
-        stream_budgets['S10_MEGA_TREND'] = available_capital * (weights.get('S10_MEGA_TREND', 0.0) or weights.get('S10', 0.0))
+        stream_budgets['S10_MEGA_TREND'] = available_capital * (float(weights.get('S10_MEGA_TREND', 0.0) or 0.0) + float(weights.get('S10', 0.0) or 0.0))
         if 'S10' in signals and 'S10_MEGA_TREND' not in signals:
             stream_budgets['S10'] = stream_budgets['S10_MEGA_TREND']
         else:
             stream_budgets.pop('S10', None)
-        stream_budgets['S11_HIGHBETA_SNIPER'] = available_capital * (weights.get('S11_HIGHBETA_SNIPER', 0.0) or weights.get('S11', 0.0))
+        stream_budgets['S11_HIGHBETA_SNIPER'] = available_capital * (float(weights.get('S11_HIGHBETA_SNIPER', 0.0) or 0.0) + float(weights.get('S11', 0.0) or 0.0))
         stream_budgets['S11'] = stream_budgets['S11_HIGHBETA_SNIPER']
-        stream_budgets['S12_DERIVATIVE_SQUEEZE'] = available_capital * (weights.get('S12_DERIVATIVE_SQUEEZE', 0.0) or weights.get('S12', 0.0))
+        stream_budgets['S12_DERIVATIVE_SQUEEZE'] = available_capital * (float(weights.get('S12_DERIVATIVE_SQUEEZE', 0.0) or 0.0) + float(weights.get('S12', 0.0) or 0.0))
         stream_budgets['S12'] = stream_budgets['S12_DERIVATIVE_SQUEEZE']
-        stream_budgets['S13_JAPAN_ALPHA'] = available_capital * (weights.get('S13_JAPAN_ALPHA', 0.0) or weights.get('S13', 0.0))
+        stream_budgets['S13_JAPAN_ALPHA'] = available_capital * (float(weights.get('S13_JAPAN_ALPHA', 0.0) or 0.0) + float(weights.get('S13', 0.0) or 0.0))
         stream_budgets['S13'] = stream_budgets['S13_JAPAN_ALPHA']
-        stream_budgets['S14_PAIR_ALPHA'] = available_capital * (weights.get('S14_PAIR_ALPHA', 0.0) or weights.get('S14', 0.0))
+        stream_budgets['S14_PAIR_ALPHA'] = available_capital * (float(weights.get('S14_PAIR_ALPHA', 0.0) or 0.0) + float(weights.get('S14', 0.0) or 0.0))
         stream_budgets['S14'] = stream_budgets['S14_PAIR_ALPHA']
         
 
@@ -2977,9 +2982,28 @@ class StreamOrchestrator:
                         _pv.get('current_price', 0.0) or _pv.get('avg_price', 0.0) or _pv.get('entry_price', 0.0) or 0.0
                     )
 
-                _sid = _pk.split(':')[0] if ':' in _pk else _pv.get('stream_id', '?')
+                _STREAM_CANONICAL_MAP = {
+                    'S0_BETA': 'S0',
+                    'S1_EDGE': 'S1',
+                    'S2_ML_ALPHA': 'S2',
+                    'S3_ACTIVE_MACRO': 'S3',
+                    'S3_A': 'S3',
+                    'S3_B': 'S3',
+                    'S3_C': 'S3',
+                    'S10': 'S10_MEGA_TREND',
+                    'S11': 'S11_HIGHBETA_SNIPER',
+                    'S11_HIGH_BETA': 'S11_HIGHBETA_SNIPER',
+                    'S12': 'S12_DERIVATIVE_SQUEEZE',
+                    'S13': 'S13_JAPAN_ALPHA',
+                    'S14': 'S14_PAIR_ALPHA',
+                }
+                _raw_sid = _pk.split(':')[0] if ':' in _pk else _pv.get('stream_id', '?')
+                _sid = _STREAM_CANONICAL_MAP.get(str(_raw_sid), str(_raw_sid))
                 if _sid in stream_budgets:
                     stream_budgets[_sid] = max(0, stream_budgets[_sid] - _pos_val)
+                    for _short_k, _canon_k in _STREAM_CANONICAL_MAP.items():
+                        if _canon_k == _sid and _short_k in stream_budgets:
+                            stream_budgets[_short_k] = stream_budgets[_sid]
                 else:
                     _unattributed_held_krw += _pos_val
         except Exception as _et_e:

@@ -17,6 +17,11 @@ sys.path.insert(0, str(ROOT))
 
 from src.utils.api_key_manager import get_key
 from src.utils.file_ops import atomic_write_json
+try:
+    from src.params import pget
+except Exception:
+    def pget(name, fallback, ctx=None):
+        return fallback
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
 logger = logging.getLogger('alpha_vantage_collector')
 
@@ -331,15 +336,7 @@ def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.D
                         df_cper = None
             if df_cper is not None and not df_cper.empty and 'close' in df_cper.columns:
                 df_hg = df_cper.copy()
-                scale_hg = 0.165
-                try:
-                    from src.utils.google_finance_collector import GoogleFinanceCollector
-                    gf_hg = GoogleFinanceCollector.get_quote_details('HG=F')
-                    last_cper = float(df_hg['close'].dropna().iloc[-1])
-                    if gf_hg and float(gf_hg.get('price', 0) or 0) > 0 and last_cper > 0:
-                        scale_hg = float(gf_hg['price']) / last_cper
-                except Exception:
-                    pass
+                scale_hg = float(pget('data.cper_to_hg_scale', 0.165))
                 for col in ('open', 'high', 'low', 'close'):
                     if col in df_hg.columns:
                         df_hg[col] = pd.to_numeric(df_hg[col], errors='coerce') * scale_hg
@@ -398,7 +395,7 @@ def _fetch_yahoo_chart_quote(symbol: str) -> Optional[dict]:
                 p = closes[-1]
                 prev = closes[-2] if len(closes) >= 2 else p
                 chg_1d = round((p / prev - 1.0) * 100.0, 2) if prev > 0 else 0.0
-                return {'price': round(p, 4), 'change_1d': chg_1d}
+                return {'price': round(p, 4), 'prev_close': round(prev, 4), 'change_1d': chg_1d}
     except Exception as e:
         logger.debug(f"  [MultiVendorQuote] {symbol} 조회 스킵: {e}")
     return None
@@ -445,7 +442,7 @@ def collect_global_macro(symbols: list) -> dict:
                     continue
                 gf = GoogleFinanceCollector.get_quote_details(symbol)
                 if gf and gf.get('price', 0) > 0:
-                    results[symbol] = {'price': float(gf['price']), 'change_pct': float(gf.get('change_pct', 0.0)), 'change_1d': float(gf.get('change_pct', 0.0))}
+                    results[symbol] = {'price': float(gf['price']), 'prev_close': float(gf.get('prev_close', 0.0) or 0.0), 'change_pct': float(gf.get('change_pct', 0.0)), 'change_1d': float(gf.get('change_pct', 0.0))}
                     logger.info(f"  🌍 [GoogleFinance] {symbol} 수집 성공: {gf['price']} ({gf.get('change_pct', 0.0):+.2f}%)")
                     continue
                 if symbol not in mapping:

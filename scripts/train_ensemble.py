@@ -842,6 +842,28 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
     _all_y = np.asarray(_p_labels, dtype=int)
     _all_sw = np.ones(len(_all_y), dtype=np.float64)
 
+    _split_arr = np.asarray(_p_split, dtype=object)
+    _tr_mask = _split_arr == 'train'
+    _va_mask = _split_arr == 'val'
+
+    _raw_train_X = _all_X[_tr_mask].copy() if len(_all_X) > 0 and np.any(_tr_mask) else np.zeros((0, len(active_features)), dtype=np.float64)
+    _raw_feat_means = np.nanmean(_raw_train_X, axis=0) if len(_raw_train_X) > 0 else np.zeros(len(active_features), dtype=np.float64)
+    _raw_feat_stds = np.nanstd(_raw_train_X, axis=0) if len(_raw_train_X) > 0 else np.ones(len(active_features), dtype=np.float64)
+    _raw_feat_means = np.nan_to_num(_raw_feat_means, nan=0.0, posinf=0.0, neginf=0.0)
+    _raw_feat_stds = np.where(np.isfinite(_raw_feat_stds) & (_raw_feat_stds > 1e-8), _raw_feat_stds, 1.0)
+    _raw_means_map = {fn: float(m) for fn, m in zip(active_features, _raw_feat_means)}
+    _raw_stds_map = {fn: float(s) for fn, s in zip(active_features, _raw_feat_stds)}
+
+    _date_market_vol = np.zeros(len(_all_X), dtype=np.float64)
+    if len(_all_X) > 0 and 'volatility_20d' in active_features:
+        _v_idx = active_features.index('volatility_20d')
+        _raw_v = np.nan_to_num(_all_X[:, _v_idx], nan=0.0, posinf=0.0, neginf=0.0)
+        _d_arr_v = np.asarray(_p_dates)
+        _, _inv_v = np.unique(_d_arr_v, return_inverse=True)
+        for _g in range(int(_inv_v.max()) + 1 if len(_inv_v) else 0):
+            _g_mask = _inv_v == _g
+            _date_market_vol[_g_mask] = float(np.mean(_raw_v[_g_mask]))
+
     # Cross-Sectional Rank-Z Standardization & Excess Return Target (zero look-ahead across dates)
     if len(_all_X) > 0:
         try:
@@ -856,10 +878,6 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 _p_labels = _all_y.tolist()
         except Exception as _cs_e:
             logger.warning(f"  ⚠️ Cross-sectional standardization fallback: {_cs_e}")
-
-    _split_arr = np.asarray(_p_split, dtype=object)
-    _tr_mask = _split_arr == 'train'
-    _va_mask = _split_arr == 'val'
 
     train_X = _all_X[_tr_mask] if len(_all_X) else np.zeros((0, len(active_features)))
     train_y = _all_y[_tr_mask] if len(_all_y) else np.zeros(0, dtype=int)
@@ -908,6 +926,12 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             'val_fwd_ret': np.array(_m_val_fwd, dtype=float),
             'train_sample_weight': _all_sw[_tr_mask] if len(_all_sw) else np.zeros(0, dtype=float),
             'val_sample_weight': _all_sw[_va_mask] if len(_all_sw) else np.zeros(0, dtype=float),
+            'train_date_market_vol': _date_market_vol[_tr_mask] if len(_date_market_vol) else np.zeros(0, dtype=float),
+            'val_date_market_vol': _date_market_vol[_va_mask] if len(_date_market_vol) else np.zeros(0, dtype=float),
+            'raw_feature_means': [float(_raw_means_map.get(fn, 0.0)) for fn in active_features],
+            'raw_feature_stds': [float(_raw_stds_map.get(fn, 1.0)) for fn in active_features],
+            'raw_feature_means_map': _raw_means_map,
+            'raw_feature_stds_map': _raw_stds_map,
             'panel': _panel,
             'panel_features': list(active_features),
             'calendar': pd.DatetimeIndex(sorted(_calendar)),
@@ -950,6 +974,8 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 
             active_features = [fname for fname, keep in zip(active_features, keep_mask) if keep]
             if return_meta and _meta is not None:
+                _meta['raw_feature_means'] = [float(_raw_means_map.get(fn, 0.0)) for fn in active_features]
+                _meta['raw_feature_stds'] = [float(_raw_stds_map.get(fn, 1.0)) for fn in active_features]
                 _drop_all = [c for c in all_excluded if c in _meta['panel'].columns]
                 if _drop_all:
                     _meta['panel'] = _meta['panel'].drop(columns=_drop_all)
@@ -2290,15 +2316,19 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         logger.debug(f"  Drift Guard 체크 스킵: {e}")
 
     import numpy as np
+    import shutil as _shutil
     train_X = np.nan_to_num(train_X, nan=0.0)
     val_X = np.nan_to_num(val_X, nan=0.0)
     _use_dates = _cv_method == CV_METHOD_PURGED and ds_meta is not None
+    _staging_dir = MODEL_DIR / '_staging'
+    _staging_dir.mkdir(parents=True, exist_ok=True)
     models, val_acc, val_auc, per_model_metrics, ensemble_weights, train_X, val_X, active_features = train_ensemble(
         train_X, train_y, val_X, val_y, active_features,
         train_dates=ds_meta['train_dates'] if _use_dates else None,
         val_dates=ds_meta['val_dates'] if _use_dates else None,
         label_horizon_days=ds_meta['forward_days'] if ds_meta else None,
         cv_method=_cv_method,
+        artifact_dir=_staging_dir,
         calendar=ds_meta['calendar'] if _use_dates else None,
         sample_weights=ds_meta.get('train_sample_weight') if _use_dates else None,
         val_sample_weights=ds_meta.get('val_sample_weight') if _use_dates else None)
@@ -2332,12 +2362,22 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     from src.learning.model_registry_manager import ModelRegistryManager
     registry = ModelRegistryManager(registry_dir=str(MODEL_DIR))
     
+    _rm_map = (ds_meta.get('raw_feature_means_map') if isinstance(ds_meta, dict) else None) or {}
+    _rs_map = (ds_meta.get('raw_feature_stds_map') if isinstance(ds_meta, dict) else None) or {}
+    _raw_f_means = [float(_rm_map.get(fn, 0.0)) for fn in active_features] if _rm_map else (
+        ds_meta.get('raw_feature_means', []) if isinstance(ds_meta, dict) else []
+    )
+    _raw_f_stds = [float(_rs_map.get(fn, 1.0)) for fn in active_features] if _rs_map else (
+        ds_meta.get('raw_feature_stds', []) if isinstance(ds_meta, dict) else []
+    )
     metadata = {
         'val_acc': val_acc,
         'val_auc': val_auc,
         'feature_names': active_features,  # ★ H-21: AutoML 시 실제 피쳐명 저장
         'feature_means': train_X.mean(axis=0).tolist() if len(train_X) > 0 else [],
         'feature_stds': train_X.std(axis=0).tolist() if len(train_X) > 0 else [],
+        'raw_feature_means': _raw_f_means,
+        'raw_feature_stds': _raw_f_stds,
         'trigger': trigger,
         'ensemble_weights': ensemble_weights,
         'train_size': len(train_X),
@@ -2428,6 +2468,21 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     )
     
     challenger_result = {'status': 'adopted' if promoted else 'rejected', 'reason': msg}
+    _should_sync_active_artifacts = bool(promoted) or not (MODEL_DIR / 'stock_ranker_ensemble.pkl').exists()
+    if _should_sync_active_artifacts:
+        for _aux_art in ('fast_corrector.joblib', 'meta_learner.joblib', 'auto_tune_results.json'):
+            _src_art = _staging_dir / _aux_art
+            if _src_art.exists():
+                try:
+                    _shutil.copy2(_src_art, MODEL_DIR / _aux_art)
+                except Exception as _art_e:
+                    logger.debug(f"  Staging artifact copy skip ({_aux_art}): {_art_e}")
+        try:
+            from src.risk.drift_guard import DriftGuard as _DG_Save
+            _dg_save = _DG_Save()
+            _dg_save.save_reference(train_X, feature_names=active_features)
+        except Exception as _dg_se:
+            logger.debug(f"  DriftGuard save_reference 스킵: {_dg_se}")
 
     # ═══════════════════════════════════════════════════════
     # ★ #8: Walk-Forward Split 진단 — 하위 split 자동 식별
@@ -2482,9 +2537,10 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         cp_result = cp.predict_interval(ens_pred[:10])
         logger.info(f"  📏 Conformal: width={cp_result['width']:.3f}, "
                    f"n_cal={cp_result.get('n_calibration', 0)}")
-        # Conformal 상태 저장
+        # Conformal 상태 저장 (promoted 시 MODEL_DIR 반영, 미승격 시 _staging_dir 만 저장)
         import pickle as _pkl
-        with open(MODEL_DIR / 'conformal_state.pkl', 'wb') as f:
+        _conf_target = (MODEL_DIR / 'conformal_state.pkl') if _should_sync_active_artifacts else (_staging_dir / 'conformal_state.pkl')
+        with open(_conf_target, 'wb') as f:
             _pkl.dump({'calibration_scores': cp.calibration_scores,
                        'quantile_level': cp.quantile_level}, f)
     except Exception as e:
@@ -2636,9 +2692,10 @@ def run_regime_split_training(window_days: int = None,
     logger.info('═' * 60)
 
     # 1. 전체 데이터셋 빌드
+    ds_meta = None
     try:
-        train_X, train_y, val_X, val_y, active_features = build_rolling_dataset(
-            window_days=window_days)
+        train_X, train_y, val_X, val_y, active_features, ds_meta = build_rolling_dataset(
+            window_days=window_days, return_meta=True)
     except Exception as e:
         logger.error(f'  데이터셋 빌드 실패: {e}')
         return {}
@@ -2681,7 +2738,6 @@ def run_regime_split_training(window_days: int = None,
         logger.debug(f'  [Phase 10] Registry 피처 동기화 스킵: {_sync_e}')
 
     # 2. 레짐 히스토리 로드 (결과 폴더에서 날짜별 레짐 매핑)
-    # 레짐 레이블이 없으면 VIX 기반 대략적 분류 사용
     try:
         _regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
         _current_regime = 'caution'
@@ -2695,32 +2751,29 @@ def run_regime_split_training(window_days: int = None,
 
     logger.info(f'  현재 레짐: {_current_regime.upper()}')
 
-    # 3. 레짐 기반 서브셋 분할
-    # 주의: build_rolling_dataset은 레짐 레이블을 반환하지 않으므로
-    # 총 샘플을 시간순으로 2분할하여 bull/bear로 근사.
-    # 더 정밀한 구현: feature_store에서 날짜별 레짐 레이블 로드 필요.
+    # 3. 날짜 단위(Date-Level) 시장 변동성 기반 서브셋 분할 (종목별 Rank-Z 0.0 분할 금지)
     n_train = len(train_X)
     n_half = max(n_train // 2, 1)
 
-    # 간단한 시간 기반 분할 (최근 = bear, 오래된 = bull 경향 가정은 X)
-    # 대신: VIX/변동성 기반 분류 (훈련 세트 내 변동성 중앙값 기준)
-    # feature에 volatility_20d(인덱스) 있으면 해당 값 기반 분류
     try:
-        vol_idx = active_features.index('volatility_20d')
-        vols = train_X[:, vol_idx]
+        _tr_mkt_vol = ds_meta.get('train_date_market_vol') if isinstance(ds_meta, dict) else None
+        if _tr_mkt_vol is not None and len(_tr_mkt_vol) == n_train and np.std(_tr_mkt_vol) > 1e-8:
+            vols = np.asarray(_tr_mkt_vol, dtype=float)
+        else:
+            vol_idx = active_features.index('volatility_20d')
+            vols = train_X[:, vol_idx]
         vol_median = float(np.median(vols))
-        # 저변동성(Bull) vs 고변동성(Bear/Crash)
         bull_mask = vols <= vol_median
         bear_mask = ~bull_mask
         logger.info(
-            f'  VIX 기반 분류: Bull(저변동성) {bull_mask.sum():,}개 / '
-            f'Bear(고변동성) {bear_mask.sum():,}개 (중앙값={vol_median:.2f}%)'
+            f'  날짜별 시장 변동성 분류: Bull(저변동성 날짜) {bull_mask.sum():,}개 / '
+            f'Bear(고변동성 날짜) {bear_mask.sum():,}개 (중앙값={vol_median:.2f}%)'
         )
     except (ValueError, IndexError):
-        # volatility_20d 피처 없으면 단순 절반 분할
         bull_mask = np.zeros(n_train, dtype=bool)
         bull_mask[:n_half] = True
         bear_mask = ~bull_mask
+        vol_median = 0.0
         logger.info('  [Phase 10] 피처 기반 분류 불가 → 절반 분할 사용')
 
     X_bull = train_X[bull_mask]
@@ -2733,7 +2786,7 @@ def run_regime_split_training(window_days: int = None,
 
     results = {}
 
-    # 4. Bull 모델 학습
+    # 4. Bull / Bear 모델 학습 (Purged Date-Split val_X, val_y 로 OOS 검증)
     for regime_name, X_sub, y_sub, fname in [
         ('bull', X_bull, y_bull, 'train_bull_model.pkl'),
         ('bear', X_bear, y_bear, 'train_bear_model.pkl'),
@@ -2747,13 +2800,13 @@ def run_regime_split_training(window_days: int = None,
 
         logger.info(f'  📊 [Phase 10] {regime_name.upper()} 모델 학습 ({len(X_sub):,}개)...')
 
-        # val 데이터 분할 (80/20)
-        split = int(len(X_sub) * 0.8)
-        X_tr = X_sub[:split]; y_tr = y_sub[:split]
-        X_vl = X_sub[split:]; y_vl = y_sub[split:]
-
-        if len(X_vl) == 0:
-            X_vl, y_vl = val_X, val_y  # 전체 val 사용
+        if len(val_X) > 0 and len(np.unique(val_y)) > 1:
+            X_tr, y_tr = X_sub, y_sub
+            X_vl, y_vl = val_X, val_y
+        else:
+            split = int(len(X_sub) * 0.8)
+            X_tr = X_sub[:split]; y_tr = y_sub[:split]
+            X_vl = X_sub[split:]; y_vl = y_sub[split:]
 
         try:
             # GBR 단일 모델 학습 (빠른 분리 학습 — 풀 앙상블 대신)
@@ -2810,7 +2863,10 @@ def run_regime_split_training(window_days: int = None,
     # 5. 메타데이터 저장
     try:
         from datetime import datetime as _dt
-        results['trained_at'] = _dt.now().isoformat()
+        _now_iso = _dt.now().isoformat()
+        results['trained_at'] = _now_iso
+        results['bull_trained_at'] = _now_iso
+        results['bear_trained_at'] = _now_iso
         results['trigger'] = trigger
         results['window_days'] = window_days
         results['current_regime'] = _current_regime

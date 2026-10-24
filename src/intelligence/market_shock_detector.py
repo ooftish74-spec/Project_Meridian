@@ -134,6 +134,7 @@ class MarketShockDetector:
     def _check_us_market(self) -> list:
         """미국 시장 마감 데이터 확인."""
         scores = []
+        us_data_loaded = False
         try:
             sent_dir = PROJECT_ROOT / 'data' / 'raw' / 'realtime_sentiment'
             today_str = datetime.now().strftime('%Y-%m-%d')
@@ -147,34 +148,37 @@ class MarketShockDetector:
                     sent = json.load(open(sent_path))
                 except (Exception,):
                     sent = {}
-                sp500_ret = sent.get('sp500_return', sent.get('us_market', {}).get('sp500_return', 0))
-                if sp500_ret:
+                sp500_ret = sent.get('sp500_return', sent.get('us_market', {}).get('sp500_return', None))
+                if sp500_ret is not None and sp500_ret != 0:
                     sp500_ret = float(sp500_ret)
+                    us_data_loaded = True
                     if sp500_ret < self.THRESHOLDS['us_sp500_severe']:
                         scores.append(40)
                         self.shock_signals.append(f"S&P500 {sp500_ret * 100:+.1f}% (SEVERE)")
                     elif sp500_ret < self.THRESHOLDS['us_sp500_moderate']:
                         scores.append(20)
                         self.shock_signals.append(f"S&P500 {sp500_ret * 100:+.1f}% (MODERATE)")
-                nasdaq_ret = sent.get('nasdaq_return', sent.get('us_market', {}).get('nasdaq_return', 0))
-                if nasdaq_ret:
+                nasdaq_ret = sent.get('nasdaq_return', sent.get('us_market', {}).get('nasdaq_return', None))
+                if nasdaq_ret is not None and nasdaq_ret != 0:
                     nasdaq_ret = float(nasdaq_ret)
+                    us_data_loaded = True
                     if nasdaq_ret < self.THRESHOLDS['us_nasdaq_severe']:
                         scores.append(35)
                         self.shock_signals.append(f"NASDAQ {nasdaq_ret * 100:+.1f}% (SEVERE)")
                     elif nasdaq_ret < self.THRESHOLDS['us_nasdaq_moderate']:
                         scores.append(15)
                         self.shock_signals.append(f"NASDAQ {nasdaq_ret * 100:+.1f}% (MODERATE)")
-            if not scores:
+            if not us_data_loaded:
                 sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
                 if sc_path.exists():
                     sc = json.loads(sc_path.read_text())
                     oi = sc.get('overnight_intel', {})
                     sp_1d = sc.get('sp500_change_1d', oi.get('sp500_change_pct'))
-                    if sp_1d is None and sc.get('sp500_change_1m'):
+                    if sp_1d is None and sc.get('sp500_change_1m') is not None:
                         sp_1d = float(sc['sp500_change_1m']) / 21.0
-                    if sp_1d:
+                    if sp_1d is not None:
                         sp_ret = float(sp_1d) / 100.0
+                        us_data_loaded = True
                         if sp_ret < self.THRESHOLDS['us_sp500_severe']:
                             scores.append(40)
                             self.shock_signals.append(f"S&P500 {sp_ret * 100:+.1f}% (SEVERE)")
@@ -182,17 +186,18 @@ class MarketShockDetector:
                             scores.append(20)
                             self.shock_signals.append(f"S&P500 {sp_ret * 100:+.1f}% (MODERATE)")
                     nq_1d = sc.get('nasdaq_change_1d', oi.get('nasdaq_change_pct'))
-                    if nq_1d is None and sc.get('nasdaq_change_1m'):
+                    if nq_1d is None and sc.get('nasdaq_change_1m') is not None:
                         nq_1d = float(sc['nasdaq_change_1m']) / 21.0
-                    if nq_1d:
+                    if nq_1d is not None:
                         nq_ret = float(nq_1d) / 100.0
+                        us_data_loaded = True
                         if nq_ret < self.THRESHOLDS['us_nasdaq_severe']:
                             scores.append(35)
                             self.shock_signals.append(f"NASDAQ {nq_ret * 100:+.1f}% (SEVERE)")
                         elif nq_ret < self.THRESHOLDS['us_nasdaq_moderate']:
                             scores.append(15)
                             self.shock_signals.append(f"NASDAQ {nq_ret * 100:+.1f}% (MODERATE)")
-            if not scores:
+            if not us_data_loaded:
                 sp = self._safe_yf_download('^GSPC', timeout=self.YF_TIMEOUT)
                 if sp is not None and len(sp) >= 2:
                     last_ret = float(sp['close'].iloc[-1] / sp['close'].iloc[-2] - 1)
@@ -209,6 +214,7 @@ class MarketShockDetector:
     def _check_vix(self) -> list:
         """VIX 수준 확인."""
         scores = []
+        vix_data_loaded = False
         try:
             sent_dir = PROJECT_ROOT / 'data' / 'raw' / 'realtime_sentiment'
             for date_offset in range(3):
@@ -220,6 +226,8 @@ class MarketShockDetector:
                     vix = s.get('vix_term', {}).get('vix', 0)
                     if vix:
                         vix = float(vix)
+                        if vix > 0:
+                            vix_data_loaded = True
                         if vix > self.THRESHOLDS['vix_severe']:
                             scores.append(30)
                             self.shock_signals.append(f"VIX {vix:.1f} (SEVERE)")
@@ -227,7 +235,7 @@ class MarketShockDetector:
                             scores.append(15)
                             self.shock_signals.append(f"VIX {vix:.1f} (MODERATE)")
                     break
-            if not scores:
+            if not vix_data_loaded:
                 sc_path = PROJECT_ROOT / 'results' / 'signal_cache.json'
                 if sc_path.exists():
                     sc = json.loads(sc_path.read_text())
@@ -236,6 +244,8 @@ class MarketShockDetector:
                         vix_sc = vix_sc.get('value', vix_sc.get('close'))
                     if vix_sc:
                         vix_val = float(vix_sc)
+                        if vix_val > 0:
+                            vix_data_loaded = True
                         if vix_val > self.THRESHOLDS['vix_severe']:
                             scores.append(30)
                             self.shock_signals.append(f"VIX {vix_val:.1f} (SEVERE)")
@@ -244,7 +254,7 @@ class MarketShockDetector:
                             self.shock_signals.append(f"VIX {vix_val:.1f} (MODERATE)")
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
-        if not scores:
+        if not vix_data_loaded:
             vdf = self._safe_yf_download('^VIX', timeout=self.YF_TIMEOUT)
             if vdf is not None and len(vdf) > 0:
                 vix_now = float(vdf['close'].iloc[-1])

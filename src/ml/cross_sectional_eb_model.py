@@ -203,6 +203,8 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
 
         if n == 0 or p == 0:
             self.w_ = np.zeros(p, dtype=np.float64)
+            self.s_mean_ = 0.0
+            self.s_std_ = 1.0
             self.top_idx_ = np.arange(min(1, p), dtype=int)
             self.feature_importances_ = np.zeros(p, dtype=np.float64)
             self.tree_ = None
@@ -324,6 +326,10 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
             fallback_norm = float(np.linalg.norm(mean_ic))
             self.w_ = mean_ic / fallback_norm if fallback_norm > _EPS else np.zeros(p, dtype=np.float64)
 
+        s_train = X_arr @ self.w_
+        self.s_mean_ = float(np.mean(s_train)) if len(s_train) > 0 else 0.0
+        self.s_std_ = float(max(np.std(s_train), _STD_EPS)) if len(s_train) > 1 else 1.0
+
         imp_sum = float(np.sum(np.abs(self.w_)))
         if imp_sum > _EPS:
             self.feature_importances_ = np.abs(self.w_) / imp_sum
@@ -363,10 +369,12 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
 
         s = X_arr @ self.w_
         std = float(np.std(s))
-        if std > _STD_EPS:
+        if len(s) >= _MIN_CS_NAMES and std > _STD_EPS:
             z = (s - float(np.mean(s))) / std
         else:
-            z = s
+            s_mean = float(getattr(self, 's_mean_', 0.0))
+            s_std = float(max(getattr(self, 's_std_', 1.0), _STD_EPS))
+            z = (s - s_mean) / s_std
         logit_bound = float(_LOGIT_CLIP)
         z_clipped = np.clip(z, -logit_bound, logit_bound)
         p_eb = 1.0 / (1.0 + np.exp(-z_clipped))

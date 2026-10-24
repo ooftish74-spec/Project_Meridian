@@ -1041,7 +1041,7 @@ class S3FactorStream(BaseStream):
         for key, pos in positions.items():
             _sid = pos.get('stream_id') or pos.get('stream', '')
             _trk = pos.get('track', '')
-            if _sid not in ('S3', 'S3_A', 'S3_B') and _trk != 'TRACK_2_BUFFETT_QVM':
+            if _sid not in ('S3', 'S3_A', 'S3_B', 'S3_C') and _trk != 'TRACK_2_BUFFETT_QVM':
                 continue
             pnl_pct = pos.get('pnl_pct', 0)
             days_held = pos.get('days_held', 0)

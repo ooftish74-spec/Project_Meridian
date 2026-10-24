@@ -62,7 +62,7 @@ class S13JapanAlphaStream(BaseStream):
     }
 
     def __init__(self):
-        super().__init__('S13', 'Japan Niche Alpha')
+        super().__init__('S13_JAPAN_ALPHA', 'Japan Niche Alpha')
         self._positions: List[Dict[str, Any]] = []
 
     def calculate_us_lead_signal(
@@ -173,7 +173,7 @@ class S13JapanAlphaStream(BaseStream):
 
             signals.append({
                 'stream_id': self.stream_id,
-                'stream': 'S13',
+                'stream': self.stream_id,
                 'ticker': stock['ticker'],
                 'symbol': stock['ticker'],
                 'name': stock['name'],

@@ -60,9 +60,21 @@ class DataAggregator:
         return self.meridian_data
 
     def load_macro_data(self):
-        """Load macroeconomic indicators from external project's SQLite DB."""
+        """Load macroeconomic indicators from parquet or external project's SQLite DB."""
+        parquet_path = _MERIDIAN_ROOT / 'data' / 'macro' / 'macro_data.parquet'
+        if parquet_path.exists():
+            try:
+                df_pq = pd.read_parquet(parquet_path)
+                if not df_pq.empty:
+                    if 'date' in df_pq.columns:
+                        df_pq['date'] = pd.to_datetime(df_pq['date'])
+                        df_pq.set_index('date', inplace=True)
+                    self.macro_data = df_pq
+                    return self.macro_data
+            except Exception as e:
+                self.logger.debug(f"Failed to load macro_data.parquet: {e}")
         if not _MACRO_DB_PATH.exists():
-            self.logger.warning(f"Macro DB not found at {_MACRO_DB_PATH}")
+            self.logger.debug(f"Macro DB not found at {_MACRO_DB_PATH}")
             return pd.DataFrame()
         try:
             conn = sqlite3.connect(_MACRO_DB_PATH)
@@ -86,6 +98,18 @@ class DataAggregator:
             latest = df.iloc[-1]
             for col in df.columns:
                 metrics[col] = latest[col]
+        signal_cache = self.meridian_data.get('signal_cache')
+        if not isinstance(signal_cache, dict) or not signal_cache:
+            sc_path = _MERIDIAN_RESULTS / 'signal_cache.json'
+            if sc_path.exists():
+                try:
+                    signal_cache = json.loads(sc_path.read_text(encoding='utf-8'))
+                except Exception:
+                    signal_cache = {}
+            else:
+                signal_cache = {}
         if 'VIXCLS' not in metrics:
-            metrics['VIXCLS'] = 20.0
+            vix_val = signal_cache.get('vix')
+            if vix_val is not None:
+                metrics['VIXCLS'] = vix_val
         return metrics

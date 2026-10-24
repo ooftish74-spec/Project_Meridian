@@ -43,6 +43,23 @@ logger = logging.getLogger(__name__)
 cfg = DynamicConfig()
 market_ctx = MarketContextManager()
 
+_STREAM_CANONICAL_MAP = {
+    'S0_BETA': 'S0',
+    'S1_EDGE': 'S1',
+    'S2_ML_ALPHA': 'S2',
+    'S3_ACTIVE_MACRO': 'S3',
+    'S3_A': 'S3',
+    'S3_B': 'S3',
+    'S3_C': 'S3',
+    'S10': 'S10_MEGA_TREND',
+    'S11': 'S11_HIGHBETA_SNIPER',
+    'S11_HIGH_BETA': 'S11_HIGHBETA_SNIPER',
+    'S12': 'S12_DERIVATIVE_SQUEEZE',
+    'S13': 'S13_JAPAN_ALPHA',
+    'S14': 'S14_PAIR_ALPHA',
+}
+
+
 class AlphaAllocator:
     """4-Stream 리스크 패리티 하이브리드 배분기.
 
@@ -50,6 +67,7 @@ class AlphaAllocator:
     SelfLearning이 IC 기반으로 base_weight를 자동 갱신.
     """
     STREAMS = None
+    _STREAM_CANONICAL_MAP = _STREAM_CANONICAL_MAP
 
     def _default_regime_weights(self) -> Dict[str, Dict[str, float]]:
         """레짐별 기본 배분 (MaxEnt KL-사영 수리 모델 + DynamicConfig 오버라이드)."""
@@ -71,7 +89,8 @@ class AlphaAllocator:
         _cfg_streams = cfg.get('allocator.active_streams', None)
         _default_streams = ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
         if _cfg_streams and isinstance(_cfg_streams, list):
-            self.STREAMS = [s for s in dict.fromkeys(list(_cfg_streams) + [s for s in _default_streams if s not in _cfg_streams]) if s != 'S4']
+            _norm_cfg = [_STREAM_CANONICAL_MAP.get(str(s), str(s)) for s in _cfg_streams]
+            self.STREAMS = [s for s in dict.fromkeys(_norm_cfg + [s for s in _default_streams if s not in _norm_cfg]) if s != 'S4']
         else:
             self.STREAMS = list(_default_streams)
         self.us_night_cap = pget('allocator.us_night_max_cap_pct', 0.50)  # Phase 8: 24h Recycling US Cap (50%)
@@ -190,14 +209,17 @@ class AlphaAllocator:
             배분 비율 {'S1': 0.20, 'S2': 0.50, 'S3': 0.30}
         """
         # ★ [SSoT Architecture] 경쟁적 EV(Expected Value) 100% 몰아주기 자산 배분 엔진
+        self.STREAMS = [s for s in dict.fromkeys(_STREAM_CANONICAL_MAP.get(str(x), str(x)) for x in self.STREAMS) if s != 'S4']
+        _norm_metrics = dict(stream_metrics or {})
+        for _mk, _mv in list((stream_metrics or {}).items()):
+            _canon_mk = _STREAM_CANONICAL_MAP.get(str(_mk), str(_mk))
+            if _canon_mk != _mk and not _norm_metrics.get(_canon_mk):
+                _norm_metrics[_canon_mk] = _mv
+        stream_metrics = _norm_metrics
+
         ev_scores = {}
         for sid in self.STREAMS:
             metrics = (stream_metrics or {}).get(sid, {})
-            if not metrics:
-                if sid == 'S10':
-                    metrics = (stream_metrics or {}).get('S10_MEGA_TREND', {})
-                elif sid == 'S10_MEGA_TREND':
-                    metrics = (stream_metrics or {}).get('S10', {})
             import math
             p_win = float(metrics.get('win_rate', metrics.get('p_win', 0.50)) or 0.50)
             reward = float(metrics.get('avg_win', metrics.get('expected_return', 0.02)) or 0.02)
@@ -429,9 +451,9 @@ class AlphaAllocator:
                 logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
             logger.info(f"  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})")
         try:
-            _crisis_exempt = {'S0', 'S5', 'S_YIELD', 'S12', 'S12_DERIVATIVE_SQUEEZE', 'S14', 'S14_PAIR_ALPHA', 'S7', 'S7_PAIR'}
+            _crisis_exempt = {'S0', 'S3', 'S5', 'S_YIELD', 'S12', 'S12_DERIVATIVE_SQUEEZE', 'S14', 'S14_PAIR_ALPHA', 'S7', 'S7_PAIR'}
             _micro_bound = set(cfg.get('allocator.micro_bound_streams', ['S1', 'S2']))
-            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound and sid not in _crisis_exempt))
+            _macro_bound = set((sid for sid in final_weights if sid not in _micro_bound and sid not in _crisis_exempt and sid != 'S3'))
             _crowding_active = False
             try:
                 import json as _json
@@ -449,9 +471,18 @@ class AlphaAllocator:
                 logger.critical('[SILENT_BYPASS] Suppressed exception at alpha_allocator.py:450', exc_info=True)
             _in_macro_defense = _crowding_active or regime in ('bear', 'crash', 'caution')
             if _in_macro_defense:
-                from src.risk.intraday_micro_guard import IntradayMicroGuard
-                _guard = IntradayMicroGuard()
-                _micro_ok, _micro_reason = _guard.check()
+                try:
+                    from src.utils.time_utils import now_kst as _now_kst
+                    _now_k = _now_kst()
+                except Exception:
+                    _now_k = datetime.now()
+                _is_krx_session = (_now_k.weekday() < 5) and (9 <= _now_k.hour < 16)
+                if _is_krx_session:
+                    from src.risk.intraday_micro_guard import IntradayMicroGuard
+                    _guard = IntradayMicroGuard()
+                    _micro_ok, _micro_reason = _guard.check()
+                else:
+                    _micro_ok, _micro_reason = (True, 'KRX 정규장 외 시간 — MicroGuard 미적용')
                 _cut_bc = float(pget('allocator.macro_cut.bear_crash', 0.6))
                 _cut_ca = float(pget('allocator.macro_cut.caution', 0.3))
                 _macro_cut = _cut_bc if regime in ('bear', 'crash') else _cut_ca

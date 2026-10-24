@@ -53,7 +53,16 @@ class CrashDefense:
         vix = float(signal_cache.get('vix', vix_default) or vix_default)
         vkospi = float(signal_cache.get('vkospi', vkospi_default) or vkospi_default)
         vix_prev = float(signal_cache.get('vix_prev', vix) or vix)
-        vix_change = (vix / vix_prev - 1) * 100 if vix_prev > 0 else float(signal_cache.get('vix_change_1d', 0.0) or 0.0)
+        vix_hist = signal_cache.get('vix_history', [])
+        if isinstance(vix_hist, list) and len(vix_hist) >= 2 and float(vix_hist[-2] or 0.0) > 0:
+            _vh_prev = float(vix_hist[-2])
+            _v_sync_tol = float(pget('data.vix_prev_sync_tol', 0.05))
+            if vix_prev <= 0 or abs(vix_prev - _vh_prev) > _v_sync_tol:
+                vix_prev = _vh_prev
+        if signal_cache.get('vix_change_1d') is not None:
+            vix_change = float(signal_cache.get('vix_change_1d') or 0.0)
+        else:
+            vix_change = (vix / vix_prev - 1) * 100 if vix_prev > 0 else 0.0
         usdkrw = float(signal_cache.get('usdkrw', fx_default) or fx_default)
         usdkrw_prev = signal_cache.get('usdkrw_prev')
         if usdkrw_prev is not None and float(usdkrw_prev) > 0:

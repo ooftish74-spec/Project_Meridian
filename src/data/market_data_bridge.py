@@ -358,15 +358,28 @@ class MarketDataBridge:
                 signal['kospi'] = fresh_kospi
                 signal['kospi_close'] = float(self._cache.get('kospi_close', 0) or fresh_kospi)
                 signal['kospi_ma20'] = kospi.get('ma20', signal['kospi'])
-            _ois_default_val = self._cfg.get('ois.default_value', 50.0) if self._cfg else 50.0
+            _ois_default_val = self._cfg.get('ois.default_value', float(pget('scenarios.ois_neutral_center', 50.0))) if self._cfg else float(pget('scenarios.ois_neutral_center', 50.0))
             _fresh_ois = fetched_data.get('ois', _ois_default_val)
             _cached_ois = self._cache.get('ois', 0)
+            _ois_max_age_h = float(pget('data.ois_max_age_hours', 6.0))
+            _ois_cache_fresh = True
+            _ois_ts_str = str(self._cache.get('ois_updated_at') or self._cache.get('timestamp') or '')
+            if _ois_ts_str:
+                try:
+                    _ois_dt = datetime.fromisoformat(_ois_ts_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                    if (datetime.now() - _ois_dt).total_seconds() / 3600.0 > _ois_max_age_h:
+                        _ois_cache_fresh = False
+                except Exception:
+                    pass
             if _fresh_ois is not None and _fresh_ois != _ois_default_val:
                 signal['ois'] = _fresh_ois
-            elif _cached_ois and _cached_ois != _ois_default_val:
+                signal['ois_updated_at'] = datetime.now().isoformat()
+            elif _cached_ois and _cached_ois != _ois_default_val and _ois_cache_fresh:
                 signal['ois'] = _cached_ois
+                if self._cache.get('ois_updated_at'):
+                    signal['ois_updated_at'] = self._cache['ois_updated_at']
             else:
-                signal['ois'] = _fresh_ois or _ois_default_val
+                signal['ois'] = _fresh_ois if _fresh_ois is not None else _ois_default_val
             signal['sector_momentum'] = fetched_data.get('sector_momentum') or {}
             signal['stock_technicals'] = fetched_data.get('stock_technicals') if fetched_data.get('stock_technicals') is not None else {}
         else:
@@ -381,14 +394,15 @@ class MarketDataBridge:
             except Exception:
                 kospi = {'close': cached_kospi, 'ma20': self._cache.get('kospi_ma20', cached_kospi)}
             fresh_kospi = float(kospi.get('close', 0) or 0)
-            if fresh_kospi > 1000:
+            _kospi_min_lv = float(pget('data.kospi_min_valid_level', 1000.0))
+            if fresh_kospi > _kospi_min_lv:
                 signal['kospi'] = fresh_kospi
                 signal['kospi_close'] = fresh_kospi
                 signal['kospi_ma20'] = float(kospi.get('ma20', fresh_kospi) or fresh_kospi)
                 if kospi.get('change_1d') is not None:
                     signal['kospi_change_1d'] = float(kospi['change_1d'])
                     signal['kospi_change_pct'] = float(kospi['change_1d'])
-            elif cached_kospi and cached_kospi > 1000:
+            elif cached_kospi and cached_kospi > _kospi_min_lv:
                 signal['kospi'] = cached_kospi
                 signal['kospi_close'] = float(self._cache.get('kospi_close', cached_kospi) or cached_kospi)
                 signal['kospi_ma20'] = self._cache.get('kospi_ma20', cached_kospi)
@@ -396,13 +410,26 @@ class MarketDataBridge:
                 signal['kospi'] = fresh_kospi
                 signal['kospi_close'] = float(self._cache.get('kospi_close', 0) or fresh_kospi)
                 signal['kospi_ma20'] = kospi.get('ma20', signal['kospi'])
-            _ois_default_val = self._cfg.get('ois.default_value', 50.0) if self._cfg else 50.0
+            _ois_default_val = self._cfg.get('ois.default_value', float(pget('scenarios.ois_neutral_center', 50.0))) if self._cfg else float(pget('scenarios.ois_neutral_center', 50.0))
             _fresh_ois = self._get_ois()
             _cached_ois = self._cache.get('ois', 0)
+            _ois_max_age_h = float(pget('data.ois_max_age_hours', 6.0))
+            _ois_cache_fresh = True
+            _ois_ts_str = str(self._cache.get('ois_updated_at') or self._cache.get('timestamp') or '')
+            if _ois_ts_str:
+                try:
+                    _ois_dt = datetime.fromisoformat(_ois_ts_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                    if (datetime.now() - _ois_dt).total_seconds() / 3600.0 > _ois_max_age_h:
+                        _ois_cache_fresh = False
+                except Exception:
+                    pass
             if _fresh_ois != _ois_default_val:
                 signal['ois'] = _fresh_ois
-            elif _cached_ois and _cached_ois != _ois_default_val:
+                signal['ois_updated_at'] = datetime.now().isoformat()
+            elif _cached_ois and _cached_ois != _ois_default_val and _ois_cache_fresh:
                 signal['ois'] = _cached_ois
+                if self._cache.get('ois_updated_at'):
+                    signal['ois_updated_at'] = self._cache['ois_updated_at']
                 logger.info(f"  📦 OIS: 기존 캐시값 보존 ({_cached_ois:.1f})")
             else:
                 signal['ois'] = _fresh_ois
@@ -812,30 +839,46 @@ class MarketDataBridge:
             df = stock.get_index_ohlcv(start_str, end_str, '1001') # 1001 is KOSPI
             if df is not None and not df.empty:
                 close = df['종가'].dropna().tail(20)
-                if len(close) >= 20:
+                _min_len = int(pget('data.vkospi_min_bars', 20))
+                if len(close) >= _min_len:
                     rets = close.pct_change().dropna()
                     # Huber/MAD Robust Volatility + 5일 단기 실현 변동성 (과거 충격 소멸 후 VKOSPI 고착 오발화 차단)
                     med_r = float(rets.median())
                     mad_sigma = float((rets - med_r).abs().median() * 1.4826 * np.sqrt(252) * 100.0)
                     ewma_sigma = float(rets.ewm(span=7).std().iloc[-1] * np.sqrt(252) * 100.0)
-                    rv_5d = float(rets.tail(5).std() * np.sqrt(252) * 100.0) if len(rets) >= 5 else ewma_sigma
-                    ret_5d_sum = float(rets.tail(5).sum()) if len(rets) >= 5 else 0.0
-                    robust_rv = 0.65 * mad_sigma + 0.35 * min(ewma_sigma, mad_sigma * 1.5)
-                    if ret_5d_sum >= 0.0 and rv_5d < mad_sigma:
-                        robust_rv = min(robust_rv, 0.5 * rv_5d + 0.5 * ewma_sigma)
+                    _n5 = int(pget('data.vkospi_short_rv_days', 5))
+                    rv_5d = float(rets.tail(_n5).std() * np.sqrt(252) * 100.0) if len(rets) >= _n5 else ewma_sigma
+                    ret_5d_sum = float(rets.tail(_n5).sum()) if len(rets) >= _n5 else 0.0
+                    last_1d_ret = float(rets.iloc[-1]) if len(rets) >= 1 else 0.0
+                    crash_1d_ret = float(pget('data.vkospi_crash_1d_ret', -0.015))
+                    max_vix_ratio = float(pget('data.vkospi_max_vix_ratio', 1.35))
+                    is_not_crash = (last_1d_ret >= crash_1d_ret)
+                    _mad_cap = mad_sigma * 1.5
+                    robust_rv = 0.65 * mad_sigma + 0.35 * min(ewma_sigma, _mad_cap)
+                    if (ret_5d_sum >= 0.0 or is_not_crash) and rv_5d < mad_sigma:
+                        _rv_ewma_blend = 0.5 * rv_5d + 0.5 * ewma_sigma
+                        robust_rv = min(robust_rv, _rv_ewma_blend)
                     vix_ref = 0.0
                     try:
                         from src.utils.google_finance_collector import GoogleFinanceCollector
                         vix_ref = float(GoogleFinanceCollector.get_vix() or 0.0)
                     except Exception:
                         vix_ref = float(self._cache.get('vix', 0.0) or 0.0)
-                    if 5.0 <= vix_ref <= 100.0:
-                        if ret_5d_sum >= 0.0:
-                            robust_rv = min(robust_rv, vix_ref * 1.5)
+                    _vix_min = float(pget('data.vkospi_min_valid', 5.0))
+                    if _vix_min <= vix_ref <= 100.0:
+                        _vix_rv_cap = vix_ref * max_vix_ratio
+                        if is_not_crash:
+                            robust_rv = min(robust_rv, _vix_rv_cap)
+                        elif ret_5d_sum >= 0.0:
+                            _vix_rv_cap_5d = vix_ref * 1.5
+                            robust_rv = min(robust_rv, _vix_rv_cap_5d)
                         estimated = round(0.55 * (vix_ref * 1.05) + 0.45 * robust_rv, 2)
+                        if is_not_crash:
+                            estimated = round(min(float(estimated), _vix_rv_cap), 2)
                     else:
                         estimated = round(robust_rv * 1.05, 2)
-                    if 5.0 <= estimated <= 150.0:
+                    _est_max = float(pget('data.vkospi_max_valid', 150.0))
+                    if _vix_min <= estimated <= _est_max:
                         self._field_quality['vkospi'] = 0.85
                         import logging
                         logging.getLogger(__name__).info(f"  [VKOSPI] 베이지안 로버스트 변동성 추정 성공: {estimated:.2f} (MAD={mad_sigma:.2f}, VIX={vix_ref:.2f})")
@@ -1082,11 +1125,13 @@ class MarketDataBridge:
 
     def _get_ois(self) -> float:
         """[Phase 84] Overnight Intelligence Score (0~100) (Live Calculation First)."""
+        _ois_center = float(pget('scenarios.ois_neutral_center', 50.0))
+        _ois_max_age_h = float(pget('data.ois_max_age_hours', 6.0))
         try:
             from src.intelligence.overnight_intelligence import OvernightIntelligenceScore
             intel = OvernightIntelligenceScore()
             res = intel.calculate(include_premarket=True)
-            if isinstance(res, dict) and 'ois' in res and res['ois'] != 50.0:
+            if isinstance(res, dict) and 'ois' in res and res['ois'] != _ois_center:
                 self._field_quality['ois'] = 0.95
                 self._last_ois_details = res
                 return float(res['ois'])
@@ -1099,7 +1144,7 @@ class MarketDataBridge:
                     if files:
                         mtime = datetime.fromtimestamp(files[0].stat().st_mtime)
                         age_hours = (datetime.now() - mtime).total_seconds() / 3600.0
-                        if age_hours <= 12.0:
+                        if age_hours <= _ois_max_age_h:
                             data = json.loads(files[0].read_text())
                             self._field_quality['ois'] = 0.95
                             raw_os = data.get('overnight_score')
@@ -1107,14 +1152,14 @@ class MarketDataBridge:
                                 return float(raw_os['overnight_score'])
                             elif isinstance(raw_os, (int, float)):
                                 return float(raw_os)
-                            ois_val = float(data.get('ois', data.get('score', data.get('ois_score', 50))))
+                            ois_val = float(data.get('ois', data.get('score', data.get('ois_score', _ois_center))))
                             return ois_val
                         else:
-                            logger.warning(f"  [Phase 84] OIS 파일 폐기 (Stale: {age_hours:.1f}시간 경과 > 12h)")
+                            logger.warning(f"  [Phase 84] OIS 파일 폐기 (Stale: {age_hours:.1f}시간 경과 > {_ois_max_age_h:.1f}h)")
                 except Exception as e:
                     logger.error(f'Critical error encountered in _get_ois: {e}', exc_info=True)
         self._field_quality['ois'] = 0.5
-        return 50.0
+        return _ois_center
 
     def _get_sector_momentum(self) -> Dict:
         """섹터별 모멘텀 — ticker 기반 (S3 호환).
@@ -1537,6 +1582,10 @@ class MarketDataBridge:
                             _d_obj.pop(_k, None)
 
             # 2. MacroRealtimeRefresher / MacroFeatureIntegrator / UnifiedCollector가 기록한 모든 유효 키 보존
+            _fresh_keys = {
+                k for k, v in data.items()
+                if v not in (None, 'N/A', '', []) and not (isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0)
+            }
             for _pk, _pv in existing.items():
                 if _pk in ('timestamp', '_generated_at'):
                     continue
@@ -1549,6 +1598,7 @@ class MarketDataBridge:
                         if not (isinstance(_pv, (int, float)) and not isinstance(_pv, bool) and _pv == 0):
                             data[_pk] = _pv
             # US ETF 시계열에서 sp500/nasdaq/sox/gold/wti 1D/1M 변동률만 자동 보강 (지수 레벨에 ETF 가격 덮어쓰기 금지)
+            _n21 = int(pget('data.change_1m_bars', 21))
             for _idx_key, _chg1d_k, _chg1m_k, _tk_sym in [
                 ('sp500', 'sp500_change_1d', 'sp500_change_1m', 'SPY'),
                 ('nasdaq', 'nasdaq_change_1d', 'nasdaq_change_1m', 'QQQ'),
@@ -1560,10 +1610,10 @@ class MarketDataBridge:
                 if df_u is not None and len(df_u) >= 2 and 'close' in df_u.columns:
                     cs_u = pd.to_numeric(df_u['close'], errors='coerce').dropna()
                     if len(cs_u) >= 2:
-                        if not data.get(_chg1d_k):
+                        if _chg1d_k not in _fresh_keys or not data.get(_chg1d_k):
                             data[_chg1d_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-2] - 1.0) * 100.0), 2)
-                        if not data.get(_chg1m_k) and len(cs_u) >= 21:
-                            data[_chg1m_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-21] - 1.0) * 100.0), 2)
+                        if (_chg1m_k not in _fresh_keys or not data.get(_chg1m_k)) and len(cs_u) >= _n21:
+                            data[_chg1m_k] = round(float((cs_u.iloc[-1] / cs_u.iloc[-_n21] - 1.0) * 100.0), 2)
             # Legacy alias 키(spx_change_1d, ixic_change_1d, soxx_change_1d)를 최신 1D 변동률과 강제 동기화 (과거 잔상 오염 차단)
             if data.get('sp500_change_1d') is not None:
                 data['spx_change_1d'] = data['sp500_change_1d']
@@ -1594,19 +1644,23 @@ class MarketDataBridge:
             if not data.get('us_regime') or data.get('us_regime') == 'N/A':
                 data['us_regime'] = str(data.get('regime') or data.get('current_regime') or 'caution')
             if not data.get('us_regime_confidence'):
-                data['us_regime_confidence'] = float(data.get('regime_confidence') or 0.65)
+                data['us_regime_confidence'] = float(data.get('regime_confidence') or float(pget('regime.default_confidence', 0.65)))
             if not data.get('cross_asset_direction') or data.get('cross_asset_direction') == 'N/A':
                 _sp_c = float(data.get('sp500_change_1d') or 0.0)
                 _gd_c = float(data.get('gold_change_1d') or 0.0)
-                data['cross_asset_direction'] = 'risk_off' if (_sp_c < -0.3 and _gd_c >= 0) else ('risk_on' if _sp_c > 0.3 else 'neutral')
+                _ca_cut = float(pget('data.cross_asset_dir_cut_pct', 0.3))
+                data['cross_asset_direction'] = 'risk_off' if (_sp_c < -_ca_cut and _gd_c >= 0) else ('risk_on' if _sp_c > _ca_cut else 'neutral')
             _vh = data.get('vix_history')
             if isinstance(_vh, list) and len(_vh) >= 2:
-                if float(_vh[-2]) > 0 and not getattr(self, '_last_vix_prev', 0):
-                    data['vix_prev'] = round(float(_vh[-2]), 2)
-                if not data.get('vix_change_1d') and float(_vh[-2]) > 0:
-                    data['vix_change_1d'] = round((float(_vh[-1]) / float(_vh[-2]) - 1.0) * 100.0, 2)
-                if not data.get('vix_change_1m') and len(_vh) >= 21 and float(_vh[-21]) > 0:
-                    data['vix_change_1m'] = round((float(_vh[-1]) / float(_vh[-21]) - 1.0) * 100.0, 2)
+                _vh_prev = float(_vh[-2])
+                _v_sync_tol = float(pget('data.vix_prev_sync_tol', 0.05))
+                _cur_vp = float(data.get('vix_prev') or 0.0)
+                if _vh_prev > 0 and (_cur_vp <= 0 or abs(_cur_vp - _vh_prev) > _v_sync_tol):
+                    data['vix_prev'] = round(_vh_prev, 2)
+                if (not data.get('vix_change_1d') or abs(_cur_vp - _vh_prev) > _v_sync_tol) and _vh_prev > 0:
+                    data['vix_change_1d'] = round((float(_vh[-1]) / _vh_prev - 1.0) * 100.0, 2)
+                if not data.get('vix_change_1m') and len(_vh) >= _n21 and float(_vh[-_n21]) > 0:
+                    data['vix_change_1m'] = round((float(_vh[-1]) / float(_vh[-_n21]) - 1.0) * 100.0, 2)
             self._ensure_root_meta(data)
         except Exception as _merge_e:
             logger.debug(f"  [Cache] 필드 보존 병합 참고: {_merge_e}")

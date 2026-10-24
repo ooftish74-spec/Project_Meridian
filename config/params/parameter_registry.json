@@ -16844,6 +16844,591 @@
       "config_key": "s3.qvm.min_qvm_score",
       "rationale": "Minimum composite QVM score (0-100) required for Track 2 Buffett QVM selection.",
       "provenance": "src/streams/s3_active_macro/qvm_strategic_sleeve.py"
+    },
+    "data.change_1m_bars": {
+      "level": "L1",
+      "default": 21,
+      "policy": "free",
+      "config_key": "data.change_1m_bars",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:1601",
+      "bounds": [
+        0.0,
+        210.0
+      ]
+    },
+    "data.cper_to_hg_scale": {
+      "level": "L1",
+      "default": 0.165,
+      "policy": "free",
+      "config_key": "data.cper_to_hg_scale",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/alpha_vantage_collector.py:339",
+      "bounds": [
+        0.0,
+        1.6500000000000001
+      ]
+    },
+    "data.cross_asset_dir_cut_pct": {
+      "level": "L1",
+      "default": 0.3,
+      "policy": "free",
+      "config_key": "data.cross_asset_dir_cut_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:1651",
+      "bounds": [
+        0.0,
+        3.0
+      ]
+    },
+    "data.kospi_min_valid_level": {
+      "level": "L1",
+      "default": 1000.0,
+      "policy": "free",
+      "config_key": "data.kospi_min_valid_level",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:397",
+      "bounds": [
+        0.0,
+        10000.0
+      ]
+    },
+    "data.ois_max_age_hours": {
+      "level": "L1",
+      "default": 6.0,
+      "policy": "free",
+      "config_key": "data.ois_max_age_hours",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:416",
+      "bounds": [
+        0.0,
+        60.0
+      ]
+    },
+    "data.vix_prev_sync_tol": {
+      "level": "L1",
+      "default": 0.05,
+      "policy": "free",
+      "config_key": "data.vix_prev_sync_tol",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/crash_defense.py:59",
+      "bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "data.vkospi_crash_1d_ret": {
+      "level": "L1",
+      "default": -0.015,
+      "policy": "free",
+      "config_key": "data.vkospi_crash_1d_ret",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:853",
+      "bounds": [
+        -0.15,
+        0.0
+      ]
+    },
+    "data.vkospi_default": {
+      "level": "L1",
+      "default": 20.0,
+      "policy": "free",
+      "config_key": "data.vkospi_default",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:204",
+      "bounds": [
+        0.0,
+        200.0
+      ]
+    },
+    "data.vkospi_eps": {
+      "level": "L1",
+      "default": 1e-06,
+      "policy": "free",
+      "config_key": "data.vkospi_eps",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:99",
+      "bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "data.vkospi_fallback_vix": {
+      "level": "L1",
+      "default": 18.5,
+      "policy": "free",
+      "config_key": "data.vkospi_fallback_vix",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:71",
+      "bounds": [
+        0.0,
+        185.0
+      ]
+    },
+    "data.vkospi_level_extreme_fear": {
+      "level": "L1",
+      "default": 30.0,
+      "policy": "free",
+      "config_key": "data.vkospi_level_extreme_fear",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:109",
+      "bounds": [
+        0.0,
+        300.0
+      ]
+    },
+    "data.vkospi_level_fear": {
+      "level": "L1",
+      "default": 25.0,
+      "policy": "free",
+      "config_key": "data.vkospi_level_fear",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:110",
+      "bounds": [
+        0.0,
+        250.0
+      ]
+    },
+    "data.vkospi_level_greed": {
+      "level": "L1",
+      "default": 12.0,
+      "policy": "free",
+      "config_key": "data.vkospi_level_greed",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:112",
+      "bounds": [
+        0.0,
+        120.0
+      ]
+    },
+    "data.vkospi_level_neutral": {
+      "level": "L1",
+      "default": 18.0,
+      "policy": "free",
+      "config_key": "data.vkospi_level_neutral",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data_collection/market_breadth_collector.py:111",
+      "bounds": [
+        0.0,
+        180.0
+      ]
+    },
+    "data.vkospi_max_valid": {
+      "level": "L1",
+      "default": 150.0,
+      "policy": "free",
+      "config_key": "data.vkospi_max_valid",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:880",
+      "bounds": [
+        0.0,
+        1500.0
+      ]
+    },
+    "data.vkospi_max_vix_ratio": {
+      "level": "L1",
+      "default": 1.35,
+      "policy": "free",
+      "config_key": "data.vkospi_max_vix_ratio",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:854",
+      "bounds": [
+        0.0,
+        13.5
+      ]
+    },
+    "data.vkospi_min_bars": {
+      "level": "L1",
+      "default": 20,
+      "policy": "free",
+      "config_key": "data.vkospi_min_bars",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:842",
+      "bounds": [
+        0.0,
+        200.0
+      ]
+    },
+    "data.vkospi_min_valid": {
+      "level": "L1",
+      "default": 5.0,
+      "policy": "free",
+      "config_key": "data.vkospi_min_valid",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:867",
+      "bounds": [
+        0.0,
+        50.0
+      ]
+    },
+    "data.vkospi_short_rv_days": {
+      "level": "L1",
+      "default": 5,
+      "policy": "free",
+      "config_key": "data.vkospi_short_rv_days",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:849",
+      "bounds": [
+        0.0,
+        50.0
+      ]
+    },
+    "micro_guard.vix_prev_tol": {
+      "level": "L1",
+      "default": 0.05,
+      "policy": "free",
+      "config_key": "micro_guard.vix_prev_tol",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/intraday_micro_guard.py:115",
+      "bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "micro_guard.vix_spike_min_level": {
+      "level": "L1",
+      "default": 22.0,
+      "policy": "free",
+      "config_key": "micro_guard.vix_spike_min_level",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/intraday_micro_guard.py:140",
+      "bounds": [
+        0.0,
+        220.0
+      ]
+    },
+    "optimizer.cvar_lookback_days": {
+      "level": "L1",
+      "default": 60,
+      "policy": "free",
+      "config_key": "optimizer.cvar_lookback_days",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/allocation/portfolio_optimizer.py:409",
+      "bounds": [
+        0.0,
+        600.0
+      ]
+    },
+    "regime.bleed_1d_floor_pct": {
+      "level": "L1",
+      "default": -0.5,
+      "policy": "free",
+      "config_key": "regime.bleed_1d_floor_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:558",
+      "bounds": [
+        -5.0,
+        0.0
+      ]
+    },
+    "regime.bleed_5d_floor_pct": {
+      "level": "L1",
+      "default": -3.0,
+      "policy": "free",
+      "config_key": "regime.bleed_5d_floor_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:557",
+      "bounds": [
+        -30.0,
+        0.0
+      ]
+    },
+    "regime.bleed_cum_10d_crash_pct": {
+      "level": "L1",
+      "default": -6.0,
+      "policy": "free",
+      "config_key": "regime.bleed_cum_10d_crash_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:556",
+      "bounds": [
+        -60.0,
+        0.0
+      ]
+    },
+    "regime.bleed_neg_days_bear": {
+      "level": "L1",
+      "default": 6,
+      "policy": "free",
+      "config_key": "regime.bleed_neg_days_bear",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:559",
+      "bounds": [
+        0.0,
+        60.0
+      ]
+    },
+    "regime.bleed_neg_days_crash": {
+      "level": "L1",
+      "default": 8,
+      "policy": "free",
+      "config_key": "regime.bleed_neg_days_crash",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:555",
+      "bounds": [
+        0.0,
+        80.0
+      ]
+    },
+    "regime.bleed_stabilizing_conf": {
+      "level": "L1",
+      "default": 0.7,
+      "policy": "free",
+      "config_key": "regime.bleed_stabilizing_conf",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:655",
+      "bounds": [
+        0.0,
+        7.0
+      ]
+    },
+    "regime.bleed_window_days": {
+      "level": "L1",
+      "default": 10,
+      "policy": "free",
+      "config_key": "regime.bleed_window_days",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:554",
+      "bounds": [
+        0.0,
+        100.0
+      ]
+    },
+    "regime.default_confidence": {
+      "level": "L1",
+      "default": 0.65,
+      "policy": "free",
+      "config_key": "regime.default_confidence",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/data/market_data_bridge.py:1647",
+      "bounds": [
+        0.0,
+        6.5
+      ]
+    },
+    "regime.kospi_pct_unit_min": {
+      "level": "L1",
+      "default": 0.05,
+      "policy": "free",
+      "config_key": "regime.kospi_pct_unit_min",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:507",
+      "bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "regime.kospi_ret_sync_eps": {
+      "level": "L1",
+      "default": 0.0001,
+      "policy": "free",
+      "config_key": "regime.kospi_ret_sync_eps",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:506",
+      "bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "regime.rebound_ois_min": {
+      "level": "L1",
+      "default": 60.0,
+      "policy": "free",
+      "config_key": "regime.rebound_ois_min",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:524",
+      "bounds": [
+        0.0,
+        600.0
+      ]
+    },
+    "regime.short_window_5d": {
+      "level": "L1",
+      "default": 5,
+      "policy": "free",
+      "config_key": "regime.short_window_5d",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:512",
+      "bounds": [
+        0.0,
+        50.0
+      ]
+    },
+    "regime.short_window_6d": {
+      "level": "L1",
+      "default": 6,
+      "policy": "free",
+      "config_key": "regime.short_window_6d",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:513",
+      "bounds": [
+        0.0,
+        60.0
+      ]
+    },
+    "regime.stabilized_5d_min_pct": {
+      "level": "L1",
+      "default": -2.5,
+      "policy": "free",
+      "config_key": "regime.stabilized_5d_min_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:520",
+      "bounds": [
+        -25.0,
+        0.0
+      ]
+    },
+    "regime.stabilized_pos_days_min": {
+      "level": "L1",
+      "default": 3,
+      "policy": "free",
+      "config_key": "regime.stabilized_pos_days_min",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:522",
+      "bounds": [
+        0.0,
+        30.0
+      ]
+    },
+    "regime.stabilized_vix_max": {
+      "level": "L1",
+      "default": 25.0,
+      "policy": "free",
+      "config_key": "regime.stabilized_vix_max",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/regime/regime_detector.py:523",
+      "bounds": [
+        0.0,
+        250.0
+      ]
+    },
+    "scenarios.s2.contracts_vs_krw_cutoff": {
+      "level": "L1",
+      "default": 10000000.0,
+      "policy": "free",
+      "config_key": "scenarios.s2.contracts_vs_krw_cutoff",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:362",
+      "bounds": [
+        0.0,
+        100000000.0
+      ]
+    },
+    "scenarios.s2.futures_net_sell_contracts": {
+      "level": "L1",
+      "default": -5000.0,
+      "policy": "free",
+      "config_key": "scenarios.s2.futures_net_sell_contracts",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:265",
+      "bounds": [
+        -50000.0,
+        0.0
+      ]
+    },
+    "scenarios.s2.kospi_confirm_max_pct": {
+      "level": "L1",
+      "default": -0.5,
+      "policy": "free",
+      "config_key": "scenarios.s2.kospi_confirm_max_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:379",
+      "bounds": [
+        -5.0,
+        0.0
+      ]
+    },
+    "scenarios.s2.sox_1d_max_clamp_pct": {
+      "level": "L1",
+      "default": 15.0,
+      "policy": "free",
+      "config_key": "scenarios.s2.sox_1d_max_clamp_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:266",
+      "bounds": [
+        0.0,
+        150.0
+      ]
+    },
+    "scenarios.s3.kospi_panic_confirm_pct": {
+      "level": "L1",
+      "default": -1.5,
+      "policy": "free",
+      "config_key": "scenarios.s3.kospi_panic_confirm_pct",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:450",
+      "bounds": [
+        -15.0,
+        0.0
+      ]
+    },
+    "scenarios.s3.vix_min_floor": {
+      "level": "L1",
+      "default": 25.0,
+      "policy": "free",
+      "config_key": "scenarios.s3.vix_min_floor",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:272",
+      "bounds": [
+        0.0,
+        250.0
+      ]
+    },
+    "scenarios.s3.vkospi_vix_max_ratio": {
+      "level": "L1",
+      "default": 1.35,
+      "policy": "free",
+      "config_key": "scenarios.s3.vkospi_vix_max_ratio",
+      "auto": true,
+      "rationale": "Registered Red Team dynamic parameter with provenance-documented prior.",
+      "provenance": "src/risk/master_scenario_engine.py:449",
+      "bounds": [
+        0.0,
+        13.5
+      ]
     }
   }
 }

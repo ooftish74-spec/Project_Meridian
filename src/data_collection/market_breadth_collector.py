@@ -11,6 +11,12 @@ Date: 2026-03-15
 """
 from src.utils.file_ops import atomic_write_json
 
+try:
+    from src.params import pget
+except Exception:
+    def pget(name, fallback, ctx=None):
+        return fallback
+
 import json
 import logging
 import numpy as np
@@ -62,35 +68,55 @@ class MarketBreadthCollector:
                 except Exception:
                     pass
             if vix_now <= 0:
-                vix_now = 18.5
+                vix_now = float(pget('data.vkospi_fallback_vix', 18.5))
             vix_prev = float(self._data.get('vix_prev', vix_now) or vix_now)
-            vix_ma20 = float(self._data.get('vix_ma20', 18.2) or 18.2)
-            realized_est = self._estimate_vkospi_from_realized().get('vkospi', 0.0)
-            if realized_est and 5.0 <= realized_est <= 100.0:
-                vkospi = round(0.6 * float(realized_est) + 0.4 * (vix_now * 0.95), 2)
+            vix_ma20 = float(self._data.get('vix_ma20', vix_now) or vix_now)
+            realized_res = self._estimate_vkospi_from_realized(vix_hint=vix_now)
+            realized_est = float(realized_res.get('vkospi', 0.0) or 0.0)
+            is_crash_1d = bool(realized_res.get('is_crash_1d', False))
+            max_vix_ratio = float(pget('data.vkospi_max_vix_ratio', 1.35))
+            vix_cap = vix_now * max_vix_ratio
+            vkospi_min = float(pget('data.vkospi_min_valid', 5.0))
+            if (
+                vkospi_direct
+                and vkospi_min <= vkospi_direct <= 100.0
+                and (not realized_est or abs(vkospi_direct - vix_now) <= abs(realized_est - vix_now))
+            ):
+                vkospi = round(min(vkospi_direct, vix_cap) if not is_crash_1d else vkospi_direct, 2)
+                src = 'signal_cache'
+            elif realized_est and vkospi_min <= realized_est <= 100.0:
+                blended = 0.6 * float(realized_est) + 0.4 * (vix_now * 0.95)
+                if not is_crash_1d:
+                    blended = min(blended, vix_cap)
+                vkospi = round(blended, 2)
                 src = 'realized_and_vix_blend'
-            elif vkospi_direct and 5.0 <= vkospi_direct <= 100.0:
-                vkospi = round(vkospi_direct, 2)
+            elif vkospi_direct and vkospi_min <= vkospi_direct <= 100.0:
+                vkospi = round(min(vkospi_direct, vix_cap) if not is_crash_1d else vkospi_direct, 2)
                 src = 'signal_cache'
             else:
                 vkospi = round(vix_now * 0.85, 2)
                 src = 'local_vix'
+            _eps_den = float(pget('data.vkospi_eps', 1e-6))
             result = {
                 'vkospi': vkospi,
                 'vix': round(vix_now, 2),
                 'vkospi_prev': round(vix_prev * 0.85, 2),
-                'vkospi_change': round((vix_now / max(vix_prev, 1e-6) - 1) * 100, 2),
+                'vkospi_change': round((vix_now / max(vix_prev, _eps_den) - 1) * 100, 2),
                 'vkospi_ma20': round(vix_ma20 * 0.85, 2),
                 'timestamp': datetime.now().isoformat(),
                 'source': src,
             }
-            if vkospi >= 30:
+            _th_ext_fear = float(pget('data.vkospi_level_extreme_fear', 30.0))
+            _th_fear = float(pget('data.vkospi_level_fear', 25.0))
+            _th_neutral = float(pget('data.vkospi_level_neutral', 18.0))
+            _th_greed = float(pget('data.vkospi_level_greed', 12.0))
+            if vkospi >= _th_ext_fear:
                 result['level'] = 'extreme_fear'
-            elif vkospi >= 25:
+            elif vkospi >= _th_fear:
                 result['level'] = 'fear'
-            elif vkospi >= 18:
+            elif vkospi >= _th_neutral:
                 result['level'] = 'neutral'
-            elif vkospi >= 12:
+            elif vkospi >= _th_greed:
                 result['level'] = 'greed'
             else:
                 result['level'] = 'extreme_greed'
@@ -102,8 +128,8 @@ class MarketBreadthCollector:
             logger.warning(f"  VKOSPI 수집 실패: {e}", exc_info=True)
         return self._estimate_vkospi_from_realized()
 
-    def _estimate_vkospi_from_realized(self) -> Dict:
-        """KOSPI 실현 변동성에서 VKOSPI 추정"""
+    def _estimate_vkospi_from_realized(self, vix_hint: float = 0.0) -> Dict:
+        """KOSPI 실현 변동성에서 VKOSPI 추정 (Huber/MAD + 5d RV + VIX Shrinkage)"""
         try:
             df = None
             for pq_path in [
@@ -122,16 +148,60 @@ class MarketBreadthCollector:
                 close_col = 'Close' if 'Close' in df.columns else ('close' if 'close' in df.columns else None)
                 if close_col:
                     close = pd.to_numeric(df[close_col], errors='coerce').dropna().tail(60)
-                    if len(close) >= 20:
-                        realized = float(close.pct_change().tail(20).std() * np.sqrt(252) * 100)
-                        estimated = realized * 1.15
-                        result = {'vkospi': round(estimated, 2), 'vkospi_prev': round(estimated, 2), 'vkospi_change': 0, 'vkospi_ma20': round(estimated, 2), 'level': 'estimated', 'source': 'realized_vol', 'timestamp': datetime.now().isoformat()}
+                    _min_len = int(pget('data.vkospi_min_bars', 20))
+                    if len(close) >= _min_len:
+                        rets = close.pct_change().dropna().tail(20)
+                        med_r = float(rets.median())
+                        mad_sigma = float((rets - med_r).abs().median() * 1.4826 * np.sqrt(252) * 100.0)
+                        ewma_sigma = float(rets.ewm(span=7).std().iloc[-1] * np.sqrt(252) * 100.0)
+                        _n5 = int(pget('data.vkospi_short_rv_days', 5))
+                        rv_5d = float(rets.tail(_n5).std() * np.sqrt(252) * 100.0) if len(rets) >= _n5 else ewma_sigma
+                        ret_5d_sum = float(rets.tail(_n5).sum()) if len(rets) >= _n5 else 0.0
+                        last_1d_ret = float(rets.iloc[-1]) if len(rets) >= 1 else 0.0
+                        crash_1d_ret = float(pget('data.vkospi_crash_1d_ret', -0.015))
+                        max_vix_ratio = float(pget('data.vkospi_max_vix_ratio', 1.35))
+                        is_not_crash = (last_1d_ret >= crash_1d_ret)
+                        _ewma_cap = mad_sigma * 1.5
+                        robust_rv = 0.65 * mad_sigma + 0.35 * min(ewma_sigma, _ewma_cap)
+                        if (ret_5d_sum >= 0.0 or is_not_crash) and rv_5d < mad_sigma:
+                            _short_blend = 0.5 * rv_5d + 0.5 * ewma_sigma
+                            robust_rv = min(robust_rv, _short_blend)
+                        vix_now = float(vix_hint or 0.0)
+                        if vix_now <= 0.0:
+                            sc_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                            if sc_path.exists():
+                                try:
+                                    sc = json.loads(sc_path.read_text(encoding='utf-8'))
+                                    vix_now = float(sc.get('vix', 0.0) or 0.0)
+                                except Exception:
+                                    pass
+                        _vix_min = float(pget('data.vkospi_min_valid', 5.0))
+                        if _vix_min <= vix_now <= 100.0:
+                            _vix_cap = vix_now * max_vix_ratio
+                            if is_not_crash:
+                                robust_rv = min(robust_rv, _vix_cap)
+                            estimated = 0.55 * (vix_now * 1.05) + 0.45 * robust_rv
+                            if is_not_crash:
+                                estimated = min(estimated, _vix_cap)
+                        else:
+                            estimated = robust_rv * 1.05
+                        estimated = round(float(estimated), 2)
+                        result = {
+                            'vkospi': estimated,
+                            'vkospi_prev': estimated,
+                            'vkospi_change': 0,
+                            'vkospi_ma20': estimated,
+                            'level': 'estimated',
+                            'source': 'realized_vol',
+                            'is_crash_1d': not is_not_crash,
+                            'timestamp': datetime.now().isoformat(),
+                        }
                         self._data['vkospi'] = result
-                        logger.info(f"  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반)")
+                        logger.info(f"  ⚠️ VKOSPI 추정: {estimated:.1f} (실현변동성 기반, MAD={mad_sigma:.1f}, RV5d={rv_5d:.1f})")
                         return result
         except Exception as e:
             logger.warning(f"  VKOSPI 추정 실패: {e}", exc_info=True)
-        return {'vkospi': 20.0, 'level': 'unknown', 'source': 'default'}
+        return {'vkospi': float(pget('data.vkospi_default', 20.0)), 'level': 'unknown', 'source': 'default'}
 
     def collect_put_call_ratio(self) -> Dict:
         """KRX 200 옵션 Put/Call 비율 (1순위: KRX 옵션 지수, 2순위: 인버스/레버리지 ETF 거래대금 헤지 비율)"""

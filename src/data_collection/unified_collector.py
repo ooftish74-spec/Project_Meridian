@@ -1397,59 +1397,72 @@ def _save_collection_status(results: Dict, mode: str):
     """
     status_file = _PROJECT_ROOT / 'results' / 'data_collection_status.json'
     try:
-        existing = {}
-        if status_file.exists():
-            try:
-                existing = json.loads(status_file.read_text())
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
-                existing = {}
-        phases = existing.get('phases', {})
-        phase_key = f'{mode}'
-        phase_entry = {'timestamp': datetime.now().isoformat(), 'elapsed_sec': results.get('elapsed_sec', 0)}
-        for key in results:
-            if key in ('timestamp', 'mode', 'elapsed_sec'):
-                continue
-            val = results[key]
-            if isinstance(val, int):
-                phase_entry[key] = val
-            elif isinstance(val, dict):
-                phase_entry[key] = val
-            elif isinstance(val, bool):
-                phase_entry[key] = val
-            elif isinstance(val, list):
-                phase_entry[key] = val
-        if _GLOBAL_FALLBACK_EVENTS:
-            phase_entry['fallback_events'] = _GLOBAL_FALLBACK_EVENTS.copy()
-            _GLOBAL_FALLBACK_EVENTS.clear()
-        phases[phase_key] = phase_entry
+        from src.infra.safe_io import safe_json_update
         stale_files = []
         stale_threshold_h = pget('collector.stale_threshold_hours', 36)
+        total_kr_parquets = 0
         if _DATA_DIR.exists():
-            for f in sorted(_DATA_DIR.glob('kr_*.parquet'))[:500]:
+            all_kr_pqs = sorted(_DATA_DIR.glob('kr_*.parquet'))
+            total_kr_parquets = len(all_kr_pqs)
+            for f in all_kr_pqs[:500]:
                 age_h = (datetime.now() - datetime.fromtimestamp(f.stat().st_mtime)).total_seconds() / 3600
                 if age_h > stale_threshold_h:
                     stale_files.append({'file': f.name, 'age_hours': round(age_h, 1)})
-        total_attempted = 0
-        total_success = 0
-        total_failed = 0
-        for p_key, p_val in phases.items():
-            if isinstance(p_val, dict):
-                _att = p_val.get('stocks_attempted', 0)
-                _suc = p_val.get('stocks', 0)
-                _fai = p_val.get('stocks_failed', 0)
-                _skip = max(0, _att - _suc - _fai)
-                total_attempted += _att
-                total_success += _suc + _skip
-                total_failed += _fai
-        status = {'last_updated': datetime.now().isoformat(), 'phases': phases, 'stale_files': stale_files[:50], 'stale_count': len(stale_files), 'overall': {'total_kr_parquets': len(list(_DATA_DIR.glob('kr_*.parquet'))) if _DATA_DIR.exists() else 0, 'fresh_count': (len(list(_DATA_DIR.glob('kr_*.parquet'))) if _DATA_DIR.exists() else 0) - len(stale_files), 'stale_count': len(stale_files), 'success_rate': round(total_success / max(total_attempted, 1), 3)}}
-        import tempfile, os
+        fallback_snapshot = None
+        if _GLOBAL_FALLBACK_EVENTS:
+            fallback_snapshot = _GLOBAL_FALLBACK_EVENTS.copy()
+            _GLOBAL_FALLBACK_EVENTS.clear()
+
+        def _mutate(existing: dict) -> dict:
+            if not isinstance(existing, dict):
+                existing = {}
+            phases = existing.get('phases', {})
+            if not isinstance(phases, dict):
+                phases = {}
+            phase_key = f'{mode}'
+            phase_entry = {'timestamp': datetime.now().isoformat(), 'elapsed_sec': results.get('elapsed_sec', 0)}
+            for key in results:
+                if key in ('timestamp', 'mode', 'elapsed_sec'):
+                    continue
+                val = results[key]
+                if isinstance(val, int):
+                    phase_entry[key] = val
+                elif isinstance(val, dict):
+                    phase_entry[key] = val
+                elif isinstance(val, bool):
+                    phase_entry[key] = val
+                elif isinstance(val, list):
+                    phase_entry[key] = val
+            if fallback_snapshot:
+                phase_entry['fallback_events'] = fallback_snapshot
+            phases[phase_key] = phase_entry
+            total_attempted = 0
+            total_success = 0
+            total_failed = 0
+            for p_key, p_val in phases.items():
+                if isinstance(p_val, dict):
+                    _att = p_val.get('stocks_attempted', 0)
+                    _suc = p_val.get('stocks', 0)
+                    _fai = p_val.get('stocks_failed', 0)
+                    _skip = max(0, _att - _suc - _fai)
+                    total_attempted += _att
+                    total_success += _suc + _skip
+                    total_failed += _fai
+            return {
+                'last_updated': datetime.now().isoformat(),
+                'phases': phases,
+                'stale_files': stale_files[:50],
+                'stale_count': len(stale_files),
+                'overall': {
+                    'total_kr_parquets': total_kr_parquets,
+                    'fresh_count': total_kr_parquets - len(stale_files),
+                    'stale_count': len(stale_files),
+                    'success_rate': round(total_success / max(total_attempted, 1), 3),
+                },
+            }
+
         status_file.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(status_file.parent), suffix='.tmp')
-        with os.fdopen(fd, 'w') as f:
-            json.dump(status, f, indent=2, ensure_ascii=False, default=str)
-        os.replace(tmp, str(status_file))
+        safe_json_update(status_file, _mutate, strict=True)
     except Exception as e:
         logger.error(f'  수집 상태 기록 실패: {e}', exc_info=True)
 

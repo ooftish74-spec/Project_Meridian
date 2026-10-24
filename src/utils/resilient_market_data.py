@@ -313,9 +313,13 @@ class ResilientFetcher:
             logger.debug(f"  Alpha Vantage 조회 예외 ({ticker}): {e}")
         return None
 
-    def _yf_history(self, ticker: str, period: str, interval: str) -> Optional[pd.DataFrame]:
-        # yfinance 폐기 — 로컬 RealtimeDataBus / MarketDataBridge 우선 참조
-        return None
+    def _yf_history(self, ticker: str, period: str = '1y', interval: str = '1d') -> Optional[pd.DataFrame]:
+        try:
+            from src.data_collection.alpha_vantage_collector import fetch_yahoo_chart_ohlcv
+            return fetch_yahoo_chart_ohlcv(ticker, range_str=period)
+        except Exception as e:
+            logger.debug(f"  _yf_history 예외 ({ticker}): {e}")
+            return None
 
     def _yf_current(self, ticker: str) -> Optional[float]:
         """Google Finance / KIS API 실시간 틱 수집기 (VIX 및 해외 지수 0-Lag)."""
@@ -372,6 +376,9 @@ class ResilientFetcher:
         return None
 
     def _av_history(self, ticker: str) -> Optional[pd.DataFrame]:
+        t_up = str(ticker).strip().upper()
+        if t_up.startswith('^') or t_up.endswith('=F') or t_up.endswith('=X'):
+            return None
         t0 = time.time()
         try:
             import requests

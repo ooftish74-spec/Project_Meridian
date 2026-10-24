@@ -46,6 +46,7 @@ class MLRegimeRouter:
     def __init__(self):
         self._models: Dict[str, object] = {}
         self._meta: Dict = {}
+        self._ensemble_feature_names: List[str] = []
         self._load_meta()
 
     def _load_meta(self):
@@ -54,6 +55,10 @@ class MLRegimeRouter:
             if _REGIME_META_FILE.exists():
                 self._meta = json.loads(_REGIME_META_FILE.read_text())
                 logger.info(f"  [MLRegimeRouter] 메타 로드: bull_auc={self._meta.get('bull_val_auc', 0):.4f}, bear_auc={self._meta.get('bear_val_auc', 0):.4f}")
+            _ens_meta_file = _MODEL_DIR / 'ensemble_meta.json'
+            if _ens_meta_file.exists():
+                _ens_meta = json.loads(_ens_meta_file.read_text())
+                self._ensemble_feature_names = list(_ens_meta.get('feature_names') or [])
         except Exception as e:
             from src.utils.error_logger import log_error_rate_limited
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
@@ -91,7 +96,24 @@ class MLRegimeRouter:
             return None
 
     @staticmethod
-    def _align_features(X: np.ndarray, model: object) -> np.ndarray:
+    def _align_features(
+        X: np.ndarray,
+        model: object,
+        input_feature_names: Optional[List[str]] = None,
+        target_feature_names: Optional[List[str]] = None,
+    ) -> np.ndarray:
+        if (
+            input_feature_names
+            and target_feature_names
+            and len(input_feature_names) == X.shape[1]
+            and list(input_feature_names) != list(target_feature_names)
+        ):
+            in_map = {fn: idx for idx, fn in enumerate(input_feature_names)}
+            aligned = np.zeros((X.shape[0], len(target_feature_names)), dtype=X.dtype)
+            for j, t_fn in enumerate(target_feature_names):
+                if t_fn in in_map:
+                    aligned[:, j] = X[:, in_map[t_fn]]
+            X = aligned
         n_in = getattr(model, 'n_features_in_', None)
         if n_in is not None:
             if X.shape[1] > n_in:
@@ -122,7 +144,9 @@ class MLRegimeRouter:
         model = self._load_model_for_regime(regime)
         if model is not None:
             try:
-                X_in = self._align_features(X_clean, model)
+                _in_names = feature_names or self._ensemble_feature_names
+                _tgt_names = self._meta.get('feature_names')
+                X_in = self._align_features(X_clean, model, input_feature_names=_in_names, target_feature_names=_tgt_names)
                 if hasattr(model, 'predict_proba'):
                     prob = float(model.predict_proba(X_in)[0, 1])
                 elif hasattr(model, 'predict'):
@@ -194,7 +218,9 @@ class MLRegimeRouter:
         model = self._load_model_for_regime(regime)
         if model is not None:
             try:
-                X_in = self._align_features(X_clean, model)
+                _in_names = self._ensemble_feature_names
+                _tgt_names = self._meta.get('feature_names')
+                X_in = self._align_features(X_clean, model, input_feature_names=_in_names, target_feature_names=_tgt_names)
                 if hasattr(model, 'predict_proba'):
                     return model.predict_proba(X_in)[:, 1]
                 elif hasattr(model, 'predict'):
@@ -216,7 +242,7 @@ class MLRegimeRouter:
         info['val_auc'] = self._meta.get(f"{regime_key}_val_auc", 0.0)
         info['val_acc'] = self._meta.get(f"{regime_key}_val_acc", 0.0)
         info['train_samples'] = self._meta.get(f"{regime_key}_train_samples", 0)
-        info['trained_at'] = self._meta.get(f"{regime_key}_trained_at", 'N/A')
+        info['trained_at'] = self._meta.get(f"{regime_key}_trained_at", self._meta.get('trained_at', 'N/A'))
         return info
 
     def clear_cache(self):

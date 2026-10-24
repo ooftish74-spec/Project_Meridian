@@ -191,7 +191,9 @@ class MasterScenarioEngine:
         ois_z = float((ois_val - ois_neutral) / ois_scale) if ois_val is not None else 0.0
 
         nf_chg = _safe_float(signal_cache.get('night_futures_change_1d', signal_cache.get('night_futures_change_pct'))) or 0.0
-        sox_chg = _safe_float(signal_cache.get('sox_change_1d', signal_cache.get('soxx_change_1d'))) or 0.0
+        _sox_clamp_pred = float(pget('scenarios.s2.sox_1d_max_clamp_pct', 15.0))
+        _sox_raw = _safe_float(signal_cache.get('sox_change_1d', signal_cache.get('soxx_change_1d'))) or 0.0
+        sox_chg = max(-_sox_clamp_pred, min(_sox_clamp_pred, _sox_raw))
         nq_chg = _safe_float(signal_cache.get('nasdaq_change_1d', signal_cache.get('ixic_change_1d'))) or 0.0
         ewy_chg = _safe_float(signal_cache.get('ewy_change_1d')) or 0.0
 
@@ -260,11 +262,14 @@ class MasterScenarioEngine:
         s1_hy_calm_max = float(pget('scenarios.s1.hy_calm_max_z', -0.5))
         s1_bull_prob_min = float(pget('scenarios.s1.bull_prob_min', 0.55))
         s2_futures_sell_thresh = float(pget('scenarios.s2.futures_net_sell', -1500000000000.0))
+        s2_fut_contracts_thresh = float(pget('scenarios.s2.futures_net_sell_contracts', -5000.0))
+        s2_sox_clamp = float(pget('scenarios.s2.sox_1d_max_clamp_pct', 15.0))
         s2_semi_z_thresh = float(pget('scenarios.s2.semi_z_threshold', 2.2))
         s2_semi_hard_z = float(pget('scenarios.s2.semi_hard_z_threshold', 2.5))
         s2_footprint_thresh = float(pget('scenarios.s2.footprint_threshold', 0.70))
         s3_vkospi_thresh = float(pget('scenarios.s3.vkospi_threshold', 35.0))
         s3_vix_z_thresh = float(pget('scenarios.s3.vix_z_threshold', 2.5))
+        s3_vix_min_floor = float(pget('scenarios.s3.vix_min_floor', 25.0))
         s3_reb_ois_min = float(pget('scenarios.s3.rebound_ois_min', 55.0))
         s3_reb_kospi_min = float(pget('scenarios.s3.rebound_kospi_chg_min', 0.5))
         s3_panic_ois_max = float(pget('scenarios.s3.panic_ois_max', 45.0))
@@ -352,23 +357,42 @@ class MasterScenarioEngine:
         foreign_futures_flow = _safe_float(
             signal_cache.get('foreign_futures_flow', signal_cache.get('foreign_futures_net_krw', signal_cache.get('frgn_fut_net_buy')))
         ) or 0.0
+        s2_eff_fut_thresh = (
+            s2_fut_contracts_thresh
+            if abs(foreign_futures_flow) < float(pget('scenarios.s2.contracts_vs_krw_cutoff', 1e7))
+            else s2_futures_sell_thresh
+        )
         semi_ofi_z = _safe_float(signal_cache.get('semi_ofi_z'))
-        sox_chg_1d = _safe_float(signal_cache.get('sox_change_1d', signal_cache.get('soxx_change_1d'))) or 0.0
+        semi_ofi_is_proxy = (semi_ofi_z is None)
+        sox_chg_1d_raw = _safe_float(signal_cache.get('sox_change_1d', signal_cache.get('soxx_change_1d'))) or 0.0
+        sox_chg_1d = max(-s2_sox_clamp, min(s2_sox_clamp, sox_chg_1d_raw))
         sox_scale = max(float(pget('scenarios.s2.sox_1d_scale_pct', 1.8)), _EPS)
         if semi_ofi_z is None:
             semi_ofi_z = -sox_chg_1d / sox_scale if sox_chg_1d != 0.0 else 0.0
         footprint_score = _safe_float(signal_cache.get('footprint_score')) or 0.0
+        kospi_chg = _safe_float(signal_cache.get('kospi_change_pct', signal_cache.get('kospi_change_1d', signal_cache.get('kospi_change')))) or 0.0
 
         s2_pred_down_z = -0.6 * pred['lead_lag_impulse_z'] - 0.4 * pred['s2_semi_z']
         s2_comp_down_z = w_hist * semi_ofi_z + w_pred * s2_pred_down_z
 
-        if (
-            foreign_futures_flow <= s2_futures_sell_thresh
-            or semi_ofi_z >= s2_semi_hard_z
+        s2_kr_confirmed = (
+            kospi_chg <= float(pget('scenarios.s2.kospi_confirm_max_pct', -0.5))
+            or foreign_futures_flow <= s2_eff_fut_thresh
             or footprint_score >= s2_footprint_thresh
-            or (semi_ofi_z >= s2_semi_z_thresh and s2_comp_down_z >= s2_semi_z_thresh)
+        )
+        s2_semi_hard_trig = (
+            semi_ofi_z >= s2_semi_hard_z
+            and (not semi_ofi_is_proxy or s2_kr_confirmed)
+        )
+
+        if (
+            foreign_futures_flow <= s2_eff_fut_thresh
+            or s2_semi_hard_trig
+            or footprint_score >= s2_footprint_thresh
+            or (semi_ofi_z >= s2_semi_z_thresh and s2_comp_down_z >= s2_semi_z_thresh and (not semi_ofi_is_proxy or s2_kr_confirmed))
         ):
-            _s2_eff_z = max(semi_ofi_z, s2_comp_down_z, s2_semi_hard_z if (foreign_futures_flow <= s2_futures_sell_thresh or footprint_score >= s2_footprint_thresh) else 0.0)
+            _s2_base_z = s2_comp_down_z if semi_ofi_is_proxy else max(semi_ofi_z, s2_comp_down_z)
+            _s2_eff_z = max(_s2_base_z, s2_semi_hard_z if (foreign_futures_flow <= s2_eff_fut_thresh or footprint_score >= s2_footprint_thresh) else 0.0)
             p_s2 = _norm_cdf(_s2_eff_z - s2_semi_z_thresh + 0.5)
             def_r, atk_r = self._dynamic_defense_attack(p_s2, base_defense=0.30, is_surge=False)
             active_scenarios.append({
@@ -376,7 +400,7 @@ class MasterScenarioEngine:
                 'name': 'Semiconductor Crash & Foreign Futures Dump (Footprint Active)',
                 'direction': 'crash',
                 'probability': round(p_s2, 4),
-                'z_composite': round(max(semi_ofi_z, s2_comp_down_z), 4),
+                'z_composite': round(_s2_base_z, 4),
                 'defense_ratio': def_r,
                 'attack_ratio': atk_r,
                 'actions': {
@@ -418,11 +442,17 @@ class MasterScenarioEngine:
 
         ois = _safe_float(signal_cache.get('ois'))
         ois_eff = ois if ois is not None else ois_center
-        kospi_chg = _safe_float(signal_cache.get('kospi_change_pct', signal_cache.get('kospi_change'))) or 0.0
+
+        vkospi_credible = True
+        if vix is not None and vix > 0.0 and vkospi is not None:
+            vkospi_credible = (
+                vkospi <= vix * float(pget('scenarios.s3.vkospi_vix_max_ratio', 1.35))
+                or kospi_chg <= float(pget('scenarios.s3.kospi_panic_confirm_pct', -1.5))
+            )
 
         is_vol_extreme = (
-            (vkospi is not None and vkospi >= s3_vkospi_thresh)
-            or (vix_z >= s3_vix_z_thresh)
+            (vkospi is not None and vkospi >= s3_vkospi_thresh and vkospi_credible)
+            or (vix is not None and vix >= s3_vix_min_floor and vix_z >= s3_vix_z_thresh)
         )
         if is_vol_extreme:
             is_v_rebound = (

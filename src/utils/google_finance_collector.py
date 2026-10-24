@@ -142,17 +142,25 @@ class GoogleFinanceCollector:
                 html = res.text
                 symbol_code = re.escape(target_sym.split(':')[0])   # ★ Wave 1: 전체 이스케이프 ('^','-','.' 등)
 
+                def _is_date_array(p_val: float, c_val: float, r_val: float) -> bool:
+                    return (
+                        1990 <= p_val <= 2100 and float(p_val).is_integer()
+                        and 1 <= c_val <= 12 and float(c_val).is_integer()
+                        and 1 <= r_val <= 31 and float(r_val).is_integer()
+                    )
+
                 # 1순위: Strict quote-card protobuf array (캘린더 배열 [YYYY, M, D] 오매칭 원천 차단)
                 p_strict = (
                     r'\[\"' + symbol_code + r'\"(?:\,\"[^\"]*\")?\]\,\"[^\"]*\"\,[0-9]+\,(?:\"[^\"]*\"|null)\,'
                     r'\[([0-9\.]+)\,([+-]?[0-9\.]+)\,([+-]?[0-9\.]+)[^\]]*\]\,null(?:\,([0-9\.]+))?'
                 )
-                m_strict = re.search(p_strict, html)
-                if m_strict:
+                for m_strict in re.finditer(p_strict, html):
                     price = float(m_strict.group(1))
+                    chg_amt = float(m_strict.group(2))
+                    chg_ratio = float(m_strict.group(3))
+                    if _is_date_array(price, chg_amt, chg_ratio):
+                        continue
                     if not valid_bounds or (valid_bounds[0] <= price <= valid_bounds[1]):
-                        chg_amt = float(m_strict.group(2))
-                        chg_ratio = float(m_strict.group(3))
                         prev_close = float(m_strict.group(4)) if m_strict.group(4) else (price - chg_amt if price != chg_amt else price)
                         price, prev_close, chg_amt = _normalize_tnx(price, prev_close, chg_amt)
                         calc_pct = ((price - prev_close) / prev_close) * 100.0 if prev_close > 0 else (chg_ratio if abs(chg_ratio) < 100 else chg_ratio / 100)
@@ -168,18 +176,16 @@ class GoogleFinanceCollector:
 
                 # 2순위: Primary callback pattern (FX pair 등 p_strict 미매칭 심볼용, 캘린더 연도 오매칭 가드 포함)
                 p1 = r'\[\"' + symbol_code + r'\"\,\"[^\"]*\"\]\,[^\,]*\,[^\,]*\,[^\,]*\,\[([0-9\.]+)\,([+-]?[0-9\.]+)\,([+-]?[0-9\.]+)'
-                m1 = re.search(p1, html)
-                if m1:
+                for m1 in re.finditer(p1, html):
                     price = float(m1.group(1))
                     chg_amt = float(m1.group(2))
                     chg_ratio = float(m1.group(3))
-                    _is_date_array = (price == _curr_yr and chg_amt == float(int(chg_amt)) and chg_ratio == float(int(chg_ratio)))
-                    if (not _is_date_array) and (not valid_bounds or (valid_bounds[0] <= price <= valid_bounds[1])):
+                    if (not _is_date_array(price, chg_amt, chg_ratio)) and (not valid_bounds or (valid_bounds[0] <= price <= valid_bounds[1])):
                         prev_close = price - chg_amt if price != chg_amt else price
-                        
-                        m_prev = re.search(p1 + r'[^\n\r]*?\]\,null\,([0-9\.]+)', html)
+
+                        m_prev = re.match(r'[^\n\r]*?\]\,null\,([0-9\.]+)', html[m1.end():])
                         if m_prev:
-                            prev_close = float(m_prev.group(4))
+                            prev_close = float(m_prev.group(1))
                         price, prev_close, chg_amt = _normalize_tnx(price, prev_close, chg_amt)
                         calc_pct = ((price - prev_close) / prev_close) * 100.0 if prev_close > 0 else (chg_ratio if abs(chg_ratio) < 100 else chg_ratio/100)
                         return {

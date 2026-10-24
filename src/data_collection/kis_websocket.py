@@ -200,6 +200,10 @@ class KISWebSocketClient:
             self._thread.start()
             self._stats['started_at'] = now_kst().isoformat()
             return True
+        import importlib.util
+        if importlib.util.find_spec('websocket') is None:
+            logger.info('websocket-client 미설치 — REST 폴링 모드로 동작')
+            return False
         if not self._approval_key:
             self._approval_key = self._get_approval_key()
             if not self._approval_key:

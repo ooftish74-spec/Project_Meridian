@@ -434,14 +434,16 @@ def sync_ssot_from_me():
                 'raw_data': _sm_existing.get('raw_data', {}),  # 보존
                 'metrics': {},
             }
+            _raw_data_map = _sm_ssot.get('raw_data', {}) if isinstance(_sm_ssot.get('raw_data'), dict) else {}
             for _k, _v in _sm_existing.items():
                 if _k.startswith('S') and isinstance(_v, dict):
-                    _sm_ssot[_k] = _v
-            for _sid in sorted(set(list(_sleeves.keys()) + list(_per_stream.keys()))):
+                    _sm_ssot[_k] = dict(_v)
+            for _sid in sorted(set(list(_sleeves.keys()) + list(_per_stream.keys()) + list(_raw_data_map.keys()))):
                 _sv = _sleeves.get(_sid, {})
                 _ps_v = _per_stream.get(_sid, {})
+                _rv_d = _raw_data_map.get(_sid, {}) if isinstance(_raw_data_map.get(_sid), dict) else {}
                 if isinstance(_sv, dict):
-                    _sm_ssot['metrics'][_sid] = {
+                    _m_entry = {
                         'win_rate': _sv.get('win_rate', _ps_v.get('win_rate', 0)),
                         'total_trades': _sv.get('total_trades', _ps_v.get('total_trades', 0)),
                         'realized_pnl': _sv.get('realized_pnl', _ps_v.get('realized_pnl', 0)),
@@ -452,8 +454,13 @@ def sync_ssot_from_me():
                         'mdd': _sv.get('mdd'),
                         'sortino': _sv.get('sortino'),
                     }
-                    if _sid not in _sm_ssot:
-                        _sm_ssot[_sid] = _sm_ssot['metrics'][_sid]
+                    if _rv_d.get('daily_returns'):
+                        _m_entry['daily_returns'] = _rv_d['daily_returns']
+                    _sm_ssot['metrics'][_sid] = _m_entry
+                    if _sid not in _sm_ssot or not isinstance(_sm_ssot[_sid], dict):
+                        _sm_ssot[_sid] = dict(_m_entry)
+                    elif _rv_d.get('daily_returns') and not _sm_ssot[_sid].get('daily_returns'):
+                        _sm_ssot[_sid]['daily_returns'] = _rv_d['daily_returns']
             _sm_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
             atomic_write_json(_sm_path, 
                 _sm_ssot, indent=2)
@@ -2396,6 +2403,11 @@ def _phase_us_regular_market():
             logger.info(f'  ✅ {_tag} 글로벌 시그널: {len(signals)}개')
         except Exception as e:
             logger.debug(f'  {_tag} 글로벌 시그널 예외: {e}')
+        try:
+            from src.data_collection.macro_realtime_refresher import MacroRealtimeRefresher
+            MacroRealtimeRefresher().refresh(tier='tier1')
+        except Exception as e_mrr:
+            logger.debug(f'  {_tag} MacroRealtimeRefresher(tier1) 예외: {e_mrr}')
         try:
             from src.intelligence.us_market_regime import USMarketRegimeEngine
             USMarketRegimeEngine().detect()

@@ -496,12 +496,17 @@ class DARTDailyCollector:
                     insider_signal = 1.0 if net_buy > 0 else -0.5 if net_buy < 0 else 0.0
             except Exception as _e:
                 logger.warning(f'  suppressed: {_e}', exc_info=True)
+        cutoff_90d = (datetime.now() - timedelta(days=90)).strftime('%Y%m%d')
         buyback_signal = 0.0
         buyback_path = ticker_dir / 'buyback_events.csv'
         if buyback_path.exists():
             try:
                 df = pd.read_csv(buyback_path)
-                has_buyback = df['is_buyback'].any() if 'is_buyback' in df.columns else False
+                dt_col = 'rcept_dt' if 'rcept_dt' in df.columns else ('date' if 'date' in df.columns else None)
+                if dt_col:
+                    dt_s = df[dt_col].astype(str).str.replace('-', '').str[:8]
+                    df = df[dt_s >= cutoff_90d]
+                has_buyback = bool(df['is_buyback'].any()) if ('is_buyback' in df.columns and not df.empty) else False
                 buyback_signal = 0.8 if has_buyback else 0.0
             except Exception as _e:
                 logger.warning(f'  suppressed: {_e}', exc_info=True)
@@ -510,7 +515,11 @@ class DARTDailyCollector:
         if major_path.exists():
             try:
                 df = pd.read_csv(major_path)
-                if 'ratio_after' in df.columns and 'ratio_before' in df.columns:
+                dt_col = 'rcept_dt' if 'rcept_dt' in df.columns else ('date' if 'date' in df.columns else None)
+                if dt_col:
+                    dt_s = df[dt_col].astype(str).str.replace('-', '').str[:8]
+                    df = df[dt_s >= cutoff_90d]
+                if not df.empty and 'ratio_after' in df.columns and 'ratio_before' in df.columns:
                     net_change = (df['ratio_after'] - df['ratio_before']).sum()
                     major_signal = float(np.clip(net_change * 0.1, -1, 1))
             except Exception as _e:

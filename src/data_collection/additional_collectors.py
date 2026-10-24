@@ -25,16 +25,23 @@ class GoogleTrendsCollector:
     def pytrends(self):
         """Lazy initialization of pytrends with error handling"""
         if not self._initialized:
+            import importlib.util
+            if importlib.util.find_spec('pytrends') is None:
+                logger.debug('pytrends not installed — skipping')
+                self._pytrends = None
+                self._initialized = True
+                self._init_error = None
+                return None
             try:
                 from pytrends.request import TrendReq
                 self._pytrends = TrendReq(hl='en-US', tz=360, timeout=(10, 30), retries=2, backoff_factor=0.5)
                 self._initialized = True
                 logger.info('✓ Google Trends connection established')
             except ImportError as e:
-                logger.error('pytrends not installed. Run: pip install pytrends', exc_info=True)
+                logger.debug('pytrends not installed — skipping')
                 self._pytrends = None
                 self._initialized = True
-                self._init_error = 'ImportError'
+                self._init_error = None
             except Exception as e:
                 logger.warning(f'Google Trends unavailable: {e}', exc_info=True)
                 logger.info('Continuing without Google Trends data')
@@ -56,11 +63,15 @@ class GoogleTrendsCollector:
         Returns:
             DataFrame with trend data
         """
+        import importlib.util
+        if importlib.util.find_spec('pytrends') is None:
+            logger.debug('pytrends not installed — skipping')
+            return pd.DataFrame()
         if self.pytrends is None:
             if self._init_error:
                 logger.error(f"Google Trends not available: {self._init_error}")
             else:
-                logger.error('Google Trends not available')
+                logger.debug('Google Trends not available')
             return pd.DataFrame()
         try:
             logger.info(f"Collecting Google Trends for {keywords}")
