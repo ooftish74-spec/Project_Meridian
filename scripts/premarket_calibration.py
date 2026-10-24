@@ -76,7 +76,15 @@ def run_calibration():
     logger.info("==================================================")
     logger.info(f" 🌅 08:50 Premarket Calibration Started")
     logger.info("==================================================")
-    
+    try:
+        from src.utils.market_calendar import MarketCalendar
+        _today_str = datetime.now().strftime('%Y-%m-%d')
+        if not MarketCalendar().is_trading_day(_today_str):
+            logger.info(f"  ⏭ KRX 휴장일({_today_str}) — Premarket Calibration 스킵 (dual_exit_plan 보존)")
+            return
+    except Exception as _cal_e:
+        logger.warning(f"  ⚠️ MarketCalendar 확인 중 예외 (계속 진행): {_cal_e}")
+
     signals_file = base / 'results' / 'latest_signals.json'
     if not signals_file.exists():
         logger.error("  🚨 latest_signals.json 파일이 없습니다. 모닝 파이프라인(07:50)이 실패했거나 실행되지 않았습니다.")

@@ -171,7 +171,7 @@ class TCAAnalyzer:
         vwap_map = {}
         close_map = {}
         try:
-            from pykrx import stock as pykrx_stock
+            from src.data_collection.pykrx_compat import stock as pykrx_stock
             for ticker in tickers:
                 try:
                     df = pykrx_stock.get_market_ohlcv(date_str, date_str, ticker)

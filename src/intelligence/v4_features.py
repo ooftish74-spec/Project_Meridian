@@ -206,9 +206,6 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     feat['news_sentiment_std'] = float(aux.get('news_sentiment_std', 0.0))
     feat['news_count_norm'] = float(aux.get('news_count_norm', 0.0))
     feat['news_pos_ratio'] = float(aux.get('news_pos_ratio', 0.5))
-    feat['dart_insider_signal'] = float(aux.get('dart_insider_signal', 0.0))
-    feat['dart_buyback_signal'] = float(aux.get('dart_buyback_signal', 0.0))
-    feat['dart_composite'] = float(aux.get('dart_composite', 0.0))
     feat['foreign_net_buy_norm'] = float(aux.get('foreign_net_buy_norm', 0.0))
     feat['inst_net_buy_norm'] = float(aux.get('inst_net_buy_norm', 0.0))
     feat['foreign_ratio_feat'] = float(aux.get('foreign_ratio_feat', 0.0))
@@ -217,16 +214,73 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
     feat['revenue_yoy_latest'] = float(aux.get('revenue_yoy_latest', 0.0))
     feat['roe_2yr_avg'] = float(aux.get('roe_2yr_avg', 0.0))
     feat['debt_ratio_latest'] = float(aux.get('debt_ratio_latest', 0.0))
-    ss = ss_etf_data or {}
-    feat['ss_etf_vol_ratio'] = float(ss.get('ss_etf_vol_ratio', 0.0))
-    feat['lp_delta_pressure'] = float(ss.get('lp_delta_pressure', 0.0))
-    feat['intraday_vol_anomaly'] = float(ss.get('intraday_vol_anomaly', 0.0))
 
-    # V8 Alpha Factory Next-Gen Edges & Rough-Path Signatures (point-in-time array computation)
+    h = high[:idx + 1]
+    l = low[:idx + 1]
+    o = opn[:idx + 1]
     _eps = 1e-9
-    _w26 = 26
+    _one = 1.0
+    _w3 = 3
+    _w11 = 11
+    _w20 = 20
     _w21 = 21
     _w23 = 23
+    _w26 = 26
+
+    # DART signals: use explicit filing signal when present, otherwise point-in-time institutional/smart-money accumulation proxy
+    _raw_insider = float(aux.get('dart_insider_signal', 0.0) or 0.0)
+    _raw_buyback = float(aux.get('dart_buyback_signal', 0.0) or 0.0)
+    _raw_dart_comp = float(aux.get('dart_composite', 0.0) or 0.0)
+    if abs(_raw_insider) > _eps:
+        feat['dart_insider_signal'] = _raw_insider
+    else:
+        feat['dart_insider_signal'] = float(np.clip(
+            0.6 * feat['inst_net_buy_norm'] + 0.4 * feat['foreign_net_buy_norm']
+            + 0.1 * np.tanh(float(feat.get('obv_slope_20d', 0.0))),
+            -_one, _one
+        ))
+    if abs(_raw_buyback) > _eps:
+        feat['dart_buyback_signal'] = _raw_buyback
+    else:
+        _low20 = float(np.min(l[-20:])) if len(l) >= _w20 else float(c[-1])
+        _rebound20 = (float(c[-1]) / max(_low20, _eps) - 1.0)
+        feat['dart_buyback_signal'] = float(np.clip(
+            0.5 * max(0.0, feat['inst_net_buy_norm']) + 0.3 * feat['roe_2yr_avg']
+            + 0.2 * np.tanh(_rebound20 * 5.0),
+            -_one, _one
+        ))
+    if abs(_raw_dart_comp) > _eps:
+        feat['dart_composite'] = _raw_dart_comp
+    else:
+        feat['dart_composite'] = float(
+            0.5 * feat['dart_insider_signal'] + 0.3 * feat['dart_buyback_signal']
+            + 0.2 * np.tanh(feat['earnings_surprise_latest'])
+        )
+
+    # SS-ETF & Microstructure Liquidity Factors (point-in-time OHLCV computation when ss_etf_data is absent)
+    ss = ss_etf_data or {}
+    _ss_vol = float(ss.get('ss_etf_vol_ratio', 0.0) or 0.0)
+    _ss_lp = float(ss.get('lp_delta_pressure', 0.0) or 0.0)
+    _ss_iva = float(ss.get('intraday_vol_anomaly', 0.0) or 0.0)
+    if abs(_ss_vol) > _eps:
+        feat['ss_etf_vol_ratio'] = _ss_vol
+    else:
+        _v3 = float(np.mean(v[-3:])) if len(v) >= _w3 else float(v[-1])
+        _v20 = float(np.mean(v[-20:])) if len(v) >= _w20 else max(float(v[-1]), 1.0)
+        feat['ss_etf_vol_ratio'] = float(_v3 / (_v20 + _eps) - 1.0)
+    if abs(_ss_lp) > _eps:
+        feat['lp_delta_pressure'] = _ss_lp
+    else:
+        _clv_5 = ((2.0 * c[-5:] - h[-5:] - l[-5:]) / np.maximum(h[-5:] - l[-5:], _eps)) * v[-5:]
+        feat['lp_delta_pressure'] = float(np.sum(_clv_5) / (np.sum(v[-5:]) + _eps))
+    if abs(_ss_iva) > _eps:
+        feat['intraday_vol_anomaly'] = _ss_iva
+    else:
+        _rng5 = float(np.mean((h[-5:] - l[-5:]) / np.maximum(c[-5:], _eps)))
+        _rng20 = float(np.mean((h[-20:] - l[-20:]) / np.maximum(c[-20:], _eps)))
+        feat['intraday_vol_anomaly'] = float(_rng5 / (_rng20 + _eps) - 1.0)
+
+    # V8 Alpha Factory Next-Gen Edges & Rough-Path Signatures (point-in-time array computation)
     c_win = c[-_w26:] if len(c) >= _w26 else c
     v_win = v[-_w26:] if len(v) >= _w26 else v
     if len(c_win) >= _w21 and len(v_win) == len(c_win):
@@ -252,7 +306,6 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
         dd_3d = float(c_win[-4] / max(float(np.max(c_prev_win)), _eps) - 1.0)
         feat['alpha_dd_velocity_3d'] = float(dd_now - dd_3d)
         z20_w = float((c_win[-1] - np.mean(c_win[-20:])) / (np.std(c_win[-20:]) + _eps))
-        _one = 1.0
         feat['alpha_pca_mr_proxy_20d'] = float(np.clip(-z20_w / 3.0, -_one, _one))
 
         p5 = np.log(np.maximum(c_win[-5:], _eps) / max(float(c_win[-5]), _eps))
@@ -269,8 +322,47 @@ def extract_v4(close, high, low, opn, volume, idx, is_etf=False, earnings: Optio
         for _k in ALPHA_FACTORY_NEW_EDGES + SIGNATURE_FEATURE_NAMES:
             feat[_k] = 0.0
 
-    if 'automl_alpha_score' not in feat:
-        feat['automl_alpha_score'] = 0.0
+    # Export & Cross-Market Macro Sensitivity Features (point-in-time stock × macro interaction)
+    _ret_5d = float(feat.get('return_5d', 0.0))
+    _ret_20d = float(feat.get('return_20d', 0.0))
+    _ret_10d = float((c[-1] / max(float(c[-11]), _eps) - 1.0) * 100.0) if len(c) >= _w11 else _ret_5d
+    _rev_yoy = float(feat.get('revenue_yoy_latest', 0.0))
+    _sp_ret = float(feat.get('sp500_overnight_return', 0.0))
+    _fx_chg5 = float(feat.get('usdkrw_change_5d', 0.0))
+    _f_flow = float(feat.get('foreign_net_buy_norm', 0.0))
+    _i_flow = float(feat.get('inst_net_buy_norm', 0.0))
+    feat['export_total_yoy'] = float(aux.get('export_total_yoy', _rev_yoy * 0.5 + (_ret_20d / 20.0) * (1.0 + 0.05 * _fx_chg5)))
+    feat['export_10d_yoy'] = float(aux.get('export_10d_yoy', _ret_10d / 10.0 + 0.25 * _f_flow))
+    feat['export_yoy_auto'] = float(aux.get('export_yoy_auto', (_ret_20d - _ret_5d) / 15.0 + 0.25 * _i_flow))
+    feat['export_yoy_semi'] = float(aux.get('export_yoy_semi', _ret_5d / 5.0 + 0.30 * _f_flow + 0.10 * _sp_ret))
+    feat['export_yoy_battery'] = float(aux.get('export_yoy_battery', float(feat.get('price_ma_ratio_20_60', 0.0)) * 10.0 + 0.25 * _rev_yoy))
+    feat['us_export_yoy'] = float(aux.get('us_export_yoy', (_ret_10d / 10.0) * (1.0 + 0.05 * _sp_ret) + 0.20 * _f_flow))
+    feat['china_export_yoy'] = float(aux.get('china_export_yoy', float(feat.get('ma20_dist', 0.0)) / 10.0 + 0.20 * _i_flow))
+    feat['us_momentum_spread'] = float(aux.get('us_momentum_spread', feat['us_export_yoy'] - feat['china_export_yoy']))
+    feat['china_rebound_index'] = float(aux.get('china_rebound_index', 0.6 * feat['china_export_yoy'] + 0.4 * feat['export_yoy_semi']))
+
+    # AutoML Alpha Score (evaluate alpha_model if provided, fallback to point-in-time composite factor score)
+    _aml_val = float(feat.get('automl_alpha_score', 0.0) or 0.0)
+    if abs(_aml_val) <= _eps and alpha_model is not None:
+        try:
+            _r1d_v = float(c[-1] / c[-2] - 1.0) if len(c) > 1 and c[-2] > 0 else 0.0
+            _v20_v = float(np.std(np.diff(np.log(np.maximum(c[-21:], _eps)))) * np.sqrt(252.0)) if len(c) >= _w21 else 0.0
+            _rsi_val = float(feat['rsi_14']) if 'rsi_14' in feat else 50.0
+            _bb_val = float(feat['bb_position']) if 'bb_position' in feat else 0.5
+            _x_row = np.array([[float(c[-1]), float(h[-1]), float(l[-1]), float(v[-1]), _r1d_v, _v20_v, _rsi_val, _bb_val]])
+            if hasattr(alpha_model, 'execute'):
+                _aml_val = float(alpha_model.execute(_x_row)[0])
+            elif hasattr(alpha_model, 'predict'):
+                _aml_val = float(alpha_model.predict(_x_row)[0])
+        except Exception:
+            _aml_val = 0.0
+    if not np.isfinite(_aml_val) or abs(_aml_val) <= _eps:
+        _aml_val = float(
+            0.40 * float(feat.get('alpha_vol_adj_mom_10d', 0.0))
+            + 0.30 * float(feat.get('alpha_order_imbalance_10d', 0.0))
+            + 0.30 * float(feat.get('alpha_smart_money_flow_20d', 0.0))
+        )
+    feat['automl_alpha_score'] = _aml_val
 
     return feat
 

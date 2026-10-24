@@ -53,7 +53,14 @@ class HMMRegimePredictor:
         self._train_std = train_data.std().replace(0.0, 1e-9)
         X = (train_data - self._train_mean) / self._train_std
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
-        self.model = GaussianHMM(n_components=self.n_components, covariance_type='full', n_iter=100, random_state=42)
+        self.model = GaussianHMM(
+            n_components=self.n_components,
+            covariance_type='diag',
+            min_covar=1e-2,
+            tol=1e-2,
+            n_iter=100,
+            random_state=42,
+        )
         try:
             self.model.fit(X)
             

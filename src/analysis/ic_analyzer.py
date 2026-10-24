@@ -100,14 +100,27 @@ def evaluate_features(features_df: pd.DataFrame,
         DataFrame with IC stats per feature
     """
     results = []
+    _p_thresh = 0.05
+    _ic_strong = 0.02
+    _ic_weak = 0.005
     for i, name in enumerate(feature_names):
         vals = features_df[:, i] if isinstance(features_df, np.ndarray) else features_df.iloc[:, i]
         corr, pval = stats.spearmanr(vals, forward_returns)
+        ic_val = round(float(corr) if not np.isnan(corr) else 0.0, 4)
+        p_val = round(float(pval) if not np.isnan(pval) else 1.0, 4)
+        sig = bool(p_val < _p_thresh)
+        if sig and abs(ic_val) >= _ic_strong:
+            verdict = 'STRONG'
+        elif (not sig) or abs(ic_val) < _ic_weak:
+            verdict = 'WEAK'
+        else:
+            verdict = 'MODERATE'
         results.append({
             'feature': name,
-            'ic': round(float(corr) if not np.isnan(corr) else 0, 4),
-            'p_value': round(float(pval) if not np.isnan(pval) else 1, 4),
-            'significant': pval < 0.05 if not np.isnan(pval) else False,
+            'ic': ic_val,
+            'p_value': p_val,
+            'significant': sig,
+            'verdict': verdict,
         })
 
     df = pd.DataFrame(results).sort_values('ic', key=abs, ascending=False)

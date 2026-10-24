@@ -401,9 +401,11 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                     if cross_path.exists():
                         existing = pd.read_parquet(cross_path)
                         existing.columns = [c.lower() for c in existing.columns]
+                        if 'date' not in existing.columns:
+                            existing = existing.reset_index().rename(columns={existing.index.name or 'index': 'date'})
                         if 'date' in existing.columns:
-                            existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
-                            combined = pd.concat([existing, df]).drop_duplicates(subset='date', keep='last').sort_values('date')
+                            existing['date'] = pd.to_datetime(existing['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+                            combined = pd.concat([existing, df]).dropna(subset=['date']).drop_duplicates(subset='date', keep='last').sort_values('date')
                             safe_parquet_write(combined, cross_path)
                     else:
                         safe_parquet_write(df, cross_path)
@@ -671,9 +673,9 @@ def update_ticker_names() -> Dict[str, str]:
         ticker → 종목명 dict
     """
     try:
-        from pykrx import stock as pykrx_stock
+        from src.data_collection.pykrx_compat import stock as pykrx_stock
     except ImportError as e:
-        logger.error('  pykrx 미설치 — 종목명 갱신 스킵', exc_info=True)
+        logger.error('  pykrx_compat 미설치 — 종목명 갱신 스킵', exc_info=True)
         return {}
     tickers: List[str] = []
     try:
@@ -1157,6 +1159,43 @@ def collect_us_macro() -> Dict:
         start = (datetime.now() - timedelta(days=3650)).strftime('%Y-%m-%d')
         result = collector.collect_all_usa_data(start, end)
         if result:
+            # 10년치 US 지수/국채/원자재 시계열을 cross_*.parquet에 영속 병합
+            _cross_series_targets = []
+            _idx_df = result.get('indices')
+            if isinstance(_idx_df, pd.DataFrame) and 'S&P_500' in _idx_df.columns:
+                _cross_series_targets.append((_idx_df['S&P_500'], _DATA_DIR / 'cross_sp500.parquet'))
+            _tr_df = result.get('treasuries')
+            if isinstance(_tr_df, pd.DataFrame) and 'US_10Y' in _tr_df.columns:
+                _cross_series_targets.append((_tr_df['US_10Y'], _DATA_DIR / 'cross_us10y.parquet'))
+            _cm_df = result.get('commodities')
+            if isinstance(_cm_df, pd.DataFrame):
+                if 'WTI_Oil' in _cm_df.columns:
+                    _cross_series_targets.append((_cm_df['WTI_Oil'], _DATA_DIR / 'cross_oil_futures.parquet'))
+                if 'Gold' in _cm_df.columns:
+                    _cross_series_targets.append((_cm_df['Gold'], _DATA_DIR / 'cross_gold_futures.parquet'))
+            for _ser, _cpath in _cross_series_targets:
+                try:
+                    _s_clean = pd.to_numeric(_ser, errors='coerce').dropna()
+                    if len(_s_clean) < 10:
+                        continue
+                    _new_df = pd.DataFrame({
+                        'date': pd.to_datetime(_s_clean.index).tz_localize(None).normalize(),
+                        'open': _s_clean.values,
+                        'high': _s_clean.values,
+                        'low': _s_clean.values,
+                        'close': _s_clean.values,
+                        'volume': 0,
+                    })
+                    if _cpath.exists():
+                        _ex = pd.read_parquet(_cpath)
+                        _ex.columns = [c.lower() for c in _ex.columns]
+                        if 'date' not in _ex.columns:
+                            _ex = _ex.reset_index().rename(columns={_ex.index.name or 'index': 'date'})
+                        _ex['date'] = pd.to_datetime(_ex['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+                        _new_df = pd.concat([_ex, _new_df], ignore_index=True).dropna(subset=['date', 'close']).drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
+                    safe_parquet_write(_new_df, _cpath)
+                except Exception as _ce:
+                    logger.debug(f'  cross series sync skip ({_cpath.name}): {_ce}')
             economic = result.get('economic', {})
             key_map = {'CPI': 'cpi', 'Unemployment': 'unemployment_rate', 'Fed_Funds_Rate': 'federal_funds_rate', 'Consumer_Sentiment': 'consumer_sentiment', 'HY_Credit_Spread': 'hy_credit_spread', 'IG_Credit_Spread': 'ig_credit_spread', 'Industrial_Production': 'industrial_production', 'Retail_Sales': 'retail_sales', 'GDP_Growth': 'gdp_growth'}
             cache_updates = {}

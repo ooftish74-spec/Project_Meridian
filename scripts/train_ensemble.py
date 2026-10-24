@@ -290,57 +290,96 @@ def extract_v3(close, high, low, opn, volume, idx, is_etf=False):
 # ═══════════════════════════════════════════════════════
 
 def _load_cross_asset_data() -> Dict:
-    """S&P500, VIX, USD/KRW 일별 데이터 로드.
+    """S&P500, VIX, USD/KRW 일별 데이터 로드 (다중 로컬 파케 병합).
 
     Returns:
-        {'sp500': {date_str: {'close': ..., 'prev_close': ...}},
+        {'sp500': {date_str: {'return': ...}},
          'vix': {date_str: {'close': ..., 'prev_close': ...}},
          'usdkrw': {date_str: {'close': ..., 'close_5d_ago': ...}}}
     """
     result = {'sp500': {}, 'vix': {}, 'usdkrw': {}}
     _SIGNAL_DIR = DATA_DIR.parent / 'signals'
     _US_PRICES_DIR = DATA_DIR.parent / 'us_stocks' / 'prices'
+    _GLOBAL_DIR = DATA_DIR / 'global_markets'
     files = {
-        'sp500': [DATA_DIR / 'cross_sp500.parquet',
-                  _US_PRICES_DIR / 'SPY.parquet',
-                  _SIGNAL_DIR / 'signal_sp500.parquet'],
-        'vix':   [DATA_DIR / 'cross_vix.parquet',
-                  _US_PRICES_DIR / '^VIX.parquet',
-                  _SIGNAL_DIR / 'signal_vix.parquet'],
-        'usdkrw': [DATA_DIR / 'cross_usdkrw.parquet',
-                   _SIGNAL_DIR / 'signal_usdkrw.parquet'],
+        'sp500': [
+            DATA_DIR / 'cross_sp500.parquet',
+            _US_PRICES_DIR / 'SPY.parquet',
+            _GLOBAL_DIR / 'indices_S&P_500.parquet',
+            _SIGNAL_DIR / 'signal_sp500.parquet',
+        ],
+        'vix': [
+            DATA_DIR / 'cross_vix.parquet',
+            _US_PRICES_DIR / '^VIX.parquet',
+            _GLOBAL_DIR / 'indices_VIX.parquet',
+            _SIGNAL_DIR / 'signal_vix.parquet',
+        ],
+        'usdkrw': [
+            DATA_DIR / 'cross_usdkrw.parquet',
+            _US_PRICES_DIR / 'KRW=X.parquet',
+            _GLOBAL_DIR / 'currencies_USD_KRW.parquet',
+            _SIGNAL_DIR / 'signal_usdkrw.parquet',
+        ],
     }
 
-    _min_series_rows = 10
+    def _extract_date_close(cand_df: pd.DataFrame) -> Optional[pd.DataFrame]:
+        if cand_df is None or len(cand_df) == 0:
+            return None
+        df_c = cand_df.copy()
+        df_c.columns = [c.lower() if isinstance(c, str) else c for c in df_c.columns]
+        if hasattr(df_c.columns, 'levels'):
+            df_c.columns = ['_'.join(c).strip('_') if isinstance(c, tuple) else c for c in df_c.columns]
+        close_col = 'close' if 'close' in df_c.columns else (df_c.columns[0] if len(df_c.columns) > 0 else None)
+        if close_col is None:
+            return None
+        if 'date' in df_c.columns:
+            dt_ser = pd.to_datetime(df_c['date'], errors='coerce')
+        else:
+            dt_ser = pd.to_datetime(df_c.index, errors='coerce')
+        out = pd.DataFrame({
+            'date': pd.Series(dt_ser).dt.tz_localize(None).dt.normalize().values,
+            'close': pd.to_numeric(df_c[close_col], errors='coerce').values,
+        }).dropna()
+        out = out[out['close'] > 0]
+        return out if len(out) >= 2 else None
+
     for key, fp_list in files.items():
-        df = None
-        for candidate in fp_list:
+        merged_parts = []
+        # 역순으로 병합하여 앞순위(1순위) 파일이 중복 날짜에서 우선권을 갖도록 함
+        for candidate in reversed(fp_list):
             if not candidate.exists():
                 continue
             try:
-                cand_df = pd.read_parquet(candidate)
-                if len(cand_df) >= _min_series_rows:
-                    df = cand_df
-                    break
+                part = _extract_date_close(pd.read_parquet(candidate))
+                if part is not None:
+                    merged_parts.append(part)
             except Exception:
                 continue
-        if df is None:
+        if key == 'vix':
+            vix_json_path = DATA_DIR.parent / 'macro' / 'vix_daily.json'
+            if vix_json_path.exists():
+                try:
+                    vj = json.loads(vix_json_path.read_text(encoding='utf-8'))
+                    hist = vj.get('history', vj) if isinstance(vj, dict) else {}
+                    if isinstance(hist, dict) and len(hist) >= 2:
+                        part_j = pd.DataFrame([
+                            {'date': pd.Timestamp(k).tz_localize(None).normalize(), 'close': float(v)}
+                            for k, v in hist.items() if v is not None and float(v) > 0
+                        ])
+                        if len(part_j) >= 2:
+                            merged_parts.insert(0, part_j)
+                except Exception:
+                    pass
+        if not merged_parts:
             continue
         try:
-            # 컬럼명 정규화
-            df.columns = [c.lower() if isinstance(c, str) else c for c in df.columns]
-            if hasattr(df.columns, 'levels'):
-                df.columns = ['_'.join(c).strip('_') if isinstance(c, tuple) else c
-                              for c in df.columns]
-            closes = pd.to_numeric(df['close'], errors='coerce').values
-            # index가 Date 또는 date 컬럼
-            if 'date' in df.columns:
-                dates = pd.to_datetime(df['date'])
-                date_strs = [d.strftime('%Y-%m-%d') for d in dates]
-            else:
-                dates = df.index
-                date_strs = [pd.Timestamp(d).strftime('%Y-%m-%d') for d in dates]
+            df = pd.concat(merged_parts, ignore_index=True)
+            df = df.dropna().drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
+            closes = df['close'].values.astype(float)
+            date_strs = [pd.Timestamp(d).strftime('%Y-%m-%d') for d in df['date']]
 
+            _max_jump_pct = 25.0
+            _lookback_5 = 5
             for i in range(1, len(closes)):
                 if not np.isfinite(closes[i]) or not np.isfinite(closes[i - 1]):
                     continue
@@ -348,20 +387,41 @@ def _load_cross_asset_data() -> Dict:
                 if key == 'sp500':
                     prev = closes[i - 1]
                     ret = (closes[i] / prev - 1) * 100 if prev > 0 else 0
-                    result['sp500'][d] = {'return': float(ret)}
+                    if abs(ret) < _max_jump_pct:  # 이종 스케일 점프 경계 방어
+                        result['sp500'][d] = {'return': float(ret)}
                 elif key == 'vix':
                     result['vix'][d] = {
                         'close': float(closes[i]),
                         'prev_close': float(closes[i - 1]),
                     }
                 elif key == 'usdkrw':
-                    close_5d = closes[max(0, i - 5)]
+                    close_5d = closes[max(0, i - _lookback_5)]
                     result['usdkrw'][d] = {
                         'close': float(closes[i]),
                         'close_5d_ago': float(close_5d),
                     }
         except Exception as e:
             logger.debug(f"  Cross-asset {key} 로드 실패: {e}")
+
+    # S&P500 장기 일간 수익률 백필 (국내 상장 S&P500 ETF kr_360750 / kr_133690 일간 수익률로 미커버 과거 구간 보완)
+    _min_etf_rows = 20
+    _max_etf_jump = 25.0
+    for etf_fallback in (DATA_DIR / 'kr_360750.parquet', DATA_DIR / 'kr_133690.parquet'):
+        if etf_fallback.exists():
+            try:
+                part_etf = _extract_date_close(pd.read_parquet(etf_fallback))
+                if part_etf is not None and len(part_etf) >= _min_etf_rows:
+                    part_etf = part_etf.sort_values('date').reset_index(drop=True)
+                    c_etf = part_etf['close'].values.astype(float)
+                    d_etf = [pd.Timestamp(d).strftime('%Y-%m-%d') for d in part_etf['date']]
+                    for i in range(1, len(c_etf)):
+                        d_s = d_etf[i]
+                        if d_s not in result['sp500'] and c_etf[i - 1] > 0:
+                            r_etf = (c_etf[i] / c_etf[i - 1] - 1.0) * 100.0
+                            if abs(r_etf) < _max_etf_jump:
+                                result['sp500'][d_s] = {'return': float(r_etf)}
+            except Exception:
+                pass
 
     return result
 
@@ -2378,9 +2438,25 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     # ── IC Analyzer: 피처 예측력 평가 ──
     try:
         from src.analysis.ic_analyzer import evaluate_features
-        ic_result = evaluate_features(val_X, val_y, active_features)  # ★ H-21
-        strong = [f for f in ic_result if ic_result[f].get('verdict') == 'STRONG']
-        weak = [f for f in ic_result if ic_result[f].get('verdict') == 'WEAK']
+        _ic_target = (
+            ds_meta['val_fwd_ret']
+            if (isinstance(ds_meta, dict) and ds_meta.get('val_fwd_ret') is not None
+                and len(ds_meta['val_fwd_ret']) == len(val_X))
+            else val_y
+        )
+        ic_result = evaluate_features(val_X, _ic_target, active_features)  # ★ H-21
+        if isinstance(ic_result, pd.DataFrame):
+            if 'verdict' in ic_result.columns:
+                strong = ic_result.loc[ic_result['verdict'] == 'STRONG', 'feature'].tolist()
+                weak = ic_result.loc[ic_result['verdict'] == 'WEAK', 'feature'].tolist()
+            else:
+                strong = ic_result.loc[ic_result['significant'] & (ic_result['ic'].abs() >= 0.02), 'feature'].tolist()
+                weak = ic_result.loc[(~ic_result['significant']) | (ic_result['ic'].abs() < 0.005), 'feature'].tolist()
+        elif isinstance(ic_result, dict):
+            strong = [f for f in ic_result if isinstance(ic_result[f], dict) and ic_result[f].get('verdict') == 'STRONG']
+            weak = [f for f in ic_result if isinstance(ic_result[f], dict) and ic_result[f].get('verdict') == 'WEAK']
+        else:
+            strong, weak = [], []
         logger.info(f"  📊 IC Analysis: strong={len(strong)}, weak={len(weak)}")
     except Exception as e:
         logger.debug(f"  IC Analyzer 스킵: {e}")

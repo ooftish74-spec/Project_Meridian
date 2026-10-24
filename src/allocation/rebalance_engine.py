@@ -379,7 +379,7 @@ class RebalanceEngine:
     def _load_returns_from_data(self, ticker: str) -> List[float]:
         """pykrx 또는 parquet에서 수익률 로드."""
         try:
-            from pykrx import stock as pykrx
+            from src.data_collection.pykrx_compat import stock as pykrx
             lookback = pget('rebalance.score.momentum_lookback_days', 60)
             end = date.today().strftime('%Y%m%d')
             start = (date.today() - timedelta(days=lookback * 2)).strftime('%Y%m%d')
@@ -429,7 +429,7 @@ class RebalanceEngine:
         if ticker in self._price_cache:
             return self._price_cache[ticker]
         try:
-            from pykrx import stock as pykrx
+            from src.data_collection.pykrx_compat import stock as pykrx
             today = date.today().strftime('%Y%m%d')
             week_ago = (date.today() - timedelta(days=7)).strftime('%Y%m%d')
             df = pykrx.get_market_ohlcv_by_date(week_ago, today, ticker)

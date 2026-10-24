@@ -361,7 +361,7 @@ def validate_intraday_sources(test_ticker: str='069500') -> Dict:
     result = {'pykrx_intraday': False, 'pykrx_data_fresh': False, 'kis_price': False, 'validation_at': now_kst().isoformat(), 'details': {}}
     today_str = now_kst().strftime('%Y%m%d')
     try:
-        from pykrx import stock as pykrx_stock
+        from src.data_collection.pykrx_compat import stock as pykrx_stock
         df = pykrx_stock.get_market_trading_volume_by_date(today_str, today_str, test_ticker)
         if df is not None and (not df.empty):
             result['pykrx_intraday'] = True

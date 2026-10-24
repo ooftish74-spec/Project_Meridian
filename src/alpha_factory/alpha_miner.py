@@ -1121,7 +1121,18 @@ def get_active_alpha_names(alpha_file: Optional[Path]=None, max_alphas: Optional
         return []
     try:
         alphas = json.loads(alpha_file.read_text(encoding='utf-8'))
-        active = [a for a in alphas if a.get('status') == 'active']
+        active = []
+        for a in alphas:
+            if a.get('status') != 'active':
+                continue
+            py_expr = str(a.get('py_expr', '') or '').strip()
+            formula = str(a.get('formula', '') or '').strip()
+            feats_used = a.get('features_used', []) or []
+            if not py_expr or py_expr == '0.0' or 'MagicMock' in formula:
+                continue
+            if any(f in ('f1', 'x0', 'x1', 'gscpi', 'copper_gold_ratio') for f in feats_used):
+                continue
+            active.append(a)
         active = sorted(active, key=lambda a: a.get('oos_ic', 0.0), reverse=True)[:max_n]
         return [a.get('col_name', f"auto_alpha_{a['id'][-6:]}") for a in active]
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:

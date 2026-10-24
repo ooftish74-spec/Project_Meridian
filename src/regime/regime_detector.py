@@ -192,11 +192,22 @@ class RegimeDetector:
         """
         if market_data is None:
             market_data = {}
+        if 'signal_cache' not in market_data or not market_data.get('signal_cache'):
             try:
                 import json as _sc_json
                 _sc_path = Path(__file__).resolve().parent.parent.parent / 'results' / 'signal_cache.json'
                 if _sc_path.exists():
                     market_data['signal_cache'] = _sc_json.loads(_sc_path.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        if not market_data.get('kospi_returns') or not market_data.get('vix_history'):
+            try:
+                from src.data.market_data_bridge import MarketDataBridge
+                _hist = MarketDataBridge().get_regime_history()
+                if isinstance(_hist, dict):
+                    for _hk in ('kospi_returns', 'vix_history', 'vkospi_history', 'volume_history'):
+                        if not market_data.get(_hk) and _hist.get(_hk):
+                            market_data[_hk] = _hist[_hk]
             except Exception:
                 pass
         try:
@@ -612,6 +623,9 @@ class RegimeDetector:
         logger.info(f"  [RegimeDetector] Probabilistic Inference: FlashCrash={prob_flash_crash:.2f}, Recession={prob_recession:.2f}, Stress={cross_asset_stress:.2f} → state={divergence_state}")
         confidence = abs(score - 50) / 50
         conf_floor = pget('regime.rule_confidence_floor', 0.3)
+        _rebound_conf = 0.65
+        if crash_type == 'rebound_from_bleed' or (force_regime == 'caution' and regime == 'caution'):
+            conf_floor = max(float(conf_floor), _rebound_conf)
         confidence = max(conf_floor, min(1.0, confidence))
         return {'regime': regime, 'score': round(score, 1), 'confidence': confidence, 'crash_type': crash_type, 'divergence_state': divergence_state, 'prob_flash_crash': prob_flash_crash, 'prob_recession': prob_recession, 'prob_liquidity_rally': prob_liquidity_rally, 'prob_recovery': prob_recovery, 'cross_asset_stress': cross_asset_stress}
 
@@ -645,11 +659,12 @@ class RegimeDetector:
             if self._hmm_fitted and hasattr(self._hmm_model, 'means_'):
                 sorted_states = np.argsort(self._hmm_model.means_[:, 0])
                 n_st = len(sorted_states)
+                _n3 = 3
                 if n_st == 1:
                     self._state_to_regime = {int(sorted_states[0]): 'bull'}
                 elif n_st == 2:
                     self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'bear'}
-                elif n_st == 3:
+                elif n_st == _n3:
                     self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'caution', int(sorted_states[2]): 'bear'}
                 else:
                     self._state_to_regime = {int(sorted_states[0]): 'bull', int(sorted_states[1]): 'caution', int(sorted_states[2]): 'bear'}
@@ -723,6 +738,9 @@ class RegimeDetector:
                 regime_scores['bear'] += gi_weight * gi['confidence']
         if rule.get('crash_type') == 'rebound_from_bleed':
             regime_scores['crash'] = 0.0
+            if rule.get('regime') == 'caution' and regime_scores.get('bear', 0.0) > 0.0:
+                regime_scores['caution'] += regime_scores['bear']
+                regime_scores['bear'] = 0.0
         best_regime = max(regime_scores, key=regime_scores.get)
         best_score = regime_scores[best_regime]
         if rule['regime'] in ('crash', 'bear'):

@@ -141,9 +141,18 @@ class MacroCollector:
         try:
             _copper = self._vmx.fetch('HG=F', _ss, _es)
             _gold = self._vmx.fetch('GC=F', _ss, _es)
-            ratio = (_copper / _gold).replace([float('inf'), float('-inf')], float('nan')).dropna()
-            if hasattr(ratio, 'columns') and len(ratio.columns) > 0:
-                ratio = ratio.iloc[:, 0]
+            if hasattr(_copper, 'columns') and len(_copper.columns) > 0:
+                _copper = _copper.iloc[:, 0]
+            if hasattr(_gold, 'columns') and len(_gold.columns) > 0:
+                _gold = _gold.iloc[:, 0]
+            _copper.index = pd.to_datetime(_copper.index).tz_localize(None).normalize()
+            _gold.index = pd.to_datetime(_gold.index).tz_localize(None).normalize()
+            _copper = _copper[~_copper.index.duplicated(keep='last')].sort_index()
+            _gold = _gold[~_gold.index.duplicated(keep='last')].sort_index()
+            _common_idx = _gold.index.union(_copper.index).sort_values()
+            _c_aligned = _copper.reindex(_common_idx).ffill(limit=5).bfill(limit=5)
+            _g_aligned = _gold.reindex(_common_idx).ffill(limit=5).bfill(limit=5)
+            ratio = (_c_aligned / _g_aligned).replace([float('inf'), float('-inf')], float('nan')).dropna()
             return ratio[ratio > 0].rename('copper_gold_ratio')
         except Exception as _e:
             logger.error(f'[Phase 70 PRIMARY_FAIL] copper_gold_ratio: 1차 소스 수집 실패 ({_e}) — Fail-Fast 진단 및 엔지니어 정밀 수정 필요')
@@ -186,23 +195,21 @@ class MacroCollector:
             df = df.dropna(subset=['date'])
             df.set_index('date', inplace=True)
             
-            gscpi = df['gscpi']
-            gscpi = gscpi.loc[start:end]
-            
+            gscpi = pd.to_numeric(df['gscpi'], errors='coerce').dropna()
+            # [Point-in-Time] GSCPI 발표 시차(약 35일)를 먼저 반영한 뒤 구간 인덱스에 정렬
+            gscpi.index = pd.to_datetime(gscpi.index).tz_localize(None).normalize() + pd.DateOffset(days=35)
+            gscpi = gscpi[~gscpi.index.duplicated(keep='last')].sort_index()
+            start_norm = pd.to_datetime(start).tz_localize(None).normalize()
+            end_norm = pd.to_datetime(end).tz_localize(None).normalize()
+            gscpi_sub = gscpi.loc[start_norm - pd.DateOffset(days=90):end_norm]
+
             _gscpi_min = int(self._cfg.get('data.gscpi_min_obs', 1)) if self._cfg and hasattr(self._cfg, 'get') else 1
-            if not gscpi.empty and len(gscpi) >= _gscpi_min:
-                # 시분초 제거하여 자정(00:00:00) 기준으로 맞춤
-                start_norm = pd.to_datetime(start).normalize()
-                end_norm = pd.to_datetime(end).normalize()
+            if not gscpi_sub.empty and len(gscpi_sub) >= _gscpi_min:
                 idx = pd.date_range(start_norm, end_norm, freq='B')
-                
-                # 원본 시계열(gscpi)과 새 인덱스(idx)를 합친 후 ffill하고, idx만 필터링
-                # [Point-in-Time] GSCPI 발표 시차(약 35일) 반영 후 ffill
-                gscpi.index = gscpi.index + pd.DateOffset(days=35)
-                combined_idx = gscpi.index.union(idx).sort_values()
-                gscpi_aligned = gscpi.reindex(combined_idx).ffill().reindex(idx)
-                
-                logger.info(f'  GSCPI(NY Fed): {len(gscpi)}개 월간 관측치 수집 완료')
+                combined_idx = gscpi_sub.index.union(idx).sort_values()
+                gscpi_aligned = gscpi_sub.reindex(combined_idx).ffill().bfill().reindex(idx)
+
+                logger.info(f'  GSCPI(NY Fed): {len(gscpi_sub)}개 월간 관측치 수집 완료')
                 return gscpi_aligned.rename('gscpi')
                 
         except Exception as _e:

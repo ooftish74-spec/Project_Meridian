@@ -118,7 +118,7 @@ def _safe_get_index_close(index_code: str, days: int = 5):
     
     if is_krx_time:
         try:
-            from pykrx import stock as _pykrx
+            from src.data_collection.pykrx_compat import stock as _pykrx
             df = _pykrx.get_index_ohlcv(_start, _today, index_code)
             if df is not None and len(df) > 0:
                 close_col = '종가' if '종가' in df.columns else df.columns[3]
@@ -543,7 +543,7 @@ def _phase_aftermarket():
                 _today_s1 = _dt_s1.now().strftime('%Y%m%d')
 
                 # 현재가 조회
-                from pykrx import stock as _pyk_s1
+                from src.data_collection.pykrx_compat import stock as _pyk_s1
                 _s1_prices = {}
                 for _pk in _s1_keys:
                     _tk = _pk.split(':')[1]

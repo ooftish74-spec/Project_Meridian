@@ -113,7 +113,7 @@ class BetaHedge:
     def _extract_benchmark_returns(self, n_days: int) -> List[float]:
         """KOSPI(KODEX 200) 일별 수익률 추출."""
         try:
-            from pykrx import stock as pykrx
+            from src.data_collection.pykrx_compat import stock as pykrx
             end = now_kst().strftime('%Y%m%d')
             start = (now_kst() - timedelta(days=n_days * 3)).strftime('%Y%m%d')
             df = pykrx.get_market_ohlcv_by_date(start, end, self.benchmark_ticker)

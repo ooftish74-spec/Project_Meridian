@@ -47,6 +47,8 @@ class HMMRegimeLayer:
         self._n = n_states
         self._mdl = None
         self._ok = False
+        self._mean = None
+        self._std = None
         self._state_map = dict(self._STATE_NAMES)
         self._log = logging.getLogger(self.__class__.__name__)
 
@@ -54,12 +56,24 @@ class HMMRegimeLayer:
         import numpy as np
         if obs_df is None or len(obs_df) < self._MIN_SAMPLES:
             return False
-        X = obs_df[['returns', 'volatility']].fillna(0.0).values
+        X_raw = obs_df[['returns', 'volatility']].replace([np.inf, -np.inf], np.nan).fillna(0.0).values.astype(float)
+        self._mean = np.mean(X_raw, axis=0)
+        raw_std = np.std(X_raw, axis=0)
+        _min_std = 1e-8
+        self._std = np.where(raw_std > _min_std, raw_std, 1.0)
+        X = (X_raw - self._mean) / self._std
         if _HMMLEARN_OK and _GaussianHMM is not None:
             try:
                 _hmm_n_iter = int(cfg.get('regime.hmm_n_iter', 100))
                 _hmm_rs = int(pget('regime.hmm_random_state', 42))
-                m = _GaussianHMM(n_components=self._n, covariance_type='diag', n_iter=_hmm_n_iter, random_state=_hmm_rs)
+                m = _GaussianHMM(
+                    n_components=self._n,
+                    covariance_type='diag',
+                    min_covar=1e-2,
+                    tol=1e-2,
+                    n_iter=_hmm_n_iter,
+                    random_state=_hmm_rs,
+                )
                 m.fit(X)
                 ordered_names = ['bull', 'correction', 'whipsaw', 'crash']
                 vol_order = np.argsort(m.means_[:, 1])
@@ -83,7 +97,10 @@ class HMMRegimeLayer:
         try:
             r = float(obs.get('kospi_return', 0.0))
             v = float(obs.get('kospi_volatility', 15.0)) / 100.0
-            pp = self._mdl.predict_proba(np.array([[r, v]]))[0]
+            x_vec = np.array([[r, v]], dtype=float)
+            if self._mean is not None and self._std is not None:
+                x_vec = (x_vec - self._mean) / self._std
+            pp = self._mdl.predict_proba(x_vec)[0]
             state_map = getattr(self, '_state_map', None) or self._STATE_NAMES
             return {state_map[i]: round(float(p), 4) for i, p in enumerate(pp)}
         except Exception as e:

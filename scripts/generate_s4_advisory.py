@@ -97,9 +97,9 @@ def _fetch_prices(tickers: list) -> dict:
     if not tickers:
         return prices
 
-    # pykrx 우선 (주말/비거래일에도 최종 종가 제공)
+    # pykrx_compat 우선 (주말/비거래일에도 최종 종가 제공)
     try:
-        from pykrx import stock as pykrx_stock
+        from src.data_collection.pykrx_compat import stock as pykrx_stock
         from datetime import datetime, timedelta
         today = datetime.now().strftime('%Y%m%d')
         # 최근 5일 범위에서 종가 조회 (주말 대비)

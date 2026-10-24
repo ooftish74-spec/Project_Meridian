@@ -89,6 +89,11 @@ class UnifiedSentimentCollector:
         if self._finbert_loaded:
             return
         self._finbert_loaded = True
+        import importlib.util
+        if importlib.util.find_spec('transformers') is None or importlib.util.find_spec('torch') is None:
+            logger.debug("ℹ️ FinBERT 패키지(transformers/torch) 미설치 환경 → 키워드 감성 엔진 사용")
+            self._finbert = None
+            return
         try:
             os.environ.setdefault('TRANSFORMERS_NO_TF', '1')
             os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '3')
@@ -101,7 +106,7 @@ class UnifiedSentimentCollector:
             _fb_dev = self._finbert.get('device')
             logger.info(f"✅ FinBERT 로딩 완료 ({_fb_dev})")
         except Exception as e:
-            logger.info(f"ℹ️ FinBERT 미가용 → 키워드 fallback 사용: {e}")
+            logger.debug(f"ℹ️ FinBERT 미가용 → 키워드 fallback 사용: {e}")
             self._finbert = None
 
     def _load_ticker_names(self) -> Dict[str, str]:

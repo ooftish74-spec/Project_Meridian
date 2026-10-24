@@ -55,7 +55,7 @@ def fetch_realtime_prices(tickers: list) -> dict:
     """
     prices = {}
     try:
-        from pykrx import stock
+        from src.data_collection.pykrx_compat import stock
     except ImportError as e:
         logger.error("pykrx 미설치", exc_info=True)
         return prices

@@ -204,6 +204,16 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         'intraday',        # ★ 실시간 장중 감시
     )
 
+    if not is_krx_open and phase in ('us_premarket', 'us_regular', 'us_market', 'us_aftermarket'):
+        try:
+            from src.utils.market_calendar import is_us_trading_day
+            _us_date_str = today.isoformat()
+            if not is_us_trading_day(_us_date_str):
+                logger.info(f"  ⏭ KRX 및 US 동시 휴장일({_us_date_str}) → {phase} 스킵")
+                return {'status': 'skipped_holiday', 'date': _us_date_str, 'phase': phase}
+        except Exception as _us_cal_e:
+            logger.warning(f"  ⚠️ US 휴장일 확인 예외: {_us_cal_e}")
+
     if not is_krx_open and phase not in _WEEKEND_OK_PHASES:
         logger.info("  KRX 휴장일 → 글로벌 + US 데이터 수집만 실행")
         # ★ 체크포인트를 통해 실행하여 대시보드에 정확히 반영

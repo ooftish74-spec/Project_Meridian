@@ -195,10 +195,12 @@ class MedallionOrchestrator:
                 sector = pos.get('sector', 'Unknown')
                 if sector == 'Unknown':
                     try:
-                        from pykrx import stock as krx_stock
+                        from src.data_collection.ticker_master import get_ticker_master
+                        _tm_info = get_ticker_master().get(clean)
+                        if _tm_info and getattr(_tm_info, 'underlying', ''):
+                            sector = str(_tm_info.underlying)
+                    except Exception:
                         pass
-                    except ImportError as e:
-                        logger.critical('[SILENT_BYPASS] Suppressed exception at medallion_orchestrator.py:290', exc_info=True)
                 global_sector_counts[sector] = global_sector_counts.get(sector, 0) + 1
                 if stream_id not in stream_sector_counts:
                     stream_sector_counts[stream_id] = {}

@@ -316,7 +316,39 @@ def fetch_yahoo_chart_ohlcv(symbol: str, range_str: str = '2y') -> Optional[pd.D
         if sym_up == 'CL=F':
             return collect_econ_indicator_daily_ohlcv('WTI', interval='daily')
         if sym_up == 'HG=F':
-            return collect_econ_indicator_daily_ohlcv('COPPER', interval='monthly')
+            # 구리 선물(HG=F): 일별 해상도 보장을 위해 CPER(US Copper Index ETF) 일봉을 우선 수집하여 HG=F 스케일(~0.165x)로 정합
+            df_cper = collect_us_daily_ohlcv('CPER')
+            if df_cper is None or df_cper.empty:
+                cper_pq = ROOT / 'data' / 'us_stocks' / 'prices' / 'CPER.parquet'
+                if cper_pq.exists():
+                    try:
+                        df_cper = pd.read_parquet(cper_pq)
+                        df_cper.columns = [c.lower() for c in df_cper.columns]
+                        if 'date' in df_cper.columns:
+                            df_cper['date'] = pd.to_datetime(df_cper['date'])
+                            df_cper = df_cper.set_index('date').sort_index()
+                    except Exception:
+                        df_cper = None
+            if df_cper is not None and not df_cper.empty and 'close' in df_cper.columns:
+                df_hg = df_cper.copy()
+                scale_hg = 0.165
+                try:
+                    from src.utils.google_finance_collector import GoogleFinanceCollector
+                    gf_hg = GoogleFinanceCollector.get_quote_details('HG=F')
+                    last_cper = float(df_hg['close'].dropna().iloc[-1])
+                    if gf_hg and float(gf_hg.get('price', 0) or 0) > 0 and last_cper > 0:
+                        scale_hg = float(gf_hg['price']) / last_cper
+                except Exception:
+                    pass
+                for col in ('open', 'high', 'low', 'close'):
+                    if col in df_hg.columns:
+                        df_hg[col] = pd.to_numeric(df_hg[col], errors='coerce') * scale_hg
+                return df_hg.dropna(subset=['close'])
+            df_cop_m = collect_econ_indicator_daily_ohlcv('COPPER', interval='monthly')
+            if df_cop_m is not None and not df_cop_m.empty:
+                b_idx = pd.date_range(df_cop_m.index.min(), datetime.now(), freq='B')
+                return df_cop_m.reindex(df_cop_m.index.union(b_idx)).sort_index().ffill().reindex(b_idx).dropna(subset=['close'])
+            return None
         if sym_up == 'GC=F':
             df_gld = collect_us_daily_ohlcv('GLD')
             if df_gld is not None and not df_gld.empty:

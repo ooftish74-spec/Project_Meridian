@@ -210,13 +210,33 @@ class DARTDailyCollector:
         return None
 
     def _collect_insider(self, ticker: str, corp_code: str, start: str, end: str) -> int:
-        """내부자 매매 수집."""
+        """내부자 매매 수집 (OpenDART elestock.json 공식 필드 호환)."""
         data = self._api_call('elestock', {'corp_code': corp_code, 'bgn_de': start, 'end_de': end})
         if not data or 'list' not in data:
             return 0
         records = []
         for item in data['list']:
-            records.append({'date': item.get('rcept_dt', ''), 'name': item.get('repror', ''), 'position': item.get('ofcps', ''), 'change_dir': item.get('sp_stock_chg_reason', ''), 'shares_before': self._parse_num(item.get('sp_stock_bfe_holdvol', '0')), 'shares_after': self._parse_num(item.get('sp_stock_aft_holdvol', '0')), 'change_amount': self._parse_num(item.get('sp_stock_aft_holdvol', '0')) - self._parse_num(item.get('sp_stock_bfe_holdvol', '0'))})
+            # OpenDART elestock 공식 필드: sp_stock_lmp_cnt (소유수), sp_stock_lmp_irds_cnt (증감수), isu_exctv_ofcps (직위)
+            aft_shares = self._parse_num(
+                item.get('sp_stock_lmp_cnt') or item.get('sp_stock_aft_holdvol') or item.get('trmend_secur_hold_volum') or '0'
+            )
+            chg_raw = item.get('sp_stock_lmp_irds_cnt')
+            if chg_raw is not None and str(chg_raw).strip() not in ('', '-'):
+                chg_amt = self._parse_num(chg_raw)
+                bfe_shares = aft_shares - chg_amt
+            else:
+                bfe_shares = self._parse_num(item.get('sp_stock_bfe_holdvol', '0'))
+                chg_amt = aft_shares - bfe_shares
+            chg_dir = item.get('sp_stock_chg_reason') or ('증가' if chg_amt > 0 else ('감소' if chg_amt < 0 else ''))
+            records.append({
+                'date': item.get('rcept_dt', ''),
+                'name': item.get('repror', ''),
+                'position': item.get('isu_exctv_ofcps') or item.get('ofcps', ''),
+                'change_dir': chg_dir,
+                'shares_before': bfe_shares,
+                'shares_after': aft_shares,
+                'change_amount': chg_amt,
+            })
         if records:
             df = pd.DataFrame(records)
             path = _DART_DATA_DIR / ticker / 'insider_trades.csv'
@@ -272,7 +292,8 @@ class DARTDailyCollector:
             try:
                 _fh_obj = json.loads(fh_path.read_text(encoding='utf-8'))
                 _ann = _fh_obj if isinstance(_fh_obj, list) else _fh_obj.get('annual', [])
-                if len(_ann) >= 3:
+                _min_ann_yrs = 3
+                if len(_ann) >= _min_ann_yrs:
                     has_historical_fh = True
             except Exception:
                 pass

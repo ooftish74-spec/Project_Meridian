@@ -166,11 +166,15 @@ class DARTCollector:
         trades = data['list']
         net_buy = 0
         for trade in trades:
-            qty = self._parse_number(trade.get('trmend_secur_hold_volum', '0'))
-            if '증가' in str(trade.get('change_dir', '')):
-                net_buy += qty
-            elif '감소' in str(trade.get('change_dir', '')):
-                net_buy -= qty
+            irds = trade.get('sp_stock_lmp_irds_cnt')
+            if irds is not None and str(irds).strip() not in ('', '-'):
+                net_buy += self._parse_number(irds)
+            else:
+                qty = self._parse_number(trade.get('trmend_secur_hold_volum', '0'))
+                if '증가' in str(trade.get('change_dir', '')):
+                    net_buy += qty
+                elif '감소' in str(trade.get('change_dir', '')):
+                    net_buy -= qty
         signal = 1.0 if net_buy > 0 else -0.5 if net_buy < 0 else 0.0
         return {'trade_count': len(trades), 'net_buy': net_buy, 'signal': signal, 'interpretation': '경영진 순매수 → 강한 Buy' if signal > 0 else '경영진 순매도 → 주의' if signal < 0 else '변동 없음'}
 

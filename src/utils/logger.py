@@ -26,6 +26,7 @@ def setup_logger(
         설정된 Logger
     """
     logger = logging.getLogger(name)
+    logger.propagate = False
     if logger.handlers:
         return logger
 
