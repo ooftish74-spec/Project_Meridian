@@ -15,11 +15,25 @@ logger = logging.getLogger(__name__)
 
 class VirtualAccountManager:
 
+    _DEFAULT_STREAMS = (
+        'S0', 'S1', 'S2', 'S3', 'S5',
+        'S10', 'S10_MEGA_TREND',
+        'S11', 'S11_HIGHBETA_SNIPER',
+        'S12', 'S12_DERIVATIVE_SQUEEZE',
+        'S13', 'S13_JAPAN_ALPHA',
+        'S14', 'S14_PAIR_ALPHA',
+        'Beta',
+    )
+
     def __init__(self, state_file: str='results/virtual_ledger.json', total_master_capital: float=20000000.0):
         self._project_root = Path(__file__).resolve().parent.parent.parent
         self.state_file = self._project_root / state_file
         self.total_master_capital = total_master_capital
-        self.ledger = {'master_cash': self.total_master_capital, 'streams': {'S1': {'allocated': 0.0, 'used': 0.0}, 'S2': {'allocated': 0.0, 'used': 0.0}, 'S3': {'allocated': 0.0, 'used': 0.0}, 'S5': {'allocated': 0.0, 'used': 0.0}, 'S10': {'allocated': 0.0, 'used': 0.0}, 'Beta': {'allocated': 0.0, 'used': 0.0}}, 'timestamp': None}
+        self.ledger = {
+            'master_cash': self.total_master_capital,
+            'streams': {sid: {'allocated': 0.0, 'used': 0.0} for sid in self._DEFAULT_STREAMS},
+            'timestamp': None,
+        }
         self._load_ledger()
 
     def _load_ledger(self):
@@ -32,6 +46,9 @@ class VirtualAccountManager:
                 loaded_cash = float(loaded.get('master_cash', 0.0) or 0.0)
                 if self.total_master_capital > 0 and loaded_cash <= self.total_master_capital * 3:
                     self.ledger = loaded
+                    streams_dict = self.ledger.setdefault('streams', {})
+                    for sid in self._DEFAULT_STREAMS:
+                        streams_dict.setdefault(sid, {'allocated': 0.0, 'used': 0.0})
                 else:
                     self._save_ledger()
             except Exception as e:

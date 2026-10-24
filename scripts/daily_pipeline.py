@@ -506,16 +506,23 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 # 이 스코프의 변수명은 _market_data임 (market_data는 미정의)
                 _market_data['exit_only'] = True
 
-            # ★ Wave 0 A1: 기존 HMMRegimeModel은 _prepare_features가 `pass`이고 predict()가 모든 분기에서 'caution'을
-            #   반환하는 스텁이었다(모델 출력처럼 표기됨). 검증되지 않은 RegimeEngine(A3 부호반전·평활 미작동 결함)으로
-            #   하룻밤 교체하지 않고, 'caution'을 명시적 고정값으로 기록 + RegimeEngine은 섀도 로그만 남긴다(≥5거래일 비교 후 교체).
+            _def_conf = float(pget('scenarios.default_regime_conf', 0.5))
             regime = 'caution'
-            confidence = 0.5
-            regime_result = {'regime': regime, 'confidence': confidence, 'method': 'FIXED_FALLBACK_WAVE0',
+            confidence = _def_conf
+            regime_result = {'regime': regime, 'confidence': confidence, 'method': 'fallback',
                              'scores': {}, 'measurements': {}}
             try:
+                from src.regime.regime_detector import RegimeDetector
+                _det_res = RegimeDetector().detect(_market_data) or {}
+                if _det_res.get('regime'):
+                    regime = str(_det_res['regime'])
+                    confidence = float(_det_res.get('confidence', _def_conf))
+                    regime_result = dict(_det_res)
+            except Exception as _rd_e:
+                logger.warning(f"  [RegimeDetector] 레짐 탐지 예외 (caution 폴백): {_rd_e}")
+            try:
                 from src.intelligence.regime_engine import RegimeEngine
-                _shadow = RegimeEngine().detect() or {}
+                _shadow = RegimeEngine().detect(save_state=False) or {}
                 regime_result['shadow_regime_engine'] = {'regime': _shadow.get('regime'),
                                                          'confidence': _shadow.get('confidence'),
                                                          'scores': _shadow.get('scores', {})}

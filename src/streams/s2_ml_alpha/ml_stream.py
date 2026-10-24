@@ -80,6 +80,7 @@ class S2MLAlphaStream(BaseStream):
         self._fundamental_filter = MeridianFundamentalFilter()
         self._sector_map = self._load_sector_map()
         self.MAX_PER_SECTOR = cfg.get('s2.max_per_sector', 2)
+        self.max_single_position_pct = float(pget('sizer.max_single_position_pct', 0.15))
         self._drift_detector = ModelDriftDetector(window=pget('s2.drift_window', 20), threshold=pget('s2.drift_threshold', 0.15))
         self._load_ensemble()
 
@@ -132,15 +133,28 @@ class S2MLAlphaStream(BaseStream):
             self._model_meta['model_weights'] = self._model_weights
             feat_means = pkg.get('feature_means') if pkg.get('feature_means') is not None else meta.get('feature_means')
             feat_stds = pkg.get('feature_stds') if pkg.get('feature_stds') is not None else meta.get('feature_stds')
+            raw_feat_means = pkg.get('raw_feature_means') if pkg.get('raw_feature_means') is not None else meta.get('raw_feature_means')
+            raw_feat_stds = pkg.get('raw_feature_stds') if pkg.get('raw_feature_stds') is not None else meta.get('raw_feature_stds')
+            if not raw_feat_means or feat_means is None:
+                _em_path = _MODEL_DIR / 'ensemble_meta.json'
+                if _em_path.exists():
+                    try:
+                        _em_data = json.loads(_em_path.read_text(encoding='utf-8'))
+                        if feat_means is None:
+                            feat_means = _em_data.get('feature_means')
+                            feat_stds = _em_data.get('feature_stds')
+                        if not raw_feat_means:
+                            raw_feat_means = _em_data.get('raw_feature_means')
+                            raw_feat_stds = _em_data.get('raw_feature_stds')
+                    except Exception:
+                        pass
             if feat_means is not None:
                 self._feature_means = np.array(feat_means)
                 self._feature_stds = np.array(feat_stds) if feat_stds is not None else np.ones(len(feat_means))
                 logger.info('  S2: OOD 탐지용 피처 통계 로드 완료')
-            raw_feat_means = pkg.get('raw_feature_means') if pkg.get('raw_feature_means') is not None else meta.get('raw_feature_means')
-            raw_feat_stds = pkg.get('raw_feature_stds') if pkg.get('raw_feature_stds') is not None else meta.get('raw_feature_stds')
-            if raw_feat_means is not None:
+            if raw_feat_means is not None and len(raw_feat_means) > 0:
                 self._raw_feature_means = np.array(raw_feat_means, dtype=float)
-                self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if raw_feat_stds is not None else np.ones(len(raw_feat_means), dtype=float)
+                self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if (raw_feat_stds is not None and len(raw_feat_stds) > 0) else np.ones(len(raw_feat_means), dtype=float)
             logger.info(f"  S2: pkl 앙상블 로드 완료 ({len(self._models)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
             conformal_path = _MODEL_DIR / 'conformal_state.pkl'
             if conformal_path.exists():
@@ -422,6 +436,13 @@ class S2MLAlphaStream(BaseStream):
                 es['vix_scale_factor'] = 1.0
                 es['regime'] = regime
                 es['timestamp'] = now_kst().isoformat()
+                if 'tp_pct' not in es or 'sl_pct' not in es:
+                    _etf_tpsl = self._compute_s2_tp_sl(es, regime, vix_ref, vkospi_ref)
+                    es.setdefault('tp_pct', _etf_tpsl['tp_pct'])
+                    es.setdefault('sl_pct', _etf_tpsl['sl_pct'])
+                _es_er = float(es.get('expected_return', 0.0) or 0.0)
+                es['expected_return'] = round(_es_er, 6)
+                es['expected_return_pct'] = round(_es_er * 100.0, 4)
                 signals.append(es)
         if not signals and not use_etf_basket:
             _indiv_sigs = []
@@ -448,17 +469,21 @@ class S2MLAlphaStream(BaseStream):
                     _gk_alpha = grinold_kahn_expected_alpha(_sz_val, _gk_shrunk_ic, _d_vol)
                 _px_val = max(0.0, float(stock.get('close', stock.get('price', 0.0)) or 0.0))
                 _exp_ret = max(float(_gk_alpha), float(_ev_val))
-                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6), 'expected_return': round(_exp_ret, 6), 'expected_value': round(float(_ev_val), 6), 'price': _px_val}
+                signal = {'stream_id': 'S2', 'ticker': stock['ticker'], 'name': stock.get('name', stock['ticker']), 'direction': 'long', 'confidence': round(stock['up_prob'], 3), 'size_pct': round(size, 4), 'suggested_weight': suggested_weight, 'vix_scale_factor': round(_p11_combined_scale, 4), 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'reason': f"P(up)={_up_pr:.1%}, EV={_ev_val:.2%}, SW={suggested_weight:.1%}(×{_p11_combined_scale:.2f})", 'regime': regime, 'timestamp': now_kst().isoformat(), 'tp_pct': tp_sl_meta['tp_pct'], 'sl_pct': tp_sl_meta['sl_pct'], 'trail_activate_pct': tp_sl_meta['trail_activate_pct'], 'trail_distance_pct': tp_sl_meta['trail_distance_pct'], 'tp_sl_source': tp_sl_meta['tp_sl_source'], 'score_z': round(_sz_val, 4), 'gk_expected_alpha': round(_gk_alpha, 6), 'expected_return': round(_exp_ret, 6), 'expected_return_pct': round(float(_exp_ret) * 100.0, 4), 'expected_value': round(float(_ev_val), 6), 'price': _px_val}
                 if stock.get('conformal_lower') is not None:
                     signal['conformal_lower'] = round(stock['conformal_lower'], 4)
                     signal['conformal_upper'] = round(stock['conformal_upper'], 4)
                 _indiv_sigs.append(signal)
             _raw_kelly_sum = sum(float(s.get('size_pct', 0.0)) for s in _indiv_sigs)
-            if _raw_kelly_sum > 0.0:
+            _max_single_cap = float(getattr(self, 'max_single_position_pct', pget('sizer.max_single_position_pct', 0.15)))
+            if _raw_kelly_sum > 1.0:
                 for _sig_item in _indiv_sigs:
-                    _norm_w = float(_sig_item.get('size_pct', 0.0)) / _raw_kelly_sum
-                    _sig_item['size_pct'] = round(max(float(_sig_item.get('size_pct', 0.0)), _norm_w), 4)
-                    _sig_item['suggested_weight'] = _sig_item['size_pct']
+                    _scaled_w = float(_sig_item.get('size_pct', 0.0)) / _raw_kelly_sum
+                    _sig_item['size_pct'] = round(min(_scaled_w, _max_single_cap), 4)
+                    _sig_item['suggested_weight'] = round(min(float(_sig_item.get('suggested_weight', _sig_item['size_pct'])), _sig_item['size_pct']), 4)
+            else:
+                for _sig_item in _indiv_sigs:
+                    _sig_item['size_pct'] = round(min(float(_sig_item.get('size_pct', 0.0)), _max_single_cap), 4)
             signals.extend(_indiv_sigs)
         if scored:
             try:
@@ -781,8 +806,13 @@ class S2MLAlphaStream(BaseStream):
                     if not hasattr(self.__class__, '_V4_FEATS_CACHE'):
                         self.__class__._V4_FEATS_CACHE = {}
                     _v4_cached = self.__class__._V4_FEATS_CACHE.get(_tk_v4)
-                    if _v4_cached is not None and (_time.monotonic() - _v4_cached[0]) < 60.0:
+                    _adtv_v4 = 0.0
+                    _v4_tuple_len = 3
+                    _v4_ttl = 60
+                    if _v4_cached is not None and (_time.monotonic() - _v4_cached[0]) < _v4_ttl:
                         _v4_feats = _v4_cached[1]
+                        if len(_v4_cached) >= _v4_tuple_len:
+                            _adtv_v4 = float(_v4_cached[2] or 0.0)
                     else:
                         from src.data.market_data_bridge import MarketDataBridge
                         from src.intelligence.v4_features import extract_v4
@@ -814,12 +844,17 @@ class S2MLAlphaStream(BaseStream):
                             _l = _df['low'].values.astype(float)
                             _o = _df['open'].values.astype(float)
                             _v = _df['volume'].values.astype(float)
+                            if len(_c) >= _min_bars and len(_v) >= _min_bars:
+                                _adtv_v4 = float(np.mean(_c[-_min_bars:] * _v[-_min_bars:]))
                             _idx = len(_df) - 1
                             _is_etf = _tk_v4 in ('069500', '091160', '122670', '122630', '252670') or stock.get('is_etf', False)
                             _aux_feats = _aux_loader.get_features(_tk_v4, _date_str_v4) if _aux_loader is not None else None
                             _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, aux_data=_aux_feats, is_etf=_is_etf) or {}
                             if _v4_feats:
-                                self.__class__._V4_FEATS_CACHE[_tk_v4] = (_time.monotonic(), dict(_v4_feats))
+                                self.__class__._V4_FEATS_CACHE[_tk_v4] = (_time.monotonic(), dict(_v4_feats), _adtv_v4)
+                    if _adtv_v4 > 0.0:
+                        stock['adtv'] = _adtv_v4
+                        stock['avg_volume_value'] = _adtv_v4
                     for _vk, _vv in _v4_feats.items():
                         if _vk in _aux_preserve and features.get(_vk, 0) != 0 and _vv == 0:
                             continue
@@ -864,6 +899,19 @@ class S2MLAlphaStream(BaseStream):
             if cfg.get('s2.filter_placeholder_features', True):
                 _excluded = set(cfg.get('s2.placeholder_features', ['dart_disclosure', 'institutional_flow', 'short_interest', 'options_flow']))
                 features = {k: v for k, v in features.items() if k not in _excluded}
+            _def_rsi = 50
+            _ann_days = 252
+            stock['features'] = features
+            stock['rsi'] = float(features.get('rsi_14', stock.get('rsi', _def_rsi)))
+            stock['bb_position'] = float(features.get('bb_position', stock.get('bb_position', 0)))
+            stock['macd_signal'] = float(features.get('macd_signal', stock.get('macd_signal', 0)))
+            stock['volume_ratio'] = float(features.get('volume_ratio_20d', stock.get('volume_ratio', 1)))
+            stock['momentum_5d'] = float(features.get('return_5d', stock.get('momentum_5d', 0)))
+            _v20_raw = float(features.get('volatility_20d', 0.0) or 0.0)
+            if _v20_raw > 1.0:
+                stock['volatility_20d'] = _v20_raw / (100.0 * math.sqrt(_ann_days))
+            elif _v20_raw > 0.0:
+                stock['volatility_20d'] = _v20_raw
             if self._feature_names:
                 row = []
                 for fn in self._feature_names:

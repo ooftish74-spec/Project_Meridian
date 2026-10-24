@@ -38,7 +38,11 @@ class S12DerivativeSqueezeStream(BaseStream):
         self.inverse_1x_ticker = str(cfg.get('s12.inverse_1x_ticker', '114800'))
         self.z_skew_threshold = float(pget('s12.z_skew_threshold', 1.5))       # Skew Z-Score >= +1.5
         self.z_flow_threshold = float(pget('s12.z_flow_threshold', 1.5))       # Foreign Futures Net Sell Z-Score >= +1.5
-        self.bdi_threshold = float(cfg.get('s12.bdi_threshold', 0.0))            # BDI <= 0.0 (Backwardation)
+        self.bdi_threshold = float(cfg.get('s12.bdi_threshold') or (-2.0 / 1000.0))  # BDI <= -0.002 (True Backwardation)
+        _init_sl = float(pget('s12.sl_pct', 3.0))
+        _init_tp = float(pget('s12.tp_pct', 6.0))
+        self.sl_pct = abs(_init_sl) * 100.0 if 0 < abs(_init_sl) < (1.0 / 2.0) else abs(_init_sl)
+        self.tp_pct = _init_tp * 100.0 if 0 < _init_tp < (1.0 / 2.0) else _init_tp
 
     def compute_z_score(self, value: float, mean: float, std: float) -> float:
         """통계적 Z-Score 산출 (표준화 모델)."""
@@ -48,7 +52,10 @@ class S12DerivativeSqueezeStream(BaseStream):
 
     def compute_basis_disparity_index(self, futures_price: float, spot_price: float) -> float:
         """선물-현물 베이시스 괴리율 (Basis Disparity Index, BDI) 산출."""
-        if spot_price is None or spot_price <= 0 or math.isnan(spot_price):
+        if (
+            spot_price is None or spot_price <= 0 or math.isnan(spot_price)
+            or futures_price is None or futures_price <= 0 or math.isnan(futures_price)
+        ):
             return 0.0
         return (futures_price - spot_price) / spot_price
 
@@ -76,12 +83,16 @@ class S12DerivativeSqueezeStream(BaseStream):
         # (3) 선물-현물 베이시스 (KOSPI 200 Futures vs Spot)
         futures_price = float(signal_cache.get('kospi200_futures_price', signal_cache.get('FUTURES_PRICE', 0.0)))
         spot_price = float(signal_cache.get('kospi200_spot_price', signal_cache.get('SPOT_PRICE', 0.0)))
-        bdi = self.compute_basis_disparity_index(futures_price, spot_price)
+        if futures_price > 0 and spot_price > 0:
+            bdi = self.compute_basis_disparity_index(futures_price, spot_price)
+            basis_trigger = bdi <= self.bdi_threshold
+        else:
+            bdi = 0.0
+            basis_trigger = False
 
         # ── 2. 순수 수학적 조건 판정 ──
         skew_trigger = z_skew >= self.z_skew_threshold
         flow_trigger = z_flow_sell >= self.z_flow_threshold
-        basis_trigger = bdi <= self.bdi_threshold
 
         logger.info(
             f"  [S12 Derivative Squeeze Metrics] Z_skew={z_skew:+.2f} (th={self.z_skew_threshold}), "
@@ -90,7 +101,15 @@ class S12DerivativeSqueezeStream(BaseStream):
 
         # ── 3. 숏 알파 신호 발화 ──
         if skew_trigger and flow_trigger and basis_trigger:
-            target_ticker = self.inverse_2x_ticker if regime.lower() in ('crash', 'crisis', 'bear', 'bull') else self.inverse_1x_ticker
+            _reg_l = str(regime or '').lower()
+            _ext_z = 2.0
+            _ext_bdi = -(1.0 / 200.0)
+            _extreme_squeeze = (z_skew >= _ext_z and z_flow_sell >= _ext_z and bdi <= _ext_bdi)
+            target_ticker = (
+                self.inverse_2x_ticker
+                if (_reg_l in ('crash', 'crisis', 'bear') or (_reg_l == 'bull' and _extreme_squeeze))
+                else self.inverse_1x_ticker
+            )
             confidence = min(1.0, max(0.60, 0.50 + 0.10 * (z_skew + z_flow_sell) / 2.0))
 
             reason = (
@@ -103,6 +122,8 @@ class S12DerivativeSqueezeStream(BaseStream):
             _raw_tp = float(pget('s12.tp_pct', 6.0))
             norm_sl_pct = abs(_raw_sl) * 100.0 if 0 < abs(_raw_sl) < 0.5 else abs(_raw_sl)
             norm_tp_pct = _raw_tp * 100.0 if 0 < _raw_tp < 0.5 else _raw_tp
+            self.sl_pct = norm_sl_pct
+            self.tp_pct = norm_tp_pct
 
             signal = {
                 'stream_id': self.stream_id,
@@ -114,6 +135,8 @@ class S12DerivativeSqueezeStream(BaseStream):
                 'strategy': 'derivative_squeeze_short_alpha',
                 'sl_pct': norm_sl_pct,
                 'tp_pct': norm_tp_pct,
+                'expected_return': round(self.tp_pct / 100.0, 4),
+                'expected_return_pct': self.tp_pct,
                 'target_price': None,
                 'stop_loss_price': None,
                 'reason': reason,
@@ -132,23 +155,5 @@ class S12DerivativeSqueezeStream(BaseStream):
         return getattr(self, '_positions', [])
 
     def get_performance(self) -> Dict:
-        """성과 지표 반환 (실측 수익률 기반 동적 승률 산출, 거래 기록 부재 시 중립 사전확률 0.50)."""
-        daily_pnl = getattr(self, '_daily_pnl', [])
-        signals = getattr(self, '_signals', [])
-        positions = getattr(self, '_positions', [])
-        n_obs = len(daily_pnl)
-        if n_obs > 0:
-            wins = sum(1 for r in daily_pnl if r > 0)
-            emp_win_rate = (wins + 2.5) / (n_obs + 5.0)
-        else:
-            emp_win_rate = 0.50
-        return {
-            'stream_id': self.stream_id,
-            'daily_returns': daily_pnl,
-            'cumulative_return_pct': sum(daily_pnl) if daily_pnl else 0.0,
-            'sharpe': 1.5 if daily_pnl else None,
-            'max_drawdown_pct': 0.0,
-            'win_rate': round(emp_win_rate, 4),
-            'total_trades': len(signals),
-            'active_positions': len(positions),
-        }
+        """성과 지표 반환 (실측 수익률 기반 표준 동적 성과 산출)."""
+        return self._compute_standard_performance(self._daily_pnl, len(self._positions), self._trade_count)

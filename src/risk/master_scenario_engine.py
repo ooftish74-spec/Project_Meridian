@@ -103,8 +103,11 @@ class MasterScenarioEngine:
             or signal_cache.get('hmm_transition_probs')
             or {}
         )
+        _bear_raw = hmm_trans.get('bear', hmm_trans.get('bear_prob', hmm_trans.get('correction', hmm_trans.get('correction_prob'))))
+        _caution_raw = hmm_trans.get('caution', hmm_trans.get('caution_prob', hmm_trans.get('whipsaw', hmm_trans.get('whipsaw_prob'))))
         p_bull_trans = _safe_float(pred_override.get('p_bull_trans', hmm_trans.get('bull', hmm_trans.get('bull_prob'))))
-        p_bear_trans = _safe_float(pred_override.get('p_bear_trans', hmm_trans.get('bear', hmm_trans.get('bear_prob'))))
+        p_bear_trans = _safe_float(pred_override.get('p_bear_trans', _bear_raw))
+        p_caution_trans = _safe_float(pred_override.get('p_caution_trans', _caution_raw))
         p_crash_trans = _safe_float(pred_override.get('p_crash_trans', hmm_trans.get('crash', hmm_trans.get('crash_prob'))))
 
         _def_conf = float(pget('scenarios.default_regime_conf', 0.50))
@@ -116,10 +119,12 @@ class MasterScenarioEngine:
             reg_conf = reg_conf_raw if reg_conf_raw is not None else _def_conf
             p_bull_trans = reg_conf if 'bull' in reg_str else _def_bull_p
             p_crash_trans = reg_conf if ('crash' in reg_str or 'crisis' in reg_str) else _def_crash_p
-            p_bear_trans = reg_conf if 'bear' in reg_str else _def_bull_p
+            p_bear_trans = reg_conf if ('bear' in reg_str or 'correction' in reg_str) else _def_bull_p
+            p_caution_trans = reg_conf if ('caution' in reg_str or 'whipsaw' in reg_str) else _def_bull_p
         else:
             p_bull_trans = p_bull_trans or 0.0
             p_bear_trans = p_bear_trans or 0.0
+            p_caution_trans = p_caution_trans or 0.0
             p_crash_trans = p_crash_trans or 0.0
 
         down_trans_prob = min(1.0, max(0.0, p_bear_trans + p_crash_trans))

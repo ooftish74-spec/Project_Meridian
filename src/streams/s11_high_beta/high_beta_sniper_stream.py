@@ -178,6 +178,8 @@ class S11HighBetaSniperStream(BaseStream):
             'size_pct': default_size_pct,
             'confidence': norm_conf,
             'expected_value': round(base_ev, 5),
+            'expected_return': round(base_ev, 5),
+            'expected_return_pct': round(base_ev * 100.0, 4),
             'strategy': 'orthogonal_leadlag_ofi_voltarget',
             'lead_lag_score': round(lead_lag_score, 2),
             'net_flow_100m': round(tot_net_flow / 1e8, 1),
@@ -210,6 +212,8 @@ class S11HighBetaSniperStream(BaseStream):
                 'size_pct': float(pget('s11.track_c_size_pct', 0.25)),
                 'confidence': 0.90,
                 'expected_value': 0.025,
+                'expected_return': 0.025,
+                'expected_return_pct': 2.5,
                 'sl_pct': norm_sl_pct,
                 'tp_pct': norm_tp_pct,
                 'strategy': 's11_track_c_vkospi_mean_reversion',
@@ -223,21 +227,17 @@ class S11HighBetaSniperStream(BaseStream):
         return self._positions
 
     def get_performance(self) -> Dict:
-        """성과 지표 반환 (실측 수익률 기반 동적 승률 산출, 거래 기록 부재 시 중립 사전확률 0.50)."""
+        """성과 지표 반환 (실측 수익률 기반 동적 산출, 하드코딩 샤프 배제)."""
+        perf = self._compute_standard_performance(
+            returns_override=self._daily_pnl,
+            active_positions=len(self._positions),
+            total_trades=len(self._signals),
+        )
         n_obs = len(self._daily_pnl)
         if n_obs > 0:
             wins = sum(1 for r in self._daily_pnl if r > 0)
             # Laplace-Beta(2.5, 2.5) 경험적 베이즈 수축으로 소표본 과적합(100% 승률 독점) 방지
-            emp_win_rate = (wins + 2.5) / (n_obs + 5.0)
+            perf['win_rate'] = round((wins + 2.5) / (n_obs + 5.0), 4)
         else:
-            emp_win_rate = 0.50
-        return {
-            'stream_id': self.stream_id,
-            'daily_returns': self._daily_pnl,
-            'cumulative_return_pct': sum(self._daily_pnl) if self._daily_pnl else 0.0,
-            'sharpe': 1.5 if self._daily_pnl else None,
-            'max_drawdown_pct': 0.0,
-            'win_rate': round(emp_win_rate, 4),
-            'total_trades': len(self._signals),
-            'active_positions': len(self._positions),
-        }
+            perf['win_rate'] = 0.50
+        return perf

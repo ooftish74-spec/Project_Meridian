@@ -1039,6 +1039,38 @@ class DynamicQuantEngine:
     # 4. 마찰비용·최소보유시간·최적정지장벽·무거래영역·재진입허들 수리 모델
     # =========================================================================
 
+    def get_fx_rate(self, portfolio: Optional[Dict[str, Any]] = None) -> float:
+        """실시간/캐시 USD/KRW 환율 동적 조회 (고정 1350.0 하드코딩 대체)."""
+        if isinstance(portfolio, dict):
+            pf_fx = portfolio.get("fx_rate") or portfolio.get("usdkrw")
+            if pf_fx and float(pf_fx) > 0:
+                return float(pf_fx)
+        sc_path = _RESULTS_DIR / "signal_cache.json"
+        if sc_path.exists():
+            try:
+                sc = json.loads(sc_path.read_text(encoding="utf-8"))
+                fx = sc.get("usdkrw") or sc.get("fx_rate")
+                if fx and float(fx) > 0:
+                    return float(fx)
+            except Exception:
+                pass
+        for pf_name in ("kis_portfolio.json", "shadow_portfolio.json"):
+            pf_path = _RESULTS_DIR / pf_name
+            if pf_path.exists():
+                try:
+                    pf = json.loads(pf_path.read_text(encoding="utf-8"))
+                    fx = pf.get("fx_rate") or pf.get("usdkrw")
+                    if fx and float(fx) > 0:
+                        return float(fx)
+                except Exception:
+                    pass
+        try:
+            from src.params import pget
+            return float(pget("fx.default_usdkrw", 1380.0))
+        except Exception:
+            _fx_num = 1380
+            return float(_fx_num)
+
     @staticmethod
     def _krx_tick_size(price: float, is_etf: bool = False) -> float:
         """KRX 유가증권/코스닥/ETF 법정 호가단위(Tick Size) 물리 테이블."""
@@ -1092,7 +1124,8 @@ class DynamicQuantEngine:
             tax_pct = 0.00278  # US SEC Fee
             eff_price = float(price) if price and price > 0 else 100.0
             spread_pct = (0.01 / max(eff_price, 1.0)) * 100.0
-            order_val_usd = max(order_value_krw / 1350.0, 100.0)
+            fx_rate = max(float(self.get_fx_rate()), 1.0)
+            order_val_usd = max(order_value_krw / fx_rate, 100.0)
             participation = order_val_usd / adt
 
         # 2) Almgren-Chriss 제곱근 시장충격 (왕복 매수+매도 2회, η = 0.15)

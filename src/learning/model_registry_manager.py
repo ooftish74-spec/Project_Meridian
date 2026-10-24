@@ -56,6 +56,8 @@ class ModelRegistryManager:
             'model_weights': metadata.get('ensemble_weights', metadata.get('model_weights', {})),
             'feature_means': metadata.get('feature_means', []),
             'feature_stds': metadata.get('feature_stds', []),
+            'raw_feature_means': metadata.get('raw_feature_means', []),
+            'raw_feature_stds': metadata.get('raw_feature_stds', []),
         }
         with open(model_path, 'wb') as f:
             pickle.dump(pkg, f)

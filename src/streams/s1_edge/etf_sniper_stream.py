@@ -593,6 +593,11 @@ class S1ETFSniperStream(BaseStream):
         except Exception as _unc_e:
             logger.debug(f"  [S1 Unconventional Engine] Evaluation bypassed: {_unc_e}")
 
+        for _sig in signals:
+            _sig_tp = float(_sig.get('tp_pct', tp_pct) or tp_pct)
+            _sig.setdefault('expected_return_pct', round(_sig_tp, 4))
+            _sig.setdefault('expected_return', round(float(_sig['expected_return_pct']) / 100.0, 4))
+
         return signals
 
     def get_performance(self) -> Dict[str, Any]:

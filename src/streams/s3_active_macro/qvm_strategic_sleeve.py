@@ -580,7 +580,6 @@ class StrategicQVMCompoundingSleeve:
 
         if selected_candidates:
             _min_w_z = 0.1
-            _fallback_p = 50000.0
             total_z = sum(max(_min_w_z, c['qvm_zscore']) for c in selected_candidates)
             for c in selected_candidates:
                 ticker = c['ticker']
@@ -592,9 +591,10 @@ class StrategicQVMCompoundingSleeve:
                     target_positions_krw[ticker] = float(alloc_krw)
                     price = float(c.get('price', 0.0) or 0.0)
                     if price <= 0.0:
-                        price = _fallback_p
-                    shares = math.floor(alloc_krw / max(1.0, price))
-                    target_shares[ticker] = int(shares)
+                        target_shares[ticker] = 0
+                    else:
+                        shares = math.floor(alloc_krw / price)
+                        target_shares[ticker] = int(shares)
 
         return {
             'sleeve_status': 'ACTIVE_STRATEGIC_EVALUATION',

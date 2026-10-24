@@ -567,12 +567,34 @@ class ExposureOrchestrator:
             if pf_path.exists():
                 pf = json.loads(pf_path.read_text())
                 positions = pf.get('holdings' if _is_live_exp else 'positions', pf.get('positions', {}))
+                _parking_set_exp = {'459580', '449170', '423160', '130730', 'SHV', 'SGOV', 'BIL'}  # hardcode-ok: L0 cash-parking shield ETFs
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_exp
+                    _parking_set_exp = _parking_set_exp | _get_qe_exp().get_cash_equivalent_tickers()
+                except Exception:
+                    pass
+                _fx_exp = float((pf.get('account') or {}).get('fx_rate') or pf.get('fx_rate') or 0.0)
+                if _fx_exp <= 0:
+                    try:
+                        from src.data_collection.central_data_gateway import CentralDataGateway as _CDG_Exp
+                        _fx_exp = float(_CDG_Exp().get_usdkrw_rate() or 0.0)
+                    except Exception:
+                        _fx_exp = 0.0
                 for pk, pos in positions.items():
                     sid = (pk.split(':')[0] if ':' in pk else '') or str(pos.get('stream_id', ''))
                     tk = (pk.split(':')[1] if ':' in pk else pk) or str(pos.get('ticker', ''))
-                    mv = pos.get('market_value', pos.get('eval_krw', pos.get('amount', 0)))
-                    if not mv and pos.get('qty') and pos.get('current_price'):
-                        mv = float(pos.get('qty', 0)) * float(pos.get('current_price', 0))
+                    if str(tk).strip().upper() in _parking_set_exp or sid == 'S_YIELD':
+                        continue
+                    _is_us_tk = not str(tk).isdigit()
+                    _pos_fx = (float(pos.get('fx_rate') or 0.0) or _fx_exp or 1.0) if _is_us_tk else 1.0
+                    mv = float(pos.get('eval_krw', pos.get('eval_amount_krw', 0.0)) or 0.0)
+                    if mv <= 0:
+                        _q_e = float(pos.get('qty', pos.get('quantity', 0)) or 0.0)
+                        _p_e = float(pos.get('current_price', pos.get('avg_price', 0)) or 0.0)
+                        if _q_e > 0 and _p_e > 0:
+                            mv = _q_e * _p_e * _pos_fx
+                        else:
+                            mv = float(pos.get('market_value', pos.get('amount', 0)) or 0.0) * (_pos_fx if _is_us_tk else 1.0)
                     if sid in ('H', 'SYS_HEDGE') or tk in ('114800', '252670', 'SQQQ', 'SH', 'PSQ'):
                         current_hedge_amount += mv
                         current_hedge_ticker = tk or '114800'
@@ -682,7 +704,7 @@ class ExposureOrchestrator:
             path = _RESULTS / 'signal_cache.json'
             if path.exists():
                 cache = json.loads(path.read_text())
-                result: Dict = {}
+                result: Dict = dict(cache) if isinstance(cache, dict) else {}
                 from src.utils.metric_parser import parse_vix
                 result['vix'] = parse_vix(cache, 18.0)
                 return result
@@ -699,14 +721,19 @@ class ExposureOrchestrator:
                 adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=True)
                 if adapter.mode == 'live':
                     adapter.fetch_live_account_balance()
+                    _fx_adp = float(getattr(adapter, 'fx_rate', 0.0) or adapter._get_live_fx_rate() or 1.0)
                     positions_dict = {}
                     for t, p in adapter.positions.items():
+                        _is_us_p = not str(t).isdigit()
+                        _px_p = p.current_price or p.avg_price or 0.0
+                        _mv_krw = p.quantity * _px_p * (_fx_adp if _is_us_p else 1.0)
                         positions_dict[f"LIVE:{t}"] = {
                             'ticker': t,
                             'quantity': p.quantity,
                             'avg_price': p.avg_price,
                             'current_price': p.current_price,
-                            'market_value': p.quantity * (p.current_price or p.avg_price or 0.0)
+                            'eval_krw': _mv_krw,
+                            'market_value': _mv_krw,
                         }
                     return {
                         'nav': adapter.account.total_equity,

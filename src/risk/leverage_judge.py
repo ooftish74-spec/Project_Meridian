@@ -331,7 +331,7 @@ class LeverageJudge:
                 days_held = pos.get('days_held', 0)
 
             reason = None
-            urgency = 0
+            urgency = 'normal'
             atr_pct = 0.0
             try:
                 from src.execution.risk_params import _estimate_atr_pct
@@ -369,19 +369,19 @@ class LeverageJudge:
 
             if pnl_pct <= dynamic_hard_sl:
                 reason = f'[ETF Stop] Hard SL (ATR 기반): 손실률 {pnl_pct:.2f}% (<= {dynamic_hard_sl:.2f}%)'
-                urgency = 3
+                urgency = 'panic'
             elif drawdown_from_hwm >= dynamic_trail_stop and state['hwm'] > entry_price and peak_pnl_pct >= trail_activate_min_pct and pnl_pct > 0:
                 reason = f'[ETF Stop] Trailing Stop (ATR 기반): HWM 대비 {drawdown_from_hwm:.1f}% 하락 (>= {dynamic_trail_stop:.2f}%)'
-                urgency = 2
+                urgency = 'stop'
             elif is_inverse_pos and (not is_bear_or_crash) and (effective_vol_index < dynamic_vix_caution) and (pnl_pct <= 0):
                 reason = (
                     f'[ETF Stop] Macro 안정화 (Regime={resolved_regime}, '
                     f'Vol={effective_vol_index:.1f} < Q_caution={dynamic_vix_caution:.1f}, PnL={pnl_pct:+.2f}%) → 인버스 동적 청산'
                 )
-                urgency = 2
+                urgency = 'stop'
             elif allow_time_decay_exit and days_held >= effective_max_hold:
                 reason = f'[ETF Stop] Medallion Decay: {days_held}일 보유 >= 동적 임계값 {effective_max_hold}일 (Vol={effective_vol_index:.1f})'
-                urgency = 2
+                urgency = 'stop'
 
             if reason:
                 exit_orders.append({

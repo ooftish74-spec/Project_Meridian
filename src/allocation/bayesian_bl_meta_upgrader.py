@@ -173,14 +173,6 @@ class BayesianBlackLittermanMetaUpgrader:
         """
         os.makedirs(os.path.dirname(self.overrides_path), exist_ok=True)
 
-        current_data = {}
-        if os.path.exists(self.overrides_path):
-            try:
-                with open(self.overrides_path, 'r', encoding='utf-8') as f:
-                    current_data = json.load(f)
-            except Exception as e:
-                logger.warning(f"기존 dynamic_overrides.json 로드 실패: {e}")
-
         # 후험 기대수익률 기반 알파 승격 팩터 계산
         upgraded_alphas = {}
         for ticker, ret in posterior_returns.items():
@@ -188,11 +180,17 @@ class BayesianBlackLittermanMetaUpgrader:
             conviction_multiplier = round(max(0.2, min(2.0, float(ret / (unc + 1e-4)))), 4)
             upgraded_alphas[ticker] = conviction_multiplier
 
-        current_data['bayesian_bl_alpha_multipliers'] = upgraded_alphas
-        current_data['last_bl_upgrade_timestamp'] = logging.Formatter().formatTime(logging.LogRecord("", 0, "", 0, "", (), None))
+        ts_str = logging.Formatter().formatTime(logging.LogRecord("", 0, "", 0, "", (), None))
+        from src.utils.file_ops import safe_json_update
 
-        with open(self.overrides_path, 'w', encoding='utf-8') as f:
-            json.dump(current_data, f, indent=2, ensure_ascii=False)
+        def _mutator(d: Dict[str, Any]) -> Dict[str, Any]:
+            if not isinstance(d, dict):
+                d = {}
+            d['bayesian_bl_alpha_multipliers'] = upgraded_alphas
+            d['last_bl_upgrade_timestamp'] = ts_str
+            return d
+
+        current_data = safe_json_update(self.overrides_path, _mutator, default={}, strict=True)
 
         logger.info(f"✅ [BayesianBLMetaUpgrader] 자율 전략 승격 완료 -> {self.overrides_path}")
         return current_data

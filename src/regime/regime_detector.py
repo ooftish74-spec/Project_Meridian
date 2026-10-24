@@ -109,6 +109,7 @@ class RegimeDetector:
         exit_thresh = float(pget('regime.crash_radar_exit_threshold', 0.35))
         min_hold_days = int(pget('regime.crash_radar_min_hold_days', 3))
         crash_prob = raw_result.get('crash_prob', 0.0)
+        raw_crash_prob = float(raw_result.get('raw_crash_prob', crash_prob))
         was_active = self._crash_radar_state.get('is_active', False)
         hold_elapsed = self._crash_radar_state.get('hold_days_elapsed', 0)
         today_str = datetime.now().strftime('%Y-%m-%d')
@@ -117,7 +118,17 @@ class RegimeDetector:
                 self._crash_radar_state.update({'is_active': True, 'activated_at': datetime.now().isoformat(), 'last_updated_date': today_str, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
                 logger.warning(f"  🚨 [CrashRadar Hysteresis] 경보 ON: crash_prob={crash_prob:.3f} >= entry={entry_thresh:.2f}")
                 is_warning = True
+            elif raw_crash_prob >= exit_thresh and hold_elapsed > 0:
+                last_date = self._crash_radar_state.get('last_updated_date')
+                if last_date != today_str:
+                    hold_elapsed += 1
+                    self._crash_radar_state['hold_days_elapsed'] = hold_elapsed
+                    self._crash_radar_state['last_updated_date'] = today_str
+                self._crash_radar_state['last_crash_prob'] = crash_prob
+                is_warning = False
             else:
+                if hold_elapsed > 0 and raw_crash_prob < exit_thresh:
+                    self._crash_radar_state['hold_days_elapsed'] = 0
                 is_warning = False
         else:
             last_date = self._crash_radar_state.get('last_updated_date')
@@ -129,7 +140,8 @@ class RegimeDetector:
             min_hold_met = hold_elapsed >= min_hold_days
             below_exit = crash_prob < exit_thresh
             if min_hold_met and below_exit:
-                self._crash_radar_state.update({'is_active': False, 'activated_at': None, 'last_updated_date': today_str, 'last_crash_prob': crash_prob, 'hold_days_elapsed': 0})
+                _reset_hold = 0 if raw_crash_prob < exit_thresh else hold_elapsed
+                self._crash_radar_state.update({'is_active': False, 'activated_at': None, 'last_updated_date': today_str, 'last_crash_prob': crash_prob, 'hold_days_elapsed': _reset_hold})
                 logger.info(f"  ✅ [CrashRadar Hysteresis] 경보 OFF: crash_prob={crash_prob:.3f} < exit={exit_thresh:.2f}, 유지일={hold_elapsed}/{min_hold_days}")
                 is_warning = False
             else:
@@ -247,14 +259,40 @@ class RegimeDetector:
         if data_confidence_score < 75.0:
             logger.error(f"  🚨 [Data Watchdog] 핵심 매크로 데이터 {missing_count}개 누락 (Score: {data_confidence_score:.1f}). Confidence 강제 삭감 대기.")
             watchdog_triggered = True
+        from src.utils.metric_parser import parse_metric
+        _kospi_rets_in = list(market_data.get('kospi_returns', []) or [])
+        _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
+        _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
+        _pct_unit_min = float(pget('regime.kospi_pct_unit_min', 0.05))
+        if _live_chg_pct != 0.0 and _kospi_rets_in:
+            _live_ret_dec = _live_chg_pct / 100.0 if abs(_live_chg_pct) >= _pct_unit_min else _live_chg_pct
+            if abs(float(_kospi_rets_in[-1]) - _live_ret_dec) > _ret_eps and abs(float(_kospi_rets_in[-1]) - _live_chg_pct) > _ret_eps:
+                _kospi_rets_in.append(_live_ret_dec)
+                market_data = dict(market_data, kospi_returns=_kospi_rets_in)
         rule_result = self._rule_based(signal, market_data)
         crash_radar_result = self._crash_radar(market_data)
         crash_radar_result = self._apply_crash_hysteresis(crash_radar_result)
         if crash_radar_result.get('is_crash_warning'):
             _crash_penalty = float(pget('regime.crash_radar_score_penalty', 5.0))
-            rule_result['score'] = max(0.0, rule_result.get('score', 50.0) - _crash_penalty)
+            _default_rule_score = float(pget('regime.rule_score_default', 50.0))
+            rule_result['score'] = max(0.0, rule_result.get('score', _default_rule_score) - _crash_penalty)
+            _pen_score = float(rule_result['score'])
+            _bull_t = float(pget('regime.rule_score_bull', 65))
+            _caution_t = float(pget('regime.rule_score_caution', 45))
+            _bear_t = float(pget('regime.rule_score_bear', 25))
+            if _pen_score >= _bull_t:
+                _pen_reg = 'bull'
+            elif _pen_score >= _caution_t:
+                _pen_reg = 'caution'
+            elif _pen_score >= _bear_t:
+                _pen_reg = 'bear'
+            else:
+                _pen_reg = 'crash'
+            _reg_rank = {'bull': 3, 'caution': 2, 'bear': 1, 'crash': 0}
+            if _reg_rank.get(_pen_reg, 2) <= _reg_rank.get(str(rule_result.get('regime', 'caution')), 2):
+                rule_result['regime'] = _pen_reg
             rule_result['crash_radar_triggered'] = True
-            logger.warning(f"  [CrashRadar→Rule] score 패널티 -{_crash_penalty:.0f}점 적용 → score={rule_result['score']:.1f}")
+            logger.warning(f"  [CrashRadar→Rule] score 패널티 -{_crash_penalty:.0f}점 적용 → score={rule_result['score']:.1f}, regime={rule_result['regime']}")
         hmm_result = self._hmm_detect(market_data)
         gi_result = self._compute_gi_matrix(market_data)
         if hmm_result and hmm_result['regime'] is not None:
@@ -361,7 +399,9 @@ class RegimeDetector:
             w_vol = float(pget('regime.crash_radar_w_vol', 0.3))
             w_fear = float(pget('regime.crash_radar_w_fear', 0.3))
             crash_prob = w_vix * vix_velocity_score + w_vol * vol_zscore_score + w_fear * fear_score
-            result['crash_prob'] = round(min(1.0, crash_prob), 4)
+            raw_crash_prob = round(min(1.0, float(crash_prob)), 4)
+            result['crash_prob'] = raw_crash_prob
+            result['raw_crash_prob'] = raw_crash_prob
             try:
                 _cr_state = self._crash_radar_state
                 _hold_days = int(_cr_state.get('hold_days_elapsed', 0)) if isinstance(_cr_state, dict) else 0

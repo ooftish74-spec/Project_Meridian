@@ -158,7 +158,15 @@ class USNightExecutionEngine:
                 kp = json.loads(kp_path.read_text(encoding='utf-8'))
                 today_str = datetime.now().strftime('%Y-%m-%d')
                 from src.utils.market_calendar import is_kr_ticker
+                _us_parking_exempt = {'SHV', 'SGOV', 'BIL'}  # hardcode-ok: L0 US cash-parking shield ETFs
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_usn
+                    _us_parking_exempt = _us_parking_exempt | _get_qe_usn().get_cash_equivalent_tickers()
+                except Exception:
+                    pass
                 for t, h in kp.get('holdings', {}).items():
+                    if str(t).strip().upper() in _us_parking_exempt:
+                        continue
                     if not is_kr_ticker(str(t)):  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
                         entry_p = float(h.get('avg_price', 0.0) or 0.0)
                         curr_p = float(h.get('current_price', 0.0) or 0.0)
@@ -358,7 +366,7 @@ class USNightExecutionEngine:
             atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
             dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
-            dynamic_hard_stop_pct = min(self.hard_stop_pct, max(self.trail_activation_pct, dynamic_trailing_stop_pct))
+            dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
             effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
             # 1) Hard Stop-Loss (수익 활성화 전에도 종목별 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)

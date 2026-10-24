@@ -1586,17 +1586,27 @@ def _update_signal_cache(updates: dict):
             if _exp_path.exists():
                 try:
                     _ed = json.loads(_exp_path.read_text(encoding='utf-8'))
-                    if isinstance(_ed, list) and _ed:
-                        existing['exposure'] = float(_ed[-1].get('exposure', 0.72))
+                    if isinstance(_ed, list) and _ed and _ed[-1].get('exposure') is not None:
+                        existing['exposure'] = float(_ed[-1]['exposure'])
                     elif isinstance(_ed, dict):
-                        existing['exposure'] = float(_ed.get('current_exposure', _ed.get('exposure', 0.72)))
+                        _ev = _ed.get('current_exposure', _ed.get('exposure'))
+                        if _ev is not None:
+                            existing['exposure'] = float(_ev)
                 except Exception:
-                    existing['exposure'] = 0.72
-            else:
-                existing['exposure'] = 0.72
+                    pass
 
         if 'qqq_ker' not in existing:
-            existing['qqq_ker'] = 0.25
+            try:
+                _qqq_hist = existing.get('qqq_close_history') or []
+                if isinstance(_qqq_hist, list) and len(_qqq_hist) >= 11:
+                    _q_arr = [float(x) for x in _qqq_hist[-11:] if float(x) > 0]
+                    if len(_q_arr) >= 11:
+                        _net_chg = abs(_q_arr[-1] - _q_arr[0])
+                        _tot_path = sum(abs(_q_arr[i] - _q_arr[i - 1]) for i in range(1, len(_q_arr)))
+                        if _tot_path > 0:
+                            existing['qqq_ker'] = round(_net_chg / _tot_path, 4)
+            except Exception:
+                pass
 
         existing['last_overnight_update'] = datetime.now().isoformat()
         cache_file.parent.mkdir(parents=True, exist_ok=True)

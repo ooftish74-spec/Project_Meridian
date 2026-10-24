@@ -240,9 +240,7 @@ class MorningIntelligenceFusion:
                 if len(df) >= 2 and 'close' in df.columns:
                     return float((df['close'].iloc[-1] / df['close'].iloc[-2] - 1) * 100)
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:389', exc_info=True)
+            logger.debug(f"Signal change load fallback ({name}): {e}")
         return 0.0
 
     def _load_json(self, filename: str) -> Dict:
@@ -252,9 +250,7 @@ class MorningIntelligenceFusion:
             try:
                 return json.loads(path.read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:401', exc_info=True)
+                logger.debug(f"JSON load fallback ({filename}): {e}")
         return {}
 
     def _load_latest_overnight_macro(self) -> Dict:
@@ -266,9 +262,7 @@ class MorningIntelligenceFusion:
                 if files:
                     return json.loads(files[0].read_text())
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                logger.warning('[SILENT_BYPASS] Suppressed exception at morning_intelligence_fusion.py:415', exc_info=True)
+                logger.debug(f"Overnight macro load fallback: {e}")
         return {}
 
     def _save(self, result: Dict):

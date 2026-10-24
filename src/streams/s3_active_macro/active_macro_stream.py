@@ -508,6 +508,9 @@ class S3FactorStream(BaseStream):
                 _sig_item['f_score'] = int(pick.get('f_score', 6) or 6)
                 _sig_item['ohlson_prob'] = float(pick.get('ohlson_prob', 0.0) or 0.0)
                 _sig_item['roic_wacc_spread_pct'] = float(pick.get('roic_wacc_spread_pct', 0.0) or 0.0)
+            else:
+                _sig_item['expected_return_pct'] = round(float(tp_val), 2)
+            _sig_item['expected_return'] = round(float(_sig_item['expected_return_pct']) / 100.0, 4)
             signals.append(_sig_item)
         if qvm_exit_signals:
             signals.extend(qvm_exit_signals)
@@ -522,8 +525,14 @@ class S3FactorStream(BaseStream):
             track_c_signals = track_c_engine.generate_track_c_signals(us_regime, market_data)
             for c_sig in track_c_signals:
                 c_sig['_type'] = 'TRACK_C'
-                c_sig['tp_pct'] = float(pget('s3.track_c.tp_pct', 5.0))
-                c_sig['sl_pct'] = float(pget('s3.track_c.sl_pct', 2.5))
+                if not c_sig.get('tp_pct') or float(c_sig.get('tp_pct', 0.0)) <= 0.0:
+                    c_sig['tp_pct'] = float(pget('s3.track_c.tp_pct', 5.0))
+                if not c_sig.get('sl_pct') or abs(float(c_sig.get('sl_pct', 0.0))) <= 0.0:
+                    c_sig['sl_pct'] = abs(float(pget('s3.track_c.sl_pct', 2.5)))
+                else:
+                    c_sig['sl_pct'] = abs(float(c_sig['sl_pct']))
+                c_sig.setdefault('expected_return_pct', round(float(c_sig['tp_pct']), 4))
+                c_sig.setdefault('expected_return', round(float(c_sig['expected_return_pct']) / 100.0, 4))
                 signals.append(c_sig)
         except Exception as _tc_e:
             logger.warning(f"  ⚠️ [Alpha 4 Track C] 대체자산 슬리 발화 예외 (무시): {_tc_e}")

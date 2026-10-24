@@ -235,17 +235,8 @@ class QPortfolioOptimizer:
         if n_assets == 0:
             return {'weights': {}, 'lambda_risk': 1.0, 'expected_portfolio_alpha': 0.0, 'portfolio_volatility': 0.0, 'turnover': 0.0, 'status': 'empty'}
 
-        # ── Phase 2 Solution: Natural FX Hedge Matrix Integration ──
-        cov_matrix_hedged = np.nan_to_num(np.array(cov_matrix, dtype=float, copy=True), nan=0.0, posinf=0.0, neginf=0.0)
-        for i, name_i in enumerate(asset_names):
-            if any(us_tag in name_i.upper() for us_tag in ['US', 'S5', 'S6', 'TQQQ', 'SOXL', 'NVDA']):
-                for j, name_j in enumerate(asset_names):
-                    if i == j:
-                        cov_matrix_hedged[i, j] = max(1e-6, cov_matrix_hedged[i, j] * 0.82)
-                    elif any(us_tag in name_j.upper() for us_tag in ['US', 'S5', 'S6', 'TQQQ', 'SOXL', 'NVDA']):
-                        cov_matrix_hedged[i, j] *= 0.85
-
-        cov_matrix = np.nan_to_num(cov_matrix_hedged, nan=0.0, posinf=0.0, neginf=0.0)
+        # ── Covariance Matrix Sanitization (PSD-preserving, no arbitrary scaling) ──
+        cov_matrix = np.nan_to_num(np.array(cov_matrix, dtype=float, copy=True), nan=0.0, posinf=0.0, neginf=0.0)
 
         if cov_matrix.shape != (n_assets, n_assets):
             logger.warning(f"[QPOptimizer] Covariance matrix shape mismatch {cov_matrix.shape} vs ({n_assets}, {n_assets}) → Using diagonal")

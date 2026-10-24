@@ -136,7 +136,7 @@ class RegimeEngine:
         self._hmm.load_model()
         self._hmm_blend = float(pget('regime.hmm_blend_weight', 0.4))
 
-    def detect(self) -> Dict:
+    def detect(self, save_state: bool = True) -> Dict:
         """현재 레짐 판정.
 
         원칙 3: 측정-판정 분리
@@ -181,7 +181,8 @@ class RegimeEngine:
             logger.error(f'[Phase 89 HMM] 정보 주입 실패: {_he}', exc_info=True)
             result['hmm_state_proba'] = {'bull': 0.25, 'caution': 0.25, 'bear': 0.25, 'crash': 0.25}
             result['hmm_regime'] = regime
-        self._save_state(result)
+        if save_state:
+            self._save_state(result)
         logger.info(f"  레짐: {regime.upper()} (conf={confidence:.2f})")
         return result
 
@@ -308,16 +309,27 @@ class RegimeEngine:
                 def is_extreme(cv, hist, z, p):
                     return abs(cv) > 0.3
         if macro:
-            hy = macro.get('fred_hy_spread', 0)
-            hy_hist = self._read_macro_history('fred_hy_spread', default_val=0.0)
-            if VolatilityScaledThreshold.is_extreme(hy, hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_hy_bull = pget('regime.w_hy_bull', 0.3)
-                scores['bull'] += w_macro * _w_hy_bull
-            elif VolatilityScaledThreshold.is_extreme(-hy, [-h for h in hy_hist], z_score_limit=z_ext, percentile_limit=p_ext):
-                _w_hy_bear = pget('regime.w_hy_bear', 0.4)
-                _w_hy_crash = pget('regime.w_hy_crash', 0.2)
-                scores['bear'] += w_macro * _w_hy_bear
-                scores['crash'] += w_macro * _w_hy_crash
+            hy_raw = macro.get('fred_hy_spread_raw')
+            hy = macro.get('fred_hy_spread')
+            _w_hy_bull = pget('regime.w_hy_bull', 0.3)
+            _w_hy_bear = pget('regime.w_hy_bear', 0.4)
+            _w_hy_crash = pget('regime.w_hy_crash', 0.2)
+            if hy_raw is not None:
+                hy_hist = self._read_macro_history('fred_hy_spread', default_val=0.0)
+                if VolatilityScaledThreshold.is_extreme(float(hy_raw), hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
+                    scores['bear'] += w_macro * _w_hy_bear
+                    scores['crash'] += w_macro * _w_hy_crash
+                elif VolatilityScaledThreshold.is_extreme(-float(hy_raw), [-h for h in hy_hist], z_score_limit=z_ext, percentile_limit=p_ext):
+                    scores['bull'] += w_macro * _w_hy_bull
+            elif hy is not None:
+                _hy_f = float(hy)
+                _hy_stress_th = float(pget('regime.hy_norm_stress_thresh', 0.3))
+                _hy_calm_th = float(pget('regime.hy_norm_calm_thresh', 0.3))
+                if _hy_f < -_hy_stress_th:
+                    scores['bear'] += w_macro * _w_hy_bear
+                    scores['crash'] += w_macro * _w_hy_crash
+                elif _hy_f > _hy_calm_th:
+                    scores['bull'] += w_macro * _w_hy_bull
             yc_inv = macro.get('yield_curve_inverted', 0)
             if yc_inv:
                 _w_yc_caution = pget('regime.w_yc_caution', 0.3)

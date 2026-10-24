@@ -98,7 +98,15 @@ class TransactionCostFilter:
 
         # ETP Dynamic Friction Multiplier Check
         is_etp_trade = any(
-            sid in ['S0', 'S1', 'S2', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA', 'TQQQ', 'SQQQ', '233740', '252670', 'SOXL', 'SOXS', 'SH']
+            sid in [
+                'S0', 'S1', 'S2', 'S5',
+                'S10', 'S10_MEGA_TREND',
+                'S11', 'S11_HIGHBETA_SNIPER',
+                'S12', 'S12_DERIVATIVE_SQUEEZE',
+                'S13', 'S13_JAPAN_ALPHA',
+                'S14', 'S14_PAIR_ALPHA',
+                'TQQQ', 'SQQQ', '233740', '252670', 'SOXL', 'SOXS', 'SH',
+            ]
             for sid in current_weights.keys() | target_weights.keys()
         )
         if is_etp_trade:
@@ -241,7 +249,9 @@ class PortfolioOptimizer:
 
     def __init__(self):
         from config.dynamic_config import DynamicConfig as _DC
-        self.STREAMS = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
+        from src.allocation.alpha_allocator import _STREAM_CANONICAL_MAP
+        _raw_streams = list(_DC().get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']))
+        self.STREAMS = [s for s in dict.fromkeys(_STREAM_CANONICAL_MAP.get(str(x), str(x)) for x in _raw_streams) if s != 'S4']
         self._tx_filter = TransactionCostFilter()
         self._turnover = TurnoverLimiter()
 
@@ -350,22 +360,26 @@ class PortfolioOptimizer:
     def _apply_exposure(self, weights: Dict[str, float], exposure: float) -> Dict[str, float]:
         """노출도를 비중에 적용.
 
-        exposure < 1 → 전체 축소 + 나머지 S4(방어)로 이동.
+        exposure < 1 → 전체 축소 + 나머지 S5(방어/현금파킹)로 이동.
         """
         if exposure >= 1.0:
             return weights
         cash_pct = cfg.get('optimizer.cash_to_defensive', True)
+        cash_sid = 'S5' if 'S5' in weights else ('S4' if 'S4' in weights else ('S0' if 'S0' in weights else None))
         result = {}
-        remaining = 0
+        remaining = 0.0
         for sid, w in weights.items():
-            if sid == 'S4' and cash_pct:
+            if cash_pct and cash_sid is not None and sid == cash_sid:
                 result[sid] = w
             else:
                 scaled = w * exposure
                 result[sid] = round(scaled, 4)
                 remaining += w - scaled
-        if cash_pct and 'S4' in result:
-            result['S4'] = round(result['S4'] + remaining, 4)
+        if cash_pct and cash_sid is not None and cash_sid in result:
+            result[cash_sid] = round(result[cash_sid] + remaining, 4)
+        elif remaining > 0.0:
+            target_cash = cash_sid or 'S5'
+            result[target_cash] = round(result.get(target_cash, 0.0) + remaining, 4)
         total = sum(result.values())
         if total > 1.0:
             result = {k: round(v / total, 4) for k, v in result.items()}
@@ -401,8 +415,10 @@ class PortfolioOptimizer:
             try:
                 _proxy_map = {  # hardcode-ok: L0 stream benchmark proxy tickers for CVaR fallback
                     'S0': '069500', 'S1': '069500', 'S2': '229200', 'S3': '069500',
-                    'S4': 'GLD', 'S5': 'QQQ', 'S10': 'SPY', 'S11': 'SOXX',
-                    'S12': '069500', 'S13': 'SPY', 'S14_PAIR_ALPHA': 'QQQ',
+                    'S5': 'QQQ', 'S10': 'SPY', 'S10_MEGA_TREND': '069500',
+                    'S11': 'SOXX', 'S11_HIGHBETA_SNIPER': '069500',
+                    'S12': '069500', 'S12_DERIVATIVE_SQUEEZE': '069500',
+                    'S13': 'SPY', 'S13_JAPAN_ALPHA': 'SPY', 'S14_PAIR_ALPHA': 'QQQ',
                 }
                 _needed_sids = [sid for sid in self.STREAMS if sid not in stream_order]
                 _tks = list(dict.fromkeys(_proxy_map[sid] for sid in _needed_sids if sid in _proxy_map))
@@ -534,7 +550,10 @@ class PortfolioOptimizer:
                     return history[-1].get('weights', {})
             except Exception as _e5:
                 logger.critical(f"  [portfolio_optimizer] 현재 비중 파일 로드: {_e5}", exc_info=True)
-        return {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S4': pget('allocator.s4_base_weight', 0.25)}
+        base_w = {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S5': pget('allocator.s4_base_weight', 0.25)}
+        for sid in getattr(self, 'STREAMS', []):
+            base_w.setdefault(sid, 0.0)
+        return base_w
 
     def _save_result(self, result: Dict) -> None:
         """최적화 결과 저장."""

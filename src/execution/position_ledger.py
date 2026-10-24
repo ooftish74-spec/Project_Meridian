@@ -63,12 +63,16 @@ class PositionLedgerManager:
         return {}
 
     def _save_file_unlocked(self, data: Dict[str, Dict[str, Any]]):
-        """락 없이 파일 저장 (원자적 저장)."""
+        """프로세스 간 엄격 파일 락(safe_json_update strict=True) 기반 원자적 저장."""
         try:
-            from src.utils.file_ops import atomic_write_json
-            atomic_write_json(self.ledger_path, data, indent=2, ensure_ascii=False)
+            from src.utils.file_ops import safe_json_update
+            safe_json_update(self.ledger_path, lambda _cur: dict(data), default={}, strict=True)
         except Exception as e:
             logger.error(f"  ❌ [PositionLedger] 저장 실패: {e}")
+
+    def _save_ledger(self, data: Dict[str, Dict[str, Any]]):
+        """_save_file_unlocked 별칭."""
+        self._save_file_unlocked(data)
 
     def load_ledger(self) -> Dict[str, Dict[str, Any]]:
         """원장 데이터 로드."""
@@ -122,6 +126,7 @@ class PositionLedgerManager:
                     "scaled_out": False,
                     "last_avg_price": float(entry_price),
                     "last_qty": float(quantity),
+                    "last_quantity": float(quantity),
                     "stream_id": resolved_stream or "LIVE_SSOT",
                     "strategy": resolved_strategy,
                     "track": resolved_track or "TRACK_1_TACTICAL",
@@ -355,6 +360,7 @@ class PositionLedgerManager:
                     "trail_activated": bool(float(current_pnl_pct or 0.0) >= trail_activate_threshold),
                     "scaled_out": False,
                     "last_avg_price": float(avg_price or 0.0),
+                    "last_qty": float(quantity or 0.0),
                     "last_quantity": float(quantity or 0.0),
                     "stream_id": str(stream_id or "LIVE_SSOT"),
                     "strategy": str(strategy or ""),
@@ -383,7 +389,7 @@ class PositionLedgerManager:
                 info["track"] = str(track)
                 updated = True
 
-            prev_qty = float(info.get("last_quantity", 0.0) or 0.0)
+            prev_qty = float(info.get("last_quantity", info.get("last_qty", 0.0)) or 0.0)
             prev_avg_px = float(info.get("last_avg_price", 0.0) or 0.0)
             curr_qty = float(quantity or 0.0)
             curr_avg_px = float(avg_price or 0.0)
@@ -421,6 +427,7 @@ class PositionLedgerManager:
                 updated = True
 
             if curr_qty > 0 and curr_qty != prev_qty:
+                info["last_qty"] = curr_qty
                 info["last_quantity"] = curr_qty
                 updated = True
             if curr_avg_px > 0 and curr_avg_px != prev_avg_px:

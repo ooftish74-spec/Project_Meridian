@@ -249,41 +249,56 @@ class MarketDataBridge:
 
             # 2. Exposure
             if 'exposure' not in signal or signal.get('exposure') is None:
+                _exp_val = signal.get('target_exposure', self._cache.get('target_exposure', self._cache.get('exposure')))
                 _exp_path = _PROJECT_ROOT / 'results' / 'exposure_history.json'
-                if _exp_path.exists():
+                if _exp_val is None and _exp_path.exists():
                     try:
                         _ed = json.loads(_exp_path.read_text(encoding='utf-8'))
                         if isinstance(_ed, list) and _ed:
-                            signal['exposure'] = float(_ed[-1].get('exposure', 0.72))
+                            _exp_val = _ed[-1].get('exposure', _ed[-1].get('target_exposure'))
                         elif isinstance(_ed, dict):
-                            signal['exposure'] = float(_ed.get('current_exposure', _ed.get('exposure', 0.72)))
+                            _exp_val = _ed.get('current_exposure', _ed.get('exposure', _ed.get('target_exposure')))
                     except Exception:
-                        signal['exposure'] = 0.72
-                if not signal.get('exposure'):
-                    signal['exposure'] = 0.72
+                        pass
+                if _exp_val is None:
+                    _reg_cur = str(signal.get('regime', 'caution')).lower()
+                    _reg_exp_map = {
+                        'bull': float(pget('regime.exposure.bull', 0.90)),
+                        'caution': float(pget('regime.exposure.caution', 0.65)),
+                        'bear': float(pget('regime.exposure.bear', 0.40)),
+                        'crash': float(pget('regime.exposure.crash', 0.20)),
+                    }
+                    _exp_val = _reg_exp_map.get(_reg_cur, float(pget('regime.exposure.caution', 0.65)))
+                signal['exposure'] = float(_exp_val)
 
             # 3. QQQ KER (Kaufman Efficiency Ratio)
             if 'qqq_ker' not in signal or signal.get('qqq_ker') is None:
+                _ker_val = self._cache.get('qqq_ker')
                 try:
                     from src.risk.whipsaw_defense_engine import AntiWhipsawDefenseEngine
                     wde = AntiWhipsawDefenseEngine()
                     qqq_df = self._load_price_history('QQQ')
+                    if qqq_df is None or qqq_df.empty or 'close' not in qqq_df.columns:
+                        _kr_bm = str(self._cfg.get('regime.kospi_benchmark_ticker') or '')
+                        if _kr_bm:
+                            qqq_df = self._load_price_history(_kr_bm)
                     if qqq_df is not None and not qqq_df.empty and 'close' in qqq_df.columns:
                         closes = qqq_df['close'].dropna().tolist()
-                        signal['qqq_ker'] = round(float(wde.compute_kaufman_efficiency_ratio(closes, period=20)), 4)
-                    else:
-                        signal['qqq_ker'] = 0.25
+                        _min_ker_bars = 5
+                        if len(closes) >= _min_ker_bars:
+                            _ker_val = round(float(wde.compute_kaufman_efficiency_ratio(closes, period=20)), 4)
                 except Exception:
-                    signal['qqq_ker'] = 0.25
+                    pass
+                signal['qqq_ker'] = float(_ker_val) if _ker_val is not None else float(pget('whipsaw.default_ker', 0.30))
         except Exception as _meta_e:
             logger.debug(f"  [SignalCache] Root meta fields injection fallback: {_meta_e}")
             if 'regime' not in signal:
                 signal['regime'] = 'caution'
                 signal['current_regime'] = 'caution'
             if 'exposure' not in signal:
-                signal['exposure'] = 0.72
+                signal['exposure'] = float(self._cache.get('target_exposure') or self._cache.get('exposure') or pget('regime.exposure.caution', 0.65))
             if 'qqq_ker' not in signal:
-                signal['qqq_ker'] = 0.25
+                signal['qqq_ker'] = float(self._cache.get('qqq_ker') or pget('whipsaw.default_ker', 0.30))
         return signal
 
     def build_signal_cache(self, force: bool=False, force_refresh: bool=False, **kwargs) -> Dict:
@@ -539,7 +554,7 @@ class MarketDataBridge:
         if sox:
             result['sox_change_pct'] = sox
         else:
-            result['sox_change_pct'] = result['nasdaq_change_pct'] * 1.2
+            result['sox_change_pct'] = float(self._cache.get('sox_change_1d', 0.0) or 0.0)
         avg = (result['sp500_change'] + result['nasdaq_change']) / 2
         if avg > 1.0:
             result['us_sentiment'] = 'bullish'
@@ -726,9 +741,15 @@ class MarketDataBridge:
                 except Exception as e:
                     logger.error(f"  [VIX Parquet] 읽기 에러: {e}")
 
-        logger.warning('  [Data Janitor] 모든 VIX 소스 실패. 비상 Imputation(20.0) 적용.')
-        self._field_quality['vix'] = 0.2
-        return 20.0
+        _cached_vix = float(self._cache.get('vix', 0.0) or 0.0)
+        if _cached_vix > 0.0:
+            self._field_quality['vix'] = float(pget('vix.cached_fallback_quality', 0.4))
+            logger.warning(f'  [Data Janitor] 모든 실시간 VIX 소스 실패 → 캐시 VIX({_cached_vix:.2f}) 유지.')
+            return _cached_vix
+        _ou_mean_vix = float(pget('vix.ou_long_run_mean', 18.5))
+        logger.warning(f'  [Data Janitor] 모든 VIX 소스 및 캐시 부재 → OU 장기평균({_ou_mean_vix:.2f}) 적용.')
+        self._field_quality['vix'] = float(pget('vix.prior_fallback_quality', 0.2))
+        return _ou_mean_vix
 
     def _safe_get_index_close(self, index_code: str, days: int=5):
         """지수 종가를 안전하게 가져오기 (KIS 업종지수 -> pykrx 지수 -> ETF 프록시(1028/2203 한정)).
@@ -911,13 +932,15 @@ class MarketDataBridge:
                 self._field_quality['vkospi'] = proxy_quality
                 return proxy_vkospi
             else:
-                AlertManager().report_error('VKOSPI', 'VIX 품질 0.7 미만(프록시 불가). 최후의 보루 20.0(상수)을 주입합니다.', severity='critical')
+                _fb_vk = float(self._cache.get('vkospi', 0.0) or self._cache.get('vix', 0.0) or pget('vix.ou_long_run_mean', 18.5))
+                AlertManager().report_error('VKOSPI', f'VIX 품질 0.7 미만(프록시 불가). 캐시/장기평균({_fb_vk:.2f})을 주입합니다.', severity='critical')
                 self._field_quality['vkospi'] = 0.0
-                return 20.0
+                return _fb_vk
         except Exception as e:
-            AlertManager().report_error('VKOSPI', f"VIX 프록시 폴백마저 실패(예외 발생). 최후의 보루 20.0 주입: {e}", severity='critical')
+            _fb_vk = float(self._cache.get('vkospi', 0.0) or self._cache.get('vix', 0.0) or pget('vix.ou_long_run_mean', 18.5))
+            AlertManager().report_error('VKOSPI', f"VIX 프록시 폴백마저 실패(예외 발생). 캐시/장기평균({_fb_vk:.2f}) 주입: {e}", severity='critical')
             self._field_quality['vkospi'] = 0.0
-            return 20.0
+            return _fb_vk
 
     def _get_usdkrw(self) -> Dict:
         """[Phase 84] USD/KRW 환율 (Strict Staleness & Sanity Check).
@@ -1110,9 +1133,24 @@ class MarketDataBridge:
                 data = resp['datas'][0]
                 close_val = float(str(data.get('closePriceRaw', '0')).replace(',', ''))
                 if close_val > 0:
-                    ma20_val = float(self._cache.get('kospi_ma20', 0) or (close_val * 1.002))
-                    if ma20_val > 10000 or ma20_val < 1000 or abs(ma20_val - close_val) / max(close_val, 1.0) > 0.15:
-                        ma20_val = round(close_val * 1.002, 2)
+                    ma20_val = float(self._cache.get('kospi_ma20', 0) or 0)
+                    _k_min = 1000
+                    _k_max = 10000
+                    _max_dev = float(pget('data.kospi_ma20_max_dev', 0.15))
+                    if ma20_val > _k_max or ma20_val < _k_min or abs(ma20_val - close_val) / max(close_val, 1.0) > _max_dev:
+                        ma20_val = close_val
+                        _etf_pq = _DATA_DIR / 'kr_markets' / 'kr_069500.parquet'
+                        if _etf_pq.exists():
+                            try:
+                                _df_etf = pd.read_parquet(_etf_pq)
+                                _c_etf = 'close' if 'close' in _df_etf.columns else ('Close' if 'Close' in _df_etf.columns else None)
+                                if _c_etf and len(_df_etf) >= 20:
+                                    _cs_etf = pd.to_numeric(_df_etf[_c_etf], errors='coerce').dropna()
+                                    if len(_cs_etf) >= 20 and float(_cs_etf.iloc[-1]) > 0:
+                                        _ratio_ma20 = float(_cs_etf.tail(20).mean()) / float(_cs_etf.iloc[-1])
+                                        ma20_val = round(close_val * _ratio_ma20, 2)
+                            except Exception:
+                                pass
                     self._field_quality['kospi'] = 0.9
                     logger.info(f"  📊 KOSPI Index (Naver Realtime API): {close_val:,.2f} (MA20: {ma20_val:,.2f})")
                     return {'close': close_val, 'ma20': ma20_val}

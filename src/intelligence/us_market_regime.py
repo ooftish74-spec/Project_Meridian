@@ -293,14 +293,14 @@ class USMarketRegimeEngine:
             # yfinance 폐기 — FRED API 및 Alpha Vantage 우선 참조
             pass
         if move_val is None or move_val <= 0:
-            return (0.0, {'move': None, 'score': 0.0, 'source': 'unavailable'})
+            return (0.0, {'move': None, 'score': 0.0, 'source': 'unavailable', 'detail': 'unavailable'})
         score = max(-1.0, min(1.0, (90 - move_val) / 40))
         return (score, {'move': round(move_val, 2), 'score': round(score, 3), 'source': source})
 
     def _f7_ted_spread(self) -> Tuple[float, Dict]:
         """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
         # yfinance 폐기 — FRED API 우선 참조
-        return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable'})
+        return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable', 'detail': 'unavailable'})
 
     def detect(self) -> Dict:
         """
@@ -321,8 +321,28 @@ class USMarketRegimeEngine:
         f5_score, f5_det = self._f5_streak()
         f6_score, f6_det = self._f6_move_index()
         f7_score, f7_det = self._f7_ted_spread()
-        components = {'spy_qqq_trend': {**f1_det, 'weight': self.WEIGHTS['spy_qqq_trend']}, 'vix': {**f2_det, 'weight': self.WEIGHTS['vix']}, 'overnight_mom': {**f3_det, 'weight': self.WEIGHTS['overnight_mom']}, 'fear_greed': {**f4_det, 'weight': self.WEIGHTS['fear_greed']}, 'streak': {**f5_det, 'weight': self.WEIGHTS['streak']}, 'move_index': {**f6_det, 'weight': self.WEIGHTS['move_index']}, 'ted_spread': {**f7_det, 'weight': self.WEIGHTS['ted_spread']}}
-        total_score = f1_score * self.WEIGHTS['spy_qqq_trend'] + f2_score * self.WEIGHTS['vix'] + f3_score * self.WEIGHTS['overnight_mom'] + f4_score * self.WEIGHTS['fear_greed'] + f5_score * self.WEIGHTS['streak'] + f6_score * self.WEIGHTS['move_index'] + f7_score * self.WEIGHTS['ted_spread']
+        _factor_items = [
+            ('spy_qqq_trend', f1_score, f1_det),
+            ('vix', f2_score, f2_det),
+            ('overnight_mom', f3_score, f3_det),
+            ('fear_greed', f4_score, f4_det),
+            ('streak', f5_score, f5_det),
+            ('move_index', f6_score, f6_det),
+            ('ted_spread', f7_score, f7_det),
+        ]
+        components = {
+            _fname: {**_fdet, 'weight': self.WEIGHTS[_fname]}
+            for _fname, _, _fdet in _factor_items
+        }
+        active_weight_sum = 0.0
+        weighted_score_sum = 0.0
+        for _fname, _fscore, _fdet in _factor_items:
+            _w = float(self.WEIGHTS[_fname])
+            if _fdet.get('detail') == 'unavailable' or _fdet.get('source') == 'unavailable':
+                continue
+            active_weight_sum += _w
+            weighted_score_sum += float(_fscore) * _w
+        total_score = weighted_score_sum / active_weight_sum if active_weight_sum > 0.0 else 0.0
         vix_val = float(f2_det.get('vix', 20))
         if total_score >= self.BULL_THRESHOLD:
             regime = 'bull'

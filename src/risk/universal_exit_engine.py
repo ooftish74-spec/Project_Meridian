@@ -77,19 +77,19 @@ class UniversalExitEngine:
                 atr_pct = float(np.clip(float(_m['vol_daily']) * 1.2533, pget('exit.vol_atr_clip_min', 0.003), pget('exit.atr_clip_max', 0.08)))
                 self._atr_cache[ticker] = atr_pct
                 return atr_pct
+            _tk_u = str(ticker).upper()
+            if _tk_u in _dqe.get_cash_equivalent_tickers():
+                atr_pct = float(pget('exit.vol_atr_clip_min', 0.003))
+                self._atr_cache[ticker] = atr_pct
+                return atr_pct
+            if _tk_u in set(_dqe.get_inverse_hedge_tickers()):
+                atr_pct = float(cfg.get('exit.default_atr_pct', default_atr_pct)) * 2.0
+                self._atr_cache[ticker] = atr_pct
+                return atr_pct
         except Exception:
             pass
 
-        if ticker in ('252670', '233740', '122630', 'TQQQ', 'SQQQ', 'SOXL'):
-            atr_pct = 0.045
-        elif ticker in ('NVDA', '091160', 'SOXX', 'XLK', 'TSLA'):
-            atr_pct = 0.028
-        elif ticker in ('069500', 'SPY', 'QQQ', 'VOO', 'IVV'):
-            atr_pct = 0.018
-        elif ticker in ('SHV', '459580', 'BIL'):
-            atr_pct = 0.003
-        else:
-            atr_pct = float(cfg.get('exit.default_atr_pct', default_atr_pct))
+        atr_pct = float(cfg.get('exit.default_atr_pct', default_atr_pct))
 
         self._atr_cache[ticker] = atr_pct
         return atr_pct
@@ -194,7 +194,11 @@ class UniversalExitEngine:
                 except Exception:
                     pass
                 if price <= 0:
-                    price = entry_px if entry_px > 0 else 1.0
+                    if entry_px > 0 and (pos.get('unrealized_pnl_pct') is not None or pos.get('pnl_pct') is not None or pos.get('return_pct') is not None):
+                        price = entry_px
+                    else:
+                        logger.warning(f"  ⚠️ [UniversalExitEngine] {ticker} ({stream_id}): 유효 가격 미확보(price<=0) → 평가 스킵")
+                        continue
 
             # ── [Track 2 Isolation] Buffett-Moat QVM (S3_B) 전용 4대 매도 헌법 라우팅 ──
             # 단기 노이즈 손절(-2.5%~-5%), 본전 보존(Profit-Lock), 샹들리에 추적손절, 3~5일 시간감쇠 청산을 100% 차단하고
@@ -250,6 +254,9 @@ class UniversalExitEngine:
                     exit_orders.append({
                         'stream_id': stream_id, 'ticker': ticker, 'direction': 'short' if action_type == 'sell' else 'long',
                         'action': action_type, 'quantity': qty, 'price': price, 'execution_algo': 'market',
+                        'urgency': 'high',
+                        'pnl_pct': round(float(pnl_pct), 4),
+                        'unrealized_pnl_pct': round(float(pnl_pct), 4),
                         'reason': detail
                     })
                     continue
@@ -263,6 +270,9 @@ class UniversalExitEngine:
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
                     'exit_type': 'hard_stop_loss',
+                    'urgency': 'stop',
+                    'pnl_pct': round(float(pnl_pct), 4),
+                    'unrealized_pnl_pct': round(float(pnl_pct), 4),
                     'reason': detail
                 })
                 continue
@@ -278,6 +288,9 @@ class UniversalExitEngine:
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
                     'exit_type': 'catastrophic_peak_stop',
+                    'urgency': 'stop',
+                    'pnl_pct': round(float(pnl_pct), 4),
+                    'unrealized_pnl_pct': round(float(pnl_pct), 4),
                     'reason': detail
                 })
                 continue
@@ -299,6 +312,9 @@ class UniversalExitEngine:
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': qty, 'price': price, 'execution_algo': 'market',
                     'exit_type': 'chandelier_trailing',
+                    'urgency': 'high',
+                    'pnl_pct': round(float(pnl_pct), 4),
+                    'unrealized_pnl_pct': round(float(pnl_pct), 4),
                     'reason': detail
                 })
                 continue
@@ -319,6 +335,9 @@ class UniversalExitEngine:
                     'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                     'action': 'sell', 'quantity': so_qty, 'price': price, 'execution_algo': 'market',
                     'exit_type': 'scale_out_50pct',
+                    'urgency': 'high',
+                    'pnl_pct': round(float(pnl_pct), 4),
+                    'unrealized_pnl_pct': round(float(pnl_pct), 4),
                     'reason': detail
                 })
                 continue
@@ -348,10 +367,14 @@ class UniversalExitEngine:
                         so_pct = time_decay_eval.get('scale_out_pct', 0.50)
                         decay_qty = max(1, math.floor(qty * so_pct))
                         detail = time_decay_eval.get('reason', f"⏱️ [Time-Decay Exit] {ticker} ({stream_id})")
+                        _td_ex_type = str(time_decay_eval.get('exit_type') or 'time_decay_exit')
                         exit_orders.append({
                             'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
                             'action': 'sell', 'quantity': decay_qty, 'price': price, 'execution_algo': 'market',
-                            'exit_type': 'time_decay_exit',
+                            'exit_type': _td_ex_type,
+                            'urgency': 'stop' if _td_ex_type in ('hard_sl', 'volatility_exhaustion') else 'high',
+                            'pnl_pct': round(float(pnl_pct), 4),
+                            'unrealized_pnl_pct': round(float(pnl_pct), 4),
                             'reason': detail
                         })
                         continue
@@ -458,6 +481,9 @@ class UniversalExitEngine:
                     'price': price,
                     'execution_algo': 'market',
                     'exit_type': _ex_type,
+                    'urgency': 'stop' if _ex_type in ('hard_sl', 'volatility_exhaustion') else 'high',
+                    'pnl_pct': round(float(_pnl_pct), 4),
+                    'unrealized_pnl_pct': round(float(_pnl_pct), 4),
                     'reason': _reason,
                 }
         except Exception as _t2_err:

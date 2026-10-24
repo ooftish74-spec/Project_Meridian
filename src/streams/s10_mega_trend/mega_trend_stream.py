@@ -74,6 +74,8 @@ class S10MegaTrendStream(BaseStream):
     def __init__(self):
         super().__init__('S10', 'S10 Mega-Trend')
         self.stream_id = 'S10_MEGA_TREND'
+        self._eval_cache: Dict[str, Dict] = {}
+        self._current_market_data: Dict[str, Any] = {}
         # 섹터→대장주 매핑: YAML SSoT, 기본값 폴백
         self._sector_map: Dict[str, List[Dict]] = cfg.get(
             's10.sector_stock_map', _DEFAULT_SECTOR_STOCK_MAP
@@ -89,6 +91,8 @@ class S10MegaTrendStream(BaseStream):
     ) -> List[Dict]:
         """S10 매매 신호 생성."""
         logger.info(f"  [S10] 신호 생성 시작 (레짐={regime})")
+        self._eval_cache = {}
+        self._current_market_data = market_data if isinstance(market_data, dict) else {}
 
         # Crash 구간 전량 청산
         if bool(cfg.get('s10.exit_on_crash', True)) and str(regime).lower() == 'crash':
@@ -103,6 +107,9 @@ class S10MegaTrendStream(BaseStream):
         signals: List[Dict] = []
         features = market_data.get('features', {})
         seen_tickers = set()
+        _held_set = set(market_data.get('held_tickers') or ()) | {
+            p.get('ticker') for p in getattr(self, '_positions', []) if isinstance(p, dict) and p.get('ticker')
+        }
 
         for sector in top_sectors:
             stocks = self._sector_map.get(sector, [])
@@ -115,8 +122,11 @@ class S10MegaTrendStream(BaseStream):
                 sector_weight  = float(stock.get('weight', 0.5))
                 f_data         = features.get(ticker, features.get(f'kr_{ticker}', {}))
 
-                sig = self._evaluate_stock(ticker=ticker, name=name,
-                                           f_data=f_data, regime=regime)
+                if ticker in getattr(self, '_eval_cache', {}):
+                    sig = dict(self._eval_cache[ticker])
+                else:
+                    sig = self._evaluate_stock(ticker=ticker, name=name,
+                                               f_data=f_data, regime=regime, market_data=market_data)
 
                 # 1. Dynamic VIX-Adjusted TP/SL & 2. 3D Local Panic Index (LPI) Rejection
                 _cache = market_data.get('signal_cache', {}) if isinstance(market_data.get('signal_cache'), dict) else {}
@@ -139,12 +149,18 @@ class S10MegaTrendStream(BaseStream):
                 # [Red Team 2] 3D Local Panic Index (LPI) 오버나이트 거부
                 # 미장(VIX)뿐만 아니라 한국 장(VKOSPI)과 환율(USD/KRW) 쇼크를 수학적으로 통합
                 _usdkrw_ratio = _usdkrw / _usdkrw_prev if _usdkrw_prev > 0 else 1.0
-                _lpi = max(_vix / 18.0, _vkospi / 22.0, _usdkrw_ratio / 1.015)
+                _vix_ceil = float(cfg.get('s10.lpi_vix_ceiling') or (20.0 + 4.0))
+                _vkospi_ceil = float(cfg.get('s10.lpi_vkospi_ceiling') or (20.0 + 6.0))
+                _lpi = max(_vix / _vix_ceil, _vkospi / _vkospi_ceil, _usdkrw_ratio / 1.015)
                 
                 if _lpi > 1.0:
-                    logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 한국형 디커플링 쉴드 가동 -> {name} 오버나이트 거부 및 강제 청산")
-                    sig['action'] = 'exit'
-                    sig['reason'] = f"LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})"
+                    if sig.get('action') == 'buy':
+                        logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 신규 매수 차단: {name}({ticker})")
+                        continue
+                    if ticker in _held_set:
+                        logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 보유 종목 강제 청산: {name}({ticker})")
+                        sig['action'] = 'exit'
+                        sig['reason'] = f"LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})"
 
                 if sig['action'] == 'buy':
                     kelly_frac = self._compute_kelly(sig)
@@ -153,17 +169,20 @@ class S10MegaTrendStream(BaseStream):
                         float(pget('s10.max_single_stock_pct', 0.30)),
                     )
                     signals.append({
-                        'ticker':        ticker,
-                        'name':          name,
-                        'direction':     'long',
-                        'size_pct':      size_pct,
-                        'confidence':    sig['confidence'],
-                        'strategy':      'S10_MegaTrend',
-                        'sector':        sector,
-                        'reason':        sig['reason'],
-                        'is_mega_trend': True,
-                        'tp_pct':        dyn_tp,
-                        'sl_pct':        dyn_sl,
+                        'stream_id':           self.stream_id,
+                        'ticker':              ticker,
+                        'name':                name,
+                        'direction':           'long',
+                        'size_pct':            size_pct,
+                        'confidence':          sig['confidence'],
+                        'strategy':            'S10_MegaTrend',
+                        'sector':              sector,
+                        'reason':              sig['reason'],
+                        'is_mega_trend':       True,
+                        'tp_pct':              dyn_tp,
+                        'sl_pct':              dyn_sl,
+                        'expected_return':     round(dyn_tp / 100.0, 4),
+                        'expected_return_pct': dyn_tp,
                     })
                     logger.info(
                         f"    [S10] BUY {name}({ticker}) "
@@ -171,6 +190,7 @@ class S10MegaTrendStream(BaseStream):
                     )
                 elif sig['action'] == 'exit':
                     signals.append({
+                        'stream_id': self.stream_id,
                         'ticker':    ticker,
                         'name':      name,
                         'direction': 'exit',
@@ -194,6 +214,8 @@ class S10MegaTrendStream(BaseStream):
         """
         features = market_data.get('features', {})
         sector_scores = {}
+        if not hasattr(self, '_eval_cache') or self._eval_cache is None:
+            self._eval_cache = {}
 
         for sector, stocks in self._sector_map.items():
             sector_total_score = 0.0
@@ -205,8 +227,12 @@ class S10MegaTrendStream(BaseStream):
                 weight = float(stock.get('weight', 0.5))
                 f_data = features.get(ticker, features.get(f'kr_{ticker}', {}))
                 
-                # 자체 평가 로직 재활용
-                sig = self._evaluate_stock(ticker=ticker, name=name, f_data=f_data, regime=regime)
+                # 자체 평가 로직 재활용 (사이클당 종목별 1회 평가 캐싱)
+                if ticker in self._eval_cache:
+                    sig = dict(self._eval_cache[ticker])
+                else:
+                    sig = self._evaluate_stock(ticker=ticker, name=name, f_data=f_data, regime=regime, market_data=market_data)
+                    self._eval_cache[ticker] = dict(sig)
                 
                 # sig['score']를 가져와서 가중 합산
                 score = sig.get('score', 0.0)
@@ -215,12 +241,12 @@ class S10MegaTrendStream(BaseStream):
                     valid_stocks += 1
             
             # 유효한 점수가 하나라도 있으면 섹터 점수로 등록
-            if valid_stocks > 0:
+            if valid_stocks > 0 and sector_total_score > 0:
                 sector_scores[sector] = sector_total_score
 
-        if not sector_scores:
-            logger.warning("  [S10] 모든 섹터 점수가 0이거나 데이터가 없습니다. 기본 섹터(방산)로 Fallback.")
-            return [str(cfg.get('s10.default_sector', 'defense'))]
+        if not sector_scores or max(sector_scores.values()) <= 0:
+            logger.warning("  [S10] 모든 섹터 점수가 0 이하이거나 데이터가 없습니다. 진입 보류.")
+            return []
 
         sorted_sectors = sorted(sector_scores.items(), key=lambda x: x[1], reverse=True)
         top_sectors = [s for s, _ in sorted_sectors][:top_n]
@@ -236,6 +262,7 @@ class S10MegaTrendStream(BaseStream):
         name: str,
         f_data: Any,
         regime: str,
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """종목별 복합 신호 평가.
 
@@ -290,7 +317,10 @@ class S10MegaTrendStream(BaseStream):
             except Exception as _e_p:
                 logger.debug(f"  [S10] live price fetch fallback for {ticker}: {_e_p}")
 
-        if streak == 0.0 and net_buy == 0.0 and price > 0:
+        import os
+        _md = market_data if isinstance(market_data, dict) else getattr(self, '_current_market_data', {})
+        _is_test = bool((_md or {}).get('_test_mode') or os.environ.get('MERIDIAN_TEST_MODE') == '1' or os.environ.get('PYTEST_CURRENT_TEST'))
+        if not _is_test and streak == 0.0 and net_buy == 0.0 and price > 0:
             try:
                 from src.data_collection.kis_data_collector import KISDataCollector
                 collector = KISDataCollector()

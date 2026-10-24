@@ -17429,6 +17429,140 @@
         0.0,
         13.5
       ]
+    },
+    "regime.hy_norm_stress_thresh": {
+      "level": "L1",
+      "default": 0.3,
+      "bounds": [
+        0.05,
+        0.95
+      ],
+      "policy": "free",
+      "rationale": "Normalized HY spread stress threshold in [-1, 1] scale when raw spread is unavailable."
+    },
+    "regime.hy_norm_calm_thresh": {
+      "level": "L1",
+      "default": 0.3,
+      "bounds": [
+        0.05,
+        0.95
+      ],
+      "policy": "free",
+      "rationale": "Normalized HY spread calm threshold in [-1, 1] scale when raw spread is unavailable."
+    },
+    "fx.default_usdkrw": {
+      "level": "L1",
+      "default": 1380.0,
+      "bounds": [
+        900.0,
+        2000.0
+      ],
+      "policy": "free",
+      "rationale": "L1 prior for USD/KRW exchange rate when live cache and historical parquet are unavailable."
+    },
+    "vix.ou_long_run_mean": {
+      "level": "L1",
+      "default": 18.5,
+      "bounds": [
+        10.0,
+        45.0
+      ],
+      "policy": "free",
+      "rationale": "Historical CBOE VIX Ornstein-Uhlenbeck long-run equilibrium level."
+    },
+    "vix.prior_fallback_quality": {
+      "level": "L1",
+      "default": 0.2,
+      "bounds": [
+        0.0,
+        1.0
+      ],
+      "policy": "free",
+      "rationale": "Data quality weight assigned when VIX falls back to L1 prior."
+    },
+    "vix.cached_fallback_quality": {
+      "level": "L1",
+      "default": 0.4,
+      "bounds": [
+        0.0,
+        1.0
+      ],
+      "policy": "free",
+      "rationale": "Data quality weight assigned when VIX falls back to cached value."
+    },
+    "whipsaw.default_ker": {
+      "level": "L1",
+      "default": 0.3,
+      "bounds": [
+        0.0,
+        1.0
+      ],
+      "policy": "free",
+      "rationale": "Neutral Kaufman Efficiency Ratio prior when index history is insufficient."
+    },
+    "data.kospi_ma20_max_dev": {
+      "level": "L1",
+      "default": 0.15,
+      "bounds": [
+        0.02,
+        0.5
+      ],
+      "policy": "free",
+      "rationale": "Maximum plausible 20-day moving average deviation ratio for KOSPI sanity validation."
+    },
+    "regime.exposure.bull": {
+      "level": "L1",
+      "default": 0.9,
+      "bounds": [
+        0.3,
+        1.0
+      ],
+      "policy": "tighten_only",
+      "tighten": "down",
+      "rationale": "Target gross exposure cap in Bull regime."
+    },
+    "regime.exposure.caution": {
+      "level": "L1",
+      "default": 0.65,
+      "bounds": [
+        0.2,
+        0.9
+      ],
+      "policy": "tighten_only",
+      "tighten": "down",
+      "rationale": "Target gross exposure cap in Caution regime."
+    },
+    "regime.exposure.bear": {
+      "level": "L1",
+      "default": 0.4,
+      "bounds": [
+        0.05,
+        0.7
+      ],
+      "policy": "tighten_only",
+      "tighten": "down",
+      "rationale": "Target gross exposure cap in Bear regime."
+    },
+    "regime.exposure.crash": {
+      "level": "L1",
+      "default": 0.2,
+      "bounds": [
+        0.0,
+        0.5
+      ],
+      "policy": "tighten_only",
+      "tighten": "down",
+      "rationale": "Target gross exposure cap in Crash regime."
+    },
+    "regime.rule_score_default": {
+      "level": "L1",
+      "default": 50.0,
+      "bounds": [
+        0.0,
+        100.0
+      ],
+      "policy": "free",
+      "rationale": "Neutral baseline score (50/100) for rule-based regime detector."
     }
   }
 }

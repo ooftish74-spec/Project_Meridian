@@ -93,18 +93,27 @@ class PositionSizer:
         if market_data is None:
             market_data = {}
         kelly_size = float(signal.get('kelly_size', signal.get('size_pct', pget('sizer.default_kelly_size', 0.1))))
-        if _RISK_PARAMS_AVAILABLE and ticker:
+        _sig_tp = float(signal.get('tp_pct') or 0.0)
+        _sig_sl = abs(float(signal.get('sl_pct') or 0.0))
+        if _sig_tp > 0.0 and _sig_sl > 0.0:
+            tp_pct = _sig_tp
+            sl_pct = _sig_sl
+        elif _RISK_PARAMS_AVAILABLE and ticker:
             try:
                 sl_pct, tp_pct = compute_dynamic_sl_tp(ticker=ticker, regime=regime, market_data=market_data)
+                if _sig_tp > 0.0:
+                    tp_pct = _sig_tp
+                if _sig_sl > 0.0:
+                    sl_pct = _sig_sl
             except Exception as _ssot_e:
                 logger.error(f"  [PositionSizer] SSOT compute_dynamic_sl_tp 실패, Fallback 적용: {_ssot_e}", exc_info=True)
-                tp_pct = float(signal.get('tp_pct', pget('s2.exit.tp.caution', 12.0)))
-                sl_pct = abs(float(signal.get('sl_pct', pget('s2.exit.sl.caution', -5))))
+                tp_pct = _sig_tp if _sig_tp > 0.0 else float(signal.get('tp_pct', pget('s2.exit.tp.caution', 12.0)))
+                sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(signal.get('sl_pct', pget('s2.exit.sl.caution', -5))))
         else:
             vix_val = float(market_data.get('vix', pget('sizer.fallback_vix', 20.0)))
             daily_vol_pct = vix_val / math.sqrt(252)
-            tp_pct = float(signal.get('tp_pct', daily_vol_pct * pget('sizer.fallback_tp_vol_mult', 3.0)))
-            sl_pct = abs(float(signal.get('sl_pct', daily_vol_pct * pget('sizer.fallback_sl_vol_mult', 1.5))))
+            tp_pct = _sig_tp if _sig_tp > 0.0 else float(signal.get('tp_pct', daily_vol_pct * pget('sizer.fallback_tp_vol_mult', 3.0)))
+            sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(signal.get('sl_pct', daily_vol_pct * pget('sizer.fallback_sl_vol_mult', 1.5))))
         mu_pct = self._compute_ev(signal, conf, tp_pct, sl_pct)
         # [Dynamic Non-Linear Volatility Neutral Base] 롤링 252일 VIX 중간값(Median) 동적 연산 (15.5 고정 상수 100% 제거)
         _vix_neutral_param = pget('sizer.vix_neutral', 17.5)  # L2: trailing 252d median VIX (tighten_only, quality-gated)
@@ -190,6 +199,8 @@ class PositionSizer:
         for sig in signals:
             result = self.compute(signal=sig, portfolio_value=portfolio_value, regime=regime, vix=vix)
             if result['approved']:
+                _orig_tp = float(sig.get('tp_pct') or 0.0)
+                _orig_sl = abs(float(sig.get('sl_pct') or 0.0))
                 sig = dict(sig)
                 sig['size_pct'] = result['final_size']
                 sig['ev_pct'] = result['ev_pct']
@@ -197,8 +208,8 @@ class PositionSizer:
                 sig['ev_margin'] = result['ev_margin']
                 sig['vix_scale'] = result['vix_scale']
                 sig['sizer_reason'] = result['reason']
-                sig['sl_pct'] = result['sl_pct']
-                sig['tp_pct'] = result['tp_pct']
+                sig['sl_pct'] = _orig_sl if _orig_sl > 0.0 else result['sl_pct']
+                sig['tp_pct'] = _orig_tp if _orig_tp > 0.0 else result['tp_pct']
                 approved.append(sig)
             else:
                 dropped += 1

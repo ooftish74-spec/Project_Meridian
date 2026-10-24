@@ -183,7 +183,7 @@ def main():
                         if _ls_file.exists() and _kr_held_cnt == 0:
                             with open(_ls_file, encoding='utf-8') as f:
                                 _ls_data = json.load(f)
-                            _sigs = _ls_data.get('signals', {})
+                            _sigs = _ls_data.get('signals', _ls_data) if isinstance(_ls_data, dict) else {}
                             if _sigs:
                                 main._daily_executed.add(('intraday_auto_retry', today_str))
                                 logger.info("  🎯 [Intraday Auto-Retry] 09:00 시초가 미체결(보유 0종목) 감지 ➔ 당일 1회 자동 재진입 파이프라인 가동!")
@@ -205,10 +205,18 @@ def main():
                     except Exception:
                         pass
 
-                # 1분 단위 Online Bayesian Particle Filter 실시간 미분 업데이트
-                _bayesian_res = main._bayesian_filter.update(_telemetry)
-                if loop_count % 12 == 0:
+                # signal_cache 타임스탬프 변경 시에만 Online Bayesian Particle Filter 업데이트 (정적 입력 5초 반복에 의한 분산 붕괴 원천 차단)
+                _sc_ts = _sc_data.get('updated_at') or _sc_data.get('timestamp') or _sc_data.get('last_overnight_update')
+                if not _sc_ts and _sc_file.exists():
+                    try:
+                        _sc_ts = str(_sc_file.stat().st_mtime)
+                    except Exception:
+                        _sc_ts = None
+                if _sc_ts != getattr(main, '_last_pf_sc_ts', None) or not hasattr(main, '_last_bayesian_res'):
+                    main._last_pf_sc_ts = _sc_ts
+                    main._last_bayesian_res = main._bayesian_filter.update(_telemetry)
                     main._bayesian_filter.save_state(str(results_dir / 'bayesian_filter_state.json'))
+                _bayesian_res = getattr(main, '_last_bayesian_res', {}) or {}
                 logger.debug(f"  🧪 [Online Bayesian Filter] Dominant Regime: {_bayesian_res.get('dominant_regime')}")
                 
                 # 횡보 폭풍장 휩소 방어 엔진(Anti-Whipsaw Defense) 스캔 — 실제 지수/ETF 시계열 연동
@@ -295,14 +303,20 @@ def main():
                             try:
                                 from src.utils.file_ops import atomic_write_json
                                 _ls_path = results_dir / 'latest_signals.json'
-                                _existing_ls = {}
+                                _existing_ls: dict[str, list] = {}
                                 if _ls_path.exists():
                                     with open(_ls_path, 'r', encoding='utf-8') as _lf:
-                                        _existing_ls = json.load(_lf)
-                                _existing_sigs = _existing_ls.get('signals', {})
+                                        _raw_ls = json.load(_lf)
+                                    if isinstance(_raw_ls, dict):
+                                        for _k_ls, _v_ls in _raw_ls.items():
+                                            if isinstance(_v_ls, list):
+                                                _existing_ls[str(_k_ls)] = [x for x in _v_ls if isinstance(x, dict)]
                                 for _es in _entry_sigs:
                                     _tk = _es['ticker']
-                                    _existing_sigs[_tk] = {
+                                    _sid_es = str(_es.get('stream_id') or _es.get('stream') or 'S1')
+                                    _sig_list = [x for x in _existing_ls.get(_sid_es, []) if isinstance(x, dict) and x.get('ticker') != _tk]
+                                    _sig_list.append({
+                                        'stream_id': _sid_es,
                                         'ticker': _tk,
                                         'action': 'BUY',
                                         'direction': _es.get('direction', 'long'),
@@ -310,9 +324,8 @@ def main():
                                         'strategy': 'intraday_dynamic_breakout',
                                         'score': _es.get('score', 1.8),
                                         'timestamp': datetime.now().isoformat()
-                                    }
-                                _existing_ls['signals'] = _existing_sigs
-                                _existing_ls['updated_at'] = datetime.now().isoformat()
+                                    })
+                                    _existing_ls[_sid_es] = _sig_list
                                 atomic_write_json(_ls_path, _existing_ls)
 
                                 # [Bayesian State-Divergence & FDR Multiple-Testing Trigger]
@@ -507,7 +520,7 @@ def main():
                     main._last_kr_repeg_time = 0.0
                 if time.time() - main._last_kr_repeg_time >= 5.0:
                     try:
-                        _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0)
+                        _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0, market='KR')
                         main._last_kr_repeg_time = time.time()
                     except Exception as _kr_rp_err:
                         logger.debug(f"  [KRX RePeg] 미체결 스캔 예외: {_kr_rp_err}")
@@ -527,9 +540,10 @@ def main():
                         _token_success = False
                         for _retry in range(3):
                             try:
-                                from src.execution._kis_adapter import KISTraderAdapter
-                                _hot_adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
-                                _hot_adapter.authenticate()
+                                if not hasattr(main, '_kis_adapter'):
+                                    from src.execution._kis_adapter import KISTraderAdapter
+                                    main._kis_adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+                                main._kis_adapter.authenticate()
                                 logger.info(f"  🔒 [{time_str}] [Hot-Reload Lock] 개장 10초 전 KIS OAuth2 토큰 & 통합증거금 사전 갱신 성공! (시도 {_retry+1}/3)")
                                 _token_success = True
                                 break
@@ -615,6 +629,7 @@ def main():
                                             quantity=eo['quantity'],
                                             price=eo['price'],
                                             order_type='limit',
+                                            urgency='stop',
                                             notes=eo.get('reason', 'US Night Trailing Stop')
                                         )
                                         if getattr(_us_sell_fill, 'status', '') in ('filled', 'submitted', 'partially_filled', 'filled_market_fallback'):
@@ -636,7 +651,7 @@ def main():
                         if not hasattr(main, '_last_repeg_time'):
                             main._last_repeg_time = 0.0
                         if time.time() - main._last_repeg_time >= 3.0:
-                            _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0)
+                            _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0, market='US')
                             main._last_repeg_time = time.time()
                     except Exception as _swee:
                         logger.debug(f"  [Auto-Sweep/RePeg] 이벤트 스윕 및 정정 예외: {_swee}")

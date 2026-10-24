@@ -150,7 +150,6 @@ class MacroRealtimeRefresher:
                 spread_10y_5y = us10y - us5y
                 updates['yield_curve_10y_5y'] = round(spread_10y_5y, 4)
                 updates['yield_curve_inverted'] = 1 if spread_10y_5y < 0 else 0
-                updates['yield_curve_10y_2y'] = round(spread_10y_5y, 4)
             if us10y and us30y and isinstance(us10y, (int, float)) and isinstance(us30y, (int, float)):
                 updates['yield_curve_10y_30y'] = round(us10y - us30y, 4)
             try:
@@ -378,12 +377,27 @@ class MacroRealtimeRefresher:
                 try:
                     from src.data_collection.alpha_vantage_collector import collect_global_macro
                     av_res = collect_global_macro(['^KS11'])
-                    if '^KS11' in av_res and 1000.0 < float(av_res['^KS11']['price']) < 10000.0:
-                        updates['kospi'] = av_res['^KS11']['price']
-                        updates['kospi_close'] = av_res['^KS11']['price']
+                    _k_min = 1000
+                    _k_max = 10000
+                    if '^KS11' in av_res and _k_min < float(av_res['^KS11']['price']) < _k_max:
+                        _av_px = float(av_res['^KS11']['price'])
+                        updates['kospi'] = _av_px
+                        updates['kospi_close'] = _av_px
                         updates['kospi_change_1d'] = av_res['^KS11']['change_1d']
                         updates['kospi_change_pct'] = av_res['^KS11']['change_1d']
-                        updates['kospi_ma20'] = av_res['^KS11']['price']
+                        _existing_ma20 = float(self._cache.get('kospi_ma20', 0) or 0)
+                        if _k_min < _existing_ma20 < _k_max:
+                            updates['kospi_ma20'] = _existing_ma20
+                        else:
+                            import pandas as _pd_ma
+                            _etf_pq = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
+                            if _etf_pq.exists():
+                                _df_e = _pd_ma.read_parquet(_etf_pq)
+                                _ce = 'close' if 'close' in _df_e.columns else ('Close' if 'Close' in _df_e.columns else None)
+                                if _ce and len(_df_e) >= 20:
+                                    _cse = _pd_ma.to_numeric(_df_e[_ce], errors='coerce').dropna()
+                                    if len(_cse) >= 20 and float(_cse.iloc[-1]) > 0:
+                                        updates['kospi_ma20'] = round(_av_px * (float(_cse.tail(20).mean()) / float(_cse.iloc[-1])), 2)
                         n_updated += 1
                 except Exception as e:
                     if dhm:

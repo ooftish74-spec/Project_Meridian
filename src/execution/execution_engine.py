@@ -42,7 +42,14 @@ _EXIT_URGENCY_MARKERS = ('stop', 'sl_', 'stop_loss', '손절', 'kill', 'panic', 
 
 
 def _derive_order_urgency(order: Dict, is_buy: bool) -> str:
-    explicit = str(order.get('urgency', '') or '').strip().lower()
+    explicit = order.get('urgency')
+    _INT_URG_MAP = {3: 'panic', 2: 'stop', 1: 'normal'}
+    if isinstance(explicit, int) and not isinstance(explicit, bool):
+        explicit = _INT_URG_MAP.get(explicit, 'normal') if explicit != 0 else ''
+    _STR_URG_MAP = {'3': 'panic', '2': 'stop', '1': 'normal', 'high': 'high', '0': ''}
+    explicit = str(explicit or '').strip().lower()
+    if explicit in _STR_URG_MAP:
+        explicit = _STR_URG_MAP[explicit]
     if explicit:
         return explicit
     if is_buy:
@@ -54,6 +61,31 @@ def _derive_order_urgency(order: Dict, is_buy: bool) -> str:
     if any(m in blob for m in _EXIT_URGENCY_MARKERS):
         return 'stop'
     return 'normal'
+
+
+def _extract_expected_alpha_decimal(order: Dict, default_dec: float = 0.0) -> float:
+    """주문 메타데이터에서 기대 알파/수익률을 소수점(decimal, e.g. 0.008 = 0.8%) 단위로 정밀 추출."""
+    if not isinstance(order, dict):
+        return float(default_dec)
+    for _k in ('expected_alpha', 'expected_return'):
+        _v = order.get(_k)
+        if _v is not None:
+            try:
+                _fv = float(_v)
+                if math.isfinite(_fv) and _fv > 0.0:
+                    return (_fv / 100.0) if (_fv * 2.0 > 1.0) else _fv
+            except (TypeError, ValueError):
+                pass
+    for _k_pct in ('expected_return_pct', 'tp_pct'):
+        _vp = order.get(_k_pct)
+        if _vp is not None:
+            try:
+                _fvp = float(_vp)
+                if math.isfinite(_fvp) and _fvp > 0.0:
+                    return (_fvp / 100.0) if (_fvp * 10.0 >= 1.0) else _fvp
+            except (TypeError, ValueError):
+                pass
+    return float(default_dec)
 
 
 def _extract_spread_pct(ob) -> Optional[float]:
@@ -126,8 +158,8 @@ def _s1_spread_guard(order: Dict, ticker: str, action: str) -> Tuple[bool, float
     - 청산(매도)은 절대 차단하지 않는다 (손절 증발 방지 — E2/E3와 동일 원칙).
     - 스프레드 산출 불가 시 통과 + 로그 (데이터 부재를 0 스프레드로 위장하지 않음, 차단 근거도 없음).
     """
-    _raw_tp = float(order.get('expected_return') or order.get('tp_pct') or 0.015)
-    tp_pct = _raw_tp / 100.0 if _raw_tp > 1.0 else _raw_tp
+    _default_tp = float(pget('execution.fee_rate', 0.0015)) * 10.0
+    tp_pct = _extract_expected_alpha_decimal(order, _default_tp)
     max_spread = abs(tp_pct) / 3.0
     if str(action or '').lower() not in ('buy', 'add_on'):
         return False, 0.0, max_spread
@@ -707,10 +739,9 @@ class ExecutionEngine:
           - Alpha Decay Threshold: α_expected * 0.50 (기대 알파의 50%)
           - Net EV Limit: α_expected - Slippage - Fee <= 0 (기대값 0 이하 시 완전 취소)
         """
-        raw_alpha = float(order.get('expected_alpha') or order.get('expected_return') or order.get('tp_pct') or 0.015)
-        exp_alpha = raw_alpha / 100.0 if raw_alpha > 1.0 else raw_alpha
         decay_ratio = float(pget('execution.alpha_decay_ratio', 0.50)) if _cfg else 0.50
         fee_rate = float(pget('execution.fee_rate', 0.0015)) if _cfg else 0.0015
+        exp_alpha = _extract_expected_alpha_decimal(order, fee_rate * 10.0)
         
         max_allowed_slippage = exp_alpha * decay_ratio
         net_ev_cutoff = max(0.0, exp_alpha - fee_rate)

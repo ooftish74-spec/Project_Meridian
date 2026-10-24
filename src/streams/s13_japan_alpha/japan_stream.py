@@ -62,7 +62,7 @@ class S13JapanAlphaStream(BaseStream):
     }
 
     def __init__(self):
-        super().__init__('S13_JAPAN_ALPHA', 'Japan Niche Alpha')
+        super().__init__('S13', 'Japan Niche Alpha')
         self._positions: List[Dict[str, Any]] = []
 
     def calculate_us_lead_signal(
@@ -151,6 +151,14 @@ class S13JapanAlphaStream(BaseStream):
             return []
 
         signal_cache = market_data.get('signal_cache', {})
+        _has_lead_data = any(
+            signal_cache.get(_k) is not None
+            for _k in ('nvda_chg_pct', 'soxx_chg_pct', 'qqq_chg_pct', 'nikkei_change_pct')
+        ) or bool(signal_cache.get('hist_us_tech'))
+        if not _has_lead_data:
+            logger.info("S13 Japan Alpha: Missing US lead / Nikkei telemetry in signal_cache — Skipping Long Signals")
+            return []
+
         nvda_chg = signal_cache.get('nvda_chg_pct', 0.0)
         soxx_chg = signal_cache.get('soxx_chg_pct', 0.0)
         qqq_chg = signal_cache.get('qqq_chg_pct', 0.0)
@@ -160,20 +168,22 @@ class S13JapanAlphaStream(BaseStream):
         lead_res = self.calculate_us_lead_signal(nvda_chg, soxx_chg, qqq_chg, hist_us)
         lead_sig = lead_res['lead_signal']
 
-        if lead_sig <= float(pget('s13.min_lead_threshold', -0.50)):
-            logger.info(f"S13 Japan Alpha: Negative US Lead Signal ({lead_sig:.3f}) — Skipping Long Signals")
+        if lead_sig <= float(pget('s13.min_lead_threshold', -0.50)) or lead_sig <= 0.0:
+            logger.info(f"S13 Japan Alpha: Non-positive US Lead Signal ({lead_sig:.3f}) — Skipping Long Signals")
             return []
 
         scored_universe = self.score_japan_universe(lead_sig, jpy_krw_chg)
         max_positions = int(pget('s13.max_positions', 3))
+        _tp_jp = 3.0
+        _sl_jp = 3.0 / 2.0
 
         for stock in scored_universe[:max_positions]:
             if stock['composite_score'] <= 0.10:
                 continue
 
             signals.append({
-                'stream_id': self.stream_id,
-                'stream': self.stream_id,
+                'stream_id': 'S13_JAPAN_ALPHA',
+                'stream': 'S13',
                 'ticker': stock['ticker'],
                 'symbol': stock['ticker'],
                 'name': stock['name'],
@@ -184,6 +194,10 @@ class S13JapanAlphaStream(BaseStream):
                 'target_weight': stock['suggested_weight'],
                 'composite_score': stock['composite_score'],
                 'us_lead_signal': lead_sig,
+                'tp_pct': _tp_jp,
+                'sl_pct': _sl_jp,
+                'expected_return': round(_tp_jp / 100.0, 4),
+                'expected_return_pct': _tp_jp,
                 'market': 'JP',
                 'strategy': 'japan_niche_alpha',
                 'timestamp': now_kst().isoformat()

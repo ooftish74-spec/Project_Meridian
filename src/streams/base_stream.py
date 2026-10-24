@@ -43,6 +43,7 @@ class BaseStream(ABC):
         self._daily_pnl: List[float] = []
         self._positions: List[Dict] = []
         self._signals: List[Dict] = []
+        self._trade_count: int = 0
 
     @abstractmethod
     def generate_signals(self, regime: str, market_data: Dict) -> List[Dict]:
@@ -99,7 +100,12 @@ class BaseStream(ABC):
             }
         """
 
-    def _compute_standard_performance(self, returns_override: Optional[List[float]] = None) -> Dict[str, Any]:
+    def _compute_standard_performance(
+        self,
+        returns_override: Optional[List[float]] = None,
+        active_positions: Optional[int] = None,
+        total_trades: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """[Dynamic Empirical Performance] 하드코딩 배제: 실제 수익률 이력 및 Laplace-Beta(2.5, 2.5) 사전분포 기반 동적 성과 산출."""
         import math
         raw_returns = returns_override if returns_override is not None else (
@@ -136,6 +142,9 @@ class BaseStream(ABC):
         cum_ret_pct = round((cum_prod - 1.0) * 100.0, 2) if n > 0 else 0.0
         mdd_pct = round(max_dd, 2)
 
+        eff_trades = int(total_trades) if total_trades is not None else (int(getattr(self, '_trade_count', 0) or 0) or n)
+        eff_positions = int(active_positions) if active_positions is not None else len(getattr(self, '_positions', []) or [])
+
         return {
             'stream_id': self.stream_id,
             'daily_returns': rets,
@@ -145,8 +154,8 @@ class BaseStream(ABC):
             'max_drawdown_pct': mdd_pct,
             'mdd_pct': mdd_pct,
             'win_rate': win_rate,
-            'total_trades': n,
-            'active_positions': len(getattr(self, '_positions', []) or []),
+            'total_trades': eff_trades,
+            'active_positions': eff_positions,
             'score': round(max(0.1, min(2.0, 0.5 + sharpe * 0.25)), 4),
         }
 

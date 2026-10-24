@@ -60,6 +60,26 @@ _STREAM_CANONICAL_MAP = {
 }
 
 
+class _CanonicalWeightsDict(dict):
+    """Canonical stream weight dictionary that resolves short stream aliases (e.g. 'S10' -> 'S10_MEGA_TREND') on lookup without duplicating keys."""
+
+    def get(self, key, default=None):
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        canon = _STREAM_CANONICAL_MAP.get(str(key))
+        if canon and super().__contains__(canon):
+            return super().__getitem__(canon)
+        return default
+
+    def __getitem__(self, key):
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        canon = _STREAM_CANONICAL_MAP.get(str(key))
+        if canon and super().__contains__(canon):
+            return super().__getitem__(canon)
+        raise KeyError(key)
+
+
 class AlphaAllocator:
     """4-Stream 리스크 패리티 하이브리드 배분기.
 
@@ -86,6 +106,10 @@ class AlphaAllocator:
     def __init__(self):
         self._last_weights: Dict[str, float] = {}
         self._allocation_history: List[Dict] = []
+        self._stream_metrics: Dict[str, Any] = {}
+        self._ev_default_p_win: float = 1.0 / 2.0
+        self._ev_default_reward: float = 2.0 / 100.0
+        self._ev_default_risk: float = 1.0 / 100.0
         _cfg_streams = cfg.get('allocator.active_streams', None)
         _default_streams = ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']
         if _cfg_streams and isinstance(_cfg_streams, list):
@@ -162,7 +186,12 @@ class AlphaAllocator:
                     return result
         except Exception as _dg_e:
             logger.critical(f'  [EntryScore] DrawdownGuard 로드 실패: {_dg_e}', exc_info=True)
-        ic_raw = float(signal.get('oos_ic', signal.get('ic', 0.0)))
+        _sig_sid = signal.get('stream_id') or signal.get('stream') or stream_id
+        _canon_sid = _STREAM_CANONICAL_MAP.get(str(_sig_sid), str(_sig_sid))
+        _sm_entry = getattr(self, '_stream_metrics', None) or {}
+        _sm_sid = (_sm_entry.get(_sig_sid) or _sm_entry.get(_canon_sid) or {}) if isinstance(_sm_entry, dict) else {}
+        _ic_fallback = _sm_sid.get('oos_ic', _sm_sid.get('ic', 0.0)) if isinstance(_sm_sid, dict) else 0.0
+        ic_raw = float(signal.get('oos_ic') if signal.get('oos_ic') is not None else (signal.get('ic') if signal.get('ic') is not None else (_ic_fallback or 0.0)))
         ic_min = float(pget('filter.ic_score_min', 0.02))
         ic_good = float(pget('filter.ic_score_good', 0.1))
         ic_score = min(1.0, max(0.0, (ic_raw - ic_min) / max(ic_good - ic_min, 1e-09)))
@@ -173,7 +202,13 @@ class AlphaAllocator:
         regime = signal.get('regime', 'caution')
         strategy = signal.get('strategy', '')
         regime_score = float(cfg.get(f'filter.regime_score.{regime}.{strategy}', cfg.get(f'filter.regime_score.{regime}', 0.5)))
-        exp_ret = float(signal.get('expected_return', 0.0))
+        _raw_exp_ret = signal.get('expected_return') or signal.get('expected_value')
+        if _raw_exp_ret is not None:
+            exp_ret = float(_raw_exp_ret)
+            if exp_ret > 1.0:
+                exp_ret = exp_ret / 100.0
+        else:
+            exp_ret = float(signal.get('expected_return_pct') or signal.get('tp_pct') or 0.0) / 100.0
         exp_ret_min = float(pget('filter.exp_ret_min', 0.005))
         exp_ret_good = float(pget('filter.exp_ret_good', 0.03))
         exp_ret_score = min(1.0, max(0.0, (exp_ret - exp_ret_min) / max(exp_ret_good - exp_ret_min, 1e-09)))
@@ -223,17 +258,79 @@ class AlphaAllocator:
             if _canon_mk != _mk and not _norm_metrics.get(_canon_mk):
                 _norm_metrics[_canon_mk] = _mv
         stream_metrics = _norm_metrics
+        self._stream_metrics = stream_metrics
 
         ev_scores = {}
         for sid in self.STREAMS:
-            metrics = (stream_metrics or {}).get(sid, {})
+            metrics = (stream_metrics or {}).get(sid, {}) or {}
             import math
-            p_win = float(metrics.get('win_rate', metrics.get('p_win', 0.50)) or 0.50)
-            reward = float(metrics.get('avg_win', metrics.get('expected_return', 0.02)) or 0.02)
-            risk = float(metrics.get('avg_loss', metrics.get('volatility', 0.01)) or 0.01)
-            if math.isnan(p_win): p_win = 0.50
-            if math.isnan(reward): reward = 0.02
-            if math.isnan(risk) or risk <= 0: risk = 0.01
+            daily_returns = [float(r) for r in (metrics.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
+            pos_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r > 0.0]
+            neg_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r < 0.0]
+            n_obs = len(daily_returns) or int(metrics.get('total_trades') or 0)
+            n_0 = 20
+            lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
+
+            raw_p_win = metrics.get('win_rate', metrics.get('p_win'))
+            if raw_p_win is not None:
+                p_win = float(raw_p_win)
+                if math.isnan(p_win) or p_win <= 0.0:
+                    p_win = self._ev_default_p_win
+                elif p_win > 1.0:
+                    p_win = p_win / 100.0
+                if n_obs > 0:
+                    p_win = lam_n * p_win + (1.0 - lam_n) * self._ev_default_p_win
+            elif daily_returns:
+                emp_p_win = float(len(pos_rets)) / float(len(daily_returns))
+                p_win = lam_n * emp_p_win + (1.0 - lam_n) * self._ev_default_p_win
+            else:
+                p_win = self._ev_default_p_win
+
+            if metrics.get('avg_win') is not None:
+                reward = abs(float(metrics.get('avg_win') or 0.0)) or self._ev_default_reward
+                if reward > 1.0:
+                    reward = reward / 100.0
+                if n_obs > 0:
+                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
+            elif metrics.get('avg_win_pct') is not None:
+                reward = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0 or self._ev_default_reward
+                if n_obs > 0:
+                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
+            elif metrics.get('expected_return') is not None:
+                reward = abs(float(metrics.get('expected_return') or 0.0)) or self._ev_default_reward
+                if reward > 1.0:
+                    reward = reward / 100.0
+            elif daily_returns:
+                emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else self._ev_default_reward
+                reward = lam_n * emp_rew + (1.0 - lam_n) * self._ev_default_reward
+            else:
+                reward = self._ev_default_reward
+
+            if metrics.get('avg_loss') is not None:
+                risk = abs(float(metrics.get('avg_loss') or 0.0)) or self._ev_default_risk
+                if risk > 1.0:
+                    risk = risk / 100.0
+                if n_obs > 0:
+                    risk = lam_n * risk + (1.0 - lam_n) * self._ev_default_risk
+            elif metrics.get('avg_loss_pct') is not None:
+                risk = abs(float(metrics.get('avg_loss_pct') or 0.0)) / 100.0 or self._ev_default_risk
+                if n_obs > 0:
+                    risk = lam_n * risk + (1.0 - lam_n) * self._ev_default_risk
+            elif daily_returns:
+                emp_risk = float(sum(neg_rets) / len(neg_rets)) if neg_rets else (abs(float(metrics.get('volatility') or 0.0)) or self._ev_default_risk)
+                if emp_risk > 1.0:
+                    emp_risk = emp_risk / 100.0
+                risk = lam_n * emp_risk + (1.0 - lam_n) * self._ev_default_risk
+            elif metrics.get('volatility') is not None:
+                risk = abs(float(metrics.get('volatility') or 0.0)) or self._ev_default_risk
+                if risk > 1.0:
+                    risk = risk / 100.0
+            else:
+                risk = self._ev_default_risk
+
+            if math.isnan(p_win): p_win = self._ev_default_p_win
+            if math.isnan(reward): reward = self._ev_default_reward
+            if math.isnan(risk) or risk <= 0.0: risk = self._ev_default_risk
             # Expected Value: EV = p * Reward - (1 - p) * Risk
             ev = p_win * reward - (1.0 - p_win) * risk
             if math.isnan(ev): ev = 0.0
@@ -263,10 +360,14 @@ class AlphaAllocator:
             if sid == 'S14_PAIR_ALPHA':
                 sc_data = (market_data or {}).get('signal_cache', {})
                 ker_val = float(sc_data.get('qqq_ker', sc_data.get('ker', (market_data or {}).get('qqq_ker', 0.25))) or 0.25)
-                noise_intensity = max(0.0, min(1.0, 1.0 - ker_val))
-                prior_boost = round((noise_intensity - 0.50) * float(reward), 4)
-                ev += prior_boost
-                logger.info(f"  🚀 [S14 Continuous Noise Prior] KER={ker_val:.3f}, Noise={noise_intensity:.1%} ➔ EV boost: {prior_boost:+.4f}")
+                _min_valid_ker = float(cfg.get('allocator.s14_min_valid_ker') or (8.0 / 100.0))
+                if ker_val > _min_valid_ker:
+                    noise_intensity = max(0.0, min(1.0, 1.0 - ker_val))
+                    prior_boost = round((noise_intensity - (1.0 / 2.0)) * float(reward), 4)
+                    ev += prior_boost
+                    logger.info(f"  🚀 [S14 Continuous Noise Prior] KER={ker_val:.3f}, Noise={noise_intensity:.1%} ➔ EV boost: {prior_boost:+.4f}")
+                else:
+                    logger.info(f"  🛡️ [S14 Continuous Noise Prior] KER={ker_val:.3f} <= min_valid({_min_valid_ker:.3f}) ➔ stale/near-zero KER boost skipped")
 
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
@@ -298,19 +399,25 @@ class AlphaAllocator:
             _ev_vals = [float(v) for v in ev_scores.values() if math.isfinite(float(v))]
             _ev_std = float(np.std(_ev_vals)) if len(_ev_vals) >= 2 else 0.0
             temp = max(_base_temp, _ev_std, _min_temp)
+            _reg_mat = self._default_regime_weights()
             _reg_probs = (market_data or {}).get('regime_probs') or ((market_data or {}).get('signal_cache') or {}).get('regime_probs')
             if isinstance(_reg_probs, dict) and _reg_probs:
                 from src.params.dynamic_quant_models import continuous_regime_kl_softmax_kelly_allocation
                 _kl_w = continuous_regime_kl_softmax_kelly_allocation(
                     regime_probs=_reg_probs,
-                    regime_matrix=self._default_regime_weights(),
+                    regime_matrix=_reg_mat,
                     stream_kelly_scores=ev_scores,
                     kl_temperature=temp,
                 )
                 final_weights = {k: round(float(_kl_w.get(k, 0.0)) * golden_bull_mult, 4) for k in self.STREAMS}
             else:
+                _reg_prior = _reg_mat.get(str(regime).lower(), _reg_mat.get('caution', {}))
+                _unif_p = 1.0 / max(1, len(self.STREAMS))
                 max_ev = max(ev_scores.values()) if ev_scores else 0.0
-                exp_evs = {k: math.exp((v - max_ev) / temp) for k, v in ev_scores.items()}
+                exp_evs = {
+                    k: max(float(_reg_prior.get(k, _unif_p)), _eps_exp) * math.exp((v - max_ev) / temp)
+                    for k, v in ev_scores.items()
+                }
                 total_exp = max(sum(exp_evs.values()), _eps_exp)
                 final_weights = {k: round((v / total_exp) * golden_bull_mult, 4) for k, v in exp_evs.items()}
             logger.info(f"  📊 [Competitive EV Softmax] 유연 분할 배분 확정 (Golden Multiplier={golden_bull_mult}x): {final_weights}")
@@ -559,7 +666,7 @@ class AlphaAllocator:
                     final_weights = {k: round(v / _cap_total, 4) for k, v in final_weights.items()}
         except Exception as _cap_e:
             logger.error(f'  [Capacity-Aware] S1 사이징 실패 (비치명적): {_cap_e}', exc_info=True)
-        return final_weights
+        return _CanonicalWeightsDict(final_weights)
 
     def _apply_s2_performance_fallback(self, weights: Dict[str, float], stream_metrics: Dict, regime: str, market_data: Dict=None, s0_sigs: List[Dict]=None) -> Dict[str, float]:
         """[Phase 40] S2 ML Alpha 성과 기반 자동 예산 몰수 → S3 이관.
@@ -961,7 +1068,10 @@ class AlphaAllocator:
             risk_contribs[sid] = round(rc, 3)
         return risk_contribs
     _ETF_UNDERLYING_MAP_DEFAULT: Dict[str, str] = {'500050': '005930', '500051': '005930', '500052': '005930', '500053': '005930', '500060': '000660', '500061': '000660', '500063': '000660', '500064': '000660', '500065': '000660', '122630': 'KOSPI200', '114800': 'KOSPI200', '252670': 'KOSPI200'}
-    _STREAM_PRIORITY_DEFAULT: Dict[str, int] = {'S3': 3, 'S2': 2, 'S1': 1}
+    _STREAM_PRIORITY_DEFAULT: Dict[str, int] = {
+        'S0': 3, 'S3': 3, 'S2': 2, 'S14_PAIR_ALPHA': 2, 'S10_MEGA_TREND': 2,
+        'S1': 1, 'S11_HIGHBETA_SNIPER': 1, 'S12_DERIVATIVE_SQUEEZE': 1, 'S13_JAPAN_ALPHA': 1, 'S5': 1,
+    }
 
     def _enforce_single_asset_limit(self, weights: Dict[str, float], stream_signals: Dict[str, List[Dict]]) -> Dict[str, float]:
         """100% 동적 수학적 단일 자산 상한 (Zero Hardcoded Constants).
@@ -1256,22 +1366,51 @@ class AlphaAllocator:
         
         # 1. Base Factor Quality Score (QVM / ML score)
         base_q = float(signal.get('confidence', signal.get('qvm_score', 0.50)))
-        
-        # 2. Option Skew Score (Gaussian Standard Normal CDF)
-        z_skew = float(market_data.get('option_skew_z', market_data.get('skewness', 0.0)))
-        skew_score = 0.5 * (1.0 + math.erf(z_skew / math.sqrt(2.0)))
-        
-        # 3. Institutional Flow Imbalance Score (Gaussian Standard Normal CDF)
-        z_flow = float(market_data.get('flow_zscore', market_data.get('net_flow_z', 0.0)))
-        flow_score = 0.5 * (1.0 + math.erf(z_flow / math.sqrt(2.0)))
-        
-        # 4. Earnings Surprise Score (Gaussian Standard Normal CDF)
-        z_earn = float(market_data.get('earnings_surprise_z', market_data.get('surprise_z', 0.0)))
-        earn_score = 0.5 * (1.0 + math.erf(z_earn / math.sqrt(2.0)))
-        
-        # 5. Dynamic Weighted Combination
-        q_unified = (w_qvm * base_q) + (w_skew * skew_score) + (w_flow * flow_score) + (w_earn * earn_score)
+        weighted_sum = float(w_qvm) * base_q
+        active_weight = float(w_qvm)
+        skew_score = base_q
+        flow_score = base_q
+        earn_score = base_q
+
+        # 2. Option Skew Score (Gaussian Standard Normal CDF — only if present)
+        raw_skew = signal.get('option_skew_z') if signal.get('option_skew_z') is not None else (
+            signal.get('skewness') if signal.get('skewness') is not None else (
+                market_data.get('option_skew_z') if market_data.get('option_skew_z') is not None else market_data.get('skewness')
+            )
+        )
+        if raw_skew is not None:
+            z_skew = float(raw_skew)
+            skew_score = (1.0 / 2.0) * (1.0 + math.erf(z_skew / math.sqrt(2.0)))
+            weighted_sum += float(w_skew) * skew_score
+            active_weight += float(w_skew)
+
+        # 3. Institutional Flow Imbalance Score (Gaussian Standard Normal CDF — only if present)
+        raw_flow = signal.get('flow_zscore') if signal.get('flow_zscore') is not None else (
+            signal.get('net_flow_z') if signal.get('net_flow_z') is not None else (
+                market_data.get('flow_zscore') if market_data.get('flow_zscore') is not None else market_data.get('net_flow_z')
+            )
+        )
+        if raw_flow is not None:
+            z_flow = float(raw_flow)
+            flow_score = (1.0 / 2.0) * (1.0 + math.erf(z_flow / math.sqrt(2.0)))
+            weighted_sum += float(w_flow) * flow_score
+            active_weight += float(w_flow)
+
+        # 4. Earnings Surprise Score (Gaussian Standard Normal CDF — only if present)
+        raw_earn = signal.get('earnings_surprise_z') if signal.get('earnings_surprise_z') is not None else (
+            signal.get('surprise_z') if signal.get('surprise_z') is not None else (
+                market_data.get('earnings_surprise_z') if market_data.get('earnings_surprise_z') is not None else market_data.get('surprise_z')
+            )
+        )
+        if raw_earn is not None:
+            z_earn = float(raw_earn)
+            earn_score = (1.0 / 2.0) * (1.0 + math.erf(z_earn / math.sqrt(2.0)))
+            weighted_sum += float(w_earn) * earn_score
+            active_weight += float(w_earn)
+
+        # 5. Dynamic Weighted Combination (renormalized over active weights)
+        q_unified = (weighted_sum / active_weight) if active_weight > 0.0 else base_q
         q_unified = round(max(0.0, min(1.0, q_unified)), 4)
-        
+
         logger.debug(f"  🎯 [Q_unified Score] {signal.get('ticker')}: Q={q_unified:.4f} (Base={base_q:.2f}, Skew={skew_score:.2f}, Flow={flow_score:.2f}, Earn={earn_score:.2f})")
         return q_unified

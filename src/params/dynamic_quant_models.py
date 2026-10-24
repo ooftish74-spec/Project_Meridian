@@ -60,6 +60,12 @@ from pathlib import Path
 from statistics import NormalDist
 from typing import Any, Dict, List, Optional, Sequence
 
+try:
+    from src.params import pget
+except Exception:
+    def pget(name, fallback, ctx=None):
+        return fallback
+
 _EPS = 1e-12
 _STD_NORM = NormalDist(0.0, 1.0)
 _SQRT_2 = math.sqrt(2.0)
@@ -389,7 +395,7 @@ class OUKalmanVixState:
 def ou_kalman_vix_state(
     last_vix: Optional[float],
     age_hours: Optional[float] = 0.0,
-    long_run_vix: float = 18.5,
+    long_run_vix: Optional[float] = 18.5,
     half_life_hours: float = 24.0,
     sigma_log_vix_annual: float = 0.80,
     z_alpha: float = _DEFAULT_Z_CRIT_95,
@@ -415,6 +421,8 @@ def ou_kalman_vix_state(
           kappa_entry = max(0, (q(dt) - q_crit) / (1 - q_crit))
           exit_only   = (kappa_entry <= 0)
     """
+    if long_run_vix is None:
+        long_run_vix = float(pget('vix.ou_long_run_mean', 18.5))
     safe_lr_vix = max(1.0, float(long_run_vix))
     x_bar = math.log(safe_lr_vix)
     safe_hl = max(_EPS, float(half_life_hours))

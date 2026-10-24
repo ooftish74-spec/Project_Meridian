@@ -220,9 +220,11 @@ class S14SectorPairStream(BaseStream):
                         'name': f"US Pair {order['sector'].upper()} ({leg_label})",
                         'direction': direction_to_trade,
                         'action': action_to_trade,
+                        'market': 'US',
                         'size_pct': dynamic_size,
                         'tp_pct': round(_tp_us, 2),
                         'sl_pct': round(_sl_us, 2),
+                        'expected_return': round(_tp_us / 100.0, 5),
                         'expected_return_pct': round(_tp_us, 2),
                         'confidence': order.get('confidence', 0.70),
                         'strategy': 'us_sector_pair_alpha',
@@ -295,9 +297,11 @@ class S14SectorPairStream(BaseStream):
                         'name': f"KR Pair {order['sector'].upper()} ({leg_label})",
                         'direction': trade_dir,
                         'action': 'buy',
+                        'market': 'KR',
                         'size_pct': dynamic_size,
                         'tp_pct': round(_tp_kr, 2),
                         'sl_pct': round(_sl_kr, 2),
+                        'expected_return': round(_tp_kr / 100.0, 5),
                         'expected_return_pct': round(_tp_kr, 2),
                         'confidence': order.get('confidence', 0.70),
                         'strategy': 'kr_sector_pair_alpha',
@@ -336,6 +340,7 @@ class S14SectorPairStream(BaseStream):
                                     'name': f"{_mkt} StatArb {_p['long_ticker']}/{_inv_tk_ou} (LONG)",
                                     'direction': 'long',
                                     'action': 'buy',
+                                    'market': _mkt,
                                     'size_pct': _sz_ou,
                                     'tp_pct': _ou_er_pct,
                                     'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
@@ -355,6 +360,7 @@ class S14SectorPairStream(BaseStream):
                                     'name': f"{_mkt} StatArb {_p['long_ticker']}/{_inv_tk_ou} (INVERSE_HEDGE)",
                                     'direction': 'long',
                                     'action': 'buy',
+                                    'market': _mkt,
                                     'size_pct': _sz_ou,
                                     'tp_pct': _ou_er_pct,
                                     'sl_pct': round(max(1.0, _ou_er_pct * 0.6), 2),
@@ -388,9 +394,10 @@ class S14SectorPairStream(BaseStream):
 
     def get_performance(self) -> Dict:
         """스트림 성과 지표 동적 산출 (SSOT 및 실시간 daily_pnl 기반, 하드코딩 완전 제거)."""
-        win_rate = 0.50
-        sharpe = 0.0
-        
+        std_perf = self._compute_standard_performance(self._daily_pnl)
+        win_rate = float(std_perf.get('win_rate', 1.0 / 2.0))
+        sharpe = float(std_perf.get('sharpe', 0.0) or 0.0)
+
         # 1. results/stream_metrics.json 확인
         try:
             sm_file = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
@@ -398,31 +405,28 @@ class S14SectorPairStream(BaseStream):
                 sm_data = json.loads(sm_file.read_text(encoding='utf-8'))
                 raw = sm_data.get('raw_data', {}).get(self.stream_id, {})
                 if raw:
-                    win_rate = float(raw.get('win_rate', 0.50))
-                    sharpe = float(raw.get('sharpe', 0.0))
+                    raw_wr = float(raw.get('win_rate', win_rate))
+                    win_rate = raw_wr / 100.0 if raw_wr > 1.0 else raw_wr
+                    sharpe = float(raw.get('sharpe', sharpe))
+                    raw_rets = list(raw.get('daily_returns', self._daily_pnl) or self._daily_pnl)
                     return {
+                        **std_perf,
                         'stream_id': self.stream_id,
                         'name': self.name,
-                        'daily_pnl': self._daily_pnl,
+                        'daily_pnl': list(self._daily_pnl),
+                        'daily_returns': raw_rets,
                         'win_rate': round(win_rate, 4),
-                        'sharpe': round(sharpe, 4)
+                        'sharpe': round(sharpe, 4),
                     }
         except Exception:
             pass
 
-        # 2. 실시간 daily_pnl 기반 수학적 동적 통계
-        if self._daily_pnl:
-            wins = [p for p in self._daily_pnl if p > 0]
-            win_rate = len(wins) / len(self._daily_pnl)
-            pnl_arr = np.array(self._daily_pnl, dtype=float)
-            std_val = float(np.std(pnl_arr))
-            if std_val > 1e-8:
-                sharpe = float(np.mean(pnl_arr) / std_val * np.sqrt(252))
-
         return {
+            **std_perf,
             'stream_id': self.stream_id,
             'name': self.name,
-            'daily_pnl': self._daily_pnl,
+            'daily_pnl': list(self._daily_pnl),
+            'daily_returns': list(self._daily_pnl),
             'win_rate': round(win_rate, 4),
-            'sharpe': round(sharpe, 4)
+            'sharpe': round(sharpe, 4),
         }

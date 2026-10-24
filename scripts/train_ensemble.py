@@ -2918,7 +2918,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='ML 앙상블 학습')
     parser.add_argument('--trigger', default=None,
                         help='재학습 트리거 (regime_change, da_failure, weekly, manual)')
-    parser.add_argument('--window', type=int, default=730,
+    parser.add_argument('--window', type=int, default=None,
                         help='Rolling Window 크기 (일, 기본 730)')
     parser.add_argument('--force', action='store_true',
                         help='트리거 체크 없이 강제 학습')
@@ -2944,6 +2944,7 @@ if __name__ == '__main__':
     parser.add_argument('--compare-naive', action='store_true',
                         help='[--purged-wf-only] 행 단위 KFold 와 비교 (누수 규모 참고)')
     args = parser.parse_args()
+    _default_window = 730
 
     if args.check_only:
         needed, trigger = should_retrain()
@@ -2953,7 +2954,8 @@ if __name__ == '__main__':
     # [WAVE3 Track D] 검증 전용 모드 — 이후의 운영 부수효과(Gap/FactorPruner) 이전에 종료
     if args.purged_wf_only:
         _res = run_purged_validation(
-            window_days=args.window, max_tickers=args.max_tickers, n_splits=args.n_splits,
+            window_days=args.window if args.window is not None else _default_window,
+            max_tickers=args.max_tickers, n_splits=args.n_splits,
             model_name=args.wf_model, out_dir=args.out_dir,
             save_candidate=args.save_candidate, compare_naive=args.compare_naive)
         print(json.dumps(_res, indent=2, ensure_ascii=False, default=str))
@@ -2963,7 +2965,7 @@ if __name__ == '__main__':
     if getattr(args, 'regime_split', False):
         logger.info('[Phase 10: Alpha Breakthrough] 레짐 분리 학습 모드 활성화')
         result = run_regime_split_training(
-            window_days=args.window,
+            window_days=args.window if args.window is not None else _default_window,
             trigger=args.trigger or 'manual',
         )
         print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
@@ -2979,14 +2981,15 @@ if __name__ == '__main__':
         logger.warning(f"Freshness Gate 검증 중 오류: {e}")
 
     if args.trigger:
-        effective_window = args.window
+        effective_window = args.window if args.window is not None else _default_window
         run_training(window_days=effective_window, trigger=args.trigger, cv_method=args.cv_method)
     elif args.force or args.window is not None:
-        run_training(window_days=args.window, trigger='manual', cv_method=args.cv_method)
+        effective_window = args.window if args.window is not None else _default_window
+        run_training(window_days=effective_window, trigger='manual', cv_method=args.cv_method)
     else:
         needed, trigger = should_retrain()
         if needed:
-            effective_window = args.window
+            effective_window = args.window if args.window is not None else _default_window
             logger.info(f"  ⚡ Dynamic Retraining Window 적용: trigger={trigger} ➔ window={effective_window}d")
             run_training(window_days=effective_window, trigger=trigger, cv_method=args.cv_method)
         else:

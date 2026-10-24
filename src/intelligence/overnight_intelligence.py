@@ -198,8 +198,8 @@ class OvernightIntelligenceScore:
                                 if (datetime.now() - ts_dt).total_seconds() > 64800: # 18시간 경과
                                     logger.warning(f"  ⚠️ 야간선물 데이터 Stale 감지 ({kf_file.name}, {ts_str}) ➔ 과거 데이터 사용 거부")
                                     continue
-                            except Exception:
-                                pass
+                            except Exception as _ts_e:
+                                logger.debug(f"Timestamp parse fallback ({kf_file.name}): {_ts_e}")
 
                         chg = data.get('change_pct', data.get('overnight_gap'))
                         # 세션 종가 마감 후 status가 CLOSED이더라도 valid numeric change_pct가 존재하면 최종 마감 등락률로 사용
@@ -246,8 +246,8 @@ class OvernightIntelligenceScore:
                             fv = float(v)
                             if not math.isnan(fv):
                                 found_rets.append(fv)
-                        except (ValueError, TypeError):
-                            pass
+                        except (ValueError, TypeError) as _ve_ret:
+                            logger.debug(f"Invalid US index return value ({k}={v}): {_ve_ret}")
                 if found_rets:
                     avg_ret = sum(found_rets) / len(found_rets)
                     score = float(np.clip(50.0 + avg_ret * (50.0 / 2.5), 5.0, 95.0))
@@ -293,3 +293,19 @@ class OvernightIntelligenceScore:
         except Exception as _ve:
             logger.warning(f"vix_fear score skip: {_ve}")
         return {'score': 50.0, 'detail': 'no data'}
+
+    def _load_active_portfolio(self) -> Dict[str, Any]:
+        """라이브 모드 시 kis_portfolio.json을 최우선 조회하고 shadow_portfolio.json으로 폴백."""
+        is_live = str(_cfg.get('execution.current_mode', 'live')).lower() == 'live'
+        pf_files = (
+            [self.results_dir / 'kis_portfolio.json', self.results_dir / 'shadow_portfolio.json']
+            if is_live
+            else [self.results_dir / 'shadow_portfolio.json', self.results_dir / 'kis_portfolio.json']
+        )
+        for pf_path in pf_files:
+            if pf_path.exists():
+                try:
+                    return json.loads(pf_path.read_text(encoding='utf-8'))
+                except Exception as _pe:
+                    logger.debug(f"Portfolio load fallback ({pf_path.name}): {_pe}")
+        return {}

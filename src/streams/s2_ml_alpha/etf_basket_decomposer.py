@@ -84,6 +84,7 @@ class S2ETFBasketDecomposer:
 
         # 1. 섹터별 스코어 집계 (Sector Aggregation)
         sector_scores: Dict[str, List[float]] = {}
+        sector_stocks: Dict[str, List[Dict[str, Any]]] = {}
         for stock in scored_stocks:
             raw_sector = stock.get('sector')
             if not raw_sector or str(raw_sector).lower() == 'unknown':
@@ -96,7 +97,9 @@ class S2ETFBasketDecomposer:
             score = float(stock.get('up_prob', stock.get('predict_proba', stock.get('score', 0.5))))
             if sector not in sector_scores:
                 sector_scores[sector] = []
+                sector_stocks[sector] = []
             sector_scores[sector].append(score)
+            sector_stocks[sector].append(stock)
 
         # 2. 섹터 대표 점수 산출
         aggregated_sectors = []
@@ -110,7 +113,8 @@ class S2ETFBasketDecomposer:
                     'sector': sector,
                     'score': round(mean_score, 4),
                     'ticker': etf_info['ticker'],
-                    'name': etf_info['name']
+                    'name': etf_info['name'],
+                    'stocks': sector_stocks.get(sector, []),
                 })
 
         # 스코어 내림차순 정렬 후 Top K 추출
@@ -118,8 +122,23 @@ class S2ETFBasketDecomposer:
         selected_sectors = aggregated_sectors[:top_k_sectors]
 
         # 3. 거래세 0% 적용 ETF 시그널 생성
+        default_tp = float(pget('s2.exit.tp.caution', 12.0))
+        default_sl = abs(float(pget('s2.exit.sl.caution', -5.0)))
+        default_win = float(pget('s2.default_win_pct', 0.05))
+        base_score_ref = float(pget('a3.fb.base_score', 0.5))
         etf_signals = []
         for sec in selected_sectors:
+            sec_items = sec.get('stocks') or []
+            tps = [float(s['tp_pct']) for s in sec_items if s.get('tp_pct') is not None]
+            sls = [abs(float(s['sl_pct'])) for s in sec_items if s.get('sl_pct') is not None]
+            ers = [
+                float(s.get('expected_return', s.get('expected_value')))
+                for s in sec_items
+                if s.get('expected_return', s.get('expected_value')) is not None
+            ]
+            tp_val = round(sum(tps) / len(tps), 2) if tps else default_tp
+            sl_val = round(sum(sls) / len(sls), 2) if sls else default_sl
+            er_val = round(sum(ers) / len(ers), 6) if ers else round(max(0.0, (sec['score'] - base_score_ref) * default_win), 6)
             sig = {
                 'stream_id': 'S2',
                 'ticker': sec['ticker'],
@@ -129,6 +148,10 @@ class S2ETFBasketDecomposer:
                 'predict_proba': sec['score'],
                 'strategy': 's2_ml_etf_basket_decomposition',
                 'tax_drag_pct': 0.00,  # 거래세 0% 완전 소멸
+                'tp_pct': tp_val,
+                'sl_pct': sl_val,
+                'expected_return': er_val,
+                'expected_return_pct': round(er_val * 100.0, 4),
                 'reason': f"S2 ML Sector Basket ({sec['sector']} MeanScore={sec['score']:.3f})"
             }
             etf_signals.append(sig)

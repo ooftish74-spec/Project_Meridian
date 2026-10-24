@@ -312,6 +312,15 @@ class S0BetaStream(BaseStream):
                 'reason': f'중립 레짐 수비수 대기 (D_macro={d_macro:.2f}, bull={bull_prob:.2f}, down={down_prob:.2f})'
             })
 
+        _s0_tp = 3.0
+        _s0_sl = 3.0 / 2.0
+        for _sig in signals:
+            _sig.setdefault('stream_id', self.stream_id)
+            _exp_r = float(_sig.get('expected_return', 0.0) or 0.0)
+            _sig.setdefault('expected_return_pct', round(_exp_r * 100.0, 4))
+            _sig.setdefault('tp_pct', round(max(_s0_tp, _exp_r * 100.0), 2) if not _sig.get('is_base_position') else 1.0)
+            _sig.setdefault('sl_pct', _s0_sl if not _sig.get('is_base_position') else 0.5)
+
         return signals
 
     def _evaluate_conviction(

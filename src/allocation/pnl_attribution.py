@@ -36,6 +36,15 @@ cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 
+_STREAM_CANONICAL_MAP = {
+    'S10': 'S10_MEGA_TREND',
+    'S11': 'S11_HIGHBETA_SNIPER',
+    'S12': 'S12_DERIVATIVE_SQUEEZE',
+    'S13': 'S13_JAPAN_ALPHA',
+    'S14': 'S14_PAIR_ALPHA',
+}
+
+
 class PnLAttributor:
     """스트림별 PnL 기여분석.
 
@@ -48,7 +57,15 @@ class PnLAttributor:
     @property
     def STREAMS(self):
         """★ SSOT: system.active_streams (Legacy Purge 2026-07-19)"""
-        return list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10', 'S11', 'S12', 'S13', 'S14_PAIR_ALPHA']))
+        raw = list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S12_DERIVATIVE_SQUEEZE', 'S13_JAPAN_ALPHA', 'S14_PAIR_ALPHA']))
+        out = []
+        for s in raw:
+            if s == 'S4':
+                continue
+            canon = _STREAM_CANONICAL_MAP.get(s, s)
+            if canon not in out:
+                out.append(canon)
+        return out
 
     def compute(self, stream_metrics: Dict=None, portfolio_value: float=None, current_weights: Dict[str, float]=None) -> Dict:
         """PnL Attribution 계산.
@@ -100,7 +117,7 @@ class PnLAttributor:
         holding_pnl = weighted_return * portfolio_value
         trade_count = metrics.get('total_trades', 0)
         tx_cost_rate = pget('allocation.attribution_tx_cost', 0.0015)
-        avg_trade_size = weight * portfolio_value / max(trade_count, 1)
+        avg_trade_size = weight * portfolio_value
         trading_cost = trade_count * avg_trade_size * tx_cost_rate
         risk_events = metrics.get('risk_cut_count', 0)
         risk_cut_impact = pget('allocation.risk_cut_avg_impact', 0.005)
@@ -128,14 +145,19 @@ class PnLAttributor:
         n_streams = len(self.STREAMS)
         bench_weight = 1.0 / n_streams
         returns = {}
+        bench_returns = {}
         for sid in self.STREAMS:
-            daily_r = stream_metrics.get(sid, {}).get('daily_returns', [])
+            sm = stream_metrics.get(sid, {})
+            daily_r = sm.get('daily_returns', [])
             window = pget('allocation.attribution_window', 20)
             if daily_r:
                 recent = daily_r[-window:]
                 returns[sid] = sum(recent)
             else:
                 returns[sid] = 0
+            bench_r = sm.get('benchmark_returns', [])
+            if bench_r:
+                bench_returns[sid] = sum(bench_r[-window:])
         bench_total = sum(returns.values()) / n_streams
         effects = {}
         total_alloc = 0
@@ -145,9 +167,10 @@ class PnLAttributor:
             w_p = weights.get(sid, bench_weight)
             w_b = bench_weight
             r_p = returns.get(sid, 0)
-            alloc = (w_p - w_b) * (r_p - bench_total)
-            select = w_b * (r_p - bench_total)
-            interact = (w_p - w_b) * (r_p - bench_total) - alloc
+            r_b = bench_returns.get(sid, bench_total)
+            alloc = (w_p - w_b) * (r_b - bench_total)
+            select = w_b * (r_p - r_b)
+            interact = (w_p - w_b) * (r_p - r_b)
             effects[sid] = {'allocation_effect': round(alloc * 100, 4), 'selection_effect': round(select * 100, 4), 'interaction_effect': round(interact * 100, 4), 'total_effect': round((alloc + select + interact) * 100, 4)}
             total_alloc += alloc
             total_select += select
@@ -191,7 +214,7 @@ class PnLAttributor:
                     return w
         except Exception as _e2:
             logger.critical(f'  [pnl_attribution] PnL attribution 섹션 3: {_e2}', exc_info=True)
-        return {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S4': pget('allocator.s4_base_weight', 0.25)}
+        return {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S5': pget('allocator.s4_base_weight', 0.25)}
 
     def _save_result(self, result: Dict) -> None:
         try:

@@ -694,10 +694,11 @@ class KISTraderAdapter:
                 # 매도/청산은 환율과 무관하게 진행 (원화 명목 한도 검사만 생략)
                 logger.warning(f"  ⚠️ [FX Unknown] {order.ticker} {order.side.upper()}: USD/KRW 미확보 → 원화 명목 한도 검사 생략 후 매도 진행")
                 fx_rate = 0.0
-            order_price_krw = order.price * fx_rate
+            _eff_price = float(order.price) if order.price > 0 else float(self._get_current_price(order.ticker) or 0.0)
+            order_price_krw = _eff_price * fx_rate
             order_val_krw = order.quantity * order_price_krw
 
-            if (not _fx_unknown) and order_val_krw > max_amount and order.order_type != 'market':
+            if (not _fx_unknown) and order_val_krw > max_amount and (order.order_type != 'market' or _eff_price > 0):
                 raise ValueError(f"Order amount ₩{order_val_krw:,.0f} exceeds MAX_AMOUNT_KRW (₩{max_amount:,.0f})")
 
             # [Cash-Only Execution Firewall] 100% 현금 전액 주문 강제 락 (미수/신용 차단)
@@ -860,9 +861,10 @@ class KISTraderAdapter:
                     order.status = 'submitted'
                     order.order_id = data.get('output', {}).get('ODNO', order.order_id)
                     logger.info(f"  📋 API 주문 접수: {data.get('msg1', '')} (주문번호: {order.order_id})")
-                    if order.side == 'buy' and order.price > 0 and getattr(self, 'account', None):
-                        order_cost_usd = order.quantity * order.price
-                        order_cost_krw = (order_cost_usd * fx_rate) if is_us_stock else (order.quantity * order.price)
+                    _deduct_px = float(order.price) if order.price > 0 else _eff_price
+                    if order.side == 'buy' and _deduct_px > 0 and getattr(self, 'account', None):
+                        order_cost_usd = order.quantity * _deduct_px
+                        order_cost_krw = (order_cost_usd * fx_rate) if is_us_stock else (order.quantity * _deduct_px)
                         self.account.cash = max(0.0, self.account.cash - order_cost_krw)
                         if is_us_stock:
                             if hasattr(self, 'us_cash_usd'):
@@ -2407,13 +2409,21 @@ class KISTraderAdapter:
             logger.warning(f"  ⚠️ inquire_unexecuted 조회 예외: {e}")
         return []
 
-    def check_and_repeg_unexecuted_orders(self, max_wait_sec: float = 0.0) -> List[Dict]:
+    def check_and_repeg_unexecuted_orders(
+        self,
+        max_wait_sec: float = 0.0,
+        market: str = 'ALL',
+        max_wait_seconds: Optional[float] = None,
+    ) -> List[Dict]:
         """[Time-Bounded Pegging Monitoring Loop]
         미체결 주문(inquire-nccs)을 조회하여 제출 후 지연 시 실시간 호가로 자동 정정 체결!
         (매수/매도 구분 철저 적용: 매도는 최유리 매수호가로, 매수는 최유리 매도호가로 정정)
         """
         if self.mode == 'mock':
             return []
+        if max_wait_seconds is not None:
+            max_wait_sec = float(max_wait_seconds)
+        _mkt = str(market or 'ALL').strip().upper()
         try:
             import requests
             headers = self._get_headers()
@@ -2422,108 +2432,122 @@ class KISTraderAdapter:
             repeg_results = []
             seen_order_nos = set()
 
-            for excg_target in ('NASD', 'NYSE', 'AMEX'):
-                params = {
-                    'CANO': acnt[0],
-                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
-                    'OVRS_EXCG_CD': excg_target,
-                    'SORT_SQN': 'DS',
-                    'CTX_AREA_FK200': '',
-                    'CTX_AREA_NK200': ''
-                }
-                url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-nccs"
-                resp = requests.get(url, headers=headers, params=params, timeout=10)
-                if hasattr(resp, 'text') and isinstance(resp.text, str) and not resp.text.strip():
-                    continue
-                data = resp.json()
-                if data.get('rt_cd') == '0':
-                    for item in data.get('output', []):
-                        order_no = item.get('odno', '')
-                        if not order_no or order_no in seen_order_nos:
-                            continue
-                        seen_order_nos.add(order_no)
-
-                        ticker = item.get('pdno', '')
-                        qty = int(float(item.get('nccs_qty', item.get('ft_ord_qty', 1))))
-                        submitted_px = float(item.get('ft_ord_unpr3', 0))
-                        excg = item.get('ovrs_excg_cd', excg_target)
-                        side_cd = str(item.get('sll_buy_dvsn_cd', '')).strip()
-                        is_sell = side_cd in ('01', 'SELL', 'sell')
-
-                        # [Time-Bounded Delay Verification] 주문이 접수된 후 최소 max_wait_sec 경과 후에만 정정 집행
-                        now_ts = time.time()
-                        if not hasattr(self, '_unexec_first_seen_ts'):
-                            self._unexec_first_seen_ts = {}
-                        first_seen = self._unexec_first_seen_ts.setdefault(order_no, now_ts)
-                        if max_wait_sec > 0 and (now_ts - first_seen) < max_wait_sec:
-                            continue
-
-                        if ticker and submitted_px > 0 and qty > 0:
-                            resolved_excg = self.resolve_overseas_exchange(ticker, excg)
-                            cncl_us = self.cancel_us_order(order_no, ticker, resolved_excg)
-                            if not cncl_us.get('success', False):
+            if _mkt in ('ALL', 'US'):
+                for excg_target in ('NASD', 'NYSE', 'AMEX'):
+                    params = {
+                        'CANO': acnt[0],
+                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                        'OVRS_EXCG_CD': excg_target,
+                        'SORT_SQN': 'DS',
+                        'CTX_AREA_FK200': '',
+                        'CTX_AREA_NK200': ''
+                    }
+                    url = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-nccs"
+                    resp = requests.get(url, headers=headers, params=params, timeout=10)
+                    if hasattr(resp, 'text') and isinstance(resp.text, str) and not resp.text.strip():
+                        continue
+                    data = resp.json()
+                    if data.get('rt_cd') == '0':
+                        for item in data.get('output', []):
+                            order_no = item.get('odno', '')
+                            if not order_no or order_no in seen_order_nos:
                                 continue
-                            time.sleep(0.3)
+                            seen_order_nos.add(order_no)
 
-                            if is_sell:
-                                bid_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=False) or (submitted_px - 0.01)
-                                repeg_price = round(min(bid_p, submitted_px) - 0.01, 2) if bid_p > 0 else round(submitted_px - 0.01, 2)
-                                logger.warning(f"  ⚡ [Auto Re-Peg Loop] {ticker} {qty}주 매도 미체결({order_no}) ➔ 실시간 최유리 매수호가(${repeg_price:.2f})로 즉시 매도 정정!")
-                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
-                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
-                            else:
-                                ask_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=True) or (submitted_px + 0.01)
-                                repeg_price = round(max(ask_p, submitted_px + 0.01), 2)
-                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
-                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
+                            ticker = item.get('pdno', '')
+                            qty = int(float(item.get('nccs_qty', item.get('ft_ord_qty', 1))))
+                            submitted_px = float(item.get('ft_ord_unpr3', 0))
+                            excg = item.get('ovrs_excg_cd', excg_target)
+                            side_cd = str(item.get('sll_buy_dvsn_cd', '')).strip()
+                            is_sell = side_cd in ('01', 'SELL', 'sell')
+
+                            # [Time-Bounded Delay Verification] 주문이 접수된 후 최소 max_wait_sec 경과 후에만 정정 집행
+                            now_ts = time.time()
+                            if not hasattr(self, '_unexec_first_seen_ts'):
+                                self._unexec_first_seen_ts = {}
+                            first_seen = self._unexec_first_seen_ts.setdefault(order_no, now_ts)
+                            if max_wait_sec > 0 and (now_ts - first_seen) < max_wait_sec:
+                                continue
+
+                            if ticker and submitted_px > 0 and qty > 0:
+                                resolved_excg = self.resolve_overseas_exchange(ticker, excg)
+                                cncl_us = self.cancel_us_order(order_no, ticker, resolved_excg)
+                                if not cncl_us.get('success', False):
+                                    continue
+                                time.sleep(0.3)
+                                st_us = self.check_order_status(order_no, is_us=True, ticker=ticker) or {}
+                                _st_u = str(st_us.get('status', '')).lower()
+                                rem_qty = max(0, int(qty) - int(st_us.get('filled_qty', 0) or 0))
+                                if _st_u in ('unknown', 'error', 'filled') or rem_qty <= 0:
+                                    logger.info(f"  🛡️ [Auto Re-Peg Guard] {ticker} ({order_no}): 취소 후 체결확인 status={_st_u}, rem_qty={rem_qty} → 재발주 생략")
+                                    continue
+
+                                if is_sell:
+                                    bid_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=False) or (submitted_px - 0.01)
+                                    repeg_price = round(min(bid_p, submitted_px) - 0.01, 2) if bid_p > 0 else round(submitted_px - 0.01, 2)
+                                    logger.warning(f"  ⚡ [Auto Re-Peg Loop] {ticker} {rem_qty}주 매도 미체결({order_no}) ➔ 실시간 최유리 매수호가(${repeg_price:.2f})로 즉시 매도 정정!")
+                                    repeg_res = self.sell(ticker=ticker, quantity=rem_qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
+                                    repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
+                                else:
+                                    ask_p = self.get_live_overseas_price(ticker, resolved_excg, ask_side=True) or (submitted_px + 0.01)
+                                    repeg_price = round(max(ask_p, submitted_px + 0.01), 2)
+                                    repeg_res = self.buy(ticker=ticker, quantity=rem_qty, price=repeg_price, order_type='limit', exchange=resolved_excg, urgency='repeg')
+                                    repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
 
             # ── 2. KRX 국내 미체결 주문 실시간 자동 재페깅/시장가 전환 ──
-            try:
-                krx_headers = self._get_headers()
-                krx_headers['tr_id'] = 'VTTC8036R' if self.mode == 'paper' else 'TTTC8036R'
-                krx_params = {
-                    'CANO': acnt[0],
-                    'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
-                    'INQR_DVSN_1': '0',
-                    'INQR_DVSN_2': '0',
-                    'CTX_AREA_FK100': '',
-                    'CTX_AREA_NK100': ''
-                }
-                krx_url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
-                krx_resp = requests.get(krx_url, headers=krx_headers, params=krx_params, timeout=5)
-                krx_data = krx_resp.json()
-                if krx_data.get('rt_cd') == '0':
-                    for item in krx_data.get('output', krx_data.get('output1', [])):
-                        order_no = item.get('odno', item.get('ODNO', ''))
-                        if not order_no or order_no in seen_order_nos:
-                            continue
-                        seen_order_nos.add(order_no)
-                        ticker = item.get('pdno', item.get('PDNO', ''))
-                        qty = int(float(item.get('psbl_qty', item.get('PSBL_QTY', item.get('rmn_qty', item.get('ord_qty', item.get('ORD_QTY', 0))))) or 0))
-                        side_cd = str(item.get('sll_buy_dvsn_cd', item.get('SLL_BUY_DVSN_CD', ''))).strip()
-                        is_sell = side_cd in ('01', 'SELL', 'sell', '매도')
-                        now_ts = time.time()
-                        if not hasattr(self, '_unexec_first_seen_ts'):
-                            self._unexec_first_seen_ts = {}
-                        first_seen = self._unexec_first_seen_ts.setdefault(order_no, now_ts)
-                        if max_wait_sec > 0 and (now_ts - first_seen) < max_wait_sec:
-                            continue
-
-                        if ticker and qty > 0:
-                            cncl_kr = self.cancel_order(order_no, ticker=ticker)
-                            if not cncl_kr.get('success', False):
+            if _mkt in ('ALL', 'KR', 'KRX'):
+                try:
+                    krx_headers = self._get_headers()
+                    krx_headers['tr_id'] = 'VTTC8036R' if self.mode == 'paper' else 'TTTC8036R'
+                    krx_params = {
+                        'CANO': acnt[0],
+                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                        'INQR_DVSN_1': '0',
+                        'INQR_DVSN_2': '0',
+                        'CTX_AREA_FK100': '',
+                        'CTX_AREA_NK100': ''
+                    }
+                    krx_url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
+                    krx_resp = requests.get(krx_url, headers=krx_headers, params=krx_params, timeout=5)
+                    krx_data = krx_resp.json()
+                    if krx_data.get('rt_cd') == '0':
+                        for item in krx_data.get('output', krx_data.get('output1', [])):
+                            order_no = item.get('odno', item.get('ODNO', ''))
+                            if not order_no or order_no in seen_order_nos:
                                 continue
-                            time.sleep(0.3)
-                            if is_sell:
-                                logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매도 미체결({order_no}) ➔ 즉시 최유리 시장가 매도 정정!")
-                                repeg_res = self.sell(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
-                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
-                            else:
-                                logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
-                                repeg_res = self.buy(ticker=ticker, quantity=qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
-                                repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
-            except Exception as _krx_e:
-                logger.debug(f"  [KRX Auto Re-Peg] 국내 미체결 스캔 예외: {_krx_e}")
+                            seen_order_nos.add(order_no)
+                            ticker = item.get('pdno', item.get('PDNO', ''))
+                            qty = int(float(item.get('psbl_qty', item.get('PSBL_QTY', item.get('rmn_qty', item.get('ord_qty', item.get('ORD_QTY', 0))))) or 0))
+                            side_cd = str(item.get('sll_buy_dvsn_cd', item.get('SLL_BUY_DVSN_CD', ''))).strip()
+                            is_sell = side_cd in ('01', 'SELL', 'sell', '매도')
+                            now_ts = time.time()
+                            if not hasattr(self, '_unexec_first_seen_ts'):
+                                self._unexec_first_seen_ts = {}
+                            first_seen = self._unexec_first_seen_ts.setdefault(order_no, now_ts)
+                            if max_wait_sec > 0 and (now_ts - first_seen) < max_wait_sec:
+                                continue
+
+                            if ticker and qty > 0:
+                                cncl_kr = self.cancel_order(order_no, ticker=ticker)
+                                if not cncl_kr.get('success', False):
+                                    continue
+                                time.sleep(0.3)
+                                st_kr = self.check_order_status(order_no, is_us=False, ticker=ticker) or {}
+                                _st_k = str(st_kr.get('status', '')).lower()
+                                rem_qty = max(0, int(qty) - int(st_kr.get('filled_qty', 0) or 0))
+                                if _st_k in ('unknown', 'error', 'filled') or rem_qty <= 0:
+                                    logger.info(f"  🛡️ [KRX Auto Re-Peg Guard] {ticker} ({order_no}): 취소 후 체결확인 status={_st_k}, rem_qty={rem_qty} → 시장가 재발주 생략")
+                                    continue
+                                if is_sell:
+                                    logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {rem_qty}주 매도 미체결({order_no}) ➔ 즉시 최유리 시장가 매도 정정!")
+                                    repeg_res = self.sell(ticker=ticker, quantity=rem_qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
+                                    repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
+                                else:
+                                    logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {rem_qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
+                                    repeg_res = self.buy(ticker=ticker, quantity=rem_qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
+                                    repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
+                except Exception as _krx_e:
+                    logger.debug(f"  [KRX Auto Re-Peg] 국내 미체결 스캔 예외: {_krx_e}")
 
             return repeg_results
         except Exception as e:
@@ -2675,8 +2699,11 @@ class KISTraderAdapter:
             # 달러 초단기채(SHV) 파킹은 오직 순수 달러 예수금(direct_usd_cash > $100)으로만 수행!
             # 원화 기반 통합증거금(integrated_margin_usd)은 이자 파킹에 1센트도 침범 엄격 금지!
             if us_cash > 100:
-                p_us = round(self.get_live_overseas_price(us_shield_ticker, 'NYSE') or 110.29, 2)
-                if us_cash >= p_us and p_us > 0:
+                _raw_p_us = self.get_live_overseas_price(us_shield_ticker, 'NYSE')
+                p_us = round(float(_raw_p_us), 2) if _raw_p_us and float(_raw_p_us) > 0 else 0.0
+                if p_us <= 0:
+                    logger.warning(f"  ⚠️ [Yield Harvester 2.0] {us_shield_ticker} 실시간 가격 미확보(<=0) → US 파킹 스윕 스킵")
+                elif us_cash >= p_us:
                     max_qty = int(us_cash // p_us)
                     for q_try in range(max_qty, 0, -1):
                         res = self.buy(ticker=us_shield_ticker, quantity=q_try, price=p_us, order_type='limit', exchange='NYSE', is_yield_sweep=True)
@@ -2710,8 +2737,10 @@ class KISTraderAdapter:
                 logger.debug(f"Friction guard check bypass: {_fric_err}")
 
             raw_kr_cash = float(getattr(self, 'raw_d2_cash', getattr(self.account, 'd2_cash', 0.0)) or 0.0)
-            p_kr = self._get_current_price(kr_shield_ticker) or 1075000.0
-            if raw_kr_cash >= p_kr and p_kr > 0:
+            p_kr = float(self._get_current_price(kr_shield_ticker) or 0.0)
+            if p_kr <= 0:
+                logger.warning(f"  ⚠️ [Yield Harvester 2.0] {kr_shield_ticker} 실시간 가격 미확보(<=0) → KR 파킹 스윕 스킵")
+            elif raw_kr_cash >= p_kr:
                 qty_kr = int(raw_kr_cash // p_kr)
                 if qty_kr > 0:
                     logger.info(f"  🏦 [Yield Harvester 2.0] 주말/연휴(보유 기간: {total_days}일) 무위험 이자 누적 확정 ➔ 원화 현금 ₩{raw_kr_cash:,.0f} ➔ {kr_shield_ticker} {qty_kr}주 파킹 스윕 집행! (익영업일 08:30 KST 자동 청산 예약)")
