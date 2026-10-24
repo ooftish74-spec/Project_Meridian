@@ -730,8 +730,8 @@ def get_us_session_state(now: Optional[datetime] = None) -> Tuple[bool, str]:
     return (False, 'closed')
 
 
-def is_kr_trading_now(now: Optional[datetime] = None) -> Tuple[bool, str]:
-    """한국 거래소(KRX) 장중 실시간 여부 판별 (08:30~15:30 KST)."""
+def is_kr_trading_now(now: Optional[datetime] = None, include_extended: bool = True) -> Tuple[bool, str]:
+    """한국 거래소(KRX/NXT) 장중/프리/애프터 실시간 여부 판별 (08:00~20:00 KST)."""
     if now is None:
         try:
             from src.utils.time_utils import now_kst
@@ -747,9 +747,14 @@ def is_kr_trading_now(now: Optional[datetime] = None) -> Tuple[bool, str]:
     if not cal.is_trading_day(date_str):
         return (False, 'closed')
 
-    # 08:30 ~ 15:30 (장전 동시호가 포함 정규 세션)
-    if (now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30):
+    t = now.time()
+    if time(8, 30) <= t <= time(15, 30):
         return (True, 'regular')
+    if include_extended:
+        if time(8, 0) <= t < time(8, 30):
+            return (True, 'premarket')
+        if time(15, 30) < t <= time(20, 0):
+            return (True, 'aftermarket')
 
     return (False, 'closed')
 

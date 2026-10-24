@@ -69,8 +69,11 @@ class IntradayCapitalRouter:
             ticker = str(sig.get('ticker', '')).strip()
             _barriers = _dqe.compute_dynamic_exit_barriers(ticker) if ticker else {}
             win_rate = float(sig.get('win_rate', sig.get('confidence', 0.55)))
-            tp = float(sig.get('tp_pct', _barriers.get('take_profit_pct', 2.0)))
-            sl = abs(float(sig.get('sl_pct', abs(_barriers.get('stop_loss_pct', 1.0)))))
+            _sentinel_barrier = 50
+            _raw_tp = float(sig.get('tp_pct') or 0.0)
+            _raw_sl = abs(float(sig.get('sl_pct') or 0.0))
+            tp = _raw_tp if (0.0 < _raw_tp < _sentinel_barrier) else float(_barriers.get('take_profit_pct', 2.0))
+            sl = _raw_sl if (0.0 < _raw_sl < _sentinel_barrier) else abs(float(_barriers.get('stop_loss_pct', 1.0)))
             atr_pct = float(
                 market_data.get('ticker_atr_pct', {}).get(
                     ticker, market_data.get('atr_pct', _barriers.get('sigma_daily_pct', 1.5))

@@ -103,14 +103,15 @@ def cross_sectional_rank_z_matrix(
             z_sub = np.zeros_like(sub)
             if np.any(valid):
                 z_sub[:, valid] = (sub[:, valid] - med[:, valid]) / scale[:, valid]
+            if np.any(~valid):
+                z_sub[:, ~valid] = sub[:, ~valid]
             out[idx] = np.clip(z_sub, -z_bound, z_bound)
             continue
 
         stds = np.std(sub, axis=0)
         for j in range(n_cols):
             if stds[j] <= std_eps:
-                # Date-level macro feature (constant across stocks on date t): preserve clipped value instead of zeroing
-                out[idx, j] = np.clip(sub[:, j], -z_bound, z_bound)
+                out[idx, j] = 0.0
                 continue
             col = sub[:, j]
             ranks = stats.rankdata(col, method='average')

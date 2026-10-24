@@ -91,10 +91,33 @@ def test_extract_v4_populates_all_v7_features_nonzero():
             "revenue_yoy_latest": float(0.05 + 0.03 * seed_offset),
             "roe_2yr_avg": float(0.08 + 0.02 * seed_offset),
             "debt_ratio_latest": float(0.8 + 0.1 * seed_offset),
+            "dart_insider_signal": float(-0.1 + 0.05 * seed_offset),
+            "dart_buyback_signal": float(0.1 * seed_offset),
+            "dart_composite": float(-0.05 + 0.08 * seed_offset),
+            "export_total_yoy": float(0.04 + 0.01 * seed_offset),
+            "export_10d_yoy": float(0.03 + 0.015 * seed_offset),
+            "export_yoy_auto": float(0.02 + 0.01 * seed_offset),
+            "export_yoy_semi": float(0.08 + 0.02 * seed_offset),
+            "export_yoy_battery": float(-0.02 + 0.01 * seed_offset),
+            "us_export_yoy": float(0.05 + 0.01 * seed_offset),
+            "china_export_yoy": float(-0.01 + 0.01 * seed_offset),
+            "us_momentum_spread": float(0.01 + 0.005 * seed_offset),
+            "china_rebound_index": float(0.02 + 0.008 * seed_offset),
         }
+        ss_etf_data = {
+            "ss_etf_vol_ratio": float(0.8 + 0.1 * seed_offset),
+            "lp_delta_pressure": float(-0.2 + 0.08 * seed_offset),
+            "intraday_vol_anomaly": float(0.9 + 0.05 * seed_offset),
+        }
+
+        class _StubAlphaModel:
+            def execute(self, x_row):
+                return np.array([float(0.1 * (seed_offset + 1))])
+
         feat_dict = extract_v4(
             close, high, low, open_p, vol, n_bars - 1,
-            is_etf=False, cross_asset=cross_asset, aux_data=aux_data
+            is_etf=False, cross_asset=cross_asset, aux_data=aux_data,
+            ss_etf_data=ss_etf_data, alpha_model=_StubAlphaModel(),
         )
         assert feat_dict is not None
         vec = [float(feat_dict.get(k, 0.0)) for k in FEATURE_NAMES_V7]

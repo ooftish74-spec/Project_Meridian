@@ -1016,9 +1016,12 @@ class DynamicQuantEngine:
             elif u_sid.startswith("S3"):
                 alignment = 0.35 * (1.0 - abs(target_beta)) + 0.25
             elif u_sid.startswith("S5"):
-                alignment = 0.20 * target_beta - 0.50 * p_crash
+                _w_s5_beta = 1.0 / 2.0
+                _w_s5_crash = 1.0
+                alignment = -_w_s5_beta * target_beta + _w_s5_crash * p_crash
             elif u_sid.startswith("S11"):
-                alignment = 0.45 * abs(target_beta)
+                _w_s11_beta = 0.45
+                alignment = _w_s11_beta * target_beta
             elif u_sid.startswith("S12"):
                 alignment = 0.30 * abs(target_beta)
             elif u_sid.startswith("S13"):

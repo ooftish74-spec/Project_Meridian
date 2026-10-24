@@ -22,6 +22,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
     def pget(name, fallback, ctx=None):
         return fallback
 import json
+import re
 import sys
 import pandas as pd
 import logging
@@ -462,8 +463,12 @@ class S2MLAlphaStream(BaseStream):
                 _ev_val = stock.get('expected_value', 0)
                 _tk_str = str(stock.get('ticker', ''))
                 _sz_val = float(_score_z_map.get(_tk_str, 0.0))
-                _def_vol = 0.02
-                _d_vol = float(stock.get('volatility_20d') or _def_vol)
+                _def_vol = float(pget('streams.s2.default_daily_vol', 0.02))
+                _d_vol = float(stock.get('daily_vol_20d') or stock.get('volatility_20d') or _def_vol)
+                if _d_vol > 1.0:
+                    _d_vol = _d_vol / (float(100) * math.sqrt(252))
+                elif _d_vol > (1.0 / 5):
+                    _d_vol = _d_vol / math.sqrt(252)
                 _gk_alpha = 0.0
                 if _gk_shrunk_ic > 0.0 and _sz_val != 0.0:
                     _gk_alpha = grinold_kahn_expected_alpha(_sz_val, _gk_shrunk_ic, _d_vol)
@@ -570,7 +575,7 @@ class S2MLAlphaStream(BaseStream):
             etf_set = set(get_universe_tickers(market='ETF') or [])
             kr_stocks = get_universe_tickers(stocks_only=True)
             if kr_stocks:
-                universe = {t for t in kr_stocks if len(str(t)) == 6 and str(t).isdigit() and t not in etf_set}
+                universe = {t for t in kr_stocks if re.match(r'^\d{4}[0-9A-Z]{2}$', str(t)) and t not in etf_set}
         except Exception:
             pass
         if not universe:
@@ -579,7 +584,7 @@ class S2MLAlphaStream(BaseStream):
                 try:
                     raw_u = _json.loads(uni_file.read_text())
                     if isinstance(raw_u, list):
-                        universe = {str(t) for t in raw_u if len(str(t)) == 6 and str(t).isdigit() and str(t) not in etf_set}
+                        universe = {str(t) for t in raw_u if re.match(r'^\d{4}[0-9A-Z]{2}$', str(t)) and str(t) not in etf_set}
                 except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                     import logging
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
@@ -601,7 +606,7 @@ class S2MLAlphaStream(BaseStream):
         seen_tickers = set()
         _ref_ts = pd.Timestamp(target_date).tz_localize(None) if target_date is not None else pd.Timestamp(datetime.now()).tz_localize(None)
         for pf in parquets:
-            if not (len(pf.stem) == 6 and pf.stem.isdigit()):
+            if not re.match(r'^\d{4}[0-9A-Z]{2}$', str(pf.stem)):
                 continue
             ticker = pf.stem
             if ticker in seen_tickers:
@@ -654,7 +659,7 @@ class S2MLAlphaStream(BaseStream):
                     # RangeIndex without date/close or stale (> 5 days): do NOT bypass extract_v4 with frozen row
                     feature_dict = {}
                 _close_px = float(feature_dict.get('close') or feature_dict.get('Close') or 0.0)
-                if _close_px <= 0.0:
+                if _close_px <= 0.0 or not _use_fs_row:
                     for _p_cand in (
                         _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
                         _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
@@ -663,15 +668,52 @@ class S2MLAlphaStream(BaseStream):
                         if _p_cand.exists():
                             try:
                                 _df_px = pd.read_parquet(_p_cand)
+                                if target_date is not None and not _df_px.empty:
+                                    _px_cols_l = {str(c).lower(): c for c in _df_px.columns}
+                                    if isinstance(_df_px.index, pd.DatetimeIndex):
+                                        _df_px = _df_px[_df_px.index.tz_localize(None) <= _ref_ts]
+                                    elif 'date' in _px_cols_l:
+                                        _dts = pd.to_datetime(_df_px[_px_cols_l['date']], errors='coerce').dt.tz_localize(None)
+                                        _df_px = _df_px[_dts <= _ref_ts]
                                 _c_col = 'close' if 'close' in _df_px.columns else ('Close' if 'Close' in _df_px.columns else None)
+                                _v_col = 'volume' if 'volume' in _df_px.columns else ('Volume' if 'Volume' in _df_px.columns else None)
                                 if _c_col and not _df_px.empty:
-                                    _close_px = float(_df_px[_c_col].dropna().iloc[-1])
-                                    break
+                                    _c_s = pd.to_numeric(_df_px[_c_col], errors='coerce').dropna()
+                                    if not _c_s.empty:
+                                        _close_px = float(_c_s.iloc[-1])
+                                        _c_arr = _c_s.values.astype(float)
+                                        if len(_c_arr) >= 20:
+                                            _d15 = np.diff(_c_arr[-15:])
+                                            _g = float(np.mean(_d15[_d15 > 0.0])) if np.any(_d15 > 0.0) else 0.0
+                                            _ls = float(np.mean(-_d15[_d15 < 0.0])) if np.any(_d15 < 0.0) else 0.0
+                                            _rsi_v = float(100) - (float(100) / (1.0 + _g / _ls)) if _ls > 0.0 else (float(100) if _g > 0.0 else float(50))
+                                            _ma20 = float(np.mean(_c_arr[-20:]))
+                                            _sd20 = float(np.std(_c_arr[-20:]))
+                                            _bb_v = (_c_arr[-1] - (_ma20 - 2 * _sd20)) / (4 * _sd20) if _sd20 > 0.0 else (1.0 / 2)
+                                            _mom5 = (_c_arr[-1] / _c_arr[-6] - 1.0) * float(100) if len(_c_arr) >= 6 and _c_arr[-6] > 0.0 else 0.0
+                                            _c21 = _c_arr[-21:] if len(_c_arr) >= 21 else _c_arr[-20:]
+                                            _lrets = np.diff(np.log(np.maximum(_c21, 1.0)))
+                                            _v20_ann = float(np.std(_lrets) * math.sqrt(252) * float(100)) if len(_lrets) > 1 else 0.0
+                                            feature_dict.setdefault('rsi_14', _rsi_v)
+                                            feature_dict.setdefault('bb_position', _bb_v)
+                                            feature_dict.setdefault('mom_7', _mom5)
+                                            feature_dict.setdefault('return_5d', _mom5)
+                                            feature_dict.setdefault('volatility_20d', _v20_ann)
+                                        if _v_col and _v_col in _df_px.columns:
+                                            _v_s = pd.to_numeric(_df_px[_v_col], errors='coerce').dropna()
+                                            if len(_v_s) >= 20:
+                                                _v_arr = _v_s.values.astype(float)
+                                                _vm20 = float(np.mean(_v_arr[-20:]))
+                                                if _vm20 > 0.0:
+                                                    feature_dict.setdefault('volume_ratio_20d', float(_v_arr[-1] / _vm20))
+                                        break
                             except Exception:
                                 pass
                 if not _use_fs_row and _close_px <= 0.0:
                     continue
-                candidates.append({'ticker': ticker, 'name': ticker, 'features': feature_dict, 'rsi': feature_dict.get('rsi_14', 50), 'bb_position': feature_dict.get('bb_position', 0.5), 'macd_signal': feature_dict.get('macd_signal', 0), 'volume_ratio': feature_dict.get('volume_ratio_20d', 1.0), 'momentum_5d': feature_dict.get('mom_7', 0), 'close': max(0.0, _close_px), 'foreign_net_5d': _flow_by_ticker.get(ticker, {}).get('foreign_net_5d', 0), 'inst_net_5d': _flow_by_ticker.get(ticker, {}).get('inst_net_5d', 0)})
+                _cand_v20 = float(feature_dict.get('volatility_20d', 0.0) or 0.0)
+                _cand_dvol = _cand_v20 / (float(100) * math.sqrt(252)) if _cand_v20 > 1.0 else _cand_v20
+                candidates.append({'ticker': ticker, 'name': ticker, 'features': feature_dict, 'rsi': feature_dict.get('rsi_14', 50), 'bb_position': feature_dict.get('bb_position', 1.0 / 2), 'macd_signal': feature_dict.get('macd_signal', 0), 'volume_ratio': feature_dict.get('volume_ratio_20d', 1.0), 'momentum_5d': feature_dict.get('return_5d', feature_dict.get('mom_7', 0)), 'volatility_20d': _cand_v20, 'daily_vol_20d': _cand_dvol, 'close': max(0.0, _close_px), 'foreign_net_5d': _flow_by_ticker.get(ticker, {}).get('foreign_net_5d', 0), 'inst_net_5d': _flow_by_ticker.get(ticker, {}).get('inst_net_5d', 0)})
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
                 logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
@@ -805,7 +847,8 @@ class S2MLAlphaStream(BaseStream):
                     _tk_v4 = str(stock.get('ticker', ''))
                     if not hasattr(self.__class__, '_V4_FEATS_CACHE'):
                         self.__class__._V4_FEATS_CACHE = {}
-                    _v4_cached = self.__class__._V4_FEATS_CACHE.get(_tk_v4)
+                    _v4_cache_key = f"{_tk_v4}_{target_date or ''}"
+                    _v4_cached = self.__class__._V4_FEATS_CACHE.get(_v4_cache_key)
                     _adtv_v4 = 0.0
                     _v4_tuple_len = 3
                     _v4_ttl = 60
@@ -825,6 +868,13 @@ class S2MLAlphaStream(BaseStream):
                                 try:
                                     _df_pq = pd.read_parquet(_pq_cand)
                                     _df_pq.columns = [str(col).lower() for col in _df_pq.columns]
+                                    if target_date is not None and not _df_pq.empty:
+                                        _pit_ts = pd.Timestamp(target_date).tz_localize(None)
+                                        if isinstance(_df_pq.index, pd.DatetimeIndex):
+                                            _df_pq = _df_pq[_df_pq.index.tz_localize(None) <= _pit_ts]
+                                        elif 'date' in _df_pq.columns:
+                                            _dt_col = pd.to_datetime(_df_pq['date'], errors='coerce').dt.tz_localize(None)
+                                            _df_pq = _df_pq[_dt_col <= _pit_ts]
                                     if len(_df_pq) >= _min_bars and 'close' in _df_pq.columns:
                                         _df = _df_pq
                                         break
@@ -851,7 +901,7 @@ class S2MLAlphaStream(BaseStream):
                             _aux_feats = _aux_loader.get_features(_tk_v4, _date_str_v4) if _aux_loader is not None else None
                             _v4_feats = extract_v4(_c, _h, _l, _o, _v, _idx, cross_asset=_ca_latest, aux_data=_aux_feats, is_etf=_is_etf) or {}
                             if _v4_feats:
-                                self.__class__._V4_FEATS_CACHE[_tk_v4] = (_time.monotonic(), dict(_v4_feats), _adtv_v4)
+                                self.__class__._V4_FEATS_CACHE[_v4_cache_key] = (_time.monotonic(), dict(_v4_feats), _adtv_v4)
                     if _adtv_v4 > 0.0:
                         stock['adtv'] = _adtv_v4
                         stock['avg_volume_value'] = _adtv_v4
@@ -907,11 +957,16 @@ class S2MLAlphaStream(BaseStream):
             stock['macd_signal'] = float(features.get('macd_signal', stock.get('macd_signal', 0)))
             stock['volume_ratio'] = float(features.get('volume_ratio_20d', stock.get('volume_ratio', 1)))
             stock['momentum_5d'] = float(features.get('return_5d', stock.get('momentum_5d', 0)))
-            _v20_raw = float(features.get('volatility_20d', 0.0) or 0.0)
+            _v20_raw = float(features.get('volatility_20d', stock.get('volatility_20d', 0.0)) or 0.0)
             if _v20_raw > 1.0:
-                stock['volatility_20d'] = _v20_raw / (100.0 * math.sqrt(_ann_days))
-            elif _v20_raw > 0.0:
                 stock['volatility_20d'] = _v20_raw
+                stock['daily_vol_20d'] = _v20_raw / (float(100) * math.sqrt(_ann_days))
+                features['volatility_20d'] = _v20_raw
+            elif _v20_raw > 0.0:
+                _v20_ann_conv = _v20_raw * float(100) * math.sqrt(_ann_days)
+                stock['volatility_20d'] = _v20_ann_conv
+                stock['daily_vol_20d'] = _v20_raw
+                features['volatility_20d'] = _v20_ann_conv
             if self._feature_names:
                 row = []
                 for fn in self._feature_names:

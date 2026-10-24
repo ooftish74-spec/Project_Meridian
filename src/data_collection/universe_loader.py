@@ -148,6 +148,28 @@ def _ensure_loaded():
                 except Exception:
                     pass
 
+    # Pre-populate known KR ETFs from data/universe/dynamic_universe.json before reading flat results/dynamic_universe.json
+    dyn_path = _PROJECT_ROOT / 'data' / 'universe' / 'dynamic_universe.json'
+    if dyn_path.exists():
+        try:
+            _u_pre = json.loads(dyn_path.read_text())
+            if isinstance(_u_pre, dict):
+                for _s_etf in _u_pre.get('kr_etfs', []):
+                    _t_etf = str(_s_etf.get('ticker', '') if isinstance(_s_etf, dict) else _s_etf).strip()
+                    if _t_etf:
+                        if _t_etf not in etfs:
+                            etfs.append(_t_etf)
+                        if _t_etf not in tickers:
+                            tickers.append(_t_etf)
+                        if isinstance(_s_etf, dict):
+                            names[_t_etf] = _s_etf.get('name', _t_etf)
+                            meta[_t_etf] = {'market': 'KRX', 'type': _s_etf.get('type', 'etf'), 'underlying': _s_etf.get('underlying'), 'region': _s_etf.get('region')}
+                        else:
+                            names.setdefault(_t_etf, _t_etf)
+                            meta.setdefault(_t_etf, {'market': 'KRX', 'type': 'etf'})
+        except Exception as _e_pre:
+            logger.debug(f'  Pre-populate ETFs note: {_e_pre}')
+
     # Priority #1: results/dynamic_universe.json
     res_dyn = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
     if res_dyn.exists():
@@ -165,7 +187,7 @@ def _ensure_loaded():
                             tickers.append(tk_str)
                         names.setdefault(tk_str, tk_str)
                         meta.setdefault(tk_str, {'market': 'KR', 'type': 'stock'})
-                    elif 1 <= len(tk_str) <= 5 and tk_str.isalpha() and tk_str.isupper():
+                    elif re.match(r'^[A-Z]{1,5}([.-][A-Z])?$', tk_str):
                         if tk_str not in us:
                             us.append(tk_str)
                         if tk_str not in tickers:

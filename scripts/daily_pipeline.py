@@ -331,7 +331,12 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             if _kis_f.exists():
                 try:
                     _kd = json.loads(_kis_f.read_text(encoding='utf-8'))
-                    _nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+                    _nav = (
+                        _kd.get('combined_nav_krw')
+                        or _kd.get('nav')
+                        or _kd.get('account', {}).get('total_equity')
+                        or (_kd.get('kr_account', {}) or {}).get('total_equity_krw')
+                    )
                 except Exception:
                     pass
         else:
@@ -339,7 +344,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             if _shadow_f.exists():
                 _sd = json.loads(_shadow_f.read_text())
                 _nav = _sd.get('nav', _sd.get('total_value', _sd.get('virtual_nav', cfg.get('portfolio.initial_capital'))))
-        if _nav:
+        if _nav is not None and float(_nav) > 0:
             _dd = DrawdownGuard().check(float(_nav))
             _dd_exposure = _dd.get('exposure', 1.0)
             _kill_switch_result['position_scale'] *= _dd_exposure
@@ -1244,22 +1249,28 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 if _kis_p.exists():
                     try:
                         _kd = json.loads(_kis_p.read_text(encoding='utf-8'))
-                        _current_nav = _kd.get('nav') or _kd.get('account', {}).get('total_equity')
+                        _current_nav = (
+                            _kd.get('combined_nav_krw')
+                            or _kd.get('nav')
+                            or _kd.get('account', {}).get('total_equity')
+                            or (_kd.get('kr_account', {}) or {}).get('total_equity_krw')
+                        )
                     except Exception:
                         pass
             else:
                 _sp_data = json.loads((_PROJECT_ROOT / 'results' / 'shadow_portfolio.json').read_text())
                 _current_nav = _sp_data.get('nav', _sp_data.get('total_value', cfg.get('portfolio.initial_capital')))
-            _dd_status = _ddg.check(nav=float(_current_nav or 0.0))
+            if _current_nav is not None and float(_current_nav) > 0:
+                _dd_status = _ddg.check(nav=float(_current_nav))
 
-            # pipeline_state.json에 직접 기록
-            _ps_path = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
-            if _ps_path.exists():
-                _ps_data = json.loads(_ps_path.read_text())
-                _ps_data['drawdown_stage'] = _dd_status.get('stage', 'Normal')
-                _ps_data['drawdown_pct'] = _dd_status.get('drawdown_pct', 0)
-                _ps_data['updated_at'] = datetime.now().isoformat()
-                atomic_write_json(_ps_path, _ps_data, indent=2)
+                # pipeline_state.json에 직접 기록
+                _ps_path = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
+                if _ps_path.exists():
+                    _ps_data = json.loads(_ps_path.read_text())
+                    _ps_data['drawdown_stage'] = _dd_status.get('stage', 'Normal')
+                    _ps_data['drawdown_pct'] = _dd_status.get('drawdown_pct', 0)
+                    _ps_data['updated_at'] = datetime.now().isoformat()
+                    atomic_write_json(_ps_path, _ps_data, indent=2)
         except Exception as e:
             logger.error(f"  Drawdown Guard 상태 기록 실패: {e}", exc_info=True)
 

@@ -276,7 +276,10 @@ class S5OvernightStream(BaseStream):
         if _resid_s5_pct > 0.0:
             _pk_tp = 99.0
             _pk_sl = abs(-99.0)
-            signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': _resid_s5_pct, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': _pk_tp, 'sl_pct': _pk_sl, 'expected_return': round(_pk_tp / 100.0, 4), 'expected_return_pct': _pk_tp, 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
+            _min_idle_h = 12.0
+            _kofr_ann_pct = float(cfg.get('s5.kofr_div_pct') or pget('s4.kofr_div_pct', 3.5))
+            _pk_exp_ret_pct = round(_kofr_ann_pct * (max(float(expected_idle_hours), _min_idle_h) / (365.0 * 24.0)), 4)
+            signals.append({'stream_id': 'S5', 'ticker': best_parking['ticker'], 'name': best_parking['name'], 'direction': 'long', 'confidence': 1.0, 'size_pct': _resid_s5_pct, 'strategy': 'risk_free_parking', 'reason': '순수익 > 거래비용 검증 완수 무위험 KOFR/CD 이자 스윕', 'tp_pct': _pk_tp, 'sl_pct': _pk_sl, 'expected_return': round(_pk_exp_ret_pct / 100.0, 6), 'expected_return_pct': _pk_exp_ret_pct, 'max_hold_minutes': pget('s5.max_hold_minutes', 1200), 'timestamp': now_kst().isoformat()})
             _bp_nm = best_parking.get('name', '')
             logger.info(f"  🌙 S5 파킹 스윕: {_bp_nm} 순수익 검증 완수 후 잔여 자본({_resid_s5_pct:.0%}) 배정")
         return signals

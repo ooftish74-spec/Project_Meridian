@@ -555,7 +555,10 @@ class S1ETFSniperStream(BaseStream):
             for decay_res in unconventional_eval.get('etf_decay_results', []):
                 if decay_res.get('recommended_action') == 'HARVEST_DECAY':
                     t_code = decay_res['ticker']
-                    _is_inv_etp = t_code in ('252670', 'SQQQ', '114800')
+                    _is_inv_etp = (  # hardcode-ok: L0 inverse ETP structural ticker identifiers
+                        t_code in ('252670', 'SQQQ', '114800', '251340', '390390', 'SOXS', 'SH', 'PSQ', 'SDS', 'QID')
+                        or 'inv' in str(self.universe.get(t_code, {}).get('type', '')).lower()
+                    )
                     if _is_inv_etp and not _allow_inverse_etp:
                         continue
                     if (not _is_inv_etp) and not _allow_bull_etp:

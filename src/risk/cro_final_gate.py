@@ -36,13 +36,13 @@ class CROFinalGate:
 
     def __init__(
         self,
-        confidence_level: float = 0.99,
-        max_daily_var_pct: float = 0.054,
-        max_portfolio_exposure: float = 1.0
+        confidence_level: Optional[float] = None,
+        max_daily_var_pct: Optional[float] = None,
+        max_portfolio_exposure: Optional[float] = None
     ):
-        self.confidence_level = cfg.get('risk.cro_confidence_level', confidence_level)
-        self.max_daily_var_pct = cfg.get('risk.max_daily_var_pct', max_daily_var_pct)
-        self.max_portfolio_exposure = cfg.get('risk.max_portfolio_exposure', max_portfolio_exposure)
+        self.confidence_level = float(confidence_level) if confidence_level is not None else float(cfg.get('risk.cro_confidence_level', 0.99))
+        self.max_daily_var_pct = float(max_daily_var_pct) if max_daily_var_pct is not None else float(cfg.get('risk.max_daily_var_pct', 0.054))
+        self.max_portfolio_exposure = float(max_portfolio_exposure) if max_portfolio_exposure is not None else float(cfg.get('risk.max_portfolio_exposure', 1.0))
 
         # 99% 신뢰수준 z-score = 2.326
         self.z_score = 2.326 if abs(self.confidence_level - 0.99) < 1e-4 else 1.645
@@ -206,6 +206,8 @@ class CROFinalGate:
                 raw_dir = order.get('action', order.get('direction', 1))
                 is_sell_act = str(raw_dir).lower() in _EXIT_ACTIONS
                 _ts_cro = str(t).strip().upper()
+                if _ts_cro in _cash_eq_set:
+                    continue
                 _is_kr_cro = _ts_cro.isdigit() or bool(_KR_RE_CRO.match(_ts_cro))
                 if bool(order.get('is_hedge')) or (_ts_cro in _inv_cro_set):
                     inv_tk_set.add(_ts_cro)
@@ -221,13 +223,20 @@ class CROFinalGate:
                     has_buy_orders = True
                     buy_w_by_tk[t] = buy_w_by_tk.get(t, 0.0) + w_ord
 
-        weights_vec = np.zeros(n_tickers)
+        ret_vec = np.zeros(n_tickers)
+        buy_vec = np.zeros(n_tickers)
         for t, idx in t_map.items():
-            post_long_w = max(0.0, held_w_by_tk.get(t, 0.0) - sell_w_by_tk.get(t, 0.0)) + buy_w_by_tk.get(t, 0.0)
+            ret_long_w = max(0.0, held_w_by_tk.get(t, 0.0) - sell_w_by_tk.get(t, 0.0))
+            buy_long_w = buy_w_by_tk.get(t, 0.0)
             _ts_w = str(t).strip().upper()
-            weights_vec[idx] = -post_long_w if (_ts_w in inv_tk_set) else post_long_w
+            sign_w = -1.0 if (_ts_w in inv_tk_set) else 1.0
+            ret_vec[idx] = sign_w * ret_long_w
+            buy_vec[idx] = sign_w * buy_long_w
+        weights_vec = ret_vec + buy_vec
 
-        proposed_exposure_pct = max(0.0, float(np.sum(weights_vec)))
+        ret_gross = float(abs(np.sum(ret_vec)))
+        buy_gross = float(abs(np.sum(buy_vec)))
+        proposed_exposure_pct = float(abs(np.sum(weights_vec)))
         proposed_var_krw, proposed_var_pct = self.compute_parametric_var(weights_vec, cov_work, portfolio_value)
 
         # Dynamic Leverage Expansion via Anti-fragile Option Coverage
@@ -240,18 +249,6 @@ class CROFinalGate:
                 dynamic_allowed_exposure = float(unc_eval.get('dynamic_leverage_recommended', self.max_portfolio_exposure))
                 logger.info(f"  🛡️ [CROFinalGate] Anti-fragile Option Coverage Verified ➔ Dynamic Leverage Expansion to {dynamic_allowed_exposure:.2f}x")
 
-        # 축소 계수 (Scaling Factor) 산출
-        var_scale_factor = 1.0
-        if proposed_var_pct > self.max_daily_var_pct and proposed_var_pct > 0:
-            var_scale_factor = self.max_daily_var_pct / proposed_var_pct
-
-        exposure_scale_factor = 1.0
-        if proposed_exposure_pct > dynamic_allowed_exposure and proposed_exposure_pct > 0:
-            exposure_scale_factor = dynamic_allowed_exposure / proposed_exposure_pct
-
-        # ── Historical & Surge Scenario Stress Gate ──
-        stress_scale_factor = 1.0
-        stress_res = None
         try:
             from src.params import pget as _pget_cro
         except Exception:
@@ -259,6 +256,37 @@ class CROFinalGate:
                 return fallback
         _cro_eps = float(_pget_cro('risk.cro_weight_eps', 1e-9))
         _min_vh = int(_pget_cro('risk.cro_vix_hist_min_len', 12))
+
+        # 축소 계수 (Scaling Factor) 산출 — 기보유(ret_vec) 고정 하 신규 매수(buy_vec)만 비례 축소하는 정확한 Closed-Form 해
+        var_scale_factor = 1.0
+        if proposed_var_pct > self.max_daily_var_pct and proposed_var_pct > 0.0 and has_buy_orders:
+            _sigma_max = self.max_daily_var_pct / max(float(self.z_score), _cro_eps)
+            _sigma_max_sq = _sigma_max * _sigma_max
+            _quad_a = float(buy_vec @ cov_work @ buy_vec)
+            _quad_b = float(ret_vec @ cov_work @ buy_vec)
+            _quad_c = float(ret_vec @ cov_work @ ret_vec)
+            if _quad_a > 0.0:
+                if _quad_c >= _sigma_max_sq:
+                    if _quad_b < 0.0 and (_quad_a + 2 * _quad_b + _quad_c) < _quad_c:
+                        var_scale_factor = min(1.0, -_quad_b / _quad_a)
+                    else:
+                        var_scale_factor = 0.0
+                else:
+                    _disc = max(0.0, (_quad_b * _quad_b) - _quad_a * (_quad_c - _sigma_max_sq))
+                    var_scale_factor = float(np.clip((-_quad_b + float(np.sqrt(_disc))) / _quad_a, 0.0, 1.0))
+            else:
+                var_scale_factor = self.max_daily_var_pct / proposed_var_pct
+
+        exposure_scale_factor = 1.0
+        if proposed_exposure_pct > dynamic_allowed_exposure and buy_gross > 0.0:
+            exposure_scale_factor = min(
+                1.0,
+                max(0.0, dynamic_allowed_exposure - ret_gross) / buy_gross,
+            )
+
+        # ── Historical & Surge Scenario Stress Gate ──
+        stress_scale_factor = 1.0
+        stress_res = None
         try:
             inv_map = {idx: tk for tk, idx in t_map.items()}
             w_by_tk = {inv_map[i]: float(weights_vec[i]) for i in range(n_tickers) if i in inv_map and abs(weights_vec[i]) > _cro_eps}
@@ -313,8 +341,9 @@ class CROFinalGate:
             reasons.append(f"Stress 한도 초과 ({stress_res.get('worst_scenario_name')}: {stress_res.get('worst_loss_pct', 0)*100:.1f}%)")
         reason_str = " & ".join(reasons) if reasons else "PASS"
 
-        # 주문 수량 비례 축소 (Vector Projection Scaling — 매도/청산 주문은 리스크 축소 목적이므로 축소 제외)
+        # 주문 수량 비례 축소 (Vector Projection Scaling — 매도/청산 및 현금성 파킹 주문은 리스크 축소/무위험 목적이므로 축소 제외)
         scaled_orders = []
+        _running_post_gross = ret_gross
         for order in orders:
             raw_shares = int(order.get('net_shares', order.get('quantity', order.get('shares', order.get('qty', 0)))) or 0)
             if order.get('is_netted_out', False) or raw_shares == 0:
@@ -323,15 +352,15 @@ class CROFinalGate:
 
             raw_dir = order.get('action', order.get('direction', 1))
             is_sell = str(raw_dir).lower() in _EXIT_ACTIONS
-            if is_sell:
+            t = order.get('ticker', '')
+            _ts_cro2 = str(t).strip().upper()
+            if is_sell or _ts_cro2 in _cash_eq_set:
                 scaled_orders.append(dict(order))
                 continue
 
-            t = order.get('ticker', '')
             scaled_shares = int(raw_shares * final_scaling_factor)
             price = float(order.get('price', 0.0) or 0.0)
             from src.data_collection.universe_loader import _KR_TICKER_RE as _KR_RE_CRO2
-            _ts_cro2 = str(t).strip().upper()
             _is_kr_cro2 = _ts_cro2.isdigit() or bool(_KR_RE_CRO2.match(_ts_cro2))
             fx_rate = (float(order.get('fx_rate') or 0.0) or _cro_live_fx()) if not _is_kr_cro2 else 1.0
             if fx_rate <= 0:
@@ -339,6 +368,10 @@ class CROFinalGate:
                 _blocked = dict(order)
                 if 'quantity' in _blocked:
                     _blocked['quantity'] = 0
+                if 'shares' in _blocked:
+                    _blocked['shares'] = 0
+                if 'qty' in _blocked:
+                    _blocked['qty'] = 0
                 _blocked['net_shares'] = 0
                 _blocked['amount_krw'] = 0
                 _blocked['is_netted_out'] = True
@@ -347,14 +380,30 @@ class CROFinalGate:
                 scaled_orders.append(_blocked)
                 continue
             price_krw = price * fx_rate
+            _one_sh_w = price_krw / max(portfolio_value, 1.0)
+            _can_restore_min_lot = (
+                bool(order.get('_min_lot_sweep'))
+                or (
+                    price_krw > 0
+                    and price_krw <= portfolio_value * 0.15
+                    and (
+                        not veto_triggered
+                        or (
+                            final_scaling_factor >= (1.0 / 2)
+                            and (_running_post_gross + _one_sh_w) <= dynamic_allowed_exposure
+                        )
+                    )
+                )
+            )
             if (
                 scaled_shares == 0
                 and raw_shares >= 1
                 and final_scaling_factor > 0.0
-                and (order.get('_min_lot_sweep') or (price_krw > 0 and price_krw <= portfolio_value * 0.15))
+                and _can_restore_min_lot
             ):
                 scaled_shares = 1
             scaled_amount_krw = scaled_shares * price_krw
+            _running_post_gross += scaled_amount_krw / max(portfolio_value, 1.0)
 
             new_order = dict(order)
             if 'net_shares' in new_order or 'quantity' not in new_order:
@@ -363,6 +412,10 @@ class CROFinalGate:
                 new_order['net_weight'] = round(scaled_amount_krw / max(portfolio_value, 1.0), 4)
             if 'quantity' in new_order:
                 new_order['quantity'] = scaled_shares
+            if 'shares' in new_order:
+                new_order['shares'] = scaled_shares
+            if 'qty' in new_order:
+                new_order['qty'] = scaled_shares
             new_order['amount_krw'] = round(scaled_amount_krw, 0)
             new_order['is_netted_out'] = (scaled_shares == 0)
             new_order['cro_scaling_applied'] = final_scaling_factor
@@ -376,6 +429,7 @@ class CROFinalGate:
         veto_audit = {
             'veto_triggered': veto_triggered,
             'scaling_factor': final_scaling_factor,
+            'exposure_scale_factor': final_scaling_factor,
             'proposed_var_pct': round(proposed_var_pct, 6),
             'allowed_var_pct': round(self.max_daily_var_pct, 6),
             'proposed_exposure_pct': round(proposed_exposure_pct, 4),

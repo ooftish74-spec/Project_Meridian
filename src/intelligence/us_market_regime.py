@@ -353,7 +353,10 @@ class USMarketRegimeEngine:
         else:
             regime = 'neutral'
         scores = [f1_score, f2_score, f3_score, f4_score, f5_score, f6_score, f7_score]
-        active_scores = [s for s in scores if abs(s) > 1e-6]
+        active_scores = [
+            s for _fname, s, _fdet in _factor_items
+            if _fdet.get('detail') != 'unavailable' and _fdet.get('source') != 'unavailable'
+        ]
         if active_scores:
             same_sign = sum((1 for s in active_scores if (s > 0) == (total_score > 0)))
             agreement = same_sign / len(active_scores)

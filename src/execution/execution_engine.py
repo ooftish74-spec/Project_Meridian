@@ -76,15 +76,22 @@ def _extract_expected_alpha_decimal(order: Dict, default_dec: float = 0.0) -> fl
                     return (_fv / 100.0) if (_fv * 2.0 > 1.0) else _fv
             except (TypeError, ValueError):
                 pass
-    for _k_pct in ('expected_return_pct', 'tp_pct'):
-        _vp = order.get(_k_pct)
-        if _vp is not None:
-            try:
-                _fvp = float(_vp)
-                if math.isfinite(_fvp) and _fvp > 0.0:
-                    return (_fvp / 100.0) if (_fvp * 10.0 >= 1.0) else _fvp
-            except (TypeError, ValueError):
-                pass
+    _v_erp = order.get('expected_return_pct')
+    if _v_erp is not None:
+        try:
+            _f_erp = float(_v_erp)
+            if math.isfinite(_f_erp) and 0.0 < _f_erp < 50:
+                return _f_erp / 100.0
+        except (TypeError, ValueError):
+            pass
+    _v_tp = order.get('tp_pct')
+    if _v_tp is not None:
+        try:
+            _f_tp = float(_v_tp)
+            if math.isfinite(_f_tp) and 0.0 < _f_tp < 50:
+                return (_f_tp / 100.0) if (_f_tp * 10 >= 1.0) else _f_tp
+        except (TypeError, ValueError):
+            pass
     return float(default_dec)
 
 

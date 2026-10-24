@@ -144,32 +144,56 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
         return _fallback_vix_from_overnight(error=str(e))
 
 def _fallback_vix_from_overnight(error: str='') -> Dict:
-    """overnight_signals.json에서 VIX 이력 추출 후 캐시 갱신."""
-    hist_file = PROJECT_ROOT / 'results' / 'overnight_signals.json'
-    if not hist_file.exists():
-        try:
-            cached = json.loads(VIX_CACHE.read_text())
-            n = len(cached.get('vix_records', []))
-            if n > 0:
-                return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': cached.get('saved_at', ''), 'source': 'cache_fallback'}
-        except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-            import logging
-            logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-            logger.warning('[SILENT_BYPASS] Suppressed exception at market_data_prefetch.py:230', exc_info=True)
-        return {'ok': False, 'error': error, 'n_rows': 0}
+    """overnight_signals.json 및 overnight_intelligence_history.json에서 VIX 추출 후 캐시 갱신."""
+    sig_file = PROJECT_ROOT / 'results' / 'overnight_signals.json'
+    hist_intel_file = PROJECT_ROOT / 'results' / 'overnight_intelligence_history.json'
+
+    def _extract_vix_val(v_obj):
+        if isinstance(v_obj, dict):
+            return v_obj.get('close') or v_obj.get('value') or v_obj.get('price')
+        if isinstance(v_obj, (int, float)):
+            return v_obj
+        return None
+
+    vix_list = []
     try:
-        raw = hist_file.read_text()
-        data = json.loads(raw)
-        history = data.get('history', [])
-        vix_list = []
-        for rec in history:
-            v = (rec.get('us_market', {}) or {}).get('vix', {})
-            val = v.get('close') if isinstance(v, dict) else None
-            d_str = rec.get('date', '')
-            if val and float(val) > 0 and d_str:
-                vix_list.append({'date': d_str[:10], 'close': round(float(val), 4)})
+        for cand_file in (hist_intel_file, sig_file):
+            if not cand_file.exists():
+                continue
+            data = json.loads(cand_file.read_text())
+            history = data if isinstance(data, list) else (data.get('history', []) if isinstance(data, dict) else [])
+            if isinstance(history, list):
+                for rec in history:
+                    if not isinstance(rec, dict):
+                        continue
+                    v = (rec.get('us_market', {}) or {}).get('vix')
+                    if v is None:
+                        v = rec.get('vix')
+                    val = _extract_vix_val(v)
+                    d_str = str(rec.get('date') or rec.get('timestamp') or '')[:10]
+                    if val is not None and float(val) > 0.0 and d_str:
+                        vix_list.append({'date': d_str, 'close': round(float(val), 4)})
+            if isinstance(data, dict):
+                v_snap = (data.get('us_market', {}) or {}).get('vix')
+                if v_snap is None:
+                    v_snap = data.get('vix')
+                val_snap = _extract_vix_val(v_snap)
+                d_snap = str(data.get('date') or data.get('timestamp') or today_kst().isoformat())[:10]
+                if val_snap is not None and float(val_snap) > 0.0 and d_snap:
+                    if not vix_list or vix_list[-1]['date'] != d_snap:
+                        vix_list.append({'date': d_snap, 'close': round(float(val_snap), 4)})
+
         if not vix_list:
-            return {'ok': False, 'error': 'overnight history에 VIX 없음', 'n_rows': 0}
+            if VIX_CACHE.exists():
+                try:
+                    cached = json.loads(VIX_CACHE.read_text())
+                    n = len(cached.get('vix_records', []))
+                    if n > 0:
+                        return {'ok': True, 'n_rows': n, 'latest_vix': cached.get('latest_vix', 0.0), 'saved_at': cached.get('saved_at', ''), 'source': 'cache_fallback'}
+                except Exception as _ce:
+                    logger.debug(f"Targeted fallback: {_ce}")
+            return {'ok': False, 'error': error or 'overnight history에 VIX 없음', 'n_rows': 0}
+
         cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'overnight_history_fallback', 'n_rows': len(vix_list), 'latest_vix': vix_list[-1]['close'], 'vix_values': [r['close'] for r in vix_list], 'vix_records': vix_list, 'original_error': error}
         _atomic_write_json(VIX_CACHE, cache_data)
         logger.info(f"  ⚠️ VIX fallback(overnight): {len(vix_list)}일 저장")

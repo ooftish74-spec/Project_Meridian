@@ -17563,6 +17563,15 @@
       ],
       "policy": "free",
       "rationale": "Neutral baseline score (50/100) for rule-based regime detector."
+    },
+    "streams.s2.default_daily_vol": {
+      "level": "L1",
+      "default": 0.02,
+      "bounds": [
+        0.002,
+        0.15
+      ],
+      "rationale": "S2 ML alpha stream prior daily cross-sectional stock return volatility (~2.0% daily, ~31.7% annualized)"
     }
   }
 }

@@ -255,7 +255,7 @@ class PortfolioOptimizer:
         self._tx_filter = TransactionCostFilter()
         self._turnover = TurnoverLimiter()
 
-    def optimize(self, stream_metrics: Dict=None, regime: str=None, portfolio_value: float=None, current_weights: Dict[str, float]=None, trigger: str='scheduled') -> Dict:
+    def optimize(self, stream_metrics: Dict=None, regime: str=None, portfolio_value: float=None, current_weights: Dict[str, float]=None, trigger: str='scheduled', market_data: Dict=None) -> Dict:
         """통합 최적화 실행.
 
         Args:
@@ -286,7 +286,7 @@ class PortfolioOptimizer:
         limit_reached = turnover_check.get('limit_reached', not turnover_check['allowed'])
         target_exposure = self._compute_exposure(regime)
         result['target_exposure'] = target_exposure
-        raw_weights = self._compute_allocation(stream_metrics, regime)
+        raw_weights = self._compute_allocation(stream_metrics, regime, market_data=market_data)
         result['raw_weights'] = raw_weights
         scaled_weights = self._apply_exposure(raw_weights, target_exposure)
         result['scaled_weights'] = scaled_weights
@@ -350,11 +350,13 @@ class PortfolioOptimizer:
         return result.get('target_exposure', pget('optimizer.exposure.caution', 0.85))
 
 
-    def _compute_allocation(self, stream_metrics: Dict, regime: str) -> Dict[str, float]:
+    def _compute_allocation(self, stream_metrics: Dict, regime: str, market_data: Dict=None) -> Dict[str, float]:
         """AlphaAllocator 호출 → 스트림 비중."""
         from src.allocation.alpha_allocator import AlphaAllocator
+        if market_data is None and isinstance(stream_metrics, dict):
+            market_data = stream_metrics.get('_market_data') or stream_metrics.get('market_data')
         alloc = AlphaAllocator()
-        return alloc.allocate(stream_metrics, regime)
+        return alloc.allocate(stream_metrics, regime, market_data=market_data)
 
 
     def _apply_exposure(self, weights: Dict[str, float], exposure: float) -> Dict[str, float]:

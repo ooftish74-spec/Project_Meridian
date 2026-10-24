@@ -208,65 +208,33 @@ def atomic_write_dataframe(df: pd.DataFrame, path, file_format: str = 'csv', bac
             pass
         return False
 
-def safe_json_update(path: Path, update_func) -> bool:
-    """[Red Team V5] 다중 프로세스 충돌 방지 (TOC/TOU Data Race 제거).
-    파일 락(fcntl.flock)을 걸어 원자적 Read-Modify-Write 사이클을 보장합니다.
-    
-    Args:
-        path: 대상 JSON 파일 경로
-        update_func: 현재 dict를 받아 변경할 dict를 반환하는 콜백 함수
-    """
-    import fcntl
-    import time
-    
-    path = Path(path)
-    lock_path = path.with_suffix('.lock')
-    
-    path.parent.mkdir(parents=True, exist_ok=True)
-    
+def safe_json_update(
+    path: Path,
+    update_func,
+    default=None,
+    timeout: int = 30,
+    indent: int = 2,
+    ensure_ascii: bool = False,
+    default_serializer=str,
+    strict: bool = False,
+) -> bool:
+    """원자적 JSON Read-Modify-Write (src.utils.file_ops.safe_json_update 단일 SSOT 위임)."""
+    from src.utils.file_ops import safe_json_update as _file_ops_sju
     try:
-        if not lock_path.exists():
-            lock_path.touch()
-            
-        with open(lock_path, 'w') as lock_file:
-            # 1. 락 획득 (Blocking)
-            try:
-                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError:
-                # 락을 얻지 못하면 최대 3초 대기
-                acquired = False
-                for _ in range(30):
-                    time.sleep(0.1)
-                    try:
-                        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                        acquired = True
-                        break
-                    except BlockingIOError:
-                        pass
-                if not acquired:
-                    logger.error(f"[FileLock] Timeout waiting for lock on {path}")
-                    return False
-                    
-            try:
-                # 2. Read
-                current_data = {}
-                if path.exists():
-                    try:
-                        current_data = json.loads(path.read_text())
-                    except json.JSONDecodeError:
-                        pass
-                        
-                # 3. Modify
-                new_data = update_func(current_data)
-                
-                # 4. Write (기존 원자적 쓰기 재사용)
-                safe_json_write(path, new_data)
-                return True
-            finally:
-                # 5. 락 해제
-                fcntl.flock(lock_file, fcntl.LOCK_UN)
+        _file_ops_sju(
+            filepath=path,
+            mutator=update_func,
+            default={} if default is None else default,
+            timeout=timeout,
+            indent=indent,
+            strict=strict,
+            ensure_ascii=ensure_ascii,
+        )
+        return True
     except Exception as e:
-        logger.error(f"[safe_json_update] Error: {e}", exc_info=True)
+        if strict:
+            raise
+        logger.error(f"safe_json_update 실패 ({path}): {e}")
         return False
 
 def winsorize_mad(series_or_list: Any, threshold_sigma: float = 3.5) -> Any:

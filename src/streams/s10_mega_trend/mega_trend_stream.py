@@ -80,6 +80,7 @@ class S10MegaTrendStream(BaseStream):
         self._sector_map: Dict[str, List[Dict]] = cfg.get(
             's10.sector_stock_map', _DEFAULT_SECTOR_STOCK_MAP
         )
+        self.sector_stock_map = self._sector_map
         logger.info(f"  [S10] Mega-Trend Stream 초기화 ({len(self._sector_map)}섹터)")
 
     # ──────────────────────────────────────────────────────────────────────
@@ -107,12 +108,45 @@ class S10MegaTrendStream(BaseStream):
         signals: List[Dict] = []
         features = market_data.get('features', {})
         seen_tickers = set()
-        _held_set = set(market_data.get('held_tickers') or ()) | {
-            p.get('ticker') for p in getattr(self, '_positions', []) if isinstance(p, dict) and p.get('ticker')
-        }
+        _held_set = set()
+        _pf_md = market_data.get('portfolio') if isinstance(market_data.get('portfolio'), dict) else {}
+        for _h_src in (
+            market_data.get('held_tickers'),
+            market_data.get('holdings'),
+            market_data.get('positions'),
+            _pf_md.get('holdings'),
+            _pf_md.get('positions'),
+            getattr(self, '_positions', None),
+        ):
+            if isinstance(_h_src, dict):
+                for _hk, _hv in _h_src.items():
+                    if isinstance(_hv, dict) and _hv.get('ticker'):
+                        _held_set.add(str(_hv['ticker']))
+                    elif _hk:
+                        _held_set.add(str(_hk))
+            elif isinstance(_h_src, (list, tuple, set)):
+                for _item in _h_src:
+                    if isinstance(_item, dict) and _item.get('ticker'):
+                        _held_set.add(str(_item['ticker']))
+                    elif isinstance(_item, str) and _item:
+                        _held_set.add(_item)
+
+        # 1. Dynamic VIX-Adjusted TP/SL & 2. 3D Local Panic Index (LPI) Rejection
+        _cache = market_data.get('signal_cache', {}) if isinstance(market_data.get('signal_cache'), dict) else {}
+        _vix = float(_cache.get('vix', 15.0))
+        _vkospi = float(_cache.get('vkospi', 15.0))
+        _usdkrw = float(_cache.get('usdkrw', 1350.0))
+        _usdkrw_prev = float(_cache.get('usdkrw_prev', 1350.0))
+        _usdkrw_ratio = _usdkrw / _usdkrw_prev if _usdkrw_prev > 0 else 1.0
+        _vix_ceil = float(cfg.get('s10.lpi_vix_ceiling') or (20.0 + 4.0))
+        _vkospi_ceil = float(cfg.get('s10.lpi_vkospi_ceiling') or (20.0 + 6.0))
+        _lpi = max(_vix / _vix_ceil, _vkospi / _vkospi_ceil, _usdkrw_ratio / 1.015)
+
+        _emitted_exit_tickers = set()
+        _active_sector_map = getattr(self, 'sector_stock_map', None) or self._sector_map
 
         for sector in top_sectors:
-            stocks = self._sector_map.get(sector, [])
+            stocks = _active_sector_map.get(sector, [])
             for stock in stocks:
                 ticker         = stock['ticker']
                 if ticker in seen_tickers:
@@ -128,13 +162,6 @@ class S10MegaTrendStream(BaseStream):
                     sig = self._evaluate_stock(ticker=ticker, name=name,
                                                f_data=f_data, regime=regime, market_data=market_data)
 
-                # 1. Dynamic VIX-Adjusted TP/SL & 2. 3D Local Panic Index (LPI) Rejection
-                _cache = market_data.get('signal_cache', {}) if isinstance(market_data.get('signal_cache'), dict) else {}
-                _vix = float(_cache.get('vix', 15.0))
-                _vkospi = float(_cache.get('vkospi', 15.0))
-                _usdkrw = float(_cache.get('usdkrw', 1350.0))
-                _usdkrw_prev = float(_cache.get('usdkrw_prev', 1350.0))
-                
                 # VIX 연동 가변 방어막 (Dynamic TP/SL, %p 단위로 정규화)
                 if _vix < 15.0:
                     dyn_tp = 30.0
@@ -145,22 +172,15 @@ class S10MegaTrendStream(BaseStream):
                 else:
                     dyn_tp = 5.0
                     dyn_sl = 2.5
-                    
-                # [Red Team 2] 3D Local Panic Index (LPI) 오버나이트 거부
-                # 미장(VIX)뿐만 아니라 한국 장(VKOSPI)과 환율(USD/KRW) 쇼크를 수학적으로 통합
-                _usdkrw_ratio = _usdkrw / _usdkrw_prev if _usdkrw_prev > 0 else 1.0
-                _vix_ceil = float(cfg.get('s10.lpi_vix_ceiling') or (20.0 + 4.0))
-                _vkospi_ceil = float(cfg.get('s10.lpi_vkospi_ceiling') or (20.0 + 6.0))
-                _lpi = max(_vix / _vix_ceil, _vkospi / _vkospi_ceil, _usdkrw_ratio / 1.015)
-                
+
                 if _lpi > 1.0:
-                    if sig.get('action') == 'buy':
-                        logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 신규 매수 차단: {name}({ticker})")
-                        continue
                     if ticker in _held_set:
                         logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 보유 종목 강제 청산: {name}({ticker})")
                         sig['action'] = 'exit'
                         sig['reason'] = f"LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})"
+                    elif sig.get('action') == 'buy':
+                        logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 신규 매수 차단: {name}({ticker})")
+                        continue
 
                 if sig['action'] == 'buy':
                     kelly_frac = self._compute_kelly(sig)
@@ -189,14 +209,35 @@ class S10MegaTrendStream(BaseStream):
                         f"size={size_pct:.1%} conf={sig['confidence']:.2f} (TP:{dyn_tp:.1f}%, SL:{dyn_sl:.1f}%)"
                     )
                 elif sig['action'] == 'exit':
+                    _emitted_exit_tickers.add(ticker)
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker':    ticker,
                         'name':      name,
                         'direction': 'exit',
+                        'action':    'exit',
                         'strategy':  'S10_MegaTrend',
                         'reason':    sig['reason'],
                     })
+
+        if _lpi > 1.0 and _held_set:
+            _lpi_reason = f"LPI > 1.0 Overnight Rejection (VIX={_vix:.1f}, VKO={_vkospi:.1f}, FX={_usdkrw_ratio:.3f})"
+            for _sec_stocks in _active_sector_map.values():
+                for _st in _sec_stocks:
+                    _tk = _st.get('ticker')
+                    if _tk in _held_set and _tk not in _emitted_exit_tickers:
+                        _emitted_exit_tickers.add(_tk)
+                        _nm = _st.get('name', _tk)
+                        logger.warning(f"    [S10] LPI({_lpi:.2f} > 1.0) 초과! 비주도 섹터 보유 종목 강제 청산: {_nm}({_tk})")
+                        signals.append({
+                            'stream_id': self.stream_id,
+                            'ticker':    _tk,
+                            'name':      _nm,
+                            'direction': 'exit',
+                            'action':    'exit',
+                            'strategy':  'S10_MegaTrend',
+                            'reason':    _lpi_reason,
+                        })
 
         logger.info(f"  [S10] 신호 {len(signals)}건 생성 완료")
         return signals

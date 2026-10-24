@@ -37,12 +37,38 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 
 _STREAM_CANONICAL_MAP = {
+    'S0_BETA': 'S0',
+    'S1_EDGE': 'S1',
+    'S2_ML_ALPHA': 'S2',
+    'S3_ACTIVE_MACRO': 'S3',
+    'S3_A': 'S3',
+    'S3_B': 'S3',
+    'S3_C': 'S3',
     'S10': 'S10_MEGA_TREND',
     'S11': 'S11_HIGHBETA_SNIPER',
+    'S11_HIGH_BETA': 'S11_HIGHBETA_SNIPER',
     'S12': 'S12_DERIVATIVE_SQUEEZE',
     'S13': 'S13_JAPAN_ALPHA',
     'S14': 'S14_PAIR_ALPHA',
 }
+
+
+def _lookup_stream_val(mapping: Dict, sid: str, default=None):
+    if not isinstance(mapping, dict):
+        return default
+    if sid in mapping:
+        return mapping[sid]
+    s_sid = str(sid)
+    canon = _STREAM_CANONICAL_MAP.get(s_sid)
+    if canon and canon in mapping:
+        return mapping[canon]
+    short = s_sid.split('_')[0]
+    if short in mapping:
+        return mapping[short]
+    for alias, c_val in _STREAM_CANONICAL_MAP.items():
+        if c_val == s_sid and alias in mapping:
+            return mapping[alias]
+    return default
 
 
 class PnLAttributor:
@@ -88,8 +114,10 @@ class PnLAttributor:
         total_pnl = 0
         total_return = 0
         for sid in self.STREAMS:
-            sm = stream_metrics.get(sid, {})
-            weight = current_weights.get(sid, 0)
+            sm = _lookup_stream_val(stream_metrics, sid, {}) or {}
+            weight = _lookup_stream_val(current_weights, sid, 0)
+            if weight is None:
+                weight = 0
             attribution = self._attribute_stream(sid, sm, weight, portfolio_value)
             result['streams'][sid] = attribution
             total_pnl += attribution['total_pnl']
@@ -147,7 +175,7 @@ class PnLAttributor:
         returns = {}
         bench_returns = {}
         for sid in self.STREAMS:
-            sm = stream_metrics.get(sid, {})
+            sm = _lookup_stream_val(stream_metrics, sid, {}) or {}
             daily_r = sm.get('daily_returns', [])
             window = pget('allocation.attribution_window', 20)
             if daily_r:
@@ -164,7 +192,9 @@ class PnLAttributor:
         total_select = 0
         total_interact = 0
         for sid in self.STREAMS:
-            w_p = weights.get(sid, bench_weight)
+            w_p = _lookup_stream_val(weights, sid, bench_weight)
+            if w_p is None:
+                w_p = bench_weight
             w_b = bench_weight
             r_p = returns.get(sid, 0)
             r_b = bench_returns.get(sid, bench_total)

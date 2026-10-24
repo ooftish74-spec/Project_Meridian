@@ -230,3 +230,121 @@ def test_exposure_orchestrator_preserves_all_signal_cache_keys(tmp_path, monkeyp
     assert loaded['gex_crash_warning'] is True
     assert loaded['wag_the_dog_active'] is True
     assert loaded['vix_momentum'] == pytest.approx(0.25, rel=1e-6)
+
+
+def test_safe_io_safe_json_update_supports_strict_kwarg(tmp_path):
+    """[Forensic-3 P0-1] src.infra.safe_io.safe_json_update accepts strict=True without TypeError."""
+    from src.infra.safe_io import safe_json_update
+
+    target = tmp_path / 'status.json'
+    res = safe_json_update(target, lambda d: {**d, 'ok': True, 'count': 1}, strict=True)
+    assert res is True
+    saved = json.loads(target.read_text(encoding='utf-8'))
+    assert saved['ok'] is True
+    assert saved['count'] == 1
+
+
+def test_position_sizer_sentinel_tp_pct_and_risk_free_parking():
+    """[Forensic-2 P0-2] S5 risk_free_parking (tp_pct=99.0) and S3_B trailing (tp_pct=100.0) are not crushed."""
+    from src.execution.position_sizer import PositionSizer
+
+    sizer = PositionSizer()
+    s5_sig = {
+        'ticker': '449170',
+        'stream': 'S5',
+        'stream_id': 'S5',
+        'action': 'buy',
+        'size_pct': 1.0,
+        'confidence': 0.90,
+        'tp_pct': 99.0,
+        'sl_pct': 2.0,
+        'expected_return': 0.0001,
+        'expected_return_pct': 0.01,
+        'risk_free_parking': True,
+        'price': 105000.0,
+    }
+    passed_s5 = sizer.filter_signals([s5_sig], portfolio_value=20_000_000.0, regime='caution', vix=18.0)
+    assert len(passed_s5) == 1
+    assert passed_s5[0]['size_pct'] == pytest.approx(1.0, rel=1e-6)
+
+    s3b_sig = {
+        'ticker': '005930',
+        'stream': 'S3_B',
+        'stream_id': 'S3_B',
+        'action': 'buy',
+        'size_pct': 0.20,
+        'confidence': 0.85,
+        'tp_pct': 100.0,
+        'sl_pct': 8.0,
+        'expected_return': 0.16,
+        'expected_return_pct': 16.0,
+        'price': 70000.0,
+    }
+    res_s3b = sizer.compute(
+        signal=s3b_sig,
+        portfolio_value=20_000_000.0,
+        regime='bull',
+        vix=15.0,
+    )
+    # Must NOT be crushed to 0.01 (1%) by plugging sentinel tp_pct=100.0 into Cornish-Fisher / probe-cap
+    assert res_s3b['final_size'] > 0.03
+
+
+def test_maxent_stream_weights_s5_defensive_sign_and_s11_beta_sign():
+    """[Forensic-2 P0-1] MaxEnt stream weights boost S5 in crash and penalize S11 when target_beta < 0."""
+    from src.utils.dynamic_quant_engine import DynamicQuantEngine
+
+    eng = DynamicQuantEngine()
+    streams = ['S0', 'S1', 'S2', 'S3', 'S5', 'S10_MEGA_TREND', 'S11_HIGHBETA_SNIPER', 'S14_PAIR_ALPHA']
+    w_bull = eng.compute_maxent_stream_weights(
+        active_streams=streams,
+        regime='bull',
+        regime_probs={'bull': 0.80, 'caution': 0.15, 'bear': 0.04, 'crash': 0.01},
+    )
+    w_crash = eng.compute_maxent_stream_weights(
+        active_streams=streams,
+        regime='crash',
+        regime_probs={'bull': 0.01, 'caution': 0.04, 'bear': 0.15, 'crash': 0.80},
+    )
+    assert w_crash['S5'] > w_bull['S5']
+    assert w_bull['S11_HIGHBETA_SNIPER'] > w_crash['S11_HIGHBETA_SNIPER']
+
+
+def test_cro_final_gate_gross_exposure_and_incremental_buy_scaling():
+    """[Forensic-3 P0-3] CROFinalGate sums |weights| for Long+Inverse and scales buys by (E_max - W_ret)/W_buy."""
+    from src.risk.cro_final_gate import CROFinalGate
+
+    gate = CROFinalGate(max_portfolio_exposure=0.80, max_daily_var_pct=0.99)
+    # Retained portfolio: 5,000,000 KRW out of 10,000,000 KRW NAV (W_ret = 0.50)
+    current_positions = {
+        '005930': {'qty': 100, 'current_price': 50000.0, 'eval_krw': 5_000_000.0},
+    }
+    # Proposed buy: 100 shares @ 50,000 KRW = 5,000,000 KRW (W_buy = 0.50)
+    # Total proposed = 1.00 > E_max (0.80). Allowed incremental buy = 0.80 - 0.50 = 0.30 -> scale = 0.30 / 0.50 = 0.60 -> 60 shares!
+    buy_order = {
+        'ticker': '000660',
+        'action': 'buy',
+        'shares': 100,
+        'price': 50000.0,
+    }
+    approved, metrics = gate.evaluate_and_scale_orders(
+        orders=[buy_order],
+        portfolio_value=10_000_000.0,
+        current_positions=current_positions,
+    )
+    assert len(approved) == 1
+    assert approved[0]['shares'] == 60
+    assert metrics['exposure_scale_factor'] == pytest.approx(0.60, rel=1e-6)
+
+
+def test_cross_sectional_rank_z_zeros_date_constant_macro_features():
+    """[Forensic-1 P0-1] Date-constant macro features across stocks on date t are zeroed, not leaked raw."""
+    from src.ml.cross_sectional_eb_model import cross_sectional_rank_z_matrix
+
+    # 10 stocks on the same date: col 0 varies across stocks, col 1 is constant macro (e.g. +2.5)
+    X = np.column_stack([np.linspace(1.0, 10.0, 10), np.full(10, 2.5)])
+    dates = np.array(['2026-10-23'] * 10)
+    Z = cross_sectional_rank_z_matrix(X, dates)
+    assert np.allclose(Z[:, 1], 0.0)
+    assert np.std(Z[:, 0]) > 0.5
+

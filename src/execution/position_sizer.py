@@ -93,8 +93,31 @@ class PositionSizer:
         if market_data is None:
             market_data = {}
         kelly_size = float(signal.get('kelly_size', signal.get('size_pct', pget('sizer.default_kelly_size', 0.1))))
-        _sig_tp = float(signal.get('tp_pct') or 0.0)
-        _sig_sl = abs(float(signal.get('sl_pct') or 0.0))
+        _sentinel_barrier = 50
+        _raw_sig_tp = float(signal.get('tp_pct') or 0.0)
+        _raw_sig_sl = abs(float(signal.get('sl_pct') or 0.0))
+        _erp_val = float(signal.get('expected_return_pct') or 0.0)
+        _sig_tp = _raw_sig_tp if (0.0 < _raw_sig_tp < _sentinel_barrier) else (_erp_val if (0.0 < _erp_val < _sentinel_barrier) else 0.0)
+        _sig_sl = _raw_sig_sl if (0.0 < _raw_sig_sl < _sentinel_barrier) else 0.0
+        if signal.get('strategy') == 'risk_free_parking' or bool(signal.get('risk_free_parking')):
+            final_size = round(min(1.0, max(0.0, float(kelly_size))), 4)
+            _pk_ev = _sig_tp if _sig_tp > 0.0 else (float(signal.get('expected_return') or 0.0) * 100.0)
+            _pk_tp_out = _raw_sig_tp if _raw_sig_tp > 0.0 else _sig_tp
+            _pk_sl_out = _raw_sig_sl if _raw_sig_sl > 0.0 else _sig_sl
+            return {
+                'approved': final_size > 0.0,
+                'final_size': final_size,
+                'kelly_size': kelly_size,
+                'ev_pct': round(_pk_ev, 4),
+                'friction_pct': 0.0,
+                'ev_margin': round(_pk_ev, 4),
+                'vix_scale': 1.0,
+                'reason': f"[Phase 11] Risk-Free Parking bypass: size={final_size:.2%}",
+                'drop_reason': '' if final_size > 0.0 else 'zero_size',
+                'sl_pct': _pk_sl_out,
+                'tp_pct': _pk_tp_out,
+                'is_probe': False,
+            }
         if _sig_tp > 0.0 and _sig_sl > 0.0:
             tp_pct = _sig_tp
             sl_pct = _sig_sl
@@ -107,13 +130,13 @@ class PositionSizer:
                     sl_pct = _sig_sl
             except Exception as _ssot_e:
                 logger.error(f"  [PositionSizer] SSOT compute_dynamic_sl_tp 실패, Fallback 적용: {_ssot_e}", exc_info=True)
-                tp_pct = _sig_tp if _sig_tp > 0.0 else float(signal.get('tp_pct', pget('s2.exit.tp.caution', 12.0)))
-                sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(signal.get('sl_pct', pget('s2.exit.sl.caution', -5))))
+                tp_pct = _sig_tp if _sig_tp > 0.0 else float(pget('s2.exit.tp.caution', 12.0))
+                sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(pget('s2.exit.sl.caution', -5)))
         else:
             vix_val = float(market_data.get('vix', pget('sizer.fallback_vix', 20.0)))
             daily_vol_pct = vix_val / math.sqrt(252)
-            tp_pct = _sig_tp if _sig_tp > 0.0 else float(signal.get('tp_pct', daily_vol_pct * pget('sizer.fallback_tp_vol_mult', 3.0)))
-            sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(signal.get('sl_pct', daily_vol_pct * pget('sizer.fallback_sl_vol_mult', 1.5))))
+            tp_pct = _sig_tp if _sig_tp > 0.0 else float(daily_vol_pct * pget('sizer.fallback_tp_vol_mult', 3.0))
+            sl_pct = _sig_sl if _sig_sl > 0.0 else abs(float(daily_vol_pct * pget('sizer.fallback_sl_vol_mult', 1.5)))
         mu_pct = self._compute_ev(signal, conf, tp_pct, sl_pct)
         # [Dynamic Non-Linear Volatility Neutral Base] 롤링 252일 VIX 중간값(Median) 동적 연산 (15.5 고정 상수 100% 제거)
         _vix_neutral_param = pget('sizer.vix_neutral', 17.5)  # L2: trailing 252d median VIX (tighten_only, quality-gated)
@@ -165,7 +188,8 @@ class PositionSizer:
         raw_size = kelly_size
         mu_dec = mu_pct / 100.0
         sigma_dec = max(0.005, sigma_pct / 100.0)
-        cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - K_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
+        _excess_kurt = max(0.0, K_kurt - 3.0)
+        cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - _excess_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
         half_kelly_factor = pget('sizer.half_kelly_factor', 0.5)
         vix_scale = (1.0 / market_var) * kelly_stale_scale
         final_size = raw_size * vix_scale * max(pget('sizer.cf_penalty_floor', 0.1), min(1.0, cf_penalty)) * half_kelly_factor

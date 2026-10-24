@@ -868,14 +868,6 @@ class S3FactorStream(BaseStream):
         try:
             import pandas as pd
             import numpy as np
-            fs_dict: Dict = {}
-            pf = _FEATURE_STORE_DIR / f'{ticker}.parquet'
-            if pf.exists():
-                df = pd.read_parquet(pf)
-                if not df.empty:
-                    fs_dict = df.iloc[-1].to_dict()
-                    if 'mom_21' in fs_dict and 'vol_60d' in fs_dict:
-                        return fs_dict
             fallback_paths = [
                 _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet',
                 _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
@@ -962,9 +954,7 @@ class S3FactorStream(BaseStream):
                                 'quality_value_proxy': quality_value_proxy,
                                 'carry_proxy': carry_proxy,
                             }
-                            return {**fs_dict, **ohlcv_dict}
-            if fs_dict:
-                return fs_dict
+                            return ohlcv_dict
         except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
             import logging
             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')

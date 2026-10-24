@@ -263,10 +263,9 @@ class RegimeDetector:
         _kospi_rets_in = list(market_data.get('kospi_returns', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
-        _pct_unit_min = float(pget('regime.kospi_pct_unit_min', 0.05))
         if _live_chg_pct != 0.0 and _kospi_rets_in:
-            _live_ret_dec = _live_chg_pct / 100.0 if abs(_live_chg_pct) >= _pct_unit_min else _live_chg_pct
-            if abs(float(_kospi_rets_in[-1]) - _live_ret_dec) > _ret_eps and abs(float(_kospi_rets_in[-1]) - _live_chg_pct) > _ret_eps:
+            _live_ret_dec = _live_chg_pct / 100.0
+            if abs(float(_kospi_rets_in[-1]) - _live_ret_dec) > _ret_eps:
                 _kospi_rets_in.append(_live_ret_dec)
                 market_data = dict(market_data, kospi_returns=_kospi_rets_in)
         rule_result = self._rule_based(signal, market_data)
@@ -544,10 +543,9 @@ class RegimeDetector:
         kospi_rets = list(market_data.get('kospi_returns', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
-        _pct_unit_min = float(pget('regime.kospi_pct_unit_min', 0.05))
         if _live_chg_pct != 0.0 and kospi_rets:
-            _live_ret_dec = _live_chg_pct / 100.0 if abs(_live_chg_pct) >= _pct_unit_min else _live_chg_pct
-            if abs(float(kospi_rets[-1]) - _live_ret_dec) > _ret_eps and abs(float(kospi_rets[-1]) - _live_chg_pct) > _ret_eps:
+            _live_ret_dec = _live_chg_pct / 100.0
+            if abs(float(kospi_rets[-1]) - _live_ret_dec) > _ret_eps:
                 kospi_rets.append(_live_ret_dec)
         _n5 = int(pget('regime.short_window_5d', 5))
         _n6 = int(pget('regime.short_window_6d', 6))

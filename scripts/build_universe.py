@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Set
@@ -40,11 +41,13 @@ _EXCLUDED_US_SYMBOLS = {'BTC', 'ETH', 'VIX', 'SOX', 'NDX', 'SPX', 'DXY'}
 
 
 def _is_valid_kr_ticker(t: str) -> bool:
-    return len(t) == 6 and t.isdigit()
+    t_s = str(t or '').strip()
+    return len(t_s) == 6 and (t_s.isdigit() or bool(re.match(r'^\d{4}[0-9A-Z]0$', t_s)))
 
 
 def _is_valid_us_ticker(t: str) -> bool:
-    return 1 <= len(t) <= 5 and t.isalpha() and t.isupper() and t not in _EXCLUDED_US_SYMBOLS
+    t_s = str(t or '').strip()
+    return bool(re.match(r'^[A-Z]{1,5}([.-][A-Z])?$', t_s)) and t_s not in _EXCLUDED_US_SYMBOLS
 
 
 def get_feature_store_tickers() -> Set[str]:

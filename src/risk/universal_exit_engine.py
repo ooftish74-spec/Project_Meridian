@@ -178,7 +178,7 @@ class UniversalExitEngine:
             if stream_id in ('S_BETA', 'BETA', 'S_YIELD') or str(ticker).upper() in _PARKING_EXEMPT:
                 continue
 
-            price = float(pos.get('current_price', 0.0) or 0.0)
+            price = float(pos.get('current_price', 0.0) or pos.get('price', 0.0) or 0.0)
             entry_px = float(pos.get('entry_price', pos.get('avg_price', 0.0)) or 0.0)
             is_kr_tk = _is_kr_uee(str(ticker))
             if price <= 0:
@@ -194,8 +194,13 @@ class UniversalExitEngine:
                 except Exception:
                     pass
                 if price <= 0:
-                    if entry_px > 0 and (pos.get('unrealized_pnl_pct') is not None or pos.get('pnl_pct') is not None or pos.get('return_pct') is not None):
-                        price = entry_px
+                    _raw_p = pos.get('unrealized_pnl_pct')
+                    if _raw_p is None:
+                        _raw_p = pos.get('pnl_pct')
+                    if _raw_p is None:
+                        _raw_p = pos.get('return_pct')
+                    if entry_px > 0 and _raw_p is not None:
+                        price = entry_px * (1.0 + (float(_raw_p) / 100))
                     else:
                         logger.warning(f"  ⚠️ [UniversalExitEngine] {ticker} ({stream_id}): 유효 가격 미확보(price<=0) → 평가 스킵")
                         continue

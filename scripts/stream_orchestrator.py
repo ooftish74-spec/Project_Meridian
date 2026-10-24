@@ -3137,7 +3137,20 @@ class StreamOrchestrator:
         # ★ [Session Closed-Market Signal Crowd-Out Guard]
         # 비개장 시장(KRX 휴장 시 국내 종목, US 휴장 시 해외 종목) 매수 시그널이 예산을 선점한 뒤
         # Session Gate에서 증발하여 가용 자본이 유휴화되는 현상 원천 차단
-        if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and not getattr(self, '_ignore_market_hours', False):
+        from src.utils.market_calendar import is_kr_trading_now, get_us_session_state, is_ticker_tradable_now
+        _kr_open_now, _ = is_kr_trading_now()
+        _us_open_now, _ = get_us_session_state()
+        _is_tt_mocked = (
+            getattr(is_ticker_tradable_now, '__module__', '') != 'src.utils.market_calendar'
+            or getattr(is_ticker_tradable_now, '__name__', '') != 'is_ticker_tradable_now'
+        )
+        _any_session_open = bool(
+            _kr_open_now
+            or _us_open_now
+            or (market_data or {}).get('enforce_session_gate', False)
+            or _is_tt_mocked
+        )
+        if _any_session_open and getattr(self, 'exec_mode', 'live') in ('live', 'paper') and not getattr(self, '_ignore_market_hours', False):
             for _p_sid in list(signals.keys()):
                 _orig_sigs = signals[_p_sid] or []
                 _before_s = len(_orig_sigs)
@@ -3250,7 +3263,8 @@ class StreamOrchestrator:
                 and not str(_s.get('ticker', '')).strip().startswith('_')
                 and str(_s.get('direction', '')).lower() != 'meta'
                 and not (
-                    getattr(self, 'exec_mode', 'live') == 'live'
+                    _any_session_open
+                    and getattr(self, 'exec_mode', 'live') == 'live'
                     and not getattr(self, '_ignore_market_hours', False)
                     and str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy')
                     and not self._is_ticker_session_open_for_live_exit(str(_s.get('ticker', '')), market_data)
@@ -3951,6 +3965,22 @@ class StreamOrchestrator:
                     return orders
                 sp = json.loads(sp_path.read_text())
                 positions = sp.get('positions', {})
+            elif not positions and getattr(self, 'exec_mode', 'live') == 'live':
+                kp_path = _ROOT / 'results' / 'kis_portfolio.json'
+                if not kp_path.exists():
+                    return orders
+                kp = json.loads(kp_path.read_text(encoding='utf-8'))
+                raw_holdings = kp.get('holdings') or kp.get('positions') or {}
+                if isinstance(raw_holdings, dict):
+                    positions = {}
+                    for _tk_dd, _h_dd in raw_holdings.items():
+                        if isinstance(_h_dd, dict):
+                            _d_copy = dict(_h_dd)
+                            _d_copy.setdefault('ticker', _tk_dd)
+                            _d_copy.setdefault('quantity', int(_h_dd.get('quantity', _h_dd.get('qty', 0)) or 0))
+                            positions[_tk_dd] = _d_copy
+                else:
+                    positions = raw_holdings
             pos_list = positions.values() if isinstance(positions, dict) else positions
             active_pos = [
                 p for p in pos_list

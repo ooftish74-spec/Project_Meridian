@@ -314,8 +314,8 @@ class RegimeEngine:
             _w_hy_bull = pget('regime.w_hy_bull', 0.3)
             _w_hy_bear = pget('regime.w_hy_bear', 0.4)
             _w_hy_crash = pget('regime.w_hy_crash', 0.2)
-            if hy_raw is not None:
-                hy_hist = self._read_macro_history('fred_hy_spread', default_val=0.0)
+            hy_hist = self._read_macro_history('fred_hy_spread_raw', default_val=0.0) if hy_raw is not None else []
+            if hy_raw is not None and len(hy_hist) >= 10:
                 if VolatilityScaledThreshold.is_extreme(float(hy_raw), hy_hist, z_score_limit=z_ext, percentile_limit=p_ext):
                     scores['bear'] += w_macro * _w_hy_bear
                     scores['crash'] += w_macro * _w_hy_crash

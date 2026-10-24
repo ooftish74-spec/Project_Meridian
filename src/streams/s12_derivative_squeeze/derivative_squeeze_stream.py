@@ -107,7 +107,7 @@ class S12DerivativeSqueezeStream(BaseStream):
             _extreme_squeeze = (z_skew >= _ext_z and z_flow_sell >= _ext_z and bdi <= _ext_bdi)
             target_ticker = (
                 self.inverse_2x_ticker
-                if (_reg_l in ('crash', 'crisis', 'bear') or (_reg_l == 'bull' and _extreme_squeeze))
+                if (_reg_l in ('crash', 'crisis', 'bear') or _extreme_squeeze)
                 else self.inverse_1x_ticker
             )
             confidence = min(1.0, max(0.60, 0.50 + 0.10 * (z_skew + z_flow_sell) / 2.0))

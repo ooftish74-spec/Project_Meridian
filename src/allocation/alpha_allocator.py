@@ -63,20 +63,34 @@ _STREAM_CANONICAL_MAP = {
 class _CanonicalWeightsDict(dict):
     """Canonical stream weight dictionary that resolves short stream aliases (e.g. 'S10' -> 'S10_MEGA_TREND') on lookup without duplicating keys."""
 
-    def get(self, key, default=None):
+    def _resolve_key(self, key):
         if super().__contains__(key):
-            return super().__getitem__(key)
-        canon = _STREAM_CANONICAL_MAP.get(str(key))
+            return key
+        s_key = str(key)
+        canon = _STREAM_CANONICAL_MAP.get(s_key)
         if canon and super().__contains__(canon):
-            return super().__getitem__(canon)
+            return canon
+        short = s_key.split('_')[0]
+        if short != s_key and super().__contains__(short):
+            return short
+        for alias, c_val in _STREAM_CANONICAL_MAP.items():
+            if c_val == s_key and super().__contains__(alias):
+                return alias
+        return None
+
+    def __contains__(self, key):
+        return self._resolve_key(key) is not None
+
+    def get(self, key, default=None):
+        rk = self._resolve_key(key)
+        if rk is not None:
+            return super().__getitem__(rk)
         return default
 
     def __getitem__(self, key):
-        if super().__contains__(key):
-            return super().__getitem__(key)
-        canon = _STREAM_CANONICAL_MAP.get(str(key))
-        if canon and super().__contains__(canon):
-            return super().__getitem__(canon)
+        rk = self._resolve_key(key)
+        if rk is not None:
+            return super().__getitem__(rk)
         raise KeyError(key)
 
 
@@ -202,13 +216,20 @@ class AlphaAllocator:
         regime = signal.get('regime', 'caution')
         strategy = signal.get('strategy', '')
         regime_score = float(cfg.get(f'filter.regime_score.{regime}.{strategy}', cfg.get(f'filter.regime_score.{regime}', 0.5)))
+        _sentinel_tp = 50
+        _raw_tp_es = float(signal.get('tp_pct') or 0.0)
+        _valid_tp_es = _raw_tp_es if (0.0 < _raw_tp_es < _sentinel_tp) else 0.0
+        _raw_erp_es = float(signal.get('expected_return_pct') or 0.0)
+        _valid_erp_es = _raw_erp_es if (0.0 < _raw_erp_es < _sentinel_tp) else 0.0
         _raw_exp_ret = signal.get('expected_return') or signal.get('expected_value')
         if _raw_exp_ret is not None:
             exp_ret = float(_raw_exp_ret)
             if exp_ret > 1.0:
                 exp_ret = exp_ret / 100.0
+            if exp_ret * 100.0 >= _sentinel_tp:
+                exp_ret = (_valid_erp_es or _valid_tp_es) / 100.0
         else:
-            exp_ret = float(signal.get('expected_return_pct') or signal.get('tp_pct') or 0.0) / 100.0
+            exp_ret = (_valid_erp_es or _valid_tp_es) / 100.0
         exp_ret_min = float(pget('filter.exp_ret_min', 0.005))
         exp_ret_good = float(pget('filter.exp_ret_good', 0.03))
         exp_ret_score = min(1.0, max(0.0, (exp_ret - exp_ret_min) / max(exp_ret_good - exp_ret_min, 1e-09)))
@@ -358,16 +379,17 @@ class AlphaAllocator:
 
             # 🚀 [S14 Market-Neutral Pair Alpha] Continuous Kaufman Noise Bayesian Prior
             if sid == 'S14_PAIR_ALPHA':
-                sc_data = (market_data or {}).get('signal_cache', {})
-                ker_val = float(sc_data.get('qqq_ker', sc_data.get('ker', (market_data or {}).get('qqq_ker', 0.25))) or 0.25)
+                sc_data = ((market_data or {}).get('signal_cache') or {}) if isinstance(market_data, dict) else {}
+                _raw_ker = sc_data.get('qqq_ker', sc_data.get('ker', (market_data or {}).get('qqq_ker') if isinstance(market_data, dict) else None))
                 _min_valid_ker = float(cfg.get('allocator.s14_min_valid_ker') or (8.0 / 100.0))
-                if ker_val > _min_valid_ker:
+                if _raw_ker is not None and float(_raw_ker) > _min_valid_ker:
+                    ker_val = float(_raw_ker)
                     noise_intensity = max(0.0, min(1.0, 1.0 - ker_val))
                     prior_boost = round((noise_intensity - (1.0 / 2.0)) * float(reward), 4)
                     ev += prior_boost
                     logger.info(f"  🚀 [S14 Continuous Noise Prior] KER={ker_val:.3f}, Noise={noise_intensity:.1%} ➔ EV boost: {prior_boost:+.4f}")
                 else:
-                    logger.info(f"  🛡️ [S14 Continuous Noise Prior] KER={ker_val:.3f} <= min_valid({_min_valid_ker:.3f}) ➔ stale/near-zero KER boost skipped")
+                    logger.info(f"  🛡️ [S14 Continuous Noise Prior] KER={_raw_ker} <= min_valid({_min_valid_ker:.3f}) ➔ missing/stale/near-zero KER boost skipped")
 
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
@@ -553,17 +575,6 @@ class AlphaAllocator:
             target_sum = golden_bull_mult if golden_bull_mult > 1.0 else 1.0
             final_weights = {k: round((v / _tot_w) * target_sum, 4) for k, v in final_weights.items()}
 
-        threshold = pget('allocator.rebalance_threshold', 0.01)
-        needs_rebalance = self._needs_rebalance(final_weights, threshold)
-        if needs_rebalance:
-            self._last_weights = final_weights
-            self._allocation_history.append({'date': datetime.now().isoformat(), 'weights': final_weights, 'regime': regime, 'method': 'competitive_ev_winner_take_all'})
-            try:
-                from src.measurement.event_ledger import log_event
-                log_event('ALLOCATION', {'weights': final_weights, 'regime': regime, 'trigger': 'rebalance', 'method': 'competitive_ev_winner_take_all'}, source='alpha_allocator')
-            except Exception as _e0:
-                logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
-            logger.info(f"  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})")
         try:
             _crisis_exempt = {'S0', 'S3', 'S5', 'S_YIELD', 'S12', 'S12_DERIVATIVE_SQUEEZE', 'S14', 'S14_PAIR_ALPHA', 'S7', 'S7_PAIR'}
             _micro_bound = set(cfg.get('allocator.micro_bound_streams', ['S1', 'S2']))
@@ -607,13 +618,14 @@ class AlphaAllocator:
                         final_weights[_sid] = round(final_weights[_sid] - _cut, 4)
                         _freed += _cut
                 if _micro_ok:
-                    _micro_boost = _freed * float(pget('allocator.micro_boost_ratio', 0.3))
-                    for _sid in _micro_bound:
-                        if _sid in final_weights:
-                            final_weights[_sid] = round(final_weights[_sid] + _micro_boost / max(1, len(_micro_bound)), 4)
-                    _remaining_defense = _freed - _micro_boost
+                    _micro_boost = 0.0 if str(regime).lower() == 'crash' else (_freed * float(pget('allocator.micro_boost_ratio', 0.3)))
+                    if _micro_boost > 0.0:
+                        for _sid in _micro_bound:
+                            if _sid in final_weights:
+                                final_weights[_sid] = round(final_weights[_sid] + _micro_boost / max(1, len(_micro_bound)), 4)
+                    _s5_boost = _freed - _micro_boost
                     if 'S5' in final_weights:
-                        final_weights['S5'] = round(final_weights['S5'] + _remaining_defense, 4)
+                        final_weights['S5'] = round(final_weights['S5'] + _s5_boost, 4)
                     logger.info(f"  [Phase 76 TwoTrack] MICRO 보호 및 S5 방어 파킹 증액: regime={regime}, crowding={_crowding_active}")
                 else:
                     for _sid in _micro_bound:
@@ -666,6 +678,18 @@ class AlphaAllocator:
                     final_weights = {k: round(v / _cap_total, 4) for k, v in final_weights.items()}
         except Exception as _cap_e:
             logger.error(f'  [Capacity-Aware] S1 사이징 실패 (비치명적): {_cap_e}', exc_info=True)
+
+        threshold = pget('allocator.rebalance_threshold', 0.01)
+        needs_rebalance = self._needs_rebalance(final_weights, threshold)
+        if needs_rebalance:
+            self._last_weights = final_weights
+            self._allocation_history.append({'date': datetime.now().isoformat(), 'weights': final_weights, 'regime': regime, 'method': 'competitive_ev_winner_take_all'})
+            try:
+                from src.measurement.event_ledger import log_event
+                log_event('ALLOCATION', {'weights': final_weights, 'regime': regime, 'trigger': 'rebalance', 'method': 'competitive_ev_winner_take_all'}, source='alpha_allocator')
+            except Exception as _e0:
+                logger.critical(f'  [alpha_allocator] Allocation Event Logging: {_e0}', exc_info=True)
+            logger.info(f"  📊 AlphaAllocator (Competitive EV): {final_weights} (regime={regime})")
         return _CanonicalWeightsDict(final_weights)
 
     def _apply_s2_performance_fallback(self, weights: Dict[str, float], stream_metrics: Dict, regime: str, market_data: Dict=None, s0_sigs: List[Dict]=None) -> Dict[str, float]:

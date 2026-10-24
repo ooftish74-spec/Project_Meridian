@@ -18,7 +18,7 @@ Usage:
     python3 scripts/train_ensemble.py --window 730
 """
 
-import json, logging, pickle, sys, warnings, argparse, functools
+import json, logging, pickle, re, sys, warnings, argparse, functools
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -569,8 +569,8 @@ _EXCLUDED_US_SYMBOLS = {'BTC', 'ETH', 'VIX', 'SOX', 'NDX', 'SPX', 'DXY'}
 
 def _is_valid_equity_ticker(t: str) -> bool:
     t = str(t or '').strip()
-    return (len(t) == 6 and t.isdigit()) or (
-        1 <= len(t) <= 5 and t.isalpha() and t.isupper() and t not in _EXCLUDED_US_SYMBOLS
+    return (len(t) == 6 and (t.isdigit() or bool(re.match(r'^\d{4}[0-9A-Z]0$', t)))) or (
+        bool(re.match(r'^[A-Z]{1,5}([.-][A-Z])?$', t)) and t not in _EXCLUDED_US_SYMBOLS
     )
 
 
@@ -849,6 +849,15 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             _p_labels = [_p_labels[i] for i in _idx_keep]
             _p_fwd = [_p_fwd[i] for i in _idx_keep]
             _p_split = [_p_split[i] for i in _idx_keep]
+
+    if len(_p_rows) > 1:
+        _order = np.lexsort((np.asarray(_p_tickers, dtype=str), np.asarray(_p_dates, dtype='datetime64[ns]')))
+        _p_rows = [_p_rows[i] for i in _order]
+        _p_dates = [_p_dates[i] for i in _order]
+        _p_tickers = [_p_tickers[i] for i in _order]
+        _p_labels = [_p_labels[i] for i in _order]
+        _p_fwd = [_p_fwd[i] for i in _order]
+        _p_split = [_p_split[i] for i in _order]
 
     _all_X = np.asarray(_p_rows, dtype=np.float64) if _p_rows else np.zeros((0, len(active_features)), dtype=np.float64)
     _all_fwd = np.asarray(_p_fwd, dtype=np.float64)
@@ -2944,7 +2953,9 @@ if __name__ == '__main__':
     parser.add_argument('--compare-naive', action='store_true',
                         help='[--purged-wf-only] 행 단위 KFold 와 비교 (누수 규모 참고)')
     args = parser.parse_args()
-    _default_window = 730
+    from config.dynamic_config import DynamicConfig
+    cfg = DynamicConfig()
+    _default_window = int(cfg.get('train.window_days', 950))
 
     if args.check_only:
         needed, trigger = should_retrain()
