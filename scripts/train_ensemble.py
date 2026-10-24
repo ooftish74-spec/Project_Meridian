@@ -2468,7 +2468,15 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     )
     
     challenger_result = {'status': 'adopted' if promoted else 'rejected', 'reason': msg}
-    _should_sync_active_artifacts = bool(promoted) or not (MODEL_DIR / 'stock_ranker_ensemble.pkl').exists()
+    _ref_path = MODEL_DIR / 'feature_reference.npy'
+    _ref_dim_mismatch = True
+    if _ref_path.exists():
+        try:
+            _existing_ref = np.load(_ref_path)
+            _ref_dim_mismatch = (_existing_ref.ndim != 2 or _existing_ref.shape[1] != train_X.shape[1])
+        except Exception:
+            _ref_dim_mismatch = True
+    _should_sync_active_artifacts = bool(promoted) or not (MODEL_DIR / 'stock_ranker_ensemble.pkl').exists() or _ref_dim_mismatch
     if _should_sync_active_artifacts:
         for _aux_art in ('fast_corrector.joblib', 'meta_learner.joblib', 'auto_tune_results.json'):
             _src_art = _staging_dir / _aux_art
@@ -2734,6 +2742,17 @@ def run_regime_split_training(window_days: int = None,
                     val_X = val_X[:, _keep_idx]
                 active_features = list(_target_features)
                 logger.info(f'  ✂️ [Phase 10] Registry 피처 동기화 완료 ({len(active_features)}개 피처)')
+        from src.risk.drift_guard import DriftGuard as _DG_Reg
+        _ref_p = MODEL_DIR / 'feature_reference.npy'
+        _need_ref = not _ref_p.exists()
+        if not _need_ref:
+            try:
+                _r_arr = np.load(_ref_p)
+                _need_ref = (_r_arr.ndim != 2 or _r_arr.shape[1] != train_X.shape[1])
+            except Exception:
+                _need_ref = True
+        if _need_ref:
+            _DG_Reg().save_reference(train_X, feature_names=active_features)
     except Exception as _sync_e:
         logger.debug(f'  [Phase 10] Registry 피처 동기화 스킵: {_sync_e}')
 

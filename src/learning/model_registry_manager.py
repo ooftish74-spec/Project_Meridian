@@ -113,6 +113,10 @@ class ModelRegistryManager:
             msg = f'Adopted (Feature Schema Upgrade): {old_fc} → {new_fc} features (new_IC={new_ic:.4f})'
             self._promote(new_version_id, registry, msg)
             return (True, msg)
+        elif not old_metadata.get('raw_feature_means') and new_metadata.get('raw_feature_means'):
+            msg = f'Adopted (Raw Stats Schema Upgrade): old_AUC={old_auc:.4f} → new_AUC={new_auc:.4f}'
+            self._promote(new_version_id, registry, msg)
+            return (True, msg)
         else:
             msg = f'Rejected: old_AUC={old_auc:.4f} → new_AUC={new_auc:.4f} (+{improvement:.4f} < {min_improvement})'
             registry['versions'][new_version_id]['status'] = 'rejected'

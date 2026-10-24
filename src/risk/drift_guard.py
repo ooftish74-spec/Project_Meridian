@@ -60,8 +60,11 @@ class DriftGuard:
             if len(valid) == 0:
                 continue
             zero_ratio = float(np.sum(np.abs(valid) < 1e-10)) / len(valid)
-            if zero_ratio >= self.SPARSE_ZERO_PCT:
-                sparse[name] = round(zero_ratio, 3)
+            _, counts = np.unique(np.round(valid, 4), return_counts=True)
+            mode_ratio = float(np.max(counts)) / len(valid) if len(counts) > 0 else 0.0
+            eff_ratio = max(zero_ratio, mode_ratio)
+            if eff_ratio >= self.SPARSE_ZERO_PCT:
+                sparse[name] = round(eff_ratio, 3)
         return sparse
 
     def check(self, current_features: np.ndarray, reference_features: Optional[np.ndarray]=None, feature_names: Optional[List[str]]=None) -> Dict:
@@ -156,8 +159,15 @@ class DriftGuard:
         min_val, max_val = (np.min(all_vals), np.max(all_vals))
         if max_val - min_val < eps:
             return 0.0
-        bins = np.linspace(min_val, max_val, n_bins + 1)
-        ref_hist = np.histogram(reference, bins=bins)[0] / len(reference) + eps
-        cur_hist = np.histogram(current, bins=bins)[0] / len(current) + eps
+        cur_uniq = len(np.unique(np.round(current, 4)))
+        ref_uniq = len(np.unique(np.round(reference, 4)))
+        min_uniq = min(cur_uniq, ref_uniq)
+        eff_bins = max(2, min_uniq) if min_uniq <= 6 else n_bins
+        eff_eps = (1 / max(len(current), n_bins)) if min_uniq <= 6 else eps
+        bins = np.linspace(min_val, max_val, eff_bins + 1)
+        ref_hist = np.histogram(reference, bins=bins)[0] / len(reference) + eff_eps
+        cur_hist = np.histogram(current, bins=bins)[0] / len(current) + eff_eps
+        ref_hist = ref_hist / np.sum(ref_hist)
+        cur_hist = cur_hist / np.sum(cur_hist)
         psi = float(np.sum((cur_hist - ref_hist) * np.log(cur_hist / ref_hist)))
         return max(psi, 0)
