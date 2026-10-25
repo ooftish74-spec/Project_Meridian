@@ -437,4 +437,28 @@ def test_wave9_master_forensic_closed_form_invariants(tmp_path, monkeypatch):
     assert len([idx for idx in eb_dh.top_idx_ if idx in (0, 1)]) == 1
     assert eb_dh.w_[2] < 0.0
 
+    # 7. [OPT-1] TransactionCostFilter conserves weight sum == 1.0 when small increases are below min_trade_value
+    from src.allocation.portfolio_optimizer import TransactionCostFilter
+    from src.execution.position_ledger import infer_canonical_stream_and_track
+    txf = TransactionCostFilter()
+    cur_w = {"S2": 0.40, "S3": 0.30, "S5": 0.30}
+    # S2 reduced by 0.20 (200,000 KRW > 50,000), while S0..S14 each increased by 0.025 (25,000 KRW < 50,000)
+    tgt_w = {
+        "S2": 0.20, "S3": 0.30, "S5": 0.30,
+        "S0": 0.025, "S1": 0.025, "S10_MEGA_TREND": 0.025, "S11_HIGHBETA_SNIPER": 0.025,
+        "S12_DERIVATIVE_SQUEEZE": 0.025, "S13_JAPAN_ALPHA": 0.025, "S14_PAIR_ALPHA": 0.025, "S6": 0.025,
+    }
+    tx_res = txf.should_rebalance(cur_w, tgt_w, portfolio_value=1_000_000.0)
+    assert sum(tx_res["adjusted_weights"].values()) == pytest.approx(1.0, rel=1e-6)
+    assert tx_res["adjusted_weights"]["S5"] == pytest.approx(0.50, rel=1e-6)
+
+    # 8. [STREAM-1] Canonical KRX ETF stream disambiguation prevents ETF pollution of S2 equity stream
+    assert infer_canonical_stream_and_track("069500")[0] == "S0"
+    assert infer_canonical_stream_and_track("114800")[0] == "S0"
+    assert infer_canonical_stream_and_track("122630")[0] == "S1"
+    assert infer_canonical_stream_and_track("091160")[0] == "S14_PAIR_ALPHA"
+    assert infer_canonical_stream_and_track("381180")[0] == "S3"
+    assert infer_canonical_stream_and_track("091180")[0] == "S5"
+
+
 

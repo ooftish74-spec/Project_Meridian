@@ -92,6 +92,12 @@ class TransactionCostFilter:
         total = sum(adjusted.values())
         if total > 1.0:
             adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
+        elif 0.0 < total < 0.9999:
+            cash_sid = 'S5' if ('S5' in adjusted or 'S5' in target_weights) else ('S0' if 'S0' in adjusted else None)
+            if cash_sid is not None:
+                adjusted[cash_sid] = round(adjusted.get(cash_sid, 0.0) + (1.0 - total), 4)
+            else:
+                adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}
         trade_cost = total_turnover * portfolio_value * tx_cost_rate
         should = total_turnover > 0
         dynamic_override = False
@@ -549,7 +555,17 @@ class PortfolioOptimizer:
                 data = json.loads(_STATE_FILE.read_text())
                 history = data.get('rebalance_history', [])
                 if history:
-                    return history[-1].get('weights', {})
+                    w = dict(history[-1].get('weights', {}) or {})
+                    w_sum = sum(float(v or 0.0) for v in w.values())
+                    if 0.0 < w_sum < 0.999:
+                        if 'S5' in w:
+                            w['S5'] = round(float(w['S5']) + (1.0 - w_sum), 4)
+                        else:
+                            w = {k: round(float(v) / w_sum, 4) for k, v in w.items()}
+                    elif w_sum > 1.001:
+                        w = {k: round(float(v) / w_sum, 4) for k, v in w.items()}
+                    if w:
+                        return w
             except Exception as _e5:
                 logger.critical(f"  [portfolio_optimizer] 현재 비중 파일 로드: {_e5}", exc_info=True)
         base_w = {'S1': pget('allocator.s1_base_weight', 0.25), 'S2': pget('allocator.s2_base_weight', 0.3), 'S3': pget('allocator.s3_base_weight', 0.2), 'S5': pget('allocator.s4_base_weight', 0.25)}

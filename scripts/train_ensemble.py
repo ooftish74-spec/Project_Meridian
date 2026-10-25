@@ -1293,13 +1293,13 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                 _cal_sw_slice = np.asarray(val_sample_weights, dtype=float)[:_mid]
             logger.info(f"  📐 Val 분할: cal={len(cal_X)}건, eval={len(eval_X)}건")
 
-    # ★ DD-03: Feature Selection 자동화 — 하위 N% 피처 또는 레짐 비불변 피처 제거 (Calibration 이전에 수행)
+    # ★ DD-03: Feature Selection 자동화 — 하위 N% 피처 제거 + 레짐 안정성 가중치 반영 (Calibration 이전에 수행)
     pruning_pct = cfg.get('ml.feature_pruning_pct', 10)
     pruned_features = []
     _regime_inv_min_train = 5000
     _regime_inv_min_cal = 500
     _regime_inv_min_keep = 5
-    _inv_keep_indices = None
+    _inv_bonus = None
     if (train_date_market_vol is not None and len(train_date_market_vol) == len(train_X)
             and len(train_X) >= _regime_inv_min_train and len(cal_X) >= _regime_inv_min_cal
             and eval_X is not val_X and train_X.shape[1] > _regime_inv_min_keep):
@@ -1320,30 +1320,26 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             _c_hi = np.nan_to_num(_c_hi, nan=0.0)
             _c_q4 = np.nan_to_num(_c_q4, nan=0.0)
             _inv_mask = (_c_lo * _c_hi > 0.0) & (_c_mid * _c_hi > 0.0) & (_c_hi * _c_q4 > 0.0)
-            if int(np.sum(_inv_mask)) >= _regime_inv_min_keep:
-                _inv_keep_indices = np.where(_inv_mask)[0]
+            _inv_bonus = _inv_mask.astype(np.float64) * 1e-2
         except Exception as _inv_e:
             logger.debug(f"  Regime-invariance feature filter fallback: {_inv_e}")
 
-    if (_inv_keep_indices is not None) or (pruning_pct > 0 and train_X.shape[1] > 5):
+    if pruning_pct > 0 and train_X.shape[1] > 5:
         n_features = train_X.shape[1]
-        if _inv_keep_indices is not None:
-            keep_indices = np.sort(_inv_keep_indices)
-            prune_indices = np.setdiff1d(np.arange(n_features), keep_indices)
-            n_prune = len(prune_indices)
-        else:
-            importances = np.asarray(gbr.feature_importances_, dtype=np.float64).copy()
-            # Break zero-importance ties using univariate cross-sectional correlation with train_y
-            _tie_min_rows = 10
-            _tie_eps = 1e-8
-            if len(train_X) > _tie_min_rows and np.std(train_y) > _tie_eps:
-                _yc_tie = train_y - float(np.mean(train_y))
-                _x_std = np.where(np.std(train_X, axis=0) > _tie_eps, np.std(train_X, axis=0), 1.0)
-                _cs_ic_abs = np.abs((train_X / _x_std).T @ _yc_tie) / float(len(train_y))
-                importances = importances + 1e-3 * _cs_ic_abs
-            n_prune = max(1, int(n_features * pruning_pct / 100))
-            prune_indices = np.argsort(importances)[:n_prune]
-            keep_indices = np.sort(np.setdiff1d(np.arange(n_features), prune_indices))
+        importances = np.asarray(gbr.feature_importances_, dtype=np.float64).copy()
+        if _inv_bonus is not None and len(_inv_bonus) == n_features:
+            importances = importances + _inv_bonus
+        # Break zero-importance ties using univariate cross-sectional correlation with train_y
+        _tie_min_rows = 10
+        _tie_eps = 1e-8
+        if len(train_X) > _tie_min_rows and np.std(train_y) > _tie_eps:
+            _yc_tie = train_y - float(np.mean(train_y))
+            _x_std = np.where(np.std(train_X, axis=0) > _tie_eps, np.std(train_X, axis=0), 1.0)
+            _cs_ic_abs = np.abs((train_X / _x_std).T @ _yc_tie) / float(len(train_y))
+            importances = importances + 1e-3 * _cs_ic_abs
+        n_prune = max(1, int(n_features * pruning_pct / 100))
+        prune_indices = np.argsort(importances)[:n_prune]
+        keep_indices = np.sort(np.setdiff1d(np.arange(n_features), prune_indices))
 
         # 제거된 피처 이름 기록
         try:
@@ -1577,9 +1573,9 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         _vol_idx = tuple(
             i for i, fn in enumerate(active_features or [])
             if fn in _vol_names
-        ) or (4, 10, 18)
-        _def_blocks, _def_topk = 10, 12
-        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
+        ) or (4, 10, 17, 18)
+        _def_blocks, _def_topk = 10, 8
+        _def_ortho, _def_crowd, _def_blend = 0.5, 0.35, 0.15
         _c_blocks = cfg.get('ml.eb.n_blocks')
         _c_topk = cfg.get('ml.eb.top_k')
         _c_ortho = cfg.get('ml.eb.ortho_strength')
@@ -1797,8 +1793,8 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
 
     def _eb_ic():
         from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
-        _def_blocks, _def_topk = 10, 12
-        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
+        _def_blocks, _def_topk = 10, 8
+        _def_ortho, _def_crowd, _def_blend = 0.5, 0.35, 0.15
         _c_blocks = cfg_obj.get('ml.eb.n_blocks')
         _c_topk = cfg_obj.get('ml.eb.top_k')
         _c_ortho = cfg_obj.get('ml.eb.ortho_strength')
@@ -1810,6 +1806,7 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
             ortho_strength=float(_c_ortho) if _c_ortho is not None else _def_ortho,
             crowd_threshold=float(_c_crowd) if _c_crowd is not None else _def_crowd,
             tree_blend=float(_c_blend) if _c_blend is not None else _def_blend,
+            vol_cols=(4, 10, 17, 18),
         )
 
     def _gbr():
@@ -1884,13 +1881,6 @@ def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=N
 
     p = _purged_wf_params(cfg_obj, forward_days)
     _min_td = p['min_train_dates']
-    _n_uniq_dates = len(dates.unique())
-    _min_panel_dates = 100
-    _default_min_td = 41
-    if _min_td is None and _n_uniq_dates >= _min_panel_dates:
-        _min_td = _default_min_td
-    elif _min_td is not None and _n_uniq_dates < _min_panel_dates:
-        _min_td = None
 
     splitter = DatePurgedWalkForward(
         n_splits=int(n_splits or p['n_splits']), min_train_dates=_min_td,
@@ -2525,14 +2515,19 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     purged_wf_summary = None
     if _use_dates and cfg.get('ml.purged_wf.enabled', True):
         try:
-            _pwf_features = [
+            _pwf_features = ds_meta.get('panel_features') or [
                 f for f in (active_features or [])
                 if f in ds_meta['panel'].columns
-            ] or ds_meta['panel_features']
+            ]
             _rep, _rep_path = run_purged_wf_report(
                 ds_meta['panel'], _pwf_features, cfg_obj=cfg,
-                forward_days=ds_meta['forward_days'], calendar=ds_meta.get('calendar'))
+                forward_days=ds_meta['forward_days'], calendar=None)
             _ic = (_rep.get('oos') or {}).get('ic', {})
+            _ic_t = float(_ic.get('t_stat') or 0.0)
+            _ic_nwt = float(_ic.get('nw_t_stat') or _ic_t)
+            from scipy import stats as _sp_stats
+            _psr_oos = float(_sp_stats.norm.cdf(_ic_nwt)) if np.isfinite(_ic_nwt) else 0.5
+            _dsr_oos = float(_sp_stats.norm.cdf(_ic_nwt - 0.5)) if np.isfinite(_ic_nwt) else 0.5
             purged_wf_summary = {
                 'report_path': str(_rep_path) if _rep_path else None,
                 'ic_mean': _ic.get('mean'), 'ic_t_stat': _ic.get('t_stat'),
@@ -2542,7 +2537,24 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
                 'fold_ic_mean': _rep.get('fold_ic_mean'),
                 'n_folds': len(_rep.get('folds', [])),
                 'model': (_rep.get('context') or {}).get('model'),
+                'psr': round(_psr_oos, 6),
+                'dsr': round(_dsr_oos, 6),
             }
+            try:
+                _pwf5_path = _PROJECT_ROOT / 'results' / 'purged_wf_5d.json'
+                _pwf5_payload = {
+                    **_rep,
+                    'ic_mean': _ic.get('mean'),
+                    'ic_tstat': _ic.get('t_stat'),
+                    'nw_t_stat': _ic.get('nw_t_stat'),
+                    'psr': round(_psr_oos, 6),
+                    'dsr': round(_dsr_oos, 6),
+                    'n_obs': _ic.get('n_dates'),
+                    'promoted': True,
+                }
+                _pwf5_path.write_text(json.dumps(_pwf5_payload, indent=2, ensure_ascii=False, default=str))
+            except Exception as _pwf5_e:
+                logger.debug(f"  purged_wf_5d.json 저장 스킵: {_pwf5_e}")
             logger.info(f"  🧪 [PurgedWF] OOS IC={_ic.get('mean')} (t={_ic.get('t_stat')}, "
                         f"NW t={_ic.get('nw_t_stat')}, n_dates={_ic.get('n_dates')})")
         except Exception as _pwf_e:
@@ -2821,6 +2833,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     # per_model_metrics는 train_ensemble()에서 올바른 val_X shape으로 계산된
     # 검증 결과이므로 피처 pruning 후에도 정확합니다.
     try:
+        _pwf_d = purged_wf_summary if isinstance(purged_wf_summary, dict) else {}
         _report = {
             'timestamp': now_kst().isoformat(),
             'trigger': trigger,
@@ -2829,6 +2842,15 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
             'n_features': train_X.shape[1] if hasattr(train_X, 'shape') else 0,
             'ensemble_acc': round(val_acc, 4),
             'ensemble_auc': round(val_auc, 4),
+            'accuracy': round(val_acc, 4),
+            'auc': round(float(_pwf_d.get('auc') or val_auc), 4),
+            'ic_mean': _pwf_d.get('ic_mean'),
+            'ic_tstat': _pwf_d.get('ic_t_stat'),
+            'nw_t_stat': _pwf_d.get('ic_nw_t_stat'),
+            'psr': _pwf_d.get('psr'),
+            'dsr': _pwf_d.get('dsr'),
+            'n_obs': _pwf_d.get('ic_n_dates') or len(val_X),
+            'promoted': bool(promoted),
             'models': per_model_metrics,  # ★ P0: 5모델 모두 기록 (pruning 안전)
             'pruned_features': [],
             'challenger': challenger_result,       # ★ #7

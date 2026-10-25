@@ -337,7 +337,14 @@ def inspect_live_truth(as_json: bool = False):
             def _mutate_shadow(cur):
                 cur = cur if isinstance(cur, dict) else {}
                 raw_th = cur.get("trade_history") if isinstance(cur.get("trade_history"), list) else []
-                if any(isinstance(t, dict) and t.get("source") == "broker_fill_import" for t in raw_th):
+                try:
+                    from scripts.rebuild_stream_metrics import _load_corporate_ledger_trades
+                    corp_th = _load_corporate_ledger_trades(PROJECT_ROOT / "results", ledger_entries_map, live_fx)
+                except Exception:
+                    corp_th = []
+                if corp_th:
+                    cur["trade_history"] = corp_th
+                elif any(isinstance(t, dict) and t.get("source") == "broker_fill_import" for t in raw_th):
                     cur["trade_history"] = [
                         t for t in raw_th
                         if isinstance(t, dict) and t.get("source") in ("broker_fill_import", "kis_live", "corporate_ledger", "execution_log")
@@ -384,6 +391,21 @@ def inspect_live_truth(as_json: bool = False):
 
             if shadow_path.exists():
                 shadow_data = safe_json_update(shadow_path, _mutate_shadow, default={}, indent=2, ensure_ascii=False, strict=True)
+            ov_path = PROJECT_ROOT / "results" / "dynamic_overrides.json"
+            if ov_path.exists():
+                try:
+                    from src.learning.genetic_rule_evolver import GeneticRuleEvolver
+                    _gre = GeneticRuleEvolver()
+                    safe_json_update(
+                        ov_path,
+                        lambda cur: _gre._enforce_tighten_only(cur if isinstance(cur, dict) else {}, defaults_data),
+                        default={},
+                        indent=2,
+                        ensure_ascii=False,
+                        strict=True,
+                    )
+                except Exception:
+                    pass
             live_fetched = True
     except Exception as e_live:
         error_msg = str(e_live)

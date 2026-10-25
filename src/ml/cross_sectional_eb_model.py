@@ -56,11 +56,11 @@ _TIE_ROUND_DECIMALS = 5
 _TIE_TOP_K = 5
 _TIE_MASS_THRESHOLD = 0.08
 _DEFAULT_N_BLOCKS = 10
-_DEFAULT_TOP_K = 12
-_DEFAULT_ORTHO_STRENGTH = 0.0
+_DEFAULT_TOP_K = 8
+_DEFAULT_ORTHO_STRENGTH = 0.50
 _DEFAULT_CROWD_THRESHOLD = 0.35
-_DEFAULT_TREE_BLEND = 0.0
-_COLLINEAR_SKIP_THRESHOLD = 0.85
+_DEFAULT_TREE_BLEND = 0.15
+_COLLINEAR_SKIP_THRESHOLD = 0.98
 _DUAL_HORIZON_MIN_ROWS = 4500
 _DUAL_HORIZON_LONG_BLOCKS = 8
 _DUAL_HORIZON_MED_BLOCKS = 4
@@ -189,7 +189,7 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
         ortho_strength: float = _DEFAULT_ORTHO_STRENGTH,
         crowd_threshold: float = _DEFAULT_CROWD_THRESHOLD,
         tree_blend: float = _DEFAULT_TREE_BLEND,
-        vol_cols: Tuple[int, ...] = (4, 10, 18),
+        vol_cols: Tuple[int, ...] = (4, 10, 17, 18),
         random_state: int = 42,
     ):
         self.n_blocks = n_blocks

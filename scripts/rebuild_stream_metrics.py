@@ -114,6 +114,9 @@ def _load_shadow_trades():
 
 
 from src.execution.position_ledger import (
+    _S0_KR_INDEX_HEDGING_ETFS,
+    _S1_KR_LEVERAGED_ETFS,
+    _S14_KR_SECTOR_PAIR_ETFS,
     _S3_MACRO_TICKERS,
     _S6_US_EQUITY_TICKERS,
     _S5_KR_ETF_TICKERS,
@@ -131,25 +134,33 @@ def _infer_canonical_stream(ticker: str, raw_stream: str = "", ledger_map: dict 
         if not raw_stream and prefix not in _INVALID_STREAM_IDS:
             raw_stream = prefix
     l_entry = (ledger_map or {}).get(t_sym, {}) if isinstance(ledger_map, dict) else {}
-    cand = str(raw_stream or l_entry.get("stream_id") or l_entry.get("stream") or "").strip()
+    cand_raw = str(raw_stream or l_entry.get("stream_id") or l_entry.get("stream") or "").strip()
+    cand = cand_raw.split()[0].strip() if cand_raw else ""
+    if "/" in cand:
+        cand = cand.split("/")[0].strip()
     trk = str(l_entry.get("track") or "").strip()
 
     if t_sym in _S3_B_BUFFETT_TICKERS or trk == "TRACK_2_BUFFETT_QVM":
         if cand in _INVALID_STREAM_IDS or cand == "S2":
             return "S3_B"
-    if cand in _INVALID_STREAM_IDS or (cand == "S2" and t_sym in (_S3_MACRO_TICKERS | _S6_US_EQUITY_TICKERS | _S5_KR_CASH_PARKING_ETFS)):
+    if cand in _INVALID_STREAM_IDS or cand == "S2":
+        if t_sym in _S0_KR_INDEX_HEDGING_ETFS:
+            return "S0"
+        if t_sym in _S1_KR_LEVERAGED_ETFS:
+            return "S1"
+        if t_sym in _S14_KR_SECTOR_PAIR_ETFS:
+            return "S14_PAIR_ALPHA"
         if t_sym in _S3_MACRO_TICKERS:
             return "S3"
         if t_sym in _S6_US_EQUITY_TICKERS:
             return "S6"
-        if t_sym in _S5_KR_CASH_PARKING_ETFS:
-            return "S5"
-        if t_sym in _S5_KR_ETF_TICKERS and t_sym in (ledger_map or {}):
+        if t_sym in _S5_KR_CASH_PARKING_ETFS or t_sym in _S5_KR_ETF_TICKERS:
             return "S5"
         if t_sym in _S3_B_BUFFETT_TICKERS:
             return "S3_B"
-        is_kr = len(t_sym) == 6 and t_sym.isdigit()
-        return "S2" if is_kr else ("S6" if t_sym else "S2")
+        if cand in _INVALID_STREAM_IDS:
+            is_kr = len(t_sym) == 6 and t_sym.isdigit()
+            return "S2" if is_kr else ("S6" if t_sym else "S2")
     return cand
 
 
@@ -324,6 +335,90 @@ def _extract_external_logs(results_dir: Path, ledger_map: dict, fx_rate: float) 
     return _fifo_enrich_and_remap_trades(ext_trades, ledger_map, fx_rate), ext_daily_rets
 
 
+def _load_corporate_ledger_trades(results_dir: Path, ledger_map: dict, fx_rate: float) -> list:
+    """Load verified broker fills with moving-average cost basis from Corporate_Trade_Ledger / Daily_Corporate_Ledger CSV."""
+    import csv
+    rdir = results_dir or _RESULTS
+    candidates = []
+    corp_dir = rdir / 'corporate_ledger'
+    if corp_dir.exists():
+        candidates.extend(sorted(corp_dir.glob('Corporate_Trade_Ledger_*.csv'), reverse=True))
+    candidates.extend(sorted(rdir.glob('Daily_Corporate_Ledger_*.csv'), reverse=True))
+    for csv_path in candidates:
+        try:
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                if not reader.fieldnames or '주문번호(ODNO)' not in reader.fieldnames:
+                    continue
+                rows = list(reader)
+            if not rows:
+                continue
+            parsed = []
+            for r in rows:
+                d_str = str(r.get('체결일자', '') or '')[:10]
+                tk = str(r.get('종목코드', '') or '').strip().upper()
+                if not d_str or not tk:
+                    continue
+                side_raw = str(r.get('매매구분', '') or '')
+                action = 'SELL' if ('매도' in side_raw or 'SELL' in side_raw.upper()) else 'BUY'
+                try:
+                    qty = float(str(r.get('체결수량', 0) or 0).replace(',', '') or 0)
+                except ValueError:
+                    qty = 0.0
+                if qty <= 0:
+                    continue
+                try:
+                    amt_krw = float(str(r.get('원화환산금액(KRW)', 0) or 0).replace(',', '') or 0)
+                except ValueError:
+                    amt_krw = 0.0
+                try:
+                    unit_px = float(str(r.get('체결단가(원화/외화)', 0) or 0).replace(',', '') or 0)
+                except ValueError:
+                    unit_px = 0.0
+                price_krw = (amt_krw / qty) if amt_krw > 0 else unit_px
+                try:
+                    cost_krw = float(str(r.get('매도취득원가(KRW)', 0) or 0).replace(',', '') or 0)
+                except ValueError:
+                    cost_krw = 0.0
+                avg_p_krw = (cost_krw / qty) if (action == 'SELL' and cost_krw > 0) else price_krw
+                try:
+                    comm = float(str(r.get('위탁수수료(KRW)', 0) or 0).replace(',', '') or 0)
+                    tax = float(str(r.get('제세공과금(KRW)', 0) or 0).replace(',', '') or 0)
+                except ValueError:
+                    comm, tax = 0.0, 0.0
+                try:
+                    rpnl = float(str(r.get('실현순손익(KRW)', 0) or 0).replace(',', '') or 0) if action == 'SELL' else 0.0
+                except ValueError:
+                    rpnl = 0.0
+                try:
+                    pnl_pct = float(str(r.get('실현수익률(%)', 0) or 0).replace(',', '') or 0) if action == 'SELL' else 0.0
+                except ValueError:
+                    pnl_pct = 0.0
+                raw_s = str(r.get('전략스트림', '') or '').strip()
+                sid = _infer_canonical_stream(tk, raw_s, ledger_map)
+                parsed.append({
+                    'date': d_str,
+                    'odno': str(r.get('주문번호(ODNO)', '') or '').strip(),
+                    'ticker': tk,
+                    'name': str(r.get('종목명', tk) or tk),
+                    'action': action,
+                    'quantity': qty,
+                    'price': round(price_krw, 4),
+                    'avg_price': round(avg_p_krw, 4),
+                    'commission': round(comm + tax, 2),
+                    'realized_pnl': round(rpnl, 2),
+                    'pnl_pct': round(pnl_pct, 4),
+                    'stream': sid,
+                    'stream_id': sid,
+                    'source': 'corporate_ledger',
+                })
+            if parsed:
+                return parsed
+        except Exception:
+            continue
+    return []
+
+
 def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
     """Reconstruct weighted daily time-series returns for a stream's live holdings."""
     if not pos_list:
@@ -479,11 +574,31 @@ def compute_stream_metrics(results_dir: Path = None):
     kis_data = _load_json_safe(rdir / 'kis_portfolio.json')
     fx_rate = _resolve_live_fx(kis_data, rdir)
 
-    # Remap S_RECON trades & FIFO-enrich missing avg_price/realized_pnl
-    trade_history = _fifo_enrich_and_remap_trades(raw_trade_history, ledger_map, fx_rate)
-    ext_trades, ext_daily_rets = _extract_external_logs(rdir, ledger_map, fx_rate)
-    if ext_trades:
-        trade_history = trade_history + ext_trades
+    corp_trades = _load_corporate_ledger_trades(rdir, ledger_map, fx_rate)
+    if corp_trades:
+        seen_keys = {
+            (t.get('date'), t.get('ticker'), t.get('action'), int(round(float(t.get('quantity', 0) or 0))))
+            for t in corp_trades
+        }
+        extra_live = [
+            t for t in _fifo_enrich_and_remap_trades(raw_trade_history, ledger_map, fx_rate)
+            if isinstance(t, dict)
+            and t.get('source') in ('kis_live', 'execution_log')
+            and (
+                str(t.get('date', '') or '')[:10],
+                str(t.get('ticker', '') or '').upper(),
+                str(t.get('action', '') or '').upper(),
+                int(round(float(t.get('quantity', 0) or 0))),
+            ) not in seen_keys
+        ]
+        trade_history = corp_trades + extra_live
+        _, ext_daily_rets = _extract_external_logs(rdir, ledger_map, fx_rate)
+    else:
+        # Remap S_RECON trades & FIFO-enrich missing avg_price/realized_pnl
+        trade_history = _fifo_enrich_and_remap_trades(raw_trade_history, ledger_map, fx_rate)
+        ext_trades, ext_daily_rets = _extract_external_logs(rdir, ledger_map, fx_rate)
+        if ext_trades:
+            trade_history = trade_history + ext_trades
 
     # ═══════════════════════════════════════
     # 1. 스트림별 포지션 분류 (Shadow + Live KIS Holdings 통합)
@@ -681,6 +796,23 @@ def compute_stream_metrics(results_dir: Path = None):
                 daily_returns.append(round(ret, 6))
                 daily_costs.append(cost)
                 regimes.append('caution')
+
+        all_sells = [
+            t for t in trades
+            if t.get('action') == 'SELL'
+            and float(t.get('avg_price', t.get('price', 0)) or 0) * float(t.get('quantity', 0) or 0) > 0
+        ]
+        if len(daily_returns) < 2 and len(all_sells) >= 2:
+            daily_returns = []
+            daily_costs = []
+            regimes = []
+            for s in all_sells:
+                s_cost = float(s.get('avg_price', s.get('price', 0)) or 0) * float(s.get('quantity', 0) or 0)
+                s_pnl = float(s.get('realized_pnl', 0) or 0)
+                if s_cost > 0:
+                    daily_returns.append(round(s_pnl / s_cost, 6))
+                    daily_costs.append(float(s.get('commission', 0) or 0))
+                    regimes.append('caution')
 
         if ext_daily_rets.get(sid):
             for ext_r in ext_daily_rets[sid]:
