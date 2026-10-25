@@ -162,7 +162,7 @@ def _infer_canonical_stream(ticker: str, raw_stream: str = "", ledger_map: dict 
         if t_sym in _S3_B_BUFFETT_TICKERS:
             return "S3_B"
         if cand in _INVALID_STREAM_IDS:
-            is_kr = len(t_sym) == 6 and t_sym.isdigit()
+            is_kr = len(t_sym) == 6 and (t_sym.isdigit() or (t_sym[:5].isdigit() and t_sym[5].isalpha()))
             return "S2" if is_kr else ("S6" if t_sym else "S2")
     return cand
 
@@ -241,7 +241,7 @@ def _fifo_enrich_and_remap_trades(trades: list, ledger_map: dict, fx_rate: float
         sid = _infer_canonical_stream(ticker, raw_sid, ledger_map)
         t['stream'] = sid
         t['stream_id'] = sid
-        is_kr = len(ticker) == 6 and ticker.isdigit()
+        is_kr = len(ticker) == 6 and (ticker.isdigit() or (ticker[:5].isdigit() and ticker[5].isalpha()))
         mult = 1.0 if is_kr else (fx_rate if float(t.get('price', 0) or 0) < 5000 else 1.0)
         qty = float(t.get('quantity', t.get('qty', 0)) or 0)
         price = float(t.get('price', t.get('fill_price', t.get('current_price', 0))) or 0) * mult
@@ -433,7 +433,7 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
             continue
         weight = float(pos.get('market_value', pos.get('amount', 1.0)) or 1.0)
         entry_date = str(pos.get('entry_date', '') or '')[:10]
-        is_kr = len(ticker) == 6 and ticker.isdigit()
+        is_kr = len(ticker) == 6 and (ticker.isdigit() or (ticker[:5].isdigit() and ticker[5].isalpha()))
         pq_path = (
             (root_dir / 'data' / 'kr_markets' / f"kr_{ticker}.parquet")
             if is_kr

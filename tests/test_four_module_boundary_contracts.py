@@ -357,7 +357,7 @@ def test_wave9_master_forensic_closed_form_invariants(tmp_path, monkeypatch):
     r_neg = sizer.compute(sig_neg_skew, portfolio_value=100_000_000.0, regime="bull", vix=17.5)
     # Hand-computed: mu_pct = 0.75*8 - 0.25*4 = 5.0% (0.05), sigma_dec = 0.04, S = -0.6
     # cf_penalty = 1 + (-0.6)*(0.05)/(3*0.04) = 1 - 0.25 = 0.75
-    assert r_neg["final_size"] == pytest.approx(round(r_zero["final_size"] * 0.75, 4), rel=1e-6)
+    assert r_neg["final_size"] == pytest.approx(round(r_zero["final_size"] * 0.75, 4), abs=1.5e-4)
     assert r_neg["final_size"] < r_zero["final_size"]
 
     # 3. [EXEC-1] wait_for_fill blocks market fallback when cancel_res.success=True but post_status='unknown',

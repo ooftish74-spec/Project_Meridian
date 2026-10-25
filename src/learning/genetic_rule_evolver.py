@@ -66,9 +66,17 @@ class GeneticRuleEvolver:
     # Risk parameters subject to strict tighten_only discipline
     TIGHTEN_DIRECTION = {
         "exit.sl_atr_multiplier": "down",       # Lower stop-loss multiplier = tighter stop (never > 1.5)
+        "exit.trailing_tp_trigger": "down",     # Lower trailing TP trigger = earlier lock-in
         "execution.us_3x_min_vp": "up",         # Higher volume-power requirement = tighter entry
         "execution.us_3x_min_z": "up",          # Higher z-score requirement = tighter entry
         "regime.leverage.ois_min": "up",        # Higher OIS minimum = tighter leverage gate
+    }
+    DEFAULT_BASELINE = {
+        "execution.us_3x_min_vp": 120.0,
+        "execution.us_3x_min_z": 2.0,
+        "exit.sl_atr_multiplier": 1.5,
+        "exit.trailing_tp_trigger": 2.5,
+        "regime.leverage.ois_min": 55.0,
     }
 
     def __init__(self):
@@ -81,13 +89,16 @@ class GeneticRuleEvolver:
         """Enforce tighten_only invariant on risk/stop-loss parameters."""
         clamped = dict(candidate)
         for param, (low, high) in self.SAFETY_BOUNDS.items():
-            val = float(clamped.get(param, baseline.get(param, (low + high) / 2.0)))
-            base_val = float(baseline.get(param, (low + high) / 2.0))
+            default_base = self.DEFAULT_BASELINE.get(param, (low + high) / 2.0)
+            base_val = float(baseline.get(param, default_base))
+            val = float(clamped.get(param, base_val))
             if param == "exit.sl_atr_multiplier":
                 max_allowed = min(high, 1.5, base_val)
                 val = max(low, min(max_allowed, val))
             elif self.TIGHTEN_DIRECTION.get(param) == "down":
                 val = max(low, min(high, base_val, val))
+            elif self.TIGHTEN_DIRECTION.get(param) == "up":
+                val = min(high, max(low, base_val, val))
             else:
                 val = max(low, min(high, val))
             clamped[param] = round(val, 4)

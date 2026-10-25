@@ -86,7 +86,7 @@ def infer_canonical_stream_and_track(
     if clean_tk in _S6_US_SINGLE_STOCKS:
         return "S6", "TRACK_1_TACTICAL"
 
-    is_kr = clean_tk.isdigit() and len(clean_tk) == 6
+    is_kr = len(clean_tk) == 6 and (clean_tk.isdigit() or (clean_tk[:5].isdigit() and clean_tk[5].isalpha()))
     if not is_kr:
         try:
             from src.utils.market_calendar import is_kr_ticker
