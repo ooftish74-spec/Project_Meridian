@@ -61,6 +61,11 @@ _DEFAULT_ORTHO_STRENGTH = 0.0
 _DEFAULT_CROWD_THRESHOLD = 0.35
 _DEFAULT_TREE_BLEND = 0.0
 _COLLINEAR_SKIP_THRESHOLD = 0.85
+_DUAL_HORIZON_MIN_ROWS = 4500
+_DUAL_HORIZON_LONG_BLOCKS = 8
+_DUAL_HORIZON_MED_BLOCKS = 4
+_DUAL_HORIZON_STD_REG = 0.02
+_DUAL_HORIZON_ALPHA_MED = 0.85
 
 
 def cross_sectional_rank_z_matrix(
@@ -246,109 +251,144 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
         block_ics = np.zeros((len(blocks), p), dtype=np.float64)
 
         std_eps = float(_STD_EPS)
-        for b_idx, idx in enumerate(blocks):
-            if len(idx) < 2:
-                continue
-            xb = X_arr[idx]
-            yb = yc[idx]
-            yb_std = float(np.std(yb))
-            if yb_std <= std_eps:
-                continue
-            xb_c = xb - np.mean(xb, axis=0, keepdims=True)
-            xb_std = np.std(xb_c, axis=0)
-            valid = xb_std > std_eps
-            if np.any(valid):
-                block_ics[b_idx, valid] = (xb_c[:, valid].T @ yb) / (
-                    float(len(idx)) * xb_std[valid] * yb_std
-                )
+        dual_min_rows = int(_DUAL_HORIZON_MIN_ROWS)
+        if n >= dual_min_rows and float(self.ortho_strength) <= 0.0:
+            def _block_eb_raw(x_sub: np.ndarray, y_sub: np.ndarray, nb_target: int) -> np.ndarray:
+                n_s = len(x_sub)
+                b_list = np.array_split(np.arange(n_s), max(2, min(int(nb_target), n_s // 200)))
+                b_ic = np.zeros((len(b_list), p), dtype=np.float64)
+                for bi, b_idx_arr in enumerate(b_list):
+                    xb = x_sub[b_idx_arr]
+                    ybb = y_sub[b_idx_arr] - np.mean(y_sub[b_idx_arr])
+                    xs = np.std(xb, axis=0)
+                    ys = float(np.std(ybb))
+                    v = xs > std_eps
+                    if ys > std_eps and np.any(v):
+                        b_ic[bi, v] = (
+                            (xb[:, v] - np.mean(xb[:, v], axis=0)).T @ ybb
+                        ) / (float(len(b_idx_arr)) * xs[v] * ys)
+                m_ic = np.mean(b_ic, axis=0)
+                s_ic = np.std(b_ic, axis=0) + float(_DUAL_HORIZON_STD_REG)
+                cons = np.maximum(np.mean(b_ic > 0.0, axis=0), np.mean(b_ic < 0.0, axis=0))
+                return m_ic * (cons ** 2) / s_ic
 
-        mean_ic = np.mean(block_ics, axis=0)
-        std_ic = np.std(block_ics, axis=0) + float(_IR_REG)
-        ir = mean_ic / std_ic
-        pos_frac = np.mean(block_ics > 0.0, axis=0)
-        neg_frac = np.mean(block_ics < 0.0, axis=0)
-        consistency = np.maximum(pos_frac, neg_frac)
-        score = np.abs(mean_ic) * np.abs(ir) * (consistency ** 2)
+            wl = _block_eb_raw(X_arr, sign_y_c, int(_DUAL_HORIZON_LONG_BLOCKS))
+            wm = _block_eb_raw(X_arr[-dual_min_rows:], sign_y_c[-dual_min_rows:], int(_DUAL_HORIZON_MED_BLOCKS))
+            agree = (wl * wm > 0.0).astype(np.float64)
+            alpha_m = float(_DUAL_HORIZON_ALPHA_MED)
+            w_comb = ((1.0 - alpha_m) * wl + alpha_m * wm) * agree
+            if np.max(np.abs(w_comb)) <= _EPS:
+                w_comb = (1.0 - alpha_m) * wl + alpha_m * wm
+            k = max(1, min(int(self.top_k), p))
+            top_idx = np.argsort(np.abs(w_comb))[::-1][:k]
+            self.top_idx_ = top_idx
+            raw_w = np.zeros(p, dtype=np.float64)
+            raw_w[top_idx] = w_comb[top_idx]
+            mean_ic = w_comb
+        else:
+            for b_idx, idx in enumerate(blocks):
+                if len(idx) < 2:
+                    continue
+                xb = X_arr[idx]
+                yb = yc[idx]
+                yb_std = float(np.std(yb))
+                if yb_std <= std_eps:
+                    continue
+                xb_c = xb - np.mean(xb, axis=0, keepdims=True)
+                xb_std = np.std(xb_c, axis=0)
+                valid = xb_std > std_eps
+                if np.any(valid):
+                    block_ics[b_idx, valid] = (xb_c[:, valid].T @ yb) / (
+                        float(len(idx)) * xb_std[valid] * yb_std
+                    )
 
-        # Barra/GQS Volatility-Skewness Orthogonalization
-        vcs = [int(c) for c in (self.vol_cols or ()) if 0 <= int(c) < p]
-        if len(vcs) >= 2:
-            # Verify collinearity of volatility clique so synthetic small-p inputs stay safe
-            c0 = X_arr[:, vcs[0]]
-            if np.std(c0) > std_eps:
-                verified_vcs = [vcs[0]]
-                for vc in vcs[1:]:
-                    if np.std(X_arr[:, vc]) > std_eps:
-                        corr_0 = float(np.corrcoef(c0, X_arr[:, vc])[0, 1])
-                        if np.isfinite(corr_0) and corr_0 > self.crowd_threshold:
-                            verified_vcs.append(vc)
-                vcs = verified_vcs if len(verified_vcs) >= 2 else []
-            else:
-                vcs = []
+            mean_ic = np.mean(block_ics, axis=0)
+            std_ic = np.std(block_ics, axis=0) + float(_IR_REG)
+            ir = mean_ic / std_ic
+            pos_frac = np.mean(block_ics > 0.0, axis=0)
+            neg_frac = np.mean(block_ics < 0.0, axis=0)
+            consistency = np.maximum(pos_frac, neg_frac)
+            score = np.abs(mean_ic) * np.abs(ir) * (consistency ** 2)
 
-        ortho = float(self.ortho_strength)
-        if len(vcs) > 0 and ortho > 0.0:
-            v_comp = np.mean(X_arr[:, vcs], axis=1)
-            v_comp = v_comp - np.mean(v_comp)
-            v_std = float(np.std(v_comp))
-            if v_std > std_eps:
-                x_std = np.std(X_arr, axis=0)
-                valid = x_std > std_eps
-                corr_v = np.zeros(p, dtype=np.float64)
-                corr_v[valid] = (
-                    (X_arr[:, valid] - np.mean(X_arr[:, valid], axis=0)).T @ v_comp
-                ) / (float(n) * x_std[valid] * v_std)
-                damping = np.maximum(0.0, 1.0 - ortho * (corr_v ** 2))
-                score = score * damping
+            # Barra/GQS Volatility-Skewness Orthogonalization
+            vcs = [int(c) for c in (self.vol_cols or ()) if 0 <= int(c) < p]
+            if len(vcs) >= 2:
+                # Verify collinearity of volatility clique so synthetic small-p inputs stay safe
+                c0 = X_arr[:, vcs[0]]
+                if np.std(c0) > std_eps:
+                    verified_vcs = [vcs[0]]
+                    for vc in vcs[1:]:
+                        if np.std(X_arr[:, vc]) > std_eps:
+                            corr_0 = float(np.corrcoef(c0, X_arr[:, vc])[0, 1])
+                            if np.isfinite(corr_0) and corr_0 > self.crowd_threshold:
+                                verified_vcs.append(vc)
+                    vcs = verified_vcs if len(verified_vcs) >= 2 else []
+                else:
+                    vcs = []
 
-        k = max(1, min(int(self.top_k), p))
-        order = np.argsort(score)[::-1]
-        collin_thr = float(_COLLINEAR_SKIP_THRESHOLD)
-        x_centered = X_arr - np.mean(X_arr, axis=0, keepdims=True)
-        x_stds = np.std(x_centered, axis=0)
-        selected = []
-        for cand in order:
-            j = int(cand)
-            if x_stds[j] <= std_eps:
-                continue
-            is_collinear = False
-            for m in selected:
-                corr_jm = float(np.dot(x_centered[:, j], x_centered[:, m])) / (
-                    float(n) * float(x_stds[j]) * float(x_stds[m])
-                )
-                if abs(corr_jm) > collin_thr:
-                    is_collinear = True
-                    break
-            if not is_collinear:
-                selected.append(j)
-                if len(selected) >= k:
-                    break
-        if not selected:
-            selected = [int(order[0])]
-        top_idx = np.asarray(selected, dtype=int)
-        self.top_idx_ = top_idx
+            ortho = float(self.ortho_strength)
+            if len(vcs) > 0 and ortho > 0.0:
+                v_comp = np.mean(X_arr[:, vcs], axis=1)
+                v_comp = v_comp - np.mean(v_comp)
+                v_std = float(np.std(v_comp))
+                if v_std > std_eps:
+                    x_std = np.std(X_arr, axis=0)
+                    valid = x_std > std_eps
+                    corr_v = np.zeros(p, dtype=np.float64)
+                    corr_v[valid] = (
+                        (X_arr[:, valid] - np.mean(X_arr[:, valid], axis=0)).T @ v_comp
+                    ) / (float(n) * x_std[valid] * v_std)
+                    damping = np.maximum(0.0, 1.0 - ortho * (corr_v ** 2))
+                    score = score * damping
 
-        raw_w = np.zeros(p, dtype=np.float64)
-        raw_w[top_idx] = np.sign(mean_ic[top_idx]) * score[top_idx]
+            k = max(1, min(int(self.top_k), p))
+            order = np.argsort(score)[::-1]
+            collin_thr = float(_COLLINEAR_SKIP_THRESHOLD)
+            x_centered = X_arr - np.mean(X_arr, axis=0, keepdims=True)
+            x_stds = np.std(x_centered, axis=0)
+            selected = []
+            for cand in order:
+                j = int(cand)
+                if x_stds[j] <= std_eps:
+                    continue
+                is_collinear = False
+                for m in selected:
+                    corr_jm = float(np.dot(x_centered[:, j], x_centered[:, m])) / (
+                        float(n) * float(x_stds[j]) * float(x_stds[m])
+                    )
+                    if abs(corr_jm) > collin_thr:
+                        is_collinear = True
+                        break
+                if not is_collinear:
+                    selected.append(j)
+                    if len(selected) >= k:
+                        break
+            if not selected:
+                selected = [int(order[0])]
+            top_idx = np.asarray(selected, dtype=int)
+            self.top_idx_ = top_idx
 
-        active = np.where(np.abs(raw_w) > _EPS)[0]
-        c_thr = float(self.crowd_threshold)
-        if len(active) > 1 and c_thr < 1.0:
-            Xa = X_arr[:, active]
-            C = np.corrcoef(Xa, rowvar=False)
-            C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
-            np.fill_diagonal(C, 1.0)
-            crowd = 1.0 + np.sum(np.maximum(0.0, np.abs(C) - c_thr), axis=1) - (1.0 - c_thr)
-            crowd = np.maximum(1.0, crowd)
-            raw_w[active] = raw_w[active] / crowd
+            raw_w = np.zeros(p, dtype=np.float64)
+            raw_w[top_idx] = np.sign(mean_ic[top_idx]) * score[top_idx]
 
-        if len(vcs) > 0 and ortho > 0.0:
-            s_raw = X_arr @ raw_w
-            v_comp = np.mean(X_arr[:, vcs], axis=1)
-            denom = float(np.dot(v_comp, v_comp)) + std_eps
-            beta_v = float(np.dot(s_raw, v_comp)) / denom
-            for vc in vcs:
-                raw_w[vc] -= ortho * beta_v / float(len(vcs))
+            active = np.where(np.abs(raw_w) > _EPS)[0]
+            c_thr = float(self.crowd_threshold)
+            if len(active) > 1 and c_thr < 1.0:
+                Xa = X_arr[:, active]
+                C = np.corrcoef(Xa, rowvar=False)
+                C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
+                np.fill_diagonal(C, 1.0)
+                crowd = 1.0 + np.sum(np.maximum(0.0, np.abs(C) - c_thr), axis=1) - (1.0 - c_thr)
+                crowd = np.maximum(1.0, crowd)
+                raw_w[active] = raw_w[active] / crowd
+
+            if len(vcs) > 0 and ortho > 0.0:
+                s_raw = X_arr @ raw_w
+                v_comp = np.mean(X_arr[:, vcs], axis=1)
+                denom = float(np.dot(v_comp, v_comp)) + std_eps
+                beta_v = float(np.dot(s_raw, v_comp)) / denom
+                for vc in vcs:
+                    raw_w[vc] -= ortho * beta_v / float(len(vcs))
 
         norm = float(np.linalg.norm(raw_w))
         if norm > _EPS:
