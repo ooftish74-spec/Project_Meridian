@@ -157,7 +157,8 @@ def inspect_live_truth(as_json: bool = False):
         if adapter.fetch_live_balance():
             sig_cache = load_json(PROJECT_ROOT / "results" / "signal_cache.json")
             raw_fx = (
-                adapter._get_live_fx_rate()
+                getattr(adapter, 'fx_rate', None)
+                or adapter._get_live_fx_rate()
                 or account_info.get('fx_rate')
                 or sig_cache.get('usdkrw')
                 or sig_cache.get('usdkrw_close')
@@ -270,6 +271,13 @@ def inspect_live_truth(as_json: bool = False):
             account_info['invest_pct'] = round((total_invested_krw / nav_val) * 100.0, 2) if nav_val > 0 else 0.0
             account_info['d2_settlement_cash_krw'] = d2_settlement_cash_krw
             account_info['unsettled_d2_receivable_krw'] = unsettled_d2_krw
+            account_info['d0_deposit_krw'] = round(float(getattr(adapter, 'd0_cash_krw', 0.0)), 2)
+            account_info['d1_settlement_cash_krw'] = round(float(getattr(adapter, 'd1_cash_krw', d2_settlement_cash_krw)), 2)
+            account_info['ord_psbl_cash_krw'] = round(float(getattr(adapter, 'ord_psbl_cash_raw_krw', account_info.get('cash', 0.0))), 2)
+            account_info['nrcvb_buy_amt_krw'] = round(float(getattr(adapter, 'nrcvb_buy_amt_krw', account_info.get('cash', 0.0))), 2)
+            account_info['withdrawable_cash_krw'] = round(float(getattr(adapter, 'withdrawable_cash_krw', 0.0)), 2)
+            account_info['d0_usd_deposit'] = round(float(getattr(adapter, 'total_usd_deposit', account_info.get('cash_usd', 0.0))), 2)
+            account_info['pledged_margin_usd'] = round(float(getattr(adapter, 'pledged_margin_usd', 0.0)), 2)
             account_info['positions'] = holdings
 
             kis_data['date'] = live_date
@@ -440,9 +448,16 @@ def inspect_live_truth(as_json: bool = False):
     kr_stock_val = sum(v.get('qty', 0) * v.get('current_price', 0) for v in kr_holdings.values())
     us_stock_val_usd = sum(v.get('qty', 0) * v.get('current_price', 0) for v in us_holdings.values())
     cash_krw = account_info.get("cash", 0.0)
+    ord_psbl_cash_krw = account_info.get("ord_psbl_cash_krw", cash_krw)
+    nrcvb_buy_amt_krw = account_info.get("nrcvb_buy_amt_krw", cash_krw)
+    withdrawable_cash_krw = account_info.get("withdrawable_cash_krw", 0.0)
+    d0_deposit_krw = account_info.get("d0_deposit_krw", 0.0)
+    d1_settlement_cash_krw = account_info.get("d1_settlement_cash_krw", 0.0)
     d2_settlement_cash_krw = account_info.get("d2_settlement_cash_krw", cash_krw)
     unsettled_d2_krw = account_info.get("unsettled_d2_receivable_krw", 0.0)
     cash_usd = account_info.get("cash_usd", 0.0)
+    d0_usd_deposit = account_info.get("d0_usd_deposit", cash_usd)
+    pledged_margin_usd = account_info.get("pledged_margin_usd", 0.0)
     integrated_margin_usd = account_info.get("integrated_margin_usd", 0.0)
     fx_rate = float(account_info.get("fx_rate") or 0.0)
 
@@ -458,6 +473,11 @@ def inspect_live_truth(as_json: bool = False):
         "initial_capital": account_info.get("initial_capital", 0.0),
         "kr_account": {
             "cash_krw": cash_krw,
+            "ord_psbl_cash_krw": ord_psbl_cash_krw,
+            "nrcvb_buy_amt_krw": nrcvb_buy_amt_krw,
+            "withdrawable_cash_krw": withdrawable_cash_krw,
+            "d0_deposit_krw": d0_deposit_krw,
+            "d1_settlement_cash_krw": d1_settlement_cash_krw,
             "d2_settlement_cash_krw": d2_settlement_cash_krw,
             "unsettled_d2_receivable_krw": unsettled_d2_krw,
             "stock_val_krw": kr_stock_val,
@@ -466,6 +486,8 @@ def inspect_live_truth(as_json: bool = False):
         },
         "us_account": {
             "cash_usd": cash_usd,
+            "d0_usd_deposit": d0_usd_deposit,
+            "pledged_margin_usd": pledged_margin_usd,
             "integrated_margin_usd": integrated_margin_usd,
             "stock_val_usd": us_stock_val_usd,
             "total_equity_usd": us_total_equity,
@@ -493,15 +515,16 @@ def inspect_live_truth(as_json: bool = False):
     print(f"📌 Account Number       : {truth_summary['account_number']} ({truth_summary['account_type']})")
     print("----------------------------------------------------------")
     print("🇰🇷 국내 원화 계좌 (KRW Wallet):")
-    print(f"   - 주문가능 원화 (Orderable): ₩{cash_krw:,.0f} KRW")
-    print(f"   - D+2 결제예수금 (Settled) : ₩{d2_settlement_cash_krw:,.0f} KRW (미결제 정산금: ₩{unsettled_d2_krw:+,.0f})")
-    print(f"   - 원화 주식 평가액        : ₩{kr_stock_val:,.0f} KRW")
-    print(f"   - 원화 자산 소계 (D+2기준): ₩{kr_total_equity:,.0f} KRW")
+    print(f"   - 주문가능 현금 (ord_psbl_cash): ₩{ord_psbl_cash_krw:,.0f} KRW (출금가능: ₩{withdrawable_cash_krw:,.0f} / 100%증거금매수가능: ₩{nrcvb_buy_amt_krw:,.0f})")
+    print(f"   - D+0 예수금 총액 (dnca_tot)   : ₩{d0_deposit_krw:,.0f} KRW")
+    print(f"   - D+2 결제예수금 (Settled)     : ₩{d2_settlement_cash_krw:,.0f} KRW (환변동유보차액: ₩{unsettled_d2_krw:+,.0f})")
+    print(f"   - 원화 주식 평가액             : ₩{kr_stock_val:,.0f} KRW")
+    print(f"   - 원화 자산 소계 (D+2기준)     : ₩{kr_total_equity:,.0f} KRW")
     print("🇺🇸 해외 외화 계좌 (USD Wallet):")
-    print(f"   - 외화 예수금 (Cash USD)  : ${cash_usd:,.2f} USD")
-    print(f"   - 통합증거금 주문가능 달러: ${integrated_margin_usd:,.2f} USD")
-    print(f"   - 외화 주식 평가액        : ${us_stock_val_usd:,.2f} USD")
-    print(f"   - 외화 자산 소계          : ${us_total_equity:,.2f} USD")
+    print(f"   - 외화 D+2 주문가능 (Cash USD) : ${cash_usd:,.2f} USD (D+0 외화예수금: ${d0_usd_deposit:,.2f} / 미결제매수증거금: ${pledged_margin_usd:,.2f})")
+    print(f"   - 통합증거금 주문가능 달러     : ${integrated_margin_usd:,.2f} USD")
+    print(f"   - 외화 주식 평가액             : ${us_stock_val_usd:,.2f} USD")
+    print(f"   - 외화 자산 소계               : ${us_total_equity:,.2f} USD")
     print("----------------------------------------------------------")
     print("🌐 통합 참고 평가액 (Combined Total Reference NAV):")
     print(f"   - 총 자산 NAV (원화)      : ₩{truth_summary['combined_nav_krw']:,.0f} KRW")

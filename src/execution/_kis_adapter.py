@@ -1809,7 +1809,10 @@ class KISTraderAdapter:
                     if data_psbl.get('rt_cd') == '0':
                         out_psbl = data_psbl.get('output', {})
                         # [Strict Currency Isolation] 순수 원화 주문가능금액만 파싱 (달러 통합증거금을 원화 현금으로 이중 계상/침범 원천 차단)
-                        ord_psbl_cash = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', out_psbl.get('ord_psbl_cash', 0))) or 0.0)
+                        self.ord_psbl_cash_raw_krw = float(out_psbl.get('ord_psbl_cash', 0) or 0.0)
+                        self.nrcvb_buy_amt_krw = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', 0)) or 0.0)
+                        self.ord_psbl_frcr_amt_wcrc = float(out_psbl.get('ord_psbl_frcr_amt_wcrc', 0) or 0.0)
+                        ord_psbl_cash = self.ord_psbl_cash_raw_krw if self.ord_psbl_cash_raw_krw > 0 else self.nrcvb_buy_amt_krw
                 except Exception as e_psbl:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_psbl}", exc_info=True)
@@ -1825,6 +1828,9 @@ class KISTraderAdapter:
                     output2 = data.get('output2', [{}])
                     if output2:
                         summary = output2[0]
+                        # D+0 / D+1 / D+2 예수금 원장 전체 보존
+                        self.d0_cash_krw = float(summary.get('dnca_tot_amt', 0) or 0.0)
+                        self.d1_cash_krw = float(summary.get('nxdy_excc_amt', self.d0_cash_krw) or 0.0)
                         # D+2 가수도정산금(prvs_rcdl_excc_amt): 통합증거금 사용 시 음수(-) 부채가 반영된 실제 원화 순예수금
                         net_d2_cash_krw = float(summary.get('prvs_rcdl_excc_amt', summary.get('nxdy_excc_amt', summary.get('dnca_tot_amt', 0))) or 0.0)
                         self.net_d2_cash_krw = net_d2_cash_krw
@@ -1917,11 +1923,13 @@ class KISTraderAdapter:
                                             _ctrp_fx = float(_crow.get('frst_bltn_exrt', 0) or 0.0)
                                             if _ctrp_fx > 0:
                                                 fx_rate = _ctrp_fx
-                                                if _fx_from_gateway <= 0 and _ctrp_fx > 1000:
-                                                    # ★ Wave 1 Track C: 게이트웨이 미확보 시 증권사 당일 최초고시환율(실관측)을 60초 캐시에 반영
+                                                self.fx_rate = _ctrp_fx
+                                                if _ctrp_fx > 1000:
                                                     KISTraderAdapter._fx_cache_val = _ctrp_fx
                                                     KISTraderAdapter._fx_cache_ts = time.time()
                                             break
+                                    out3_ctrp = d_ctrp.get('output3') if isinstance(d_ctrp.get('output3'), dict) else {}
+                                    self.withdrawable_cash_krw = float(out3_ctrp.get('wdrw_psbl_tot_amt', 0) or 0.0)
                             except Exception as _ctrp_e:
                                 logger.debug(f"CTRP6504R inquiry bypass: {_ctrp_e}")
 
@@ -2107,7 +2115,15 @@ class KISTraderAdapter:
                                     'nav': round(float(self.account.total_equity)),
                                     'total_equity': round(float(self.account.total_equity)),
                                     'cash': round(float(self.account.cash)),
+                                    'ord_psbl_cash_krw': round(float(getattr(self, 'ord_psbl_cash_raw_krw', self.account.cash))),
+                                    'nrcvb_buy_amt_krw': round(float(getattr(self, 'nrcvb_buy_amt_krw', self.account.cash))),
+                                    'withdrawable_cash_krw': round(float(getattr(self, 'withdrawable_cash_krw', 0.0))),
+                                    'd0_deposit_krw': round(float(getattr(self, 'd0_cash_krw', 0.0))),
+                                    'd1_settlement_cash_krw': round(float(getattr(self, 'd1_cash_krw', 0.0))),
+                                    'd2_settlement_cash_krw': round(float(getattr(self, 'net_d2_cash_krw', self.account.cash))),
                                     'us_cash_usd': float(getattr(self, 'direct_usd_cash', getattr(self, 'us_cash_usd', 0.0))),
+                                    'd0_usd_deposit': float(getattr(self, 'total_usd_deposit', 0.0)),
+                                    'pledged_margin_usd': float(getattr(self, 'pledged_margin_usd', 0.0)),
                                     'integrated_margin_usd': float(getattr(self, 'integrated_margin_usd', 0.0)),
                                     'fx_rate': round(float(fx_rate), 2),
                                     'positions': _live_holdings,
