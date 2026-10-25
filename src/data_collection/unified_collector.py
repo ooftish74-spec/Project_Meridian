@@ -321,16 +321,54 @@ def collect_kr_stocks(tickers: List[str], backfill: bool=False) -> Dict[str, int
                     safe_parquet_write(combined, out_file)
                 except Exception as _merge_e:
                     logger.error(f'  {ticker} parquet merge 실패 — {_merge_e}, 새 데이터로 덮어쓰기', exc_info=True)
+                    combined = df
                     safe_parquet_write(df, out_file)
             else:
                 _DATA_DIR.mkdir(parents=True, exist_ok=True)
+                combined = df
                 safe_parquet_write(df, out_file)
             results[ticker] = len(df)
+            try:
+                from src.data_collection.feature_store import FeatureStore
+                FeatureStore().sync_ticker_parquet(ticker, ohlcv_df=combined)
+            except Exception as _fs_e:
+                logger.debug(f'  {ticker} FeatureStore parquet 동기화 스킵: {_fs_e}')
         else:
             results[ticker] = -1
         if i % 20 == 0:
             logger.info(f'  [{i}/{total}] 진행 중...')
     return results
+
+
+def _save_signal_parquet(df: pd.DataFrame, out_file: Path) -> pd.DataFrame:
+    """시그널 parquet 병합 저장 (단일 행 덮어쓰기 방지 — 기존 시계열 보존 + date 중복 제거)."""
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    new_df = df.copy()
+    new_df.columns = [str(c).lower() for c in new_df.columns]
+    if 'date' not in new_df.columns:
+        new_df = new_df.reset_index().rename(columns={new_df.index.name or 'index': 'date'})
+    new_df['date'] = pd.to_datetime(new_df['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+    if out_file.exists():
+        try:
+            existing = pd.read_parquet(out_file)
+            existing.columns = [str(c).lower() for c in existing.columns]
+            if 'date' not in existing.columns:
+                existing = existing.reset_index().rename(columns={existing.index.name or 'index': 'date'})
+            existing['date'] = pd.to_datetime(existing['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+            combined = (
+                pd.concat([existing, new_df], ignore_index=True)
+                .dropna(subset=['date'])
+                .drop_duplicates(subset=['date'], keep='last')
+                .sort_values('date')
+                .reset_index(drop=True)
+            )
+            safe_parquet_write(combined, out_file)
+            return combined
+        except Exception as e:
+            logger.debug(f'  _save_signal_parquet merge fallback ({out_file.name}): {e}')
+    safe_parquet_write(new_df, out_file)
+    return new_df
+
 
 def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     """[Phase 1] 글로벌 시그널 데이터 수집 (yfinance 대체 - Alpha Vantage 사용).
@@ -339,8 +377,8 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     따라서 backfill(과거 10년치 생성)은 지원하지 않으며, 기존 캐시를 append 합니다.
     """
     from src.data_collection.alpha_vantage_collector import collect_global_macro
-    _CROSS_SYNC_MAP = {'vix': ['cross_vix.parquet', 'us_vix.parquet'], 'sp500': ['cross_sp500.parquet'], 'usdkrw': ['cross_usdkrw.parquet'], 'us10y': ['cross_us10y.parquet'], 'wti': ['cross_oil_futures.parquet'], 'gold_us': ['cross_gold_futures.parquet']}
-    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet']}
+    _CROSS_SYNC_MAP = {'vix': ['cross_vix.parquet', 'us_vix.parquet'], 'sp500': ['cross_sp500.parquet'], 'usdkrw': ['cross_usdkrw.parquet', 'us_usdkrw.parquet'], 'us10y': ['cross_us10y.parquet'], 'wti': ['cross_oil_futures.parquet'], 'gold_us': ['cross_gold_futures.parquet']}
+    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet'], 'usdkrw': ['KRW=X.parquet']}
     signals = {}
     today_dt = pd.Timestamp(datetime.now().date())
     from src.data_collection.bok_ecos_collector import BOKEcosCollector
@@ -392,45 +430,36 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
         if price is not None:
             df = pd.DataFrame([{'date': today_dt, 'open': price, 'high': price, 'low': price, 'close': price, 'volume': 0}])
             out_file = _SIGNAL_DIR / f'signal_{name.lower()}.parquet'
-            _SIGNAL_DIR.mkdir(parents=True, exist_ok=True)
-            safe_parquet_write(df, out_file)
+            _save_signal_parquet(df, out_file)
             name_lower = name.lower()
             for cross_file in _CROSS_SYNC_MAP.get(name_lower, []):
-                cross_path = _DATA_DIR / cross_file
-                try:
-                    if cross_path.exists():
-                        existing = pd.read_parquet(cross_path)
-                        existing.columns = [c.lower() for c in existing.columns]
-                        if 'date' not in existing.columns:
-                            existing = existing.reset_index().rename(columns={existing.index.name or 'index': 'date'})
-                        if 'date' in existing.columns:
-                            existing['date'] = pd.to_datetime(existing['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
-                            combined = pd.concat([existing, df]).dropna(subset=['date']).drop_duplicates(subset='date', keep='last').sort_values('date')
-                            safe_parquet_write(combined, cross_path)
-                    else:
-                        safe_parquet_write(df, cross_path)
-                except Exception as e:
-                    logger.error(f'  cross sync {cross_file} 실패: {e}', exc_info=True)
+                for cross_dir in (_PROJECT_ROOT / 'data' / 'cross_market', _DATA_DIR):
+                    cross_path = cross_dir / cross_file
+                    try:
+                        _save_signal_parquet(df, cross_path)
+                    except Exception as e:
+                        logger.error(f'  cross sync {cross_file} 실패: {e}', exc_info=True)
             for us_file in _US_STOCKS_SYNC_MAP.get(name_lower, []):
-                us_path = _DATA_DIR / 'us_stocks' / us_file
-                try:
-                    us_path.parent.mkdir(parents=True, exist_ok=True)
-                    df_us = df.set_index('date') if 'date' in df.columns else df.copy()
-                    if us_path.exists():
-                        existing = pd.read_parquet(us_path)
-                        existing.columns = [c.lower() for c in existing.columns]
-                        if 'date' in existing.columns:
-                            existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
-                            existing = existing.set_index('date')
+                for us_dir in (_PROJECT_ROOT / 'data' / 'us_stocks' / 'prices', _DATA_DIR / 'us_stocks'):
+                    us_path = us_dir / us_file
+                    try:
+                        us_path.parent.mkdir(parents=True, exist_ok=True)
+                        df_us = df.set_index('date') if 'date' in df.columns else df.copy()
+                        if us_path.exists():
+                            existing = pd.read_parquet(us_path)
+                            existing.columns = [c.lower() for c in existing.columns]
+                            if 'date' in existing.columns:
+                                existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
+                                existing = existing.set_index('date')
+                            else:
+                                existing.index = pd.to_datetime(existing.index).normalize()
+                            combined = pd.concat([existing, df_us])
+                            combined = combined[~combined.index.duplicated(keep='last')]
+                            safe_parquet_write(combined, us_path)
                         else:
-                            existing.index = pd.to_datetime(existing.index).normalize()
-                        combined = pd.concat([existing, df_us])
-                        combined = combined[~combined.index.duplicated(keep='last')]
-                        safe_parquet_write(combined, us_path)
-                    else:
-                        safe_parquet_write(df_us, us_path)
-                except Exception as e:
-                    logger.error(f'  us_stocks sync {us_file} 실패: {e}', exc_info=True)
+                            safe_parquet_write(df_us, us_path)
+                    except Exception as e:
+                        logger.error(f'  us_stocks sync {us_file} 실패: {e}', exc_info=True)
             signals[name] = price
             signals[name_lower] = price
             if yf_ticker in av_data and av_data[yf_ticker].get('change_1d') is not None:
@@ -439,6 +468,7 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
         from src.data_collection.alpha_vantage_collector import collect_options_pcr
         pcr = collect_options_pcr('SPY')
         signals['options_pcr'] = pcr
+        signals['put_call_ratio'] = pcr
     except Exception as e:
         logger.error(f'  옵션 PCR 수집 실패: {e}', exc_info=True)
     try:
@@ -451,12 +481,31 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     return signals
 
 def _save_signal_cache(signals: Dict):
-    """시그널 캐시 저장 (safe_json_update로 멀티프로세스 파일락 100% 보장)."""
+    """시그널 캐시 저장 (safe_json_update + 지수 범위 검증 및 별칭/계약 키 동기화)."""
     try:
+        from src.data_collection.macro_realtime_refresher import MacroRealtimeRefresher
+        bounds_map = MacroRealtimeRefresher._INDEX_SANITY_BOUNDS
+
         def _update(data):
             if not isinstance(data, dict):
                 data = {}
-            data.update(signals)
+            for _ek in list(data.keys()):
+                if _ek in bounds_map and isinstance(data.get(_ek), (int, float)):
+                    _lo, _hi = bounds_map[_ek]
+                    if not (_lo <= float(data[_ek]) <= _hi):
+                        data.pop(_ek, None)
+            safe_signals = {}
+            for k, v in (signals or {}).items():
+                if k in bounds_map and isinstance(v, (int, float)):
+                    _lo, _hi = bounds_map[k]
+                    if not (_lo <= float(v) <= _hi):
+                        logger.warning(f'  ⚠️ [_save_signal_cache] {k}={v} 정상 범위({_lo}~{_hi}) 이탈 — 기각')
+                        continue
+                safe_signals[k] = v
+                if k.upper() in bounds_map and isinstance(v, (int, float)):
+                    safe_signals[k.upper()] = v
+            MacroRealtimeRefresher._enrich_and_sync_signal_dict(data, safe_signals, bounds_map)
+            data['timestamp'] = datetime.now().isoformat()
             return data
         safe_json_update(_SIGNAL_CACHE, _update)
     except Exception as e:
@@ -946,7 +995,8 @@ def run_daily(mode: str='full', **kwargs):
         try:
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
-                tickers = json.loads(uni_file.read_text())
+                raw_uni = json.loads(uni_file.read_text())
+                tickers = raw_uni if isinstance(raw_uni, list) else raw_uni.get('tickers', raw_uni.get('kr_stocks', []))
                 max_stocks = pget('collector.max_stock_tickers', 350)
                 stock_results = collect_kr_stocks(tickers[:max_stocks])
                 n_updated = sum((1 for v in stock_results.values() if v > 0))
@@ -1033,7 +1083,8 @@ def run_daily(mode: str='full', **kwargs):
         try:
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
-                tickers = json.loads(uni_file.read_text())
+                raw_uni = json.loads(uni_file.read_text())
+                tickers = raw_uni if isinstance(raw_uni, list) else raw_uni.get('tickers', raw_uni.get('kr_stocks', []))
                 max_stocks = pget('collector.max_stock_tickers', 350)
                 stock_results = collect_kr_stocks(tickers[:max_stocks])
                 results['stocks'] = sum((1 for v in stock_results.values() if v > 0))
@@ -1159,24 +1210,36 @@ def collect_us_macro() -> Dict:
         start = (datetime.now() - timedelta(days=3650)).strftime('%Y-%m-%d')
         result = collector.collect_all_usa_data(start, end)
         if result:
-            # 10년치 US 지수/국채/원자재 시계열을 cross_*.parquet에 영속 병합
+            # 10년치 US 지수/국채/원자재/VIX/환율 시계열을 cross_*.parquet에 영속 병합
+            _cross_dir = _PROJECT_ROOT / 'data' / 'cross_market'
+            _cross_dir.mkdir(parents=True, exist_ok=True)
             _cross_series_targets = []
             _idx_df = result.get('indices')
-            if isinstance(_idx_df, pd.DataFrame) and 'S&P_500' in _idx_df.columns:
-                _cross_series_targets.append((_idx_df['S&P_500'], _DATA_DIR / 'cross_sp500.parquet'))
+            if isinstance(_idx_df, pd.DataFrame):
+                if 'S&P_500' in _idx_df.columns:
+                    _cross_series_targets.append((_idx_df['S&P_500'], 'cross_sp500.parquet'))
+                if 'VIX' in _idx_df.columns:
+                    _cross_series_targets.append((_idx_df['VIX'], 'cross_vix.parquet'))
             _tr_df = result.get('treasuries')
             if isinstance(_tr_df, pd.DataFrame) and 'US_10Y' in _tr_df.columns:
-                _cross_series_targets.append((_tr_df['US_10Y'], _DATA_DIR / 'cross_us10y.parquet'))
+                _cross_series_targets.append((_tr_df['US_10Y'], 'cross_us10y.parquet'))
+            _fx_df = result.get('currencies') or result.get('fx')
+            if isinstance(_fx_df, pd.DataFrame):
+                for _fx_col in ('USD_KRW', 'USDKRW', 'KRW'):
+                    if _fx_col in _fx_df.columns:
+                        _cross_series_targets.append((_fx_df[_fx_col], 'cross_usdkrw.parquet'))
+                        break
             _cm_df = result.get('commodities')
             if isinstance(_cm_df, pd.DataFrame):
                 if 'WTI_Oil' in _cm_df.columns:
-                    _cross_series_targets.append((_cm_df['WTI_Oil'], _DATA_DIR / 'cross_oil_futures.parquet'))
+                    _cross_series_targets.append((_cm_df['WTI_Oil'], 'cross_oil_futures.parquet'))
                 if 'Gold' in _cm_df.columns:
-                    _cross_series_targets.append((_cm_df['Gold'], _DATA_DIR / 'cross_gold_futures.parquet'))
-            for _ser, _cpath in _cross_series_targets:
+                    _cross_series_targets.append((_cm_df['Gold'], 'cross_gold_futures.parquet'))
+            for _ser, _cname in _cross_series_targets:
                 try:
                     _s_clean = pd.to_numeric(_ser, errors='coerce').dropna()
-                    if len(_s_clean) < 10:
+                    _min_len = 10
+                    if len(_s_clean) < _min_len:
                         continue
                     _new_df = pd.DataFrame({
                         'date': pd.to_datetime(_s_clean.index).tz_localize(None).normalize(),
@@ -1186,16 +1249,10 @@ def collect_us_macro() -> Dict:
                         'close': _s_clean.values,
                         'volume': 0,
                     })
-                    if _cpath.exists():
-                        _ex = pd.read_parquet(_cpath)
-                        _ex.columns = [c.lower() for c in _ex.columns]
-                        if 'date' not in _ex.columns:
-                            _ex = _ex.reset_index().rename(columns={_ex.index.name or 'index': 'date'})
-                        _ex['date'] = pd.to_datetime(_ex['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
-                        _new_df = pd.concat([_ex, _new_df], ignore_index=True).dropna(subset=['date', 'close']).drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
-                    safe_parquet_write(_new_df, _cpath)
+                    for _tdir in (_cross_dir, _DATA_DIR):
+                        _save_signal_parquet(_new_df, _tdir / _cname)
                 except Exception as _ce:
-                    logger.debug(f'  cross series sync skip ({_cpath.name}): {_ce}')
+                    logger.debug(f'  cross series sync skip ({_cname}): {_ce}')
             economic = result.get('economic', {})
             key_map = {'CPI': 'cpi', 'Unemployment': 'unemployment_rate', 'Fed_Funds_Rate': 'federal_funds_rate', 'Consumer_Sentiment': 'consumer_sentiment', 'HY_Credit_Spread': 'hy_credit_spread', 'IG_Credit_Spread': 'ig_credit_spread', 'Industrial_Production': 'industrial_production', 'Retail_Sales': 'retail_sales', 'GDP_Growth': 'gdp_growth'}
             cache_updates = {}
@@ -1256,11 +1313,34 @@ def collect_us_macro() -> Dict:
         return {}
 
 def collect_cross_market() -> Dict:
-    """US-JP 스프레드, ISM/Caixin PMI, 수익률곡선."""
+    """US-JP 스프레드, ISM/Caixin PMI, 수익률곡선 및 cross_vix/cross_usdkrw 최신화."""
     try:
         from src.data_collection.cross_market_collector import CrossMarketCollector
         collector = CrossMarketCollector()
         result = collector.collect_all()
+        # Sync cross_vix.parquet and cross_usdkrw.parquet from us_vix/signal_vix/^VIX and us_usdkrw/signal_usdkrw/KRW=X
+        _cross_dir = _PROJECT_ROOT / 'data' / 'cross_market'
+        _cross_dir.mkdir(parents=True, exist_ok=True)
+        cross_map = {
+            'us_vix.parquet': 'cross_vix.parquet',
+            'us_usdkrw.parquet': 'cross_usdkrw.parquet',
+            'signal_vix.parquet': 'cross_vix.parquet',
+            'signal_usdkrw.parquet': 'cross_usdkrw.parquet',
+            '^VIX.parquet': 'cross_vix.parquet',
+            'KRW=X.parquet': 'cross_usdkrw.parquet',
+        }
+        _src_dirs = (_DATA_DIR, _SIGNAL_DIR, _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices', _PROJECT_ROOT / 'data' / 'us_stocks')
+        for src_name, dst_name in cross_map.items():
+            for sdir in _src_dirs:
+                spath = sdir / src_name
+                if spath.exists():
+                    try:
+                        sdf = pd.read_parquet(spath)
+                        if not sdf.empty:
+                            for tdir in (_cross_dir, _DATA_DIR):
+                                _save_signal_parquet(sdf, tdir / dst_name)
+                    except Exception as _se:
+                        logger.debug(f'  cross_map sync skip ({src_name} -> {dst_name}): {_se}')
         cache_updates = {}
         if 'us_jp_spread' in result and result['us_jp_spread'] is not None:
             try:
@@ -1304,8 +1384,12 @@ def collect_market_breadth() -> Dict:
                 cache_updates['vkospi'] = vkospi_val
         if 'put_call' in result:
             pcr_val = result['put_call'].get('put_call_ratio')
-            if pcr_val:
+            if pcr_val is not None:
                 cache_updates['put_call_ratio'] = pcr_val
+                cache_updates['options_pcr'] = pcr_val
+            hz_val = result['put_call'].get('etf_hedge_zscore', result['put_call'].get('z_score'))
+            if hz_val is not None:
+                cache_updates['etf_hedge_zscore'] = hz_val
         if cache_updates:
             _save_signal_cache(cache_updates)
         logger.info(f'  ✅ 시장 브레드스: {len(result)}개 지표')
@@ -1348,7 +1432,9 @@ def collect_sentiment() -> Dict:
         if nns.is_available:
             uni_file = _PROJECT_ROOT / 'results' / 'dynamic_universe.json'
             if uni_file.exists():
-                tickers = json.loads(uni_file.read_text())[:20]
+                raw_uni = json.loads(uni_file.read_text())
+                uni_list = raw_uni if isinstance(raw_uni, list) else raw_uni.get('tickers', raw_uni.get('kr_stocks', []))
+                tickers = uni_list[:20]
                 nns.collect_all(tickers=tickers)
                 results['naver_tickers'] = len(tickers)
                 logger.info(f'  ✅ 네이버 뉴스: {len(tickers)}종목')

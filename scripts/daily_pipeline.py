@@ -1312,9 +1312,48 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         try:
             from src.allocation.bayesian_bl_meta_upgrader import BayesianBlackLittermanMetaUpgrader
             bl_upgrader = BayesianBlackLittermanMetaUpgrader()
+            current_weights = {}
+            realized_sharpes = {}
+            _sm_bl_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
+            if _sm_bl_path.exists():
+                try:
+                    _sm_bl = json.loads(_sm_bl_path.read_text(encoding='utf-8'))
+                    _raw_bl = _sm_bl.get('raw_data', {}) if isinstance(_sm_bl, dict) else {}
+                    _met_bl = _sm_bl.get('metrics', {}) if isinstance(_sm_bl, dict) else {}
+                    _tot_mv_bl = sum(
+                        float((_raw_bl.get(_sk, {}) or {}).get('market_value') or (_met_bl.get(_sk, {}) or {}).get('market_value') or 0.0)
+                        for _sk in set(list(_raw_bl.keys()) + list(_met_bl.keys()))
+                        if _sk != 'S_RECON' and isinstance(_raw_bl.get(_sk, _met_bl.get(_sk)), dict)
+                    )
+                    for _sk in sorted(set(list(_raw_bl.keys()) + list(_met_bl.keys()))):
+                        if _sk == 'S_RECON' or not _sk.startswith('S'):
+                            continue
+                        _r_entry = _raw_bl.get(_sk) if isinstance(_raw_bl.get(_sk), dict) else {}
+                        _m_entry = _met_bl.get(_sk) if isinstance(_met_bl.get(_sk), dict) else {}
+                        _mv = float(_r_entry.get('market_value') or _m_entry.get('market_value') or 0.0)
+                        if _tot_mv_bl > 0 and _mv > 0:
+                            current_weights[_sk] = round(_mv / _tot_mv_bl, 4)
+                        _sh = _r_entry.get('sharpe') if _r_entry.get('sharpe') is not None else _m_entry.get('sharpe')
+                        if _sh is not None:
+                            realized_sharpes[_sk] = float(_sh)
+                except Exception as _bl_load_e:
+                    logger.debug(f"  BayesianBLMetaUpgrader stream_metrics load skipped: {_bl_load_e}")
+            if not current_weights:
+                _po_path = _PROJECT_ROOT / 'results' / 'portfolio_optimizer.json'
+                if _po_path.exists():
+                    try:
+                        _po_d = json.loads(_po_path.read_text(encoding='utf-8'))
+                        _fw = _po_d.get('final_weights') or _po_d.get('weights') or {}
+                        if isinstance(_fw, dict):
+                            current_weights = {k: float(v) for k, v in _fw.items() if isinstance(v, (int, float))}
+                    except Exception:
+                        pass
             # 장 마감 후 감사 장부 및 체결 오차 수집 후 자율 파라미터 승격
-            bl_upgrader.auto_upgrade_strategy_parameters({}, {})
-            logger.info("  ✅ BayesianBLMetaUpgrader: 베이시안 후험 자율 파라미터 승격 완료")
+            bl_upgrader.auto_upgrade_strategy_parameters(current_weights, realized_sharpes)
+            logger.info(
+                f"  ✅ BayesianBLMetaUpgrader: 베이시안 후험 자율 파라미터 승격 완료 "
+                f"(weights={len(current_weights)}, sharpes={len(realized_sharpes)})"
+            )
         except Exception as e:
             logger.error(f"  BayesianBLMetaUpgrader 실패: {e}", exc_info=True)
 

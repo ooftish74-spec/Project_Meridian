@@ -175,26 +175,26 @@ def _ensure_loaded():
     if res_dyn.exists():
         try:
             raw_u = json.loads(res_dyn.read_text())
-            if isinstance(raw_u, list):
-                for tk in raw_u:
-                    tk_str = str(tk).strip()
-                    if not tk_str:
-                        continue
-                    if _KR_TICKER_RE.match(tk_str):
-                        if tk_str not in etfs and tk_str not in stocks:
-                            stocks.append(tk_str)
-                        if tk_str not in tickers:
-                            tickers.append(tk_str)
-                        names.setdefault(tk_str, tk_str)
-                        meta.setdefault(tk_str, {'market': 'KR', 'type': 'stock'})
-                    elif re.match(r'^[A-Z]{1,5}([.-][A-Z])?$', tk_str):
-                        if tk_str not in us:
-                            us.append(tk_str)
-                        if tk_str not in tickers:
-                            tickers.append(tk_str)
-                        names.setdefault(tk_str, tk_str)
-                        meta.setdefault(tk_str, {'market': 'US', 'type': 'us_stock'})
-            elif isinstance(raw_u, dict):
+            flat_list = raw_u if isinstance(raw_u, list) else (raw_u.get('tickers', []) if isinstance(raw_u, dict) else [])
+            for tk in flat_list:
+                tk_str = str(tk.get('ticker', '') if isinstance(tk, dict) else tk).strip()
+                if not tk_str:
+                    continue
+                if _KR_TICKER_RE.match(tk_str):
+                    if tk_str not in etfs and tk_str not in stocks:
+                        stocks.append(tk_str)
+                    if tk_str not in tickers:
+                        tickers.append(tk_str)
+                    names.setdefault(tk_str, tk_str)
+                    meta.setdefault(tk_str, {'market': 'KR', 'type': 'stock'})
+                elif re.match(r'^[A-Z]{1,5}([.-][A-Z])?$', tk_str):
+                    if tk_str not in us:
+                        us.append(tk_str)
+                    if tk_str not in tickers:
+                        tickers.append(tk_str)
+                    names.setdefault(tk_str, tk_str)
+                    meta.setdefault(tk_str, {'market': 'US', 'type': 'us_stock'})
+            if isinstance(raw_u, dict):
                 for s in raw_u.get('kr_stocks', []):
                     t = str(s.get('ticker', '') if isinstance(s, dict) else s)
                     if t:

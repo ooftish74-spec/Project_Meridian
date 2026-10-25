@@ -965,19 +965,52 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
             'n_sample_dates': int(len(_sample_dates)) if _sample_dates is not None else None,
         }
 
-    # ═══ DD-11: All-zero V6 피처 자동 제외 ═══
+    # ═══ DD-11: All-zero / Ultra-Sparse / Near-Duplicate V6 피처 자동 제외 ═══
     auto_exclude = _cfg.get('ml.auto_exclude_zero_features', True)
     excluded_cfg = _cfg.get('ml.excluded_features', [])
     if auto_exclude and len(train_X) > 0 and train_X.shape[1] == len(active_features):  # ★ H-21
         auto_excluded = []
+        auto_sparse = []
+        auto_collinear = []
+        _sparse_zero_ratio = 0.80
+        _collinear_corr_limit = 0.995
+        _min_rows_for_sparse = 500
+        _eps_zero = 1e-8
         for col_idx, fname in enumerate(active_features):  # ★ H-21
             col_vals = train_X[:, col_idx]
             # all-zero 또는 단일값(분산 0)인 피처 감지
             if np.std(col_vals) < 1e-10:
                 auto_excluded.append(fname)
+            elif len(train_X) >= _min_rows_for_sparse:
+                if float(np.mean(np.abs(col_vals) < _eps_zero)) > _sparse_zero_ratio:
+                    auto_sparse.append(fname)
+                elif fname == 'asset_type' and len(_raw_train_X) == len(train_X):
+                    if float(np.mean(np.abs(_raw_train_X[:, col_idx]) < _eps_zero)) > _sparse_zero_ratio:
+                        auto_sparse.append(fname)
+
+        # Pairwise collinearity / exact-duplicate pruning (|corr| > 0.995)
+        if len(train_X) >= _min_rows_for_sparse:
+            _prelim_drop = set(auto_excluded) | set(auto_sparse) | set(excluded_cfg)
+            _kept_so_far: List[int] = []
+            for col_idx, fname in enumerate(active_features):
+                if fname in _prelim_drop:
+                    continue
+                col_vals = train_X[:, col_idx]
+                _is_dup = False
+                for prev_idx in _kept_so_far:
+                    prev_vals = train_X[:, prev_idx]
+                    _c = np.corrcoef(col_vals, prev_vals)[0, 1]
+                    if np.isfinite(_c) and abs(float(_c)) > _collinear_corr_limit:
+                        auto_collinear.append(fname)
+                        _is_dup = True
+                        break
+                if not _is_dup:
+                    _kept_so_far.append(col_idx)
 
         # DynamicConfig에서 명시적으로 제외한 피처도 합산
-        all_excluded = sorted(set(auto_excluded) | set(excluded_cfg))
+        all_excluded = sorted(
+            set(auto_excluded) | set(auto_sparse) | set(auto_collinear) | set(excluded_cfg)
+        )
 
         if all_excluded:
             keep_mask = np.array(
@@ -991,6 +1024,10 @@ def build_rolling_dataset(window_days: int = None, forward_days: int = None,
                 f"({len(all_excluded)}개 제거)")
             if auto_excluded:
                 logger.info(f"     auto-zero: {auto_excluded}")
+            if auto_sparse:
+                logger.info(f"     auto-sparse (>80% zero): {auto_sparse}")
+            if auto_collinear:
+                logger.info(f"     auto-collinear (|r|>0.995): {auto_collinear}")
             if excluded_cfg:
                 logger.info(f"     config: {excluded_cfg}")
                 
@@ -1169,14 +1206,36 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     # ═══ GBR (1차 학습 + Feature Pruning 선행) ═══
     current += 1
     logger.info(f"\n  📊 {current}/{model_count} GradientBoosting...")
-    gbr_params = {
-        'n_estimators': cfg.get('ml.hp.gbr.n_estimators', 300),
-        'max_depth': cfg.get('ml.hp.gbr.max_depth', 4),
-        'learning_rate': cfg.get('ml.hp.gbr.learning_rate', 0.03),
-        'subsample': cfg.get('ml.hp.gbr.subsample', 0.8),
-        'min_samples_leaf': cfg.get('ml.hp.gbr.min_samples_leaf', 100),
-        'random_state': 42,
-    }
+    _target_type_cfg = str(cfg.get('ml.target_type', 'max_high') or 'max_high')
+    _cs_min_rows = 500
+    _cs_depth_cap = 3
+    _cs_lr_cap = 0.02
+    _cs_sub_cap = 0.6
+    _cs_leaf_floor = 3000
+    _cs_rf_est_cap = 200
+    _is_cs_target = (
+        _target_type_cfg in ('cross_sectional_excess', 'cs_rank', 'cross_sectional')
+        and len(train_X) >= _cs_min_rows
+    )
+    if _is_cs_target:
+        gbr_params = {
+            'n_estimators': min(int(cfg.get('ml.hp.gbr.n_estimators', 100)), 100),
+            'max_depth': min(int(cfg.get('ml.hp.gbr.max_depth', _cs_depth_cap)), _cs_depth_cap),
+            'learning_rate': min(float(cfg.get('ml.hp.gbr.learning_rate', _cs_lr_cap)), _cs_lr_cap),
+            'subsample': min(float(cfg.get('ml.hp.gbr.subsample', _cs_sub_cap)), _cs_sub_cap),
+            'min_samples_leaf': max(int(cfg.get('ml.hp.gbr.min_samples_leaf', _cs_leaf_floor)), _cs_leaf_floor),
+            'max_features': 'sqrt',
+            'random_state': 42,
+        }
+    else:
+        gbr_params = {
+            'n_estimators': cfg.get('ml.hp.gbr.n_estimators', 300),
+            'max_depth': cfg.get('ml.hp.gbr.max_depth', 4),
+            'learning_rate': cfg.get('ml.hp.gbr.learning_rate', 0.03),
+            'subsample': cfg.get('ml.hp.gbr.subsample', 0.8),
+            'min_samples_leaf': cfg.get('ml.hp.gbr.min_samples_leaf', 100),
+            'random_state': 42,
+        }
     logger.info(f"    HP: {gbr_params}")
     gbr = GradientBoostingClassifier(**gbr_params)
 
@@ -1196,7 +1255,15 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     pruning_pct = cfg.get('ml.feature_pruning_pct', 10)
     pruned_features = []
     if pruning_pct > 0 and train_X.shape[1] > 5:
-        importances = gbr.feature_importances_
+        importances = np.asarray(gbr.feature_importances_, dtype=np.float64).copy()
+        # Break zero-importance ties using univariate cross-sectional correlation with train_y
+        _tie_min_rows = 10
+        _tie_eps = 1e-8
+        if len(train_X) > _tie_min_rows and np.std(train_y) > _tie_eps:
+            _yc_tie = train_y - float(np.mean(train_y))
+            _x_std = np.where(np.std(train_X, axis=0) > _tie_eps, np.std(train_X, axis=0), 1.0)
+            _cs_ic_abs = np.abs((train_X / _x_std).T @ _yc_tie) / float(len(train_y))
+            importances = importances + 1e-3 * _cs_ic_abs
         n_features = len(importances)
         n_prune = max(1, int(n_features * pruning_pct / 100))
         prune_indices = np.argsort(importances)[:n_prune]
@@ -1230,6 +1297,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     eval_X, eval_y = val_X, val_y
     _cal_sw_slice = None
     _date_split_done = False
+    _cal_n_dates = 0
     # [WAVE3 Track D] val 행은 종목-major 순서이므로 행 절반 분할은 '시계열 순'이 아니다.
     # → 날짜 단위 앞/뒤 분할 + 라벨 horizon(h 거래일) purge gap.
     if (_cv_method == CV_METHOD_PURGED and val_dates is not None
@@ -1242,6 +1310,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                     and len(np.unique(val_y[_ei])) >= 2:
                 cal_X, cal_y = val_X[_ci], val_y[_ci]
                 eval_X, eval_y = val_X[_ei], val_y[_ei]
+                _cal_n_dates = int(_sinfo.get('cal_dates') or len(np.unique(val_dates[_ci])))
                 if val_sample_weights is not None and len(val_sample_weights) == len(val_y):
                     _cal_sw_slice = np.asarray(val_sample_weights, dtype=float)[_ci]
                 _date_split_done = True
@@ -1265,6 +1334,9 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
 
     # [S2 Upgrade] Task 3: Probability Calibration (FrozenEstimator 기반 prefit 보정)
     calibration_method = cfg.get('ml.calibration_method', 'isotonic')
+    _iso_min_dates, _iso_min_rows = 30, 10000
+    if calibration_method == 'isotonic' and ((0 < _cal_n_dates < _iso_min_dates) or len(cal_X) < _iso_min_rows):
+        calibration_method = 'sigmoid'
     calibration_enabled = cfg.get('ml.calibration_enabled', True)
     try:
         from sklearn.frozen import FrozenEstimator as _FrozenEstimator
@@ -1287,6 +1359,14 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
                     cv='prefit',
                 )
             cal.fit(cal_X, cal_y)
+            # Guard against Platt-scaling sign inversion when cal_X has negative slope
+            _raw_p = base_model.predict_proba(cal_X)[:, 1]
+            _cal_p = cal.predict_proba(cal_X)[:, 1]
+            _cal_eps = 1e-8
+            if np.std(_raw_p) > _cal_eps and np.std(_cal_p) > _cal_eps:
+                if float(np.corrcoef(_raw_p, _cal_p)[0, 1]) < 0.0:
+                    logger.info(f"    [S2 Upgrade] {model_label} Calibration sign-inversion guard → uncalibrated")
+                    return base_model
             logger.info(f"    [S2 Upgrade] {model_label} Calibrated ({calibration_method})")
             return cal
         except Exception as _cal_e:
@@ -1334,13 +1414,23 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     # ═══ RandomForest ═══
     current += 1
     logger.info(f"  📊 {current}/{model_count} RandomForest...")
-    rf_params = {
-        'n_estimators': cfg.get('ml.hp.rf.n_estimators', 500),
-        'max_depth': cfg.get('ml.hp.rf.max_depth', 8),
-        'min_samples_leaf': cfg.get('ml.hp.rf.min_samples_leaf', 100),
-        'random_state': 42,
-        'n_jobs': -1,
-    }
+    if _is_cs_target:
+        rf_params = {
+            'n_estimators': min(int(cfg.get('ml.hp.rf.n_estimators', _cs_rf_est_cap)), _cs_rf_est_cap),
+            'max_depth': min(int(cfg.get('ml.hp.rf.max_depth', _cs_depth_cap)), _cs_depth_cap),
+            'min_samples_leaf': max(int(cfg.get('ml.hp.rf.min_samples_leaf', _cs_leaf_floor)), _cs_leaf_floor),
+            'max_features': 'sqrt',
+            'random_state': 42,
+            'n_jobs': -1,
+        }
+    else:
+        rf_params = {
+            'n_estimators': cfg.get('ml.hp.rf.n_estimators', 500),
+            'max_depth': cfg.get('ml.hp.rf.max_depth', 8),
+            'min_samples_leaf': cfg.get('ml.hp.rf.min_samples_leaf', 100),
+            'random_state': 42,
+            'n_jobs': -1,
+        }
     logger.info(f"    HP: n_est={rf_params['n_estimators']}, "
                 f"depth={rf_params['max_depth']}")
     rf = RandomForestClassifier(**rf_params)
@@ -1397,15 +1487,28 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
     if has_catboost:
         current += 1
         logger.info(f"  📊 {current}/{model_count} CatBoost...")
-        cb_params = {
-            'iterations': cfg.get('ml.hp.catboost.iterations', 300),
-            'depth': cfg.get('ml.hp.catboost.depth', 5),
-            'learning_rate': cfg.get('ml.hp.catboost.learning_rate', 0.03),
-            'subsample': cfg.get('ml.hp.catboost.subsample', 0.8),
-            'min_data_in_leaf': cfg.get('ml.hp.catboost.min_data_in_leaf', 100),
-            'verbose': 0,
-            'random_seed': 42,
-        }
+        if _is_cs_target:
+            cb_params = {
+                'iterations': min(int(cfg.get('ml.hp.catboost.iterations', 100)), 100),
+                'depth': min(int(cfg.get('ml.hp.catboost.depth', _cs_depth_cap)), _cs_depth_cap),
+                'learning_rate': min(float(cfg.get('ml.hp.catboost.learning_rate', _cs_lr_cap)), _cs_lr_cap),
+                'grow_policy': 'Depthwise',
+                'min_data_in_leaf': max(int(cfg.get('ml.hp.catboost.min_data_in_leaf', _cs_leaf_floor)), _cs_leaf_floor),
+                'l2_leaf_reg': 100.0,
+                'rsm': 0.3,
+                'verbose': 0,
+                'random_seed': 42,
+            }
+        else:
+            cb_params = {
+                'iterations': cfg.get('ml.hp.catboost.iterations', 300),
+                'depth': cfg.get('ml.hp.catboost.depth', 5),
+                'learning_rate': cfg.get('ml.hp.catboost.learning_rate', 0.03),
+                'subsample': cfg.get('ml.hp.catboost.subsample', 0.8),
+                'min_data_in_leaf': cfg.get('ml.hp.catboost.min_data_in_leaf', 100),
+                'verbose': 0,
+                'random_seed': 42,
+            }
         logger.info(f"    HP: iters={cb_params['iterations']}, "
                     f"depth={cb_params['depth']}, "
                     f"lr={cb_params['learning_rate']}")
@@ -1433,13 +1536,18 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             i for i, fn in enumerate(active_features or [])
             if fn in _vol_names
         ) or (4, 10, 18)
-        _def_blocks, _def_topk = 10, 8
-        _def_ortho, _def_crowd, _def_blend = 0.50, 0.35, 0.15
-        _eb_blocks = int(cfg.get('ml.eb.n_blocks') or _def_blocks)
-        _eb_topk = int(cfg.get('ml.eb.top_k') or _def_topk)
-        _eb_ortho = float(cfg.get('ml.eb.ortho_strength') or _def_ortho)
-        _eb_crowd = float(cfg.get('ml.eb.crowd_threshold') or _def_crowd)
-        _eb_blend = float(cfg.get('ml.eb.tree_blend') or _def_blend)
+        _def_blocks, _def_topk = 10, 12
+        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
+        _c_blocks = cfg.get('ml.eb.n_blocks')
+        _c_topk = cfg.get('ml.eb.top_k')
+        _c_ortho = cfg.get('ml.eb.ortho_strength')
+        _c_crowd = cfg.get('ml.eb.crowd_threshold')
+        _c_blend = cfg.get('ml.eb.tree_blend')
+        _eb_blocks = int(_c_blocks) if _c_blocks is not None else _def_blocks
+        _eb_topk = int(_c_topk) if _c_topk is not None else _def_topk
+        _eb_ortho = float(_c_ortho) if _c_ortho is not None else _def_ortho
+        _eb_crowd = float(_c_crowd) if _c_crowd is not None else _def_crowd
+        _eb_blend = float(_c_blend) if _c_blend is not None else _def_blend
         eb_model = CrossSectionalEBClassifier(
             n_blocks=_eb_blocks,
             top_k=_eb_topk,
@@ -1526,7 +1634,11 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         _sub_ts = {m: _sub_ics[m] * np.sqrt(_n_eval_eff) for m in model_names}
         _js_w_map = james_stein_ic_ensemble_weights(_sub_ics, _sub_ts)
         w_edge = np.array([float(_js_w_map.get(m, 0.0)) for m in model_names], dtype=float)
-        if 'eb_ic' in model_names:
+        _pos_mask = np.array([1.0 if float(model_aucs[m]) > _half else 0.0 for m in model_names], dtype=float)
+        _w_eps = 1e-12
+        if float(np.sum(w_edge * _pos_mask)) > _w_eps:
+            w_edge = (w_edge * _pos_mask) / float(np.sum(w_edge * _pos_mask))
+        if 'eb_ic' in model_names and float(model_aucs.get('eb_ic', 0.0)) > _half:
             w_prior = np.array([1.0 if m == 'eb_ic' else 0.0 for m in model_names], dtype=float)
             weights = _eb_prior * w_prior + (1.0 - _eb_prior) * w_edge
             weights = weights / float(np.sum(weights))
@@ -1648,14 +1760,19 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
 
     def _eb_ic():
         from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
-        _def_blocks, _def_topk = 10, 8
-        _def_ortho, _def_crowd, _def_blend = 0.50, 0.35, 0.15
+        _def_blocks, _def_topk = 10, 12
+        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
+        _c_blocks = cfg_obj.get('ml.eb.n_blocks')
+        _c_topk = cfg_obj.get('ml.eb.top_k')
+        _c_ortho = cfg_obj.get('ml.eb.ortho_strength')
+        _c_crowd = cfg_obj.get('ml.eb.crowd_threshold')
+        _c_blend = cfg_obj.get('ml.eb.tree_blend')
         return CrossSectionalEBClassifier(
-            n_blocks=int(cfg_obj.get('ml.eb.n_blocks') or _def_blocks),
-            top_k=int(cfg_obj.get('ml.eb.top_k') or _def_topk),
-            ortho_strength=float(cfg_obj.get('ml.eb.ortho_strength') or _def_ortho),
-            crowd_threshold=float(cfg_obj.get('ml.eb.crowd_threshold') or _def_crowd),
-            tree_blend=float(cfg_obj.get('ml.eb.tree_blend') or _def_blend),
+            n_blocks=int(_c_blocks) if _c_blocks is not None else _def_blocks,
+            top_k=int(_c_topk) if _c_topk is not None else _def_topk,
+            ortho_strength=float(_c_ortho) if _c_ortho is not None else _def_ortho,
+            crowd_threshold=float(_c_crowd) if _c_crowd is not None else _def_crowd,
+            tree_blend=float(_c_blend) if _c_blend is not None else _def_blend,
         )
 
     def _gbr():
@@ -1743,8 +1860,13 @@ def run_purged_wf_report(panel: pd.DataFrame, feature_cols: List[str], cfg_obj=N
         label_horizon_days=int(forward_days), embargo_days=p['embargo_days'],
         expanding=p['expanding'], calendar=calendar)
     est_factory = _purged_wf_estimator_factory(cfg_obj, mname)
-    pipe_factory = _pwf.make_pipeline_factory(est_factory, impute=True,
-                                              variance_filter=True, scale=True)
+    _is_eb_model = str(mname).lower() in ('eb_ic', 'eb', 'cross_sectional_eb')
+    pipe_factory = _pwf.make_pipeline_factory(
+        est_factory,
+        impute=True,
+        variance_filter=not _is_eb_model,
+        scale=not _is_eb_model,
+    )
     mnpd = int(min_names_per_date or cfg_obj.get('ml.purged_wf.min_names_per_date', 5))
     # fold train 행이 너무 적으면(GBR min_samples_leaf=100 등) 상수 예측 → 지표 오염 → 스킵
     mtr = int(min_train_rows if min_train_rows is not None
@@ -1832,7 +1954,13 @@ def run_purged_validation(window_days: Optional[int] = None, max_tickers: Option
 
     if save_candidate:
         mname = model_name or cfg.get('ml.purged_wf.model', 'gbr')
-        pipe = _pwf.make_pipeline_factory(_purged_wf_estimator_factory(cfg, mname))()
+        _is_eb_cand = str(mname).lower() in ('eb_ic', 'eb', 'cross_sectional_eb')
+        pipe = _pwf.make_pipeline_factory(
+            _purged_wf_estimator_factory(cfg, mname),
+            impute=True,
+            variance_filter=not _is_eb_cand,
+            scale=not _is_eb_cand,
+        )()
         pdf = panel.sort_values(['date', 'ticker'])
         Xa = pdf[feature_cols].to_numpy(dtype=float)
         ya = pdf['label'].to_numpy(dtype=int)
@@ -2522,6 +2650,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
 
     # ── IC Analyzer: 피처 예측력 평가 ──
     try:
+        from src.analysis import ic_analyzer
         from src.analysis.ic_analyzer import evaluate_features
         _ic_target = (
             ds_meta['val_fwd_ret']
@@ -2530,6 +2659,43 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
             else val_y
         )
         ic_result = evaluate_features(val_X, _ic_target, active_features)  # ★ H-21
+        if not hasattr(ic_analyzer, 'save_ic_report'):
+            def _save_ic_report(ic_df_or_dict, out_path=None):
+                target_path = Path(out_path) if out_path else (_PROJECT_ROOT / 'results' / 'ic_report.json')
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                if isinstance(ic_df_or_dict, pd.DataFrame):
+                    records = ic_df_or_dict.to_dict(orient='records')
+                    _ic_s_th, _ic_w_th = 0.02, 0.005
+                    s_list = (
+                        ic_df_or_dict.loc[ic_df_or_dict['verdict'] == 'STRONG', 'feature'].tolist()
+                        if 'verdict' in ic_df_or_dict.columns
+                        else ic_df_or_dict.loc[ic_df_or_dict['significant'] & (ic_df_or_dict['ic'].abs() >= _ic_s_th), 'feature'].tolist()
+                    )
+                    w_list = (
+                        ic_df_or_dict.loc[ic_df_or_dict['verdict'] == 'WEAK', 'feature'].tolist()
+                        if 'verdict' in ic_df_or_dict.columns
+                        else ic_df_or_dict.loc[(~ic_df_or_dict['significant']) | (ic_df_or_dict['ic'].abs() < _ic_w_th), 'feature'].tolist()
+                    )
+                elif isinstance(ic_df_or_dict, dict):
+                    records = ic_df_or_dict
+                    s_list = [f for f in ic_df_or_dict if isinstance(ic_df_or_dict[f], dict) and ic_df_or_dict[f].get('verdict') == 'STRONG']
+                    w_list = [f for f in ic_df_or_dict if isinstance(ic_df_or_dict[f], dict) and ic_df_or_dict[f].get('verdict') == 'WEAK']
+                else:
+                    records, s_list, w_list = [], [], []
+                payload = {
+                    'timestamp': now_kst().isoformat(),
+                    'feature_count': len(active_features or []),
+                    'strong_features': s_list,
+                    'weak_features': w_list,
+                    'features': records,
+                }
+                target_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+                return str(target_path)
+            ic_analyzer.save_ic_report = _save_ic_report
+        try:
+            ic_analyzer.save_ic_report(ic_result)
+        except Exception as _ic_save_e:
+            logger.debug(f"  ic_report.json 저장 스킵: {_ic_save_e}")
         if isinstance(ic_result, pd.DataFrame):
             if 'verdict' in ic_result.columns:
                 strong = ic_result.loc[ic_result['verdict'] == 'STRONG', 'feature'].tolist()
@@ -2562,17 +2728,29 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     try:
         from src.intelligence.conformal_predictor import AdaptiveConformalPredictor
         cp = AdaptiveConformalPredictor()
-        ens_pred = np.mean([m.predict_proba(val_X)[:, 1] for m in models.values()], axis=0)
-        cp.calibrate(ens_pred, val_y)
+        _member_preds_arr = np.asarray([m.predict_proba(val_X)[:, 1] for m in models.values()], dtype=np.float64)
+        ens_pred = np.mean(_member_preds_arr, axis=0)
+        _member_std_arr = np.std(_member_preds_arr, axis=0) if len(_member_preds_arr) > 1 else None
+        cp.calibrate(ens_pred, val_y, member_std=_member_std_arr)
         cp_result = cp.predict_interval(ens_pred[:10])
         logger.info(f"  📏 Conformal: width={cp_result['width']:.3f}, "
                    f"n_cal={cp_result.get('n_calibration', 0)}")
         # Conformal 상태 저장 (promoted 시 MODEL_DIR 반영, 미승격 시 _staging_dir 만 저장)
         import pickle as _pkl
-        _conf_target = (MODEL_DIR / 'conformal_state.pkl') if _should_sync_active_artifacts else (_staging_dir / 'conformal_state.pkl')
+        _conf_dir = MODEL_DIR if _should_sync_active_artifacts else _staging_dir
+        _conf_target = _conf_dir / 'conformal_state.pkl'
+        _conf_state = {
+            'calibration_scores': cp.calibration_scores,
+            'quantile_level': cp.quantile_level,
+            'alpha': cp.alpha,
+            'effective_alpha': cp._effective_alpha,
+        }
         with open(_conf_target, 'wb') as f:
-            _pkl.dump({'calibration_scores': cp.calibration_scores,
-                       'quantile_level': cp.quantile_level}, f)
+            _pkl.dump(_conf_state, f)
+        try:
+            cp.save_state(str(_conf_dir / 'conformal_state.json'))
+        except Exception as _cj_e:
+            logger.debug(f"  conformal_state.json 저장 스킵: {_cj_e}")
     except Exception as e:
         logger.debug(f"  Conformal 보정 스킵: {e}")
 

@@ -1019,6 +1019,11 @@ class KISTraderAdapter:
                     _lone = str(output[0].get('odno', output[0].get('ODNO', ''))).strip().lstrip('0')
                     if not _lone:   # ★ 주문번호가 다른 단일 행을 내 주문으로 오인 금지
                         matched_item = output[0]
+                _recent_cncl_set = getattr(self, '_recently_canceled_odnos', set()) or set()
+                _is_recent_cancel = (
+                    str(order_no).strip() in _recent_cncl_set
+                    or bool(target_odno and target_odno in {str(x).strip().lstrip('0') for x in _recent_cncl_set})
+                )
                 if matched_item:
                     total_qty = int(float(matched_item.get('ord_qty', matched_item.get('ORD_QTY', 0)) or 0))
                     filled_qty = int(float(matched_item.get('tot_ccld_qty', matched_item.get('TOT_CCLD_QTY', 0)) or 0))
@@ -1026,14 +1031,20 @@ class KISTraderAdapter:
                     cncl_yn = str(matched_item.get('cncl_yn', matched_item.get('CNCL_YN', matched_item.get('ORD_TMD', '')))).strip()
                     rjct_qty = int(float(matched_item.get('rjct_qty', 0) or 0))
                     cncl_cfrm_qty = int(float(matched_item.get('cncl_cfrm_qty', 0) or 0))
+                    _has_ccld_field = ('tot_ccld_qty' in matched_item) or ('TOT_CCLD_QTY' in matched_item)
                     if (remaining == 0 and filled_qty > 0) or (filled_qty >= total_qty and total_qty > 0):
                         status = 'filled'
-                    elif rjct_qty > 0 and filled_qty == 0:
-                        status = 'rejected'
-                    elif cncl_yn in ('Y', '취소') or cncl_cfrm_qty > 0 or (hasattr(self, '_recently_canceled_odnos') and str(order_no).strip() in self._recently_canceled_odnos):
-                        status = 'canceled'
                     elif filled_qty > 0:
                         status = 'partial'
+                    elif rjct_qty > 0 and filled_qty == 0:
+                        status = 'rejected'
+                    elif cncl_yn in ('Y', '취소') or cncl_cfrm_qty > 0:
+                        status = 'canceled'
+                    elif _is_recent_cancel:
+                        if _has_ccld_field and filled_qty == 0:
+                            status = 'canceled'
+                        else:
+                            status = 'unknown'
                     elif total_qty > 0 and remaining == 0:
                         # ★ Wave 0 (KIS 실데이터 검증): 체결 0·잔량 0 = 거부/만료/취소된 '죽은 주문' → 종결 상태
                         status = 'canceled'
@@ -1048,11 +1059,19 @@ class KISTraderAdapter:
                         'filled_price': float(matched_item.get('avg_prvs', matched_item.get('AVG_PRVS', 0)) or 0),
                         'order_no': order_no
                     }
+                if _is_recent_cancel:
+                    return {'status': 'unknown', 'order_no': order_no}
                 return {'status': 'not_found', 'order_no': order_no}
             else:
+                _recent_cncl_set = getattr(self, '_recently_canceled_odnos', set()) or set()
+                if str(order_no).strip() in _recent_cncl_set:
+                    return {'status': 'unknown', 'order_no': order_no, 'message': data.get('msg1', '')}
                 return {'status': 'error', 'message': data.get('msg1', '')}
         except Exception as e:
             logger.error(f"  국내 주문체결 조회 실패: {e}")
+            _recent_cncl_set = getattr(self, '_recently_canceled_odnos', set()) or set()
+            if str(order_no).strip() in _recent_cncl_set:
+                return {'status': 'unknown', 'order_no': order_no, 'message': str(e)}
             return {'status': 'error', 'message': str(e)}
 
     def check_us_order_status(self, order_no: str, ticker: str = '', exchange: str = '') -> Dict:

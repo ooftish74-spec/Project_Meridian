@@ -872,20 +872,29 @@ class KISDataCollector:
             return (0.0, 'fallback')
 
     @staticmethod
+    def _second_thursday(year: int, month: int) -> datetime:
+        """해당 연/월의 두 번째 목요일 반환."""
+        thu_count = 0
+        for d in range(1, 32):
+            dt = datetime(year, month, d)
+            if dt.weekday() == 3:
+                thu_count += 1
+                if thu_count == 2:
+                    return dt
+        return datetime(year, month, 14)
+
+    @staticmethod
     def _get_dte(today_str: str) -> float:
-        """이번 달 두 번째 목요일(옵션 만기)까지 잔여일."""
+        """옵션 만기(두 번째 목요일)까지 잔여일. 당월 만기 도래/경과 시 차월 두 번째 목요일로 자동 롤오버."""
         try:
             today = datetime.strptime(today_str, '%Y%m%d')
-            thu_count = 0
-            for d in range(1, 32):
-                try:
-                    dt = datetime(today.year, today.month, d)
-                    if dt.weekday() == 3:
-                        thu_count += 1
-                        if thu_count == 2:
-                            return float(max(1, (dt - today).days))
-                except ValueError:
-                    break
+            exp_dt = KISDataCollector._second_thursday(today.year, today.month)
+            if today >= exp_dt:
+                dec_month = 12
+                next_year = today.year + (1 if today.month == dec_month else 0)
+                next_month = 1 if today.month == dec_month else today.month + 1
+                exp_dt = KISDataCollector._second_thursday(next_year, next_month)
+            return float(max(1, (exp_dt - today).days))
         except Exception as _dte_e:
             logger.error(f"  [Validation] DTE 계산 실패: {_dte_e}", exc_info=True)
         return 10.0
@@ -1095,38 +1104,71 @@ class KISDataCollector:
             return None
 
     def get_vix_series(self, window: int = 20) -> List[Dict[str, Any]]:
-        """Fetch VIX history from local cache/signal_cache and append live GoogleFinance VIX."""
-        vix_val = 17.20
+        """Fetch VIX history from local parquet/signal_cache and append live GoogleFinance VIX (no hardcoded 17.20)."""
+        vix_val: Optional[float] = None
         try:
             from src.utils.google_finance_collector import GoogleFinanceCollector
             v = GoogleFinanceCollector().get_vix()
-            if v > 0:
+            if v and v > 0:
                 vix_val = float(v)
                 logger.info(f"  🟢 [KISDataCollector] VIX fetched via GoogleFinance: {v}")
         except Exception as e:
             logger.warning(f"  ⚠️ [KISDataCollector] GoogleFinance VIX fetch error: {e}")
 
         records: List[Dict[str, Any]] = []
+        root = Path(__file__).resolve().parent.parent.parent
+        # 1순위: cross_vix.parquet / signal_vix.parquet 시계열
+        for rel_pq in ('data/cross_market/cross_vix.parquet', 'data/signals/signal_vix.parquet'):
+            pq_path = root / rel_pq
+            if pq_path.exists():
+                try:
+                    vdf = pd.read_parquet(pq_path)
+                    vdf.columns = [str(c).lower() for c in vdf.columns]
+                    if 'close' in vdf.columns and len(vdf) >= 2:
+                        if 'date' not in vdf.columns:
+                            vdf = vdf.reset_index().rename(columns={vdf.index.name or 'index': 'date'})
+                        tail_df = vdf.dropna(subset=['close']).tail(window)
+                        for _, row in tail_df.iterrows():
+                            c_val = float(row['close'])
+                            if c_val > 0:
+                                d_str = pd.to_datetime(row['date']).strftime('%Y-%m-%d') if 'date' in row and pd.notna(row['date']) else datetime.now().strftime('%Y-%m-%d')
+                                records.append({'date': d_str, 'close': c_val})
+                        if records:
+                            if vix_val is not None and vix_val > 0:
+                                today_s = datetime.now().strftime('%Y-%m-%d')
+                                if records[-1]['date'] == today_s:
+                                    records[-1]['close'] = vix_val
+                                else:
+                                    records.append({'date': today_s, 'close': vix_val})
+                            return records[-window:]
+                except Exception:
+                    pass
+
+        # 2순위: signal_cache.json vix_history / vix
         try:
-            root = Path(__file__).resolve().parent.parent.parent
             sc_path = root / 'results' / 'signal_cache.json'
             if sc_path.exists():
                 sc = json.loads(sc_path.read_text())
+                if vix_val is None:
+                    cached_v = sc.get('vix') or sc.get('VIX')
+                    if isinstance(cached_v, (int, float)) and float(cached_v) > 0:
+                        vix_val = float(cached_v)
                 vh = sc.get('vix_history', [])
                 if isinstance(vh, list) and len(vh) >= 2:
-                    hist_vals = [float(x) for x in vh[-(window - 1):] if x is not None]
+                    hist_vals = [float(x) for x in vh[-(window - 1):] if x is not None and float(x) > 0]
                     for idx, val in enumerate(hist_vals):
                         d = (datetime.now() - timedelta(days=len(hist_vals) - idx)).strftime('%Y-%m-%d')
                         records.append({'date': d, 'close': val})
-                    records.append({'date': datetime.now().strftime('%Y-%m-%d'), 'close': vix_val})
-                    return records[-window:]
+                    if vix_val is not None and vix_val > 0:
+                        records.append({'date': datetime.now().strftime('%Y-%m-%d'), 'close': vix_val})
+                    if records:
+                        return records[-window:]
         except Exception:
             pass
 
-        for i in range(window - 1, -1, -1):
-            d = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
-            records.append({'date': d, 'close': vix_val})
-        return records
+        if vix_val is not None and vix_val > 0:
+            return [{'date': datetime.now().strftime('%Y-%m-%d'), 'close': vix_val}]
+        return []
 
 
 if __name__ == '__main__':

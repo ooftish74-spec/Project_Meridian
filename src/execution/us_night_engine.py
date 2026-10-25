@@ -318,20 +318,75 @@ class USNightExecutionEngine:
         self._save_holdings()
         return orders
 
-    def update_trailing_stop(self, current_prices: Dict[str, float], atr_map: Optional[Dict[str, float]] = None) -> List[Dict]:
+    def confirm_exit(self, ticker: str, reason: str = 'US Night Trailing Stop', realized_pnl_pct: float = 0.0) -> bool:
+        """브로커 매도 주문 성공 확인 후 보유 목록에서 제거 및 일간 청산 원장 기록."""
+        tk = str(ticker or '').strip()
+        if not tk:
+            return False
+        removed = False
+        if isinstance(self.holdings, dict):
+            if tk in self.holdings:
+                del self.holdings[tk]
+                removed = True
+        elif isinstance(self.holdings, list):
+            new_holdings = []
+            for h in self.holdings:
+                if isinstance(h, dict) and str(h.get('ticker', '')).strip() == tk:
+                    removed = True
+                else:
+                    new_holdings.append(h)
+            self.holdings = new_holdings
+        if removed:
+            self._save_holdings()
+        try:
+            from src.execution.position_ledger import PositionLedgerManager
+            PositionLedgerManager().record_daily_exit(
+                tk,
+                reason=reason,
+                realized_pnl_pct=float(realized_pnl_pct),
+            )
+        except Exception as _le:
+            logger.warning(f"  [USNightEngine] confirm_exit 원장 기록 예외 ({tk}): {_le}")
+        return removed
+
+    def update_trailing_stop(
+        self,
+        current_prices: Dict[str, float],
+        atr_map: Optional[Dict[str, float]] = None,
+        submit_fn: Optional[Any] = None,
+    ) -> List[Dict]:
         """미국 장 트레일링 스탑 감시 및 청산 주문 생성 (ATR 변동성 동적 연동 및 HWM 원장 동기화)."""
         exit_orders = []
         if not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
             if not self.is_us_session_active():
                 return exit_orders
-        remaining = []
+        holdings_is_dict = isinstance(self.holdings, dict)
+        if holdings_is_dict:
+            iter_items = [
+                (k, (v if isinstance(v, dict) else {'ticker': k}))
+                for k, v in list(self.holdings.items())
+            ]
+        else:
+            iter_items = [
+                (str(h.get('ticker', '')).strip(), h)
+                for h in (self.holdings or [])
+                if isinstance(h, dict)
+            ]
+        remaining_list = []
+        remaining_dict = {}
         from src.execution.position_ledger import PositionLedgerManager
         ledger_mgr = PositionLedgerManager()
-        for h in self.holdings:
-            ticker = h['ticker']
+        _adapter = getattr(self, 'adapter', None)
+        for tk_key, h in iter_items:
+            ticker = str(h.get('ticker') or tk_key).strip()
+            if not ticker:
+                continue
             price = current_prices.get(ticker, 0.0)
             if price <= 0:
-                remaining.append(h)
+                if holdings_is_dict:
+                    remaining_dict[tk_key] = h
+                else:
+                    remaining_list.append(h)
                 continue
 
             entry_p = float(h.get('entry_price', price) or price)
@@ -369,49 +424,81 @@ class USNightExecutionEngine:
             dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
             effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
+            exit_reason = None
             # 1) Hard Stop-Loss (수익 활성화 전에도 종목별 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)
             if entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
-                ledger_mgr.record_daily_exit(
-                    ticker,
-                    reason=exit_reason,
-                    realized_pnl_pct=float(entry_return * 100.0),
-                )
-                exit_orders.append({
-                    'ticker': ticker,
-                    'direction': 'sell',
-                    'action': 'sell',
-                    'quantity': h.get('quantity', 0),
-                    'amount': h.get('amount', 0),
-                    'price': price,
-                    'pnl_pct': round(entry_return * 100.0, 4),
-                    'reason': exit_reason,
-                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                })
             # 2) Trailing Stop (고점이 진입가 대비 +effective_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화)
             elif entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
                 exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")
-                ledger_mgr.record_daily_exit(
-                    ticker,
-                    reason=exit_reason,
-                    realized_pnl_pct=float(entry_return * 100.0),
-                )
-                exit_orders.append({
+
+            if exit_reason is not None:
+                exit_order = {
                     'ticker': ticker,
                     'direction': 'sell',
                     'action': 'sell',
-                    'quantity': h.get('quantity', 0),
+                    'quantity': h.get('quantity', h.get('qty', 0)),
                     'amount': h.get('amount', 0),
                     'price': price,
                     'pnl_pct': round(entry_return * 100.0, 4),
                     'reason': exit_reason,
                     'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                })
-            else:
-                remaining.append(h)
+                }
+                exit_orders.append(exit_order)
+                order_confirmed_ok = False
+                if callable(submit_fn):
+                    try:
+                        _sres = submit_fn(exit_order)
+                        if isinstance(_sres, dict):
+                            order_confirmed_ok = bool(
+                                _sres.get('success', False)
+                                or str(_sres.get('status', '')).lower() in ('filled', 'submitted', 'ok')
+                            )
+                        elif hasattr(_sres, 'status'):
+                            order_confirmed_ok = str(getattr(_sres, 'status', '')).lower() in ('filled', 'submitted', 'ok')
+                        else:
+                            order_confirmed_ok = bool(_sres)
+                    except Exception as _se:
+                        logger.warning(f"  [USNightEngine] {ticker} 청산 주문 제출 실패: {_se}")
+                        order_confirmed_ok = False
+                elif _adapter is not None and hasattr(_adapter, 'sell'):
+                    try:
+                        _q_sell = int(exit_order.get('quantity', 0) or 0)
+                        _sres = _adapter.sell(ticker, _q_sell, price=price, order_type='market')
+                        if isinstance(_sres, dict):
+                            order_confirmed_ok = bool(
+                                _sres.get('success', False)
+                                or str(_sres.get('status', '')).lower() in ('filled', 'submitted', 'ok')
+                            )
+                        elif hasattr(_sres, 'status'):
+                            order_confirmed_ok = str(getattr(_sres, 'status', '')).lower() in ('filled', 'submitted', 'ok')
+                        else:
+                            order_confirmed_ok = bool(_sres)
+                    except Exception as _se:
+                        logger.warning(f"  [USNightEngine] {ticker} 어댑터 청산 주문 실패: {_se}")
+                        order_confirmed_ok = False
 
-        self.holdings = remaining
+                if order_confirmed_ok:
+                    ledger_mgr.record_daily_exit(
+                        ticker,
+                        reason=exit_reason,
+                        realized_pnl_pct=float(entry_return * 100.0),
+                    )
+                else:
+                    h['pending_exit'] = True
+                    h['pending_exit_reason'] = exit_reason
+                    if holdings_is_dict:
+                        remaining_dict[tk_key] = h
+                    else:
+                        remaining_list.append(h)
+            else:
+                if holdings_is_dict:
+                    remaining_dict[tk_key] = h
+                else:
+                    remaining_list.append(h)
+
+        self.holdings = remaining_dict if holdings_is_dict else remaining_list
         self._save_holdings()
         return exit_orders

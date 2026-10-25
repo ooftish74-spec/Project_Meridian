@@ -65,25 +65,35 @@ def handle_kill():
 
 def handle_status():
     try:
-        # 상태 정보 읽기
+        # 상태 정보 읽기 (라이브 모드는 kis_portfolio.json SSOT 우선)
+        from config.dynamic_config import DynamicConfig
+        cfg = DynamicConfig()
+        is_live = str(cfg.get("execution.current_mode", cfg.get("execution.mode", "live"))).lower() == "live"
         signal_file = _PROJECT_ROOT / "results" / "signal_cache.json"
+        kis_file = _PROJECT_ROOT / "results" / "kis_portfolio.json"
         shadow_file = _PROJECT_ROOT / "results" / "shadow_portfolio.json"
-        
+
         regime = "알 수 없음"
         if signal_file.exists():
-            with open(signal_file, "r") as f:
+            with open(signal_file, "r", encoding="utf-8") as f:
                 sig_data = json.load(f)
                 regime = sig_data.get("regime", "알 수 없음")
-                
-        nav = 0
-        if shadow_file.exists():
-            with open(shadow_file, "r") as f:
+
+        nav = 0.0
+        target_port_file = kis_file if (is_live or kis_file.exists()) else shadow_file
+        if target_port_file.exists():
+            with open(target_port_file, "r", encoding="utf-8") as f:
                 port_data = json.load(f)
-                nav = port_data.get("nav", 0)
-                
+                acct = port_data.get("account") if isinstance(port_data.get("account"), dict) else {}
+                nav = float(port_data.get("nav") or acct.get("nav") or acct.get("total_equity") or 0.0)
+        elif shadow_file.exists():
+            with open(shadow_file, "r", encoding="utf-8") as f:
+                port_data = json.load(f)
+                nav = float(port_data.get("nav", 0.0) or 0.0)
+
         msg = (
             f"📊 **Meridian Status** 📊\n"
-            f"• 마켓 레짐: `{regime.upper()}`\n"
+            f"• 마켓 레짐: `{str(regime).upper()}`\n"
             f"• 추정 NAV: `₩{nav:,.0f}`\n"
         )
         send_message(msg)

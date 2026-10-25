@@ -120,7 +120,7 @@ class SelfLearning:
         logger.debug(f"  [AdaptiveLR] {param_key}: lr={final_lr:.4f} (base={base_lr:.3f}, stability={stability_factor:.3f}, momentum={momentum_factor:.3f}, dir_count={direction_count})")
         return final_lr
 
-    def measure_ic(self, measurement_results: Dict) -> Dict:
+    def measure_ic(self, measurement_results: Dict = None) -> Dict:
         """IC 측정값 추출 (순수 측정).
 
         Args:
@@ -129,21 +129,104 @@ class SelfLearning:
         Returns:
             IC 측정 딕셔너리
         """
+        if measurement_results is None:
+            measurement_results = {}
+        res_dir = self._overrides_file.parent if hasattr(self, '_overrides_file') else (_PROJECT_ROOT / 'results')
         ic_values = {}
-        feature_ic = measurement_results.get('feature_ic', {})
-        for feature_key, ic_val in feature_ic.items():
-            if feature_key in self.IC_PARAM_MAP:
-                ic_std = feature_ic.get(f'{feature_key}_std', 0.0)
-                ic_values[feature_key] = {'value': ic_val, 'abs_value': abs(ic_val), 'direction': 'positive' if ic_val > 0 else 'negative', 'std': float(ic_std) if ic_std else 0.0}
-        stream_metrics = measurement_results.get('streams', {})
+
+        # 1. Feature IC 수집: measurement_results['feature_ic'] + results/ic_report.json['features']
+        feature_ic = dict(measurement_results.get('feature_ic', {}) or {})
+        ic_report_path = res_dir / 'ic_report.json'
+        if ic_report_path.exists():
+            try:
+                ic_rep = json.loads(ic_report_path.read_text(encoding='utf-8'))
+                if isinstance(ic_rep, dict):
+                    rep_feats = ic_rep.get('features', ic_rep.get('feature_ic', {}))
+                    if isinstance(rep_feats, dict):
+                        for fk, fv in rep_feats.items():
+                            norm_k = fk if fk in self.IC_PARAM_MAP else (f"{fk}_ic" if f"{fk}_ic" in self.IC_PARAM_MAP else fk)
+                            if isinstance(fv, dict):
+                                val = fv.get('ic', fv.get('value', fv.get('mean_ic')))
+                                std_v = fv.get('std', fv.get('ic_std', 0.0))
+                                if val is not None and norm_k not in feature_ic:
+                                    feature_ic[norm_k] = float(val)
+                                    feature_ic[f"{norm_k}_std"] = float(std_v or 0.0)
+                            elif isinstance(fv, (int, float)):
+                                if norm_k not in feature_ic:
+                                    feature_ic[norm_k] = float(fv)
+            except Exception as e:
+                logger.debug(f"  SelfLearning: ic_report.json 로드 실패: {e}")
+
+        for feature_key, raw_ic_val in list(feature_ic.items()):
+            norm_key = feature_key if feature_key in self.IC_PARAM_MAP else (f"{feature_key}_ic" if f"{feature_key}_ic" in self.IC_PARAM_MAP else feature_key)
+            if norm_key in self.IC_PARAM_MAP:
+                if isinstance(raw_ic_val, dict):
+                    ic_val = float(raw_ic_val.get('ic', raw_ic_val.get('value', 0.0)) or 0.0)
+                    ic_std = float(raw_ic_val.get('std', raw_ic_val.get('ic_std', 0.0)) or 0.0)
+                else:
+                    ic_val = float(raw_ic_val)
+                    ic_std = float(feature_ic.get(f'{norm_key}_std', feature_ic.get(f'{feature_key}_std', 0.0)) or 0.0)
+                ic_values[norm_key] = {
+                    'value': ic_val,
+                    'abs_value': abs(ic_val),
+                    'direction': 'positive' if ic_val > 0 else 'negative',
+                    'std': ic_std,
+                }
+
+        # 2. Stream Sharpe 수집: measurement_results / measurement_engine.json['official']['per_stream'] / stream_metrics.json['raw_data']
+        merged_streams: Dict[str, Dict] = {}
+        me_disk = {}
+        me_path = res_dir / 'measurement_engine.json'
+        if me_path.exists():
+            try:
+                me_disk = json.loads(me_path.read_text(encoding='utf-8'))
+            except Exception:
+                me_disk = {}
+        sm_disk = {}
+        sm_path = res_dir / 'stream_metrics.json'
+        if sm_path.exists():
+            try:
+                sm_disk = json.loads(sm_path.read_text(encoding='utf-8'))
+            except Exception:
+                sm_disk = {}
+
+        stream_sources = [
+            sm_disk.get('raw_data', {}) if isinstance(sm_disk, dict) else {},
+            sm_disk.get('metrics', {}) if isinstance(sm_disk, dict) else {},
+            (me_disk.get('views') or {}).get('sleeves', {}) if isinstance(me_disk, dict) else {},
+            (me_disk.get('official') or {}).get('per_stream', {}) if isinstance(me_disk, dict) else {},
+            (measurement_results.get('views') or {}).get('sleeves', {}),
+            (measurement_results.get('official') or {}).get('per_stream', {}),
+            measurement_results.get('streams', {}),
+        ]
+        for src in stream_sources:
+            if isinstance(src, dict):
+                for sk, sv in src.items():
+                    if isinstance(sv, dict):
+                        base_s = merged_streams.get(sk, {})
+                        for k_f, v_f in sv.items():
+                            if v_f is not None:
+                                base_s[k_f] = v_f
+                        merged_streams[sk] = base_s
+
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
-        active_streams = cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10'])
+        active_streams = list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
+        for extra_s in ('S1', 'S2', 'S3', 'S4'):
+            if extra_s not in active_streams:
+                active_streams.append(extra_s)
         for sid in active_streams:
-            sharpe_key = f'{sid.lower()}_sharpe'
-            sharpe = stream_metrics.get(sid, {}).get('sharpe')
+            short_sid = str(sid).split('_')[0]
+            sharpe_key = f'{short_sid.lower()}_sharpe'
+            s_info = merged_streams.get(sid) or merged_streams.get(short_sid) or {}
+            sharpe = s_info.get('sharpe')
             if sharpe is not None:
-                ic_values[sharpe_key] = {'value': sharpe, 'abs_value': abs(sharpe), 'direction': 'positive' if sharpe > 0 else 'negative'}
+                sh_val = float(sharpe)
+                ic_values[sharpe_key] = {
+                    'value': sh_val,
+                    'abs_value': abs(sh_val),
+                    'direction': 'positive' if sh_val > 0 else 'negative',
+                }
         return {'ic_values': ic_values, 'n_features': len(ic_values), 'timestamp': datetime.now().isoformat()}
 
     def judge_updates(self, ic_measurement: Dict) -> Dict:
@@ -312,18 +395,18 @@ class SelfLearning:
     def _apply_changes(self, changes: List[Dict]) -> bool:
         """변경사항을 dynamic_overrides.json에 적용."""
         try:
-            overrides = {}
-            if self._overrides_file.exists():
-                from src.utils.file_ops import atomic_write_json
-
-                with open(self._overrides_file, 'r', encoding='utf-8') as f:
-                    overrides = json.load(f)
-            for change in changes:
-                overrides[change['param']] = change['new_value']
-            overrides['_last_updated'] = datetime.now().isoformat()
-            overrides['_updated_by'] = 'self_learning'
+            from src.utils.file_ops import safe_json_update
             self._overrides_file.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_json(self._overrides_file, overrides, indent=2, ensure_ascii=False)
+
+            def _mutate_overrides(cur):
+                base = cur if isinstance(cur, dict) else {}
+                for change in changes:
+                    base[change['param']] = change['new_value']
+                base['_last_updated'] = datetime.now().isoformat()
+                base['_updated_by'] = 'self_learning'
+                return base
+
+            safe_json_update(self._overrides_file, _mutate_overrides, default={}, indent=2, ensure_ascii=False, strict=True)
             cfg.reload()
             self._save_momentum()
             return True

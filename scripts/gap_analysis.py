@@ -121,22 +121,26 @@ class GapAnalyzer:
     # ──────────────────────────────────────────────
 
     def _load_data(self):
-        """shadow_portfolio.json, signal_cache.json, stream_metrics.json 로드."""
-        # trade_history
+        """shadow_portfolio.json, kis_portfolio.json, signal_cache.json, stream_metrics.json 로드."""
+        raw_trades: List[Dict] = []
         sp_file = _RESULTS / 'shadow_portfolio.json'
         if sp_file.exists():
             try:
-                sp = json.loads(sp_file.read_text())
+                sp = json.loads(sp_file.read_text(encoding='utf-8'))
                 raw_trades = sp.get('trade_history', [])
-                self.trades = self._pair_trades(raw_trades)
             except Exception as e:
                 logger.warning(f"  shadow_portfolio 로드 실패: {e}")
+
+        try:
+            self.trades = self._pair_trades(raw_trades)
+        except Exception as e:
+            logger.warning(f"  _pair_trades 실패: {e}")
 
         # signal_cache
         sc_file = _RESULTS / 'signal_cache.json'
         if sc_file.exists():
             try:
-                self.signal_cache = json.loads(sc_file.read_text())
+                self.signal_cache = json.loads(sc_file.read_text(encoding='utf-8'))
             except Exception as e:
                 logger.debug(f"  signal_cache 로드 실패: {e}")
 
@@ -144,22 +148,25 @@ class GapAnalyzer:
         sm_file = _RESULTS / 'stream_metrics.json'
         if sm_file.exists():
             try:
-                self.stream_metrics = json.loads(sm_file.read_text())
+                self.stream_metrics = json.loads(sm_file.read_text(encoding='utf-8'))
             except Exception as e:
                 logger.debug(f"  stream_metrics 로드 실패: {e}")
 
     def _pair_trades(self, raw_trades: List[Dict]) -> List[Dict]:
         """BUY/SELL 매칭하여 완결된 거래 페어로 변환.
 
-        SELL이 없는 포지션도 포함 (unrealized).
+        SELL이 없는 포지션도 포함 (unrealized: shadow_portfolio.json positions 및 라이브 kis_portfolio.json holdings).
         """
+        from scripts.rebuild_stream_metrics import _infer_canonical_stream, _load_ledger_map
+        ledger_map = _load_ledger_map(_RESULTS)
         buys: Dict[str, List[Dict]] = defaultdict(list)
         paired: List[Dict] = []
 
         for trade in raw_trades:
             action = trade.get('action', '').upper()
-            ticker = trade.get('ticker', '')
-            stream = trade.get('stream', trade.get('stream_id', ''))
+            ticker = str(trade.get('ticker', '') or '').strip()
+            raw_stream = trade.get('stream', trade.get('stream_id', ''))
+            stream = _infer_canonical_stream(ticker, raw_stream, ledger_map)
             key = f"{stream}:{ticker}"
 
             if action == 'BUY':
@@ -194,48 +201,93 @@ class GapAnalyzer:
                     'realized': True,
                 })
 
-        # 미실현 포지션도 포함 (shadow_portfolio.json positions)
+        # 미실현 포지션도 포함 (shadow_portfolio.json positions + 라이브 kis_portfolio.json holdings)
+        unrealized_positions: Dict[str, Dict] = {}
         sp_file = _RESULTS / 'shadow_portfolio.json'
         if sp_file.exists():
             try:
-                sp = json.loads(sp_file.read_text())
-                for pos_key, pos in sp.get('positions', {}).items():
-                    ticker = pos.get('ticker', '')
-                    stream = pos.get('stream_id', '')
-                    pnl_pct = float(pos.get('pnl_pct', 0))
-                    # confidence는 trade_history에서 매칭
-                    conf = 0.5
-                    for t in raw_trades:
-                        if (t.get('ticker') == ticker
-                                and t.get('action', '').upper() == 'BUY'):
-                            conf = float(t.get('confidence', 0.5))
-                            break
+                sp = json.loads(sp_file.read_text(encoding='utf-8'))
+                if isinstance(sp.get('positions'), dict) and sp['positions']:
+                    unrealized_positions.update(sp['positions'])
+            except Exception as e:
+                logger.debug(f"Targeted fallback: {e}")
 
-                    paired.append({
-                        'ticker': ticker,
-                        'name': pos.get('name', ticker),
-                        'stream': stream,
-                        'strategy': pos.get('strategy', ''),
-                        'confidence': conf,
-                        'buy_date': pos.get('entry_date', ''),
-                        'sell_date': '',
-                        'buy_price': float(pos.get('avg_price', 0)),
-                        'sell_price': float(pos.get('current_price', 0)),
-                        'return_pct': round(pnl_pct, 4),
-                        'predicted_up': conf >= 0.5,
-                        'actual_up': pnl_pct > 0,
-                        'hit': (conf >= 0.5) == (pnl_pct > 0),
-                        'reason': '',
-                        'regime': self._infer_regime(
-                            pos.get('entry_date', '')),
-                        'sector': self._infer_sector(ticker),
-                        'market_cap_tier': self._infer_cap_tier(ticker),
-                        'realized': False,
-                    })
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                pass
+        if not unrealized_positions:
+            kp_file = _RESULTS / 'kis_portfolio.json'
+            if kp_file.exists():
+                try:
+                    kp = json.loads(kp_file.read_text(encoding='utf-8'))
+                    holdings = kp.get('holdings') if isinstance(kp.get('holdings'), dict) else {}
+                    if not holdings and isinstance((kp.get('account') or {}).get('positions'), dict):
+                        holdings = kp['account']['positions']
+                    for tk, h in holdings.items():
+                        if not isinstance(h, dict):
+                            continue
+                        qty = float(h.get('qty', h.get('quantity', 0)) or 0)
+                        if qty <= 0:
+                            continue
+                        t_str = str(tk).strip()
+                        l_entry = ledger_map.get(t_str.upper(), {})
+                        sid = _infer_canonical_stream(
+                            t_str,
+                            h.get('stream_id') or h.get('stream') or l_entry.get('stream_id') or l_entry.get('stream') or '',
+                            ledger_map,
+                        )
+                        avg_p = float(h.get('avg_price', l_entry.get('avg_price', 0)) or 0)
+                        cur_p = float(h.get('current_price', avg_p) or avg_p)
+                        ret_pct = float(h.get('return_pct', h.get('pnl_pct', 0)) or 0)
+                        if ret_pct == 0.0 and avg_p > 0 and cur_p > 0:
+                            ret_pct = (cur_p / avg_p - 1.0) * 100.0
+                        unrealized_positions[f"{sid}:{t_str}"] = {
+                            **h,
+                            'ticker': t_str,
+                            'stream_id': sid,
+                            'strategy': h.get('strategy') or l_entry.get('strategy') or sid,
+                            'entry_date': h.get('entry_date') or l_entry.get('entry_date') or '',
+                            'avg_price': avg_p,
+                            'current_price': cur_p,
+                            'pnl_pct': ret_pct,
+                        }
+                except Exception as e:
+                    logger.debug(f"kis_portfolio holdings load in gap_analysis skipped: {e}")
+
+        for pos_key, pos in unrealized_positions.items():
+            ticker = str(pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key) or '').strip()
+            raw_stream = pos.get('stream_id', pos.get('stream', pos_key.split(':')[0] if ':' in pos_key else ''))
+            stream = _infer_canonical_stream(ticker, raw_stream, ledger_map)
+            pnl_pct = float(pos.get('pnl_pct', pos.get('return_pct', 0)) or 0)
+            avg_p = float(pos.get('avg_price', 0) or 0)
+            cur_p = float(pos.get('current_price', avg_p) or avg_p)
+            if pnl_pct == 0.0 and avg_p > 0 and cur_p > 0:
+                pnl_pct = (cur_p / avg_p - 1.0) * 100.0
+            conf = 0.5
+            for t in raw_trades:
+                if (t.get('ticker') == ticker
+                        and t.get('action', '').upper() == 'BUY'):
+                    conf = float(t.get('confidence', 0.5))
+                    break
+
+            paired.append({
+                'ticker': ticker,
+                'name': pos.get('name', ticker),
+                'stream': stream,
+                'strategy': pos.get('strategy', ''),
+                'confidence': conf,
+                'buy_date': pos.get('entry_date', ''),
+                'sell_date': '',
+                'buy_price': avg_p,
+                'sell_price': cur_p,
+                'return_pct': round(pnl_pct, 4),
+                'predicted_up': conf >= 0.5,
+                'actual_up': pnl_pct > 0,
+                'hit': (conf >= 0.5) == (pnl_pct > 0),
+                'reason': '',
+                'regime': self._infer_regime(
+                    pos.get('entry_date', '')),
+                'sector': self._infer_sector(ticker),
+                'market_cap_tier': self._infer_cap_tier(ticker),
+                'realized': False,
+            })
 
         return paired
 

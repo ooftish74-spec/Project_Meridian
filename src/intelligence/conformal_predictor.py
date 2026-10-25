@@ -36,10 +36,15 @@ class AdaptiveConformalPredictor:
 
     def __init__(self, target_coverage: float = 0.90,
                  adaptation_rate: float = 0.01,
-                 window_size: int = 100):
-        if _cfg:
+                 window_size: int = 100,
+                 alpha: Optional[float] = None):
+        if alpha is not None:
+            target_coverage = 1.0 - float(alpha)
+        elif _cfg:
             target_coverage = _cfg.get('conformal.target_coverage', target_coverage)
         self.target_coverage = target_coverage
+        self.alpha = 1.0 - float(target_coverage)
+        self._effective_alpha = self.alpha
         self.adaptation_rate = adaptation_rate
         self.window_size = window_size
         self.conf_high_threshold = pget('conformal.width_high', 0.15) if _cfg else 0.15
@@ -50,12 +55,70 @@ class AdaptiveConformalPredictor:
         self.coverage_history = deque(maxlen=window_size)
         self.width_history = deque(maxlen=window_size)
 
-    def calibrate(self, y_pred: np.ndarray, y_true: np.ndarray):
+    def save_state(self, filepath: str) -> bool:
+        """Save conformal calibration state to JSON."""
+        try:
+            import json
+            from pathlib import Path
+            p = Path(filepath)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                'calibration_scores': list(self.calibration_scores),
+                'quantile_level': float(self.quantile_level),
+                'target_coverage': float(self.target_coverage),
+                'alpha': float(self.alpha),
+                'effective_alpha': float(1.0 - self.quantile_level),
+            }
+            p.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+            return True
+        except Exception as e:
+            logger.debug(f"Conformal save_state failed: {e}")
+            return False
+
+    def load_state(self, filepath: str) -> bool:
+        """Load conformal calibration state from JSON or pickle."""
+        try:
+            import json
+            import pickle
+            from pathlib import Path
+            p = Path(filepath)
+            if not p.exists():
+                return False
+            if p.suffix == '.pkl':
+                with open(p, 'rb') as f:
+                    data = pickle.load(f)
+            else:
+                data = json.loads(p.read_text(encoding='utf-8'))
+            self.calibration_scores = [float(x) for x in data.get('calibration_scores', [])]
+            self.quantile_level = float(data.get('quantile_level', self.target_coverage))
+            self._effective_alpha = float(data.get('effective_alpha', 1.0 - self.quantile_level))
+            return True
+        except Exception as e:
+            logger.debug(f"Conformal load_state failed: {e}")
+            return False
+
+    def calibrate(self, y_pred: np.ndarray, y_true: np.ndarray,
+                  member_std: Optional[np.ndarray] = None):
         """Calibration Set으로 비적합 점수 계산.
 
-        Score = |y_true - y_pred| (분류: |p - actual|)
+        Score = |y_true - y_pred| (분류: 확률 불확실성 보정 포함)
         """
-        self.calibration_scores = sorted(np.abs(y_true - y_pred).tolist())
+        yp = np.asarray(y_pred, dtype=float)
+        yt = np.asarray(y_true, dtype=float)
+        _half = 0.5
+        _min_score = 0.02
+        _bern_floor = 0.45
+        if member_std is not None and len(member_std) == len(yp):
+            ms = np.asarray(member_std, dtype=float)
+            scores = np.maximum(_min_score, ms + _half * np.abs(yp - _half))
+        else:
+            raw = np.abs(yt - yp)
+            uniq_t = set(np.unique(yt[~np.isnan(yt)]).tolist())
+            if uniq_t <= {0.0, 1.0} and len(yp) > 0 and float(np.min(yp)) >= 0.0 and float(np.max(yp)) <= 1.0:
+                scores = np.maximum(_min_score, raw - _bern_floor)
+            else:
+                scores = raw
+        self.calibration_scores = sorted(scores.tolist())
         logger.debug(f"  Conformal 보정: {len(self.calibration_scores)}건")
 
     def predict_interval(self, y_pred: np.ndarray,
@@ -105,7 +168,13 @@ class AdaptiveConformalPredictor:
 
     def update(self, y_pred: float, y_true: float):
         """실시간 커버리지 추적 + 양자 자동 조정."""
-        score = abs(y_true - y_pred)
+        raw_score = abs(y_true - y_pred)
+        _min_score = 0.02
+        _bern_floor = 0.45
+        if y_true in (0.0, 1.0) and 0.0 <= y_pred <= 1.0:
+            score = max(_min_score, raw_score - _bern_floor)
+        else:
+            score = raw_score
         n = len(self.calibration_scores)
         q_idx = int(np.ceil(self.quantile_level * (n + 1))) - 1
         q_idx = max(0, min(q_idx, n - 1))

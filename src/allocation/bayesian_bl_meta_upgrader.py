@@ -15,9 +15,13 @@ import numpy as np
 import logging
 import json
 import os
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional
 
 logger = logging.getLogger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 class BayesianBlackLittermanMetaUpgrader:
     """베이시안 칼만 필터 및 블랙-리터만 통합 전략 자율 승격 엔진."""
@@ -36,7 +40,13 @@ class BayesianBlackLittermanMetaUpgrader:
         """
         self.tau = tau
         self.delta = risk_aversion_delta
-        self.overrides_path = overrides_path
+        raw_p = Path(overrides_path)
+        if not raw_p.is_absolute():
+            raw_p = _PROJECT_ROOT / raw_p
+        # Protect config/defaults.json from accidental direct mutation
+        if raw_p.name == 'defaults.json':
+            raw_p = _PROJECT_ROOT / 'results' / 'dynamic_overrides.json'
+        self.overrides_path = str(raw_p)
 
         # 칼만 필터 상태 변수 초기화
         self.kalman_states: Dict[str, float] = {}
@@ -162,35 +172,81 @@ class BayesianBlackLittermanMetaUpgrader:
 
     def auto_upgrade_strategy_parameters(
         self,
-        posterior_returns: Dict[str, float],
-        uncertainty_diag: Dict[str, float]
+        posterior_returns: Optional[Dict[str, float]] = None,
+        uncertainty_diag: Optional[Dict[str, float]] = None
     ) -> Dict[str, Any]:
         """
-        산출된 후험 기대수익률 및 불확실성 지표를 바탕으로 results/dynamic_overrides.json 자율 승격.
+        산출된 후험 기대수익률/비중(current_weights) 및 불확실성/실현 샤프(realized_sharpes)를 바탕으로
+        results/dynamic_overrides.json 자율 승격 (safe_json_update strict locking 적용).
 
         Returns:
             updated_overrides: 갱신된 오버라이드 딕셔너리
         """
-        os.makedirs(os.path.dirname(self.overrides_path), exist_ok=True)
+        target_path = Path(self.overrides_path)
+        if target_path.name == 'defaults.json':
+            target_path = _PROJECT_ROOT / 'results' / 'dynamic_overrides.json'
+        target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 후험 기대수익률 기반 알파 승격 팩터 계산
-        upgraded_alphas = {}
-        for ticker, ret in posterior_returns.items():
-            unc = uncertainty_diag.get(ticker, 1.0)
-            conviction_multiplier = round(max(0.2, min(2.0, float(ret / (unc + 1e-4)))), 4)
-            upgraded_alphas[ticker] = conviction_multiplier
+        weights_or_post = dict(posterior_returns or {})
+        sharpes_or_unc = dict(uncertainty_diag or {})
 
-        ts_str = logging.Formatter().formatTime(logging.LogRecord("", 0, "", 0, "", (), None))
+        # If called with empty dicts, auto-load live weights & realized sharpes from stream_metrics.json
+        if not weights_or_post and not sharpes_or_unc:
+            sm_path = target_path.parent / 'stream_metrics.json'
+            if sm_path.exists():
+                try:
+                    sm_data = json.loads(sm_path.read_text(encoding='utf-8'))
+                    raw_d = sm_data.get('raw_data', {}) if isinstance(sm_data, dict) else {}
+                    tot_mv = sum(
+                        float(v.get('market_value', 0) or 0)
+                        for k, v in raw_d.items()
+                        if isinstance(v, dict) and k != 'S_RECON'
+                    )
+                    for sid, s_info in raw_d.items():
+                        if not isinstance(s_info, dict) or sid == 'S_RECON':
+                            continue
+                        mv = float(s_info.get('market_value', 0) or 0)
+                        sh = s_info.get('sharpe')
+                        if tot_mv > 0 and mv > 0:
+                            weights_or_post[sid] = round(mv / tot_mv, 4)
+                        if sh is not None:
+                            sharpes_or_unc[sid] = float(sh)
+                except Exception as e:
+                    logger.debug(f"Auto-load stream_metrics in BL upgrader skipped: {e}")
+
+        upgraded_alphas: Dict[str, float] = {}
+        all_keys = sorted(set(list(weights_or_post.keys()) + list(sharpes_or_unc.keys())))
+        for key in all_keys:
+            if key == 'S_RECON':
+                continue
+            w_val = float(weights_or_post.get(key, 0.0) or 0.0)
+            s_val = sharpes_or_unc.get(key)
+            if str(key).startswith('S') and s_val is not None:
+                # Stream weight + realized Sharpe Bayesian shrinkage multiplier
+                sh_f = float(s_val)
+                prior_mult = 1.0 + 0.5 * (w_val - 0.20)
+                view_mult = 1.0 + 0.25 * np.tanh(sh_f / 2.0)
+                post_mult = 0.5 * prior_mult + 0.5 * view_mult
+                upgraded_alphas[key] = round(float(max(0.2, min(2.0, post_mult))), 4)
+            elif key in weights_or_post:
+                unc = float(sharpes_or_unc.get(key, 1.0) or 1.0)
+                conviction_multiplier = round(max(0.2, min(2.0, float(w_val / (abs(unc) + 1e-4)))), 4)
+                upgraded_alphas[key] = conviction_multiplier
+
+        ts_str = datetime.now().isoformat()
         from src.utils.file_ops import safe_json_update
 
         def _mutator(d: Dict[str, Any]) -> Dict[str, Any]:
             if not isinstance(d, dict):
                 d = {}
-            d['bayesian_bl_alpha_multipliers'] = upgraded_alphas
+            existing_mults = d.get('bayesian_bl_alpha_multipliers')
+            merged_mults = dict(existing_mults) if isinstance(existing_mults, dict) else {}
+            merged_mults.update(upgraded_alphas)
+            d['bayesian_bl_alpha_multipliers'] = merged_mults
             d['last_bl_upgrade_timestamp'] = ts_str
             return d
 
-        current_data = safe_json_update(self.overrides_path, _mutator, default={}, strict=True)
+        current_data = safe_json_update(target_path, _mutator, default={}, strict=True)
 
-        logger.info(f"✅ [BayesianBLMetaUpgrader] 자율 전략 승격 완료 -> {self.overrides_path}")
+        logger.info(f"✅ [BayesianBLMetaUpgrader] 자율 전략 승격 완료 ({len(upgraded_alphas)}개 항목) -> {target_path}")
         return current_data

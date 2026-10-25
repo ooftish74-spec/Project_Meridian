@@ -134,7 +134,9 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
             _live_vix = GoogleFinanceCollector.get_vix()
             if _live_vix and _live_vix > 0:
                 vix_records = [{'date': today_kst().isoformat(), 'close': float(_live_vix)}]
-        latest_vix = vix_records[-1]['close'] if vix_records else 14.92
+        if not vix_records:
+            return _fallback_vix_from_overnight(error='empty_vix_records')
+        latest_vix = vix_records[-1]['close']
         cache_data = {'saved_date': today_kst().isoformat(), 'saved_at': now_kst().isoformat(), 'source': 'KIS_FRED_SSOT', 'n_rows': len(vix_records), 'latest_vix': round(latest_vix, 4), 'vix_values': [r['close'] for r in vix_records], 'vix_records': vix_records}
         _atomic_write_json(VIX_CACHE, cache_data)
         logger.info(f"  ✅ VIX 캐시 저장 (KIS/FRED SSoT): {len(vix_records)}일 (최신 {latest_vix:.2f}) → {VIX_CACHE}")
@@ -144,8 +146,11 @@ def prefetch_vix(window: int=756, force: bool=False) -> Dict:
         return _fallback_vix_from_overnight(error=str(e))
 
 def _fallback_vix_from_overnight(error: str='') -> Dict:
-    """overnight_signals.json 및 overnight_intelligence_history.json에서 VIX 추출 후 캐시 갱신."""
+    """overnight_signals.json / overnight_result.json 및 overnight_intelligence_history.json에서 VIX 추출 후 캐시 갱신."""
     sig_file = PROJECT_ROOT / 'results' / 'overnight_signals.json'
+    if not sig_file.exists():
+        sig_file = PROJECT_ROOT / 'results' / 'overnight_result.json'
+    res_file = PROJECT_ROOT / 'results' / 'overnight_result.json'
     hist_intel_file = PROJECT_ROOT / 'results' / 'overnight_intelligence_history.json'
 
     def _extract_vix_val(v_obj):
@@ -157,7 +162,7 @@ def _fallback_vix_from_overnight(error: str='') -> Dict:
 
     vix_list = []
     try:
-        for cand_file in (hist_intel_file, sig_file):
+        for cand_file in (hist_intel_file, sig_file, res_file):
             if not cand_file.exists():
                 continue
             data = json.loads(cand_file.read_text())

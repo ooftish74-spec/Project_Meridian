@@ -195,7 +195,7 @@ class MeasurementEngine:
         s2_rolling = self._compute_s2_rolling_metrics(sp, target_date=target_date)
         quant = self._compute_quant_metrics(sp, risk)
         ic_ensemble = self._compute_ic_ensemble_view(sp)
-        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'jensen_alpha_pct': portfolio.get('jensen_alpha_pct', 0), 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict)}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
+        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'jensen_alpha_pct': portfolio.get('jensen_alpha_pct', 0), 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'avg_win': sv.get('avg_win', 0.0), 'avg_loss': sv.get('avg_loss', 0.0), 'n_days': sv.get('n_return_days', 0), 'daily_returns': sv.get('daily_returns', []), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict) and sid != 'S_RECON'}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
         self._save()
         self._log_summary()
         return self.result
@@ -599,32 +599,115 @@ class MeasurementEngine:
           데이터 소스: stream_metrics.json (daily_returns), trade_history
         """
         from config.dynamic_config import DynamicConfig
+        from scripts.rebuild_stream_metrics import (
+            _infer_canonical_stream,
+            _load_ledger_map,
+            _resolve_live_fx,
+            _fifo_enrich_and_remap_trades,
+            _extract_external_logs,
+            _reconstruct_holding_daily_returns,
+            _INVALID_STREAM_IDS,
+        )
         cfg = DynamicConfig()
-        positions = sp.get('positions', {})
-        trade_history = sp.get('trade_history', [])
+        positions = dict(sp.get('positions', {}) or {})
+        raw_trade_history = list(sp.get('trade_history', []) or [])
+        ledger_map = _load_ledger_map(RESULTS)
+        kis_data = _load('kis_portfolio.json', {})
+        fx_rate = _resolve_live_fx(kis_data if isinstance(kis_data, dict) else {}, RESULTS)
+        trade_history = _fifo_enrich_and_remap_trades(raw_trade_history, ledger_map, fx_rate)
+        ext_trades, ext_daily_rets = _extract_external_logs(RESULTS, ledger_map, fx_rate)
+        if ext_trades:
+            trade_history = trade_history + ext_trades
+
         stream_tracker = _load('stream_metrics.json', {})
-        raw_data = stream_tracker.get('raw_data', {})
+        raw_data = dict(stream_tracker.get('raw_data', {}) or {})
         bench_daily_returns = self._get_benchmark_daily_returns(sp, cfg)
         stream_stats = {}
+        stream_pos_lists = {}
         for pos_key, pos in positions.items():
+            if not isinstance(pos, dict):
+                continue
             if ':' in pos_key:
-                stream_id = pos_key.split(':')[0]
+                raw_sid, tk = pos_key.split(':', 1)
             else:
-                stream_id = pos.get('stream_id', 'unknown')
+                tk = pos_key
+                raw_sid = pos.get('stream_id', pos.get('stream', ''))
+            stream_id = _infer_canonical_stream(tk, raw_sid, ledger_map)
             if stream_id not in stream_stats:
-                stream_stats[stream_id] = {'count': 0, 'market_value': 0, 'unrealized_pnl': 0, 'cost_basis': 0}
+                stream_stats[stream_id] = {'count': 0, 'market_value': 0.0, 'unrealized_pnl': 0.0, 'cost_basis': 0.0, 'wins': 0}
+                stream_pos_lists[stream_id] = []
             s = stream_stats[stream_id]
             s['count'] += 1
-            s['market_value'] += pos.get('market_value', pos.get('amount', 0))
-            s['unrealized_pnl'] += pos.get('unrealized_pnl', 0)
-            s['cost_basis'] += pos.get('cost_basis', pos.get('amount', 0))
+            s['market_value'] += float(pos.get('market_value', pos.get('amount', 0)) or 0)
+            unp = float(pos.get('unrealized_pnl', 0) or 0)
+            s['unrealized_pnl'] += unp
+            s['cost_basis'] += float(pos.get('cost_basis', pos.get('amount', 0)) or 0)
+            if unp > 0 or float(pos.get('pnl_pct', pos.get('return_pct', 0)) or 0) > 0:
+                s['wins'] += 1
+            stream_pos_lists[stream_id].append({**pos, 'ticker': tk, 'stream_id': stream_id})
+
+        # Reconstruct from live kis_portfolio.json['holdings'] when shadow positions are empty or live holdings exist
+        kis_holdings = kis_data.get('holdings') if isinstance(kis_data, dict) and isinstance(kis_data.get('holdings'), dict) else {}
+        if not kis_holdings and isinstance(kis_data, dict) and isinstance((kis_data.get('account') or {}).get('positions'), dict):
+            kis_holdings = kis_data['account']['positions']
+        if kis_holdings and not positions:
+            for tk, h in kis_holdings.items():
+                if not isinstance(h, dict):
+                    continue
+                qty = float(h.get('qty', h.get('quantity', 0)) or 0)
+                if qty <= 0:
+                    continue
+                t_sym = str(tk).strip().upper()
+                l_entry = ledger_map.get(t_sym, {})
+                sid = _infer_canonical_stream(
+                    t_sym,
+                    h.get('stream_id') or h.get('stream') or l_entry.get('stream_id') or l_entry.get('stream') or '',
+                    ledger_map,
+                )
+                is_kr = (h.get('market') == 'KR') or (len(t_sym) == 6 and t_sym.isdigit())
+                mult = 1.0 if is_kr else fx_rate
+                avg_p = float(h.get('avg_price', l_entry.get('avg_price', 0)) or 0)
+                cur_p = float(h.get('current_price', avg_p) or avg_p)
+                cost_krw = avg_p * qty * mult
+                mkt_val_krw = float(h.get('eval_krw', 0) or 0) or (cur_p * qty * mult)
+                unp_krw = mkt_val_krw - cost_krw
+                ret_pct = float(h.get('return_pct', h.get('pnl_pct', 0)) or 0)
+                if ret_pct == 0.0 and avg_p > 0 and cur_p > 0:
+                    ret_pct = round((cur_p - avg_p) / avg_p * 100.0, 2)
+                if sid not in stream_stats:
+                    stream_stats[sid] = {'count': 0, 'market_value': 0.0, 'unrealized_pnl': 0.0, 'cost_basis': 0.0, 'wins': 0}
+                    stream_pos_lists[sid] = []
+                s = stream_stats[sid]
+                s['count'] += 1
+                s['market_value'] += mkt_val_krw
+                s['unrealized_pnl'] += unp_krw
+                s['cost_basis'] += cost_krw
+                if unp_krw > 0 or ret_pct > 0:
+                    s['wins'] += 1
+                stream_pos_lists[sid].append({
+                    **h,
+                    'ticker': t_sym,
+                    'stream_id': sid,
+                    'quantity': qty,
+                    'avg_price': avg_p,
+                    'current_price': cur_p,
+                    'amount': cost_krw,
+                    'market_value': mkt_val_krw,
+                    'unrealized_pnl': unp_krw,
+                    'pnl_pct': ret_pct,
+                    'return_pct': ret_pct,
+                    'entry_date': str(h.get('entry_date') or l_entry.get('entry_date') or '')[:10],
+                })
+
         realized_by_stream = {}
         wins_by_stream = {}
         trades_by_stream = {}
         for t in trade_history:
-            sid = t.get('stream_id', t.get('stream', 'unknown'))
+            sid = _infer_canonical_stream(t.get('ticker', ''), t.get('stream_id', t.get('stream', '')), ledger_map)
+            if not sid or sid in _INVALID_STREAM_IDS:
+                continue
             if sid not in realized_by_stream:
-                realized_by_stream[sid] = 0
+                realized_by_stream[sid] = 0.0
                 wins_by_stream[sid] = 0
                 trades_by_stream[sid] = 0
             action = t.get('action', '').upper()
@@ -632,24 +715,53 @@ class MeasurementEngine:
                 entry = t.get('entry_price', t.get('avg_price', 0))
                 if entry is None or entry <= 0:
                     continue
-                pnl = t.get('realized_pnl', 0)
+                pnl = float(t.get('realized_pnl', 0) or 0)
                 realized_by_stream[sid] += pnl
                 trades_by_stream[sid] += 1
                 if pnl > 0:
                     wins_by_stream[sid] += 1
         result = {}
         core_streams = cfg.get('dashboard.core_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10_MEGA_TREND'])
-        all_streams = set(list(stream_stats.keys()) + list(realized_by_stream.keys()) + [k for k in raw_data.keys() if raw_data[k].get('daily_returns')] + core_streams)
-        all_streams = {s for s in all_streams if s is not None}
+        all_streams = set(
+            list(stream_stats.keys())
+            + list(realized_by_stream.keys())
+            + list(ext_daily_rets.keys())
+            + [k for k in raw_data.keys() if k not in _INVALID_STREAM_IDS and raw_data[k].get('daily_returns')]
+            + core_streams
+        )
+        all_streams = {s for s in all_streams if s is not None and s not in _INVALID_STREAM_IDS}
         sharpe_min_days = pget('measurement.sharpe_min_days', 5)
         ic_min_positions = pget('measurement.ic_min_positions', 5)
         for sid in sorted(all_streams):
             stats = stream_stats.get(sid, {})
             n_trades = trades_by_stream.get(sid, 0)
             n_wins = wins_by_stream.get(sid, 0)
-            sleeve = {'active_positions': stats.get('count', 0), 'market_value': stats.get('market_value', 0), 'unrealized_pnl': stats.get('unrealized_pnl', 0), 'realized_pnl': realized_by_stream.get(sid, 0), 'total_trades': n_trades, 'win_rate': round(n_wins / max(n_trades, 1), 3), 'source': 'shadow_portfolio → positions + trade_history'}
-            rets = raw_data.get(sid, {}).get('daily_returns', [])
+            if n_trades == 0 and stats.get('count', 0) > 0:
+                n_trades = stats.get('count', 0)
+                n_wins = stats.get('wins', 0)
+            rets = list(raw_data.get(sid, {}).get('daily_returns', []) or [])
+            if not rets and ext_daily_rets.get(sid):
+                rets = list(ext_daily_rets[sid])
+            if len(rets) < 2 and stream_pos_lists.get(sid):
+                rets = _reconstruct_holding_daily_returns(stream_pos_lists[sid], PROJECT_ROOT)
             n_days = len(rets)
+            wins_r = [r for r in rets if r > 0]
+            loss_r = [abs(r) for r in rets if r < 0]
+            avg_win_val = round(sum(wins_r) / len(wins_r), 6) if wins_r else 0.0
+            avg_loss_val = round(sum(loss_r) / len(loss_r), 6) if loss_r else 0.0
+            win_rate_val = round(n_wins / max(n_trades, 1), 3) if n_trades > 0 else (round(len(wins_r) / n_days, 3) if n_days > 0 else 0.0)
+            sleeve = {
+                'active_positions': stats.get('count', 0),
+                'market_value': round(float(stats.get('market_value', 0)), 2),
+                'unrealized_pnl': round(float(stats.get('unrealized_pnl', 0)), 2),
+                'realized_pnl': round(float(realized_by_stream.get(sid, 0)), 2),
+                'total_trades': n_trades,
+                'win_rate': win_rate_val,
+                'avg_win': avg_win_val,
+                'avg_loss': avg_loss_val,
+                'daily_returns': rets,
+                'source': 'shadow_portfolio + kis_portfolio + position_entry_ledger',
+            }
             sleeve['n_return_days'] = n_days
             stream_profiles = cfg.get('measurement.stream_profile', {})
             profile = stream_profiles.get(sid, {})

@@ -27,16 +27,116 @@ def load_json(filepath: Path) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+_S3_MACRO_TICKERS = {"USO", "TLT", "UUP", "GLD", "XLE", "SHV", "BIL"}
+_S6_US_EQUITY_TICKERS = {"V", "MSFT", "CRM", "NVDA", "AAPL", "GOOGL", "AMZN", "META"}
+_S5_KR_ETF_TICKERS = {"091160", "091170", "091180", "102970", "117700", "139230", "140710", "305720"}
+_S3_B_BUFFETT_TICKERS = {"000270", "086280"}
+_INVALID_STREAMS = {"", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT", "Unassigned", "unassigned", "None"}
+
+
+def _infer_canonical_stream_meta(ticker: str, mkt: str, existing: dict, ledger_entry: dict) -> dict:
+    """Preserve and infer canonical (stream_id, track, strategy) for a live holding."""
+    t_sym = str(ticker).strip().upper()
+    raw_stream = (
+        existing.get("stream_id")
+        or existing.get("stream")
+        or ledger_entry.get("stream_id")
+        or ledger_entry.get("stream")
+        or ""
+    )
+    raw_track = existing.get("track") or ledger_entry.get("track") or ""
+    raw_strategy = existing.get("strategy") or ledger_entry.get("strategy") or ""
+
+    # Canonical overrides for known Buffett QVM and specific stream universes when missing or generic/S_RECON
+    if t_sym in _S3_B_BUFFETT_TICKERS:
+        if raw_stream in _INVALID_STREAMS or raw_stream == "S2":
+            raw_stream = "S3_B"
+        if not raw_track or raw_track == "TRACK_1_CORE":
+            raw_track = "TRACK_2_BUFFETT_QVM"
+        if not raw_strategy:
+            raw_strategy = "S3_B Buffett QVM Value"
+    elif raw_stream in _INVALID_STREAMS:
+        if t_sym in _S3_MACRO_TICKERS:
+            raw_stream = "S3"
+            raw_strategy = raw_strategy or "S3 Macro/Cross-Asset Overlay"
+        elif t_sym in _S6_US_EQUITY_TICKERS:
+            raw_stream = "S6"
+            raw_strategy = raw_strategy or "S6 US Equity Alpha"
+        elif t_sym in _S5_KR_ETF_TICKERS:
+            raw_stream = "S5"
+            raw_strategy = raw_strategy or "S5 KRX Sector Rotation ETF"
+        elif mkt == "KR":
+            raw_stream = "S2"
+            raw_strategy = raw_strategy or "S2 KRX Fundamental Swing"
+        else:
+            raw_stream = "S6"
+            raw_strategy = raw_strategy or "S6 US Equity Alpha"
+    else:
+        # Even if raw_stream was set to S2 on a known S5 ETF by legacy recon, fix it
+        if raw_stream == "S2" and t_sym in _S5_KR_ETF_TICKERS:
+            raw_stream = "S5"
+            raw_strategy = raw_strategy or "S5 KRX Sector Rotation ETF"
+        elif raw_stream == "S2" and t_sym in _S3_MACRO_TICKERS:
+            raw_stream = "S3"
+            raw_strategy = raw_strategy or "S3 Macro/Cross-Asset Overlay"
+        elif raw_stream == "S2" and t_sym in _S6_US_EQUITY_TICKERS:
+            raw_stream = "S6"
+            raw_strategy = raw_strategy or "S6 US Equity Alpha"
+
+    if not raw_track:
+        raw_track = "TRACK_2_BUFFETT_QVM" if raw_stream == "S3_B" else "TRACK_1_CORE"
+    if not raw_strategy:
+        _strat_map = {
+            "S1": "S1 KRX Directional Core",
+            "S2": "S2 KRX Fundamental Swing",
+            "S3": "S3 Macro/Cross-Asset Overlay",
+            "S3_B": "S3_B Buffett QVM Value",
+            "S4": "S4 Defensive Alpha",
+            "S5": "S5 KRX Sector Rotation ETF",
+            "S6": "S6 US Equity Alpha",
+        }
+        raw_strategy = _strat_map.get(raw_stream, f"{raw_stream} Active Alpha")
+
+    return {
+        "stream_id": raw_stream,
+        "stream": raw_stream,
+        "track": raw_track,
+        "strategy": raw_strategy,
+    }
+
+
 def inspect_live_truth(as_json: bool = False):
     kis_path = PROJECT_ROOT / "results" / "kis_portfolio.json"
+    ledger_path = PROJECT_ROOT / "results" / "position_entry_ledger.json"
     shadow_path = PROJECT_ROOT / "results" / "shadow_portfolio.json"
     defaults_path = PROJECT_ROOT / "config" / "defaults.json"
     regime_path = PROJECT_ROOT / "results" / "current_regime.json"
 
     kis_data = load_json(kis_path)
+    ledger_data = load_json(ledger_path)
     shadow_data = load_json(shadow_path)
     defaults_data = load_json(defaults_path)
     regime_data = load_json(regime_path)
+
+    existing_holdings = kis_data.get("holdings") if isinstance(kis_data.get("holdings"), dict) else {}
+    existing_acct_positions = (
+        (kis_data.get("account") or {}).get("positions")
+        if isinstance((kis_data.get("account") or {}).get("positions"), dict)
+        else {}
+    )
+    ledger_entries_map = {}
+    if isinstance(ledger_data, dict):
+        for k, v in ledger_data.items():
+            if k not in ("entries", "positions", "error") and isinstance(v, dict):
+                ledger_entries_map[str(k)] = v
+        if isinstance(ledger_data.get("positions"), dict):
+            for k, v in ledger_data["positions"].items():
+                if isinstance(v, dict):
+                    ledger_entries_map[str(k)] = {**ledger_entries_map.get(str(k), {}), **v}
+        if isinstance(ledger_data.get("entries"), dict):
+            for k, v in ledger_data["entries"].items():
+                if isinstance(v, dict):
+                    ledger_entries_map[str(k)] = {**ledger_entries_map.get(str(k), {}), **v}
 
     # Hard Enforcement of Live KIS API Fetch
     live_fetched = False
@@ -45,33 +145,81 @@ def inspect_live_truth(as_json: bool = False):
     account_info = kis_data.get("account", {})
     from datetime import datetime
     live_date = datetime.now().strftime("%Y-%m-%d %H:%M KST")
+    today_iso = datetime.now().strftime("%Y-%m-%d")
     try:
         sys.path.insert(0, str(PROJECT_ROOT))
         from src.execution._kis_adapter import KISTraderAdapter
-        from src.utils.file_ops import atomic_write_json
+        from src.utils.file_ops import safe_json_update
         adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
         if adapter.fetch_live_balance():
+            live_fx = round(float(adapter._get_live_fx_rate() or account_info.get('fx_rate') or 1353.63), 2)
             live_holdings = {}
+            ledger_sync_updates = {}
             from src.utils.ticker_name_resolver import resolve_name
+            from src.utils.market_calendar import is_kr_ticker
             for ticker, pos in adapter.positions.items():
                 if int(getattr(pos, 'quantity', 0) or 0) <= 0:
                     continue
+                t_key = str(ticker)
                 c_price = float(pos.current_price) if pos.current_price > 0 else float(pos.avg_price)
                 a_price = float(pos.avg_price) if pos.avg_price > 0 else c_price
                 ret_pct = round((c_price / a_price - 1.0) * 100.0, 2) if a_price > 0 else 0.0
-                from src.utils.market_calendar import is_kr_ticker
-                mkt = 'KR' if is_kr_ticker(str(ticker)) else 'US'
-                prod_name = pos.name or resolve_name(ticker)
-                live_holdings[ticker] = {
+                mkt = 'KR' if is_kr_ticker(t_key) else 'US'
+                prod_name = pos.name or resolve_name(t_key)
+
+                prev_h = {
+                    **existing_acct_positions.get(t_key, {}),
+                    **existing_holdings.get(t_key, {}),
+                }
+                led_h = ledger_entries_map.get(t_key, {})
+                meta = _infer_canonical_stream_meta(t_key, mkt, prev_h, led_h)
+
+                entry_date = (
+                    prev_h.get("entry_date")
+                    or led_h.get("entry_date")
+                    or prev_h.get("first_seen")
+                    or led_h.get("first_seen")
+                    or today_iso
+                )
+                currency = prev_h.get("currency") or led_h.get("currency") or ("KRW" if mkt == "KR" else "USD")
+                qty_int = int(pos.quantity)
+                eval_krw = round(qty_int * c_price * (1.0 if mkt == "KR" else live_fx), 0)
+                prev_hwm = float(prev_h.get("high_water_mark") or led_h.get("high_water_mark") or 0.0)
+                hwm = round(max(prev_hwm, a_price, c_price), 4)
+
+                holding_record = {
+                    **prev_h,
                     'name': prod_name,
-                    'qty': int(pos.quantity),
+                    'qty': qty_int,
                     'avg_price': round(a_price, 2),
                     'current_price': round(c_price, 2),
                     'return_pct': ret_pct,
-                    'market': mkt
+                    'market': mkt,
+                    'currency': currency,
+                    'eval_krw': eval_krw,
+                    'entry_date': entry_date,
+                    'high_water_mark': hwm,
+                    'stream_id': meta['stream_id'],
+                    'stream': meta['stream'],
+                    'track': meta['track'],
+                    'strategy': meta['strategy'],
+                }
+                live_holdings[t_key] = holding_record
+                ledger_sync_updates[t_key] = {
+                    **led_h,
+                    'entry_date': entry_date,
+                    'avg_price': round(a_price, 2),
+                    'qty': qty_int,
+                    'market': mkt,
+                    'currency': currency,
+                    'high_water_mark': hwm,
+                    'stream_id': meta['stream_id'],
+                    'stream': meta['stream'],
+                    'track': meta['track'],
+                    'strategy': meta['strategy'],
+                    'updated_at': datetime.now().isoformat(),
                 }
             holdings = live_holdings
-            live_fx = round(float(adapter._get_live_fx_rate() or 1353.63), 2)
             if hasattr(adapter, 'account') and getattr(adapter.account, 'total_equity', 0) > 0:
                 account_info['nav'] = round(adapter.account.total_equity, 2)
             if hasattr(adapter, 'account') and getattr(adapter.account, 'cash', 0) >= 0:
@@ -90,20 +238,42 @@ def inspect_live_truth(as_json: bool = False):
             kis_data['account'] = account_info
             kis_data['holdings'] = holdings
             # ★ Wave 1 Track A: kis_portfolio.json 다중 writer(_kis_adapter 등) → 락 보유 merge-update.
-            #   이 스크립트가 갱신하는 키만 교체(account는 키 단위 병합), 손상 파일은 덮어쓰지 않음(→ 실패 처리).
-            from src.utils.file_ops import safe_json_update
+            #   이 스크립트가 갱신하는 키만 교체(account 및 holdings는 키 단위 메타데이터 보존 병합).
             _upd = json.loads(json.dumps({k: kis_data[k] for k in ('date', 'timestamp', 'kis_mode', 'holdings')},
                                          ensure_ascii=False, default=str))
             _acct_upd = json.loads(json.dumps(account_info, ensure_ascii=False, default=str))
 
             def _mutate_kis(cur):
                 cur = cur if isinstance(cur, dict) else {}
-                cur.update(_upd)
+                prev_cur_holdings = cur.get('holdings') if isinstance(cur.get('holdings'), dict) else {}
+                merged_holdings = {}
+                for tk, h_val in _upd.get('holdings', {}).items():
+                    base_h = prev_cur_holdings.get(tk) if isinstance(prev_cur_holdings.get(tk), dict) else {}
+                    merged_h = {**base_h, **h_val}
+                    merged_holdings[tk] = merged_h
+                cur['date'] = _upd['date']
+                cur['timestamp'] = _upd['timestamp']
+                cur['kis_mode'] = _upd['kis_mode']
+                cur['holdings'] = merged_holdings
                 acct = cur.get('account') if isinstance(cur.get('account'), dict) else {}
                 acct.update(_acct_upd)
                 cur['account'] = acct
                 return cur
             kis_data = safe_json_update(kis_path, _mutate_kis, default={}, indent=2, ensure_ascii=False)
+
+            def _mutate_ledger(cur):
+                cur = cur if isinstance(cur, dict) else {}
+                for tk, l_val in ledger_sync_updates.items():
+                    existing_t = cur.get(tk) if isinstance(cur.get(tk), dict) else {}
+                    cur[tk] = {**existing_t, **l_val}
+                    if isinstance(cur.get('entries'), dict):
+                        ex_e = cur['entries'].get(tk) if isinstance(cur['entries'].get(tk), dict) else {}
+                        cur['entries'][tk] = {**ex_e, **l_val}
+                    if isinstance(cur.get('positions'), dict):
+                        ex_p = cur['positions'].get(tk) if isinstance(cur['positions'].get(tk), dict) else {}
+                        cur['positions'][tk] = {**ex_p, **l_val}
+                return cur
+            safe_json_update(ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False)
             live_fetched = True
     except Exception as e_live:
         error_msg = str(e_live)

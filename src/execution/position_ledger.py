@@ -16,13 +16,70 @@ import logging
 import threading
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Historical backfill metadata deprecated to prevent ghost HWM injection onto newly entered positions
 INITIAL_BACKFILL_METADATA: Dict[str, Dict[str, Any]] = {}
 INITIAL_BACKFILL_ENTRY_DATES: Dict[str, str] = {}
+
+_UNATTRIBUTED_STREAM_TAGS = frozenset({"", "?", "NONE", "NULL", "UNKNOWN", "S_RECON", "LIVE_SSOT"})
+_S3_US_MACRO_ETFS = frozenset("USO TLT UUP GLD XLE SHV BIL SGOV QQQ SOXX XLK SPY SH PSQ SOXS SQQQ TQQQ".split())  # hardcode-ok
+_S6_US_SINGLE_STOCKS = frozenset("V MSFT CRM NVDA AAPL GOOGL AMZN META".split())  # hardcode-ok
+_S5_KR_SECTOR_ETFS = frozenset("091160 091170 091180 102970 117700 139230 140710 305720 459580 423160 449170 130730 430740 357870 357330".split())  # hardcode-ok
+_S3B_KR_TRACK2_STOCKS = frozenset("000270 086280".split())  # hardcode-ok
+
+
+def infer_canonical_stream_and_track(
+    ticker: str,
+    holding_info: Optional[Dict[str, Any]] = None,
+    holdings_map: Optional[Dict[str, Any]] = None,
+) -> Tuple[str, str]:
+    """Infer canonical (stream_id, track) from holding metadata or canonical ticker mapping."""
+    clean_tk = str(ticker or "").split(":")[-1].strip().upper()
+    info = holding_info if isinstance(holding_info, dict) else {}
+    if not info and isinstance(holdings_map, dict):
+        cand = holdings_map.get(clean_tk) or holdings_map.get(str(ticker or "").strip())
+        if isinstance(cand, dict):
+            info = cand
+
+    raw_sid = str(info.get("stream_id") or "").strip()
+    raw_track = str(info.get("track") or "").strip()
+    raw_strat = str(info.get("strategy") or "").strip()
+
+    if raw_sid and raw_sid.upper() not in _UNATTRIBUTED_STREAM_TAGS:
+        if not raw_track:
+            if (
+                raw_sid.upper() in ("S3_B", "TRACK_2_BUFFETT_QVM")
+                or "qvm" in raw_strat.lower()
+                or "buffett" in raw_strat.lower()
+            ):
+                raw_track = "TRACK_2_BUFFETT_QVM"
+            else:
+                raw_track = "TRACK_1_TACTICAL"
+        return raw_sid, raw_track
+
+    if clean_tk in _S3B_KR_TRACK2_STOCKS:
+        return "S3_B", "TRACK_2_BUFFETT_QVM"
+    if clean_tk in _S5_KR_SECTOR_ETFS:
+        return "S5", "TRACK_1_TACTICAL"
+    if clean_tk in _S3_US_MACRO_ETFS:
+        return "S3", "TRACK_1_TACTICAL"
+    if clean_tk in _S6_US_SINGLE_STOCKS:
+        return "S6", "TRACK_1_TACTICAL"
+
+    is_kr = clean_tk.isdigit() and len(clean_tk) == 6
+    if not is_kr:
+        try:
+            from src.utils.market_calendar import is_kr_ticker
+            is_kr = bool(is_kr_ticker(clean_tk))
+        except Exception:
+            is_kr = False
+
+    if is_kr:
+        return "S2", "TRACK_1_TACTICAL"
+    return "S6", "TRACK_1_TACTICAL"
 
 
 class PositionLedgerManager:
@@ -88,6 +145,25 @@ class PositionLedgerManager:
                 return info.get("entry_date")
             return None
 
+    def infer_stream_and_track(
+        self,
+        ticker: str,
+        holding_info: Optional[Dict[str, Any]] = None,
+        holdings_map: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, str]:
+        """Infer canonical (stream_id, track) from holding metadata, sibling kis_portfolio.json, or canonical ticker map."""
+        h_map = holdings_map if isinstance(holdings_map, dict) else {}
+        if not holding_info and not h_map:
+            kp_candidate = self.ledger_path.parent / "kis_portfolio.json"
+            if kp_candidate.exists():
+                try:
+                    kp_data = json.loads(kp_candidate.read_text(encoding="utf-8"))
+                    if isinstance(kp_data, dict) and isinstance(kp_data.get("holdings"), dict):
+                        h_map = kp_data["holdings"]
+                except Exception:
+                    h_map = {}
+        return infer_canonical_stream_and_track(ticker, holding_info=holding_info, holdings_map=h_map)
+
     def record_entry(
         self,
         ticker: str,
@@ -105,6 +181,12 @@ class PositionLedgerManager:
         resolved_stream = str(stream_id or "").strip()
         resolved_strategy = str(strategy or "").strip()
         resolved_track = str(track or "").strip()
+        if not resolved_stream or resolved_stream.upper() in _UNATTRIBUTED_STREAM_TAGS:
+            inferred_sid, inferred_trk = self.infer_stream_and_track(ticker)
+            if not resolved_stream or resolved_stream.upper() in _UNATTRIBUTED_STREAM_TAGS:
+                resolved_stream = inferred_sid
+            if not resolved_track:
+                resolved_track = inferred_trk
         if not resolved_track and resolved_stream:
             if resolved_stream.upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") or "qvm" in resolved_strategy.lower() or "buffett" in resolved_strategy.lower():
                 resolved_track = "TRACK_2_BUFFETT_QVM"
@@ -127,7 +209,7 @@ class PositionLedgerManager:
                     "last_avg_price": float(entry_price),
                     "last_qty": float(quantity),
                     "last_quantity": float(quantity),
-                    "stream_id": resolved_stream or "LIVE_SSOT",
+                    "stream_id": resolved_stream or "S2",
                     "strategy": resolved_strategy,
                     "track": resolved_track or "TRACK_1_TACTICAL",
                 }
@@ -135,7 +217,8 @@ class PositionLedgerManager:
                 logger.info(f"  📌 [PositionLedger] 신규 진입일 등록: {ticker} -> {entry_date} (stream={resolved_stream}, track={resolved_track})")
             else:
                 updated = False
-                if resolved_stream and ledger[ticker].get("stream_id") in (None, "", "LIVE_SSOT", "S3") and resolved_stream != ledger[ticker].get("stream_id"):
+                cur_sid = str(ledger[ticker].get("stream_id") or "").strip()
+                if resolved_stream and (cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS or cur_sid == "S3") and resolved_stream != cur_sid:
                     ledger[ticker]["stream_id"] = resolved_stream
                     updated = True
                 if resolved_strategy and not ledger[ticker].get("strategy"):
@@ -345,6 +428,17 @@ class PositionLedgerManager:
             except Exception:
                 trail_activate_threshold = 2.0
 
+        resolved_stream = str(stream_id or "").strip()
+        resolved_track = str(track or "").strip()
+        if not resolved_stream or resolved_stream.upper() in _UNATTRIBUTED_STREAM_TAGS:
+            inferred_sid, inferred_trk = self.infer_stream_and_track(ticker)
+            if not resolved_stream or resolved_stream.upper() in _UNATTRIBUTED_STREAM_TAGS:
+                resolved_stream = inferred_sid
+            if not resolved_track:
+                resolved_track = inferred_trk
+        if not resolved_track:
+            resolved_track = "TRACK_2_BUFFETT_QVM" if resolved_stream.upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") else "TRACK_1_TACTICAL"
+
         with self._lock:
             ledger = self._load_file_unlocked()
 
@@ -362,9 +456,9 @@ class PositionLedgerManager:
                     "last_avg_price": float(avg_price or 0.0),
                     "last_qty": float(quantity or 0.0),
                     "last_quantity": float(quantity or 0.0),
-                    "stream_id": str(stream_id or "LIVE_SSOT"),
+                    "stream_id": resolved_stream or "S2",
                     "strategy": str(strategy or ""),
-                    "track": str(track or ("TRACK_2_BUFFETT_QVM" if str(stream_id or "").upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") else "TRACK_1_TACTICAL")),
+                    "track": resolved_track,
                 }
 
             info = ledger[ticker]
@@ -379,14 +473,15 @@ class PositionLedgerManager:
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
 
             updated = False
-            if stream_id and info.get("stream_id") in (None, "", "LIVE_SSOT", "S3") and str(stream_id) != info.get("stream_id"):
-                info["stream_id"] = str(stream_id)
+            cur_sid = str(info.get("stream_id") or "").strip()
+            if resolved_stream and (cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS or (stream_id and cur_sid == "S3")) and resolved_stream != cur_sid:
+                info["stream_id"] = resolved_stream
                 updated = True
             if strategy and not info.get("strategy"):
                 info["strategy"] = str(strategy)
                 updated = True
-            if track and (not info.get("track") or str(track) == "TRACK_2_BUFFETT_QVM"):
-                info["track"] = str(track)
+            if resolved_track and (not info.get("track") or resolved_track == "TRACK_2_BUFFETT_QVM"):
+                info["track"] = resolved_track
                 updated = True
 
             prev_qty = float(info.get("last_quantity", info.get("last_qty", 0.0)) or 0.0)
@@ -509,18 +604,49 @@ class PositionLedgerManager:
                 "track": None,
             }
 
-    def sync_live_positions(self, active_tickers: List[str], current_date_str: Optional[str] = None) -> Dict[str, str]:
-        """실계좌 보유 목록과 원장 동기화 (하드코딩 백필 주입 제거)."""
+    def sync_live_positions(
+        self,
+        active_tickers: Any,
+        current_date_str: Optional[str] = None,
+        holdings_map: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, str]:
+        """실계좌 보유 목록과 원장 동기화 (하드코딩 백필 주입 제거 및 canonical stream/track 보존)."""
         if not current_date_str:
             current_date_str = datetime.now().strftime("%Y-%m-%d")
 
+        h_map: Dict[str, Any] = {}
+        if isinstance(holdings_map, dict):
+            h_map = dict(holdings_map)
+        elif isinstance(active_tickers, dict):
+            if isinstance(active_tickers.get("holdings"), dict):
+                h_map = dict(active_tickers["holdings"])
+            else:
+                h_map = dict(active_tickers)
+            active_tickers = list(h_map.keys())
+        else:
+            kp_candidate = self.ledger_path.parent / "kis_portfolio.json"
+            if kp_candidate.exists():
+                try:
+                    kp_data = json.loads(kp_candidate.read_text(encoding="utf-8"))
+                    if isinstance(kp_data, dict) and isinstance(kp_data.get("holdings"), dict):
+                        h_map = kp_data["holdings"]
+                except Exception:
+                    h_map = {}
+
+        ticker_list = [str(t) for t in (active_tickers or [])]
         result = {}
         with self._lock:
             ledger = self._load_file_unlocked()
             updated = False
 
             # 1. 활성 종목 동기화
-            for ticker in active_tickers:
+            for ticker in ticker_list:
+                h_info = h_map.get(ticker) if isinstance(h_map, dict) else None
+                inferred_sid, inferred_trk = infer_canonical_stream_and_track(
+                    ticker,
+                    holding_info=h_info if isinstance(h_info, dict) else None,
+                    holdings_map=h_map,
+                )
                 if ticker in ledger and isinstance(ledger[ticker], dict) and "entry_date" in ledger[ticker]:
                     entry_dt = str(ledger[ticker]["entry_date"])[:10]
                     peak_dt = str(ledger[ticker].get("peak_date", entry_dt))[:10]
@@ -533,9 +659,17 @@ class PositionLedgerManager:
                     if "created_at" not in ledger[ticker]:
                         ledger[ticker]["created_at"] = datetime.now().isoformat()
                         updated = True
+                    cur_sid = str(ledger[ticker].get("stream_id") or "").strip()
+                    if not cur_sid or cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS:
+                        ledger[ticker]["stream_id"] = inferred_sid
+                        updated = True
+                    cur_trk = str(ledger[ticker].get("track") or "").strip()
+                    if not cur_trk or (inferred_trk == "TRACK_2_BUFFETT_QVM" and cur_trk != "TRACK_2_BUFFETT_QVM"):
+                        ledger[ticker]["track"] = inferred_trk
+                        updated = True
                     result[ticker] = ledger[ticker]["entry_date"]
                 else:
-                    # 완전 신규 매수종목 (실측 0.0 초기화)
+                    # 완전 신규 매수종목 (실측 0.0 초기화 + canonical stream/track 추론)
                     ledger[ticker] = {
                         "entry_date": current_date_str,
                         "created_at": datetime.now().isoformat(),
@@ -544,12 +678,14 @@ class PositionLedgerManager:
                         "peak_pnl_pct": 0.0,
                         "peak_date": current_date_str,
                         "trail_activated": False,
+                        "stream_id": inferred_sid,
+                        "track": inferred_trk,
                     }
                     result[ticker] = current_date_str
                     updated = True
 
             # 2. 청산된 종목 정리
-            active_set = set(active_tickers)
+            active_set = set(ticker_list)
             to_remove = [t for t in ledger if t not in active_set]
             for t in to_remove:
                 del ledger[t]
@@ -560,3 +696,41 @@ class PositionLedgerManager:
                 self._save_file_unlocked(ledger)
 
         return result
+
+    def reconcile_with_broker(
+        self,
+        broker_holdings: Any = None,
+        current_date_str: Optional[str] = None,
+    ) -> Dict[str, str]:
+        """실계좌 보유 목록(또는 kis_portfolio.json['holdings'])과 원장 대사 및 stream_id/track 정준 보정."""
+        h_map: Dict[str, Any] = {}
+        active_list: List[str] = []
+        if isinstance(broker_holdings, dict):
+            if isinstance(broker_holdings.get("holdings"), dict):
+                h_map = dict(broker_holdings["holdings"])
+            else:
+                h_map = dict(broker_holdings)
+            active_list = [
+                str(k)
+                for k, v in h_map.items()
+                if not isinstance(v, dict)
+                or float(v.get("qty", v.get("quantity", v.get("shares", 1))) or 0) > 0
+            ]
+        elif isinstance(broker_holdings, (list, set, tuple)):
+            active_list = [str(t) for t in broker_holdings]
+        else:
+            kp_candidate = self.ledger_path.parent / "kis_portfolio.json"
+            if kp_candidate.exists():
+                try:
+                    kp_data = json.loads(kp_candidate.read_text(encoding="utf-8"))
+                    if isinstance(kp_data, dict) and isinstance(kp_data.get("holdings"), dict):
+                        h_map = kp_data["holdings"]
+                        active_list = [
+                            str(k)
+                            for k, v in h_map.items()
+                            if isinstance(v, dict)
+                            and float(v.get("qty", v.get("quantity", v.get("shares", 1))) or 0) > 0
+                        ]
+                except Exception:
+                    pass
+        return self.sync_live_positions(active_list, current_date_str=current_date_str, holdings_map=h_map)

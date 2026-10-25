@@ -158,12 +158,19 @@ class S2MLAlphaStream(BaseStream):
                 self._raw_feature_stds = np.array(raw_feat_stds, dtype=float) if (raw_feat_stds is not None and len(raw_feat_stds) > 0) else np.ones(len(raw_feat_means), dtype=float)
             logger.info(f"  S2: pkl 앙상블 로드 완료 ({len(self._models)}모델, {len(self._feature_names)}피처, AUC={self._model_meta['val_auc']:.3f})")
             conformal_path = _MODEL_DIR / 'conformal_state.pkl'
+            conformal_json_path = _MODEL_DIR / 'conformal_state.json'
             if conformal_path.exists():
                 try:
                     self._conformal_state = self._safe_pickle_load(conformal_path)
                     logger.info('  S2: Conformal Predictor 로드 완료')
                 except Exception as e:
                     logger.warning(f'  🚨 S2: Conformal state 로드 실패 (Self-Correction 적용): {e}')
+                    self._conformal_state = None
+            if self._conformal_state is None and conformal_json_path.exists():
+                try:
+                    self._conformal_state = json.loads(conformal_json_path.read_text(encoding='utf-8'))
+                    logger.info('  S2: Conformal Predictor (JSON) 로드 완료')
+                except Exception:
                     self._conformal_state = None
         except Exception as e:
             logger.warning(f'  S2: 앙상블 로드 실패: {e}')
@@ -1124,18 +1131,24 @@ class S2MLAlphaStream(BaseStream):
                         if cal_scores:
                             target_q = q_level if q_level >= 0.5 else (1.0 - q_level)
                             q = float(np.quantile(cal_scores, max(0.01, min(0.99, target_q))))
+                            _bern_legacy_th = 0.35
+                            _bern_floor = 0.45
+                            _min_q = 0.02
+                            if q > _bern_legacy_th and float(np.median(cal_scores)) > _bern_legacy_th:
+                                q = max(_min_q, q - _bern_floor)
                             conf_lower = max(0, up_prob - q)
                             conf_upper = min(1, up_prob + q)
                     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                         import logging
                         logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                         pass
-                ev = self._dynamic_ev(stock, up_prob)
                 ensemble_std = float(np.std(preds)) if preds else 0.0
                 news_sent = float(features.get('news_sentiment_mean', features.get('news_sentiment', 0.0)))
                 meta_confidence = 1.0 - ensemble_std * 2.0 - ood_score * 0.5 + news_sent * 0.1
                 meta_confidence = max(0.1, min(1.0, meta_confidence))
-                up_prob = up_prob * meta_confidence
+                _prior_half = 0.5
+                up_prob = _prior_half + meta_confidence * (up_prob - _prior_half)
+                ev = self._dynamic_ev(stock, up_prob)
                 stock['meta_confidence'] = round(meta_confidence, 4)
                 stock['up_prob'] = round(up_prob, 4)
                 stock['expected_value'] = round(ev, 4)

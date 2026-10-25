@@ -475,17 +475,155 @@ class FeatureStore:
         logger.info("  ⚠️ Data deletion is disabled. Following Append-only principle.")
         return 0
 
+    def _attach_date_and_close(self, ticker: str, df: pd.DataFrame,
+                               ohlcv_df: pd.DataFrame = None) -> pd.DataFrame:
+        """FeatureStore DataFrame에 date 및 close(OHLCV) 컬럼 보장."""
+        if df is None or df.empty:
+            return df
+        out = df.copy()
+        if 'date' not in out.columns:
+            if isinstance(out.index, pd.DatetimeIndex) or str(out.index.name).lower() in ('date', '날짜'):
+                out = out.reset_index().rename(columns={out.index.name or 'index': 'date'})
+        project_root = Path(__file__).parent.parent.parent
+        if ohlcv_df is None:
+            kr_pq = project_root / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
+            if kr_pq.exists():
+                try:
+                    ohlcv_df = pd.read_parquet(kr_pq)
+                except Exception:
+                    ohlcv_df = None
+        if ohlcv_df is not None and not ohlcv_df.empty:
+            odf = ohlcv_df.copy()
+            odf.columns = [str(c).lower() for c in ohlcv_df.columns]
+            if 'date' not in odf.columns:
+                odf = odf.reset_index().rename(columns={odf.index.name or 'index': 'date'})
+            odf['date'] = pd.to_datetime(odf['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+            odf = odf.dropna(subset=['date']).drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
+            if 'date' not in out.columns:
+                if len(out) <= len(odf):
+                    out['date'] = odf['date'].iloc[-len(out):].values
+                else:
+                    out = out.iloc[-len(odf):].copy()
+                    out['date'] = odf['date'].values
+            else:
+                out['date'] = pd.to_datetime(out['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+            if 'close' not in out.columns and 'close' in odf.columns:
+                close_map = dict(zip(odf['date'], pd.to_numeric(odf['close'], errors='coerce')))
+                out['close'] = out['date'].map(close_map)
+            for _col in ('open', 'high', 'low', 'volume'):
+                if _col not in out.columns and _col in odf.columns:
+                    col_map = dict(zip(odf['date'], pd.to_numeric(odf[_col], errors='coerce')))
+                    out[_col] = out['date'].map(col_map)
+        if 'date' in out.columns:
+            out['date'] = pd.to_datetime(out['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+            out = out.dropna(subset=['date']).drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
+            front_cols = [c for c in ('date', 'close', 'open', 'high', 'low', 'volume') if c in out.columns]
+            other_cols = [c for c in out.columns if c not in front_cols]
+            out = out[front_cols + other_cols]
+        return out
+
+    def sync_ticker_parquet(self, ticker: str, ohlcv_df: pd.DataFrame = None) -> str:
+        """종목별 data/feature_store/{ticker}.parquet에 date/close 컬럼 및 최신 OHLCV 행을 증분 동기화."""
+        project_root = Path(__file__).parent.parent.parent
+        base_dir = project_root / 'data' / 'feature_store'
+        base_dir.mkdir(parents=True, exist_ok=True)
+        fs_path = base_dir / f'{ticker}.parquet'
+        if ohlcv_df is None:
+            kr_pq = project_root / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
+            if kr_pq.exists():
+                try:
+                    ohlcv_df = pd.read_parquet(kr_pq)
+                except Exception:
+                    ohlcv_df = None
+        if ohlcv_df is None or ohlcv_df.empty:
+            if fs_path.exists():
+                try:
+                    ex_df = pd.read_parquet(fs_path)
+                    fixed = self._attach_date_and_close(ticker, ex_df)
+                    atomic_write_parquet(fixed, str(fs_path))
+                    return str(fs_path)
+                except Exception:
+                    pass
+            return ''
+
+        odf = ohlcv_df.copy()
+        odf.columns = [str(c).lower() for c in odf.columns]
+        if 'date' not in odf.columns:
+            odf = odf.reset_index().rename(columns={odf.index.name or 'index': 'date'})
+        odf['date'] = pd.to_datetime(odf['date'], errors='coerce').dt.tz_localize(None).dt.normalize()
+        odf = odf.dropna(subset=['date', 'close']).drop_duplicates(subset=['date'], keep='last').sort_values('date').reset_index(drop=True)
+        if odf.empty:
+            return ''
+
+        existing = None
+        if fs_path.exists():
+            try:
+                existing = pd.read_parquet(fs_path)
+                if 'date' not in existing.columns and len(existing) <= len(odf):
+                    # 기존 RangeIndex parquet: 마지막 행의 날짜를 첫 OHLCV(또는 직전 스냅샷)와 정합시켜 정렬
+                    existing = existing.copy()
+                    existing['date'] = odf['date'].iloc[:len(existing)].values
+                existing = self._attach_date_and_close(ticker, existing, ohlcv_df=odf)
+            except Exception:
+                existing = None
+
+        c = pd.to_numeric(odf['close'], errors='coerce')
+        v = pd.to_numeric(odf['volume'], errors='coerce').fillna(0.0) if 'volume' in odf.columns else pd.Series(0.0, index=odf.index)
+        ret_1d = c.pct_change(1)
+        new_feats = pd.DataFrame({'date': odf['date'], 'close': c})
+        for _col in ('open', 'high', 'low', 'volume'):
+            if _col in odf.columns:
+                new_feats[_col] = pd.to_numeric(odf[_col], errors='coerce')
+        for _w in (1, 3, 5, 10, 20, 60):
+            new_feats[f'ret_{_w}d'] = c.pct_change(_w)
+        for _w in (5, 20, 60):
+            new_feats[f'volatility_{_w}d'] = ret_1d.rolling(_w, min_periods=2).std()
+        for _w in (5, 20, 60, 120):
+            _ma = c.rolling(_w, min_periods=2).mean()
+            new_feats[f'price_vs_ma{_w}'] = (c / _ma.replace(0, np.nan)) - 1.0
+        _vma5 = v.rolling(5, min_periods=1).mean().replace(0, np.nan)
+        _vma20 = v.rolling(20, min_periods=1).mean().replace(0, np.nan)
+        new_feats['volume_ma_ratio_5d'] = v / _vma5
+        new_feats['volume_ma_ratio_20d'] = v / _vma20
+
+        if existing is not None and not existing.empty and 'date' in existing.columns:
+            last_ex_date = existing['date'].max()
+            delta_rows = new_feats[new_feats['date'] > last_ex_date].copy()
+            if not delta_rows.empty:
+                for col in existing.columns:
+                    if col not in delta_rows.columns:
+                        delta_rows[col] = existing[col].iloc[-1]
+                combined = pd.concat([existing, delta_rows[existing.columns]], ignore_index=True)
+            else:
+                combined = existing.copy()
+            # 최신 close/date 보정
+            close_map = dict(zip(odf['date'], c))
+            combined['close'] = combined['date'].map(close_map).fillna(combined.get('close'))
+        else:
+            combined = new_feats
+
+        combined = self._attach_date_and_close(ticker, combined, ohlcv_df=odf)
+        atomic_write_parquet(combined, str(fs_path))
+        return str(fs_path)
+
     def export_parquet(self, ticker: str, date: str = None) -> str:
-        """피처를 날짜 파티션(YYYY-MM-DD) Parquet으로 내보내기 (Append-Only Time-travel)."""
+        """피처를 날짜 파티션(YYYY-MM-DD) 및 루트 Parquet으로 내보내기 (date, close 컬럼 포함)."""
         df = self.get_features(ticker)
         if df.empty:
-            return ''
+            return self.sync_ticker_parquet(ticker)
+
+        df = self._attach_date_and_close(ticker, df)
 
         if date is None:
             date = datetime.now().strftime('%Y-%m-%d')
             
         project_root = Path(__file__).parent.parent.parent
         base_dir = project_root / 'data' / 'feature_store'
+        base_dir.mkdir(parents=True, exist_ok=True)
+
+        # 루트 종목 Parquet 동기화 (M2/M3 직접 소비 경로)
+        root_path = base_dir / f'{ticker}.parquet'
+        atomic_write_parquet(df, str(root_path))
         
         # 날짜별 파티션
         date_dir = base_dir / date

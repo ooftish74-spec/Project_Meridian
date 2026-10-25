@@ -106,6 +106,8 @@ class PnLAttributor:
         """
         if stream_metrics is None:
             stream_metrics = self._load_stream_metrics()
+        raw_stream_map = stream_metrics.get('raw_data', stream_metrics) if isinstance(stream_metrics, dict) else {}
+        metrics_sub_map = stream_metrics.get('metrics', {}) if isinstance(stream_metrics, dict) and isinstance(stream_metrics.get('metrics'), dict) else {}
         if portfolio_value is None:
             portfolio_value = self._load_portfolio_value()
         if current_weights is None:
@@ -114,7 +116,14 @@ class PnLAttributor:
         total_pnl = 0
         total_return = 0
         for sid in self.STREAMS:
-            sm = _lookup_stream_val(stream_metrics, sid, {}) or {}
+            sm_raw = _lookup_stream_val(raw_stream_map, sid, {}) or {}
+            sm_met = _lookup_stream_val(metrics_sub_map, sid, {}) or {}
+            sm_top = _lookup_stream_val(stream_metrics, sid, {}) or {}
+            sm = {
+                **(sm_top if isinstance(sm_top, dict) else {}),
+                **(sm_met if isinstance(sm_met, dict) else {}),
+                **(sm_raw if isinstance(sm_raw, dict) else {}),
+            }
             weight = _lookup_stream_val(current_weights, sid, 0)
             if weight is None:
                 weight = 0
@@ -122,8 +131,11 @@ class PnLAttributor:
             result['streams'][sid] = attribution
             total_pnl += attribution['total_pnl']
             total_return += attribution['weighted_return']
+        if total_pnl != 0:
+            for sid_k, attr_v in result['streams'].items():
+                attr_v['contribution_pct'] = round(attr_v['total_pnl'] / abs(total_pnl) * 100.0, 2)
         result['summary'] = {'total_pnl': round(total_pnl, 0), 'total_return_pct': round(total_return * 100, 4), 'best_stream': max(result['streams'].items(), key=lambda x: x[1]['total_pnl'])[0] if result['streams'] else 'N/A', 'worst_stream': min(result['streams'].items(), key=lambda x: x[1]['total_pnl'])[0] if result['streams'] else 'N/A'}
-        brinson = self._brinson_decomposition(stream_metrics, current_weights)
+        brinson = self._brinson_decomposition(raw_stream_map, current_weights)
         result['brinson'] = brinson
         self._save_result(result)
         logger.info(f"  📊 PnL Attribution: total={total_return * 100:.2f}%, best={result['summary']['best_stream']}, worst={result['summary']['worst_stream']}")
@@ -164,18 +176,19 @@ class PnLAttributor:
         return {'weight': round(weight, 4), 'stream_return': round(stream_return, 6), 'weighted_return': round(weighted_return, 6), 'holding_pnl': round(holding_pnl, 0), 'trading_cost': round(trading_cost, 0), 'risk_pnl': round(risk_pnl, 0), 'total_pnl': round(total_pnl, 0), 'contribution_pct': 0, 'sharpe_contribution': round(sharpe_contribution, 4), 'volatility': round(vol, 4), 'trade_count': trade_count, 'n_days': n}
 
     def _brinson_decomposition(self, stream_metrics: Dict, weights: Dict[str, float]) -> Dict:
-        """Brinson-Hood-Beebower 스타일 분해.
+        """Brinson-Fachler 스타일 분해.
 
-        Allocation Effect: (w_p - w_b) × (R_b - R_total)
-        Selection Effect: w_b × (R_p - R_b)
-        Interaction Effect: (w_p - w_b) × (R_p - R_b)
+        Allocation Effect: (w_s - W_B) × (R_s - R_B)
+        Selection Effect: W_B × (R_s - R_b)
+        Interaction Effect: (w_s - W_B) × (R_s - R_b)
         """
+        raw_map = stream_metrics.get('raw_data', stream_metrics) if isinstance(stream_metrics, dict) else {}
         n_streams = len(self.STREAMS)
         bench_weight = 1.0 / n_streams
         returns = {}
         bench_returns = {}
         for sid in self.STREAMS:
-            sm = _lookup_stream_val(stream_metrics, sid, {}) or {}
+            sm = _lookup_stream_val(raw_map, sid, {}) or _lookup_stream_val(stream_metrics, sid, {}) or {}
             daily_r = sm.get('daily_returns', [])
             window = pget('allocation.attribution_window', 20)
             if daily_r:
@@ -198,7 +211,7 @@ class PnLAttributor:
             w_b = bench_weight
             r_p = returns.get(sid, 0)
             r_b = bench_returns.get(sid, bench_total)
-            alloc = (w_p - w_b) * (r_b - bench_total)
+            alloc = (w_p - w_b) * (r_p - bench_total)
             select = w_b * (r_p - r_b)
             interact = (w_p - w_b) * (r_p - r_b)
             effects[sid] = {'allocation_effect': round(alloc * 100, 4), 'selection_effect': round(select * 100, 4), 'interaction_effect': round(interact * 100, 4), 'total_effect': round((alloc + select + interact) * 100, 4)}

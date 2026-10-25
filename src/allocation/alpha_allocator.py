@@ -216,7 +216,7 @@ class AlphaAllocator:
         regime = signal.get('regime', 'caution')
         strategy = signal.get('strategy', '')
         regime_score = float(cfg.get(f'filter.regime_score.{regime}.{strategy}', cfg.get(f'filter.regime_score.{regime}', 0.5)))
-        _sentinel_tp = 50
+        _sentinel_tp = 500
         _raw_tp_es = float(signal.get('tp_pct') or 0.0)
         _valid_tp_es = _raw_tp_es if (0.0 < _raw_tp_es < _sentinel_tp) else 0.0
         _raw_erp_es = float(signal.get('expected_return_pct') or 0.0)
@@ -282,18 +282,36 @@ class AlphaAllocator:
         self._stream_metrics = stream_metrics
 
         ev_scores = {}
+        _cold_start_aux_streams = set()
+        _AUX_STREAM_SET = {
+            'S10', 'S10_MEGA_TREND',
+            'S11', 'S11_HIGHBETA_SNIPER',
+            'S12', 'S12_DERIVATIVE_SQUEEZE',
+            'S13', 'S13_JAPAN_ALPHA',
+            'S14', 'S14_PAIR_ALPHA',
+        }
         for sid in self.STREAMS:
             metrics = (stream_metrics or {}).get(sid, {}) or {}
             import math
             daily_returns = [float(r) for r in (metrics.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
             pos_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r > 0.0]
             neg_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r < 0.0]
-            n_obs = len(daily_returns) or int(metrics.get('total_trades') or 0)
+            _has_zero_days = ('n_days' in metrics and int(metrics.get('n_days') or 0) == 0)
+            _has_zero_trades = ('total_trades' in metrics and int(metrics.get('total_trades') or 0) == 0)
+            _has_explicit_payoff = ('avg_win' in metrics or 'avg_win_pct' in metrics)
+            n_obs = len(daily_returns) or int(metrics.get('total_trades') or metrics.get('n_days') or 0)
+            if _has_zero_days or _has_zero_trades:
+                n_obs = len(daily_returns)
+            _is_cold_start = (len(daily_returns) == 0) and (_has_zero_days or _has_zero_trades or (n_obs == 0 and not _has_explicit_payoff))
+            if _is_cold_start and sid in _AUX_STREAM_SET:
+                _cold_start_aux_streams.add(sid)
             n_0 = 20
             lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
 
             raw_p_win = metrics.get('win_rate', metrics.get('p_win'))
-            if raw_p_win is not None:
+            if _is_cold_start:
+                p_win = self._ev_default_p_win
+            elif raw_p_win is not None:
                 p_win = float(raw_p_win)
                 if math.isnan(p_win) or p_win <= 0.0:
                     p_win = self._ev_default_p_win
@@ -311,16 +329,18 @@ class AlphaAllocator:
                 reward = abs(float(metrics.get('avg_win') or 0.0)) or self._ev_default_reward
                 if reward > 1.0:
                     reward = reward / 100.0
-                if n_obs > 0:
+                if n_obs > 0 or _is_cold_start:
                     reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
             elif metrics.get('avg_win_pct') is not None:
                 reward = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0 or self._ev_default_reward
-                if n_obs > 0:
+                if n_obs > 0 or _is_cold_start:
                     reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
             elif metrics.get('expected_return') is not None:
                 reward = abs(float(metrics.get('expected_return') or 0.0)) or self._ev_default_reward
                 if reward > 1.0:
                     reward = reward / 100.0
+                if n_obs > 0 or _is_cold_start:
+                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
             elif daily_returns:
                 emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else self._ev_default_reward
                 reward = lam_n * emp_rew + (1.0 - lam_n) * self._ev_default_reward
@@ -678,6 +698,36 @@ class AlphaAllocator:
                     final_weights = {k: round(v / _cap_total, 4) for k, v in final_weights.items()}
         except Exception as _cap_e:
             logger.error(f'  [Capacity-Aware] S1 사이징 실패 (비치명적): {_cap_e}', exc_info=True)
+
+        if _cold_start_aux_streams:
+            try:
+                _reg_mat_cap = self._default_regime_weights()
+                _reg_row_cap = _reg_mat_cap.get(str(regime).lower(), _reg_mat_cap.get('caution', {}))
+                _target_tot_cap = sum(final_weights.values()) or 1.0
+                _excess_aux_w = 0.0
+                for _aux_sid in _cold_start_aux_streams:
+                    if _aux_sid in final_weights:
+                        _prior_cap_w = round(float(_reg_row_cap.get(_aux_sid, 0.0) or 0.0) * _target_tot_cap, 4)
+                        if final_weights[_aux_sid] > _prior_cap_w:
+                            _excess_aux_w += (final_weights[_aux_sid] - _prior_cap_w)
+                            final_weights[_aux_sid] = _prior_cap_w
+                if _excess_aux_w > 0.0:
+                    _core_sids = [s for s in final_weights if s not in _cold_start_aux_streams and final_weights.get(s, 0.0) > 0.0]
+                    if not _core_sids:
+                        _core_sids = [s for s in ('S0', 'S1', 'S2', 'S3', 'S5') if s in final_weights]
+                    _core_sum = sum(final_weights.get(s, 0.0) for s in _core_sids)
+                    if _core_sum > 0.0:
+                        for _cs in _core_sids:
+                            final_weights[_cs] = round(final_weights[_cs] + _excess_aux_w * (final_weights[_cs] / _core_sum), 4)
+                    elif _core_sids:
+                        _eq_add = _excess_aux_w / len(_core_sids)
+                        for _cs in _core_sids:
+                            final_weights[_cs] = round(final_weights.get(_cs, 0.0) + _eq_add, 4)
+                    _re_tot = sum(final_weights.values())
+                    if _re_tot > 0:
+                        final_weights = {k: round((v / _re_tot) * _target_tot_cap, 4) for k, v in final_weights.items()}
+            except Exception as _cs_e:
+                logger.debug(f"  [Cold-Start Aux Cap] 예외: {_cs_e}")
 
         threshold = pget('allocator.rebalance_threshold', 0.01)
         needs_rebalance = self._needs_rebalance(final_weights, threshold)

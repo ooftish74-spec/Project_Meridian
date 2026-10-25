@@ -150,20 +150,55 @@ class S13JapanAlphaStream(BaseStream):
         if not is_backtest and not (time(9, 0) <= now_time <= time(15, 0)):
             return []
 
-        signal_cache = market_data.get('signal_cache', {})
+        signal_cache = (market_data.get('signal_cache') or market_data) if isinstance(market_data, dict) else {}
+        inv_flow = signal_cache.get('investor_flow') if isinstance(signal_cache.get('investor_flow'), dict) else (
+            market_data.get('investor_flow') if isinstance(market_data, dict) and isinstance(market_data.get('investor_flow'), dict) else {}
+        )
         _has_lead_data = any(
             signal_cache.get(_k) is not None
-            for _k in ('nvda_chg_pct', 'soxx_chg_pct', 'qqq_chg_pct', 'nikkei_change_pct')
+            for _k in (
+                'nvda_chg_pct', 'soxx_chg_pct', 'qqq_chg_pct',
+                'nikkei_change_pct', 'nikkei_ret',
+                'sp500_change_1d', 'us_spx_ret', 'nq_change_pct',
+            )
         ) or bool(signal_cache.get('hist_us_tech'))
         if not _has_lead_data:
             logger.info("S13 Japan Alpha: Missing US lead / Nikkei telemetry in signal_cache — Skipping Long Signals")
             return []
 
-        nvda_chg = signal_cache.get('nvda_chg_pct', 0.0)
-        soxx_chg = signal_cache.get('soxx_chg_pct', 0.0)
-        qqq_chg = signal_cache.get('qqq_chg_pct', 0.0)
+        spx_chg = float(
+            signal_cache.get('us_spx_ret')
+            if signal_cache.get('us_spx_ret') is not None
+            else (signal_cache.get('sp500_change_1d', 0.0) or 0.0)
+        )
+        nikkei_chg = float(
+            signal_cache.get('nikkei_ret')
+            if signal_cache.get('nikkei_ret') is not None
+            else (signal_cache.get('nikkei_change_pct', 0.0) or 0.0)
+        )
+        nq_chg = float(signal_cache.get('nq_change_pct', spx_chg) or spx_chg or nikkei_chg)
+        foreign_net_5d = float(inv_flow.get('foreign_net_5d', signal_cache.get('foreign_net_5d', 0.0)) or 0.0)
+        inst_net_5d = float(inv_flow.get('inst_net_5d', signal_cache.get('inst_net_5d', 0.0)) or 0.0)
+        inst_foreign_sell_z = float(signal_cache.get('inst_foreign_sell_z', 0.0) or 0.0)
+        _ = (foreign_net_5d, inst_net_5d, inst_foreign_sell_z)
+
+        nvda_chg = float(
+            signal_cache.get('nvda_chg_pct')
+            if signal_cache.get('nvda_chg_pct') is not None
+            else (nq_chg if nq_chg != 0.0 else (spx_chg if spx_chg != 0.0 else nikkei_chg))
+        )
+        soxx_chg = float(
+            signal_cache.get('soxx_chg_pct', signal_cache.get('soxx_change_pct'))
+            if signal_cache.get('soxx_chg_pct', signal_cache.get('soxx_change_pct')) is not None
+            else (nq_chg if nq_chg != 0.0 else (spx_chg if spx_chg != 0.0 else nikkei_chg))
+        )
+        qqq_chg = float(
+            signal_cache.get('qqq_chg_pct')
+            if signal_cache.get('qqq_chg_pct') is not None
+            else (nq_chg if nq_chg != 0.0 else (spx_chg if spx_chg != 0.0 else nikkei_chg))
+        )
         hist_us = signal_cache.get('hist_us_tech', [])
-        jpy_krw_chg = signal_cache.get('jpy_krw_chg_pct', 0.0)
+        jpy_krw_chg = float(signal_cache.get('jpy_krw_chg_pct', 0.0) or 0.0)
 
         lead_res = self.calculate_us_lead_signal(nvda_chg, soxx_chg, qqq_chg, hist_us)
         lead_sig = lead_res['lead_signal']

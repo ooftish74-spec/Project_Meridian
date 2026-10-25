@@ -266,7 +266,19 @@ class S14SectorPairStream(BaseStream):
                 _ois_bull_kr = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _reg_kr = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
                 _kr_inv_blocked = (_vix_kr < _vix_caut_kr and _ois_kr >= _ois_bull_kr) or _reg_kr == 'bull'
+                _seen_kr_hedge_tickers = set()
+                _allowed_kr_pids = set()
+                for _cand_o in (kr_pair_res.get('pair_orders', []) if not _kr_inv_blocked else []):
+                    _cand_dir = _cand_o.get('direction', 'long').lower()
+                    _cand_inv = bool(_cand_o.get('is_inverse_hedge', False)) or _cand_dir == 'short' or _cand_o.get('action') in ('sell', 'buy_inverse')
+                    if _cand_inv:
+                        _htk = _kr_1x_inv
+                        if _htk not in _seen_kr_hedge_tickers:
+                            _seen_kr_hedge_tickers.add(_htk)
+                            _allowed_kr_pids.add(str(_cand_o.get('pair_id', '')))
                 for order in (kr_pair_res.get('pair_orders', []) if not _kr_inv_blocked else []):
+                    if _allowed_kr_pids and str(order.get('pair_id', '')) not in _allowed_kr_pids:
+                        continue
                     t_dir = order.get('direction', 'long').lower()
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or order.get('action') in ('sell', 'buy_inverse')
                     
@@ -376,17 +388,76 @@ class S14SectorPairStream(BaseStream):
                 logger.debug(f"  [S14 OU StatArb] 동적 페어 탐색 참고: {_ou_e}")
 
         if signals:
+            signals = self._deduplicate_and_tag_pair_batch(signals)
             _total_raw_sz = sum(max(0.0, float(s.get('size_pct', 0.0) or 0.0)) for s in signals)
             _mean_noise = max(0.0, min(1.0, (float(noise_us) + float(noise_kr)) / 2.0))
             if _total_raw_sz > 0.0 and _mean_noise > 0.0:
                 _scale_norm = _mean_noise / _total_raw_sz
                 for _s_item in signals:
                     _s_item['size_pct'] = round(float(_s_item.get('size_pct', 0.0) or 0.0) * _scale_norm, 4)
-                    _s_item['is_market_neutral'] = True
-                    _s_item['beta'] = 0.0
+            signals = self._deduplicate_and_tag_pair_batch(signals)
 
         logger.info(f"  ⚖️ [S14 Sector Pair Stream] {len(signals)}개 마켓 뉴트럴 페어 신호 생성 (KER_US={ker_us:.2f}, KER_KR={ker_kr:.2f})")
         return signals
+
+    @staticmethod
+    def _deduplicate_and_tag_pair_batch(signals: List[Dict]) -> List[Dict]:
+        """단일 배치 내 중복 헷지 시그널(114800 등) 제거 및 단독 3X 인버스(SOXS)의 비(非)마켓뉴트럴 태깅."""
+        _kr_inv_set = set("114800 252670 251340".split())  # hardcode-ok
+        _us_inv_set = set("SOXS SQQQ SH PSQ".split())  # hardcode-ok
+        _all_inv_set = _kr_inv_set | _us_inv_set
+        _soxs_set = set("SOXS".split())  # hardcode-ok
+
+        deduped: List[Dict] = []
+        seen_kr_hedge: set = set()
+        dropped_pids: set = set()
+        for sig in signals:
+            if not isinstance(sig, dict):
+                continue
+            tk = str(sig.get('ticker', '') or '').strip().upper()
+            pid = str(sig.get('pair_id', '') or '').strip()
+            if tk in _kr_inv_set:
+                if tk in seen_kr_hedge:
+                    if pid:
+                        dropped_pids.add(pid)
+                    continue
+                seen_kr_hedge.add(tk)
+            deduped.append(sig)
+
+        if dropped_pids:
+            deduped = [
+                s for s in deduped
+                if str(s.get('pair_id', '') or '').strip() not in dropped_pids
+            ]
+
+        active_long_by_pid = {}
+        active_long_tickers = set()
+        for s in deduped:
+            tk_u = str(s.get('ticker', '') or '').strip().upper()
+            pid_u = str(s.get('pair_id', '') or '').strip()
+            if tk_u and tk_u not in _all_inv_set and float(s.get('size_pct', 0.0) or 0.0) > 0:
+                active_long_tickers.add(tk_u)
+                if pid_u:
+                    active_long_by_pid[pid_u] = tk_u
+
+        for s in deduped:
+            tk_u = str(s.get('ticker', '') or '').strip().upper()
+            pid_u = str(s.get('pair_id', '') or '').strip()
+            partner_u = str(s.get('pair_partner', '') or '').strip().upper()
+            has_paired_long = bool(
+                (pid_u and pid_u in active_long_by_pid)
+                or (partner_u and partner_u in active_long_tickers)
+            )
+            if tk_u in _soxs_set and not has_paired_long:
+                s['is_market_neutral'] = False
+                s['beta'] = -3.0
+            elif tk_u in _all_inv_set and not has_paired_long:
+                s['is_market_neutral'] = False
+                s['beta'] = -1.0
+            else:
+                s['is_market_neutral'] = True
+                s['beta'] = 0.0
+        return deduped
 
     def get_positions(self) -> List[Dict]:
         """스트림 보유 포지션 조회."""

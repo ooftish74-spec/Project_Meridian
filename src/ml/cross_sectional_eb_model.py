@@ -55,6 +55,12 @@ _MIN_TREE_ROWS = 500
 _TIE_ROUND_DECIMALS = 5
 _TIE_TOP_K = 5
 _TIE_MASS_THRESHOLD = 0.08
+_DEFAULT_N_BLOCKS = 10
+_DEFAULT_TOP_K = 12
+_DEFAULT_ORTHO_STRENGTH = 0.0
+_DEFAULT_CROWD_THRESHOLD = 0.35
+_DEFAULT_TREE_BLEND = 0.0
+_COLLINEAR_SKIP_THRESHOLD = 0.85
 
 
 def cross_sectional_rank_z_matrix(
@@ -172,11 +178,11 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
 
     def __init__(
         self,
-        n_blocks: int = 10,
-        top_k: int = 8,
-        ortho_strength: float = 0.50,
-        crowd_threshold: float = 0.35,
-        tree_blend: float = 0.15,
+        n_blocks: int = _DEFAULT_N_BLOCKS,
+        top_k: int = _DEFAULT_TOP_K,
+        ortho_strength: float = _DEFAULT_ORTHO_STRENGTH,
+        crowd_threshold: float = _DEFAULT_CROWD_THRESHOLD,
+        tree_blend: float = _DEFAULT_TREE_BLEND,
         vol_cols: Tuple[int, ...] = (4, 10, 18),
         random_state: int = 42,
     ):
@@ -223,12 +229,13 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
                     X_arr[:, j] = 0.0
 
         sign_y = 2.0 * y_arr.astype(np.float64) - 1.0
+        sign_y_c = sign_y - np.mean(sign_y)
         if sample_weight is not None and len(sample_weight) == n:
             sw = np.asarray(sample_weight, dtype=np.float64)
-            yc = sign_y * sw
+            yc = sign_y_c * sw
         else:
             sw = None
-            yc = sign_y
+            yc = sign_y_c
         yc = yc - np.mean(yc)
 
         min_block_rows = 240
@@ -295,8 +302,31 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
                 score = score * damping
 
         k = max(1, min(int(self.top_k), p))
-        top_idx = np.argsort(score)[::-1][:k]
-        self.top_idx_ = np.asarray(top_idx, dtype=int)
+        order = np.argsort(score)[::-1]
+        collin_thr = float(_COLLINEAR_SKIP_THRESHOLD)
+        x_centered = X_arr - np.mean(X_arr, axis=0, keepdims=True)
+        x_stds = np.std(x_centered, axis=0)
+        selected = []
+        for cand in order:
+            j = int(cand)
+            if x_stds[j] <= std_eps:
+                continue
+            is_collinear = False
+            for m in selected:
+                corr_jm = float(np.dot(x_centered[:, j], x_centered[:, m])) / (
+                    float(n) * float(x_stds[j]) * float(x_stds[m])
+                )
+                if abs(corr_jm) > collin_thr:
+                    is_collinear = True
+                    break
+            if not is_collinear:
+                selected.append(j)
+                if len(selected) >= k:
+                    break
+        if not selected:
+            selected = [int(order[0])]
+        top_idx = np.asarray(selected, dtype=int)
+        self.top_idx_ = top_idx
 
         raw_w = np.zeros(p, dtype=np.float64)
         raw_w[top_idx] = np.sign(mean_ic[top_idx]) * score[top_idx]

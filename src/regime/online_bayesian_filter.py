@@ -63,6 +63,12 @@ class OnlineBayesianParticleFilter:
 
         # 우도(Likelihood) 연산 함수 P(y_t | state)
         likelihoods = np.zeros(self.num_particles)
+        _vk_crash_th = 25.0
+        _ofi_calm_th = -0.5
+        _flow_calm_th = -500.0
+        _crash_decay_k = 0.15
+        _flow_scale = 1e8
+        _flow_eok = foreign_flow / _flow_scale if abs(foreign_flow) >= 1e6 else foreign_flow
         for idx, st in enumerate(self.particles):
             if st == 'bull':
                 lh = max(0.01, 1.0 + (0.3 * lead_lag) + (0.2 * ofi_z) - (0.02 * max(0, vkospi - 20)))
@@ -71,7 +77,11 @@ class OnlineBayesianParticleFilter:
             elif st == 'bear':
                 lh = max(0.01, 1.0 - (0.3 * lead_lag) - (0.2 * ofi_z) + (0.03 * max(0, vkospi - 20)))
             else:  # crash
-                lh = max(0.01, 1.0 + (0.1 * max(0, vkospi - 25)) + (0.0001 * max(0, -foreign_flow / 1e8)))
+                _min_lh = 0.01
+                if vkospi < _vk_crash_th and ofi_z >= _ofi_calm_th and _flow_eok >= _flow_calm_th:
+                    lh = max(_min_lh, math.exp(-max(0.0, _vk_crash_th - vkospi) * _crash_decay_k))
+                else:
+                    lh = max(0.01, 1.0 + (0.1 * max(0, vkospi - 25)) + (0.0001 * max(0, -_flow_eok)))
 
             likelihoods[idx] = lh
 
@@ -162,15 +172,46 @@ class OnlineBayesianParticleFilter:
             if len(saved_particles) == self.num_particles and len(saved_weights) == self.num_particles:
                 arr_p = np.array(saved_particles)
                 arr_w = np.array(saved_weights, dtype=float)
-                # 입자 멸종(2개 이하 상태로 붕괴) 감지 시 에르고딕 다양성 주입
-                unique_states = set(arr_p.tolist())
-                if len(unique_states) < len(self.states):
-                    for idx_s, st in enumerate(self.states):
-                        if st not in unique_states:
-                            arr_p[idx_s * 2:(idx_s + 1) * 2] = st
+                arr_w = np.maximum(0.0, arr_w)
+                _eps_w = 1e-12
+                w_sum = float(np.sum(arr_w))
+                if w_sum > _eps_w:
+                    arr_w = arr_w / w_sum
+                else:
                     arr_w = np.ones(self.num_particles) / self.num_particles
+
+                _ergodic_mix = 0.15
+                _n_states = len(self.states)
+                _min_per_state = max(2, int(round(_ergodic_mix * self.num_particles / max(1, _n_states))))
+                raw_state_probs = {
+                    st: float(np.sum(arr_w[arr_p == st])) for st in self.states
+                }
+                for st in self.states:
+                    cnt = int(np.sum(arr_p == st))
+                    if cnt < _min_per_state:
+                        need = _min_per_state - cnt
+                        counts_now = {s: int(np.sum(arr_p == s)) for s in self.states}
+                        maj_st = max(counts_now, key=counts_now.get)
+                        maj_idx = np.where(arr_p == maj_st)[0]
+                        if len(maj_idx) >= need:
+                            arr_p[maj_idx[:need]] = st
+
+                mixed_w = np.zeros(self.num_particles, dtype=float)
+                unif_p = 1.0 / float(max(1, _n_states))
+                for st in self.states:
+                    mask = (arr_p == st)
+                    n_st = int(np.sum(mask))
+                    if n_st == 0:
+                        continue
+                    target_p = (1.0 - _ergodic_mix) * raw_state_probs.get(st, unif_p) + _ergodic_mix * unif_p
+                    cur_p = float(np.sum(arr_w[mask]))
+                    if cur_p > _eps_w:
+                        mixed_w[mask] = arr_w[mask] * (target_p / cur_p)
+                    else:
+                        mixed_w[mask] = target_p / float(n_st)
+
                 self.particles = arr_p
-                self.weights = arr_w / max(np.sum(arr_w), 1e-12)
+                self.weights = mixed_w / max(float(np.sum(mixed_w)), _eps_w)
                 logger.info(f"📂 [Bayesian Filter] 디스크 입자 분포 복원 성공: {filepath}")
                 return True
         except Exception as e:

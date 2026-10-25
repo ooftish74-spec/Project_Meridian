@@ -160,6 +160,8 @@ class S3FactorStream(BaseStream):
     def generate_signals(self, regime: str, market_data: Dict) -> List[Dict]:
         """멀티팩터 하이브리드 신호 생성 (Track A ETF + Track B QVM)."""
         signals = []
+        _md_holdings = (market_data or {}).get('s3_current_holdings') if isinstance(market_data, dict) else None
+        self._current_holdings = list(_md_holdings) if isinstance(_md_holdings, list) else []
         rebalance_day = cfg.get('a2.rebalance_day', 1)
         today = now_kst().day
         from src.utils.dynamic_quant_engine import get_quant_engine
@@ -1103,7 +1105,8 @@ class S3FactorStream(BaseStream):
             dd = cum - peak
             max_dd = min(max_dd, dd)
         wins = sum((1 for r in self._daily_returns if r > 0))
-        return {'stream_id': 'S3', 'name': self.name, 'daily_returns': self._daily_returns[-30:], 'cumulative_return_pct': round(cum_ret, 3), 'sharpe': sharpe, 'max_drawdown_pct': round(max_dd, 2), 'win_rate': round(wins / max(n, 1), 3), 'total_trades': len(self._rebalance_history), 'active_positions': len(self._current_holdings), 'last_turnover_pct': self._last_turnover_pct, 'n_days': n}
+        _win_rate = round(wins / n, 3) if n > 0 else (1.0 / 2.0)
+        return {'stream_id': 'S3', 'name': self.name, 'daily_returns': self._daily_returns[-30:], 'cumulative_return_pct': round(cum_ret, 3), 'sharpe': sharpe, 'max_drawdown_pct': round(max_dd, 2), 'win_rate': _win_rate, 'total_trades': len(self._rebalance_history), 'active_positions': len(self._current_holdings), 'last_turnover_pct': self._last_turnover_pct, 'n_days': n}
 
     def _macro_factor_timing(self, signal_cache: dict) -> dict:
         """매크로 환경에 따른 팩터 가중치 동적 조정.

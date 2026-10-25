@@ -97,12 +97,22 @@ class ModelRegistryManager:
         improvement = new_auc - old_auc
         old_pwf = old_metadata.get('purged_wf_oos') or old_metadata.get('purged_wf') or {}
         new_pwf = new_metadata.get('purged_wf_oos') or new_metadata.get('purged_wf') or {}
-        old_ic = float(old_pwf.get('ic_mean') or 0.0)
-        new_ic = float(new_pwf.get('ic_mean') or 0.0)
+        _raw_old_ic = old_pwf.get('ic_mean')
+        _raw_new_ic = new_pwf.get('ic_mean')
+        old_ic = float(_raw_old_ic) if _raw_old_ic is not None else 0.0
+        new_ic = float(_raw_new_ic) if _raw_new_ic is not None else 0.0
         new_nw_t = float(new_pwf.get('ic_nw_t_stat') or new_pwf.get('ic_t_stat') or 0.0)
         old_fc = old_metadata.get('feature_count') or len(old_metadata.get('feature_names') or [])
         new_fc = new_metadata.get('feature_count') or len(new_metadata.get('feature_names') or [])
         _t_gate = 2.0
+        _min_schema_auc = 0.50
+        _min_schema_ic = 0.0
+        _is_forced = bool(new_metadata.get('force_promote') or min_improvement <= 0.0)
+        _schema_quality_ok = (
+            _is_forced
+            or (float(new_auc) >= _min_schema_auc)
+            or (_raw_new_ic is not None and float(_raw_new_ic) >= _min_schema_ic)
+        )
         if improvement >= min_improvement:
             msg = f'Adopted: old_AUC={old_auc:.4f} → new_AUC={new_auc:.4f} (+{improvement:.4f})'
             self._promote(new_version_id, registry, msg)
@@ -111,11 +121,11 @@ class ModelRegistryManager:
             msg = f'Adopted (PurgedWF OOS IC): old_IC={old_ic:.4f} → new_IC={new_ic:.4f} (NW t={new_nw_t:.2f})'
             self._promote(new_version_id, registry, msg)
             return (True, msg)
-        elif old_fc and new_fc and int(old_fc) != int(new_fc):
+        elif old_fc and new_fc and int(old_fc) != int(new_fc) and _schema_quality_ok:
             msg = f'Adopted (Feature Schema Upgrade): {old_fc} → {new_fc} features (new_IC={new_ic:.4f})'
             self._promote(new_version_id, registry, msg)
             return (True, msg)
-        elif not old_metadata.get('raw_feature_means') and new_metadata.get('raw_feature_means'):
+        elif not old_metadata.get('raw_feature_means') and new_metadata.get('raw_feature_means') and _schema_quality_ok:
             msg = f'Adopted (Raw Stats Schema Upgrade): old_AUC={old_auc:.4f} → new_AUC={new_auc:.4f}'
             self._promote(new_version_id, registry, msg)
             return (True, msg)

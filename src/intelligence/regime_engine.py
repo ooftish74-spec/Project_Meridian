@@ -361,11 +361,15 @@ class RegimeEngine:
                 scores['bull'] += w_macro * _w_quant_bull
         mc = m.get('macro_composite', 0)
         w_mc = pget('regime.weight_macro_composite', 0.2)
+        _w_macro_neutral = 0.10
+        _mc_neutral_band = 0.30
         _mc_high = pget('regime.mc_high', 1.5)
         _mc_mid_high = pget('regime.mc_mid_high', 0.5)
         _mc_mid_low = pget('regime.mc_mid_low', -0.5)
         _mc_low = pget('regime.mc_low', -1.5)
-        if mc > _mc_high:
+        if abs(float(mc)) <= float(_mc_neutral_band):
+            scores['caution'] += float(_w_macro_neutral)
+        elif mc > _mc_high:
             scores['bear'] += w_mc * min(mc / 3.0, 1.0)
             scores['caution'] += w_mc * 0.3
         elif mc > _mc_mid_high:
@@ -374,6 +378,8 @@ class RegimeEngine:
             scores['bull'] += w_mc * min(abs(mc) / 3.0, 1.0)
         elif mc < _mc_mid_low:
             scores['bull'] += w_mc * 0.5
+        else:
+            scores['caution'] += float(_w_macro_neutral)
         usdkrw = m.get('usdkrw', 1350)
         usdkrw_prev = m.get('usdkrw_prev', usdkrw)
         if usdkrw_prev > 0:
@@ -422,6 +428,21 @@ class RegimeEngine:
                 scores['caution'] += w_vk
             elif vkospi < 14:
                 scores['bull'] += w_vk
+        self._last_measurements = dict(m)
+        _tot_s = sum(scores.values())
+        if _tot_s > 0.0:
+            for _rk in scores:
+                scores[_rk] = scores[_rk] / _tot_s
+        _vk_crash_gate = float(pget('regime.vol_bear_threshold', 30.0))
+        _vix_bear_gate = float(vix_bear if vix_bear is not None else 35.0)
+        _crash_maj_gate = 0.55
+        _extreme_vol = (float(vix) >= _vix_bear_gate) or (float(vkospi) >= _vk_crash_gate)
+        _top_r = max(scores, key=scores.get)
+        if _top_r == 'crash' and not (_extreme_vol or scores['crash'] >= _crash_maj_gate):
+            _cw = scores['crash']
+            scores['crash'] = 0.0
+            scores['bear'] += _cw * 0.5
+            scores['caution'] += _cw * 0.5
         return scores
 
     def _decide(self, scores: Dict[str, float]) -> Tuple[str, float]:
@@ -429,9 +450,30 @@ class RegimeEngine:
 
         ★ C2-09 FIX: confidence를 총합 대비 비율로 정규화 (이전: 원시 합계값 반환, 1.0 초과 가능)
         """
-        best = max(scores, key=scores.get)
-        total = sum(scores.values())
-        confidence = scores[best] / total if total > 0 else 0.5
+        work_scores = dict(scores)
+        total_in = sum(work_scores.values())
+        if total_in > 0.0:
+            norm_scores = {k: v / total_in for k, v in work_scores.items()}
+        else:
+            norm_scores = dict(work_scores)
+        best = max(norm_scores, key=norm_scores.get)
+        _crash_maj_gate = 0.55
+        if best == 'crash' and norm_scores.get('crash', 0.0) < _crash_maj_gate:
+            _m = getattr(self, '_last_measurements', None) or {}
+            _def_vix, _def_vk, _def_vix_bear = 20.0, 18.0, 35.0
+            _vix_v = float(_m.get('vix', _def_vix))
+            _vk_v = float(_m.get('vkospi', _def_vk))
+            _vix_bear_g = float(cfg.get('regime.vix_bear_threshold') or _def_vix_bear)
+            _vk_crash_g = float(pget('regime.vol_bear_threshold', 30.0))
+            if not (_vix_v >= _vix_bear_g or _vk_v >= _vk_crash_g):
+                _cw = norm_scores.get('crash', 0.0)
+                norm_scores['crash'] = 0.0
+                norm_scores['bear'] = norm_scores.get('bear', 0.0) + _cw * 0.5
+                norm_scores['caution'] = norm_scores.get('caution', 0.0) + _cw * 0.5
+                best = max(norm_scores, key=norm_scores.get)
+                scores.update(norm_scores)
+        total = sum(norm_scores.values())
+        confidence = norm_scores[best] / total if total > 0 else 0.5
         return (best, round(confidence, 3))
 
     def _apply_smoothing(self, regime: str, confidence: float) -> Tuple[str, float]:

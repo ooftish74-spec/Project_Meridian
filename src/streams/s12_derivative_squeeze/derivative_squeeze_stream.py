@@ -65,30 +65,63 @@ class S12DerivativeSqueezeStream(BaseStream):
         if not self.is_active():
             return signals
 
-        signal_cache = market_data.get('signal_cache', {}) if market_data else {}
+        signal_cache = (market_data.get('signal_cache') or market_data) if isinstance(market_data, dict) else {}
+        inv_flow = signal_cache.get('investor_flow') if isinstance(signal_cache.get('investor_flow'), dict) else (
+            market_data.get('investor_flow') if isinstance(market_data, dict) and isinstance(market_data.get('investor_flow'), dict) else {}
+        )
 
-        # ── 1. 변수 수집 ──
+        # ── 1. 변수 수집 (canonical signal_cache.json 키 호환) ──
+        spx_ret = float(
+            signal_cache.get('us_spx_ret')
+            if signal_cache.get('us_spx_ret') is not None
+            else (signal_cache.get('sp500_change_1d', 0.0) or 0.0)
+        )
+        nikkei_ret = float(
+            signal_cache.get('nikkei_ret')
+            if signal_cache.get('nikkei_ret') is not None
+            else (signal_cache.get('nikkei_change_pct', 0.0) or 0.0)
+        )
+        foreign_net_5d = float(inv_flow.get('foreign_net_5d', signal_cache.get('foreign_net_5d', 0.0)) or 0.0)
+        inst_net_5d = float(inv_flow.get('inst_net_5d', signal_cache.get('inst_net_5d', 0.0)) or 0.0)
+
         # (1) 개인 콜옵션 Skew (Call Option Buying Bias)
-        skew_val = float(signal_cache.get('call_option_skew', signal_cache.get('CALL_OPTION_SKEW', 0.0)))
-        skew_mean = float(signal_cache.get('call_option_skew_mean_20d', 0.0))
-        skew_std = float(signal_cache.get('call_option_skew_std_20d', 1.0))
+        skew_val = float(signal_cache.get('call_option_skew', signal_cache.get('CALL_OPTION_SKEW', 0.0)) or 0.0)
+        skew_mean = float(signal_cache.get('call_option_skew_mean_20d', 0.0) or 0.0)
+        skew_std = float(signal_cache.get('call_option_skew_std_20d', 1.0) or 1.0)
         z_skew = self.compute_z_score(skew_val, skew_mean, skew_std)
 
-        # (2) 외국인 선물 누적 순매도 수급 (Foreign Futures Net Flow)
-        foreign_futures_flow = float(signal_cache.get('foreign_futures_net_contracts', signal_cache.get('FOREIGN_FUTURES_NET_CONTRACTS', signal_cache.get('frgn_fut_net_buy', 0.0))))
-        flow_mean = float(signal_cache.get('foreign_futures_net_mean_20d', 0.0))
-        flow_std = float(signal_cache.get('foreign_futures_net_std_20d', 3000.0))
-        z_flow_sell = self.compute_z_score(-foreign_futures_flow, -flow_mean, flow_std)
+        # (2) 외국인 선물 누적 순매도 수급 (Foreign Futures Net Flow + investor_flow.foreign_net_5d / inst_net_5d 호환)
+        foreign_futures_flow = float(
+            signal_cache.get(
+                'foreign_futures_net_contracts',
+                signal_cache.get('FOREIGN_FUTURES_NET_CONTRACTS', signal_cache.get('frgn_fut_net_buy', 0.0)),
+            )
+            or 0.0
+        )
+        flow_mean = float(signal_cache.get('foreign_futures_net_mean_20d', 0.0) or 0.0)
+        flow_std = float(signal_cache.get('foreign_futures_net_std_20d', 3000.0) or 3000.0)
+        if signal_cache.get('inst_foreign_sell_z') is not None and foreign_futures_flow == 0.0:
+            z_flow_sell = float(signal_cache.get('inst_foreign_sell_z') or 0.0)
+        elif foreign_futures_flow != 0.0 or flow_mean != 0.0:
+            z_flow_sell = self.compute_z_score(-foreign_futures_flow, -flow_mean, flow_std)
+        elif foreign_net_5d != 0.0 or inst_net_5d != 0.0:
+            _flow_5d_std = float(signal_cache.get('investor_flow_std_5d', 500000.0) or 500000.0)
+            z_flow_sell = self.compute_z_score(-(foreign_net_5d + inst_net_5d), 0.0, _flow_5d_std)
+        else:
+            z_flow_sell = 0.0
 
         # (3) 선물-현물 베이시스 (KOSPI 200 Futures vs Spot)
-        futures_price = float(signal_cache.get('kospi200_futures_price', signal_cache.get('FUTURES_PRICE', 0.0)))
-        spot_price = float(signal_cache.get('kospi200_spot_price', signal_cache.get('SPOT_PRICE', 0.0)))
+        futures_price = float(signal_cache.get('kospi200_futures_price', signal_cache.get('FUTURES_PRICE', 0.0)) or 0.0)
+        spot_price = float(signal_cache.get('kospi200_spot_price', signal_cache.get('SPOT_PRICE', 0.0)) or 0.0)
         if futures_price > 0 and spot_price > 0:
             bdi = self.compute_basis_disparity_index(futures_price, spot_price)
             basis_trigger = bdi <= self.bdi_threshold
         else:
-            bdi = 0.0
-            basis_trigger = False
+            bdi = float(signal_cache.get('basis_disparity_index', 0.0) or 0.0)
+            basis_trigger = bool(bdi < 0.0 and bdi <= self.bdi_threshold)
+            if not basis_trigger:
+                bdi = 0.0
+                _ = (spx_ret, nikkei_ret)
 
         # ── 2. 순수 수학적 조건 판정 ──
         skew_trigger = z_skew >= self.z_skew_threshold

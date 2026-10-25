@@ -545,7 +545,7 @@ class GapFeedbackEngine:
                     obj['_last_updated'] = ts
                     obj['_updated_by'] = 'gap_feedback'
                     return obj
-                safe_json_update(_OVERRIDES_FILE, _mut, default={})
+                safe_json_update(_OVERRIDES_FILE, _mut, default={}, strict=True)
                 logger.info(f"    💾 {len(decided)}건 조정 → dynamic_overrides.json 적용 완료 "
                             f"(경계/일일한도/tighten-only 검증)")
             except Exception as e:

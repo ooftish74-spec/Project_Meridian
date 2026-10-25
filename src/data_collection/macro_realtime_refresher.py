@@ -34,10 +34,13 @@ except Exception:  # pragma: no cover
             return {} if default is None else default
 import json
 import logging
+import math
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+import numpy as np
+import pandas as pd
 logger = logging.getLogger(__name__)
 try:
     from src.utils.data_health_monitor import dhm
@@ -162,22 +165,33 @@ class MacroRealtimeRefresher:
                 # VIX 폴백 1: 기존 캐시값(전일값) Forward Fill
                 fallback_vix = self._cache.get('vix')
                 
-                # VIX 폴백 2: 캐시도 없으면 SPY 역사적 변동성(HV)으로 합성 (Proxy VIX)
+                # VIX 폴백 2: 캐시도 없으면 로컬 VIX parquet 또는 SPY 역사적 변동성(HV)으로 합성
                 if fallback_vix is None or fallback_vix <= 0:
                     try:
-                        spy_path = Path(__file__).resolve().parent.parent.parent / 'data' / 'us_stocks' / 'prices' / 'SPY.csv'
-                        if spy_path.exists():
-                            spy_df = _pd.read_csv(spy_path)
-                            if 'close' in spy_df.columns and len(spy_df) >= 21:
-                                rets = spy_df['close'].pct_change().dropna()
-                                hv = rets.tail(20).std() * _math.sqrt(252) * 100
-                                fallback_vix = round(hv, 2)
-                                logger.warning(f"  🔄 VIX Cold Start Fallback: SPY 20-day HV 계산 완료 = {fallback_vix}")
+                        root_dir = Path(__file__).resolve().parent.parent.parent
+                        for vix_pq in (
+                            root_dir / 'data' / 'kr_markets' / 'cross_vix.parquet',
+                            root_dir / 'data' / 'signals' / 'signal_vix.parquet',
+                        ):
+                            if vix_pq.exists():
+                                vdf = _pd.read_parquet(vix_pq)
+                                c_col = 'close' if 'close' in vdf.columns else ('Close' if 'Close' in vdf.columns else None)
+                                if c_col and not vdf.empty:
+                                    v_last = float(_pd.to_numeric(vdf[c_col], errors='coerce').dropna().iloc[-1])
+                                    if v_last > 0:
+                                        fallback_vix = round(v_last, 2)
+                                        break
+                        if fallback_vix is None or fallback_vix <= 0:
+                            spy_path = root_dir / 'data' / 'us_stocks' / 'prices' / 'SPY.csv'
+                            if spy_path.exists():
+                                spy_df = _pd.read_csv(spy_path)
+                                if 'close' in spy_df.columns and len(spy_df) >= 21:
+                                    rets = spy_df['close'].pct_change().dropna()
+                                    hv = rets.tail(20).std() * _math.sqrt(252) * 100
+                                    fallback_vix = round(hv, 2)
+                                    logger.warning(f"  🔄 VIX Cold Start Fallback: SPY 20-day HV 계산 완료 = {fallback_vix}")
                     except Exception as he:
                         logger.warning(f"  ⚠️ SPY HV 합성 실패: {he}")
-                        
-                if fallback_vix is None or fallback_vix <= 0:
-                    fallback_vix = 15.0
 
                 # Google Finance 0-Lag 실시간 VIX 1순위 적용
                 try:
@@ -214,7 +228,7 @@ class MacroRealtimeRefresher:
                     except Exception as _ve:
                         logger.warning(f"  ⚠️ CBOE VIX fetch exception: {_ve}")
 
-                if 'vix' not in updates:
+                if 'vix' not in updates and fallback_vix is not None and fallback_vix > 0:
                     logger.warning(f"🚨 VIX 수집 실패! Intelligent Fallback 가동: {fallback_vix}")
                     updates['vix'] = fallback_vix
                     
@@ -312,6 +326,8 @@ class MacroRealtimeRefresher:
             from datetime import timedelta
             today_str = datetime.now().strftime('%Y%m%d')
             hist_start = (datetime.now() - timedelta(days=60)).strftime('%Y%m%d')
+            _kospi_lo, _kospi_hi = 1500.0, 10000.0
+            _kosdaq_lo, _kosdaq_hi = 400.0, 3000.0
             try:
                 _get_idx = getattr(pykrx_stock, 'get_index_ohlcv', None) or getattr(pykrx_stock, 'get_index_ohlcv_by_date')
                 df_kospi = _get_idx(hist_start, today_str, '1001')
@@ -319,9 +335,10 @@ class MacroRealtimeRefresher:
                     close_col = '종가' if '종가' in df_kospi.columns else ('Close' if 'Close' in df_kospi.columns else df_kospi.columns[3])
                     closes = df_kospi[close_col].astype(float)
                     today_close = float(closes.iloc[-1])
-                    if 1000.0 < today_close < 10000.0:
+                    if _kospi_lo < today_close < _kospi_hi:
                         updates['kospi_close'] = today_close
                         updates['kospi'] = today_close
+                        updates['KOSPI'] = today_close
                         if len(closes) >= 2:
                             prev_close = float(closes.iloc[-2])
                             updates['kospi_prev_close'] = prev_close
@@ -377,11 +394,12 @@ class MacroRealtimeRefresher:
                 try:
                     from src.data_collection.alpha_vantage_collector import collect_global_macro
                     av_res = collect_global_macro(['^KS11'])
-                    _k_min = 1000
-                    _k_max = 10000
+                    _k_min = 1500.0
+                    _k_max = 10000.0
                     if '^KS11' in av_res and _k_min < float(av_res['^KS11']['price']) < _k_max:
                         _av_px = float(av_res['^KS11']['price'])
                         updates['kospi'] = _av_px
+                        updates['KOSPI'] = _av_px
                         updates['kospi_close'] = _av_px
                         updates['kospi_change_1d'] = av_res['^KS11']['change_1d']
                         updates['kospi_change_pct'] = av_res['^KS11']['change_1d']
@@ -412,8 +430,10 @@ class MacroRealtimeRefresher:
                     close_col = '종가' if '종가' in df_k200.columns else ('Close' if 'Close' in df_k200.columns else df_k200.columns[3])
                     closes_200 = df_k200[close_col].astype(float)
                     k200_close = float(closes_200.iloc[-1])
-                    if 100.0 < k200_close < 2000.0:
+                    _k200_lo, _k200_hi = 150.0, 1500.0
+                    if _k200_lo < k200_close < _k200_hi:
                         updates['kospi200'] = k200_close
+                        updates['kospi200_spot_price'] = k200_close
                         if len(closes_200) >= 2:
                             updates['kospi200_prev_close'] = float(closes_200.iloc[-2])
                         n_updated += 1
@@ -427,7 +447,9 @@ class MacroRealtimeRefresher:
                     close_col = '종가' if '종가' in df_kq.columns else ('Close' if 'Close' in df_kq.columns else df_kq.columns[3])
                     closes_kq = df_kq[close_col].astype(float)
                     today_kq = float(closes_kq.iloc[-1])
-                    if 200.0 < today_kq < 5000.0:
+                    if _kosdaq_lo < today_kq < _kosdaq_hi:
+                        updates['kosdaq'] = today_kq
+                        updates['KOSDAQ'] = today_kq
                         updates['kosdaq_close'] = today_kq
                         if len(closes_kq) >= 2:
                             prev_kq = float(closes_kq.iloc[-2])
@@ -755,12 +777,14 @@ class MacroRealtimeRefresher:
         'sox': (2500.0, 30000.0), 'SOX': (2500.0, 30000.0),
         'dji': (15000.0, 100000.0), 'DJI': (15000.0, 100000.0),
         'dxy': (70.0, 160.0), 'DXY': (70.0, 160.0),
-        'gold_us': (1000.0, 10000.0), 'GOLD_US': (1000.0, 10000.0),
-        'wti': (20.0, 140.0), 'WTI': (20.0, 140.0),
-        'kospi': (1000.0, 10000.0), 'KOSPI': (1000.0, 10000.0),
-        'kospi_close': (1000.0, 10000.0), 'kospi_ma20': (1000.0, 10000.0),
-        'kospi200': (150.0, 1500.0),
-        'kosdaq_close': (300.0, 3000.0), 'kosdaq_ma20': (300.0, 3000.0), 'KOSDAQ': (300.0, 3000.0),
+        'gold': (500.0, 10000.0), 'GOLD': (500.0, 10000.0), 'gold_prev': (500.0, 10000.0),
+        'gold_us': (500.0, 10000.0), 'GOLD_US': (500.0, 10000.0),
+        'wti': (20.0, 140.0), 'WTI': (20.0, 140.0), 'wti_prev': (20.0, 140.0),
+        'kospi': (1500.0, 10000.0), 'KOSPI': (1500.0, 10000.0),
+        'kospi_close': (1500.0, 10000.0), 'kospi_ma20': (1500.0, 10000.0),
+        'kospi200': (150.0, 1500.0), 'kospi200_spot_price': (150.0, 1500.0), 'kospi200_futures_price': (150.0, 1500.0),
+        'kosdaq': (400.0, 3000.0), 'KOSDAQ': (400.0, 3000.0),
+        'kosdaq_close': (400.0, 3000.0), 'kosdaq_ma20': (400.0, 3000.0),
         'taiex': (5000.0, 100000.0), 'TAIEX': (5000.0, 100000.0),
         'nikkei': (10000.0, 150000.0), 'NIKKEI': (10000.0, 150000.0),
         'hangseng': (5000.0, 60000.0), 'HANGSENG': (5000.0, 60000.0),
@@ -768,6 +792,290 @@ class MacroRealtimeRefresher:
         'usdkrw': (900.0, 2000.0), 'USDKRW': (900.0, 2000.0),
         'vix': (5.0, 120.0), 'VIX': (5.0, 120.0),
     }
+
+    @staticmethod
+    def _enrich_and_sync_signal_dict(existing: dict, safe_updates: dict, bounds_map: dict) -> None:
+        """signal_cache 별칭(alias) 동기화, 오염된 원자재/지수 정화 및 M2/M3 계약 키 산출."""
+        existing.update(safe_updates)
+
+        def _pick_valid(keys, bounds=None):
+            for k in keys:
+                if k in safe_updates and isinstance(safe_updates[k], (int, float)):
+                    v = float(safe_updates[k])
+                    if bounds is None or (bounds[0] <= v <= bounds[1]):
+                        return v
+            for k in keys:
+                if k in existing and isinstance(existing[k], (int, float)):
+                    v = float(existing[k])
+                    if bounds is None or (bounds[0] <= v <= bounds[1]):
+                        return v
+            return None
+
+        # 1. 지수 레벨 별칭 원자적 동기화
+        kp_val = _pick_valid(('kospi', 'KOSPI', 'kospi_close'), bounds_map.get('kospi'))
+        if kp_val is not None:
+            for k in ('kospi', 'KOSPI', 'kospi_close'):
+                existing[k] = kp_val
+                safe_updates[k] = kp_val
+
+        kq_val = _pick_valid(('kosdaq', 'KOSDAQ', 'kosdaq_close'), bounds_map.get('kosdaq'))
+        if kq_val is not None:
+            for k in ('kosdaq', 'KOSDAQ', 'kosdaq_close'):
+                existing[k] = kq_val
+                safe_updates[k] = kq_val
+
+        # 2. 등락률 별칭 원자적 동기화
+        alias_groups = [
+            ('kospi_change_1d', 'kospi_change_pct'),
+            ('kosdaq_change_1d', 'kosdaq_change_pct'),
+            ('sp500_change_1d', 'spx_change_1d'),
+            ('nasdaq_change_1d', 'ixic_change_1d', 'nq_futures_chg_pct'),
+            ('sox_change_1d', 'soxx_change_1d', 'sox_change'),
+            ('put_call_ratio', 'options_pcr'),
+        ]
+        for grp in alias_groups:
+            val = _pick_valid(grp)
+            if val is not None:
+                for k in grp:
+                    existing[k] = val
+                    safe_updates[k] = val
+
+        # 3. Gold / WTI 오염값 정화 (GLD ETF ~292~382 스케일 또는 WTI=0 오염 복구)
+        gold_bounds = bounds_map.get('gold', (500.0, 10000.0))
+        gld_etf_lo, gld_etf_hi, gld_to_spot = 100.0, 500.0, 10.8
+        gold_val = _pick_valid(('gold_us', 'GOLD_US', 'gold', 'GOLD'), gold_bounds)
+        if gold_val is None:
+            raw_gld = _pick_valid(('gold_us', 'GOLD_US', 'gold', 'GOLD'), (gld_etf_lo, gld_etf_hi))
+            if raw_gld is not None:
+                gold_val = round(raw_gld * gld_to_spot, 2)
+        if gold_val is None:
+            for g_rel in ('data/signals/signal_gold_us.parquet', 'data/signals/signal_gold.parquet', 'data/kr_markets/cross_gold_futures.parquet'):
+                gp = _PROJECT_ROOT / g_rel
+                if gp.exists():
+                    try:
+                        gdf = pd.read_parquet(gp)
+                        col = 'close' if 'close' in gdf.columns else ('Close' if 'Close' in gdf.columns else None)
+                        if col:
+                            s = pd.to_numeric(gdf[col], errors='coerce').dropna()
+                            s_spot = s[(s >= gold_bounds[0]) & (s <= gold_bounds[1])]
+                            if not s_spot.empty:
+                                gold_val = round(float(s_spot.iloc[-1]), 2)
+                                if len(s_spot) >= 2:
+                                    existing['gold_prev'] = round(float(s_spot.iloc[-2]), 2)
+                                break
+                            s_etf = s[(s >= gld_etf_lo) & (s < gld_etf_hi)]
+                            if not s_etf.empty:
+                                gold_val = round(float(s_etf.iloc[-1]) * gld_to_spot, 2)
+                                if len(s_etf) >= 2:
+                                    existing['gold_prev'] = round(float(s_etf.iloc[-2]) * gld_to_spot, 2)
+                                break
+                    except Exception:
+                        pass
+        if gold_val is not None:
+            for gk in ('gold', 'GOLD', 'gold_us', 'GOLD_US'):
+                existing[gk] = gold_val
+                safe_updates[gk] = gold_val
+            if not isinstance(existing.get('gold_prev'), (int, float)) or not (gold_bounds[0] <= float(existing['gold_prev']) <= gold_bounds[1]):
+                existing['gold_prev'] = gold_val
+
+        wti_bounds = bounds_map.get('wti', (20.0, 140.0))
+        wti_val = _pick_valid(('wti', 'WTI'), wti_bounds)
+        if wti_val is not None:
+            existing['wti'] = wti_val
+            existing['WTI'] = wti_val
+            if not isinstance(existing.get('wti_prev'), (int, float)) or not (wti_bounds[0] <= float(existing['wti_prev']) <= wti_bounds[1]):
+                wp = _PROJECT_ROOT / 'data' / 'signals' / 'signal_wti.parquet'
+                w_prev = wti_val
+                if wp.exists():
+                    try:
+                        wdf = pd.read_parquet(wp)
+                        col = 'close' if 'close' in wdf.columns else ('Close' if 'Close' in wdf.columns else None)
+                        if col:
+                            ws = pd.to_numeric(wdf[col], errors='coerce').dropna()
+                            ws = ws[(ws >= wti_bounds[0]) & (ws <= wti_bounds[1])]
+                            if len(ws) >= 2:
+                                w_prev = round(float(ws.iloc[-2]), 2)
+                    except Exception:
+                        pass
+                existing['wti_prev'] = w_prev
+                safe_updates['wti_prev'] = w_prev
+
+        # 4. Downstream M2/M3 Contract Keys 산출
+        # (a) kospi200_spot_price & kospi200_futures_price
+        kp200_bounds = bounds_map.get('kospi200', (150.0, 1500.0))
+        kp200_spot = _pick_valid(('kospi200_spot_price', 'kospi200'), kp200_bounds)
+        if kp200_spot is None:
+            etf_p = _PROJECT_ROOT / 'data' / 'kr_markets' / 'kr_069500.parquet'
+            if etf_p.exists():
+                try:
+                    edf = pd.read_parquet(etf_p)
+                    col = 'close' if 'close' in edf.columns else ('Close' if 'Close' in edf.columns else None)
+                    if col and not edf.empty:
+                        last_etf = float(pd.to_numeric(edf[col], errors='coerce').dropna().iloc[-1])
+                        scale_div = 100.0
+                        cand = round(last_etf / scale_div, 2) if last_etf > kp200_bounds[1] else round(last_etf, 2)
+                        if kp200_bounds[0] <= cand <= kp200_bounds[1]:
+                            kp200_spot = cand
+                except Exception:
+                    pass
+        if kp200_spot is None and kp_val is not None:
+            kp200_div = 7.52
+            kp200_spot = round(kp_val / kp200_div, 2)
+        if kp200_spot is not None:
+            existing['kospi200'] = kp200_spot
+            existing['kospi200_spot_price'] = kp200_spot
+            safe_updates['kospi200_spot_price'] = kp200_spot
+            kp200_fut = _pick_valid(('kospi200_futures_price',), kp200_bounds)
+            if kp200_fut is None:
+                basis_pct = _pick_valid(('futures_basis_pct', 'basis_pct'))
+                if basis_pct is None:
+                    basis_pct = 0.0
+                kp200_fut = round(kp200_spot * (1.0 + float(basis_pct) / 100.0), 2)
+            existing['kospi200_futures_price'] = kp200_fut
+            safe_updates['kospi200_futures_price'] = kp200_fut
+
+        # (b) kospi_20d_return & kospi_trend
+        for kp_rel in ('data/signals/signal_kospi.parquet', 'data/kr_markets/kr_069500.parquet'):
+            kp_sig_p = _PROJECT_ROOT / kp_rel
+            if kp_sig_p.exists():
+                try:
+                    kdf = pd.read_parquet(kp_sig_p)
+                    col = 'close' if 'close' in kdf.columns else ('Close' if 'Close' in kdf.columns else None)
+                    if col:
+                        ks = pd.to_numeric(kdf[col], errors='coerce').dropna()
+                        win_20 = 20
+                        if len(ks) > win_20 and float(ks.iloc[-win_20 - 1]) > 0:
+                            ret_20d = round(float(ks.iloc[-1] / ks.iloc[-win_20 - 1] - 1.0), 6)
+                            existing['kospi_20d_return'] = ret_20d
+                            safe_updates['kospi_20d_return'] = ret_20d
+                            break
+                        elif len(ks) >= 2 and float(ks.iloc[0]) > 0 and kp_rel.endswith('kr_069500.parquet'):
+                            ret_20d = round(float(ks.iloc[-1] / ks.iloc[0] - 1.0), 6)
+                            existing['kospi_20d_return'] = ret_20d
+                            safe_updates['kospi_20d_return'] = ret_20d
+                            break
+                except Exception:
+                    pass
+        kp_ma20 = _pick_valid(('kospi_ma20',), bounds_map.get('kospi_ma20'))
+        if kp_val is not None and kp_ma20 is not None and kp_ma20 > 0:
+            bull_mult, bear_mult = 1.005, 0.995
+            if kp_val > kp_ma20 * bull_mult:
+                kp_trend = 'BULL'
+            elif kp_val < kp_ma20 * bear_mult:
+                kp_trend = 'BEAR'
+            else:
+                kp_trend = 'NEUTRAL'
+            existing['kospi_trend'] = kp_trend
+            safe_updates['kospi_trend'] = kp_trend
+
+        # (c) sp500_above_200ma
+        for sp_rel in ('data/kr_markets/cross_sp500.parquet', 'data/cross_market/cross_sp500.parquet', 'data/us_stocks/prices/SPY.parquet', 'data/signals/signal_sp500.parquet'):
+            sp_p = _PROJECT_ROOT / sp_rel
+            if sp_p.exists():
+                try:
+                    spdf = pd.read_parquet(sp_p)
+                    col = 'close' if 'close' in spdf.columns else ('Close' if 'Close' in spdf.columns else None)
+                    if col:
+                        sps = pd.to_numeric(spdf[col], errors='coerce').dropna()
+                        min_bars = 20
+                        if len(sps) >= min_bars:
+                            ma200 = float(sps.tail(200).mean())
+                            cur_sp = _pick_valid(('sp500', 'SP500'), bounds_map.get('sp500')) if 'SPY' not in sp_rel else None
+                            if cur_sp is None or (cur_sp > ma200 * 3.0):
+                                cur_sp = float(sps.iloc[-1])
+                            above_200 = bool(cur_sp > ma200)
+                            existing['sp500_above_200ma'] = above_200
+                            safe_updates['sp500_above_200ma'] = above_200
+                            break
+                except Exception:
+                    pass
+
+        # (d) usdkrw_5d_change_pct
+        for fx_rel in ('data/kr_markets/cross_usdkrw.parquet', 'data/kr_markets/us_usdkrw.parquet', 'data/cross_market/cross_usdkrw.parquet', 'data/us_stocks/prices/KRW=X.parquet', 'data/signals/signal_usdkrw.parquet'):
+            fx_p = _PROJECT_ROOT / fx_rel
+            if fx_p.exists():
+                try:
+                    fxdf = pd.read_parquet(fx_p)
+                    col = 'close' if 'close' in fxdf.columns else ('Close' if 'Close' in fxdf.columns else None)
+                    if col:
+                        fxs = pd.to_numeric(fxdf[col], errors='coerce').dropna()
+                        fx_bounds = bounds_map.get('usdkrw', (900.0, 2000.0))
+                        fxs = fxs[(fxs >= fx_bounds[0]) & (fxs <= fx_bounds[1])]
+                        win_5 = 5
+                        if len(fxs) > win_5 and float(fxs.iloc[-win_5 - 1]) > 0:
+                            cur_fx = _pick_valid(('usdkrw', 'USDKRW'), fx_bounds)
+                            if cur_fx is None:
+                                cur_fx = float(fxs.iloc[-1])
+                            fx_5d = round((cur_fx / float(fxs.iloc[-win_5 - 1]) - 1.0) * 100.0, 4)
+                            existing['usdkrw_5d_change_pct'] = fx_5d
+                            safe_updates['usdkrw_5d_change_pct'] = fx_5d
+                            break
+                        elif len(fxs) >= 2 and float(fxs.iloc[0]) > 0:
+                            cur_fx = _pick_valid(('usdkrw', 'USDKRW'), fx_bounds) or float(fxs.iloc[-1])
+                            fx_5d = round((cur_fx / float(fxs.iloc[0]) - 1.0) * 100.0, 4)
+                            existing['usdkrw_5d_change_pct'] = fx_5d
+                            safe_updates['usdkrw_5d_change_pct'] = fx_5d
+                            break
+                except Exception:
+                    pass
+        if 'usdkrw_5d_change_pct' not in existing:
+            fx_1d = _pick_valid(('usdkrw_change_1d',)) or 0.0
+            existing['usdkrw_5d_change_pct'] = round(float(fx_1d), 4)
+            safe_updates['usdkrw_5d_change_pct'] = existing['usdkrw_5d_change_pct']
+
+        # (e) INST_NET_BUY_KRW_15M, FOREIGN_NET_BUY_KRW_15M, OFI_RATIO
+        inst_15m = _pick_valid(('INST_NET_BUY_KRW_15M', 'inst_net_buy_krw', 'kospi_inst_net'))
+        frgn_15m = _pick_valid(('FOREIGN_NET_BUY_KRW_15M', 'foreign_net_buy_krw', 'kospi_foreign_net'))
+        if inst_15m is None or frgn_15m is None:
+            for fl_rel in ('data/kr_markets/investor_flow_kospi.parquet', 'data/investor_flow/investor_flow_kospi.parquet'):
+                fl_p = _PROJECT_ROOT / fl_rel
+                if fl_p.exists():
+                    try:
+                        fldf = pd.read_parquet(fl_p)
+                        if not fldf.empty:
+                            last_r = fldf.iloc[-1]
+                            if inst_15m is None and '기관합계' in fldf.columns:
+                                inst_15m = float(last_r['기관합계'])
+                            if frgn_15m is None and '외국인합계' in fldf.columns:
+                                frgn_15m = float(last_r['외국인합계'])
+                            break
+                    except Exception:
+                        pass
+        if inst_15m is None or frgn_15m is None:
+            fl_dir = _PROJECT_ROOT / 'data' / 'investor_flow' / f"{'069500'}"
+            if fl_dir.exists():
+                try:
+                    csv_files = sorted(p for p in fl_dir.glob('*.csv') if p.stem.isdigit())
+                    if csv_files:
+                        cdf = pd.read_csv(csv_files[-1])
+                        if not cdf.empty:
+                            last_r = cdf.iloc[-1]
+                            if inst_15m is None and 'inst_net' in cdf.columns:
+                                inst_15m = round(float(last_r['inst_net']), 4)
+                            if frgn_15m is None and 'foreign_net' in cdf.columns:
+                                frgn_15m = round(float(last_r['foreign_net']), 4)
+                except Exception:
+                    pass
+        if inst_15m is None:
+            inst_15m = 0.0
+        if frgn_15m is None:
+            frgn_15m = 0.0
+        existing['INST_NET_BUY_KRW_15M'] = inst_15m
+        safe_updates['INST_NET_BUY_KRW_15M'] = inst_15m
+        existing['FOREIGN_NET_BUY_KRW_15M'] = frgn_15m
+        safe_updates['FOREIGN_NET_BUY_KRW_15M'] = frgn_15m
+        if 'OFI_RATIO' not in existing or existing.get('OFI_RATIO') is None:
+            if abs(inst_15m) + abs(frgn_15m) > 0:
+                denom = abs(inst_15m) + abs(frgn_15m) + 1.0
+                ofi_r = round((inst_15m + frgn_15m) / denom, 4)
+            else:
+                ofi_z_val = _pick_valid(('ofi_z',)) or 0.0
+                ofi_r = round(float(math.tanh(ofi_z_val)), 4)
+            existing['OFI_RATIO'] = ofi_r
+            safe_updates['OFI_RATIO'] = ofi_r
+
+        existing.setdefault('ofi_z', 0.0)
+        existing.setdefault('lead_lag', 0.0)
 
     def _update_cache(self, updates: Dict):
         """signal_cache.json 원자적(Atomic) 쓰기 업데이트.
@@ -782,7 +1090,7 @@ class MacroRealtimeRefresher:
 
             def _apply_updates(existing: dict) -> dict:
                 nonlocal last_safe_updates
-                # 0. 기존 캐시에 남아있는 ETF 가격 오염값(예: sp500=763, nasdaq=709, gold_us=382, dxy=28.9) 사전 제거
+                # 0. 기존 캐시에 남아있는 ETF 가격 오염값(예: sp500=763, nasdaq=709, gold_us=382, dxy=28.9, kospi=242) 사전 제거
                 for _ek in list(existing.keys()):
                     if _ek in bounds_map and isinstance(existing.get(_ek), (int, float)):
                         _lo, _hi = bounds_map[_ek]
@@ -827,21 +1135,8 @@ class MacroRealtimeRefresher:
                     if k.upper() in bounds_map and isinstance(v, (int, float)):
                         safe_updates[k.upper()] = v
 
-                # Telemetry Key Alias Mapping for US Market Regime & Strategy Compatibility
-                if 'sp500_change_1d' in safe_updates:
-                    safe_updates['spx_change_1d'] = safe_updates['sp500_change_1d']
-                if 'nasdaq_change_1d' in safe_updates:
-                    safe_updates['ixic_change_1d'] = safe_updates['nasdaq_change_1d']
-                if 'sox_change_1d' in safe_updates:
-                    safe_updates['soxx_change_1d'] = safe_updates['sox_change_1d']
-                safe_updates.setdefault('spx_change_1d', safe_updates.get('sp500_change_1d', existing.get('spx_change_1d', 0.0)))
-                safe_updates.setdefault('ixic_change_1d', safe_updates.get('nasdaq_change_1d', existing.get('ixic_change_1d', 0.0)))
-                safe_updates.setdefault('soxx_change_1d', safe_updates.get('sox_change_1d', existing.get('soxx_change_1d', 0.0)))
-                safe_updates.setdefault('ofi_z', existing.get('ofi_z', 0.0))
-                safe_updates.setdefault('lead_lag', existing.get('lead_lag', 0.0))
-
+                self._enrich_and_sync_signal_dict(existing, safe_updates, bounds_map)
                 last_safe_updates = dict(safe_updates)
-                existing.update(safe_updates)
                 existing['timestamp'] = datetime.now().isoformat()
                 return existing
 

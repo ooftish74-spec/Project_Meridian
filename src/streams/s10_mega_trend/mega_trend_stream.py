@@ -44,7 +44,10 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 
 from config.dynamic_config import DynamicConfig
+from src.analysis.fundamental_filter import MeridianFundamentalFilter
 from src.streams.base_stream import BaseStream
+
+FundamentalFilter = MeridianFundamentalFilter
 
 try:
     from src.utils.time_utils import now_kst
@@ -76,6 +79,10 @@ class S10MegaTrendStream(BaseStream):
         self.stream_id = 'S10_MEGA_TREND'
         self._eval_cache: Dict[str, Dict] = {}
         self._current_market_data: Dict[str, Any] = {}
+        try:
+            self._fundamental_filter: Optional[MeridianFundamentalFilter] = MeridianFundamentalFilter()
+        except Exception:
+            self._fundamental_filter = None
         # 섹터→대장주 매핑: YAML SSoT, 기본값 폴백
         self._sector_map: Dict[str, List[Dict]] = cfg.get(
             's10.sector_stock_map', _DEFAULT_SECTOR_STOCK_MAP
@@ -183,6 +190,10 @@ class S10MegaTrendStream(BaseStream):
                         continue
 
                 if sig['action'] == 'buy':
+                    _ff = getattr(self, '_fundamental_filter', None)
+                    if _ff is not None and not _ff.passes_hard_filter(ticker, regime=regime):
+                        logger.info(f"    [S10] 펀더멘탈 Hard Filter 차단 (Beneish/Ohlson): {name}({ticker})")
+                        continue
                     kelly_frac = self._compute_kelly(sig)
                     size_pct   = min(
                         round(kelly_frac * sector_weight, 4),
@@ -265,6 +276,15 @@ class S10MegaTrendStream(BaseStream):
             for stock in stocks:
                 ticker = stock['ticker']
                 name = stock['name']
+                _ff_sec = getattr(self, '_fundamental_filter', None)
+                if _ff_sec is not None and not _ff_sec.passes_hard_filter(ticker, regime=regime):
+                    self._eval_cache[ticker] = {
+                        'action': 'hold',
+                        'confidence': 0.0,
+                        'score': 0.0,
+                        'reason': 'FundamentalFilter Hard Block (Beneish M-Score / Ohlson O-Score)',
+                    }
+                    continue
                 weight = float(stock.get('weight', 0.5))
                 f_data = features.get(ticker, features.get(f'kr_{ticker}', {}))
                 
@@ -448,8 +468,15 @@ class S10MegaTrendStream(BaseStream):
     def _exit_all_signal(self, reason: str) -> List[Dict]:
         """모든 섹터 대장주 청산 신호."""
         return [
-            {'ticker': s['ticker'], 'name': s['name'],
-             'direction': 'exit', 'strategy': 'S10_MegaTrend', 'reason': reason}
+            {
+                'stream_id': self.stream_id,
+                'ticker': s['ticker'],
+                'name': s['name'],
+                'direction': 'exit',
+                'action': 'exit',
+                'strategy': 'S10_MegaTrend',
+                'reason': reason,
+            }
             for stocks in self._sector_map.values()
             for s in stocks
         ]

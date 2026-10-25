@@ -209,6 +209,10 @@ def _load_vix_history(window: int=252) -> List[float]:
             logger.warning("Tier 2/3 Fallback: Caught exception in module. Proceeding with mathematical defaults.", exc_info=True)
     hist_file = results / 'overnight_signals.json'
     if not hist_file.exists():
+        hist_file = results / 'overnight_result.json'
+    if not hist_file.exists():
+        hist_file = results / 'overnight_intelligence_history.json'
+    if not hist_file.exists():
         return []
     try:
         raw = hist_file.read_text()

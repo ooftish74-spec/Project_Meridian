@@ -1136,21 +1136,36 @@ class MarketDataBridge:
                     ma20_val = float(self._cache.get('kospi_ma20', 0) or 0)
                     _k_min = 1000
                     _k_max = 10000
-                    _max_dev = float(pget('data.kospi_ma20_max_dev', 0.15))
-                    if ma20_val > _k_max or ma20_val < _k_min or abs(ma20_val - close_val) / max(close_val, 1.0) > _max_dev:
-                        ma20_val = close_val
-                        _etf_pq = _DATA_DIR / 'kr_markets' / 'kr_069500.parquet'
-                        if _etf_pq.exists():
+                    _scale_dev = 0.50
+                    if ma20_val > _k_max or ma20_val < _k_min or abs(ma20_val - close_val) / max(close_val, 1.0) > _scale_dev:
+                        ma20_val = 0.0
+                        _sig_kp = _DATA_DIR / 'signals' / 'signal_kospi.parquet'
+                        if _sig_kp.exists():
                             try:
-                                _df_etf = pd.read_parquet(_etf_pq)
-                                _c_etf = 'close' if 'close' in _df_etf.columns else ('Close' if 'Close' in _df_etf.columns else None)
-                                if _c_etf and len(_df_etf) >= 20:
-                                    _cs_etf = pd.to_numeric(_df_etf[_c_etf], errors='coerce').dropna()
-                                    if len(_cs_etf) >= 20 and float(_cs_etf.iloc[-1]) > 0:
-                                        _ratio_ma20 = float(_cs_etf.tail(20).mean()) / float(_cs_etf.iloc[-1])
-                                        ma20_val = round(close_val * _ratio_ma20, 2)
+                                _df_kp = pd.read_parquet(_sig_kp)
+                                _c_kp = 'close' if 'close' in _df_kp.columns else ('Close' if 'Close' in _df_kp.columns else None)
+                                if _c_kp:
+                                    _cs_kp = pd.to_numeric(_df_kp[_c_kp], errors='coerce').dropna()
+                                    _cs_kp = _cs_kp[(_cs_kp > _k_min) & (_cs_kp < _k_max)]
+                                    if len(_cs_kp) >= 5:
+                                        ma20_val = round(float(_cs_kp.tail(20).mean()), 2)
                             except Exception:
                                 pass
+                        if ma20_val <= 0:
+                            _etf_pq = _DATA_DIR / 'kr_markets' / 'kr_069500.parquet'
+                            if _etf_pq.exists():
+                                try:
+                                    _df_etf = pd.read_parquet(_etf_pq)
+                                    _c_etf = 'close' if 'close' in _df_etf.columns else ('Close' if 'Close' in _df_etf.columns else None)
+                                    if _c_etf and len(_df_etf) >= 20:
+                                        _cs_etf = pd.to_numeric(_df_etf[_c_etf], errors='coerce').dropna()
+                                        if len(_cs_etf) >= 20 and float(_cs_etf.iloc[-1]) > 0:
+                                            _ratio_ma20 = float(_cs_etf.tail(20).mean()) / float(_cs_etf.iloc[-1])
+                                            ma20_val = round(close_val * _ratio_ma20, 2)
+                                except Exception:
+                                    pass
+                        if ma20_val <= 0:
+                            ma20_val = close_val
                     self._field_quality['kospi'] = 0.9
                     logger.info(f"  📊 KOSPI Index (Naver Realtime API): {close_val:,.2f} (MA20: {ma20_val:,.2f})")
                     return {'close': close_val, 'ma20': ma20_val}
@@ -1697,6 +1712,11 @@ class MarketDataBridge:
                     data['vix_change_1d'] = round((float(_vh[-1]) / _vh_prev - 1.0) * 100.0, 2)
                 if not data.get('vix_change_1m') and len(_vh) >= _n21 and float(_vh[-_n21]) > 0:
                     data['vix_change_1m'] = round((float(_vh[-1]) / float(_vh[-_n21]) - 1.0) * 100.0, 2)
+            try:
+                from src.data_collection.macro_realtime_refresher import MacroRealtimeRefresher
+                MacroRealtimeRefresher._enrich_and_sync_signal_dict(data, dict(data), MacroRealtimeRefresher._INDEX_SANITY_BOUNDS)
+            except Exception as _sync_e:
+                logger.debug(f"  [Cache] 별칭/계약키 동기화 참고: {_sync_e}")
             self._ensure_root_meta(data)
         except Exception as _merge_e:
             logger.debug(f"  [Cache] 필드 보존 병합 참고: {_merge_e}")

@@ -3021,6 +3021,9 @@ class StreamOrchestrator:
         # ★ portfolio 딕셔너리가 주입된 경우 shadow_portfolio.json I/O 완전 차단
         # (백테스트 격리 원칙: 주입된 의존성이 있으면 파일 접근 자체를 금지)
         existing_tickers = set()
+        current_holdings = {}
+        _stream_held_krw = {}
+        _unattributed_held_krw = 0.0
         try:
             _positions = {}
             if portfolio and 'positions' in portfolio:
@@ -3043,7 +3046,6 @@ class StreamOrchestrator:
                         _sp_data = _json_budget.loads(_sp_path.read_text())
                         _positions = _sp_data.get('positions', {})
 
-            _unattributed_held_krw = 0.0
             _PARKING_EXEMPT_BUDGET = {'459580', '449170', '423160', '130730', '430740', '357870', '357330', 'SHV', 'SGOV', 'BIL'}  # hardcode-ok: L0 cash-parking shield ETFs
             try:
                 from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_ub
@@ -3051,6 +3053,13 @@ class StreamOrchestrator:
             except Exception:
                 pass
             from src.utils.market_calendar import is_kr_ticker as _is_kr_ub
+            from src.execution.position_ledger import PositionLedgerManager as _PLM_UB, infer_canonical_stream_and_track as _infer_st_ub
+            _ledger_entries_ub = {}
+            if not (portfolio and 'positions' in portfolio):
+                try:
+                    _ledger_entries_ub = _PLM_UB().load_ledger()
+                except Exception:
+                    _ledger_entries_ub = {}
             _fx_ub = float((market_data or {}).get('usdkrw') or ((market_data or {}).get('signal_cache') or {}).get('usdkrw') or 0.0)
             if _fx_ub <= 0:
                 try:
@@ -3071,18 +3080,15 @@ class StreamOrchestrator:
 
                 _is_kr_pos = _is_kr_ub(_clean_tk_ub) if _clean_tk_ub else True
                 _pos_fx = 1.0 if _is_kr_pos else (float(_pv.get('fx_rate') or 0.0) or _fx_ub or 1.0)
+                _qty_ub = float(_pv.get('quantity', _pv.get('qty', _pv.get('shares', 0))) or 0.0)
                 _pos_val = float(_pv.get('eval_krw', 0.0) or _pv.get('eval_amount_krw', 0.0) or _pv.get('amount_krw', 0.0) or 0.0)
                 if _pos_val <= 0:
-                    _qty_ub = float(_pv.get('quantity', _pv.get('qty', 0)) or 0.0)
                     _cp_ub = float(_pv.get('current_price', 0.0) or _pv.get('avg_price', 0.0) or _pv.get('entry_price', 0.0) or 0.0)
                     if _qty_ub > 0 and _cp_ub > 0:
                         _pos_val = _qty_ub * _cp_ub * _pos_fx
                     else:
                         _raw_amt_ub = float(_pv.get('amount', 0.0) or _pv.get('market_value', 0.0) or 0.0)
                         _pos_val = _raw_amt_ub * (_pos_fx if not _is_kr_pos else 1.0)
-
-                if _clean_tk_ub.upper() in _PARKING_EXEMPT_BUDGET:
-                    continue
 
                 _STREAM_CANONICAL_MAP = {
                     'S0_BETA': 'S0',
@@ -3092,6 +3098,7 @@ class StreamOrchestrator:
                     'S3_A': 'S3',
                     'S3_B': 'S3',
                     'S3_C': 'S3',
+                    'S6_US_SECTOR': 'S6',
                     'S10': 'S10_MEGA_TREND',
                     'S11': 'S11_HIGHBETA_SNIPER',
                     'S11_HIGH_BETA': 'S11_HIGHBETA_SNIPER',
@@ -3100,13 +3107,48 @@ class StreamOrchestrator:
                     'S14': 'S14_PAIR_ALPHA',
                 }
                 _raw_sid = _pk.split(':')[0] if ':' in _pk else _pv.get('stream_id', '?')
-                _sid = _STREAM_CANONICAL_MAP.get(str(_raw_sid), str(_raw_sid))
+                _raw_sid_str = str(_raw_sid or '').strip()
+                _resolved_trk_ub = str(_pv.get('track', '') or '').strip()
+                if not _raw_sid_str or _raw_sid_str.upper() in ('', '?', 'NONE', 'NULL', 'UNKNOWN', 'S_RECON', 'LIVE_SSOT'):
+                    _led_item = _ledger_entries_ub.get(_clean_tk_ub) or _ledger_entries_ub.get(_clean_tk_ub.upper()) or {}
+                    _led_sid = str(_led_item.get('stream_id', '') or '').strip() if isinstance(_led_item, dict) else ''
+                    _led_trk = str(_led_item.get('track', '') or '').strip() if isinstance(_led_item, dict) else ''
+                    if _led_sid and _led_sid.upper() not in ('', '?', 'NONE', 'NULL', 'UNKNOWN', 'S_RECON', 'LIVE_SSOT'):
+                        _raw_sid_str = _led_sid
+                        if not _resolved_trk_ub and _led_trk:
+                            _resolved_trk_ub = _led_trk
+                    else:
+                        _raw_sid_str, _inf_trk = _infer_st_ub(_clean_tk_ub, holding_info=_pv)
+                        if not _resolved_trk_ub:
+                            _resolved_trk_ub = _inf_trk
+                if not _resolved_trk_ub:
+                    _, _resolved_trk_ub = _infer_st_ub(_clean_tk_ub, holding_info=_pv)
+
+                if _clean_tk_ub:
+                    _tk_u_key = _clean_tk_ub.upper()
+                    _prev_ch = current_holdings.get(_tk_u_key, {'qty': 0.0, 'eval_krw': 0.0, 'stream_id': _raw_sid_str, 'track': _resolved_trk_ub})
+                    current_holdings[_tk_u_key] = {
+                        'qty': float(_prev_ch.get('qty', 0.0) or 0.0) + max(0.0, _qty_ub if _qty_ub > 0 else (1.0 if _pos_val > 0 else 0.0)),
+                        'eval_krw': float(_prev_ch.get('eval_krw', 0.0) or 0.0) + max(0.0, _pos_val),
+                        'stream_id': _raw_sid_str,
+                        'track': _resolved_trk_ub,
+                    }
+
+                if _clean_tk_ub.upper() in _PARKING_EXEMPT_BUDGET:
+                    continue
+
+                _sid = _STREAM_CANONICAL_MAP.get(_raw_sid_str, _raw_sid_str)
+                _stream_held_krw[_sid] = _stream_held_krw.get(_sid, 0.0) + _pos_val
+                if _raw_sid_str != _sid:
+                    _stream_held_krw[_raw_sid_str] = _stream_held_krw.get(_raw_sid_str, 0.0) + _pos_val
                 if _sid in stream_budgets:
                     stream_budgets[_sid] = max(0, stream_budgets[_sid] - _pos_val)
                     for _short_k, _canon_k in _STREAM_CANONICAL_MAP.items():
                         if _canon_k == _sid and _short_k in stream_budgets:
                             stream_budgets[_short_k] = stream_budgets[_sid]
-                else:
+                elif _sid == 'S6' and 'S3' in stream_budgets:
+                    stream_budgets['S3'] = max(0, stream_budgets['S3'] - _pos_val)
+                elif not _sid or _sid.upper() in ('', '?', 'NONE', 'NULL', 'UNKNOWN', 'S_RECON', 'LIVE_SSOT'):
                     _unattributed_held_krw += _pos_val
         except Exception as _et_e:
             logger.error(f"    [Phase 47] existing_tickers 수집 실패: {_et_e}", exc_info=True)
@@ -3328,7 +3370,7 @@ class StreamOrchestrator:
                 for s in stream_signals:
                     if isinstance(s, dict) and s.get('_orig_stream_size_pct', 0.0) > 0:
                         s['nav_probe_size_pct'] = s.get('size_pct', 0.0)
-                        s['size_pct'] = s['_orig_stream_size_pct']
+                        s['size_pct'] = min(float(s['_orig_stream_size_pct']), float(s['size_pct']))
                 # [Pair Atomic Integrity] filter_by_friction 단계에서 페어 중 한쪽 레그만 탈락한 경우, 남은 단방향 레그도 원자적으로 제거
                 _pid_counts = {}
                 for _ps in stream_signals:
@@ -3459,23 +3501,44 @@ class StreamOrchestrator:
                 _is_pair_shared_inv = bool(_sig_pid) and (_t_clean in _inv_set_gen)
                 current_amount = 0.0 if _is_pair_shared_inv else float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
                 current_qty = 0
-                if portfolio and not _is_pair_shared_inv:
-                    pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
-                    pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
-                    for pos in pos_iterable:
-                        if isinstance(pos, dict):
-                            pos_t = pos.get('ticker', '')
-                            if pos_t and _t and pos_t.split(':')[-1].upper() == _t_clean:
-                                _p_qty = float(pos.get('quantity', pos.get('qty', 0)) or 0.0)
-                                _p_px = float(pos.get('current_price', 0.0) or pos.get('avg_price', 0.0) or pos.get('entry_price', 0.0) or sig.get('price', 0.0) or 0.0)
-                                _p_amt = float(pos.get('amount', 0.0) or pos.get('market_value', 0.0) or 0.0)
-                                if _p_amt <= 0:
-                                    _p_amt = _p_qty * _p_px
-                                current_amount += _p_amt
-                                current_qty += int(_p_qty)
+                current_eval_krw = 0.0
+                if not _is_pair_shared_inv:
+                    _ch_entry = current_holdings.get(_t_clean)
+                    if isinstance(_ch_entry, dict) and float(_ch_entry.get('qty', 0.0) or 0.0) > 0:
+                        current_qty = int(float(_ch_entry.get('qty', 0.0) or 0.0))
+                        current_eval_krw = float(_ch_entry.get('eval_krw', 0.0) or 0.0)
+                        current_amount += current_eval_krw
+                    elif portfolio:
+                        pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
+                        pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
+                        for pos in pos_iterable:
+                            if isinstance(pos, dict):
+                                pos_t = pos.get('ticker', '')
+                                if pos_t and _t and pos_t.split(':')[-1].upper() == _t_clean:
+                                    _p_qty = float(pos.get('quantity', pos.get('qty', 0)) or 0.0)
+                                    _p_px = float(pos.get('current_price', 0.0) or pos.get('avg_price', 0.0) or pos.get('entry_price', 0.0) or sig.get('price', 0.0) or 0.0)
+                                    _p_amt = float(pos.get('eval_krw', 0.0) or pos.get('eval_amount_krw', 0.0) or pos.get('amount_krw', 0.0) or pos.get('amount', 0.0) or pos.get('market_value', 0.0) or 0.0)
+                                    if _p_amt <= 0:
+                                        _p_amt = _p_qty * _p_px
+                                    current_eval_krw += _p_amt
+                                    current_amount += _p_amt
+                                    current_qty += int(_p_qty)
 
-                gap = target_amount - current_amount
-                
+                target_order_krw = target_amount
+                _dup_hold_ratio = 1.0 / 2.0
+                if not _is_pair_shared_inv and current_qty > 0 and target_order_krw > 0:
+                    if current_eval_krw >= target_order_krw * _dup_hold_ratio:
+                        logger.info(
+                            f"    🛡️ [Duplicate-Buy Guard] {_t}: 기보유 평가액 ₩{current_eval_krw:,.0f} "
+                            f">= 목표 발주액 ₩{target_order_krw:,.0f}의 50% (수량={current_qty}) ➔ 중복 매수 스킵"
+                        )
+                        _abort_pair(_sig_pid)
+                        continue
+                    target_amount = max(0.0, target_order_krw - current_eval_krw)
+                    gap = target_amount - float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
+                else:
+                    gap = target_amount - current_amount
+
                 # 목표 달성 또는 초과 시 매수 스킵 (시그널 소멸 시에도 자동 스킵됨)
                 if gap <= 0:
                     _abort_pair(_sig_pid)

@@ -198,10 +198,13 @@ def main():
                 if _sc_file.exists():
                     try:
                         _sc_data = json.loads(_sc_file.read_text(encoding='utf-8'))
+                        _inv_flow_sc = _sc_data.get('investor_flow') if isinstance(_sc_data.get('investor_flow'), dict) else {}
                         _telemetry['vkospi'] = float(_sc_data.get('vkospi', 18.5))
-                        _telemetry['ofi_z'] = float(_sc_data.get('ofi_z', 0.0))
-                        _telemetry['lead_lag'] = float(_sc_data.get('lead_lag', 0.0))
-                        _telemetry['foreign_flow_krw'] = float(_sc_data.get('foreign_net_buy', 0.0) or 0.0)
+                        _telemetry['ofi_z'] = float(_sc_data.get('ofi_z', _sc_data.get('OFI_RATIO', 0.0)) or 0.0)
+                        _telemetry['lead_lag'] = float(_sc_data.get('lead_lag', _sc_data.get('lead_lag_score', 0.0)) or 0.0)
+                        _f_net_val = float(_sc_data.get('foreign_net_buy', _inv_flow_sc.get('foreign_net_5d', 0.0)) or 0.0)
+                        _telemetry['foreign_net_buy'] = _f_net_val
+                        _telemetry['foreign_flow_krw'] = _f_net_val
                     except Exception:
                         pass
 
@@ -635,6 +638,12 @@ def main():
                                         if getattr(_us_sell_fill, 'status', '') in ('filled', 'submitted', 'partially_filled', 'filled_market_fallback'):
                                             main._exit_orders_in_flight[_tk_us] = _now_us_ts
                                             try:
+                                                if hasattr(us_engine, 'confirm_exit'):
+                                                    us_engine.confirm_exit(
+                                                        str(_tk_us),
+                                                        reason=eo.get('reason', 'US Night Trailing Stop'),
+                                                        realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
+                                                    )
                                                 from src.execution.position_ledger import PositionLedgerManager
                                                 PositionLedgerManager().record_daily_exit(
                                                     str(_tk_us),

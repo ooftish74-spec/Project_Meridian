@@ -119,10 +119,10 @@ class BetaTracker:
         recent = self._history[-window:]
         p_rets = np.array([r['portfolio_ret_pct'] for r in recent], dtype=float)
         b_rets = np.array([r['benchmark_ret_pct'] for r in recent], dtype=float)
-        var_b = float(np.var(b_rets))
+        var_b = float(np.var(b_rets, ddof=1))
         if var_b < 1e-10:
             return None
-        cov = float(np.cov(p_rets, b_rets)[0, 1])
+        cov = float(np.cov(p_rets, b_rets, ddof=1)[0, 1])
         return cov / var_b
 
     def get_summary(self, last_n: int=60) -> Dict:

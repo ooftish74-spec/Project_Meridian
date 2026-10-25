@@ -235,7 +235,8 @@ class MarketBreadthCollector:
                     std_r = max(float(raw_ratio.tail(60).std()), 1e-4)
                     latest_r = float(raw_ratio.iloc[-1])
                     z_score = float((latest_r - mean_r) / std_r)
-                    norm_pc = float(np.clip(1.0 + 0.25 * z_score, 0.4, 2.0))
+                    _pcr_lo, _pcr_hi = 0.4, 2.0
+                    raw_pcr = float(np.clip(latest_r, _pcr_lo, _pcr_hi))
                     if z_score > 2.0:
                         sent = 'extreme_fear'
                     elif z_score > 1.0:
@@ -246,19 +247,23 @@ class MarketBreadthCollector:
                         sent = 'greed'
                     else:
                         sent = 'extreme_greed'
+                    pcr_rounded = round(raw_pcr, 3)
+                    z_rounded = round(z_score, 2)
                     result = {
-                        'put_call_ratio': round(norm_pc, 3),
+                        'put_call_ratio': pcr_rounded,
+                        'options_pcr': pcr_rounded,
                         'raw_etf_hedge_ratio': round(latest_r, 3),
+                        'etf_hedge_zscore': z_rounded,
                         'put_volume': int(df_pc['put'].iloc[-1]),
                         'call_volume': int(df_pc['call'].iloc[-1]),
-                        'z_score': round(z_score, 2),
+                        'z_score': z_rounded,
                         'sentiment': sent,
                         'source': 'krx_etf_hedge_ratio',
                         'date': df_pc.index[-1].strftime('%Y%m%d') if hasattr(df_pc.index[-1], 'strftime') else end_str,
                         'timestamp': datetime.now().isoformat(),
                     }
                     self._data['put_call'] = result
-                    logger.info(f"  ✅ P/C Ratio (ETF Hedge Proxy): {norm_pc:.3f} (z={z_score:.2f}, {sent})")
+                    logger.info(f"  ✅ P/C Ratio (ETF Hedge Proxy): {pcr_rounded:.3f} (raw={latest_r:.3f}, z={z_score:.2f}, {sent})")
                     return result
         except Exception as e:
             logger.warning(f"  P/C Ratio ETF Proxy 계산 실패: {e}", exc_info=True)
@@ -309,12 +314,14 @@ class MarketBreadthCollector:
             if 'US10Y_BOND' in returns.columns:
                 returns['US10Y'] = -returns['US10Y_BOND']
 
+            _min_pair_len, _min_cg_len, _min_macro_len = 20, 21, 12
+            _sp_on, _dxy_on, _sp_off, _dxy_off = 0.4, -0.1, 0.15, 0.25
             correlations = {}
             current_corr = {}
             for asset in ['SP500', 'DXY', 'WTI', 'GOLD', 'US10Y']:
                 if asset in returns.columns:
                     pair = returns[['KOSPI', asset]].dropna()
-                    if len(pair) >= 20:
+                    if len(pair) >= _min_pair_len:
                         rolling_corr = pair['KOSPI'].rolling(20).corr(pair[asset]).dropna()
                         if len(rolling_corr) > 0:
                             curr = float(rolling_corr.iloc[-1])
@@ -327,9 +334,9 @@ class MarketBreadthCollector:
                             }
             sp_corr = current_corr.get('KOSPI_SP500', 0)
             dxy_corr = current_corr.get('KOSPI_DXY', 0)
-            if sp_corr > 0.4 and dxy_corr < -0.1:
+            if sp_corr > _sp_on and dxy_corr < _dxy_on:
                 risk_mode = 'risk_on'
-            elif sp_corr < 0.15 or dxy_corr > 0.25:
+            elif sp_corr < _sp_off or dxy_corr > _dxy_off:
                 risk_mode = 'risk_off'
             else:
                 risk_mode = 'neutral'
@@ -337,11 +344,11 @@ class MarketBreadthCollector:
             copper_gold = None
             if 'COPPER' in df.columns and 'GOLD' in df.columns:
                 cg = (df['COPPER'] / df['GOLD']).dropna()
-                if len(cg) >= 21:
+                if len(cg) >= _min_cg_len:
                     copper_gold = round(float(cg.iloc[-1] / cg.iloc[-21] - 1), 4)
             elif 'WTI' in df.columns and 'GOLD' in df.columns:
                 cg = (df['WTI'] / df['GOLD']).dropna()
-                if len(cg) >= 21:
+                if len(cg) >= _min_cg_len:
                     copper_gold = round(float(cg.iloc[-1] / cg.iloc[-21] - 1), 4)
 
             result = {
@@ -364,20 +371,21 @@ class MarketBreadthCollector:
             macro_files = {'CPI': _PROJECT_ROOT / 'data' / 'raw' / 'economic_indicators' / 'USA_CPI.csv', 'GDP': _PROJECT_ROOT / 'data' / 'raw' / 'economic_indicators' / 'USA_GDP.csv', 'KOR_CPI': _PROJECT_ROOT / 'data' / 'raw' / 'korea_economic' / 'KOR_CPI.csv', 'KOR_GDP': _PROJECT_ROOT / 'data' / 'raw' / 'economic_indicators' / 'KOR_GDP.csv'}
             surprises = {}
             surprise_scores = []
+            _min_macro_rows, _min_std_floor, _esi_pos, _esi_neg = 12, 0.001, 0.5, -0.5
             for name, path in macro_files.items():
                 if path.exists():
                     try:
                         df = pd.read_csv(path, index_col=0, parse_dates=True)
                         col = df.columns[0] if len(df.columns) > 0 else None
-                        if col and len(df) >= 12:
+                        if col and len(df) >= _min_macro_rows:
                             values = df[col].dropna().tail(24)
-                            if len(values) >= 12:
+                            if len(values) >= _min_macro_rows:
                                 rolling_mean = values.rolling(6).mean()
                                 rolling_std = values.rolling(12).std()
                                 if len(rolling_mean.dropna()) > 0 and len(rolling_std.dropna()) > 0:
                                     latest = float(values.iloc[-1])
                                     expected = float(rolling_mean.iloc[-1])
-                                    std = max(float(rolling_std.iloc[-1]), 0.001)
+                                    std = max(float(rolling_std.iloc[-1]), _min_std_floor)
                                     z = (latest - expected) / std
                                     surprises[name] = {'latest': round(latest, 3), 'expected': round(expected, 3), 'z_score': round(z, 2)}
                                     surprise_scores.append(z)
@@ -387,7 +395,7 @@ class MarketBreadthCollector:
                         continue
             if surprise_scores:
                 esi = float(np.mean(surprise_scores))
-                result = {'economic_surprise_index': round(esi, 3), 'indicators': surprises, 'interpretation': 'positive_surprise' if esi > 0.5 else 'negative_surprise' if esi < -0.5 else 'inline', 'timestamp': datetime.now().isoformat()}
+                result = {'economic_surprise_index': round(esi, 3), 'indicators': surprises, 'interpretation': 'positive_surprise' if esi > _esi_pos else 'negative_surprise' if esi < _esi_neg else 'inline', 'timestamp': datetime.now().isoformat()}
                 self._data['eco_surprise'] = result
                 _interp = result.get('interpretation', '')
                 logger.info(f"  ✅ ESI: {esi:+.3f} ({_interp}), {len(surprises)}개 지표")
@@ -415,7 +423,7 @@ class MarketBreadthCollector:
         """종합 시장 센티먼트 (0=극공포, 100=극탐욕)"""
         scores = []
         vkospi_data = self._data.get('vkospi', {})
-        vkospi = vkospi_data.get('vkospi', 20)
+        vkospi = vkospi_data.get('vkospi') or 20
         vkospi_score = max(0, min(100, 100 - (vkospi - 10) * 3.3))
         scores.append(('VKOSPI', vkospi_score, 0.35))
         pc_data = self._data.get('put_call', {})
@@ -424,7 +432,7 @@ class MarketBreadthCollector:
         scores.append(('P/C_Ratio', pc_score, 0.25))
         corr_data = self._data.get('global_corr', {})
         risk_mode = corr_data.get('risk_mode', 'neutral')
-        risk_score = {'risk_on': 75, 'neutral': 50, 'risk_off': 25}.get(risk_mode, 50)
+        risk_score = {'risk_on': 75, 'neutral': 50, 'risk_off': 25}.get(risk_mode) or 50
         scores.append(('Risk_Mode', risk_score, 0.2))
         esi_data = self._data.get('eco_surprise', {})
         esi = esi_data.get('economic_surprise_index', 0)
@@ -433,13 +441,14 @@ class MarketBreadthCollector:
         total = sum((s * w for _, s, w in scores))
         total_weight = sum((w for _, _, w in scores))
         composite = total / total_weight if total_weight > 0 else 50
-        if composite >= 75:
+        _t_eg, _t_g, _t_n, _t_f = 75, 60, 40, 25
+        if composite >= _t_eg:
             label = 'extreme_greed'
-        elif composite >= 60:
+        elif composite >= _t_g:
             label = 'greed'
-        elif composite >= 40:
+        elif composite >= _t_n:
             label = 'neutral'
-        elif composite >= 25:
+        elif composite >= _t_f:
             label = 'fear'
         else:
             label = 'extreme_fear'

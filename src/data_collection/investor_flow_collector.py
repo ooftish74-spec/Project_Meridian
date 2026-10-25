@@ -48,6 +48,64 @@ class InvestorFlowCollector:
                 logger.error('pykrx_compat not available', exc_info=True)
         return self._pykrx
 
+    def _collect_from_pykrx(self, ticker: str, date_str: str, lookback_days: int = 60) -> Optional[pd.DataFrame]:
+        """pykrx → KIS API → KIS CSV → investor_flow_kospi.parquet 순서로 실제 수급 수집."""
+        if self.pykrx is not None:
+            try:
+                end_date = datetime.strptime(date_str, '%Y%m%d')
+                start_date = end_date - timedelta(days=lookback_days + 30)
+                start_str = start_date.strftime('%Y%m%d')
+                if hasattr(self.pykrx, 'get_investor_trading_range'):
+                    df = self.pykrx.get_investor_trading_range(start_str, date_str, ticker)
+                elif hasattr(self.pykrx, 'client') and hasattr(self.pykrx.client, 'get_investor_trading_range'):
+                    df = self.pykrx.client.get_investor_trading_range(start_str, date_str, ticker)
+                else:
+                    df = None
+                if df is not None and (not df.empty):
+                    result = self._parse_investor_data(df)
+                    if result is not None and len(result) > 0:
+                        return result
+            except Exception as e:
+                logger.debug(f"pykrx 수급 수집 실패 ({ticker}), KIS/CSV 폴백 시도: {e}")
+
+        # 1차 폴백: KIS API (KISDataCollector().get_investor_trading)
+        try:
+            from src.data_collection.kis_data_collector import KISDataCollector
+            kis_df = KISDataCollector().get_investor_trading(ticker)
+            if kis_df is not None and (not kis_df.empty):
+                parsed_kis = self._parse_investor_data(kis_df)
+                if parsed_kis is not None and len(parsed_kis) > 0:
+                    logger.debug(f"  ✅ KIS API 수급 수집 성공: {ticker} ({len(parsed_kis)}일)")
+                    return parsed_kis.tail(lookback_days + 30)
+        except Exception as _kis_e:
+            logger.debug(f"  KIS API 수급 폴백 스킵 ({ticker}): {_kis_e}")
+
+        # 2차 폴백: 로컬 KIS CSV / timeseries
+        kis_csv_res = self._load_from_kis_csv(ticker, lookback_days)
+        if kis_csv_res is not None and len(kis_csv_res) > 0:
+            return kis_csv_res
+
+        # 3차 폴백: data/investor_flow/investor_flow_kospi.parquet (또는 data/kr_markets/investor_flow_kospi.parquet)
+        for pq_cand in (
+            self.data_dir / 'investor_flow_kospi.parquet',
+            _PROJECT_ROOT / 'data' / 'kr_markets' / 'investor_flow_kospi.parquet',
+        ):
+            if pq_cand.exists():
+                try:
+                    df_pq = pd.read_parquet(pq_cand)
+                    if df_pq is not None and (not df_pq.empty):
+                        if 'ticker' in df_pq.columns:
+                            df_pq = df_pq[df_pq['ticker'].astype(str) == str(ticker)]
+                        if not df_pq.empty:
+                            parsed_pq = self._parse_investor_data(df_pq)
+                            if parsed_pq is not None and len(parsed_pq) > 0:
+                                logger.debug(f"  ✅ Parquet 수급 폴백 로드: {ticker} ({pq_cand.name}, {len(parsed_pq)}행)")
+                                return parsed_pq.tail(lookback_days + 30)
+                except Exception as _pq_e:
+                    logger.debug(f"  investor_flow_kospi.parquet 폴백 스킵: {_pq_e}")
+
+        return None
+
     def collect_daily(self, ticker: str, date_str: Optional[str]=None, lookback_days: int=60) -> Optional[pd.DataFrame]:
         """
         특정 종목의 투자자별 매매동향 수집.
@@ -68,25 +126,13 @@ class InvestorFlowCollector:
                 return pd.read_csv(cache_path, index_col=0, parse_dates=True)
             except Exception as _e:
                 logger.warning(f'  suppressed: {_e}', exc_info=True)
-        if self.pykrx is None:
-            kis_result = self._load_from_kis_csv(ticker, lookback_days)
-            if kis_result is not None:
-                return kis_result
-            return self._generate_proxy(ticker, lookback_days)
-        try:
-            end_date = datetime.strptime(date_str, '%Y%m%d')
-            start_date = end_date - timedelta(days=lookback_days + 30)
-            start_str = start_date.strftime('%Y%m%d')
-            df = self.pykrx.client.get_investor_trading_range(start_str, date_str, ticker)
-            if df is not None and (not df.empty):
-                result = self._parse_investor_data(df)
-                if result is not None and len(result) > 0:
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    atomic_write_dataframe(result, cache_path, file_format='csv')
-                    return result
-        except Exception as e:
-            logger.debug(f"pykrx 수급 수집 실패 ({ticker}), 프록시로 우회: {e}")
-        
+
+        real_result = self._collect_from_pykrx(ticker, date_str, lookback_days)
+        if real_result is not None and len(real_result) > 0:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_dataframe(real_result, cache_path, file_format='csv')
+            return real_result
+
         proxy_result = self._generate_proxy(ticker, lookback_days)
         if proxy_result is not None and len(proxy_result) > 0:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,21 +141,41 @@ class InvestorFlowCollector:
         return proxy_result
 
     def _parse_investor_data(self, df: pd.DataFrame) -> Optional[pd.DataFrame]:
-        """pykrx 결과 파싱."""
+        """pykrx / KIS API / Parquet 결과 파싱."""
         try:
+            work = df.copy()
+            for dt_col in ('날짜', 'date', 'Date', 'stck_bsop_date'):
+                if dt_col in work.columns:
+                    work[dt_col] = pd.to_datetime(work[dt_col], errors='coerce')
+                    work = work.dropna(subset=[dt_col]).set_index(dt_col)
+                    break
             col_map = {}
-            for col in df.columns:
+            # 금액(pbmn)보다 수량(qty) 또는 기본 컬럼을 일관되게 매핑
+            for col in work.columns:
                 col_lower = str(col).lower()
-                if '외국인' in col_lower or 'foreign' in col_lower:
-                    col_map[col] = 'foreign_net'
-                elif '기관' in col_lower or 'instit' in col_lower:
-                    col_map[col] = 'inst_net'
-                elif '개인' in col_lower or 'retail' in col_lower:
-                    col_map[col] = 'retail_net'
-            if col_map:
-                result = df[list(col_map.keys())].rename(columns=col_map)
-                result.index = pd.to_datetime(result.index)
-                return result
+                if col_lower in ('foreign_net', '외국인합계', '외국인', 'frgn_ntby_qty'):
+                    col_map.setdefault('foreign_net', col)
+                elif col_lower in ('inst_net', '기관합계', '기관', 'orgn_ntby_qty'):
+                    col_map.setdefault('inst_net', col)
+                elif col_lower in ('retail_net', '개인', 'prsn_ntby_qty'):
+                    col_map.setdefault('retail_net', col)
+            for col in work.columns:
+                col_lower = str(col).lower()
+                if 'foreign_net' not in col_map and ('외국인' in col_lower or 'foreign' in col_lower or 'frgn_ntby' in col_lower):
+                    col_map['foreign_net'] = col
+                elif 'inst_net' not in col_map and ('기관' in col_lower or 'instit' in col_lower or 'orgn_ntby' in col_lower):
+                    col_map['inst_net'] = col
+                elif 'retail_net' not in col_map and ('개인' in col_lower or 'retail' in col_lower or 'prsn_ntby' in col_lower):
+                    col_map['retail_net'] = col
+            if 'foreign_net' in col_map and 'inst_net' in col_map:
+                out = pd.DataFrame(index=pd.to_datetime(work.index))
+                out['foreign_net'] = pd.to_numeric(work[col_map['foreign_net']], errors='coerce').fillna(0.0)
+                out['inst_net'] = pd.to_numeric(work[col_map['inst_net']], errors='coerce').fillna(0.0)
+                if 'retail_net' in col_map:
+                    out['retail_net'] = pd.to_numeric(work[col_map['retail_net']], errors='coerce').fillna(0.0)
+                else:
+                    out['retail_net'] = -(out['foreign_net'] + out['inst_net'])
+                return out.sort_index()
         except Exception as _e:
             logger.warning(f'  suppressed: {_e}', exc_info=True)
         return None
@@ -208,13 +274,30 @@ class InvestorFlowCollector:
                 return None
             KR = {'종가': 'Close', '거래량': 'Volume', '시가': 'Open', '고가': 'High', '저가': 'Low', 'close': 'Close', 'volume': 'Volume', 'open': 'Open', 'high': 'High', 'low': 'Low'}
             df.rename(columns=KR, inplace=True)
+            for dt_col in ('date', 'Date', '날짜'):
+                if dt_col in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                    df[dt_col] = pd.to_datetime(df[dt_col], errors='coerce')
+                    df = df.dropna(subset=[dt_col]).set_index(dt_col).sort_index()
+                    break
             if 'Close' not in df.columns or 'Volume' not in df.columns:
                 return None
-            df = df.tail(lookback_days + 30)
-            ret = df['Close'].pct_change()
-            vol_chg = df['Volume'].pct_change()
-            foreign_proxy = ret * vol_chg.abs() * df['Close'] * df['Volume'] / 1000000000.0
-            inst_proxy = foreign_proxy * 0.7
+            df = df.tail(lookback_days + 30).copy()
+            close_s = pd.to_numeric(df['Close'], errors='coerce')
+            vol_s = pd.to_numeric(df['Volume'], errors='coerce')
+            open_s = pd.to_numeric(df['Open'], errors='coerce') if 'Open' in df.columns else close_s.shift(1)
+            high_s = pd.to_numeric(df['High'], errors='coerce') if 'High' in df.columns else pd.concat([open_s, close_s], axis=1).max(axis=1)
+            low_s = pd.to_numeric(df['Low'], errors='coerce') if 'Low' in df.columns else pd.concat([open_s, close_s], axis=1).min(axis=1)
+            eps = 1e-8
+            vol_weight = close_s * vol_s / 1000000000.0
+            overnight_ret = open_s / (close_s.shift(1) + eps) - 1.0
+            intraday_ret = (close_s - open_s) / ((high_s - low_s).abs() + eps)
+            if float((close_s - open_s).abs().dropna().sum()) <= eps:
+                # Synthetic close-only fallback: use 1d return vs 3d-1d accumulation difference
+                overnight_ret = close_s.pct_change()
+                intraday_ret = close_s.pct_change(3).fillna(0.0) - overnight_ret.fillna(0.0)
+            vol_chg_factor = 1.0 + vol_s.pct_change().abs().fillna(0.0)
+            foreign_proxy = overnight_ret * vol_chg_factor * vol_weight
+            inst_proxy = intraday_ret * vol_weight
             retail_proxy = -(foreign_proxy + inst_proxy)
             result = pd.DataFrame({'foreign_net': foreign_proxy, 'inst_net': inst_proxy, 'retail_net': retail_proxy}, index=df.index)
             return result.dropna()

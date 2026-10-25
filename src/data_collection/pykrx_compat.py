@@ -73,11 +73,62 @@ class _PykrxCompatStock:
         """지수 OHLCV (1001=KOSPI, 2001=KOSDAQ 등).
 
         수정 이력:
-          2026-07-28: KRX API를 최우선 순위로 복원 (pykrx 차단 및 로깅 버그 회피)
+          2026-07-28: KRX API / KIS Sector Daily / signal_kospi|kosdaq.parquet 최우선 조회,
+                      ETF(069500/229200) 폴백 시 마지막 유효 지수 종가에 동적 앵커링.
         """
         start_d, end_d = (self._fmt_date(start), self._fmt_date(end))
-        
-        # 1순위: KRX API (단일 일자 조회일 때만 해당 지수 행 필터링하여 사용; 다중 일자 시계열은 Naver/KIS 사용)
+        base_root = Path(__file__).resolve().parent.parent.parent
+        _INDEX_VALID_BOUNDS = {
+            '1001': (1500.0, 10000.0),
+            '0001': (1500.0, 10000.0),
+            '1028': (150.0, 1500.0),
+            '2001': (400.0, 3000.0),
+            '2203': (400.0, 3000.0),
+        }
+
+        def _load_valid_signal_parquet(code: str) -> Optional[pd.DataFrame]:
+            sig_map = {
+                '1001': 'signal_kospi.parquet',
+                '0001': 'signal_kospi.parquet',
+                '2001': 'signal_kosdaq.parquet',
+            }
+            fname = sig_map.get(code)
+            if not fname:
+                return None
+            sig_path = base_root / 'data' / 'signals' / fname
+            if not sig_path.exists():
+                return None
+            try:
+                sdf = pd.read_parquet(sig_path)
+                if sdf is None or sdf.empty:
+                    return None
+                sdf = sdf.copy()
+                sdf.columns = [str(c).lower() for c in sdf.columns]
+                if 'date' in sdf.columns:
+                    sdf['date'] = pd.to_datetime(sdf['date'], errors='coerce')
+                    sdf = sdf.dropna(subset=['date']).set_index('date').sort_index()
+                else:
+                    sdf.index = pd.to_datetime(sdf.index, errors='coerce')
+                    sdf = sdf.sort_index()
+                if 'close' not in sdf.columns:
+                    return None
+                lo_b, hi_b = _INDEX_VALID_BOUNDS.get(code, (100.0, 20000.0))
+                sdf['close'] = pd.to_numeric(sdf['close'], errors='coerce')
+                sdf = sdf[(sdf['close'] >= lo_b) & (sdf['close'] <= hi_b)]
+                if sdf.empty:
+                    return None
+                out = pd.DataFrame(index=sdf.index)
+                out['시가'] = pd.to_numeric(sdf.get('open', sdf['close']), errors='coerce').fillna(sdf['close'])
+                out['고가'] = pd.to_numeric(sdf.get('high', sdf['close']), errors='coerce').fillna(sdf['close'])
+                out['저가'] = pd.to_numeric(sdf.get('low', sdf['close']), errors='coerce').fillna(sdf['close'])
+                out['종가'] = sdf['close']
+                out['거래량'] = pd.to_numeric(sdf.get('volume', 0), errors='coerce').fillna(0)
+                return out[['시가', '고가', '저가', '종가', '거래량']]
+            except Exception as _se:
+                logger.debug(f"get_index_ohlcv signal parquet({code}) 폴백 스킵: {_se}")
+                return None
+
+        # 1순위: KRX API (단일 일자 조회일 때 해당 지수 행 필터링)
         if start_d == end_d:
             try:
                 if index_code in ('1001', '0001', '1028'):
@@ -121,7 +172,37 @@ class _PykrxCompatStock:
             except Exception as e:
                 logger.error(f'get_index_ohlcv({index_code}): KRX API 실패: {e}', exc_info=True)
 
-        # 2순위: Naver Finance API (가장 강력한 오픈 API 대안)
+        # 2순위: KIS API (공식 브로커 실제 지수 일봉 시계열)
+        _KIS_SYM_MAP = {'1001': '0001', '0001': '0001', '2001': '1001', '1028': '2001', '2203': '1203', '1004': '0304'}
+        _kis_sym = _KIS_SYM_MAP.get(index_code)
+        if _kis_sym:
+            try:
+                from src.data_collection.kis_data_collector import KISDataCollector
+                kis = KISDataCollector()
+                df_kis = kis.get_kr_sector_daily(_kis_sym, start_d, end_d)
+                if df_kis is not None and not df_kis.empty:
+                    col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
+                    df_kis = df_kis.rename(columns=col_map)
+                    logger.debug(f"get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)")
+                    return df_kis[['시가', '고가', '저가', '종가', '거래량']]
+                if index_code == '1004':
+                    vk_closes = kis.get_vkospi_1min(n_candles=5)
+                    if vk_closes:
+                        val = float(vk_closes[-1])
+                        return pd.DataFrame({'시가': [val], '고가': [val], '저가': [val], '종가': [val], '거래량': [0]}, index=pd.DatetimeIndex([pd.Timestamp(end_d)]))
+            except Exception as _kis_e:
+                logger.debug(f'get_index_ohlcv KIS API({index_code}): {_kis_e}')
+
+        # 3순위: data/signals/signal_kospi.parquet | signal_kosdaq.parquet (실제 지수 캐시 시계열)
+        df_sig = _load_valid_signal_parquet(index_code)
+        if df_sig is not None and not df_sig.empty:
+            mask = (df_sig.index >= pd.Timestamp(start_d)) & (df_sig.index <= pd.Timestamp(end_d))
+            df_sig_sub = df_sig[mask]
+            if not df_sig_sub.empty and (start_d == end_d or len(df_sig_sub) >= 2):
+                logger.debug(f"get_index_ohlcv({index_code}): signal parquet OK ({len(df_sig_sub)}행)")
+                return df_sig_sub
+
+        # 4순위: Naver Finance API
         _NAVER_SYM_MAP = {'1001': 'KOSPI', '0001': 'KOSPI', '2001': 'KOSDAQ', '1028': 'KPI200'}
         _naver_sym = _NAVER_SYM_MAP.get(index_code)
         if _naver_sym:
@@ -143,28 +224,53 @@ class _PykrxCompatStock:
             except Exception as _nv_e:
                 logger.error(f'get_index_ohlcv Naver API({index_code}): {_nv_e}', exc_info=True)
 
-        # 3순위: KIS API (공식 브로커 API, 트레이딩 영향 최소화를 위해 Rate Limit 안배)
-        _KIS_SYM_MAP = {'1001': '0001', '0001': '0001', '2001': '1001', '1028': '2001', '2203': '1203', '1004': '0304'}
-        _kis_sym = _KIS_SYM_MAP.get(index_code)
-        if _kis_sym:
+        # 5순위: ETF 시계열(069500/229200) + 마지막 유효 지수 종가 기반 동적 앵커링 (하드코딩 비율 배제)
+        _etf_map = {
+            '1001': '069500',  # hardcode-ok: L0 KOSPI benchmark ETF
+            '0001': '069500',  # hardcode-ok: L0 KOSPI benchmark ETF
+            '1028': '069500',  # hardcode-ok: L0 KOSPI200 benchmark ETF
+            '2001': '229200',  # hardcode-ok: L0 KOSDAQ150 benchmark ETF
+            '2203': '229200',  # hardcode-ok: L0 KOSDAQ150 benchmark ETF
+        }
+        etf_tk = _etf_map.get(index_code)
+        if etf_tk:
             try:
-                import time
-                from src.data_collection.kis_data_collector import KISDataCollector
-                time.sleep(0.2)
-                kis = KISDataCollector()
-                df_kis = kis.get_kr_sector_daily(_kis_sym, start_d, end_d)
-                if df_kis is not None and not df_kis.empty:
-                    col_map = {'Open': '시가', 'High': '고가', 'Low': '저가', 'Close': '종가', 'Volume': '거래량'}
-                    df_kis = df_kis.rename(columns=col_map)
-                    logger.debug(f"get_index_ohlcv({index_code}): KIS API OK ({len(df_kis)}행)")
-                    return df_kis[['시가', '고가', '저가', '종가', '거래량']]
-                if index_code == '1004':
-                    vk_closes = kis.get_vkospi_1min(n_candles=5)
-                    if vk_closes:
-                        val = float(vk_closes[-1])
-                        return pd.DataFrame({'시가': [val], '고가': [val], '저가': [val], '종가': [val], '거래량': [0]}, index=pd.DatetimeIndex([pd.Timestamp(end_d)]))
-            except Exception as _kis_e:
-                logger.debug(f'get_index_ohlcv KIS API({index_code}): {_kis_e}')
+                df_etf = self.get_market_ohlcv(start_d, end_d, etf_tk)
+                if df_etf is not None and not df_etf.empty and '종가' in df_etf.columns:
+                    last_etf_close = float(pd.to_numeric(df_etf['종가'], errors='coerce').dropna().iloc[-1])
+                    anchor_close = None
+                    if df_sig is not None and not df_sig.empty:
+                        anchor_close = float(df_sig['종가'].dropna().iloc[-1])
+                    if anchor_close is None:
+                        sc_path = base_root / 'results' / 'signal_cache.json'
+                        if sc_path.exists():
+                            sc_data = json.loads(sc_path.read_text(encoding='utf-8'))
+                            lo_b, hi_b = _INDEX_VALID_BOUNDS.get(index_code, (100.0, 20000.0))
+                            cand_keys = (
+                                ('kospi_close', 'kospi', 'KOSPI') if index_code in ('1001', '0001')
+                                else (('kospi200', 'kospi200_spot_price') if index_code == '1028'
+                                      else ('kosdaq_close', 'kosdaq', 'KOSDAQ'))
+                            )
+                            for ck in cand_keys:
+                                cv = sc_data.get(ck)
+                                if isinstance(cv, (int, float)) and lo_b <= float(cv) <= hi_b:
+                                    anchor_close = float(cv)
+                                    break
+                    if anchor_close is not None and last_etf_close > 0:
+                        dyn_ratio = anchor_close / last_etf_close
+                        df_anchored = df_etf.copy()
+                        for px_col in ('시가', '고가', '저가', '종가'):
+                            if px_col in df_anchored.columns:
+                                df_anchored[px_col] = (pd.to_numeric(df_anchored[px_col], errors='coerce') * dyn_ratio).round(2)
+                        if '거래량' not in df_anchored.columns:
+                            df_anchored['거래량'] = 0
+                        logger.debug(f"get_index_ohlcv({index_code}): 동적 앵커링 ETF({etf_tk}) OK (anchor={anchor_close:.2f}, ratio={dyn_ratio:.6f})")
+                        return df_anchored[['시가', '고가', '저가', '종가', '거래량']]
+            except Exception as _etf_e:
+                logger.debug(f"get_index_ohlcv ETF 동적 앵커링 폴백 스킵({index_code}): {_etf_e}")
+
+        if df_sig is not None and not df_sig.empty:
+            return df_sig
 
         return pd.DataFrame()
 

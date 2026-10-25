@@ -93,15 +93,20 @@ class PositionSizer:
         if market_data is None:
             market_data = {}
         kelly_size = float(signal.get('kelly_size', signal.get('size_pct', pget('sizer.default_kelly_size', 0.1))))
-        _sentinel_barrier = 50
+        _sentinel_barrier = 500
+        _pct_unit_cutoff = 5.0
         _raw_sig_tp = float(signal.get('tp_pct') or 0.0)
         _raw_sig_sl = abs(float(signal.get('sl_pct') or 0.0))
         _erp_val = float(signal.get('expected_return_pct') or 0.0)
+        if _erp_val <= 0.0 and signal.get('expected_return') is not None:
+            _er = float(signal.get('expected_return') or 0.0)
+            _erp_val = _er if abs(_er) > _pct_unit_cutoff else (_er * 100.0)
         _sig_tp = _raw_sig_tp if (0.0 < _raw_sig_tp < _sentinel_barrier) else (_erp_val if (0.0 < _erp_val < _sentinel_barrier) else 0.0)
         _sig_sl = _raw_sig_sl if (0.0 < _raw_sig_sl < _sentinel_barrier) else 0.0
         if signal.get('strategy') == 'risk_free_parking' or bool(signal.get('risk_free_parking')):
             final_size = round(min(1.0, max(0.0, float(kelly_size))), 4)
-            _pk_ev = _sig_tp if _sig_tp > 0.0 else (float(signal.get('expected_return') or 0.0) * 100.0)
+            _er_pk = float(signal.get('expected_return') or 0.0)
+            _pk_ev = _sig_tp if _sig_tp > 0.0 else (_er_pk if abs(_er_pk) > _pct_unit_cutoff else (_er_pk * 100.0))
             _pk_tp_out = _raw_sig_tp if _raw_sig_tp > 0.0 else _sig_tp
             _pk_sl_out = _raw_sig_sl if _raw_sig_sl > 0.0 else _sig_sl
             return {
@@ -141,7 +146,7 @@ class PositionSizer:
         # [Dynamic Non-Linear Volatility Neutral Base] 롤링 252일 VIX 중간값(Median) 동적 연산 (15.5 고정 상수 100% 제거)
         _vix_neutral_param = pget('sizer.vix_neutral', 17.5)  # L2: trailing 252d median VIX (tighten_only, quality-gated)
         vix_neutral = float(market_data.get('vix_rolling_median_252', market_data.get('vix_ma_252', _vix_neutral_param)) or _vix_neutral_param)
-        vix_raw = market_data.get('vix', vix_neutral) if market_data else vix_neutral
+        vix_raw = vix if (vix is not None and float(vix) > 0) else (market_data.get('vix', vix_neutral) if market_data else vix_neutral)
         try:
             vix_val = float(vix_raw)
             if math.isnan(vix_val) or vix_val <= 0:
@@ -152,8 +157,8 @@ class PositionSizer:
         sigma_pct = max(0.01, sl_pct)
         friction_pct = self._compute_friction(signal=signal, kelly_size=kelly_size, portfolio_value=portfolio_value, regime=regime, adv=adv, market_cap=market_cap, ticker=ticker)
         ev_margin = mu_pct - friction_pct
-        if vix <= 0:
-            vix = float(signal.get('vix', 0))
+        if vix is None or float(vix) <= 0:
+            vix = float(signal.get('vix', market_data.get('vix', 0) if market_data else 0) or 0.0)
             if vix <= 0 or math.isnan(vix):
                 logger.warning(f"  [PositionSizer] {ticker}: VIX 데이터 누락. 진입 차단 (Stale-Halt 방어)")
                 return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': 'VIX 데이터 누락', 'drop_reason': 'missing_vix_stale_halt'}

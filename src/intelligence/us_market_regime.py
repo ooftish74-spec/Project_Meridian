@@ -330,10 +330,6 @@ class USMarketRegimeEngine:
             ('move_index', f6_score, f6_det),
             ('ted_spread', f7_score, f7_det),
         ]
-        components = {
-            _fname: {**_fdet, 'weight': self.WEIGHTS[_fname]}
-            for _fname, _, _fdet in _factor_items
-        }
         active_weight_sum = 0.0
         weighted_score_sum = 0.0
         for _fname, _fscore, _fdet in _factor_items:
@@ -343,6 +339,12 @@ class USMarketRegimeEngine:
             active_weight_sum += _w
             weighted_score_sum += float(_fscore) * _w
         total_score = weighted_score_sum / active_weight_sum if active_weight_sum > 0.0 else 0.0
+        components = {}
+        for _fname, _, _fdet in _factor_items:
+            _raw_w = float(self.WEIGHTS[_fname])
+            _is_unavail = (_fdet.get('detail') == 'unavailable' or _fdet.get('source') == 'unavailable')
+            _eff_w = 0.0 if _is_unavail else (_raw_w / active_weight_sum if active_weight_sum > 0.0 else _raw_w)
+            components[_fname] = {**_fdet, 'weight': round(_eff_w, 4), 'raw_weight': round(_raw_w, 4)}
         vix_val = float(f2_det.get('vix', 20))
         if total_score >= self.BULL_THRESHOLD:
             regime = 'bull'
@@ -366,7 +368,8 @@ class USMarketRegimeEngine:
         score_bonus = min(0.2, abs(total_score) * 0.4)
         confidence = min(0.95, base_conf + score_bonus)
         tier = vix_tier(vix_val)
-        result = {'date': date.today().isoformat(), 'regime': regime, 'confidence': round(confidence, 3), 'tier': tier, 'score': round(total_score, 4), 'vix': vix_val, 'components': components, 'generated_at': datetime.now().isoformat()}
+        regime_kr_compat = 'caution' if regime == 'neutral' else regime
+        result = {'date': date.today().isoformat(), 'regime': regime, 'regime_kr_compat': regime_kr_compat, 'confidence': round(confidence, 3), 'tier': tier, 'score': round(total_score, 4), 'vix': vix_val, 'components': components, 'generated_at': datetime.now().isoformat()}
         atomic_write_json(OUT_FILE, result, ensure_ascii=False, indent=2)
         logger.info(f"  🌐 US Regime: {regime.upper()} (conf={confidence:.0%}, score={total_score:+.3f}, VIX={vix_val:.1f}/{tier})")
         return result
@@ -379,11 +382,15 @@ def run_us_regime() -> Dict:
 def get_us_regime() -> Dict:
     """현재 US 레짐 빠른 로드."""
     try:
-        return json.loads(OUT_FILE.read_text())
+        data = json.loads(OUT_FILE.read_text())
+        if isinstance(data, dict) and 'regime_kr_compat' not in data:
+            _r = data.get('regime', 'neutral')
+            data['regime_kr_compat'] = 'caution' if _r == 'neutral' else _r
+        return data
     except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError) as _e:
         import logging
         logging.getLogger(__name__).debug(f"Targeted fallback: {_e}")
-        return {'regime': 'neutral', 'confidence': 0.3, 'tier': 'mid', 'score': 0.0}
+        return {'regime': 'neutral', 'regime_kr_compat': 'caution', 'confidence': 0.3, 'tier': 'mid', 'score': 0.0}
 if __name__ == '__main__':
     import logging as _logging
     _logging.basicConfig(level=_logging.INFO, format='%(message)s')

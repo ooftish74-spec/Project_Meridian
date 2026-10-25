@@ -183,10 +183,13 @@ class ExposureOrchestrator:
         else:
             vix = float(raw_vix_in or _vix_d)
         options_skew = float(sentiment.get('options_skew', 0.0) or 0.0)
-        raw_ois = float(sentiment.get('ois', _ois_d) or _ois_d)
+        _raw_ois_in = sentiment.get('ois')
+        raw_ois = float(_raw_ois_in if _raw_ois_in is not None else _ois_d)
+        if raw_ois <= 0.0:
+            raw_ois = float(_ois_d)
         
         # [Pure Dynamic Math] OIS (0~100 스케일) 연속 [0.0, 1.0] 정규화
-        ois_norm = raw_ois / 100.0 if raw_ois > 1.0 else max(0.0, min(1.0, raw_ois))
+        ois_norm = max(0.0, min(1.0, raw_ois / 100.0 if raw_ois > 1.0 else raw_ois))
         
         # [Pure Dynamic Math] 불연속 하드스탑(Hard Stop) 제거 및 다차원 연속 로지스틱 시그모이드 감쇄
         # x0_vix: L2 = trailing 252d q95 VIX (tighten_only: can only lower the midpoint; quality-gated)
@@ -353,7 +356,7 @@ class ExposureOrchestrator:
           - flat: {'vix': 16.59, ...}
           - nested: {'VIX': {'value': 16.59}, ...}
         """
-        sentiment = {'regime': 'caution', 'vix': 20, 'fear_greed': 50, 'vkospi': 20, 'kospi_ma20_dist': 0}
+        sentiment = {'regime': 'caution', 'vix': 20, 'fear_greed': 50, 'vkospi': 20, 'kospi_ma20_dist': 0, 'ois': 50.0}
         try:
             cache = json.loads((_RESULTS / 'signal_cache.json').read_text())
             from src.utils.metric_parser import parse_vix
@@ -362,7 +365,7 @@ class ExposureOrchestrator:
             sentiment['fear_greed'] = parse_metric(cache, 'fng', 50.0)
             sentiment['vkospi'] = parse_metric(cache, 'vkospi', 20.0)
             sentiment['kospi_ma20_dist'] = parse_metric(cache, 'kospi_ma20_dist', 0.0)
-            sentiment['ois'] = parse_metric(cache, 'ois', 0.5)
+            sentiment['ois'] = parse_metric(cache, 'ois', 50.0)
             sentiment['options_skew'] = parse_metric(cache, 'options_skew', 0.0)
             sentiment['crash_type'] = cache.get('crash_type', 'unknown')
             sentiment['cross_asset_stress'] = parse_metric(cache, 'cross_asset_stress', 0.0)

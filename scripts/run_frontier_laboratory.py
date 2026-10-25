@@ -52,11 +52,52 @@ class FrontierLaboratory:
         self.results_dir.mkdir(parents=True, exist_ok=True)
         self.cfg = DynamicConfig()
 
+    def _load_daily_portfolio_returns(self) -> list:
+        """Load time-series daily portfolio returns from nav_history.json / live_nav_history.json / daily_Virtual_Log.json."""
+        for fname in ("nav_history.json", "live_nav_history.json", "daily_Virtual_Log.json", "shadow_portfolio.json"):
+            fpath = self.results_dir / fname
+            if not fpath.exists():
+                continue
+            try:
+                data = json.loads(fpath.read_text(encoding="utf-8"))
+                rows = []
+                if isinstance(data, list):
+                    rows = data
+                elif isinstance(data, dict):
+                    if isinstance(data.get("daily_returns"), list) and len(data["daily_returns"]) >= 2:
+                        rets = [float(r) for r in data["daily_returns"] if r is not None]
+                        if rets:
+                            return [r / 100.0 if abs(r) > 0.5 else r for r in rets]
+                    for k in ("rows", "daily_snapshots", "history", "logs", "entries", "daily_logs"):
+                        if isinstance(data.get(k), list) and data[k]:
+                            rows = data[k]
+                            break
+                if rows:
+                    direct_rets = []
+                    navs = []
+                    for r in rows:
+                        if not isinstance(r, dict):
+                            continue
+                        if "daily_return" in r and r["daily_return"] is not None:
+                            val = float(r["daily_return"])
+                            direct_rets.append(val / 100.0 if abs(val) > 0.5 else val)
+                        elif "daily_return_pct" in r and r["daily_return_pct"] is not None:
+                            direct_rets.append(float(r["daily_return_pct"]) / 100.0)
+                        if "nav" in r and r["nav"] is not None and float(r["nav"]) > 0:
+                            navs.append(float(r["nav"]))
+                    if len(direct_rets) >= 2:
+                        return direct_rets
+                    if len(navs) >= 3:
+                        return [(navs[i] - navs[i - 1]) / navs[i - 1] for i in range(1, len(navs)) if navs[i - 1] > 0]
+            except Exception as e:
+                logger.debug(f"Daily portfolio returns read error ({fname}): {e}")
+        return []
+
     def _load_market_context(self) -> dict:
-        """Load latest market regime and returns context."""
+        """Load latest market regime and time-series portfolio returns context."""
         regime = "caution"
         vix = 18.5
-        market_returns = [0.002, -0.005, 0.008, 0.001, -0.003, 0.006, 0.004]
+        market_returns = []
 
         # 1. US Market Regime
         usr_path = self.results_dir / "us_market_regime.json"
@@ -76,18 +117,10 @@ class FrontierLaboratory:
             except Exception as e:
                 logger.debug(f"Signal cache read error: {e}")
 
-        # 3. KIS Portfolio PnL for returns feedback
-        port_path = self.results_dir / "kis_portfolio.json"
-        if port_path.exists():
-            try:
-                port_data = json.loads(port_path.read_text(encoding="utf-8"))
-                holdings = port_data.get("holdings", [])
-                if holdings:
-                    pnl_list = [float(h.get("pnl_pct", 0.0)) / 100.0 for h in holdings if "pnl_pct" in h]
-                    if pnl_list:
-                        market_returns = pnl_list
-            except Exception as e:
-                logger.debug(f"Portfolio read error: {e}")
+        # 3. Time-series daily portfolio returns (never cross-sectional holding dispersion)
+        ts_rets = self._load_daily_portfolio_returns()
+        if ts_rets:
+            market_returns = ts_rets
 
         return {
             "regime": regime,
@@ -184,19 +217,28 @@ class FrontierLaboratory:
         logger.info("\n  [3/3] 🔬 Genetic Rule Evolver (Chromosome Self-Adaptation)...")
         try:
             evolver = GeneticRuleEvolver()
-            ret_arr = np.array(ctx["returns"])
-            sharpe_est = float(np.mean(ret_arr) / (np.std(ret_arr) + 1e-8) * np.sqrt(252)) if len(ret_arr) > 1 else 1.2
-            gap_metrics = {"recent_sharpe": sharpe_est}
+            ts_returns = self._load_daily_portfolio_returns() or list(ctx.get("returns", []))
+            ret_arr = np.asarray(ts_returns, dtype=float)
+            if len(ret_arr) >= 2 and float(np.std(ret_arr, ddof=1)) > 1e-12:
+                sharpe_est = float(np.mean(ret_arr) / float(np.std(ret_arr, ddof=1)) * np.sqrt(252.0))
+            else:
+                sharpe_est = 0.0
+            gap_metrics = {
+                "recent_sharpe": sharpe_est,
+                "historical_returns": [float(x) for x in ret_arr],
+            }
 
             if not self.dry_run:
                 ev_result = evolver.run_evolution(gap_metrics=gap_metrics)
                 telemetry["modules"]["genetic_evolution"] = {
-                    "status": "SUCCESS",
+                    "status": ev_result.get("status", "SUCCESS"),
                     "best_chromosome": ev_result.get("best_chromosome"),
+                    "baseline_sharpe": ev_result.get("baseline_sharpe"),
+                    "candidate_sharpe": ev_result.get("candidate_sharpe"),
                     "overrides_updated": ev_result.get("overrides_updated")
                 }
-                logger.info(f"     ✅ Dynamic Overrides Saved to results/dynamic_overrides.json ({ev_result.get('overrides_updated')} keys)")
-                logger.info(f"     🧬 Evolved Chromosome: {ev_result.get('best_chromosome')}")
+                logger.info(f"     ✅ Genetic Evolution Status={ev_result.get('status')} ({ev_result.get('overrides_updated')} keys updated)")
+                logger.info(f"     🧬 Chromosome: {ev_result.get('best_chromosome')}")
             else:
                 logger.info("     ⚠️ Dry-Run: Skipping disk override modification.")
                 telemetry["modules"]["genetic_evolution"] = {"status": "SKIPPED_DRY_RUN"}

@@ -204,15 +204,19 @@ class RegimeDetector:
         """
         if market_data is None:
             market_data = {}
+        _loaded_sc_from_disk = False
         if 'signal_cache' not in market_data or not market_data.get('signal_cache'):
             try:
                 import json as _sc_json
                 _sc_path = Path(__file__).resolve().parent.parent.parent / 'results' / 'signal_cache.json'
                 if _sc_path.exists():
                     market_data['signal_cache'] = _sc_json.loads(_sc_path.read_text(encoding='utf-8'))
+                    _loaded_sc_from_disk = True
             except Exception:
                 pass
-        if not market_data.get('kospi_returns') or not market_data.get('vix_history'):
+        _sig_in = market_data.get('signal_cache') if isinstance(market_data, dict) else {}
+        _has_live_kospi = isinstance(_sig_in, dict) and ('kospi' in _sig_in or 'kospi_close' in _sig_in)
+        if (_loaded_sc_from_disk or _has_live_kospi) and (not market_data.get('kospi_returns') or not market_data.get('vix_history')):
             try:
                 from src.data.market_data_bridge import MarketDataBridge
                 _hist = MarketDataBridge().get_regime_history()
@@ -540,6 +544,23 @@ class RegimeDetector:
             score -= pcr_risk_penalty
         kospi = parse_metric(signal, 'kospi', parse_metric(signal, 'kospi_close', 0.0))
         kospi_ma20 = parse_metric(signal, 'kospi_ma20', kospi)
+        _tr_down_ratio = 0.98
+        _tr_up_ratio = 1.02
+        kospi_trend = signal.get('kospi_trend')
+        if not kospi_trend and kospi > 0 and kospi_ma20 > 0:
+            if kospi < kospi_ma20 * _tr_down_ratio:
+                kospi_trend = 'down'
+            elif kospi > kospi_ma20 * _tr_up_ratio:
+                kospi_trend = 'up'
+            else:
+                kospi_trend = 'flat'
+        kospi_20d_return = signal.get('kospi_20d_return')
+        if kospi_20d_return is None and kospi > 0 and kospi_ma20 > 0:
+            kospi_20d_return = (kospi / kospi_ma20 - 1.0) * 100.0
+        for _opt_k in ('fear_greed', 'advance_decline_ratio', 'yield_curve_spread', 'sp500_above_200ma'):
+            _opt_v = signal.get(_opt_k)
+            if _opt_v is None:
+                continue
         kospi_rets = list(market_data.get('kospi_returns', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
@@ -567,8 +588,14 @@ class RegimeDetector:
             and vix < _vix_fear
         )
         _rebound_active = (ois >= _reb_ois_th and vix < _vix_fear) or _short_term_stabilized
+        _ma20_dist_in = signal.get('kospi_ma20_dist')
         if kospi > 0 and kospi_ma20 > 0:
             trend_ratio = kospi / kospi_ma20
+        elif _ma20_dist_in is not None:
+            trend_ratio = 1.0 + float(parse_metric(signal, 'kospi_ma20_dist', 0.0)) / 100.0
+        else:
+            trend_ratio = None
+        if trend_ratio is not None:
             # [Quant Institutional Patch] 0.5 ~ 2.0 스케일 범위 검증 및 HMM/Ensemble 연속 레짐 스코어링
             if 0.5 < trend_ratio < 2.0:
                 if trend_ratio < 0.88:
@@ -692,7 +719,10 @@ class RegimeDetector:
         elif crash_type == 'bleed_stabilizing':
             confidence = float(pget('regime.bleed_stabilizing_conf', 0.70))
         confidence = max(conf_floor, min(1.0, confidence))
-        return {'regime': regime, 'score': round(score, 1), 'confidence': confidence, 'crash_type': crash_type, 'divergence_state': divergence_state, 'prob_flash_crash': prob_flash_crash, 'prob_recession': prob_recession, 'prob_liquidity_rally': prob_liquidity_rally, 'prob_recovery': prob_recovery, 'cross_asset_stress': cross_asset_stress}
+        return {'regime': regime, 'score': round(score, 1), 'confidence': confidence, 'crash_type': crash_type, 'divergence_state': divergence_state, 'prob_flash_crash': prob_flash_crash, 'prob_recession': prob_recession, 'prob_liquidity_rally': prob_liquidity_rally, 'prob_recovery': prob_recovery, 'cross_asset_stress': cross_asset_stress, 'kospi_trend': kospi_trend, 'kospi_20d_return': kospi_20d_return}
+
+    def _rule_based_detect(self, signal: Dict, market_data: Optional[Dict] = None) -> Dict:
+        return self._rule_based(signal, market_data or {})
 
     def _hmm_detect(self, market_data: Dict) -> Optional[Dict]:
         """HMM 3-state 감지 (hmm_regime.py 활용).

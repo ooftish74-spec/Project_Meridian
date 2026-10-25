@@ -68,9 +68,11 @@ class S4AdvisoryStream(BaseStream):
         defense_ratio = min(1.0, max(0.0, base_defense * _conf * 2.0))
         _kofr_ticker = cfg.get('s4.kofr_ticker', '423160')
         _kofr_name = cfg.get('s4.kofr_name', 'KODEX KOFR금리액티브(합성)')
+        _kofr_tp = float(pget('s4.kofr_div_pct', 3.5))
+        _kofr_sl = float(cfg.get('s4.kofr_sl_pct') or 1.0)
         if defense_ratio > 0:
             for _acct in self.ACCOUNTS.keys():
-                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': pget('s4.kofr_div_pct', 3.5), 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})
+                signals.append({'stream_id': 'S4', 'ticker': _kofr_ticker, 'name': f"{_kofr_name} (연속 방어)", 'direction': 'long', 'confidence': _conf, 'size_pct': round(defense_ratio, 4), 'strategy': 'continuous_vol_defense', 'account': _acct, 'div_pct': _kofr_tp, 'tp_pct': _kofr_tp, 'sl_pct': _kofr_sl, 'etf_type': 'SAFE', 'regime': regime, 'reason': f"연속 변동성 타겟팅 (Defense={defense_ratio * 100:.1f}%)", 'timestamp': datetime.now().isoformat()})
         market_data = dict(market_data)
         market_data['s4_defense_ratio'] = defense_ratio
         try:
@@ -97,6 +99,20 @@ class S4AdvisoryStream(BaseStream):
                     _tk_str = sig.get('ticker', '')
                     logger.debug(f"  [Tax-Alpha] {acct_name} {_tk_str} Tax-Alpha({_tax_alpha:.4f}) <= Friction({_expected_friction:.4f}) -> 리밸런싱 스킵")
             signals.extend(filtered_signals)
+        _dedup_signals = []
+        _seen_tickers = set()
+        _def_tp_s4 = float(pget('s2.exit.tp.caution', 12.0))
+        _def_sl_s4 = abs(float(pget('s2.exit.sl.caution', -5)))
+        for _sig_item in signals:
+            _sig_item.setdefault('tp_pct', _def_tp_s4)
+            _sig_item.setdefault('sl_pct', _def_sl_s4)
+            _tk_k = str(_sig_item.get('ticker', '') or '').strip()
+            if _tk_k and _tk_k in _seen_tickers:
+                continue
+            if _tk_k:
+                _seen_tickers.add(_tk_k)
+            _dedup_signals.append(_sig_item)
+        signals = _dedup_signals
         self._drip_projections = self._estimate_drip()
         if signals:
             self._log_event('STREAM_SIGNAL', {'signal_count': len(signals), 'regime': regime, 'accounts': list(self.ACCOUNTS.keys()), 'drip_10y': self._drip_projections.get('total_10y', 0)})
@@ -225,7 +241,9 @@ class S4AdvisoryStream(BaseStream):
             else:
                 _etf_confidence = _base_conf
             prefix = '[수동매매/Advisory] ' if account in ('ISA', 'IRP', 'PENSION') else ''
-            signals.append({'stream_id': 'S4', 'ticker': etf_info.get('ticker', etf_key), 'name': etf_info.get('name', etf_key), 'direction': 'long', 'confidence': round(_etf_confidence, 3), 'size_pct': round(sub_weight, 4), 'strategy': 'advisory', 'account': account, 'div_pct': etf_info.get('div_pct', 0), 'etf_type': etf_info.get('type', 'GLOBAL'), 'reason': f"{prefix}{account} 월간 리밸런싱 ({regime})", 'timestamp': datetime.now().isoformat()})
+            _etf_tp = float(pget('s2.exit.tp.caution', 12.0))
+            _etf_sl = abs(float(pget('s2.exit.sl.caution', -5)))
+            signals.append({'stream_id': 'S4', 'ticker': etf_info.get('ticker', etf_key), 'name': etf_info.get('name', etf_key), 'direction': 'long', 'confidence': round(_etf_confidence, 3), 'size_pct': round(sub_weight, 4), 'strategy': 'advisory', 'account': account, 'div_pct': etf_info.get('div_pct', 0), 'tp_pct': _etf_tp, 'sl_pct': _etf_sl, 'etf_type': etf_info.get('type', 'GLOBAL'), 'reason': f"{prefix}{account} 월간 리밸런싱 ({regime})", 'timestamp': datetime.now().isoformat()})
         return signals
 
     def _isa_etf_fallback(self, regime: str) -> List:

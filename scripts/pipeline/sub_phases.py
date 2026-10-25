@@ -428,39 +428,66 @@ def sync_ssot_from_me():
                     logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
                     logger.error("[SILENT_BYPASS] Suppressed exception at sub_phases.py:299", exc_info=True)
 
+            _existing_metrics_map = _sm_existing.get('metrics', {}) if isinstance(_sm_existing.get('metrics'), dict) else {}
             _sm_ssot = {
                 'timestamp': _me_ts,
                 'source': 'measurement_engine_ssot',
                 'raw_data': _sm_existing.get('raw_data', {}),  # 보존
-                'metrics': {},
+                'metrics': dict(_existing_metrics_map),
             }
             _raw_data_map = _sm_ssot.get('raw_data', {}) if isinstance(_sm_ssot.get('raw_data'), dict) else {}
             for _k, _v in _sm_existing.items():
                 if _k.startswith('S') and isinstance(_v, dict):
                     _sm_ssot[_k] = dict(_v)
-            for _sid in sorted(set(list(_sleeves.keys()) + list(_per_stream.keys()) + list(_raw_data_map.keys()))):
-                _sv = _sleeves.get(_sid, {})
-                _ps_v = _per_stream.get(_sid, {})
+            _all_sids = sorted(set(
+                list(_sleeves.keys())
+                + list(_per_stream.keys())
+                + list(_raw_data_map.keys())
+                + list(_existing_metrics_map.keys())
+            ))
+            for _sid in _all_sids:
+                if _sid == 'S_RECON':
+                    continue
+                _sv = _sleeves.get(_sid, {}) if isinstance(_sleeves.get(_sid), dict) else {}
+                _ps_v = _per_stream.get(_sid, {}) if isinstance(_per_stream.get(_sid), dict) else {}
                 _rv_d = _raw_data_map.get(_sid, {}) if isinstance(_raw_data_map.get(_sid), dict) else {}
-                if isinstance(_sv, dict):
-                    _m_entry = {
-                        'win_rate': _sv.get('win_rate', _ps_v.get('win_rate', 0)),
-                        'total_trades': _sv.get('total_trades', _ps_v.get('total_trades', 0)),
-                        'realized_pnl': _sv.get('realized_pnl', _ps_v.get('realized_pnl', 0)),
-                        'active_positions': _sv.get('active_positions', _ps_v.get('active_positions', 0)),
-                        'market_value': _sv.get('market_value', _ps_v.get('market_value', 0)),
-                        'sharpe': _sv.get('sharpe'),
-                        'alpha': _sv.get('alpha'),
-                        'mdd': _sv.get('mdd'),
-                        'sortino': _sv.get('sortino'),
-                    }
-                    if _rv_d.get('daily_returns'):
-                        _m_entry['daily_returns'] = _rv_d['daily_returns']
-                    _sm_ssot['metrics'][_sid] = _m_entry
-                    if _sid not in _sm_ssot or not isinstance(_sm_ssot[_sid], dict):
-                        _sm_ssot[_sid] = dict(_m_entry)
-                    elif _rv_d.get('daily_returns') and not _sm_ssot[_sid].get('daily_returns'):
-                        _sm_ssot[_sid]['daily_returns'] = _rv_d['daily_returns']
+                _ex_m = _existing_metrics_map.get(_sid, {}) if isinstance(_existing_metrics_map.get(_sid), dict) else {}
+
+                def _pick_metric(key, default=0):
+                    for src in (_sv, _ps_v, _rv_d, _ex_m):
+                        val = src.get(key)
+                        if val is not None and val != 0 and val != 0.0 and val != []:
+                            return val
+                    for src in (_rv_d, _ex_m, _ps_v, _sv):
+                        if key in src and src[key] is not None:
+                            return src[key]
+                    return default
+
+                _m_entry = {
+                    **dict(_ex_m),
+                    **dict(_rv_d),
+                    'win_rate': _pick_metric('win_rate', 0.0),
+                    'avg_win': _pick_metric('avg_win', 0.0),
+                    'avg_loss': _pick_metric('avg_loss', 0.0),
+                    'total_trades': _pick_metric('total_trades', _pick_metric('n_days', 0)),
+                    'n_days': _pick_metric('n_days', _pick_metric('total_trades', 0)),
+                    'realized_pnl': _pick_metric('realized_pnl', 0.0),
+                    'active_positions': _pick_metric('active_positions', 0),
+                    'market_value': _pick_metric('market_value', 0.0),
+                    'sharpe': _pick_metric('sharpe', 0.0),
+                    'alpha': _pick_metric('alpha', None),
+                    'mdd': _pick_metric('mdd', None),
+                    'sortino': _pick_metric('sortino', None),
+                }
+                if _rv_d.get('daily_returns'):
+                    _m_entry['daily_returns'] = _rv_d['daily_returns']
+                elif _ex_m.get('daily_returns'):
+                    _m_entry['daily_returns'] = _ex_m['daily_returns']
+                _sm_ssot['metrics'][_sid] = _m_entry
+                if _sid not in _sm_ssot or not isinstance(_sm_ssot[_sid], dict):
+                    _sm_ssot[_sid] = dict(_m_entry)
+                else:
+                    _sm_ssot[_sid].update({k: v for k, v in _m_entry.items() if v is not None})
             _sm_path = _PROJECT_ROOT / 'results' / 'stream_metrics.json'
             atomic_write_json(_sm_path, 
                 _sm_ssot, indent=2)
@@ -2168,11 +2195,11 @@ def _phase_evening_data():
         _k200_val = _safe_get_index_close('1028')
         if _k200_val is not None:
             s1_cache_updates['kospi200'] = _k200_val
-            s1_cache_updates['kospi_close'] = _k200_val
+            s1_cache_updates['kospi200_close'] = _k200_val
         _kq_val = _safe_get_index_close('2203')
         if _kq_val is not None:
             s1_cache_updates['kosdaq150'] = _kq_val
-            s1_cache_updates['kosdaq_close'] = _kq_val
+            s1_cache_updates['kosdaq150_close'] = _kq_val
 
         if s1_cache_updates:
             _update_signal_cache(s1_cache_updates)
@@ -2669,18 +2696,67 @@ def _phase_call_auction_0830():
             from src.execution.position_ledger import PositionLedgerManager
             ledger_mgr = PositionLedgerManager()
             kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+            ledger_path = _PROJECT_ROOT / 'results' / 'position_entry_ledger.json'
+            raw_ledger = {}
+            if ledger_path.exists():
+                try:
+                    raw_ledger = json.loads(ledger_path.read_text(encoding='utf-8'))
+                except Exception:
+                    raw_ledger = {}
+            ledger_map = {}
+            if isinstance(raw_ledger, dict):
+                for _lk, _lv in raw_ledger.items():
+                    if _lk not in ('entries', 'positions', 'error') and isinstance(_lv, dict):
+                        ledger_map[str(_lk)] = _lv
+                for _subk in ('positions', 'entries'):
+                    if isinstance(raw_ledger.get(_subk), dict):
+                        for _lk, _lv in raw_ledger[_subk].items():
+                            if isinstance(_lv, dict):
+                                ledger_map[str(_lk)] = {**ledger_map.get(str(_lk), {}), **_lv}
             if kp_path.exists():
                 kp = json.loads(kp_path.read_text(encoding='utf-8'))
                 positions_to_eval = {}
                 for t, h in kp.get('holdings', {}).items():
                     if not str(t).isdigit():
                         continue
+                    t_str = str(t)
+                    l_entry = ledger_map.get(t_str, {})
+                    l_meta = ledger_mgr.get_position_meta(t_str) if ledger_mgr is not None else {}
+                    resolved_track = (
+                        h.get('track')
+                        or l_entry.get('track')
+                        or l_meta.get('track')
+                        or ('TRACK_2_BUFFETT_QVM' if t_str in ('000270', '086280') else '')
+                    )
+                    resolved_stream = (
+                        h.get('stream_id')
+                        or h.get('stream')
+                        or l_entry.get('stream_id')
+                        or l_entry.get('stream')
+                        or l_meta.get('stream_id')
+                        or ('S3_B' if resolved_track == 'TRACK_2_BUFFETT_QVM' else 'LIVE_SSOT')
+                    )
+                    resolved_strategy = (
+                        h.get('strategy')
+                        or l_entry.get('strategy')
+                        or l_meta.get('strategy')
+                        or ''
+                    )
+                    if (
+                        resolved_track == 'TRACK_2_BUFFETT_QVM'
+                        or resolved_stream == 'S3_B'
+                        or resolved_strategy in ('buffett_qvm', 'qvm_value')
+                    ):
+                        logger.info(f"  🛡️ [08:30 CallAuction] {t_str} ({resolved_stream}/{resolved_track}) Track 2 장기 해자 복리 슬리브 — 장전 단기 손절 평가 면제")
+                        continue
                     curr_p = float(h.get('current_price', 0.0))
                     curr_ret = float(h.get('return_pct', 0.0))
                     hwm_data = ledger_mgr.update_hwm(t, current_price=curr_p, current_pnl_pct=curr_ret)
-                    positions_to_eval[f"LIVE_SSOT:{t}"] = {
+                    positions_to_eval[f"{resolved_stream}:{t}"] = {
                         'ticker': t,
-                        'stream_id': 'LIVE_SSOT',
+                        'stream_id': resolved_stream,
+                        'track': resolved_track,
+                        'strategy': resolved_strategy,
                         'quantity': h.get('qty', 0),
                         'entry_price': h.get('avg_price', 0.0),
                         'current_price': curr_p,

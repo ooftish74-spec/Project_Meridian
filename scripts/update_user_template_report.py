@@ -33,16 +33,36 @@ POSITION_LEDGER_PATH = PROJECT_ROOT / "results" / "position_entry_ledger.json"
 SERVICE_ACCOUNT_PATH = PROJECT_ROOT.parent / "Project-A" / "config" / "gsheet_service_account.json"
 
 
-def load_position_entry_dates() -> dict:
+def load_position_ledger_map() -> dict:
     if not POSITION_LEDGER_PATH.exists():
         return {}
     try:
         with open(POSITION_LEDGER_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            return {k: v.get("entry_date") for k, v in data.items() if isinstance(v, dict) and "entry_date" in v}
+        if not isinstance(data, dict):
+            return {}
+        out = {}
+        for k, v in data.items():
+            if k not in ("entries", "positions", "error") and isinstance(v, dict):
+                out[str(k).upper()] = v
+        for subk in ("positions", "entries"):
+            if isinstance(data.get(subk), dict):
+                for k, v in data[subk].items():
+                    if isinstance(v, dict):
+                        out[str(k).upper()] = {**out.get(str(k).upper(), {}), **v}
+        return out
     except Exception as e:
         logger.warning(f"Could not load position entry ledger: {e}")
         return {}
+
+
+def load_position_entry_dates() -> dict:
+    ledger_map = load_position_ledger_map()
+    return {
+        k: v.get("entry_date") or v.get("first_seen")
+        for k, v in ledger_map.items()
+        if isinstance(v, dict) and (v.get("entry_date") or v.get("first_seen"))
+    }
 
 
 def load_live_portfolio() -> dict:
@@ -88,34 +108,45 @@ def categorize_asset(ticker: str, info: dict) -> tuple[str, str]:
 def get_stream_strategy_info(ticker: str, info: dict = None) -> tuple[str, str]:
     """Returns (stream_name, strategy_desc) for a given position ticker."""
     from src.utils.market_calendar import is_kr_ticker
-    t_upper = ticker.upper()
+    from scripts.rebuild_stream_metrics import _infer_canonical_stream
+    info = info if isinstance(info, dict) else {}
+    t_upper = str(ticker).strip().upper()
+    if t_upper.startswith("KRX:"):
+        t_upper = t_upper.split(":", 1)[1]
     if t_upper == "USD_CASH":
         return "S0 Cash Anchor (USD)", "외화(USD) 예수금 및 글로벌 통합증거금 안전 파킹"
-    elif ticker == "CASH" or "CASH" in t_upper:
+    if ticker == "CASH" or "CASH" in t_upper:
         return "S0 Cash Anchor (KRW)", "원화(KRW) 현금성 자산 및 리밸런싱 안전 파킹"
-    elif "SOXX" in t_upper:
-        return "S3 Active Macro", "멀티팩터 미국 반도체 섹터 로테이션 (4-Factor Model)"
-    elif "XLK" in t_upper:
-        return "S3 Active Macro", "멀티팩터 미국 기술주 섹터 로테이션 (4-Factor Model)"
-    elif "QQQ" in t_upper:
-        return "S3 Active Macro", "멀티팩터 글로벌 대표지수 로테이션 (4-Factor Model)"
-    elif "NVDA" in t_upper:
-        return "S3 Active Macro", "멀티팩터 글로벌 테크 앵커 (4-Factor Model)"
-    elif "SPY" in t_upper:
-        return "S3 Active Macro", "멀티팩터 미국 S&P500 대표지수 로테이션"
-    elif "TLT" in t_upper or "GLD" in t_upper:
-        return "S3 Active Macro", "Active Macro 매크로 디펜시브 앵커"
-    elif "069500" in t_upper or "KODEX 200" in t_upper:
-        return "S1 Trend Following", "국내 KOSPI 200 알파 모멘텀 추세 추종"
-    elif "091160" in t_upper or "반도체" in t_upper:
-        return "S1 Trend Following", "국내 KODEX 반도체 섹터 알파 모멘텀"
-    elif "233740" in t_upper or "TQQQ" in t_upper:
-        return "S5 High-Beta Breakout", "고베타 모멘텀 변동성 돌파"
-    else:
-        if is_kr_ticker(str(ticker)) or ticker.startswith("KRX:"):
-            return "S3 QVM Value", "K-PER 내재가치 펀더멘털 가치주 스크리닝"
-        else:
-            return "S3 Active Macro", "멀티팩터 글로벌 섹터/자산 로테이션"
+
+    ledger_map = load_position_ledger_map()
+    l_entry = ledger_map.get(t_upper, {})
+    raw_sid = (
+        info.get("stream_id")
+        or info.get("stream")
+        or l_entry.get("stream_id")
+        or l_entry.get("stream")
+        or ""
+    )
+    resolved_sid = _infer_canonical_stream(t_upper, str(raw_sid), ledger_map)
+    resolved_strategy = (
+        info.get("strategy")
+        or l_entry.get("strategy")
+        or ""
+    )
+    stream_labels = {
+        "S1": ("S1 Trend Following", "국내 KOSPI 200 알파 모멘텀 추세 추종"),
+        "S2": ("S2 KRX Fundamental Swing", "국내 펀더멘털 & 수급 스윙 알파"),
+        "S3": ("S3 Active Macro", "글로벌 매크로 및 멀티에셋 오실레이터"),
+        "S3_B": ("S3_B Buffett QVM Value", "Track 2 버핏 해자 QVM 장기 복리 가치투자"),
+        "S4": ("S4 Defensive Alpha", "배당 및 방어형 멀티에셋 파킹"),
+        "S5": ("S5 KRX Sector Rotation", "국내 핵심 섹터 ETF 로테이션 알파"),
+        "S6": ("S6 US Equity Alpha", "미국 대형 퀄리티/테크 코어 알파"),
+    }
+    default_label, default_desc = stream_labels.get(
+        resolved_sid,
+        (f"{resolved_sid} Active Alpha", "멀티팩터 정량 알파 전략" if not is_kr_ticker(t_upper) else "국내 정량 알파 스크리닝"),
+    )
+    return default_label, (resolved_strategy or default_desc)
 
 
 
@@ -220,11 +251,18 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             items.append((ticker, info))
 
         # Always include KRW CASH and USD CASH (if > 0) so Total NAV matches KIS MTS 100%
+        fx_rate = float(account.get("fx_rate") or portfolio.get("fx_rate") or 1346.90)
         cash_val = float(account.get("cash", 0) or 0)
+        cash_usd = float(account.get("cash_usd", account.get("us_cash_usd", 0)) or 0)
+        current_assets = cash_val + (cash_usd * fx_rate) + sum(
+            float(h.get("eval_krw", 0) or (float(h.get("qty", 0) or 0) * float(h.get("current_price", 0) or 0) * (fx_rate if h.get("market") == "US" else 1.0)))
+            for h in raw_holdings.values() if isinstance(h, dict)
+        )
+        logger.info(f"Computed total current_assets (including cash_usd * fx_rate): ₩{current_assets:,.0f}")
         items.append(("CASH", {"name": "원화 현금성자산 (KRW 예수금)", "qty": 1, "avg_price": cash_val, "current_price": cash_val, "market": "KR"}))
-        us_cash_val = float(account.get("us_cash_usd", 0) or 0)
+        us_cash_val = cash_usd
         if us_cash_val > 0:
-            items.append(("USD_CASH", {"name": "외화 현금성자산 (USD 예수금)", "qty": 1, "avg_price": us_cash_val, "current_price": us_cash_val, "market": "US"}))
+            items.append(("USD_CASH", {"name": "외화 현금성자산 (USD 예수금)", "qty": 1, "avg_price": us_cash_val, "current_price": us_cash_val, "eval_krw": round(us_cash_val * fx_rate, 0), "market": "US"}))
 
         num_items = len(items)
         r_start = 4
@@ -366,21 +404,6 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                     "month": rec["month"],
                     "dps": rec["dps"]
                 })
-
-        # Always include historical SHV dividend received in July (7 shares)
-        has_shv = any("SHV" in t for t, _ in items)
-        if not has_shv:
-            raw_div_list.append({
-                "ticker": "SHV",
-                "curr": "USD",
-                "name": "iShares Short Treasury Bond ETF",
-                "status": "실제 수령",
-                "ex_date": "2026-07-01",
-                "pay_date": "2026-07-07",
-                "month": 7,
-                "dps": 0.44,
-                "hist_qty": 7
-            })
 
         # Sort chronologically by pay_date, then ticker
         raw_div_list.sort(key=lambda x: (x["pay_date"], x["ticker"]))
@@ -532,6 +555,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         raw_trade_list = []
 
         # 1. Active Holdings Buy Transactions ("매수")
+        ledger_map = load_position_ledger_map()
         for idx, (ticker, info) in enumerate(items):
             if ticker == "CASH" or "CASH" in ticker.upper():
                 continue
@@ -540,11 +564,21 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             name = info.get("name", ticker)
             qty = info.get("qty", 1)
             avg_price = info.get("avg_price", 0)
-            actual_trade_date = entry_dates.get(ticker, "2026-09-16")
+            t_key = str(ticker).strip().upper()
+            l_entry = ledger_map.get(t_key, {})
+            actual_trade_date = (
+                info.get("entry_date")
+                or entry_dates.get(t_key)
+                or entry_dates.get(str(ticker))
+                or l_entry.get("entry_date")
+                or l_entry.get("first_seen")
+                or now_date_str
+            )
+            stream_label, _ = get_stream_strategy_info(ticker, info)
             fee = round(qty * avg_price * 0.0001, 2) if curr == "USD" else round(qty * avg_price * 0.00015)
 
             raw_trade_list.append({
-                "date": actual_trade_date,
+                "date": str(actual_trade_date)[:10],
                 "type": "매수",
                 "ticker": gf_ticker,
                 "name": name,
@@ -553,24 +587,39 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 "fee": fee,
                 "tax": 0,
                 "curr": curr,
-                "note": "Project Meridian AI 알파 엔진 자율 매수"
+                "note": f"Project Meridian [{stream_label}] 자율 매수"
             })
 
-        # 2. Historical Liquidations / Rebalancing Sell Transactions ("매도")
-        has_shv = any("SHV" in t for t, _ in items)
-        if not has_shv:
+        # 2. Historical Liquidations / Rebalancing Sell Transactions ("매도") from live SSOT trade history
+        for closed_t in (portfolio.get("closed_trades") or portfolio.get("trade_history") or []):
+            if not isinstance(closed_t, dict):
+                continue
+            if str(closed_t.get("action", closed_t.get("side", ""))).upper() != "SELL":
+                continue
+            c_tk = str(closed_t.get("ticker", "")).strip()
+            if not c_tk:
+                continue
+            c_is_kr = _is_kr_rep(c_tk)
+            c_curr = "KRW" if c_is_kr else "USD"
+            c_gf_tk = f"KRX:{c_tk}" if (c_is_kr and not c_tk.startswith("KRX:")) else c_tk
+            c_qty = float(closed_t.get("quantity", closed_t.get("qty", 0)) or 0)
+            c_price = float(closed_t.get("price", closed_t.get("exit_price", 0)) or 0)
+            c_avg = float(closed_t.get("avg_price", closed_t.get("entry_price", c_price)) or c_price)
+            if c_qty <= 0 or c_price <= 0:
+                continue
+            c_fee = float(closed_t.get("commission", 0) or 0)
             raw_trade_list.append({
-                "date": "2026-09-19",
+                "date": str(closed_t.get("date", closed_t.get("timestamp", now_date_str)))[:10],
                 "type": "매도",
-                "ticker": "SHV",
-                "name": "iShares Short Treasury Bond ETF",
-                "price": 110.20,
-                "qty": 7,
-                "fee": 0.08,
+                "ticker": c_gf_tk,
+                "name": closed_t.get("name", c_tk),
+                "price": c_price,
+                "qty": c_qty,
+                "fee": c_fee,
                 "tax": 0,
-                "curr": "USD",
-                "buy_avg_price": 110.00,
-                "note": "Project Meridian 리밸런싱 자산 교체 매도 (SHV ➔ XLK)"
+                "curr": c_curr,
+                "buy_avg_price": c_avg,
+                "note": str(closed_t.get("reason", "Project Meridian 리밸런싱 매도")),
             })
 
         # 3. Sort chronologically from past to present (과거 -> 현재 순)

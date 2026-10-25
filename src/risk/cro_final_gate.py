@@ -178,24 +178,6 @@ class CROFinalGate:
                 t_map[tk_h] = len(t_map)
 
         n_tickers = len(t_map)
-        if cov_matrix is None or cov_matrix.size == 0:
-            cov_work = np.zeros((n_tickers, n_tickers), dtype=float)
-            for tk_c, idx_c in t_map.items():
-                _m_c = _qe_cro.get_asset_metrics(tk_c) or {}
-                _vd = float(_m_c.get('vol_daily') or (float(_m_c.get('vol_ann', 0.0) or 0.0) / (252 ** (1.0 / 2.0))))
-                cov_work[idx_c, idx_c] = _vd * _vd
-        elif cov_matrix.shape[0] < n_tickers:
-            old_n = cov_matrix.shape[0]
-            cov_work = np.zeros((n_tickers, n_tickers), dtype=float)
-            cov_work[:old_n, :old_n] = cov_matrix
-            for tk_c, idx_c in t_map.items():
-                if idx_c >= old_n:
-                    _m_c = _qe_cro.get_asset_metrics(tk_c) or {}
-                    _vd = float(_m_c.get('vol_daily') or (float(_m_c.get('vol_ann', 0.0) or 0.0) / (252 ** (1.0 / 2.0))))
-                    cov_work[idx_c, idx_c] = _vd * _vd
-        else:
-            cov_work = cov_matrix
-
         sell_w_by_tk: Dict[str, float] = {}
         buy_w_by_tk: Dict[str, float] = {}
         has_buy_orders = False
@@ -223,21 +205,89 @@ class CROFinalGate:
                     has_buy_orders = True
                     buy_w_by_tk[t] = buy_w_by_tk.get(t, 0.0) + w_ord
 
+        _vix_val = 0.0
+        if market_data and isinstance(market_data, dict):
+            _v_md = market_data.get('vix') or (market_data.get('signal_cache') or {}).get('vix')
+            try:
+                if _v_md and float(_v_md) > 0:
+                    _vix_val = float(_v_md)
+            except (TypeError, ValueError):
+                pass
+        if _vix_val <= 0:
+            try:
+                _v_qe = float(getattr(_qe_cro, 'vix', 0.0) or 0.0)
+                if _v_qe > 0:
+                    _vix_val = _v_qe
+            except Exception:
+                pass
+        if _vix_val <= 0:
+            _vix_val = 100.0 / (2.0 + 2.0 + 1.0)
+        _sigma_m = (_vix_val / 100.0) / (252 ** (1.0 / 2.0))
+        _sigma_m_sq = _sigma_m * _sigma_m
+
+        if cov_matrix is None or cov_matrix.size == 0 or cov_matrix.shape[0] < n_tickers:
+            _beta_vec = np.zeros(n_tickers, dtype=float)
+            _idio_var_vec = np.zeros(n_tickers, dtype=float)
+            _rho_inv = 1.0 - (1.0 / (2.0 * 2.0 * 2.0))
+            _rho_lng = 1.0 - (1.0 / (2.0 * 2.0))
+            _rho_cap = 1.0 - (1.0 / (2.0 * (2.0 + 2.0 + 1.0) * 2.0))
+            for tk_c, idx_c in t_map.items():
+                _ts_c = str(tk_c).strip().upper()
+                _is_inv_c = _ts_c in inv_tk_set
+                _m_c = _qe_cro.get_asset_metrics(tk_c) or {}
+                _vd = float(_m_c.get('vol_daily') or (float(_m_c.get('vol_ann', 0.0) or 0.0) / (252 ** (1.0 / 2.0))))
+                if _vd <= 0.0:
+                    _vd = _sigma_m
+                _var_i = _vd * _vd
+                _raw_b = abs(float(_m_c.get('beta', 1.0) or 1.0))
+                _rho_floor = _rho_inv if _is_inv_c else _rho_lng
+                if _sigma_m > 0.0:
+                    _b_lo = (_rho_floor * _vd) / _sigma_m
+                    _b_hi = (_rho_cap * _vd) / _sigma_m
+                    _b_mag = min(_b_hi, max(_raw_b, _b_lo))
+                else:
+                    _b_mag = _raw_b
+                _beta_i = (-1.0 if _is_inv_c else 1.0) * _b_mag
+                _sys_var_i = (_beta_i * _beta_i) * _sigma_m_sq
+                _beta_vec[idx_c] = _beta_i
+                _idio_var_vec[idx_c] = max(0.0, _var_i - _sys_var_i)
+            cov_work = (_sigma_m_sq * np.outer(_beta_vec, _beta_vec)) + np.diag(_idio_var_vec)
+            if cov_matrix is not None and cov_matrix.size > 0 and 0 < cov_matrix.shape[0] < n_tickers:
+                old_n = cov_matrix.shape[0]
+                cov_work[:old_n, :old_n] = cov_matrix
+        else:
+            cov_work = np.array(cov_matrix, dtype=float, copy=True)
+
         ret_vec = np.zeros(n_tickers)
         buy_vec = np.zeros(n_tickers)
+        var_ret_vec = np.zeros(n_tickers)
+        var_buy_vec = np.zeros(n_tickers)
+        inv_idx_set = set()
         for t, idx in t_map.items():
             ret_long_w = max(0.0, held_w_by_tk.get(t, 0.0) - sell_w_by_tk.get(t, 0.0))
             buy_long_w = buy_w_by_tk.get(t, 0.0)
             _ts_w = str(t).strip().upper()
-            sign_w = -1.0 if (_ts_w in inv_tk_set) else 1.0
+            _is_inv_w = _ts_w in inv_tk_set
+            if _is_inv_w:
+                inv_idx_set.add(idx)
+            sign_w = -1.0 if _is_inv_w else 1.0
             ret_vec[idx] = sign_w * ret_long_w
             buy_vec[idx] = sign_w * buy_long_w
+            var_ret_vec[idx] = ret_long_w
+            var_buy_vec[idx] = buy_long_w
+        if inv_idx_set and n_tickers > 1:
+            for _i in range(n_tickers):
+                for _j in range(_i + 1, n_tickers):
+                    if (_i in inv_idx_set) != (_j in inv_idx_set) and cov_work[_i, _j] > 0.0:
+                        cov_work[_i, _j] = -cov_work[_i, _j]
+                        cov_work[_j, _i] = -cov_work[_j, _i]
         weights_vec = ret_vec + buy_vec
+        var_weights_vec = var_ret_vec + var_buy_vec
 
         ret_gross = float(abs(np.sum(ret_vec)))
         buy_gross = float(abs(np.sum(buy_vec)))
         proposed_exposure_pct = float(abs(np.sum(weights_vec)))
-        proposed_var_krw, proposed_var_pct = self.compute_parametric_var(weights_vec, cov_work, portfolio_value)
+        proposed_var_krw, proposed_var_pct = self.compute_parametric_var(var_weights_vec, cov_work, portfolio_value)
 
         # Dynamic Leverage Expansion via Anti-fragile Option Coverage
         dynamic_allowed_exposure = self.max_portfolio_exposure
@@ -262,9 +312,9 @@ class CROFinalGate:
         if proposed_var_pct > self.max_daily_var_pct and proposed_var_pct > 0.0 and has_buy_orders:
             _sigma_max = self.max_daily_var_pct / max(float(self.z_score), _cro_eps)
             _sigma_max_sq = _sigma_max * _sigma_max
-            _quad_a = float(buy_vec @ cov_work @ buy_vec)
-            _quad_b = float(ret_vec @ cov_work @ buy_vec)
-            _quad_c = float(ret_vec @ cov_work @ ret_vec)
+            _quad_a = float(var_buy_vec @ cov_work @ var_buy_vec)
+            _quad_b = float(var_ret_vec @ cov_work @ var_buy_vec)
+            _quad_c = float(var_ret_vec @ cov_work @ var_ret_vec)
             if _quad_a > 0.0:
                 if _quad_c >= _sigma_max_sq:
                     if _quad_b < 0.0 and (_quad_a + 2 * _quad_b + _quad_c) < _quad_c:
