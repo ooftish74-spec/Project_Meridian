@@ -211,16 +211,49 @@ class PositionSizer:
             is_probe = True
             logger.info(f"  🎯 [Probe Sizing] {ticker}: 횡보장 미세 정찰대({final_size:.2%} NAV) 공격적 투입 확정")
 
+        # [Discrete Lot Quantization Attenuation & Single-Lot Cap]
+        # Under quadratic Kelly utility U(w) = mu*w - 0.5*gamma*sigma^2*w^2, integer share rounding
+        # adds uniform quantization variance (Delta w_lot)^2 / 12 where Delta w_lot = P_share_KRW / NAV_KRW.
+        lot_step_pct = 0.0
+        lot_quantization_scale = 1.0
+        _unit_px_krw = float(signal.get('unit_price_krw', 0.0) or 0.0)
+        if _unit_px_krw <= 0.0 and bool(signal.get('enforce_lot_quantization')):
+            _raw_px = float(signal.get('price', signal.get('current_price', 0.0)) or 0.0)
+            _fx_px = float(signal.get('fx_rate', market_data.get('fx_rate', 1.0)) or 1.0)
+            _is_kr_tk = len(str(ticker)) == 6 and (str(ticker).isdigit() or (str(ticker)[:5].isdigit() and str(ticker)[5].isalpha()))
+            _unit_px_krw = _raw_px if _is_kr_tk else (_raw_px * _fx_px)
+        if _unit_px_krw > 0.0 and portfolio_value > 0.0 and final_size > 0.0:
+            lot_step_pct = _unit_px_krw / float(portfolio_value)
+            _uniform_var_denom = 12.0
+            _lot_cap_mult = 2.0
+            if regime in ('caution', 'bear', 'crash') and lot_step_pct > final_size * _lot_cap_mult:
+                reason = f"Drop: 1주 최소단위 비중({lot_step_pct:.2%}) > 켈리 허용상한({final_size * _lot_cap_mult:.2%})"
+                return {
+                    'approved': False,
+                    'final_size': 0.0,
+                    'kelly_size': kelly_size,
+                    'ev_pct': round(mu_pct, 4),
+                    'friction_pct': round(friction_pct, 4),
+                    'ev_margin': round(ev_margin, 4),
+                    'vix_scale': round(vix_scale, 4),
+                    'lot_step_pct': round(lot_step_pct, 6),
+                    'lot_quantization_scale': 0.0,
+                    'reason': reason,
+                    'drop_reason': 'lot_quantization_exceeds_kelly_cap',
+                }
+            lot_quantization_scale = 1.0 / (1.0 + ((lot_step_pct / max(final_size, 1e-6)) ** 2) / _uniform_var_denom)
+            final_size = final_size * lot_quantization_scale
+
         final_size = round(max(0.0, min(1.0, final_size)), 4)
         
         if final_size <= 0.0:
             reason = "Drop: 최종 포지션 사이즈 0%"
-            return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': reason, 'drop_reason': 'zero_size'}
+            return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'lot_step_pct': round(lot_step_pct, 6), 'lot_quantization_scale': round(lot_quantization_scale, 4), 'reason': reason, 'drop_reason': 'zero_size'}
 
         _prb = " [PROBE]" if is_probe else ""
         reason = f"[Phase 11] OK: EV={mu_pct:.3f}%>Friction={friction_pct:.3f}%(margin={ev_margin:+.3f}%), size={final_size:.2%}{_prb}"
         logger.debug(f"  [PositionSizer] {ticker}: {reason}")
-        return {'approved': True, 'final_size': final_size, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': round(vix_scale, 4), 'reason': reason, 'drop_reason': '', 'sl_pct': sl_pct, 'tp_pct': tp_pct, 'is_probe': is_probe}
+        return {'approved': True, 'final_size': final_size, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': round(vix_scale, 4), 'lot_step_pct': round(lot_step_pct, 6), 'lot_quantization_scale': round(lot_quantization_scale, 4), 'reason': reason, 'drop_reason': '', 'sl_pct': sl_pct, 'tp_pct': tp_pct, 'is_probe': is_probe}
 
     def filter_signals(self, signals: list, portfolio_value: float=0.0, regime: str='caution', vix: float=0.0) -> list:
         """신호 리스트 일괄 필터링 (EV > Friction 통과 신호만 반환).

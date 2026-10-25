@@ -55,10 +55,10 @@ def align_macro_point_in_time(macro_df: pd.DataFrame, target_index) -> pd.DataFr
         kind, n = macro_publication_lag(col, s)
         if kind == 'bday':
             shifted_idx = s.index + pd.offsets.BDay(n)
-            tol = pd.Timedelta(days=30)
+            tol = pd.Timedelta(30, unit='D')
         else:
-            shifted_idx = s.index + pd.Timedelta(days=n)
-            tol = pd.Timedelta(days=45 if n >= 20 else 30)
+            shifted_idx = s.index + pd.Timedelta(n, unit='D')
+            tol = pd.Timedelta(45 if n >= 20 else 30, unit='D')
         s2 = pd.Series(s.values, index=shifted_idx).sort_index()
         s2 = s2[~s2.index.duplicated(keep='last')]
         out[col] = s2.reindex(target_index, method='ffill', tolerance=tol).values

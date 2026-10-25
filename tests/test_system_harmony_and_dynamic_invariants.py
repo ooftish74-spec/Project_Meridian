@@ -348,3 +348,52 @@ def test_cross_sectional_rank_z_zeros_date_constant_macro_features():
     assert np.allclose(Z[:, 1], 0.0)
     assert np.std(Z[:, 0]) > 0.5
 
+
+def test_discrete_lot_quantization_and_eb_alpha_friction_wiring():
+    """Verify closed-form discrete lot quantization attenuation, single-lot cap, and EB expected alpha wiring."""
+    from src.execution.position_sizer import PositionSizer
+    from src.allocation.portfolio_optimizer import PortfolioOptimizer
+
+    sizer = PositionSizer()
+    # 1. Closed-form discrete lot quantization attenuation:
+    # NAV = 10,000,000 KRW, caution probe_cap = 0.03 (300,000 KRW), 1 share = 300,000 KRW -> lot_step = 0.03
+    # Ratio = lot_step / w* = 0.03 / 0.03 = 1.0 -> kappa_lot = 1 / (1 + 1^2 / 12) = 12 / 13 = 0.9230769...
+    # final_size = round(0.03 * (12 / 13), 4) = 0.0277
+    sig_lot = {
+        "ticker": "005930",
+        "stream_id": "S2",
+        "confidence": 0.80,
+        "tp_pct": 10.0,
+        "sl_pct": 4.0,
+        "kelly_size": 0.20,
+        "unit_price_krw": 300_000.0,
+        "market_data": {"skewness": 0.0, "kurtosis": 3.0},
+    }
+    res_lot = sizer.compute(sig_lot, portfolio_value=10_000_000.0, regime="caution", vix=17.5)
+    assert res_lot["approved"] is True
+    assert res_lot["lot_step_pct"] == pytest.approx(0.03, rel=1e-9)
+    assert res_lot["lot_quantization_scale"] == pytest.approx(round(12.0 / 13.0, 4), rel=1e-9)
+    assert res_lot["final_size"] == pytest.approx(round(0.03 * (12.0 / 13.0), 4), rel=1e-9)
+
+    # 2. Single-lot cap rejection in caution regime when 1 share (> 6% of NAV) exceeds 2x probe_cap (6%)
+    sig_oversized_lot = dict(sig_lot, unit_price_krw=700_000.0)
+    res_over = sizer.compute(sig_oversized_lot, portfolio_value=10_000_000.0, regime="caution", vix=17.5)
+    assert res_over["approved"] is False
+    assert res_over["drop_reason"] == "lot_quantization_exceeds_kelly_cap"
+    assert res_over["final_size"] == 0.0
+
+    # 3. PortfolioOptimizer derives non-zero expected_profit from stream_metrics daily_returns when alpha key is absent
+    opt = PortfolioOptimizer()
+    sm = {
+        "S2": {"daily_returns": [0.01, 0.012, 0.008, 0.011, 0.009], "sharpe": 2.5},
+        "S5": {"daily_returns": [0.0001, 0.0001, 0.0001], "sharpe": 1.0},
+    }
+    res_opt = opt.optimize(
+        stream_metrics=sm,
+        regime="bull",
+        portfolio_value=100_000_000.0,
+        current_weights={"S2": 0.0, "S5": 1.0},
+    )
+    assert res_opt["tx_check"]["expected_profit"] > 0
+
+

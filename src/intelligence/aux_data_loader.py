@@ -77,7 +77,7 @@ def quarterly_available_from(year=None, quarter=None, r=None) -> Optional[pd.Tim
     except (TypeError, ValueError, KeyError, AttributeError):
         return None
     lag = ANNUAL_DISCLOSURE_LAG_DAYS if q == 4 else QUARTERLY_DISCLOSURE_LAG_DAYS
-    return pd.Timestamp(year=y, month=m, day=d) + pd.Timedelta(days=lag)
+    return pd.Timestamp(year=y, month=m, day=d) + pd.Timedelta(lag, unit='D')
 
 
 def annual_available_from(year=None, r=None) -> Optional[pd.Timestamp]:
@@ -90,7 +90,7 @@ def annual_available_from(year=None, r=None) -> Optional[pd.Timestamp]:
     except (TypeError, ValueError, AttributeError):
         return None
     fy_end = pd.Timestamp(year=y, month=FISCAL_YEAR_END_MONTH, day=1) + pd.offsets.MonthEnd(0)
-    return fy_end + pd.Timedelta(days=ANNUAL_DISCLOSURE_LAG_DAYS)
+    return fy_end + pd.Timedelta(ANNUAL_DISCLOSURE_LAG_DAYS, unit='D')
 
 
 def _computed_summary_available(computed: Dict, annual, as_of: pd.Timestamp) -> bool:
@@ -242,7 +242,7 @@ class AuxDataLoader:
             try:
                 dt = pd.Timestamp(date_str)
                 for delta in range(1, 8):
-                    prev = (dt - pd.Timedelta(days=delta)).strftime('%Y-%m-%d')
+                    prev = (dt - pd.Timedelta(delta, unit='D')).strftime('%Y-%m-%d')
                     if prev in df.index:
                         row = df.loc[prev]
                         break
@@ -584,7 +584,7 @@ class AuxDataLoader:
         try:
             dt = pd.Timestamp(date_str)
             for delta in range(1, max_lookback + 1):
-                prev = (dt - pd.Timedelta(days=delta)).strftime('%Y-%m-%d')
+                prev = (dt - pd.Timedelta(delta, unit='D')).strftime('%Y-%m-%d')
                 if prev in df.index:
                     row = df.loc[prev]
                     return row.iloc[-1] if isinstance(row, pd.DataFrame) else row

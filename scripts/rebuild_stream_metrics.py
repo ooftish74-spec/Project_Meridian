@@ -641,7 +641,7 @@ def compute_stream_metrics(results_dir: Path = None):
                 h.get('stream_id') or h.get('stream') or l_entry.get('stream_id') or l_entry.get('stream') or '',
                 ledger_map,
             )
-            is_kr = (h.get('market') == 'KR') or (len(t_sym) == 6 and t_sym.isdigit())
+            is_kr = (h.get('market') == 'KR') or (len(t_sym) == 6 and (t_sym.isdigit() or (t_sym[:5].isdigit() and t_sym[5].isalpha())))
             mult = 1.0 if is_kr else fx_rate
             avg_p = float(h.get('avg_price', l_entry.get('avg_price', 0)) or 0)
             cur_p = float(h.get('current_price', avg_p) or avg_p)
@@ -882,6 +882,17 @@ def compute_stream_metrics(results_dir: Path = None):
         win_rate = round(len(wins_list) / n_days, 4) if n_days > 0 else 0.0
         avg_win = round(sum(wins_list) / len(wins_list), 6) if wins_list else 0.0
         avg_loss = round(sum(losses_list) / len(losses_list), 6) if losses_list else 0.0
+        gross_win = sum(wins_list)
+        gross_loss = sum(losses_list)
+        if gross_loss > 1e-9:
+            profit_factor = round(gross_win / gross_loss, 3)
+        elif gross_win > 0:
+            profit_factor = round(1.0 + gross_win * 10.0, 3)
+        else:
+            profit_factor = 0.0
+        mean_daily_r = (sum(daily_returns) / n_days) if n_days > 0 else 0.0
+        eb_shrink = n_days / (n_days + 10.0) if n_days > 0 else 0.0
+        alpha_annual_pct = round(mean_daily_r * eb_shrink * 252.0 * 100.0, 4)
 
         sharpe = 0.0
         if n_days >= 2:
@@ -901,10 +912,13 @@ def compute_stream_metrics(results_dir: Path = None):
             'daily_costs': daily_costs[:len(daily_returns)],
             'regimes': regimes[:len(daily_returns)],
             'n_trades': n_trades,
+            'trade_count': n_trades,
             'n_days': n_days,
             'win_rate': win_rate,
             'avg_win': avg_win,
             'avg_loss': avg_loss,
+            'profit_factor': profit_factor,
+            'alpha': alpha_annual_pct,
             'sharpe': sharpe,
             'active_positions': len(pos_list),
             'market_value': mkt_val,
@@ -1063,12 +1077,15 @@ def compute_stream_metrics(results_dir: Path = None):
             'n_buys': len(buys),
             'n_sells': len(sells),
             'total_trades': len(sells) if sells else len(trades),
+            'trade_count': len(sells) if sells else len(trades),
             'n_days': raw_data[sid].get('n_days', 0),
             'win_rate': win_rate_pct,
             'avg_win': raw_data[sid].get('avg_win', 0.0),
             'avg_loss': raw_data[sid].get('avg_loss', 0.0),
             'avg_win_pct': avg_win_pct,
             'avg_loss_pct': avg_loss_pct,
+            'profit_factor': raw_data[sid].get('profit_factor', 0.0),
+            'alpha': raw_data[sid].get('alpha', 0.0),
             'sharpe': raw_data[sid].get('sharpe', 0.0),
             'daily_returns': raw_data[sid].get('daily_returns', []),
             'market_value': round(float(raw_data[sid].get('market_value', total_invested + total_pnl))),
@@ -1085,9 +1102,12 @@ def compute_stream_metrics(results_dir: Path = None):
             'win_rate': raw_data[sid]['win_rate'],
             'avg_win': raw_data[sid]['avg_win'],
             'avg_loss': raw_data[sid]['avg_loss'],
+            'profit_factor': raw_data[sid]['profit_factor'],
+            'alpha': raw_data[sid]['alpha'],
             'sharpe': raw_data[sid]['sharpe'],
             'n_days': raw_data[sid]['n_days'],
             'total_trades': stream_summary[sid]['total_trades'],
+            'trade_count': stream_summary[sid]['total_trades'],
             'realized_pnl': stream_summary[sid]['realized_pnl'],
             'unrealized_pnl': stream_summary[sid]['unrealized_pnl'],
             'active_positions': stream_summary[sid]['active_positions'],
@@ -1098,6 +1118,7 @@ def compute_stream_metrics(results_dir: Path = None):
     }
     payload = {
         'raw_data': raw_data,
+        'streams': per_stream_metrics,
         'metrics': {
             **per_stream_metrics,
             'sharpes': sharpes,

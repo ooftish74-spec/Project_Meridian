@@ -167,7 +167,7 @@ class SectorBatchCollector:
                 kr_df = pd.DataFrame({'kr': kr_ret})
                 us_df.index = us_df.index.tz_localize(None) if us_df.index.tz else us_df.index
                 us_shifted = us_df.copy()
-                us_shifted.index = us_shifted.index + pd.Timedelta(days=1)
+                us_shifted.index = us_shifted.index + pd.Timedelta(1, unit='D')
                 lagged_merged = us_shifted.join(kr_df, how='inner').dropna()
                 same_merged = us_df.join(kr_df, how='inner').dropna()
                 if len(lagged_merged) < 20:

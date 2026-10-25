@@ -275,7 +275,7 @@ class ICEvaluator:
             window_days = int(pget('alpha_factory.ic_window_days', 30))
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'])
-                cutoff = df['date'].max() - pd.Timedelta(days=window_days)
+                cutoff = df['date'].max() - pd.Timedelta(window_days, unit='D')
                 df = df[df['date'] >= cutoff]
             if df.empty:
                 return

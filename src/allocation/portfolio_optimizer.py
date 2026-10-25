@@ -307,13 +307,21 @@ class PortfolioOptimizer:
             target_weights = scaled_weights
         result['target_weights'] = target_weights
         expected_alphas = {}
+        _eb_prior_n = 10.0
+        _days_per_year = 252.0
         for sid in self.STREAMS:
-            sm = stream_metrics.get(sid, {})
-            alpha_annual_pct = sm.get('alpha', 0)
-            if alpha_annual_pct is not None and alpha_annual_pct > 0:
-                expected_alphas[sid] = alpha_annual_pct / 100.0 / 252.0
+            sm = stream_metrics.get(sid, {}) if isinstance(stream_metrics.get(sid), dict) else {}
+            alpha_annual_pct = sm.get('alpha', None)
+            if alpha_annual_pct is not None and float(alpha_annual_pct) != 0.0:
+                expected_alphas[sid] = max(0.0, float(alpha_annual_pct) / 100.0 / _days_per_year)
             else:
-                expected_alphas[sid] = 0.0
+                d_rets = [float(r) for r in (sm.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
+                if d_rets:
+                    n_r = len(d_rets)
+                    eb_w = n_r / (n_r + _eb_prior_n)
+                    expected_alphas[sid] = max(0.0, (sum(d_rets) / n_r) * eb_w)
+                else:
+                    expected_alphas[sid] = 0.0
         tx_check = self._tx_filter.should_rebalance(current_weights, target_weights, portfolio_value, expected_alphas)
         result['tx_check'] = {'should_rebalance': tx_check['should_rebalance'], 'trade_cost': tx_check['trade_cost'], 'turnover': tx_check['turnover'], 'n_trades': tx_check['n_trades'], 'expected_profit': tx_check.get('expected_profit', 0), 'dynamic_override': tx_check.get('dynamic_override', False)}
         if limit_reached and (not tx_check.get('dynamic_override', False)):

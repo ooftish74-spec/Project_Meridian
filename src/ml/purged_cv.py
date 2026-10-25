@@ -69,7 +69,7 @@ class PurgedKFold:
                 # 테스트 셋의 마지막 날짜
                 test_end_time = X.index[test_end - 1]
                 # Embargo 끝나는 날짜
-                embargo_end_time = test_end_time + pd.Timedelta(days=self.embargo_days)
+                embargo_end_time = test_end_time + pd.Timedelta(self.embargo_days, unit='D')
                 
                 # Embargo 이후의 인덱스 찾기
                 post_test_indices = np.where(X.index > embargo_end_time)[0]
