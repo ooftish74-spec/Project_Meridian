@@ -639,13 +639,15 @@ def is_us_trading_day(date_str: Optional[str] = None) -> bool:
     """미국 거래소(NYSE/NASDAQ) 개장일 여부.
 
     Args:
-        date_str: 'YYYYMMDD' 형식 미국 날짜. None이면 KST→US 자동 변환.
+        date_str: 'YYYYMMDD' 형식 미국 날짜 또는 date/datetime 객체. None이면 KST→US 자동 변환.
     """
     if date_str is None:
         us_dt = _kst_to_us_trading_date()
         date_str = us_dt.strftime('%Y%m%d')
+    elif hasattr(date_str, 'strftime'):
+        date_str = date_str.strftime('%Y%m%d')
     else:
-        date_str = date_str.replace('-', '')
+        date_str = str(date_str).replace('-', '')
 
     # 주말 체크
     d = datetime.strptime(date_str, '%Y%m%d')
@@ -661,7 +663,10 @@ def is_us_holiday(date_str: Optional[str] = None) -> bool:
     """NYSE/NASDAQ 공휴일(휴장일) 여부 (주말 제외)."""
     if date_str is None:
         date_str = _kst_to_us_trading_date().strftime('%Y%m%d')
-    date_str = date_str.replace('-', '')
+    elif hasattr(date_str, 'strftime'):
+        date_str = date_str.strftime('%Y%m%d')
+    else:
+        date_str = str(date_str).replace('-', '')
     d = datetime.strptime(date_str, '%Y%m%d')
     return date_str in get_us_holidays(d.year)
 
@@ -671,7 +676,10 @@ def is_us_half_day(date_str: Optional[str] = None) -> bool:
     if date_str is None:
         us_dt = _kst_to_us_trading_date()
         date_str = us_dt.strftime('%Y%m%d')
-    date_str = date_str.replace('-', '')
+    elif hasattr(date_str, 'strftime'):
+        date_str = date_str.strftime('%Y%m%d')
+    else:
+        date_str = str(date_str).replace('-', '')
     d = datetime.strptime(date_str, '%Y%m%d')
     return date_str in get_us_half_days(d.year)
 
