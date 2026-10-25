@@ -256,7 +256,7 @@ class AlphaAllocator:
         logger.debug(f"  [EntryScore:{stream_id}] score={entry_score:.3f} ({('✅ 허가' if result['entry_allowed'] else '❌ 거부')}) (IC={ic_score:.3f}, conf={conf_score:.3f}, regime={regime_score:.3f}, exp_ret={exp_ret_score:.3f})")
         return result
 
-    def allocate(self, stream_metrics: Dict, regime: str='caution', market_data: Dict=None, s0_sigs: List[Dict]=None) -> Dict[str, float]:
+    def allocate(self, stream_metrics: Dict, regime: str='caution', market_data: Dict=None, s0_sigs: List[Dict]=None, stream_signals: Dict=None) -> Dict[str, float]:
         """스트림 간 배분 비율 결정 (리스크 패리티 하이브리드).
 
         Args:
@@ -497,7 +497,7 @@ class AlphaAllocator:
             final_weights = {k: round((v / total_w) * target_sum, 4) for k, v in final_weights.items()}
 
         min_weight = cfg.get('allocator.min_stream_weight', 0.0)
-        stream_signals = stream_metrics.get('_stream_signals')
+        stream_signals = stream_signals or stream_metrics.get('_stream_signals')
         if stream_signals:
             stream_signals = self._apply_sentiment_penalty(stream_signals)
             final_weights = self._enforce_single_asset_limit(final_weights, stream_signals)
@@ -530,7 +530,7 @@ class AlphaAllocator:
                             _r2 = (stream_metrics.get(_s2, {}) or {}).get('daily_returns', [])
                             if len(_r1) >= 5 and len(_r2) >= 5:
                                 _min_l = min(len(_r1), len(_r2))
-                                _c = float(np.cov(_r1[:_min_l], _r2[:_min_l])[0, 1])
+                                _c = float(np.cov(_r1[-_min_l:], _r2[-_min_l:])[0, 1])
                                 _cov_s[_i, _j] = _c
                                 _cov_s[_j, _i] = _c
 
@@ -729,7 +729,9 @@ class AlphaAllocator:
                         if _aux_sid in _explicit_zero_streams:
                             _m_aux = (stream_metrics or {}).get(_aux_sid, {}) or {}
                             _n_tr_aux = float(int(_m_aux.get('total_trades') or 0))
-                            _eb_zero_shrink = _n_tr_aux / (_n_tr_aux + _eb_n0) if _n_tr_aux > 0.0 else 0.0
+                            _live_sigs_aux = float(len((stream_signals or {}).get(_aux_sid, []) or []))
+                            _n_eff_aux = _n_tr_aux + _live_sigs_aux
+                            _eb_zero_shrink = _n_eff_aux / (_n_eff_aux + _eb_n0) if _n_eff_aux > 0.0 else 0.0
                             _raw_prior_w = _raw_prior_w * _eb_zero_shrink
                         _prior_cap_w = round(_raw_prior_w, 4)
                         if final_weights[_aux_sid] > _prior_cap_w:
@@ -972,7 +974,8 @@ class AlphaAllocator:
                         vol = self._compute_volatility(metrics.get('daily_returns', []))
                         if vol == 0:
                             vol = 0.15
-                        exp_ret = ic * vol
+                        vol_5d = vol * math.sqrt(5.0 / 252.0)
+                        exp_ret = ic * vol_5d
                     exp_ret = float(exp_ret)
                     competition_candidates.append((sid, exp_ret, weights[sid]))
                 competition_candidates.sort(key=lambda x: x[1])

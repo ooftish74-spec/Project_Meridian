@@ -159,8 +159,19 @@ class FactorRiskDecomposer:
                             for w, r in zip(weights, series_list):
                                 port_ret += w * r[-min_l:]
                             return port_ret
+            lnh_path = _RESULTS / 'live_nav_history.json'
+            if lnh_path.exists():
+                lnh = json.loads(lnh_path.read_text())
+                rows = lnh.get('rows', []) if isinstance(lnh, dict) else (lnh if isinstance(lnh, list) else [])
+                navs_l = [float(s.get('nav', 0)) for s in rows[-(lookback + 1):] if isinstance(s, dict) and float(s.get('nav', 0) or 0) > 0]
+                if len(navs_l) > min_obs:
+                    returns_l = np.diff(navs_l) / np.array(navs_l[:-1])
+                    returns_l = returns_l[np.isfinite(returns_l)]
+                    if len(returns_l) >= min_obs:
+                        return returns_l
+            _is_live_fr = (_cfg.get('execution.current_mode', _cfg.get('execution.mode', 'live')) == 'live') if _cfg else True
             sp_path = _RESULTS / 'shadow_portfolio.json'
-            if sp_path.exists():
+            if not _is_live_fr and sp_path.exists():
                 sp = json.loads(sp_path.read_text())
                 snaps = sp.get('daily_snapshots', [])
                 if len(snaps) > min_obs:

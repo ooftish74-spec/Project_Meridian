@@ -220,17 +220,23 @@ class CROFinalGate:
                     _vix_val = _v_qe
             except Exception:
                 pass
+        try:
+            from src.params import pget as _pget_cro
+        except Exception:
+            def _pget_cro(name, fallback, ctx=None):
+                return fallback
+
         if _vix_val <= 0:
-            _vix_val = 100.0 / (2.0 + 2.0 + 1.0)
+            _vix_val = float(_pget_cro('risk.cro_prior_vix', 20.0))
         _sigma_m = (_vix_val / 100.0) / (252 ** (1.0 / 2.0))
         _sigma_m_sq = _sigma_m * _sigma_m
 
         if cov_matrix is None or cov_matrix.size == 0 or cov_matrix.shape[0] < n_tickers:
             _beta_vec = np.zeros(n_tickers, dtype=float)
             _idio_var_vec = np.zeros(n_tickers, dtype=float)
-            _rho_inv = 1.0 - (1.0 / (2.0 * 2.0 * 2.0))
-            _rho_lng = 1.0 - (1.0 / (2.0 * 2.0))
-            _rho_cap = 1.0 - (1.0 / (2.0 * (2.0 + 2.0 + 1.0) * 2.0))
+            _rho_inv = float(_pget_cro('risk.cro_rho_inverse_floor', 0.875))
+            _rho_lng = float(_pget_cro('risk.cro_rho_long_floor', 0.75))
+            _rho_cap = float(_pget_cro('risk.cro_rho_cap', 0.95))
             for tk_c, idx_c in t_map.items():
                 _ts_c = str(tk_c).strip().upper()
                 _is_inv_c = _ts_c in inv_tk_set
@@ -284,9 +290,11 @@ class CROFinalGate:
         weights_vec = ret_vec + buy_vec
         var_weights_vec = var_ret_vec + var_buy_vec
 
-        ret_gross = float(abs(np.sum(ret_vec)))
-        buy_gross = float(abs(np.sum(buy_vec)))
-        proposed_exposure_pct = float(abs(np.sum(weights_vec)))
+        ret_gross = float(np.sum(np.abs(ret_vec)))
+        buy_gross = float(np.sum(np.abs(buy_vec)))
+        ret_net_abs = abs(float(np.sum(ret_vec)))
+        proposed_exposure_pct = abs(float(np.sum(weights_vec)))
+        proposed_gross_exposure_pct = float(np.sum(np.abs(weights_vec)))
         proposed_var_krw, proposed_var_pct = self.compute_parametric_var(var_weights_vec, cov_work, portfolio_value)
 
         # Dynamic Leverage Expansion via Anti-fragile Option Coverage
@@ -299,11 +307,6 @@ class CROFinalGate:
                 dynamic_allowed_exposure = float(unc_eval.get('dynamic_leverage_recommended', self.max_portfolio_exposure))
                 logger.info(f"  🛡️ [CROFinalGate] Anti-fragile Option Coverage Verified ➔ Dynamic Leverage Expansion to {dynamic_allowed_exposure:.2f}x")
 
-        try:
-            from src.params import pget as _pget_cro
-        except Exception:
-            def _pget_cro(name, fallback, ctx=None):
-                return fallback
         _cro_eps = float(_pget_cro('risk.cro_weight_eps', 1e-9))
         _min_vh = int(_pget_cro('risk.cro_vix_hist_min_len', 12))
 
@@ -331,7 +334,13 @@ class CROFinalGate:
         if proposed_exposure_pct > dynamic_allowed_exposure and buy_gross > 0.0:
             exposure_scale_factor = min(
                 1.0,
-                max(0.0, dynamic_allowed_exposure - ret_gross) / buy_gross,
+                max(0.0, dynamic_allowed_exposure - ret_net_abs) / buy_gross,
+            )
+        gross_cap = max(float(dynamic_allowed_exposure), 1.0)
+        if proposed_gross_exposure_pct > gross_cap and buy_gross > 0.0:
+            exposure_scale_factor = min(
+                exposure_scale_factor,
+                max(0.0, gross_cap - ret_gross) / buy_gross,
             )
 
         # ── Historical & Surge Scenario Stress Gate ──
@@ -339,7 +348,7 @@ class CROFinalGate:
         stress_res = None
         try:
             inv_map = {idx: tk for tk, idx in t_map.items()}
-            w_by_tk = {inv_map[i]: float(weights_vec[i]) for i in range(n_tickers) if i in inv_map and abs(weights_vec[i]) > _cro_eps}
+            w_by_tk = {inv_map[i]: float(var_weights_vec[i]) for i in range(n_tickers) if i in inv_map and abs(var_weights_vec[i]) > _cro_eps}
             if w_by_tk and not is_tail_hedged:
                 stress_res = self.stress_tester.simulate_scenario_shocks(w_by_tk, portfolio_value)
                 if not stress_res.get('stress_test_passed', True):
@@ -483,6 +492,7 @@ class CROFinalGate:
             'proposed_var_pct': round(proposed_var_pct, 6),
             'allowed_var_pct': round(self.max_daily_var_pct, 6),
             'proposed_exposure_pct': round(proposed_exposure_pct, 4),
+            'proposed_gross_exposure_pct': round(proposed_gross_exposure_pct, 4),
             'allowed_exposure_pct': round(self.max_portfolio_exposure, 4),
             'reason': reason_str
         }

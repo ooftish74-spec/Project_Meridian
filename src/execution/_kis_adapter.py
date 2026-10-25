@@ -865,6 +865,9 @@ class KISTraderAdapter:
                     if order.side == 'buy' and _deduct_px > 0 and getattr(self, 'account', None):
                         order_cost_usd = order.quantity * _deduct_px
                         order_cost_krw = (order_cost_usd * fx_rate) if is_us_stock else (order.quantity * _deduct_px)
+                        setattr(order, '_deducted_unit_px', _deduct_px)
+                        setattr(order, '_deducted_fx_rate', fx_rate if is_us_stock else 1.0)
+                        setattr(order, '_deducted_is_us', bool(is_us_stock))
                         self.account.cash = max(0.0, self.account.cash - order_cost_krw)
                         if is_us_stock:
                             if hasattr(self, 'us_cash_usd'):
@@ -1145,6 +1148,8 @@ class KISTraderAdapter:
                         else:
                             return {'status': 'pending', 'filled_qty': 0, 'remaining_qty': remaining, 'order_no': order_no}
 
+            if str(order_no).strip() in getattr(self, '_recently_canceled_odnos', set()):
+                return {'status': 'canceled', 'filled_qty': 0, 'remaining_qty': 0, 'order_no': order_no}
             return {'status': 'not_in_nccs', 'filled_qty': 0, 'remaining_qty': 0, 'order_no': order_no}
         except Exception as e:
             logger.error(f"  해외 미체결 조회 실패: {e}")
@@ -1347,7 +1352,9 @@ class KISTraderAdapter:
             return order
 
         _c_msg = str(cancel_res.get('message', '') or '')
-        cancel_confirmed = bool(cancel_res.get('success', False)) or post_status in ('canceled', 'rejected')
+        cancel_confirmed = post_status in ('canceled', 'rejected') or (
+            bool(cancel_res.get('success', False)) and post_status not in ('unknown', 'error', 'pending', 'submitted')
+        )
         if not cancel_confirmed:
             # 원주문이 아직 살아 있을 수 있음 → 추가 주문 금지 (이중 체결 방지)
             order.status = 'unknown'
@@ -1357,6 +1364,22 @@ class KISTraderAdapter:
             return order
 
         remaining = order.quantity - order.filled_quantity
+        if order.side == 'buy' and remaining > 0 and getattr(self, 'account', None):
+            _unit_px = float(getattr(order, '_deducted_unit_px', 0.0) or 0.0)
+            if _unit_px > 0.0:
+                _fx_r = float(getattr(order, '_deducted_fx_rate', 1.0) or 1.0)
+                _is_us_d = bool(getattr(order, '_deducted_is_us', False))
+                _refund_usd = remaining * _unit_px
+                _refund_krw = (_refund_usd * _fx_r) if _is_us_d else _refund_usd
+                self.account.cash = float(self.account.cash) + _refund_krw
+                if _is_us_d:
+                    if hasattr(self, 'us_cash_usd'):
+                        self.us_cash_usd = float(getattr(self, 'us_cash_usd', 0.0)) + _refund_usd
+                    if hasattr(self, 'direct_usd_cash'):
+                        self.direct_usd_cash = float(getattr(self, 'direct_usd_cash', 0.0)) + _refund_usd
+                    if hasattr(self, 'us_buying_power_usd'):
+                        self.us_buying_power_usd = float(getattr(self, 'us_buying_power_usd', 0.0)) + _refund_usd
+                setattr(order, '_deducted_unit_px', 0.0)
         if fallback == 'market' and remaining > 0:
             market_order = Order(order_id=self._gen_order_id(), ticker=order.ticker, side=order.side, quantity=remaining, price=0, order_type='market', exchange=order.exchange)
             result = self._api_order(market_order)
@@ -2602,16 +2625,27 @@ class KISTraderAdapter:
         
         if cur_p <= max_acceptable_price:
             logger.warning(f"  ⚡ [Time-Bounded Pegging] {ticker} {elapsed:.1f}초 미체결 ➔ 허용범위(${max_acceptable_price:.2f}) 이내 현재가(${cur_p:.2f})로 즉시 정정 체결 집행!")
+            repeg_qty = int(quantity)
             if order_no:
+                cancel_ok = False
                 try:
-                    if is_overseas:
-                        self.cancel_us_order(order_no, ticker)
-                    else:
-                        self.cancel_order(order_no)
+                    c_res = self.cancel_us_order(order_no, ticker) if is_overseas else self.cancel_order(order_no)
+                    st_res = self.check_order_status(order_no, is_us=is_overseas, ticker=ticker) or {}
+                    st_code = st_res.get('status')
+                    filled_so_far = int(float(st_res.get('filled_qty', 0) or 0))
+                    if st_code == 'filled' or filled_so_far >= repeg_qty:
+                        return {'action': 'none', 'reason': '원주문 이미 전량 체결 완료'}
+                    repeg_qty = max(0, repeg_qty - filled_so_far)
+                    cancel_ok = st_code in ('canceled', 'rejected') or (
+                        bool((c_res or {}).get('success', False)) and st_code not in ('unknown', 'error', 'pending', 'submitted')
+                    )
                 except Exception as e_cncl:
                     logger.warning(f"  ⚠️ [Time-Bounded Pegging] 기존 주문({order_no}) 취소 시도 예외 발생: {e_cncl}")
-            
-            repeg_res = self.buy(ticker=ticker, quantity=quantity, price=cur_p, order_type='limit', exchange='NYSE' if is_overseas else 'KRX')
+                    cancel_ok = False
+                if not cancel_ok or repeg_qty <= 0:
+                    return {'action': 'none', 'reason': '원주문 취소 미확정으로 중복 재발주 차단'}
+
+            repeg_res = self.buy(ticker=ticker, quantity=repeg_qty, price=cur_p, order_type='limit', exchange='NYSE' if is_overseas else 'KRX')
             return {
                 'action': 'repeg', 
                 'target_price': cur_p, 

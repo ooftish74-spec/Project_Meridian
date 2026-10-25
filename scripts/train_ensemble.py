@@ -1305,20 +1305,21 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             and eval_X is not val_X and train_X.shape[1] > _regime_inv_min_keep):
         try:
             _mvol = np.asarray(train_date_market_vol, dtype=float)
-            _q50, _q75 = np.quantile(_mvol, [0.50, 0.75])
-            _lo_v, _hi_v, _top_v = (_mvol <= _q50), (_mvol > _q50), (_mvol > _q75)
+            _q33, _q67, _q80 = np.quantile(_mvol, [0.33, 0.67, 0.80])
+            _lo_v, _mid_v, _hi_v, _top_v = (_mvol <= _q33), ((_mvol > _q33) & (_mvol <= _q67)), (_mvol > _q67), (_mvol > _q80)
             _y_tr_b = 2.0 * np.asarray(train_y, dtype=float) - 1.0
-            _y_ca_b = 2.0 * np.asarray(cal_y, dtype=float) - 1.0
+            if sample_weights is not None and len(sample_weights) == len(_y_tr_b):
+                _y_tr_b = _y_tr_b * np.asarray(sample_weights, dtype=float)
             _nf = train_X.shape[1]
             _c_lo = np.array([np.corrcoef(train_X[_lo_v, j], _y_tr_b[_lo_v])[0, 1] for j in range(_nf)])
+            _c_mid = np.array([np.corrcoef(train_X[_mid_v, j], _y_tr_b[_mid_v])[0, 1] for j in range(_nf)])
             _c_hi = np.array([np.corrcoef(train_X[_hi_v, j], _y_tr_b[_hi_v])[0, 1] for j in range(_nf)])
             _c_q4 = np.array([np.corrcoef(train_X[_top_v, j], _y_tr_b[_top_v])[0, 1] for j in range(_nf)])
-            _c_ca = np.array([np.corrcoef(cal_X[:, j], _y_ca_b)[0, 1] for j in range(_nf)])
             _c_lo = np.nan_to_num(_c_lo, nan=0.0)
+            _c_mid = np.nan_to_num(_c_mid, nan=0.0)
             _c_hi = np.nan_to_num(_c_hi, nan=0.0)
             _c_q4 = np.nan_to_num(_c_q4, nan=0.0)
-            _c_ca = np.nan_to_num(_c_ca, nan=0.0)
-            _inv_mask = (_c_lo * _c_hi > 0.0) & (_c_hi * _c_q4 > 0.0) & (_c_hi * _c_ca > 0.0)
+            _inv_mask = (_c_lo * _c_hi > 0.0) & (_c_mid * _c_hi > 0.0) & (_c_hi * _c_q4 > 0.0)
             if int(np.sum(_inv_mask)) >= _regime_inv_min_keep:
                 _inv_keep_indices = np.where(_inv_mask)[0]
         except Exception as _inv_e:
@@ -1364,17 +1365,14 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         cal_X = cal_X[:, keep_indices]
         eval_X = eval_X[:, keep_indices]
 
-        # GBR 재학습 (축소된 피처로)
+        # GBR 재학습 (축소된 피처로, cal_X 누수 없이 순수 train_X 사용)
         gbr = GradientBoostingClassifier(**gbr.get_params())
-        if _inv_keep_indices is not None and eval_X is not val_X and len(cal_X) > 0:
-            gbr.fit(np.vstack([train_X, cal_X]), np.concatenate([train_y, cal_y]))
-        else:
-            gbr.fit(train_X, train_y, sample_weight=sample_weights)
+        gbr.fit(train_X, train_y, sample_weight=sample_weights)
         logger.info(f"  🔄 GBR 재학습 완료 ({len(keep_indices)} 피처)")
 
-    _tree_fit_X = np.vstack([train_X, cal_X]) if (_inv_keep_indices is not None and eval_X is not val_X and len(cal_X) > 0) else train_X
-    _tree_fit_y = np.concatenate([train_y, cal_y]) if (_inv_keep_indices is not None and eval_X is not val_X and len(cal_X) > 0) else train_y
-    _tree_fit_sw = None if (_inv_keep_indices is not None and eval_X is not val_X and len(cal_X) > 0) else sample_weights
+    _tree_fit_X = train_X
+    _tree_fit_y = train_y
+    _tree_fit_sw = sample_weights
 
     # [S2 Upgrade] Task 3: Probability Calibration (FrozenEstimator 기반 prefit 보정)
     calibration_method = cfg.get('ml.calibration_method', 'isotonic')
@@ -1600,12 +1598,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             tree_blend=_eb_blend,
             vol_cols=_vol_idx,
         )
-        if eval_X is not val_X and len(cal_X) > 0 and _cal_sw_slice is not None:
-            _eb_X = np.vstack([train_X, cal_X])
-            _eb_y = np.concatenate([train_y, cal_y])
-            _eb_sw = np.concatenate([sample_weights, _cal_sw_slice]) if sample_weights is not None else None
-        else:
-            _eb_X, _eb_y, _eb_sw = train_X, train_y, sample_weights
+        _eb_X, _eb_y, _eb_sw = train_X, train_y, sample_weights
         eb_model.fit(_eb_X, _eb_y, sample_weight=_eb_sw)
         models['eb_ic'] = eb_model
         logger.info(f"  📊 CrossSectionalEBClassifier 학습 완료 (top_k={_eb_topk}, ortho={_eb_ortho})")

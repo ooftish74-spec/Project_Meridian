@@ -725,10 +725,11 @@ def _phase_aftermarket():
     except Exception as e:
         logger.error(f"  s4_advisory 갱신 실패: {e}", exc_info=True)
 
-    # ★ S4 Advisory BROKERAGE 자동 체결: auto_execute=True 주문 → shadow_portfolio 반영
+    # ★ S4 Advisory BROKERAGE 자동 체결: auto_execute=True 주문 → shadow_portfolio 반영 (Live 모드 제외)
     try:
         _adv_path = _PROJECT_ROOT / 'results' / 's4_advisory_recommendations.json'
-        if _adv_path.exists():
+        _is_live_s4_auto = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live'
+        if _adv_path.exists() and not _is_live_s4_auto:
             _adv = json.loads(_adv_path.read_text())
             _brk_auto = _adv.get('brokerage_auto', [])
             if _brk_auto:
@@ -1956,7 +1957,8 @@ def _phase_intraday():
                             import logging
                             logging.getLogger(__name__).debug(f'Targeted fallback: {e}')
 
-                        sell_orders = _mgr.check_exit_conditions(_regime)
+                        _is_live_intra_sp = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live'
+                        sell_orders = _mgr.check_exit_conditions(_regime) if not _is_live_intra_sp else []
 
                         if sell_orders:
                             # S1 매도 (ETF 수수료)

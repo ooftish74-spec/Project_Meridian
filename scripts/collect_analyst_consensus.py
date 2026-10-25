@@ -76,8 +76,22 @@ def get_target_tickers(include_qvm_top: bool = True) -> List[str]:
     sources = {}  # 소스별 카운트
 
     # ── 1. 포트폴리오 보유 종목 ──
+    kp_path = _RESULTS / 'kis_portfolio.json'
+    if kp_path.exists():
+        try:
+            kp = json.loads(kp_path.read_text())
+            before = len(tickers)
+            for pk, pos in (kp.get('holdings') or {}).items():
+                t = (pos.get('ticker', pk) if isinstance(pos, dict) else pk)
+                t = str(t).replace('.KS', '').replace('.KQ', '').zfill(6)
+                if t not in _ETF_TICKERS and len(t) == 6 and t.isdigit():
+                    tickers.add(t)
+            sources['포트폴리오'] = len(tickers) - before
+        except Exception as e:
+            logger.warning(f"  라이브 포트폴리오 로드 실패: {e}")
+
     sp_path = _RESULTS / 'shadow_portfolio.json'
-    if sp_path.exists():
+    if not tickers and sp_path.exists():
         try:
             sp = json.loads(sp_path.read_text())
             before = len(tickers)

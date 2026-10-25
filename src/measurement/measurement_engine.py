@@ -611,6 +611,11 @@ class MeasurementEngine:
         cfg = DynamicConfig()
         positions = dict(sp.get('positions', {}) or {})
         raw_trade_history = list(sp.get('trade_history', []) or [])
+        if any(isinstance(t, dict) and t.get('source') == 'broker_fill_import' for t in raw_trade_history):
+            raw_trade_history = [
+                t for t in raw_trade_history
+                if isinstance(t, dict) and t.get('source') in ('broker_fill_import', 'kis_live', 'corporate_ledger', 'execution_log')
+            ]
         ledger_map = _load_ledger_map(RESULTS)
         kis_data = _load('kis_portfolio.json', {})
         fx_rate = _resolve_live_fx(kis_data if isinstance(kis_data, dict) else {}, RESULTS)
@@ -650,7 +655,9 @@ class MeasurementEngine:
         kis_holdings = kis_data.get('holdings') if isinstance(kis_data, dict) and isinstance(kis_data.get('holdings'), dict) else {}
         if not kis_holdings and isinstance(kis_data, dict) and isinstance((kis_data.get('account') or {}).get('positions'), dict):
             kis_holdings = kis_data['account']['positions']
-        if kis_holdings and not positions:
+        if kis_holdings:
+            stream_stats.clear()
+            stream_pos_lists.clear()
             for tk, h in kis_holdings.items():
                 if not isinstance(h, dict):
                     continue

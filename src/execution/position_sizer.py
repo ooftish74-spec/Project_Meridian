@@ -184,19 +184,23 @@ class PositionSizer:
             return {'approved': False, 'final_size': 0.0, 'kelly_size': kelly_size, 'ev_pct': round(mu_pct, 4), 'friction_pct': round(friction_pct, 4), 'ev_margin': round(ev_margin, 4), 'vix_scale': 1.0, 'reason': reason, 'drop_reason': 'ev_lt_friction'}
         base_snr_threshold = 0.5
         snr_threshold = base_snr_threshold * math.exp((vix_val - vix_neutral) / 20.0)
+        snr = abs(mu_pct) / sigma_pct
+        snr_scale = min(1.0, snr / snr_threshold) if snr_threshold > 0.0 else 1.0
         
         # [Dynamic Cornish-Fisher Non-Linear Kelly] 실시간 수익률 왜도/첨도 롤링 분포 동적 적용
         _skew_d = pget('sizer.default_skew', -0.2)
         _kurt_d = pget('sizer.default_kurtosis', 3.0)
-        S_skew = float(market_data.get('skewness', market_data.get('rolling_skew_20', _skew_d)) or _skew_d)
-        K_kurt = float(market_data.get('kurtosis', market_data.get('rolling_kurt_20', _kurt_d)) or _kurt_d)
+        _raw_sk = market_data.get('skewness', market_data.get('rolling_skew_20'))
+        _raw_kt = market_data.get('kurtosis', market_data.get('rolling_kurt_20'))
+        S_skew = float(_raw_sk) if _raw_sk is not None else float(_skew_d)
+        K_kurt = float(_raw_kt) if (_raw_kt is not None and float(_raw_kt) > 0.0) else float(_kurt_d)
         raw_size = kelly_size
         mu_dec = mu_pct / 100.0
         sigma_dec = max(0.005, sigma_pct / 100.0)
         _excess_kurt = max(0.0, K_kurt - 3.0)
-        cf_penalty = 1.0 - S_skew * mu_dec / (3.0 * sigma_dec) - _excess_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
+        cf_penalty = 1.0 + S_skew * mu_dec / (3.0 * sigma_dec) - _excess_kurt * (mu_dec ** 2) / (4.0 * (sigma_dec ** 2))
         half_kelly_factor = pget('sizer.half_kelly_factor', 0.5)
-        vix_scale = (1.0 / market_var) * kelly_stale_scale
+        vix_scale = (1.0 / market_var) * kelly_stale_scale * snr_scale
         final_size = raw_size * vix_scale * max(pget('sizer.cf_penalty_floor', 0.1), min(1.0, cf_penalty)) * half_kelly_factor
         
         # ★ 대표님 지시 반영: 횡보장(caution) 미세 정찰대(Probe Sizing = 3% NAV) 공격적 투입!

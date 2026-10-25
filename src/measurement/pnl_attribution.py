@@ -84,6 +84,11 @@ class PnLAttribution:
                     continue
                 data = json.loads(fpath.read_text(encoding='utf-8'))
                 raw_trades = data.get('closed_trades') or data.get('trade_history') or []
+                if fname == 'shadow_portfolio.json' and any(isinstance(t, dict) and t.get('source') == 'broker_fill_import' for t in raw_trades):
+                    raw_trades = [
+                        t for t in raw_trades
+                        if isinstance(t, dict) and t.get('source') in ('broker_fill_import', 'kis_live', 'corporate_ledger', 'execution_log')
+                    ]
                 fx = float(
                     data.get('fx_rate')
                     or (data.get('account') or {}).get('fx_rate')

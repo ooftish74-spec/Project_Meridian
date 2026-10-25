@@ -300,7 +300,7 @@ class S2MLAlphaStream(BaseStream):
         if drift_mult < 1.0:
             logger.warning(f"  ⚠️ S2 Drift 감지: conf×{drift_mult:.2f} 적용 (accuracy={drift_result.get('accuracy', 0):.3f})")
             for s in scored:
-                s['up_prob'] = round(s['up_prob'] * drift_mult, 4)
+                s['up_prob'] = round(0.5 + drift_mult * (s['up_prob'] - 0.5), 4)
                 expected_win = pget('ml.expected_win_pct', 0.05)
                 expected_loss = pget('ml.expected_loss_pct', 0.03)
                 s['expected_value'] = round(s['up_prob'] * expected_win - (1 - s['up_prob']) * expected_loss, 4)
@@ -334,7 +334,7 @@ class S2MLAlphaStream(BaseStream):
                         ic_decay_applied = True
                         logger.warning(f'  ⚠️ S2 IC 음수 감지: IC={ic_value:.4f} < {ic_neg_threshold}, confidence ×{ic_neg_decay} 감쇄 적용')
                         for s in scored:
-                            s['up_prob'] = round(s['up_prob'] * ic_neg_decay, 4)
+                            s['up_prob'] = round(0.5 + ic_neg_decay * (s['up_prob'] - 0.5), 4)
                             s['expected_value'] = round(self._dynamic_ev(s, s['up_prob']), 4)
                             s['ic_negative_adjusted'] = True
                         retrain_file = _PROJECT_ROOT / 'results' / 'retrain_request.json'
@@ -1120,7 +1120,7 @@ class S2MLAlphaStream(BaseStream):
                 if ood_score > pget('s2.ood_threshold', 0.7):
                     ood_discount = pget('s2.ood_discount', 0.5)
                     logger.debug(f"  S2: OOD 감지 {stock['ticker']} (score={ood_score:.3f}) → conf×{ood_discount}")
-                    up_prob *= ood_discount
+                    up_prob = 0.5 + ood_discount * (up_prob - 0.5)
                     stock['ood_score'] = round(ood_score, 4)
                     stock['ood_discounted'] = True
                 conf_lower, conf_upper = (None, None)

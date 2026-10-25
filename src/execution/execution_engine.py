@@ -938,9 +938,11 @@ class ExecutionEngine:
             fills = res.get('fills', [])
             if fills:
                 for fill in fills:
-                    if fill.status in ('filled', 'filled_market_fallback', 'partially_filled'):
+                    _f_qty = int(getattr(fill, 'filled_quantity', 0) or 0)
+                    if fill.status in ('filled', 'filled_market_fallback', 'partially_filled') or _f_qty > 0:
                         result.n_filled += 1
-                        amount = fill.filled_price * fill.filled_quantity
+                        _f_px = float(getattr(fill, 'filled_price', 0.0) or order.get('price', 0.0) or 0.0)
+                        amount = _f_px * _f_qty
                         if action in ('buy', 'add_on'):
                             result.total_buy_amount += amount
                             if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
@@ -948,7 +950,7 @@ class ExecutionEngine:
                                     from src.execution.position_ledger import PositionLedgerManager
                                     PositionLedgerManager().record_entry(
                                         str(ticker),
-                                        entry_price=float(fill.filled_price or order.get('price', 0.0) or 0.0),
+                                        entry_price=_f_px,
                                         stream_id=str(stream_id or ''),
                                         strategy=str(order.get('strategy') or ''),
                                         track=str(order.get('track') or ''),

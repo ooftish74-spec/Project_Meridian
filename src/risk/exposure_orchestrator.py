@@ -239,14 +239,20 @@ class ExposureOrchestrator:
                 if _returns is not None and _returns.shape[1] > 0:
                     _weights = np.array([_positions[t].get('weight', 1.0 / len(_vol_keys)) for t in _vol_keys[:_returns.shape[1]]])
                     _weights = _weights / _weights.sum() if _weights.sum() > 0 else _weights
-                    _port_rets = _returns @ _weights
-                    _ewma_lambda = pget('risk.ewma_lambda', 0.94)
-                    _ewma_var = _var_calc._ewma_variance(_port_rets, _ewma_lambda)
-                    _down_rets = np.minimum(0.0, _port_rets)
-                    _ewma_down_var = _var_calc._ewma_variance(_down_rets, _ewma_lambda)
-                    _tot_vol = float(np.sqrt(_ewma_var)) * np.sqrt(252)
-                    _down_vol = float(np.sqrt(2.0 * _ewma_down_var)) * np.sqrt(252)
-                    _realized_vol = min(_tot_vol, _down_vol) if _down_vol > 0.0 else _tot_vol
+                    _port_rets = np.asarray(_returns @ _weights, dtype=float)
+                    _ewma_lambda = float(pget('risk.ewma_lambda', 0.94))
+                    _ewma_var = float(_var_calc._ewma_variance(_port_rets, _ewma_lambda))
+                    _down_rets_sq = np.square(np.minimum(0.0, _port_rets))
+                    _n_r = len(_down_rets_sq)
+                    if _n_r > 0:
+                        _ewma_w = (1.0 - _ewma_lambda) * np.power(_ewma_lambda, np.arange(_n_r - 1, -1, -1, dtype=float))
+                        _w_sum = float(np.sum(_ewma_w))
+                        _ewma_down_var = float(np.dot(_ewma_w, _down_rets_sq) / _w_sum) if _w_sum > 0.0 else float(np.mean(_down_rets_sq))
+                    else:
+                        _ewma_down_var = 0.0
+                    _tot_vol = float(np.sqrt(max(0.0, _ewma_var))) * np.sqrt(252)
+                    _down_vol = float(np.sqrt(max(0.0, 2.0 * _ewma_down_var))) * np.sqrt(252)
+                    _realized_vol = max(_tot_vol, _down_vol)
                 else:
                     _realized_vol = None
             else:
@@ -302,6 +308,7 @@ class ExposureOrchestrator:
             target = round(target * data_penalty, 4)
             logger.info(f"  [Phase 62] 데이터 결손 패널티 적용: {_pre_penalty:.4f} × {data_penalty:.2f} = {target:.4f}")
             reasons.append(f"DataDegradation(x{data_penalty:.1f})")
+        reasons.append(f"FinalTarget={min(1.0, target):.3f}")
         components['data_penalty'] = data_penalty
         result = {'target_exposure': min(1.0, target), 'target_raw': target, 'sigma_adjustment': round(sigma_adj, 3), 'components': components, 'reason': ' + '.join(reasons) if reasons else 'Normal conditions', 'timestamp': datetime.now().isoformat()}
         try:

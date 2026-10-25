@@ -66,7 +66,7 @@ _DUAL_HORIZON_LONG_BLOCKS = 8
 _DUAL_HORIZON_MED_BLOCKS = 4
 _DUAL_HORIZON_STD_REG = 0.02
 _DUAL_HORIZON_ALPHA_MED = 0.85
-_NEG_CONVEXITY_DAMP = 0.0
+_NEG_CONVEXITY_DAMP = 0.25
 
 
 def cross_sectional_rank_z_matrix(
@@ -274,8 +274,8 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
                 cons = np.maximum(np.mean(b_ic > 0.0, axis=0), np.mean(b_ic < 0.0, axis=0))
                 return m_ic * (cons ** 2) / s_ic
 
-            wl = _block_eb_raw(X_arr, sign_y_c, int(_DUAL_HORIZON_LONG_BLOCKS))
-            wm = _block_eb_raw(X_arr[-dual_min_rows:], sign_y_c[-dual_min_rows:], int(_DUAL_HORIZON_MED_BLOCKS))
+            wl = _block_eb_raw(X_arr, yc, int(_DUAL_HORIZON_LONG_BLOCKS))
+            wm = _block_eb_raw(X_arr[-dual_min_rows:], yc[-dual_min_rows:], int(_DUAL_HORIZON_MED_BLOCKS))
             agree = (wl * wm > 0.0).astype(np.float64)
             alpha_m = float(_DUAL_HORIZON_ALPHA_MED)
             w_comb = ((1.0 - alpha_m) * wl + alpha_m * wm) * agree
@@ -284,7 +284,30 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
             if np.any(w_comb > _EPS):
                 w_comb = np.where(w_comb < 0.0, w_comb * float(_NEG_CONVEXITY_DAMP), w_comb)
             k = max(1, min(int(self.top_k), p))
-            top_idx = np.argsort(np.abs(w_comb))[::-1][:k]
+            order = np.argsort(np.abs(w_comb))[::-1]
+            collin_thr = float(_COLLINEAR_SKIP_THRESHOLD)
+            x_centered = X_arr - np.mean(X_arr, axis=0, keepdims=True)
+            x_stds = np.std(x_centered, axis=0)
+            selected = []
+            for cand in order:
+                j = int(cand)
+                if x_stds[j] <= std_eps:
+                    continue
+                is_collinear = False
+                for m in selected:
+                    corr_jm = float(np.dot(x_centered[:, j], x_centered[:, m])) / (
+                        float(n) * float(x_stds[j]) * float(x_stds[m])
+                    )
+                    if abs(corr_jm) > collin_thr:
+                        is_collinear = True
+                        break
+                if not is_collinear:
+                    selected.append(j)
+                    if len(selected) >= k:
+                        break
+            if not selected:
+                selected = [int(order[0])]
+            top_idx = np.asarray(selected, dtype=int)
             self.top_idx_ = top_idx
             raw_w = np.zeros(p, dtype=np.float64)
             raw_w[top_idx] = w_comb[top_idx]

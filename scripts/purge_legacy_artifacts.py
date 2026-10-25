@@ -43,11 +43,66 @@ def purge_legacy_artifacts():
         "shadow_report_202607*.json",
     ]
 
-    # 프로젝트 루나 archive/backups 디렉터리 영구 삭제
-    for p_dir in [PROJECT_ROOT / "archive", PROJECT_ROOT / "backups", PROJECT_ROOT / ".legacy_quarantine"]:
+    # 프로젝트 루트 archive/backups/scratch/catboost_info 디렉터리 영구 삭제
+    for p_dir in [
+        PROJECT_ROOT / "archive",
+        PROJECT_ROOT / "backups",
+        PROJECT_ROOT / ".legacy_quarantine",
+        PROJECT_ROOT / "scratch",
+        PROJECT_ROOT / "catboost_info",
+    ]:
         if p_dir.exists():
             shutil.rmtree(p_dir)
-            logger.info(f"  🧹 [Permanent Purge] 루티 디렉터리 즉시 영구 삭제: {p_dir.name}")
+            purged_count += 1
+            logger.info(f"  🧹 [Permanent Purge] 루트 레거시 디렉터리 즉시 영구 삭제: {p_dir.name}")
+
+    # 레거시 락 파일 및 임시 파일 삭제
+    stale_files = [
+        RESULTS_DIR / ".lock_shadow_portfolio.lock",
+        RESULTS_DIR / "virtual_ledger.json.lock",
+        RESULTS_DIR / "us_night_holdings.json.lock",
+    ]
+    for sf in stale_files:
+        if sf.exists():
+            try:
+                sf.unlink()
+                purged_count += 1
+                logger.info(f"  🧹 [Permanent Purge] 레거시 락 파일 삭제: {sf.name}")
+            except Exception as e:
+                logger.error(f"  ⚠️ {sf.name} 삭제 실패: {e}")
+
+    for sub_tmp in list((RESULTS_DIR / "shadow_trades").glob("*.tmp*")) if (RESULTS_DIR / "shadow_trades").exists() else []:
+        try:
+            sub_tmp.unlink()
+            purged_count += 1
+            logger.info(f"  🧹 [Permanent Purge] 임시 파일 삭제: {sub_tmp}")
+        except Exception:
+            pass
+
+    data_dir = PROJECT_ROOT / "data"
+    if data_dir.exists():
+        for d_tmp in list(data_dir.rglob("*.tmp*")):
+            try:
+                d_tmp.unlink()
+                purged_count += 1
+                logger.info(f"  🧹 [Permanent Purge] 데이터 임시 파일 삭제: {d_tmp.name}")
+            except Exception:
+                pass
+
+    # 소스(.py)가 삭제된 고아 .pyc 바이트코드 파일 정리
+    for code_root in [PROJECT_ROOT / "scripts", PROJECT_ROOT / "src", PROJECT_ROOT / "tests"]:
+        if not code_root.exists():
+            continue
+        for pyc in list(code_root.rglob("__pycache__/*.pyc")):
+            stem = pyc.name.split(".")[0]
+            src_py = pyc.parent.parent / f"{stem}.py"
+            if not src_py.exists():
+                try:
+                    pyc.unlink()
+                    purged_count += 1
+                    logger.info(f"  🧹 [Permanent Purge] 고아 바이트코드 삭제: {pyc.name}")
+                except Exception:
+                    pass
 
     for pattern in legacy_patterns:
         for item in RESULTS_DIR.glob(pattern):

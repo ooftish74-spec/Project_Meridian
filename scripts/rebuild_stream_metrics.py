@@ -117,6 +117,7 @@ from src.execution.position_ledger import (
     _S3_MACRO_TICKERS,
     _S6_US_EQUITY_TICKERS,
     _S5_KR_ETF_TICKERS,
+    _S5_KR_CASH_PARKING_ETFS,
     _S3_B_BUFFETT_TICKERS,
 )
 _INVALID_STREAM_IDS = {"", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT", "Unassigned", "unassigned", "None"}
@@ -136,12 +137,14 @@ def _infer_canonical_stream(ticker: str, raw_stream: str = "", ledger_map: dict 
     if t_sym in _S3_B_BUFFETT_TICKERS or trk == "TRACK_2_BUFFETT_QVM":
         if cand in _INVALID_STREAM_IDS or cand == "S2":
             return "S3_B"
-    if cand in _INVALID_STREAM_IDS or (cand == "S2" and t_sym in (_S3_MACRO_TICKERS | _S6_US_EQUITY_TICKERS | _S5_KR_ETF_TICKERS)):
+    if cand in _INVALID_STREAM_IDS or (cand == "S2" and t_sym in (_S3_MACRO_TICKERS | _S6_US_EQUITY_TICKERS | _S5_KR_CASH_PARKING_ETFS)):
         if t_sym in _S3_MACRO_TICKERS:
             return "S3"
         if t_sym in _S6_US_EQUITY_TICKERS:
             return "S6"
-        if t_sym in _S5_KR_ETF_TICKERS:
+        if t_sym in _S5_KR_CASH_PARKING_ETFS:
+            return "S5"
+        if t_sym in _S5_KR_ETF_TICKERS and t_sym in (ledger_map or {}):
             return "S5"
         if t_sym in _S3_B_BUFFETT_TICKERS:
             return "S3_B"
@@ -347,10 +350,12 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
                         df = df.set_index('date')
                     closes = df['close'].dropna().astype(float)
                     rets = closes.pct_change().dropna()
-                    if entry_date and len(rets) > 5:
+                    if entry_date:
                         filtered = rets[rets.index.astype(str).str[:10] >= entry_date]
                         if len(filtered) >= 2:
                             rets = filtered
+                        else:
+                            continue
                     rets = rets.tail(30)
                     for idx_dt, r_val in rets.items():
                         d_key = str(idx_dt)[:10]
@@ -463,6 +468,11 @@ def compute_stream_metrics(results_dir: Path = None):
     sp = _load_json_safe(sp_path) if results_dir else load_shadow_portfolio()
     positions = sp.get('positions', {}) if isinstance(sp.get('positions'), dict) else {}
     raw_trade_history = sp.get('trade_history', []) if isinstance(sp.get('trade_history'), list) else []
+    if any(isinstance(t, dict) and t.get('source') == 'broker_fill_import' for t in raw_trade_history):
+        raw_trade_history = [
+            t for t in raw_trade_history
+            if isinstance(t, dict) and t.get('source') in ('broker_fill_import', 'kis_live', 'corporate_ledger', 'execution_log')
+        ]
     shadow_trades_daily = _load_shadow_trades() if not results_dir else {}
 
     ledger_map = _load_ledger_map(rdir)
@@ -498,7 +508,7 @@ def compute_stream_metrics(results_dir: Path = None):
     if not kis_holdings and isinstance((kis_data.get('account') or {}).get('positions'), dict):
         kis_holdings = kis_data['account']['positions']
 
-    if kis_holdings:
+    if kis_holdings or kis_data.get('kis_mode') == 'live':
         stream_positions.clear()
         for tk, h in kis_holdings.items():
             if not isinstance(h, dict):
@@ -613,7 +623,9 @@ def compute_stream_metrics(results_dir: Path = None):
         if s and s not in _INVALID_STREAM_IDS and s not in streams:
             streams.append(s)
 
-    snapshots = sp.get('daily_snapshots', []) if isinstance(sp.get('daily_snapshots'), list) else []
+    snapshots = []
+    if kis_data.get('kis_mode') != 'live':
+        snapshots = sp.get('daily_snapshots', []) if isinstance(sp.get('daily_snapshots'), list) else []
     if not snapshots:
         nav_hist = _load_json_safe(rdir / 'live_nav_history.json') or _load_json_safe(rdir / 'nav_history.json')
         nav_rows = nav_hist.get('rows', []) if isinstance(nav_hist, dict) else (nav_hist if isinstance(nav_hist, list) else [])
@@ -629,6 +641,8 @@ def compute_stream_metrics(results_dir: Path = None):
                     'regime': 'caution',
                 })
                 prev_nav = c_nav
+        if not snapshots and isinstance(sp.get('daily_snapshots'), list):
+            snapshots = sp.get('daily_snapshots', [])
 
     for sid in streams:
         trades = stream_trades.get(sid, [])
@@ -681,7 +695,7 @@ def compute_stream_metrics(results_dir: Path = None):
                 daily_returns.append(rec_r)
                 daily_costs.append(0.0)
                 regimes.append('caution')
-        elif len(daily_returns) < 2 and not pos_list and results_dir is None:
+        elif len(daily_returns) < 2 and not pos_list and trades and results_dir is None:
             reconstructed = _reconstruct_stream_factor_returns(sid, _ROOT)
             for rec_r in reconstructed:
                 daily_returns.append(rec_r)

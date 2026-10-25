@@ -295,3 +295,146 @@ def test_residual_risk_prescriptions_cold_start_shrinkage_and_sigma_tighten_only
     res = eo.calculate(sentiment={"regime": "caution", "vix": 19.45, "vkospi": 23.05, "ois": 63.1, "options_skew": 0.1})
     assert float(res["sigma_adjustment"]) <= 1.0
 
+
+def test_wave9_master_forensic_closed_form_invariants(tmp_path, monkeypatch):
+    """Verify Wave 9 forensic closed-form fixes across CRO, Sizer, Adapter, Allocator, Evolver, and EB ML."""
+    import threading
+    import time
+    from src.allocation.alpha_allocator import AlphaAllocator
+    from src.execution import _kis_adapter as ka
+    from src.execution._kis_adapter import Order
+    from src.execution.position_sizer import PositionSizer
+    from src.learning import genetic_rule_evolver as gre_mod
+    from src.learning.genetic_rule_evolver import GeneticRuleEvolver
+    from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
+    from src.risk.cro_final_gate import CROFinalGate
+
+    # 1. [RISK-1] CROFinalGate gross exposure sum(|w|) & non-inverted inverse ETF stress test
+    gate = CROFinalGate(max_portfolio_exposure=0.90, max_daily_var_pct=0.99)
+    current_positions = {
+        "069500": {"qty": 50, "current_price": 100_000.0, "eval_krw": 5_000_000.0},
+    }
+    inv_buy = [{"ticker": "114800", "action": "buy", "shares": 600, "price": 5_000.0}]  # 3,000,000 KRW (0.30)
+    _, audit = gate.evaluate_and_scale_orders(
+        orders=inv_buy,
+        portfolio_value=10_000_000.0,
+        current_positions=current_positions,
+        market_data={"vix": 20.0},
+    )
+    # Net directional exposure = |0.50 - 0.30| = 0.20; Gross exposure = |0.50| + |-0.30| = 0.80
+    assert audit["proposed_exposure_pct"] == pytest.approx(0.20, rel=1e-9)
+    assert audit["proposed_gross_exposure_pct"] == pytest.approx(0.80, rel=1e-9)
+    # Pure inverse position (no long) must have | -0.30 | = 0.30 exposure, NEVER max(0, -0.30) = 0.0
+    _, audit_pure_inv = gate.evaluate_and_scale_orders(
+        orders=inv_buy,
+        portfolio_value=10_000_000.0,
+        current_positions={},
+        market_data={"vix": 20.0},
+    )
+    assert audit_pure_inv["proposed_exposure_pct"] == pytest.approx(0.30, rel=1e-9)
+
+    # 2. [SIZER-1] Cornish-Fisher skewness sign: negative skew S < 0 must penalize (reduce) size vs S = 0
+    sizer = PositionSizer()
+    sig_neutral_skew = {
+        "ticker": "005930",
+        "stream_id": "S2",
+        "confidence": 0.75,
+        "tp_pct": 8.0,
+        "sl_pct": 4.0,
+        "kelly_size": 0.20,
+        "market_data": {"skewness": 0.0, "kurtosis": 3.0},
+    }
+    sig_neg_skew = {
+        "ticker": "005930",
+        "stream_id": "S2",
+        "confidence": 0.75,
+        "tp_pct": 8.0,
+        "sl_pct": 4.0,
+        "kelly_size": 0.20,
+        "market_data": {"skewness": -0.6, "kurtosis": 3.0},
+    }
+    r_zero = sizer.compute(sig_neutral_skew, portfolio_value=100_000_000.0, regime="bull", vix=17.5)
+    r_neg = sizer.compute(sig_neg_skew, portfolio_value=100_000_000.0, regime="bull", vix=17.5)
+    # Hand-computed: mu_pct = 0.75*8 - 0.25*4 = 5.0% (0.05), sigma_dec = 0.04, S = -0.6
+    # cf_penalty = 1 + (-0.6)*(0.05)/(3*0.04) = 1 - 0.25 = 0.75
+    assert r_neg["final_size"] == pytest.approx(round(r_zero["final_size"] * 0.75, 4), rel=1e-6)
+    assert r_neg["final_size"] < r_zero["final_size"]
+
+    # 3. [EXEC-1] wait_for_fill blocks market fallback when cancel_res.success=True but post_status='unknown',
+    #    and refunds unfilled buy cash on confirmed timeout cancel
+    a = ka.KISTraderAdapter.__new__(ka.KISTraderAdapter)
+    a._lock = threading.RLock()
+    a.mode = "paper"
+    a.orders = []
+    a.positions = {}
+    a.trade_history = []
+    a._access_token = "TEST"
+    a._cb = None
+    a._dlq = None
+    a.base_url = "https://example.invalid"
+    a.account_no = "12345678-01"
+    a.account = type("A", (), {"cash": 9_500_000.0, "total_equity": 10_000_000.0})()
+    a._recently_canceled_odnos = set()
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    # Case A: cancel_res says success=True, but post_status is 'unknown' -> must NOT fire market fallback
+    monkeypatch.setattr(a, "check_order_status", lambda *args, **kw: {"status": "unknown", "filled_qty": 0})
+    monkeypatch.setattr(a, "cancel_order", lambda *args, **kw: {"success": True, "message": "ack"})
+    fallback_calls = []
+    monkeypatch.setattr(a, "_api_order", lambda o: fallback_calls.append(o) or o)
+    o_ambig = Order(order_id="OD_AMBIG", ticker="005930", side="buy", quantity=10, price=50_000.0, order_type="limit", status="submitted")
+    res_ambig = a.wait_for_fill(o_ambig, timeout_sec=0, fallback="market")
+    assert res_ambig.status == "unknown"
+    assert fallback_calls == []
+
+    # Case B: confirmed cancel after 4/10 partial fill refunds 6 * 50,000 = 300,000 KRW to account.cash
+    monkeypatch.setattr(a, "check_order_status", lambda *args, **kw: {"status": "canceled", "filled_qty": 4})
+    o_part = Order(order_id="OD_PART", ticker="005930", side="buy", quantity=10, price=50_000.0, order_type="limit", status="submitted")
+    setattr(o_part, "_deducted_unit_px", 50_000.0)
+    setattr(o_part, "_deducted_fx_rate", 1.0)
+    setattr(o_part, "_deducted_is_us", False)
+    res_part = a.wait_for_fill(o_part, timeout_sec=0, fallback="none")
+    assert res_part.status == "canceled_timeout"
+    assert a.account.cash == pytest.approx(9_500_000.0 + 6 * 50_000.0, rel=1e-9)
+
+    # 4. [ALLOC-1] Cold-start stream with live signals gets non-zero exploration weight
+    alloc = AlphaAllocator()
+    zero_stream = {"n_days": 0, "total_trades": 0, "active_positions": 0, "daily_returns": []}
+    metrics_cs = {
+        "S2": {"n_days": 10, "total_trades": 20, "active_positions": 3, "win_rate": 0.60, "daily_returns": [0.01, -0.004, 0.008, 0.005, 0.006]},
+        "S10_MEGA_TREND": dict(zero_stream),
+        "S11_HIGHBETA_SNIPER": dict(zero_stream),
+    }
+    w_with_sig = alloc.allocate(
+        metrics_cs,
+        regime="bull",
+        stream_signals={"S10_MEGA_TREND": [{"ticker": "NVDA", "confidence": 0.85}]},
+    )
+    assert w_with_sig.get("S10_MEGA_TREND", 0.0) > 0.0
+    assert w_with_sig.get("S11_HIGHBETA_SNIPER", 0.0) == pytest.approx(0.0, abs=1e-6)
+
+    # 5. [FRONTIER-1] GeneticRuleEvolver does not overwrite overrides when HELD_BASELINE
+    ov_file = tmp_path / "dynamic_overrides.json"
+    hist_file = tmp_path / "genetic_evolution_history.json"
+    ov_file.write_text(json.dumps({"exit.sl_atr_multiplier": 1.2}), encoding="utf-8")
+    monkeypatch.setattr(gre_mod, "_OVERRIDES_FILE", ov_file)
+    monkeypatch.setattr(gre_mod, "_GENETIC_HISTORY_FILE", hist_file)
+    evolver = GeneticRuleEvolver()
+    ev_res = evolver.run_evolution({"recent_sharpe": 1.5, "daily_returns": [0.01, -0.005, 0.008, 0.004, 0.006, 0.003]})
+    assert ev_res["evolution_outcome"] == "HELD_BASELINE"
+    assert ev_res["overrides_updated"] == 0
+
+    # 6. [ML-1] Dual-horizon CrossSectionalEBClassifier (n >= 4500) preserves negative weights & deduplicates collinearity
+    rng = np.random.default_rng(99)
+    n_dh, p_dh = 4600, 6
+    X_dh = rng.standard_normal((n_dh, p_dh))
+    X_dh[:, 1] = X_dh[:, 0]  # Exact duplicate of positive feature 0
+    # Feature 0 is positive signal, Feature 2 is negative signal
+    latent = 0.8 * X_dh[:, 0] - 0.7 * X_dh[:, 2] + 0.5 * rng.standard_normal(n_dh)
+    y_dh = (latent > 0.0).astype(int)
+    eb_dh = CrossSectionalEBClassifier(n_blocks=6, top_k=3, ortho_strength=0.0, tree_blend=0.0)
+    eb_dh.fit(X_dh, y_dh)
+    assert len([idx for idx in eb_dh.top_idx_ if idx in (0, 1)]) == 1
+    assert eb_dh.w_[2] < 0.0
+
+

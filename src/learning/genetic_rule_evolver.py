@@ -136,8 +136,9 @@ class GeneticRuleEvolver:
                 except Exception:
                     pass
 
+        _is_live_ge = (cfg.get("execution.current_mode", cfg.get("execution.mode", "live")) == "live") if cfg else True
         sp_path = res_dir / "shadow_portfolio.json"
-        if sp_path.exists():
+        if not _is_live_ge and sp_path.exists():
             try:
                 sp = json.loads(sp_path.read_text(encoding="utf-8"))
                 snaps = sp.get("daily_snapshots", [])
@@ -211,23 +212,28 @@ class GeneticRuleEvolver:
         )
 
         best_chrom = self._enforce_tighten_only(best_chrom, baseline_chrom)
-        applied_changes: Dict[str, float] = dict(best_chrom)
+        applied_changes: Dict[str, float] = (
+            {k: v for k, v in best_chrom.items() if v != baseline_chrom.get(k)}
+            if improved
+            else {}
+        )
 
-        def _mutate_overrides(cur):
-            base = cur if isinstance(cur, dict) else {}
-            for k, v in applied_changes.items():
-                if k == "exit.sl_atr_multiplier":
-                    prev_v = float(base.get(k, baseline_chrom.get(k, 1.5)))
-                    clamped_sl = round(min(float(v), prev_v, 1.5), 4)
-                    base[k] = clamped_sl
-                    best_chrom[k] = clamped_sl
-                    applied_changes[k] = clamped_sl
-                else:
-                    base[k] = v
-            return base
+        if improved and applied_changes:
+            def _mutate_overrides(cur):
+                base = cur if isinstance(cur, dict) else {}
+                for k, v in applied_changes.items():
+                    if k == "exit.sl_atr_multiplier":
+                        prev_v = float(base.get(k, baseline_chrom.get(k, 1.5)))
+                        clamped_sl = round(min(float(v), prev_v, 1.5), 4)
+                        base[k] = clamped_sl
+                        best_chrom[k] = clamped_sl
+                        applied_changes[k] = clamped_sl
+                    else:
+                        base[k] = v
+                return base
 
-        safe_json_update(_OVERRIDES_FILE, _mutate_overrides, default={}, strict=True)
-        log_override_change('src.learning.genetic_rule_evolver', applied_changes)
+            safe_json_update(_OVERRIDES_FILE, _mutate_overrides, default={}, strict=True)
+            log_override_change('src.learning.genetic_rule_evolver', applied_changes)
 
         now_iso = datetime.now().isoformat()
         ev_result = {

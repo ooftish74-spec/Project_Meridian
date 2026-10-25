@@ -922,11 +922,12 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as _e:
             logger.error(f"  latest_signals 저장 실패: {_e}", exc_info=True)
 
-        # (3) shadow_portfolio.json: 체결 결과 반영 (STALE 근본 수정)
+        # (3) shadow_portfolio.json: 체결 결과 반영 (Live 모드에서는 실계좌 SSOT 오염 방지를 위해 가상 체결 차단)
         try:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
             _sp = ShadowPortfolioManager()
-            _orders = result.get('orders', [])
+            _is_live_dp = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live'
+            _orders = result.get('orders', []) if not _is_live_dp else []
             if _orders:
                 _actions = []
                 for _o in _orders:
@@ -1066,8 +1067,9 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
                     if _exit_prices:
                         _mgr.mark_to_market(_exit_prices)
-                        # ★ S2/S3/S4 TP/SL/Trailing 자동 Exit
-                        _sell_orders = _mgr.check_exit_conditions(_regime)
+                        # ★ S2/S3/S4 TP/SL/Trailing 자동 Exit (Live 모드에서는 가상 매도 기록 차단)
+                        _is_live_exit_dp = cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live'
+                        _sell_orders = _mgr.check_exit_conditions(_regime) if not _is_live_exit_dp else []
                         _s234_sells = [s for s in _sell_orders
                                        if s.get('stream_id', '') != 'S1']
                         if _s234_sells:
@@ -1100,10 +1102,11 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
             from src.portfolio.shadow_manager import ShadowPortfolioManager
             _cfg_close = DynamicConfig()
             _initial_close = _cfg_close.get('portfolio.initial_capital')
+            _is_live_close_dp = _cfg_close.get('execution.current_mode', _cfg_close.get('execution.mode', 'live')) == 'live'
             with ShadowPortfolioManager(initial_capital=_initial_close).transaction() as _mgr_close:
 
                 s1_positions = {pk: pos for pk, pos in _mgr_close.positions.items()
-                              if pk.startswith('S1:')}
+                              if pk.startswith('S1:')} if not _is_live_close_dp else {}
 
                 if s1_positions:
                     # 현재가 조회

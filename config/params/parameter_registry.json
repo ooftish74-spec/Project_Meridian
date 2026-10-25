@@ -17572,6 +17572,47 @@
         0.15
       ],
       "rationale": "S2 ML alpha stream prior daily cross-sectional stock return volatility (~2.0% daily, ~31.7% annualized)"
+    },
+    "risk.cro_prior_vix": {
+      "level": "L1",
+      "default": 20.0,
+      "bounds": [
+        10.0,
+        80.0
+      ],
+      "policy": "tighten_only",
+      "tighten": "up",
+      "rationale": "Prior VIX level (20.0%) for CRO single-factor market variance when live VIX telemetry is unavailable."
+    },
+    "risk.cro_rho_inverse_floor": {
+      "level": "L1",
+      "default": 0.875,
+      "bounds": [
+        0.5,
+        0.99
+      ],
+      "policy": "free",
+      "rationale": "Minimum absolute market correlation floor for inverse index ETFs in CRO single-factor covariance."
+    },
+    "risk.cro_rho_long_floor": {
+      "level": "L1",
+      "default": 0.75,
+      "bounds": [
+        0.2,
+        0.95
+      ],
+      "policy": "free",
+      "rationale": "Minimum market correlation floor for long assets in CRO single-factor covariance."
+    },
+    "risk.cro_rho_cap": {
+      "level": "L1",
+      "default": 0.95,
+      "bounds": [
+        0.7,
+        0.999
+      ],
+      "policy": "free",
+      "rationale": "Maximum market correlation cap in CRO single-factor covariance."
     }
   }
 }

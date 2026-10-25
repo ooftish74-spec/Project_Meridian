@@ -15,6 +15,8 @@ import argparse
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 VENV_PYTHON = PROJECT_ROOT / "venv" / "bin" / "python3"
 
@@ -149,12 +151,20 @@ def inspect_live_truth(as_json: bool = False):
     live_date = datetime.now().strftime("%Y-%m-%d %H:%M KST")
     today_iso = datetime.now().strftime("%Y-%m-%d")
     try:
-        sys.path.insert(0, str(PROJECT_ROOT))
         from src.execution._kis_adapter import KISTraderAdapter
         from src.utils.file_ops import safe_json_update
         adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
         if adapter.fetch_live_balance():
-            live_fx = round(float(adapter._get_live_fx_rate() or account_info.get('fx_rate') or 1353.63), 2)
+            sig_cache = load_json(PROJECT_ROOT / "results" / "signal_cache.json")
+            raw_fx = (
+                adapter._get_live_fx_rate()
+                or account_info.get('fx_rate')
+                or sig_cache.get('usdkrw')
+                or sig_cache.get('usdkrw_close')
+            )
+            if not raw_fx or float(raw_fx) <= 0:
+                raise RuntimeError("Missing live USDKRW FX rate from KIS adapter and signal_cache.json")
+            live_fx = round(float(raw_fx), 2)
             live_holdings = {}
             ledger_sync_updates = {}
             from src.utils.ticker_name_resolver import resolve_name
@@ -234,6 +244,34 @@ def inspect_live_truth(as_json: bool = False):
             account_info['number'] = adapter.account_no or account_info.get('number', '44223699-01')
             account_info['type'] = account_info.get('type', 'Main (종합 위탁)')
 
+            # Reconcile multi-currency NAV identity & D+2 settlement cash
+            kr_eval_sum = sum(float(v.get('eval_krw', 0.0)) for v in holdings.values() if v.get('market') == 'KR')
+            us_eval_usd_sum = sum(float(v.get('qty', 0)) * float(v.get('current_price', 0.0)) for v in holdings.values() if v.get('market') == 'US')
+            us_eval_krw_sum = round(us_eval_usd_sum * live_fx, 2)
+            total_invested_krw = round(kr_eval_sum + us_eval_krw_sum, 2)
+            orderable_wallet_nav = round(
+                float(account_info.get('cash', 0.0))
+                + kr_eval_sum
+                + (float(account_info.get('cash_usd', 0.0)) + us_eval_usd_sum) * live_fx,
+                2,
+            )
+            nav_val = float(account_info.get('nav', 0.0)) or orderable_wallet_nav
+            unsettled_d2_krw = round(nav_val - orderable_wallet_nav, 2)
+            d2_settlement_cash_krw = round(float(account_info.get('cash', 0.0)) + unsettled_d2_krw, 2)
+
+            nav_hist_path = PROJECT_ROOT / "results" / "live_nav_history.json"
+            nav_hist_data = load_json(nav_hist_path)
+            max_hist_nav = 0.0
+            if isinstance(nav_hist_data, list):
+                max_hist_nav = max((float(x.get('nav', 0.0)) for x in nav_hist_data if isinstance(x, dict)), default=0.0)
+            prev_acct_hwm = float(account_info.get('hwm') or 0.0)
+            account_info['hwm'] = round(max(prev_acct_hwm, nav_val, max_hist_nav), 2)
+            account_info['invested'] = total_invested_krw
+            account_info['invest_pct'] = round((total_invested_krw / nav_val) * 100.0, 2) if nav_val > 0 else 0.0
+            account_info['d2_settlement_cash_krw'] = d2_settlement_cash_krw
+            account_info['unsettled_d2_receivable_krw'] = unsettled_d2_krw
+            account_info['positions'] = holdings
+
             kis_data['date'] = live_date
             kis_data['timestamp'] = datetime.now().isoformat()
             kis_data['kis_mode'] = 'live'
@@ -259,9 +297,10 @@ def inspect_live_truth(as_json: bool = False):
                 cur['holdings'] = merged_holdings
                 acct = cur.get('account') if isinstance(cur.get('account'), dict) else {}
                 acct.update(_acct_upd)
+                acct['positions'] = merged_holdings
                 cur['account'] = acct
                 return cur
-            kis_data = safe_json_update(kis_path, _mutate_kis, default={}, indent=2, ensure_ascii=False)
+            kis_data = safe_json_update(kis_path, _mutate_kis, default={}, indent=2, ensure_ascii=False, strict=True)
 
             def _mutate_ledger(cur):
                 cur = cur if isinstance(cur, dict) else {}
@@ -275,7 +314,76 @@ def inspect_live_truth(as_json: bool = False):
                         ex_p = cur['positions'].get(tk) if isinstance(cur['positions'].get(tk), dict) else {}
                         cur['positions'][tk] = {**ex_p, **l_val}
                 return cur
-            safe_json_update(ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False)
+            safe_json_update(ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False, strict=True)
+
+            def _mutate_nav_hist(cur):
+                hist = cur if isinstance(cur, list) else []
+                entry = {
+                    "date": today_iso,
+                    "nav": round(nav_val, 0),
+                    "cash": round(float(account_info.get('cash', 0.0)), 0),
+                    "d2_settlement_cash_krw": round(d2_settlement_cash_krw, 0),
+                    "invested": round(total_invested_krw, 0),
+                    "hwm": round(float(account_info.get('hwm', nav_val)), 0),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                if hist and isinstance(hist[-1], dict) and hist[-1].get("date") == today_iso:
+                    hist[-1] = {**hist[-1], **entry}
+                else:
+                    hist.append(entry)
+                return hist
+            safe_json_update(nav_hist_path, _mutate_nav_hist, default=[], indent=2, ensure_ascii=False, strict=True)
+
+            def _mutate_shadow(cur):
+                cur = cur if isinstance(cur, dict) else {}
+                raw_th = cur.get("trade_history") if isinstance(cur.get("trade_history"), list) else []
+                if any(isinstance(t, dict) and t.get("source") == "broker_fill_import" for t in raw_th):
+                    cur["trade_history"] = [
+                        t for t in raw_th
+                        if isinstance(t, dict) and t.get("source") in ("broker_fill_import", "kis_live", "corporate_ledger", "execution_log")
+                    ]
+                synced_pos = {}
+                for tk, h_val in holdings.items():
+                    if not isinstance(h_val, dict):
+                        continue
+                    sid = str(h_val.get("stream_id") or "S2")
+                    qty_v = float(h_val.get("qty", 0) or 0)
+                    avg_v = float(h_val.get("avg_price", 0) or 0)
+                    cur_v = float(h_val.get("current_price", avg_v) or avg_v)
+                    eval_v = float(h_val.get("eval_krw", 0) or 0)
+                    cost_v = float(h_val.get("cost_krw", 0) or 0)
+                    synced_pos[f"{sid}:{tk}"] = {
+                        "stream_id": sid,
+                        "streams": [sid],
+                        "ticker": tk,
+                        "name": h_val.get("name", tk),
+                        "market": h_val.get("market", "KR"),
+                        "quantity": qty_v,
+                        "entry_price": avg_v,
+                        "avg_price": avg_v,
+                        "current_price": cur_v,
+                        "amount": cost_v,
+                        "market_value": eval_v,
+                        "unrealized_pnl": round(eval_v - cost_v, 2),
+                        "pnl_pct": float(h_val.get("return_pct", 0.0) or 0.0),
+                        "entry_date": h_val.get("entry_date", today_iso),
+                        "strategy": h_val.get("strategy", ""),
+                        "track": h_val.get("track", ""),
+                    }
+                cur["positions"] = synced_pos
+                cur["cash"] = d2_settlement_cash_krw
+                cur["cash_usd"] = float(account_info.get("cash_usd", 0.0))
+                cur["cash_usd_fx"] = live_fx
+                cur["nav"] = nav_val
+                cur["virtual_nav"] = nav_val
+                cur["total_nav"] = nav_val
+                cur["hwm"] = float(account_info.get("hwm", nav_val))
+                cur["real_account_synced"] = True
+                cur["live_synced_at"] = datetime.now().isoformat()
+                return cur
+
+            if shadow_path.exists():
+                shadow_data = safe_json_update(shadow_path, _mutate_shadow, default={}, indent=2, ensure_ascii=False, strict=True)
             live_fetched = True
     except Exception as e_live:
         error_msg = str(e_live)
@@ -310,11 +418,13 @@ def inspect_live_truth(as_json: bool = False):
     kr_stock_val = sum(v.get('qty', 0) * v.get('current_price', 0) for v in kr_holdings.values())
     us_stock_val_usd = sum(v.get('qty', 0) * v.get('current_price', 0) for v in us_holdings.values())
     cash_krw = account_info.get("cash", 0.0)
+    d2_settlement_cash_krw = account_info.get("d2_settlement_cash_krw", cash_krw)
+    unsettled_d2_krw = account_info.get("unsettled_d2_receivable_krw", 0.0)
     cash_usd = account_info.get("cash_usd", 0.0)
     integrated_margin_usd = account_info.get("integrated_margin_usd", 0.0)
-    fx_rate = account_info.get("fx_rate", 1353.63)
+    fx_rate = float(account_info.get("fx_rate") or 0.0)
 
-    kr_total_equity = cash_krw + kr_stock_val
+    kr_total_equity = d2_settlement_cash_krw + kr_stock_val
     us_total_equity = cash_usd + us_stock_val_usd
 
     truth_summary = {
@@ -326,6 +436,8 @@ def inspect_live_truth(as_json: bool = False):
         "initial_capital": account_info.get("initial_capital", 0.0),
         "kr_account": {
             "cash_krw": cash_krw,
+            "d2_settlement_cash_krw": d2_settlement_cash_krw,
+            "unsettled_d2_receivable_krw": unsettled_d2_krw,
             "stock_val_krw": kr_stock_val,
             "total_equity_krw": kr_total_equity,
             "holdings": kr_holdings
@@ -359,9 +471,10 @@ def inspect_live_truth(as_json: bool = False):
     print(f"📌 Account Number       : {truth_summary['account_number']} ({truth_summary['account_type']})")
     print("----------------------------------------------------------")
     print("🇰🇷 국내 원화 계좌 (KRW Wallet):")
-    print(f"   - 원화 예수금 (Cash KRW)  : ₩{cash_krw:,.0f} KRW")
+    print(f"   - 주문가능 원화 (Orderable): ₩{cash_krw:,.0f} KRW")
+    print(f"   - D+2 결제예수금 (Settled) : ₩{d2_settlement_cash_krw:,.0f} KRW (미결제 정산금: ₩{unsettled_d2_krw:+,.0f})")
     print(f"   - 원화 주식 평가액        : ₩{kr_stock_val:,.0f} KRW")
-    print(f"   - 원화 자산 소계          : ₩{kr_total_equity:,.0f} KRW")
+    print(f"   - 원화 자산 소계 (D+2기준): ₩{kr_total_equity:,.0f} KRW")
     print("🇺🇸 해외 외화 계좌 (USD Wallet):")
     print(f"   - 외화 예수금 (Cash USD)  : ${cash_usd:,.2f} USD")
     print(f"   - 통합증거금 주문가능 달러: ${integrated_margin_usd:,.2f} USD")
