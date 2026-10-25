@@ -1573,9 +1573,18 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
         _vol_idx = tuple(
             i for i, fn in enumerate(active_features or [])
             if fn in _vol_names
-        ) or (4, 10, 17, 18)
-        _def_blocks, _def_topk = 10, 8
-        _def_ortho, _def_crowd, _def_blend = 0.5, 0.35, 0.15
+        ) or (4, 10, 17)
+        _struct_names = {
+            'atr_pct', 'volatility_20d', 'trend_strength', 'high_low_range',
+            'close_to_high_20d', 'adx_proxy', 'earnings_surprise',
+            'log_return_kurtosis_20d', 'sig20_area', 'alpha_smart_money_flow_20d',
+        }
+        _struct_idx = tuple(
+            i for i, fn in enumerate(active_features or [])
+            if fn in _struct_names
+        ) or None
+        _def_blocks, _def_topk = 6, 10
+        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
         _c_blocks = cfg.get('ml.eb.n_blocks')
         _c_topk = cfg.get('ml.eb.top_k')
         _c_ortho = cfg.get('ml.eb.ortho_strength')
@@ -1593,6 +1602,7 @@ def train_ensemble(train_X, train_y, val_X, val_y, active_features=None,
             crowd_threshold=_eb_crowd,
             tree_blend=_eb_blend,
             vol_cols=_vol_idx,
+            structural_cols=_struct_idx,
         )
         _eb_X, _eb_y, _eb_sw = train_X, train_y, sample_weights
         eb_model.fit(_eb_X, _eb_y, sample_weight=_eb_sw)
@@ -1793,8 +1803,8 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
 
     def _eb_ic():
         from src.ml.cross_sectional_eb_model import CrossSectionalEBClassifier
-        _def_blocks, _def_topk = 10, 8
-        _def_ortho, _def_crowd, _def_blend = 0.5, 0.35, 0.15
+        _def_blocks, _def_topk = 6, 10
+        _def_ortho, _def_crowd, _def_blend = 0.0, 0.35, 0.0
         _c_blocks = cfg_obj.get('ml.eb.n_blocks')
         _c_topk = cfg_obj.get('ml.eb.top_k')
         _c_ortho = cfg_obj.get('ml.eb.ortho_strength')
@@ -1806,7 +1816,7 @@ def _purged_wf_estimator_factory(cfg_obj, model_name: str = 'eb_ic'):
             ortho_strength=float(_c_ortho) if _c_ortho is not None else _def_ortho,
             crowd_threshold=float(_c_crowd) if _c_crowd is not None else _def_crowd,
             tree_blend=float(_c_blend) if _c_blend is not None else _def_blend,
-            vol_cols=(4, 10, 17, 18),
+            vol_cols=(4, 10, 17),
         )
 
     def _gbr():

@@ -123,7 +123,10 @@ from src.execution.position_ledger import (
     _S5_KR_CASH_PARKING_ETFS,
     _S3_B_BUFFETT_TICKERS,
 )
-_INVALID_STREAM_IDS = {"", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT", "Unassigned", "unassigned", "None"}
+_INVALID_STREAM_IDS = {
+    "", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT",
+    "Unassigned", "unassigned", "None", "Track", "TRACK", "Track1", "Track2",
+}
 
 
 def _infer_canonical_stream(ticker: str, raw_stream: str = "", ledger_map: dict = None) -> str:
@@ -355,11 +358,11 @@ def _load_corporate_ledger_trades(results_dir: Path, ledger_map: dict, fx_rate: 
                 continue
             parsed = []
             for r in rows:
-                d_str = str(r.get('체결일자', '') or '')[:10]
+                d_str = str(r.get('거래일자', '') or r.get('체결일자', '') or '')[:10]
                 tk = str(r.get('종목코드', '') or '').strip().upper()
                 if not d_str or not tk:
                     continue
-                side_raw = str(r.get('매매구분', '') or '')
+                side_raw = str(r.get('거래구분', '') or r.get('매매구분', '') or '')
                 action = 'SELL' if ('매도' in side_raw or 'SELL' in side_raw.upper()) else 'BUY'
                 try:
                     qty = float(str(r.get('체결수량', 0) or 0).replace(',', '') or 0)
@@ -368,11 +371,11 @@ def _load_corporate_ledger_trades(results_dir: Path, ledger_map: dict, fx_rate: 
                 if qty <= 0:
                     continue
                 try:
-                    amt_krw = float(str(r.get('원화환산금액(KRW)', 0) or 0).replace(',', '') or 0)
+                    amt_krw = float(str(r.get('원화약정금액(KRW)', '') or r.get('원화환산금액(KRW)', '') or 0).replace(',', '') or 0)
                 except ValueError:
                     amt_krw = 0.0
                 try:
-                    unit_px = float(str(r.get('체결단가(원화/외화)', 0) or 0).replace(',', '') or 0)
+                    unit_px = float(str(r.get('체결단가', '') or r.get('체결단가(원화/외화)', '') or 0).replace(',', '') or 0)
                 except ValueError:
                     unit_px = 0.0
                 price_krw = (amt_krw / qty) if amt_krw > 0 else unit_px
@@ -394,7 +397,7 @@ def _load_corporate_ledger_trades(results_dir: Path, ledger_map: dict, fx_rate: 
                     pnl_pct = float(str(r.get('실현수익률(%)', 0) or 0).replace(',', '') or 0) if action == 'SELL' else 0.0
                 except ValueError:
                     pnl_pct = 0.0
-                raw_s = str(r.get('전략스트림', '') or '').strip()
+                raw_s = str(r.get('스트림', '') or r.get('전략스트림', '') or '').strip()
                 sid = _infer_canonical_stream(tk, raw_s, ledger_map)
                 parsed.append({
                     'date': d_str,

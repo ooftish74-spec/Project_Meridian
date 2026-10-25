@@ -55,13 +55,16 @@ _MIN_TREE_ROWS = 500
 _TIE_ROUND_DECIMALS = 5
 _TIE_TOP_K = 5
 _TIE_MASS_THRESHOLD = 0.08
-_DEFAULT_N_BLOCKS = 10
-_DEFAULT_TOP_K = 8
-_DEFAULT_ORTHO_STRENGTH = 0.50
+_DEFAULT_N_BLOCKS = 6
+_DEFAULT_TOP_K = 10
+_DEFAULT_ORTHO_STRENGTH = 0.0
 _DEFAULT_CROWD_THRESHOLD = 0.35
-_DEFAULT_TREE_BLEND = 0.15
+_DEFAULT_TREE_BLEND = 0.0
 _COLLINEAR_SKIP_THRESHOLD = 0.98
 _DUAL_HORIZON_MIN_ROWS = 4500
+_STRUCTURAL_MIN_COLS = 25
+_STRUCTURAL_STD_REG = 0.01
+_DEFAULT_STRUCTURAL_COLS = (4, 10, 12, 17, 18, 21, 24, 27, 42, 45)
 _DUAL_HORIZON_LONG_BLOCKS = 8
 _DUAL_HORIZON_MED_BLOCKS = 4
 _DUAL_HORIZON_STD_REG = 0.02
@@ -189,7 +192,8 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
         ortho_strength: float = _DEFAULT_ORTHO_STRENGTH,
         crowd_threshold: float = _DEFAULT_CROWD_THRESHOLD,
         tree_blend: float = _DEFAULT_TREE_BLEND,
-        vol_cols: Tuple[int, ...] = (4, 10, 17, 18),
+        vol_cols: Tuple[int, ...] = (4, 10, 17),
+        structural_cols: Optional[Tuple[int, ...]] = None,
         random_state: int = 42,
     ):
         self.n_blocks = n_blocks
@@ -198,6 +202,7 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
         self.crowd_threshold = crowd_threshold
         self.tree_blend = tree_blend
         self.vol_cols = vol_cols
+        self.structural_cols = structural_cols
         self.random_state = random_state
 
     def __sklearn_tags__(self):
@@ -254,7 +259,37 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
 
         std_eps = float(_STD_EPS)
         dual_min_rows = int(_DUAL_HORIZON_MIN_ROWS)
-        if n >= dual_min_rows and float(self.ortho_strength) <= 0.0:
+        struct_min_p = int(_STRUCTURAL_MIN_COLS)
+        if p >= struct_min_p:
+            raw_sc = self.structural_cols if self.structural_cols is not None else _DEFAULT_STRUCTURAL_COLS
+            sc_list = [int(c) for c in raw_sc if 0 <= int(c) < p]
+            if not sc_list:
+                sc_list = list(range(p))
+            n_b_s = max(2, min(int(self.n_blocks or 6), n // 200))
+            b_list = np.array_split(np.arange(n), n_b_s)
+            b_ic = np.zeros((len(b_list), len(sc_list)), dtype=np.float64)
+            for bi, b_idx_arr in enumerate(b_list):
+                if len(b_idx_arr) < 2:
+                    continue
+                xb = X_arr[b_idx_arr][:, sc_list]
+                ybb = yc[b_idx_arr] - np.mean(yc[b_idx_arr])
+                xs = np.std(xb, axis=0)
+                ys = float(np.std(ybb))
+                v = xs > std_eps
+                if ys > std_eps and np.any(v):
+                    b_ic[bi, v] = (
+                        (xb[:, v] - np.mean(xb[:, v], axis=0)).T @ ybb
+                    ) / (float(len(b_idx_arr)) * xs[v] * ys)
+            m_ic_s = np.mean(b_ic, axis=0)
+            s_ic_s = np.std(b_ic, axis=0) + float(_STRUCTURAL_STD_REG)
+            cons_s = np.maximum(np.mean(b_ic > 0.0, axis=0), np.mean(b_ic < 0.0, axis=0))
+            w_s = (m_ic_s / s_ic_s) * (cons_s ** 2)
+            self.top_idx_ = np.asarray(sc_list, dtype=int)
+            raw_w = np.zeros(p, dtype=np.float64)
+            raw_w[self.top_idx_] = w_s
+            mean_ic = np.zeros(p, dtype=np.float64)
+            mean_ic[self.top_idx_] = m_ic_s
+        elif n >= dual_min_rows and float(self.ortho_strength) <= 0.0:
             def _block_eb_raw(x_sub: np.ndarray, y_sub: np.ndarray, nb_target: int) -> np.ndarray:
                 n_s = len(x_sub)
                 b_list = np.array_split(np.arange(n_s), max(2, min(int(nb_target), n_s // 200)))
