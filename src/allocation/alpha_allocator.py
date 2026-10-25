@@ -291,11 +291,11 @@ class AlphaAllocator:
             'S13', 'S13_JAPAN_ALPHA',
             'S14', 'S14_PAIR_ALPHA',
         }
+        _all_sigs_in = stream_signals or (stream_metrics or {}).get('_stream_signals') or {}
         _has_active_empirical = any(
             isinstance(_m, dict) and (
                 int(_m.get('n_days') or 0) > 0
-                or int(_m.get('active_positions') or 0) > 0
-                or len(_m.get('daily_returns') or []) > 0
+                and len(_m.get('daily_returns') or []) > 0
             )
             for _m in (stream_metrics or {}).values()
         )
@@ -314,10 +314,12 @@ class AlphaAllocator:
             _is_cold_start = (len(daily_returns) == 0) and (_has_zero_days or _has_zero_trades or (n_obs == 0 and not _has_explicit_payoff))
             if _is_cold_start and sid in _AUX_STREAM_SET:
                 _cold_start_aux_streams.add(sid)
+            _sid_live_sigs = _all_sigs_in.get(sid) or []
             if (
                 _has_active_empirical
                 and _has_zero_trades
                 and int(metrics.get('active_positions') or 0) == 0
+                and len(_sid_live_sigs) == 0
                 and sid not in ('S0', 'S5')
             ):
                 _explicit_zero_streams.add(sid)
