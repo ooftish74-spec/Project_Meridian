@@ -283,6 +283,7 @@ class AlphaAllocator:
 
         ev_scores = {}
         _cold_start_aux_streams = set()
+        _explicit_zero_streams = set()
         _AUX_STREAM_SET = {
             'S10', 'S10_MEGA_TREND',
             'S11', 'S11_HIGHBETA_SNIPER',
@@ -290,6 +291,14 @@ class AlphaAllocator:
             'S13', 'S13_JAPAN_ALPHA',
             'S14', 'S14_PAIR_ALPHA',
         }
+        _has_active_empirical = any(
+            isinstance(_m, dict) and (
+                int(_m.get('n_days') or 0) > 0
+                or int(_m.get('active_positions') or 0) > 0
+                or len(_m.get('daily_returns') or []) > 0
+            )
+            for _m in (stream_metrics or {}).values()
+        )
         for sid in self.STREAMS:
             metrics = (stream_metrics or {}).get(sid, {}) or {}
             import math
@@ -304,6 +313,14 @@ class AlphaAllocator:
                 n_obs = len(daily_returns)
             _is_cold_start = (len(daily_returns) == 0) and (_has_zero_days or _has_zero_trades or (n_obs == 0 and not _has_explicit_payoff))
             if _is_cold_start and sid in _AUX_STREAM_SET:
+                _cold_start_aux_streams.add(sid)
+            if (
+                _has_active_empirical
+                and _has_zero_trades
+                and int(metrics.get('active_positions') or 0) == 0
+                and sid not in ('S0', 'S5')
+            ):
+                _explicit_zero_streams.add(sid)
                 _cold_start_aux_streams.add(sid)
             n_0 = 20
             lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
@@ -705,9 +722,16 @@ class AlphaAllocator:
                 _reg_row_cap = _reg_mat_cap.get(str(regime).lower(), _reg_mat_cap.get('caution', {}))
                 _target_tot_cap = sum(final_weights.values()) or 1.0
                 _excess_aux_w = 0.0
+                _eb_n0 = 20.0
                 for _aux_sid in _cold_start_aux_streams:
                     if _aux_sid in final_weights:
-                        _prior_cap_w = round(float(_reg_row_cap.get(_aux_sid, 0.0) or 0.0) * _target_tot_cap, 4)
+                        _raw_prior_w = float(_reg_row_cap.get(_aux_sid, 0.0) or 0.0) * _target_tot_cap
+                        if _aux_sid in _explicit_zero_streams:
+                            _m_aux = (stream_metrics or {}).get(_aux_sid, {}) or {}
+                            _n_tr_aux = float(int(_m_aux.get('total_trades') or 0))
+                            _eb_zero_shrink = _n_tr_aux / (_n_tr_aux + _eb_n0) if _n_tr_aux > 0.0 else 0.0
+                            _raw_prior_w = _raw_prior_w * _eb_zero_shrink
+                        _prior_cap_w = round(_raw_prior_w, 4)
                         if final_weights[_aux_sid] > _prior_cap_w:
                             _excess_aux_w += (final_weights[_aux_sid] - _prior_cap_w)
                             final_weights[_aux_sid] = _prior_cap_w

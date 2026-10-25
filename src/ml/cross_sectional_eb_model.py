@@ -66,6 +66,7 @@ _DUAL_HORIZON_LONG_BLOCKS = 8
 _DUAL_HORIZON_MED_BLOCKS = 4
 _DUAL_HORIZON_STD_REG = 0.02
 _DUAL_HORIZON_ALPHA_MED = 0.85
+_NEG_CONVEXITY_DAMP = 0.15
 
 
 def cross_sectional_rank_z_matrix(
@@ -280,6 +281,8 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
             w_comb = ((1.0 - alpha_m) * wl + alpha_m * wm) * agree
             if np.max(np.abs(w_comb)) <= _EPS:
                 w_comb = (1.0 - alpha_m) * wl + alpha_m * wm
+            if np.any(w_comb > _EPS):
+                w_comb = np.where(w_comb < 0.0, w_comb * float(_NEG_CONVEXITY_DAMP), w_comb)
             k = max(1, min(int(self.top_k), p))
             top_idx = np.argsort(np.abs(w_comb))[::-1][:k]
             self.top_idx_ = top_idx

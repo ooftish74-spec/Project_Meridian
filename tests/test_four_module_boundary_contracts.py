@@ -255,3 +255,43 @@ def test_m4_brinson_fachler_attribution_beta_ddof1_and_genetic_tighten_only(tmp_
         baseline={"exit.sl_atr_multiplier": 1.25},
     )
     assert float(mutated["exit.sl_atr_multiplier"]) <= 1.25
+
+
+def test_residual_risk_prescriptions_cold_start_shrinkage_and_sigma_tighten_only(monkeypatch):
+    """Verify Empirical-Bayes cold-start stream shrinkage (n_0=20, n_prior=5 -> 0.20x) and sigma_adj <= 1.0 in caution regime."""
+    from src.allocation.alpha_allocator import AlphaAllocator
+    from src.risk.exposure_orchestrator import ExposureOrchestrator
+
+    alloc = AlphaAllocator()
+    zero_stream = {"n_days": 0, "total_trades": 0, "active_positions": 0, "daily_returns": []}
+    live_like_metrics = {
+        "S0": dict(zero_stream),
+        "S1": dict(zero_stream),
+        "S2": {"n_days": 9, "total_trades": 42, "active_positions": 6, "win_rate": 0.6667, "avg_win": 0.015, "avg_loss": 0.012, "daily_returns": [0.01, -0.005, 0.012, 0.008, -0.004, 0.009]},
+        "S3": {"n_days": 30, "total_trades": 7, "active_positions": 4, "win_rate": 0.60, "avg_win": 0.010, "avg_loss": 0.008, "daily_returns": [0.008, 0.006, -0.003, 0.009, 0.005, 0.004]},
+        "S5": {"n_days": 3, "total_trades": 5, "active_positions": 1, "win_rate": 0.50, "avg_win": 0.005, "avg_loss": 0.004, "daily_returns": [0.002, 0.001, 0.002]},
+        "S10_MEGA_TREND": dict(zero_stream),
+        "S11_HIGHBETA_SNIPER": dict(zero_stream),
+        "S12_DERIVATIVE_SQUEEZE": dict(zero_stream),
+        "S13_JAPAN_ALPHA": dict(zero_stream),
+        "S14_PAIR_ALPHA": dict(zero_stream),
+    }
+    weights = alloc.allocate(live_like_metrics, regime="caution")
+    assert sum(weights.values()) == pytest.approx(1.0, abs=1e-2)
+    idle_offensive_sum = (
+        weights.get("S1", 0.0)
+        + weights.get("S10_MEGA_TREND", 0.0)
+        + weights.get("S11_HIGHBETA_SNIPER", 0.0)
+        + weights.get("S12_DERIVATIVE_SQUEEZE", 0.0)
+        + weights.get("S13_JAPAN_ALPHA", 0.0)
+        + weights.get("S14_PAIR_ALPHA", 0.0)
+    )
+    # Idle zero-evidence offensive streams must be shrunk to 0.0 (previously 41.3%+)
+    assert idle_offensive_sum == pytest.approx(0.0, abs=1e-6)
+    assert weights.get("S2", 0.0) > weights.get("S11_HIGHBETA_SNIPER", 0.0)
+
+    # ExposureOrchestrator sigma_adjustment must enforce tighten_only (<= 1.0) in non-bull regimes
+    eo = ExposureOrchestrator()
+    res = eo.calculate(sentiment={"regime": "caution", "vix": 19.45, "vkospi": 23.05, "ois": 63.1, "options_skew": 0.1})
+    assert float(res["sigma_adjustment"]) <= 1.0
+

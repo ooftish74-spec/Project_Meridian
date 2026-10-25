@@ -2532,8 +2532,12 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
     purged_wf_summary = None
     if _use_dates and cfg.get('ml.purged_wf.enabled', True):
         try:
+            _pwf_features = [
+                f for f in (active_features or [])
+                if f in ds_meta['panel'].columns
+            ] or ds_meta['panel_features']
             _rep, _rep_path = run_purged_wf_report(
-                ds_meta['panel'], ds_meta['panel_features'], cfg_obj=cfg,
+                ds_meta['panel'], _pwf_features, cfg_obj=cfg,
                 forward_days=ds_meta['forward_days'], calendar=ds_meta.get('calendar'))
             _ic = (_rep.get('oos') or {}).get('ic', {})
             purged_wf_summary = {

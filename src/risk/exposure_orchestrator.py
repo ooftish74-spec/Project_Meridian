@@ -206,6 +206,11 @@ class ExposureOrchestrator:
         
         raw_multiplier = min(vix_score, skew_score, ois_score)
         vol_surface_score = round(float(np.clip(raw_multiplier, pget('exposure.vol_surface_floor', 0.05), 1.0)), 4)
+        if str(regime).lower() == 'caution' and float(transition_adj) >= 1.0 and ois_norm >= 0.55 and vix < x0_vix:
+            _rebound_impulse = min(1.0, max(0.0, (ois_norm - 0.50) / 0.50)) * float(vix_score)
+            regime_score = round(float(regime_score + (1.0 - regime_score) * _rebound_impulse), 4)
+            components['regime']['rebound_impulse'] = round(_rebound_impulse, 4)
+            components['regime']['score'] = regime_score
         target = round(float(np.clip(vol_surface_score * regime_score, 0.0, 1.0)), 3)
         
         reasons.append(f"Vol-Surface Dynamic (VIX={vix_score:.2f}, Skew={skew_score:.2f}, OIS={ois_score:.2f}) -> raw={vol_surface_score:.2f}, target={target:.2f}")
@@ -226,14 +231,21 @@ class ExposureOrchestrator:
             _var_calc = RealtimeVaR()
             _positions = _var_calc._load_positions()
             if _positions and len(_positions) > 0:
-                _returns = _var_calc._load_returns(list(_positions.keys()), pget('risk.sigma_lookback', 60))
+                _cash_etf_set = {'459580', '423160', '357870'}
+                _risky_keys = [k for k in _positions.keys() if str(k).strip() not in _cash_etf_set]
+                _vol_keys = _risky_keys if len(_risky_keys) > 0 else list(_positions.keys())
+                _returns = _var_calc._load_returns(_vol_keys, pget('risk.sigma_lookback', 60))
                 if _returns is not None and _returns.shape[1] > 0:
-                    _weights = np.array([_positions[t].get('weight', 1.0 / len(_positions)) for t in list(_positions.keys())[:_returns.shape[1]]])
+                    _weights = np.array([_positions[t].get('weight', 1.0 / len(_vol_keys)) for t in _vol_keys[:_returns.shape[1]]])
                     _weights = _weights / _weights.sum() if _weights.sum() > 0 else _weights
                     _port_rets = _returns @ _weights
                     _ewma_lambda = pget('risk.ewma_lambda', 0.94)
                     _ewma_var = _var_calc._ewma_variance(_port_rets, _ewma_lambda)
-                    _realized_vol = float(np.sqrt(_ewma_var)) * np.sqrt(252)
+                    _down_rets = np.minimum(0.0, _port_rets)
+                    _ewma_down_var = _var_calc._ewma_variance(_down_rets, _ewma_lambda)
+                    _tot_vol = float(np.sqrt(_ewma_var)) * np.sqrt(252)
+                    _down_vol = float(np.sqrt(2.0 * _ewma_down_var)) * np.sqrt(252)
+                    _realized_vol = min(_tot_vol, _down_vol) if _down_vol > 0.0 else _tot_vol
                 else:
                     _realized_vol = None
             else:
@@ -243,6 +255,8 @@ class ExposureOrchestrator:
                 _raw_ratio = _sigma_target / _realized_vol
                 _sigma_floor = pget('risk.sigma_scale_floor', 0.4)
                 _sigma_cap = pget('risk.sigma_scale_cap', 1.3)
+                if str(regime).lower() != 'bull' or float(transition_adj) < 1.0:
+                    _sigma_cap = min(float(_sigma_cap), 1.0)
                 sigma_adj = max(_sigma_floor, min(_sigma_cap, _raw_ratio))
                 if sigma_adj < 0.9:
                     reasons.append(f"σ-target={_sigma_target:.0%}/realized={_realized_vol:.0%}→{sigma_adj:.2f}")

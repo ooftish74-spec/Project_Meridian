@@ -394,6 +394,60 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
     return fallback_rets
 
 
+_STREAM_FACTOR_PARQUET_MAP = {
+    'S0': [('kr', '114800', 1.0), ('kr', '069500', -0.5)],
+    'S1': [('kr', '005930', 0.5), ('kr', '000660', 0.5)],
+    'S10': [('us', 'NVDA', 0.4), ('us', 'MSFT', 0.3), ('us', 'QQQ', 0.3)],
+    'S10_MEGA_TREND': [('us', 'NVDA', 0.4), ('us', 'MSFT', 0.3), ('us', 'QQQ', 0.3)],
+    'S11': [('kr', '000660', 0.5), ('us', 'NVDA', 0.5)],
+    'S11_HIGHBETA_SNIPER': [('kr', '000660', 0.5), ('us', 'NVDA', 0.5)],
+    'S12': [('kr', '069500', -0.5), ('us', 'QQQ', 0.5)],
+    'S12_DERIVATIVE_SQUEEZE': [('kr', '069500', -0.5), ('us', 'QQQ', 0.5)],
+    'S13': [('kr', '005380', 0.5), ('us', 'SPY', 0.5)],
+    'S13_JAPAN_ALPHA': [('kr', '005380', 0.5), ('us', 'SPY', 0.5)],
+}
+
+
+def _reconstruct_stream_factor_returns(sid: str, root_dir: Path, window: int = 30) -> list:
+    """Reconstruct empirical OOS factor return series from local market parquets when a stream has 0 live positions."""
+    specs = _STREAM_FACTOR_PARQUET_MAP.get(str(sid), [])
+    if not specs:
+        return []
+    import pandas as pd
+    weighted_by_date = defaultdict(lambda: [0.0, 0.0])
+    for mkt, ticker, w in specs:
+        pq = (
+            root_dir / 'data' / 'kr_markets' / f'kr_{ticker}.parquet'
+            if mkt == 'kr'
+            else root_dir / 'data' / 'us_stocks' / 'prices' / f'{ticker}.parquet'
+        )
+        if not pq.exists():
+            continue
+        try:
+            df = pd.read_parquet(pq)
+            if 'close' not in df.columns or len(df) < 5:
+                continue
+            if 'date' in df.columns:
+                df = df.set_index('date')
+            closes = pd.to_numeric(df['close'], errors='coerce').dropna()
+            rets = closes.pct_change().dropna().tail(window)
+            sign_w = 1.0 if w >= 0 else -1.0
+            abs_w = abs(float(w))
+            for idx_dt, r_val in rets.items():
+                d_key = str(idx_dt)[:10]
+                if math.isfinite(float(r_val)):
+                    weighted_by_date[d_key][0] += float(r_val) * sign_w * abs_w
+                    weighted_by_date[d_key][1] += abs_w
+        except Exception:
+            continue
+    out = []
+    for d_key in sorted(weighted_by_date.keys())[-window:]:
+        w_sum = weighted_by_date[d_key][1]
+        if w_sum > 0:
+            out.append(round(weighted_by_date[d_key][0] / w_sum, 6))
+    return out if len(out) >= 2 else []
+
+
 def compute_stream_metrics(results_dir: Path = None):
     """실제 거래 데이터 및 라이브 계좌 SSOT에서 스트림별 메트릭 계산.
 
@@ -443,11 +497,7 @@ def compute_stream_metrics(results_dir: Path = None):
         kis_holdings = kis_data['account']['positions']
 
     if kis_holdings:
-        existing_stream_tickers = {
-            (s, str(p.get('ticker', '')).upper())
-            for s, plist in stream_positions.items()
-            for p in plist
-        }
+        stream_positions.clear()
         for tk, h in kis_holdings.items():
             if not isinstance(h, dict):
                 continue
@@ -461,8 +511,6 @@ def compute_stream_metrics(results_dir: Path = None):
                 h.get('stream_id') or h.get('stream') or l_entry.get('stream_id') or l_entry.get('stream') or '',
                 ledger_map,
             )
-            if (sid, t_sym) in existing_stream_tickers:
-                continue
             is_kr = (h.get('market') == 'KR') or (len(t_sym) == 6 and t_sym.isdigit())
             mult = 1.0 if is_kr else fx_rate
             avg_p = float(h.get('avg_price', l_entry.get('avg_price', 0)) or 0)
@@ -480,7 +528,7 @@ def compute_stream_metrics(results_dir: Path = None):
                 or l_entry.get('first_seen')
                 or _TRACKING_START
             )
-            stream_positions[sid].append({
+            pos_rec = {
                 **h,
                 'ticker': t_sym,
                 'stream_id': sid,
@@ -494,7 +542,13 @@ def compute_stream_metrics(results_dir: Path = None):
                 'pnl_pct': ret_pct,
                 'return_pct': ret_pct,
                 'entry_date': str(entry_date)[:10],
-            })
+            }
+            stream_positions[sid].append(pos_rec)
+            # Also roll sub-sleeves (S3_A, S3_B, S3_C -> S3; S6 -> S2) into parent canonical stream
+            if sid in ('S3_A', 'S3_B', 'S3_C'):
+                stream_positions['S3'].append({**pos_rec, 'stream_id': 'S3'})
+            elif sid == 'S6' and str(h.get('stream_id') or '').upper() == 'S2':
+                stream_positions['S2'].append({**pos_rec, 'stream_id': 'S2'})
 
     # ═══════════════════════════════════════
     # 2. 스트림별 거래 분류 (S_RECON 원천 배제 + 원장 기반 합성 진입 보강)
@@ -621,6 +675,12 @@ def compute_stream_metrics(results_dir: Path = None):
         # Live holding time-series reconstruction when realized trade daily returns are insufficient
         if len(daily_returns) < 2 and pos_list:
             reconstructed = _reconstruct_holding_daily_returns(pos_list, _ROOT)
+            for rec_r in reconstructed:
+                daily_returns.append(rec_r)
+                daily_costs.append(0.0)
+                regimes.append('caution')
+        elif len(daily_returns) < 2 and not pos_list and results_dir is None:
+            reconstructed = _reconstruct_stream_factor_returns(sid, _ROOT)
             for rec_r in reconstructed:
                 daily_returns.append(rec_r)
                 daily_costs.append(0.0)

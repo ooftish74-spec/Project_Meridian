@@ -174,12 +174,14 @@ class RegimeEngine:
                 result['hmm_regime'] = hmm_pred.get('regime', regime)
                 result['hmm_transition'] = hmm_pred.get('transition_probabilities', {})
             else:
-                result['hmm_state_proba'] = {'bull': 0.25, 'caution': 0.25, 'bear': 0.25, 'crash': 0.25}
+                _s_tot = sum(float(v) for v in result['scores'].values()) or 1.0
+                _post = {k: round(float(v) / _s_tot, 4) for k, v in result['scores'].items()}
+                result['hmm_state_proba'] = _post
                 result['hmm_regime'] = regime
-                result['hmm_transition'] = {}
+                result['hmm_transition'] = dict(_post)
         except Exception as _he:
             logger.error(f'[Phase 89 HMM] 정보 주입 실패: {_he}', exc_info=True)
-            result['hmm_state_proba'] = {'bull': 0.25, 'caution': 0.25, 'bear': 0.25, 'crash': 0.25}
+            result['hmm_state_proba'] = dict(result.get('scores') or {'bull': 0.25, 'caution': 0.25, 'bear': 0.25, 'crash': 0.25})
             result['hmm_regime'] = regime
         if save_state:
             self._save_state(result)
@@ -522,13 +524,15 @@ class RegimeEngine:
                 existing['kr_prev_regime'] = existing.get('kr_regime')
                 existing['kr_regime'] = _clean['regime']
                 existing['regime'] = _clean['regime']
+                existing['market_regime'] = _clean['regime']
                 existing['kr_regime_confidence'] = _clean['confidence']
                 existing['kr_regime_scores'] = _clean['scores']
                 existing['kr_regime_measurements'] = _clean.get('measurements', {})
                 _ois_val = (_clean.get('measurements', {}) or {}).get('ois') or (_clean.get('kr_regime_measurements', {}) or {}).get('ois')
                 if _ois_val is not None:
                     existing['ois'] = _ois_val
-                existing['hmm_transition'] = _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or {}
+                existing['hmm_transition'] = _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or _clean.get('scores') or {}
+                existing['hmm_state_proba'] = _clean.get('hmm_state_proba') or _clean.get('scores') or {}
                 existing['kr_regime_updated_at'] = datetime.now().isoformat()
                 existing['kr_regime_updated_by'] = 'regime_engine'
                 existing['operating_regime'] = self._compute_operating_regime(existing)
@@ -539,7 +543,19 @@ class RegimeEngine:
             logger.warning(f'  레짐 저장 실패: {e}', exc_info=True)
         try:
             regime_file = _PROJECT_ROOT / 'results' / 'current_regime.json'
-            regime_out = {'regime': _clean['regime'], 'confidence': _clean['confidence'], 'scores': _clean['scores'], 'hmm_transition': _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or {}, 'method': 'regime_engine_ssot', 'measurements': _clean.get('measurements', {}), 'macro_composite': (_clean.get('measurements', {}) or {}).get('macro_composite', 0), 'timestamp': datetime.now().isoformat(), 'data_source': 'regime_engine'}
+            regime_out = {
+                'regime': _clean['regime'],
+                'confidence': _clean['confidence'],
+                'scores': _clean['scores'],
+                'hmm_transition': _clean.get('hmm_transition') or _clean.get('hmm_state_proba') or _clean.get('scores') or {},
+                'hmm_state_proba': _clean.get('hmm_state_proba') or _clean.get('scores') or {},
+                'hmm_regime': _clean.get('hmm_regime', _clean['regime']),
+                'method': 'regime_engine_ssot',
+                'measurements': _clean.get('measurements', {}),
+                'macro_composite': (_clean.get('measurements', {}) or {}).get('macro_composite', 0),
+                'timestamp': datetime.now().isoformat(),
+                'data_source': 'regime_engine',
+            }
 
             def _mutate_regime(cur):
                 cur = cur if isinstance(cur, dict) else {}
