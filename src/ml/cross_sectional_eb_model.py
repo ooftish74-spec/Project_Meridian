@@ -223,7 +223,8 @@ class CrossSectionalEBClassifier(ClassifierMixin, BaseEstimator):
             return self
 
         min_rows_for_tie_filter = int(_MIN_TREE_ROWS)
-        if n >= min_rows_for_tie_filter:
+        dual_min_rows = int(_DUAL_HORIZON_MIN_ROWS)
+        if min_rows_for_tie_filter <= n < dual_min_rows:
             tie_dec = int(_TIE_ROUND_DECIMALS)
             tie_k = int(_TIE_TOP_K)
             tie_thr = float(_TIE_MASS_THRESHOLD)

@@ -2534,7 +2534,7 @@ def run_training(window_days: int = None, trigger: str = 'manual', enable_automl
         try:
             _rep, _rep_path = run_purged_wf_report(
                 ds_meta['panel'], ds_meta['panel_features'], cfg_obj=cfg,
-                forward_days=ds_meta['forward_days'], calendar=None)
+                forward_days=ds_meta['forward_days'], calendar=ds_meta.get('calendar'))
             _ic = (_rep.get('oos') or {}).get('ic', {})
             purged_wf_summary = {
                 'report_path': str(_rep_path) if _rep_path else None,
