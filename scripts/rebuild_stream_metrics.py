@@ -113,10 +113,12 @@ def _load_shadow_trades():
     return result
 
 
-_S3_MACRO_TICKERS = {"USO", "TLT", "UUP", "GLD", "XLE", "SHV", "BIL"}
-_S6_US_EQUITY_TICKERS = {"V", "MSFT", "CRM", "NVDA", "AAPL", "GOOGL", "AMZN", "META"}
-_S5_KR_ETF_TICKERS = {"091160", "091170", "091180", "102970", "117700", "139230", "140710", "305720"}
-_S3_B_BUFFETT_TICKERS = {"000270", "086280"}
+from src.execution.position_ledger import (
+    _S3_MACRO_TICKERS,
+    _S6_US_EQUITY_TICKERS,
+    _S5_KR_ETF_TICKERS,
+    _S3_B_BUFFETT_TICKERS,
+)
 _INVALID_STREAM_IDS = {"", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT", "Unassigned", "unassigned", "None"}
 
 
@@ -394,7 +396,7 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
     return fallback_rets
 
 
-_STREAM_FACTOR_PARQUET_MAP = {
+_STREAM_FACTOR_PARQUET_MAP = {  # hardcode-ok: L0 exchange benchmark factor proxies
     'S0': [('kr', '114800', 1.0), ('kr', '069500', -0.5)],
     'S1': [('kr', '005930', 0.5), ('kr', '000660', 0.5)],
     'S10': [('us', 'NVDA', 0.4), ('us', 'MSFT', 0.3), ('us', 'QQQ', 0.3)],

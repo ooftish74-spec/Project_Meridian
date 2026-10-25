@@ -231,8 +231,9 @@ class ExposureOrchestrator:
             _var_calc = RealtimeVaR()
             _positions = _var_calc._load_positions()
             if _positions and len(_positions) > 0:
-                _cash_etf_set = {'459580', '423160', '357870'}
-                _risky_keys = [k for k in _positions.keys() if str(k).strip() not in _cash_etf_set]
+                from src.data.market_context import MarketContextManager
+                _mcm = MarketContextManager()
+                _risky_keys = [k for k in _positions.keys() if _mcm.get_sector(str(k).strip()) != 'Cash_Equivalent']
                 _vol_keys = _risky_keys if len(_risky_keys) > 0 else list(_positions.keys())
                 _returns = _var_calc._load_returns(_vol_keys, pget('risk.sigma_lookback', 60))
                 if _returns is not None and _returns.shape[1] > 0:

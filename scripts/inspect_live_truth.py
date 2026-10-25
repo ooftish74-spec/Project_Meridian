@@ -27,10 +27,12 @@ def load_json(filepath: Path) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-_S3_MACRO_TICKERS = {"USO", "TLT", "UUP", "GLD", "XLE", "SHV", "BIL"}
-_S6_US_EQUITY_TICKERS = {"V", "MSFT", "CRM", "NVDA", "AAPL", "GOOGL", "AMZN", "META"}
-_S5_KR_ETF_TICKERS = {"091160", "091170", "091180", "102970", "117700", "139230", "140710", "305720"}
-_S3_B_BUFFETT_TICKERS = {"000270", "086280"}
+from src.execution.position_ledger import (
+    _S3_MACRO_TICKERS,
+    _S6_US_EQUITY_TICKERS,
+    _S5_KR_ETF_TICKERS,
+    _S3_B_BUFFETT_TICKERS,
+)
 _INVALID_STREAMS = {"", "unknown", "UNKNOWN", "S_RECON", "LIVE_SSOT", "Unassigned", "unassigned", "None"}
 
 
