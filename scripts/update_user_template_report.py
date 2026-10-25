@@ -28,6 +28,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 KIS_PORTFOLIO_PATH = PROJECT_ROOT / "results" / "kis_portfolio.json"
 POSITION_LEDGER_PATH = PROJECT_ROOT / "results" / "position_entry_ledger.json"
 SERVICE_ACCOUNT_PATH = PROJECT_ROOT.parent / "Project-A" / "config" / "gsheet_service_account.json"
