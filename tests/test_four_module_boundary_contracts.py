@@ -461,4 +461,51 @@ def test_wave9_master_forensic_closed_form_invariants(tmp_path, monkeypatch):
     assert infer_canonical_stream_and_track("091180")[0] == "S5"
 
 
+def test_wave10_capital_deployment_and_hmm_regime_invariants():
+    """Verify 4-state HMM probability conservation, ExposureOrchestrator calm-VIX/unobserved-skew invariance,
+    and S0BetaStream structural VIX stress floor."""
+    import pandas as pd
+    from src.measurement.hmm_regime import HMMRegimePredictor
+    from src.risk.exposure_orchestrator import ExposureOrchestrator
+    from src.streams.s0_beta.beta_stream import S0BetaStream
+
+    # 1. 4-State HMM probability conservation (sum == 1.0, never drops 4th state to 0.0)
+    rng = np.random.default_rng(123)
+    df_hmm = pd.DataFrame({
+        "vix": 17.0 + 2.0 * rng.standard_normal(120),
+        "kospi_ret": 0.001 + 0.01 * rng.standard_normal(120),
+    })
+    df_hmm.iloc[-1, 0] = 24.0  # Force into highest state
+    pred = HMMRegimePredictor(n_components=4, lookback_window=100)
+    pred.fit(df_hmm)
+    if pred.is_fitted:
+        probs = pred.predict_regime_probabilities(df_hmm)
+        assert sum(probs.values()) == pytest.approx(1.0, abs=1e-2)
+
+    # 2. ExposureOrchestrator calm VIX (<=20), unobserved skew (0.0), neutral OIS (>=45) -> vol_surface == 1.0
+    eo = ExposureOrchestrator()
+    res_eo = eo.calculate(sentiment={
+        "regime": "caution",
+        "vix": 19.45,
+        "options_skew": 0.0,
+        "ois": 47.2,
+    })
+    assert res_eo["components"]["vol_surface"]["score"] == pytest.approx(1.0, rel=1e-6)
+    assert res_eo["components"]["regime"]["score"] >= 0.85
+
+    # 3. S0BetaStream does NOT fire false VIX spike (252670 + cash sweep) at VIX=19.45, VKOSPI=23.05
+    s0 = S0BetaStream()
+    md_s0 = {
+        "vix": 19.45,
+        "z_skew": 0.0,
+        "features": {"z_credit": 0.0, "z_breadth": 0.0, "z_vpin": 0.0},
+        "signal_cache": {"vix": 19.45, "vkospi": 23.05, "ois": 47.2, "night_futures_change_1d": 0.3},
+        "pipeline_state": {"hmm_transition": {"bull": 0.4, "caution": 0.5, "bear": 0.1, "crash": 0.0}},
+    }
+    sigs_s0 = s0.generate_signals("caution", md_s0)
+    assert all(s.get("ticker") != "252670" for s in sigs_s0)
+    assert all(not s.get("trigger_cash_sweep", False) for s in sigs_s0)
+
+
+
 

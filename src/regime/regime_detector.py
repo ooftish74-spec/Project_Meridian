@@ -473,9 +473,10 @@ class RegimeDetector:
         if vkospi_history and len(vkospi_history) >= 20:
             vkospi_clean = [v for v in vkospi_history if v is not None and (not np.isnan(v))]
             if len(vkospi_clean) >= 20:
-                vkospi_low = np.percentile(vkospi_clean, 60)
-                vkospi_mid = np.percentile(vkospi_clean, 85)
-                vkospi_high = np.percentile(vkospi_clean, 95)
+                _vk_fl_lo, _vk_fl_mid, _vk_fl_hi = 15.0, 22.0, 28.0
+                vkospi_low = max(_vk_fl_lo, float(np.percentile(vkospi_clean, 60)))
+                vkospi_mid = max(_vk_fl_mid, float(np.percentile(vkospi_clean, 85)))
+                vkospi_high = max(_vk_fl_hi, float(np.percentile(vkospi_clean, 95)))
             else:
                 vkospi_low = pget('regime.vol_bull_threshold', 12)
                 vkospi_mid = pget('regime.vol_caution_threshold', 20)
@@ -752,7 +753,11 @@ class RegimeDetector:
             self._hmm_model = predictor.model
             self._hmm_fitted = bool(predictor.is_fitted and predictor.model is not None)
             if self._hmm_fitted and hasattr(self._hmm_model, 'means_'):
-                sorted_states = np.argsort(self._hmm_model.means_[:, 0])
+                if self._hmm_model.means_.shape[1] >= 2:
+                    _st_stress = self._hmm_model.means_[:, 0] - 0.5 * self._hmm_model.means_[:, 1]
+                else:
+                    _st_stress = self._hmm_model.means_[:, 0]
+                sorted_states = np.argsort(_st_stress)
                 n_st = len(sorted_states)
                 _n3 = 3
                 if n_st == 1:
@@ -947,12 +952,20 @@ class RegimeDetector:
             mat = self._hmm_model.transmat_
             mapping = getattr(self, '_state_to_regime', {})
             result = {}
+            _row_counts = {}
             for i in range(mat.shape[0]):
                 from_r = mapping.get(i, f"state_{i}")
-                result[from_r] = {}
+                if from_r not in result:
+                    result[from_r] = {}
+                    _row_counts[from_r] = 0
+                _row_counts[from_r] += 1
                 for j in range(mat.shape[1]):
                     to_r = mapping.get(j, f"state_{j}")
-                    result[from_r][to_r] = round(float(mat[i, j]), 4)
+                    result[from_r][to_r] = result[from_r].get(to_r, 0.0) + float(mat[i, j])
+            for from_r, row_d in result.items():
+                cnt = max(1, _row_counts.get(from_r, 1))
+                for to_r in list(row_d.keys()):
+                    row_d[to_r] = round(row_d[to_r] / cnt, 4)
             return result
         except (FileNotFoundError, pd.errors.EmptyDataError):
             return {}

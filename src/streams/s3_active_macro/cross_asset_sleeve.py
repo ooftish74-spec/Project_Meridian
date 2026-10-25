@@ -150,8 +150,10 @@ class S3CrossAssetSleeve:
                     logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 당일/1일 수익률({ret_1d:+.2%}) 음수 전환 — 역방향 추격 매수 차단")
                     continue
 
-            is_flight_to_quality = (regime in ['bear', 'crash'] if is_inv_hedge else regime in ['bear', 'crash', 'caution']) and (asset_ret > 0.0)
-            is_momentum_outperformance = spread >= spread_threshold and (not is_inv_hedge or asset_ret > 0.0)
+            _caut_min_ret = 0.01
+            _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else _caut_min_ret
+            is_flight_to_quality = (regime in ['bear', 'crash'] if is_inv_hedge else regime in ['bear', 'crash', 'caution']) and (asset_ret >= _ftq_min_ret and asset_ret > 0.0)
+            is_momentum_outperformance = spread >= spread_threshold and (asset_ret >= _caut_min_ret if not is_inv_hedge else asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
                 confidence = min(1.0, min_confidence + abs(spread) * 2.0)

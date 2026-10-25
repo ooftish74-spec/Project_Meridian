@@ -631,7 +631,7 @@ class AlphaAllocator:
                 import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 logger.critical('[SILENT_BYPASS] Suppressed exception at alpha_allocator.py:450', exc_info=True)
-            _in_macro_defense = _crowding_active or regime in ('bear', 'crash', 'caution')
+            _in_macro_defense = _crowding_active or regime in ('bear', 'crash')
             if _in_macro_defense:
                 try:
                     from src.utils.time_utils import now_kst as _now_kst

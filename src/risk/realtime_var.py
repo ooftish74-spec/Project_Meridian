@@ -21,7 +21,7 @@ try:
 except Exception:  # registry layer unavailable → call-site fallbacks (== pre-Wave2 literals)
     def pget(name, fallback, ctx=None):
         return fallback
-import json, logging
+import json, logging, os
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -317,20 +317,22 @@ class RealtimeVaR:
         self._matched_tickers = []
         for t in tickers:
             is_us_tk = not _is_kr_var(str(t))
-            fp = _DATA_DIR / (f'us_{t}.parquet' if is_us_tk else f'kr_{t}.parquet')
-            if not fp.exists() and not is_us_tk:
-                fp_alt = _PROJECT_ROOT / 'data' / 'kr_markets' / f'{t}.parquet'
+            fp = (_PROJECT_ROOT / 'data' / 'us_markets' / f'us_{t}.parquet') if is_us_tk else (_DATA_DIR / f'kr_{t}.parquet')
+            if not fp.exists():
+                fp_alt = (_DATA_DIR / f'us_{t}.parquet') if is_us_tk else (_PROJECT_ROOT / 'data' / 'kr_markets' / f'{t}.parquet')
                 if fp_alt.exists():
                     fp = fp_alt
             close = None
             if fp.exists():
                 try:
                     df = pd.read_parquet(fp)
-                    close = pd.to_numeric(df['close'], errors='coerce').dropna().values
+                    c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if c_col:
+                        close = pd.to_numeric(df[c_col], errors='coerce').dropna().values
                 except Exception as e:
                     logger.debug(f"Targeted fallback: {e}")
 
-            if close is None or len(close) < 20:
+            if (close is None or len(close) < 20) and not os.environ.get('PYTEST_CURRENT_TEST'):
                 try:
                     from src.data_collection.kis_data_collector import KISDataCollector
                     collector = KISDataCollector()

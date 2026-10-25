@@ -3024,6 +3024,7 @@ class StreamOrchestrator:
         current_holdings = {}
         _stream_held_krw = {}
         _unattributed_held_krw = 0.0
+        _initial_stream_budgets = dict(stream_budgets)
         try:
             _positions = {}
             if portfolio and 'positions' in portfolio:
@@ -3148,6 +3149,7 @@ class StreamOrchestrator:
                             stream_budgets[_short_k] = stream_budgets[_sid]
                 elif _sid == 'S6' and 'S3' in stream_budgets:
                     stream_budgets['S3'] = max(0, stream_budgets['S3'] - _pos_val)
+                    _stream_held_krw['S3'] = _stream_held_krw.get('S3', 0.0) + _pos_val
                 elif not _sid or _sid.upper() in ('', '?', 'NONE', 'NULL', 'UNKNOWN', 'S_RECON', 'LIVE_SSOT'):
                     _unattributed_held_krw += _pos_val
         except Exception as _et_e:
@@ -3155,10 +3157,18 @@ class StreamOrchestrator:
 
         # ★ [Dynamic Budget Recycling + Capital Conservation Identity]
         # 시그널이 없는 스트림의 유휴 예산에서 이미 S_RECON 등으로 실계좌에 투입된 자본(_unattributed_held_krw)을 우선 차감하여 이중 계상 원천 차단
-        # 또한 장중(08:00~15:10 KST)에는 _kis_adapter.py의 Yield Harvester가 국내 파킹 ETF(459580 등) 일반 매수를 차단하므로,
-        # S5 등 파킹 ETF 매수 시그널이 유휴 예산 재분배와 [Final Gate S5] 원화 매수 한도를 잠식하지 않도록 사전 제외
+        # 또한 활성 알파 매수 시그널이 존재할 때는 국내 파킹 ETF(459580, 357870 등) 수동 파킹 시그널이
+        # 유휴 예산 재분배와 [Final Gate S5] 원화 매수 한도를 잠식하지 않도록 사전 제외 (최종 잉여 현금은 Step 8.4 S_YIELD가 처리)
         _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}  # hardcode-ok: L0 KRX parking ETF codes
-        if getattr(self, 'exec_mode', 'live') in ('live', 'paper') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and (_dtime_gen(8, 0) <= _now_t_gen <= _dtime_gen(15, 10)):
+        _has_non_parking_alpha_buy = any(
+            isinstance(_s, dict)
+            and str(_s.get('ticker', '')).split(':')[-1].strip() not in _INTRADAY_PARKING_BLOCK_TKS
+            and not str(_s.get('ticker', '')).strip().startswith('_')
+            and str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy')
+            for _s_list in signals.values()
+            for _s in (_s_list or [])
+        )
+        if getattr(self, 'exec_mode', 'live') in ('live', 'paper', 'mock') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and _has_non_parking_alpha_buy:
             for _p_sid in list(signals.keys()):
                 _before_p = len(signals[_p_sid] or [])
                 signals[_p_sid] = [
@@ -3248,13 +3258,30 @@ class StreamOrchestrator:
 
         _idle_budget = max(0.0, _idle_budget - _unattributed_held_krw)
         if _idle_budget > 0 and _active_streams_with_buys:
-            # [Pure Dynamic Math] 순 유휴 예산을 활성 스트림의 수학적 EV 가중치 비율로 정밀 배분
-            _active_weights = {k: max(0.001, float(weights.get(k, weights.get(k.replace('_MEGA_TREND', ''), 0.01)))) for k in _active_streams_with_buys}
+            # [Pure Dynamic Math] 순 유휴 예산을 활성 스트림의 수학적 EV 가중치 및 미충족(Unfilled) 여력 비율로 정밀 배분
+            _active_weights = {}
+            _min_room_fl = 0.05
+            for k in _active_streams_with_buys:
+                _base_w = max(0.001, float(weights.get(k, weights.get(k.replace('_MEGA_TREND', ''), 0.01))))
+                _canon_k = _CANONICAL_MAP.get(k, k)
+                _held_k = float(_stream_held_krw.get(_canon_k, _stream_held_krw.get(k, 0.0)) or 0.0)
+                _init_b_k = float(_initial_stream_budgets.get(_canon_k, _initial_stream_budgets.get(k, 0.0)) or 0.0)
+                _buy_sigs_k = [
+                    _s for _s in (signals.get(k) or [])
+                    if isinstance(_s, dict) and str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy')
+                ]
+                _unheld_sigs_k = [
+                    _s for _s in _buy_sigs_k
+                    if str(_s.get('ticker', '')).split(':')[-1].strip().upper() not in current_holdings
+                ]
+                _unheld_ratio = (len(_unheld_sigs_k) / len(_buy_sigs_k)) if _buy_sigs_k else 1.0
+                _cap_room = max(_min_room_fl, 1.0 - (_held_k / max(_init_b_k + _idle_budget, 1.0))) if _held_k > 0 else 1.0
+                _active_weights[k] = _base_w * max(_min_room_fl, _unheld_ratio) * _cap_room
             _sum_w = sum(_active_weights.values())
             for _s_key in _active_streams_with_buys:
                 _prop = _active_weights[_s_key] / _sum_w
                 stream_budgets[_s_key] = stream_budgets.get(_s_key, 0.0) + (_idle_budget * _prop)
-            logger.info(f"  ♻️ [Dynamic Budget Recycling] 순 유휴 예산 ₩{_idle_budget:,.0f}을 활성 스트림 {_active_streams_with_buys}의 EV 비중에 비례하여 동적 재분배")
+            logger.info(f"  ♻️ [Dynamic Budget Recycling] 순 유휴 예산 ₩{_idle_budget:,.0f}을 활성 스트림 {_active_streams_with_buys}의 EV·미충족 여력 비중에 비례하여 동적 재분배")
 
         # [L4 Upgrade] Task 1: 시그널 증발 버그 복구 — S1/S2/S3/S5 시그널 순회 및 주문 생성
         # (S4는 Advisory 전용: 자동 주문 제외)
@@ -3395,23 +3422,32 @@ class StreamOrchestrator:
             ]
             
             # [Red Team V5] 매직 넘버(30%) 삭제 및 100% 수학적 한도(Kelly/Volatility/Drawdown) 주입
-            # _scale_factor가 1.0보다 크면 확대(몰빵)이므로 차단하고, 1.0 초과 시에만 비례 축소.
+            # PositionSizer의 스트림 내 상대적 Kelly/CF 확신도 비율을 보존하면서 스트림 목표 가동률로 정규화 후 3-Sigma 단일종목 상한 적용
             _total_size_pct = sum(sig.get('size_pct', 0) for sig in valid_signals)
+            _orig_total_pct = min(
+                1.0,
+                sum(float(sig.get('_orig_stream_size_pct', sig.get('size_pct', 0)) or 0.0) for sig in valid_signals),
+            )
             
             # 포트폴리오 최대 일일 손실 한도 (기본 -3.0%)
             max_daily_loss = abs(float(pget('risk.global_max_daily_loss_pct', 3.0))) / 100.0
             
             _max_leverage_limit = float(pget('allocator.golden_bull_multiplier', 1.50)) if regime == 'bull' else 1.00
+            _target_util = min(_max_leverage_limit, max(_orig_total_pct, 1.0 if len(valid_signals) >= 2 else _orig_total_pct))
             _scale_factor = 1.0
             if _total_size_pct > _max_leverage_limit:
                 _scale_factor = _max_leverage_limit / _total_size_pct
                 logger.info(f"    [Red Team V5] {stream_id}: 총 비중 {_total_size_pct*100:.1f}% > 최대 레버리지 한도 {_max_leverage_limit*100:.0f}% 초과 → 스케일 다운 (×{_scale_factor:.2f})")
-            elif _total_size_pct > 0 and _total_size_pct < 1.0:
-                logger.info(f"    [Red Team V5] {stream_id}: 총 비중 {_total_size_pct*100:.1f}% 미달 → 현금 보존(Cash Reserve).")
+            elif 0.0 < _total_size_pct < _target_util:
+                _scale_factor = _target_util / _total_size_pct
+                logger.info(f"    [Red Team V5] {stream_id}: 스트림 내 상대 Kelly 비중 합계({_total_size_pct*100:.1f}%) → 목표 가동률({_target_util*100:.1f}%)로 정규화 (×{_scale_factor:.2f}, 3-Sigma 상한 적용)")
             
-            _stream_share = float(budget) / _safe_nav_gen
+            _canon_sid_ord = _CANONICAL_MAP.get(stream_id, stream_id)
+            _held_in_stream = float(_stream_held_krw.get(_canon_sid_ord, _stream_held_krw.get(stream_id, 0.0)) or 0.0)
+            total_stream_budget = max(float(budget), float(budget) + _held_in_stream)
+            _stream_share = float(total_stream_budget) / _safe_nav_gen
             for _sig_n in valid_signals:
-                # 1. 포트폴리오 예산 초과 방지 (Scale Down Only)
+                # 1. 스트림 내 상대 Kelly 비중 정규화
                 _sig_n['size_pct'] = _sig_n['size_pct'] * _scale_factor
                 
                 # 2. 개별 종목 수학적 한도 (차원 일관성 3-Sigma 파산 방어선: (w_s * s_i) * 3 * sigma_i <= L_max)
@@ -3467,10 +3503,10 @@ class StreamOrchestrator:
                     _abort_pair(_sig_pid)
                     continue
 
-                # 스트림 예산 × size_pct로 "목표(Target)" 금액 계산
+                # 스트림 총 예산(기보유 포함) × size_pct로 "목표(Target)" 금액 계산 (신규 발주 총액은 아래에서 잔여 현금 예산 budget 상한으로 캡핑)
                 target_amount = min(
-                    budget * size_pct,  # 배분 비중
-                    budget,             # 스트림 총 예산 상한
+                    total_stream_budget * size_pct,  # 배분 비중
+                    total_stream_budget,             # 스트림 총 예산 상한
                 )
 
                 # Beta-Convexity 노출도 & 레버리지 반영 (음의 베타 인버스 및 마켓뉴트럴 페어, 그리고 Track 2 버핏 해자 복리 슬리브 S3_B는 롱 노출 상한 감산에서 면제)
@@ -3636,12 +3672,26 @@ class StreamOrchestrator:
                 stream_orders[stream_id].append(order)
                 orders.append(order)
 
-        # 각 스트림별로 독립적으로 포지션 스케일링
+        # 각 스트림별로 잔여 예산(budget * lev_level) 상한 캡핑 및 독립 포지션 스케일링
+        min_trade_cap = pget('a3.min_trade_amount', 10000)
         for sid in list(stream_orders.keys()):
             _s_ords = stream_orders.get(sid, [])
+            _bgt = float(stream_budgets.get(sid, 0) or 0.0)
+            _max_new_bgt = _bgt * float(lev_level or 1.0)
+            _amt = sum(float(o.get('amount_krw', 0) or 0.0) for o in _s_ords)
+            if _s_ords and _max_new_bgt > 0 and _amt > _max_new_bgt * 1.001:
+                _b_scale = _max_new_bgt / _amt
+                for _o_sc in list(_s_ords):
+                    _new_amt = round(float(_o_sc.get('amount_krw', 0) or 0.0) * _b_scale)
+                    if _new_amt < min_trade_cap:
+                        if _o_sc in _s_ords:
+                            _s_ords.remove(_o_sc)
+                        if _o_sc in orders:
+                            orders.remove(_o_sc)
+                    else:
+                        _o_sc['amount_krw'] = _new_amt
+                _amt = sum(float(o.get('amount_krw', 0) or 0.0) for o in _s_ords)
             _n = len(_s_ords)
-            _amt = sum(o['amount_krw'] for o in _s_ords)
-            _bgt = stream_budgets.get(sid, 0)
             if _n > 0:
                 logger.info(
                     f"    📊 {sid}: {_n}건 ₩{_amt:,.0f} / 예산 ₩{_bgt:,.0f}"

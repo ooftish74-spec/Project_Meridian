@@ -103,7 +103,10 @@ class HMMRegimePredictor:
         X = X.replace([np.inf, -np.inf], np.nan).fillna(0).values
         hidden_states = self.model.predict_proba(X)
         current_state_prob = hidden_states[-1]
-        state_means = self.model.means_[:, 0]
+        if self.model.means_.shape[1] >= 2:
+            state_means = self.model.means_[:, 0] - 0.5 * self.model.means_[:, 1]
+        else:
+            state_means = self.model.means_[:, 0]
         sorted_states = np.argsort(state_means)
         
         probs = {'bull_prob': 0.0, 'caution_prob': 0.0, 'bear_prob': 0.0}
@@ -114,9 +117,25 @@ class HMMRegimePredictor:
             probs['bull_prob'] = round(float(current_state_prob[sorted_states[0]]), 3)
             probs['bear_prob'] = round(float(current_state_prob[sorted_states[1]]), 3)
         elif n_st >= 3:
-            probs['bull_prob'] = round(float(current_state_prob[sorted_states[0]]), 3)
-            probs['caution_prob'] = round(float(current_state_prob[sorted_states[1]]), 3)
-            probs['bear_prob'] = round(float(current_state_prob[sorted_states[2]]), 3)
+            _vix_mean_0 = float(mean.iloc[0]) if hasattr(mean, 'iloc') and len(mean) > 0 else 0.0
+            _vix_std_0 = float(std.iloc[0]) if hasattr(std, 'iloc') and len(std) > 0 else 1.0
+            _min_vix_lv = 5.0
+            _caut_vix_ceil = 21.0
+            _caut_z_ceil = 1.2
+            _bull_acc = float(current_state_prob[sorted_states[0]])
+            _caut_acc = float(current_state_prob[sorted_states[1]])
+            _bear_acc = 0.0
+            for _s_idx in sorted_states[2:]:
+                _p_s = float(current_state_prob[_s_idx])
+                _z_vix_s = float(self.model.means_[_s_idx, 0])
+                _unstd_vix_s = _vix_mean_0 + _vix_std_0 * _z_vix_s
+                if _vix_mean_0 > _min_vix_lv and _unstd_vix_s < _caut_vix_ceil and _z_vix_s < _caut_z_ceil:
+                    _caut_acc += _p_s
+                else:
+                    _bear_acc += _p_s
+            probs['bull_prob'] = round(_bull_acc, 3)
+            probs['caution_prob'] = round(_caut_acc, 3)
+            probs['bear_prob'] = round(_bear_acc, 3)
         
         logger.debug(f"HMM Regime Probabilities: {probs}")
         return probs

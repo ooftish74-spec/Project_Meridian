@@ -192,22 +192,23 @@ class ExposureOrchestrator:
         ois_norm = max(0.0, min(1.0, raw_ois / 100.0 if raw_ois > 1.0 else raw_ois))
         
         # [Pure Dynamic Math] 불연속 하드스탑(Hard Stop) 제거 및 다차원 연속 로지스틱 시그모이드 감쇄
-        # x0_vix: L2 = trailing 252d q95 VIX (tighten_only: can only lower the midpoint; quality-gated)
-        k_vix, x0_vix = (pget('exposure.vix_sigmoid_k', 0.18), pget('exposure.vix_sigmoid_x0', 30.0))
-        vix_score = 1.0 / (1.0 + np.exp(k_vix * (vix - x0_vix)))
+        # x0_vix: L2 = trailing 252d q95 VIX (tighten_only: can only lower the midpoint; quality-gated with structural floor 26.0)
+        k_vix = float(pget('exposure.vix_sigmoid_k', 0.18))
+        _x0_vix_floor, _vix_calm_ceil, _ois_neut_floor = 26.0, 20.0, 0.45
+        x0_vix = max(_x0_vix_floor, float(pget('exposure.vix_sigmoid_x0', 30.0)))
+        vix_score = 1.0 if vix <= _vix_calm_ceil else float(1.0 / (1.0 + np.exp(k_vix * (vix - x0_vix))))
         
         k_skew, x0_skew = (pget('exposure.skew_sigmoid_k', 1.5), pget('exposure.skew_sigmoid_x0', 1.5))
-        skew_score = 1.0 / (1.0 + np.exp(k_skew * (options_skew - x0_skew)))
+        skew_score = 1.0 if options_skew <= 0.0 else float(1.0 / (1.0 + np.exp(k_skew * (options_skew - x0_skew))))
         
-        # OIS: 0~100 야간 센티먼트 연속 시그모이드 (x0=0.35, k=8.0)
-        # OIS=50일 때 ~0.77, OIS=30일 때 ~0.40, OIS=18.8일 때 ~0.21로 스무스 감쇄 (절대 0% 절벽 중단 없음)
+        # OIS: 0~100 야간 센티먼트 연속 시그모이드 (x0=0.35, k=8.0), 중립 영역(>=0.45) 감쇄 면제
         k_ois, x0_ois = (pget('exposure.ois_sigmoid_k', 8.0), pget('exposure.ois_sigmoid_x0', 0.35))
-        ois_score = 1.0 / (1.0 + np.exp(-k_ois * (ois_norm - x0_ois)))
+        ois_score = 1.0 if ois_norm >= _ois_neut_floor else float(1.0 / (1.0 + np.exp(-k_ois * (ois_norm - x0_ois))))
         
         raw_multiplier = min(vix_score, skew_score, ois_score)
         vol_surface_score = round(float(np.clip(raw_multiplier, pget('exposure.vol_surface_floor', 0.05), 1.0)), 4)
-        if str(regime).lower() == 'caution' and float(transition_adj) >= 1.0 and ois_norm >= 0.55 and vix < x0_vix:
-            _rebound_impulse = min(1.0, max(0.0, (ois_norm - 0.50) / 0.50)) * float(vix_score)
+        if str(regime).lower() == 'caution' and float(transition_adj) >= 1.0 and ois_norm >= _ois_neut_floor and vix < x0_vix:
+            _rebound_impulse = min(1.0, max(0.0, (ois_norm - 0.40) / 0.60)) * float(vix_score)
             regime_score = round(float(regime_score + (1.0 - regime_score) * _rebound_impulse), 4)
             components['regime']['rebound_impulse'] = round(_rebound_impulse, 4)
             components['regime']['score'] = regime_score
@@ -237,7 +238,8 @@ class ExposureOrchestrator:
                 _vol_keys = _risky_keys if len(_risky_keys) > 0 else list(_positions.keys())
                 _returns = _var_calc._load_returns(_vol_keys, pget('risk.sigma_lookback', 60))
                 if _returns is not None and _returns.shape[1] > 0:
-                    _weights = np.array([_positions[t].get('weight', 1.0 / len(_vol_keys)) for t in _vol_keys[:_returns.shape[1]]])
+                    _matched_tks = getattr(_var_calc, '_matched_tickers', None) or _vol_keys[:_returns.shape[1]]
+                    _weights = np.array([_positions[t].get('weight', 1.0 / len(_matched_tks)) for t in _matched_tks[:_returns.shape[1]]])
                     _weights = _weights / _weights.sum() if _weights.sum() > 0 else _weights
                     _port_rets = np.asarray(_returns @ _weights, dtype=float)
                     _ewma_lambda = float(pget('risk.ewma_lambda', 0.94))

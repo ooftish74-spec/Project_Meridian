@@ -119,8 +119,9 @@ class S0BetaStream(BaseStream):
         inverse_kq_ticker = _s('s0_beta.target_inverse_kosdaq', '251340')
         hist_max_len = _i('s0_beta.history_max_length', 120)
         vkospi_default = _f('s0_beta.vkospi_default', _vq.get('baseline', 16.5))
-        vix_stress_thr = _f('s0_beta.vix_stress_threshold', _vq.get('bear', 25.0))
-        vkospi_stress_thr = _f('s0_beta.vkospi_stress_threshold', _vq.get('caution', 22.0))
+        _vix_str_fl, _vk_caut_fl, _ois_str_fl, _nf_str_fl = 25.0, 22.0, 45.0, -0.2
+        vix_stress_thr = max(_vix_str_fl, _f('s0_beta.vix_stress_threshold', _vq.get('bear', 25.0)))
+        vkospi_stress_thr = max(_vix_str_fl, _f('s0_beta.vkospi_stress_threshold', _vq.get('caution', 25.0)))
         base_enabled = _b('s0_beta.base_position_enabled', True)
         base_ticker = _s('s0_beta.base_ticker', _opt_park)
 
@@ -176,7 +177,7 @@ class S0BetaStream(BaseStream):
         dd_vel = float(features.get('alpha_dd_velocity_3d', 0.0))
         # Backward-looking 20d realized vol proxy for VKOSPI must not trigger inverse entry if VIX is calm and overnight futures/OIS are rebounding
         _vkospi_confirmed = (vkospi > 0.0 and vkospi >= vkospi_stress_thr) and (
-            vix >= _vq.get('caution', 22.0) or (ois_val < 48.0 and nf_chg <= 0.2)
+            vix >= max(_vk_caut_fl, float(_vq.get('caution', 22.0))) or (ois_val < _ois_str_fl and nf_chg <= _nf_str_fl)
         )
         is_vix_spike = (vix > 0.0 and vix >= vix_stress_thr) or _vkospi_confirmed
 

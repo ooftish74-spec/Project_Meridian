@@ -64,6 +64,8 @@ class TransitionSignalDetector:
                 'trigger_rebalance': bool,
             }
         """
+        if market_data is None:
+            market_data = self._load_market_data()
         sources = {}
         hmm_signal = self._get_hmm_signal(market_data)
         sources['hmm'] = hmm_signal
@@ -97,22 +99,37 @@ class TransitionSignalDetector:
             strength = 0
             if trans_probs:
                 current_regime = result.get('regime', 'caution')
+                hmm_regime = result.get('hmm_regime') or current_regime
+                lookup_regime = hmm_regime if hmm_regime in trans_probs else current_regime
                 if current_regime in ('bear', 'crash'):
-                    bull_prob = trans_probs.get(current_regime, {}).get('bull', 0)
-                    caution_prob = trans_probs.get(current_regime, {}).get('caution', 0)
+                    bull_prob = trans_probs.get(lookup_regime, {}).get('bull', 0)
+                    caution_prob = trans_probs.get(lookup_regime, {}).get('caution', 0)
                     recovery_prob = bull_prob + caution_prob
                     threshold = pget('regime.hmm_recovery_prob_threshold', 0.3)
                     if recovery_prob > threshold:
                         signal_type = 'v_recovery'
                         strength = min(1.0, recovery_prob)
                 elif current_regime in ('bull', 'caution'):
-                    crash_prob = trans_probs.get(current_regime, {}).get('crash', 0)
-                    bear_prob = trans_probs.get(current_regime, {}).get('bear', 0)
-                    breakdown_prob = crash_prob + bear_prob
-                    threshold = pget('regime.hmm_breakdown_prob_threshold', 0.25)
-                    if breakdown_prob > threshold:
-                        signal_type = 'v_breakdown'
-                        strength = min(1.0, breakdown_prob)
+                    _crash_type = str(result.get('crash_type', '') or '')
+                    _vix_hist = (market_data or {}).get('vix_history', [])
+                    _cur_vix = float(_vix_hist[-1]) if _vix_hist else 20.0
+                    _vix_caut_ceil = 22.0
+                    if _crash_type == 'rebound_from_bleed' and _cur_vix < _vix_caut_ceil:
+                        bull_prob = trans_probs.get(lookup_regime, {}).get('bull', 0)
+                        caution_prob = trans_probs.get(lookup_regime, {}).get('caution', 0)
+                        recovery_prob = bull_prob + caution_prob
+                        threshold = pget('regime.hmm_recovery_prob_threshold', 0.3)
+                        if recovery_prob > threshold:
+                            signal_type = 'v_recovery'
+                            strength = min(1.0, recovery_prob * 0.5)
+                    elif hmm_regime in ('bear', 'crash') or _cur_vix >= _vix_caut_ceil:
+                        crash_prob = trans_probs.get(lookup_regime, {}).get('crash', 0)
+                        bear_prob = trans_probs.get(lookup_regime, {}).get('bear', 0)
+                        breakdown_prob = crash_prob + bear_prob
+                        threshold = pget('regime.hmm_breakdown_prob_threshold', 0.25)
+                        if breakdown_prob > threshold:
+                            signal_type = 'v_breakdown'
+                            strength = min(1.0, breakdown_prob)
             return {'signal_type': signal_type, 'strength': round(strength, 3), 'regime': result.get('regime', 'caution'), 'method': result.get('method', 'unknown')}
         except Exception as e:
             logger.debug(f"  HMM signal 실패: {e}")

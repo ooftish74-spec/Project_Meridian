@@ -323,11 +323,14 @@ class KISDataCollector:
         if not rows:
             return None
         records = []
-        for r in rows:
+        for idx_r, r in enumerate(rows):
             dt = r.get('stck_bsop_date', '')
             if not dt:
                 continue
-            records.append({'Date': dt, 'Open': float(r.get('bstp_nmix_oprc', 0)), 'High': float(r.get('bstp_nmix_hgpr', 0)), 'Low': float(r.get('bstp_nmix_lwpr', 0)), 'Close': float(r.get('bstp_nmix_prpr', 0)), 'Volume': int(r.get('acml_vol', 0))})
+            vol = int(float(r.get('acml_vol', 0) or 0))
+            if vol <= 0 and idx_r == 0 and len(rows) > 1:
+                continue
+            records.append({'Date': dt, 'Open': float(r.get('bstp_nmix_oprc', 0)), 'High': float(r.get('bstp_nmix_hgpr', 0)), 'Low': float(r.get('bstp_nmix_lwpr', 0)), 'Close': float(r.get('bstp_nmix_prpr', 0)), 'Volume': vol})
         if not records:
             return None
         df = pd.DataFrame(records)

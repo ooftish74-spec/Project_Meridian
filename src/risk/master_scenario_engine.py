@@ -152,11 +152,14 @@ class MasterScenarioEngine:
                     pass
 
                 v_rets = np.diff(v_arr) / np.maximum(v_arr[:-1], _EPS)
-                if len(v_rets) >= _min_vix_len:
+                _eq_hist = market_data.get('kospi_returns') or signal_cache.get('kospi_returns') or []
+                _eq_arr = np.asarray([float(x) for x in _eq_hist if _safe_float(x) is not None], dtype=float) if isinstance(_eq_hist, list) else np.array([], dtype=float)
+                _tail_series = _eq_arr if len(_eq_arr) >= _min_vix_len else v_rets
+                if len(_tail_series) >= _min_vix_len:
                     try:
                         from src.risk.garch_volatility_forecaster import GARCHVolatilityForecaster
-                        g_res = GARCHVolatilityForecaster().forecast_next_volatility(v_rets)
-                        curr_v_vol = float(np.std(v_rets[-_min_vix_len:], ddof=1))
+                        g_res = GARCHVolatilityForecaster().forecast_next_volatility(_tail_series)
+                        curr_v_vol = float(np.std(_tail_series[-_min_vix_len:], ddof=1))
                         next_v_vol = float(g_res['forecasted_daily_vol'])
                         if garch_vol_chg_z is None and curr_v_vol > _EPS:
                             garch_vol_chg_z = float((next_v_vol - curr_v_vol) / curr_v_vol)
@@ -167,11 +170,12 @@ class MasterScenarioEngine:
                     if cf_tail_ratio is None:
                         try:
                             from src.risk.evt_cvar_calculator import EVTCVaRCalculator
+                            _cf_in = _tail_series if len(_eq_arr) >= _min_vix_len else (-v_rets)
                             cf_res = EVTCVaRCalculator().calculate_cf_var_and_cvar(
-                                returns_history=-v_rets,
+                                returns_history=_cf_in,
                                 portfolio_value=1.0,
                                 portfolio_weights=np.array([1.0]),
-                                asset_returns_matrix=(-v_rets).reshape(-1, 1),
+                                asset_returns_matrix=_cf_in.reshape(-1, 1),
                             )
                             z_cf = float(cf_res.get('z_cf') or _z99_norm)
                             cf_tail_ratio = float(z_cf / _z99_norm)
