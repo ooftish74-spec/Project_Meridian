@@ -436,8 +436,12 @@ class MarketCalendar:
         """날짜 문자열 파싱."""
         if date_str is None:
             return datetime.now()
+        if isinstance(date_str, datetime):
+            return date_str
+        if hasattr(date_str, 'strftime'):
+            date_str = date_str.strftime('%Y%m%d')
         
-        date_str = date_str.replace('-', '')
+        date_str = str(date_str).replace('-', '')
         if len(date_str) != 8:
             raise ValueError(f"날짜 형식 오류: {date_str} (YYYYMMDD 필요)")
         

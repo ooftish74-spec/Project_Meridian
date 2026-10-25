@@ -1223,7 +1223,9 @@ def collect_us_macro() -> Dict:
             _tr_df = result.get('treasuries')
             if isinstance(_tr_df, pd.DataFrame) and 'US_10Y' in _tr_df.columns:
                 _cross_series_targets.append((_tr_df['US_10Y'], 'cross_us10y.parquet'))
-            _fx_df = result.get('currencies') or result.get('fx')
+            _fx_df = result.get('currencies')
+            if _fx_df is None:
+                _fx_df = result.get('fx')
             if isinstance(_fx_df, pd.DataFrame):
                 for _fx_col in ('USD_KRW', 'USDKRW', 'KRW'):
                     if _fx_col in _fx_df.columns:
