@@ -253,8 +253,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             items.append((ticker, info))
 
         # Always include KRW CASH and USD CASH (if > 0) so Total NAV matches KIS MTS 100%
-        fx_rate = float(account.get("fx_rate") or portfolio.get("fx_rate") or 1346.90)
-        cash_val = float(account.get("cash", 0) or 0)
+        fx_rate = float(account.get("fx_rate") or portfolio.get("fx_rate") or 0.0)
+        cash_val = float(account.get("d2_settlement_cash_krw") or account.get("cash", 0) or 0)
         cash_usd = float(account.get("cash_usd", account.get("us_cash_usd", 0)) or 0)
         current_assets = cash_val + (cash_usd * fx_rate) + sum(
             float(h.get("eval_krw", 0) or (float(h.get("qty", 0) or 0) * float(h.get("current_price", 0) or 0) * (fx_rate if h.get("market") == "US" else 1.0)))
