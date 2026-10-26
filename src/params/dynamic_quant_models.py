@@ -1308,6 +1308,13 @@ _ETP_RT_FRICTION = 0.0006
 _DEFAULT_REWARD_REALIZATION = 0.55
 _DEFAULT_LOSS_MITIGATION = 0.75
 _DEFAULT_KELLY_DEPLOYMENT = 0.75
+_PARKING_RISK_DEC = 0.0005
+_PARKING_P_WIN = 0.95
+_TRACK2_DEFAULT_HORIZON_DAYS = 20.0
+_PROB_CALIBRATION_KNOT = 0.75
+_PROB_TAIL_SLOPE = 0.25
+_PAIR_SPREAD_REWARD_SCALE = 0.65
+_PAIR_CORR_RISK_SCALE = 0.45
 _STREAM_DEFAULT_HORIZONS: Dict[str, float] = {
     'S0': 5.0,
     'S1': 2.0,
@@ -1330,7 +1337,7 @@ _STREAM_DEFAULT_HORIZONS: Dict[str, float] = {
 def normalize_signal_horizon_expectation(
     sig: Dict[str, Any],
     stream_id: str = '',
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """Normalize a signal dictionary's single-horizon reward, risk, confidence, and holding period.
 
     Prevents multi-year DCF Margin-of-Safety percentages (e.g., S3 Track 2 215% MoS)
@@ -1370,7 +1377,20 @@ def normalize_signal_horizon_expectation(
         else 0.0
     )
 
-    if is_track2:
+    is_parking_sig = (
+        strategy in ('yield_parking', 'kofr_parking', 'cash_parking')
+        or (sid in ('S5', 'S_YIELD', 'S0') and (tp_dec >= _MAX_SINGLE_HORIZON_RET or sl_dec >= _MAX_SINGLE_HORIZON_RET))
+    )
+
+    if is_parking_sig:
+        p_win = _PARKING_P_WIN
+        reward_dec = (
+            er_val
+            if (0.0 < er_val < _MAX_SINGLE_HORIZON_RET)
+            else (_DEFAULT_RF_ANN / _TRADING_DAYS_ANN) * _DEFAULT_HORIZON_DAYS
+        )
+        risk_dec = _PARKING_RISK_DEC
+    elif is_track2:
         raw_mos = sig.get('margin_of_safety_pct')
         mos_pct = float(raw_mos) if raw_mos is not None and math.isfinite(float(raw_mos)) else 0.0
         if mos_pct <= 0.0 and er_val > _MAX_SINGLE_HORIZON_RET:
@@ -1383,18 +1403,25 @@ def normalize_signal_horizon_expectation(
             er_pct_dec if (0.0 < er_pct_dec <= _MAX_SINGLE_HORIZON_RET) else 0.0
         )
         cand_tp = tp_dec if (0.0 < tp_dec <= _MAX_SINGLE_HORIZON_RET) else 0.0
-        reward_dec = max(cand_er, cand_tp)
+        if cand_er > 0.0 and cand_tp > 0.0 and cand_er < cand_tp:
+            implied_win = (cand_er + (1.0 - p_win) * sl_dec) / max(p_win, _MIN_SIG_CONF)
+            reward_dec = _clamp(implied_win, cand_er, cand_tp)
+        else:
+            reward_dec = max(cand_er, cand_tp)
         if reward_dec <= 0.0:
             reward_dec = _DEFAULT_SIG_TP_DEC
         reward_dec = _clamp(reward_dec, _MIN_SIG_SL_DEC, _MAX_SINGLE_HORIZON_RET)
         risk_dec = _clamp(sl_dec, _MIN_SIG_SL_DEC, _MAX_SINGLE_HORIZON_RET)
 
     raw_hold = sig.get('max_hold_days')
-    hold_days = (
-        float(raw_hold)
-        if raw_hold is not None and math.isfinite(float(raw_hold)) and float(raw_hold) >= 1.0
-        else _STREAM_DEFAULT_HORIZONS.get(sid, _DEFAULT_HORIZON_DAYS)
-    )
+    if raw_hold is not None and math.isfinite(float(raw_hold)) and float(raw_hold) >= 1.0:
+        hold_days = float(raw_hold)
+    elif is_parking_sig:
+        hold_days = _DEFAULT_HORIZON_DAYS
+    elif is_track2:
+        hold_days = _TRACK2_DEFAULT_HORIZON_DAYS
+    else:
+        hold_days = _STREAM_DEFAULT_HORIZONS.get(sid, _DEFAULT_HORIZON_DAYS)
 
     raw_c = sig.get('round_trip_cost')
     if raw_c is not None and math.isfinite(float(raw_c)) and float(raw_c) >= 0.0:
@@ -1417,6 +1444,7 @@ def normalize_signal_horizon_expectation(
         'horizon_days': hold_days,
         'round_trip_cost': c_rt,
         'size_weight': sz_val,
+        'is_parking': bool(is_parking_sig),
     }
 
 
@@ -1506,12 +1534,33 @@ def compute_corporate_after_tax_cagr_metrics(
             p_acc = 0.0
             rk_acc = 0.0
             h_acc = 0.0
+            is_pair_stream = (
+                sid in ('S14', 'S14_PAIR_ALPHA')
+                and len(buy_sigs) >= 2
+                and any(
+                    bool(s.get('pair_id')) or bool(s.get('is_hedge')) or bool(s.get('is_market_neutral'))
+                    for s in buy_sigs
+                )
+            )
             for s_item in buy_sigs:
                 norm = normalize_signal_horizon_expectation(s_item, stream_id=sid)
                 w_i = norm['size_weight']
-                p_i = norm['p_win']
-                r_i = norm['reward_dec'] * k_rew
-                sl_i = norm['risk_dec'] * k_loss
+                p_raw = norm['p_win']
+                if norm.get('is_parking'):
+                    p_i = p_raw
+                    r_i = norm['reward_dec']
+                    sl_i = norm['risk_dec']
+                else:
+                    p_i = (
+                        _PROB_CALIBRATION_KNOT + _PROB_TAIL_SLOPE * (p_raw - _PROB_CALIBRATION_KNOT)
+                        if p_raw > _PROB_CALIBRATION_KNOT
+                        else p_raw
+                    )
+                    r_i = norm['reward_dec'] * k_rew
+                    sl_i = norm['risk_dec'] * k_loss
+                    if is_pair_stream:
+                        r_i *= _PAIR_SPREAD_REWARD_SCALE
+                        sl_i *= _PAIR_CORR_RISK_SCALE
                 h_i = norm['horizon_days']
                 c_i = norm['round_trip_cost']
 
@@ -1591,4 +1640,48 @@ def compute_corporate_after_tax_cagr_metrics(
         'estimated_annual_gross_profit_krw': round(est_gross_profit_krw, 0),
         'stream_growth_metrics': stream_stats_final,
     }
+
+
+_PROBE_TILT_MIN = 0.80
+_PROBE_TILT_MAX = 1.25
+
+
+def apply_probe_ev_tilt(approved_signals: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Differentiate probe-capped non-pair signals by relative EV margin while preserving total size_pct.
+
+    Under Grinold-Kahn fundamental law (w_i prop alpha_i / sigma_i^2), when multiple signals in a
+    batch are clamped at the probe ceiling (e.g., 5%), tilting within [0.80, 1.25] proportional to
+    ev_margin / mean(ev_margin) restores relative alpha differentiation without changing total
+    probe budget or single-signal compute() behavior.
+    """
+    out = [dict(s) for s in approved_signals]
+    if len(out) < 2:
+        return out
+    probe_idx = [
+        idx for idx, s in enumerate(out)
+        if bool(s.get('is_probe'))
+        and not s.get('pair_id')
+        and not bool(s.get('is_market_neutral'))
+        and float(s.get('size_pct') or 0.0) > 0.0
+    ]
+    if len(probe_idx) < 2:
+        return out
+    margins = [max(_EPS, float(out[idx].get('ev_margin') or 0.0)) for idx in probe_idx]
+    base_sizes = [max(0.0, float(out[idx].get('size_pct') or 0.0)) for idx in probe_idx]
+    total_probe_size = sum(base_sizes)
+    mean_margin = sum(margins) / float(len(margins))
+    if total_probe_size <= _EPS or mean_margin <= _EPS:
+        return out
+    tilted_raw = [
+        b_sz * _clamp(m_val / mean_margin, _PROBE_TILT_MIN, _PROBE_TILT_MAX)
+        for b_sz, m_val in zip(base_sizes, margins)
+    ]
+    raw_sum = sum(tilted_raw)
+    if raw_sum <= _EPS:
+        return out
+    scale = total_probe_size / raw_sum
+    for idx, t_val in zip(probe_idx, tilted_raw):
+        out[idx]['size_pct'] = round(_clamp(t_val * scale, _EPS, 1.0), 4)
+    return out
+
 

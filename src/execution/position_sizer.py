@@ -279,12 +279,19 @@ class PositionSizer:
                 sig['sizer_reason'] = result['reason']
                 sig['sl_pct'] = _orig_sl if _orig_sl > 0.0 else result['sl_pct']
                 sig['tp_pct'] = _orig_tp if _orig_tp > 0.0 else result['tp_pct']
+                sig['is_probe'] = bool(result.get('is_probe', False))
                 approved.append(sig)
             else:
                 dropped += 1
                 _tk_ps = sig.get('ticker', '')
                 _dr_ps = result.get('drop_reason', '')
                 logger.debug(f"  [Phase 11] PositionSizer Drop: {_tk_ps} -> {_dr_ps}")
+        if len(approved) >= 2:
+            try:
+                from src.params.dynamic_quant_models import apply_probe_ev_tilt
+                approved = apply_probe_ev_tilt(approved)
+            except Exception:
+                pass
         if dropped:
             logger.info(f"  [Phase 11: Dynamic Balance] PositionSizer: {len(approved)}/{len(signals)} 통과 ({dropped}건 EV<Friction Drop)")
         return approved

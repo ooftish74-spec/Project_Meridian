@@ -90,9 +90,9 @@ def test_closed_form_reentry_hurdle_blocks_18min_sqqq_rebuy(monkeypatch):
     """
     dqe = DynamicQuantEngine()
     monkeypatch.setattr(
-        dqe,
+        DynamicQuantEngine,
         "get_asset_metrics",
-        lambda tk: {"vol_daily": 0.042, "adt": 500_000_000.0, "ir": 0.1, "mu_ann": 0.0},
+        lambda self, tk: {"vol_daily": 0.042, "adt": 500_000_000.0, "ir": 0.1, "mu_ann": 0.0},
     )
     elapsed_m = 18.6
     prev_pnl = 0.53

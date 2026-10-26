@@ -4276,7 +4276,7 @@ class StreamOrchestrator:
                 # ── Time Limit (보유기간 만료 강제 청산) ──
                 # 단기 데이트레이딩(S1, S11 등) 및 시그널 소멸 종목에만 적용하며,
                 # 코어 슬리브 및 현재 활성 매수 시그널 유지 종목은 면제 (단, 시그널이 소멸된 S14 고아 레그는 청산 허용)
-                elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
+                elif _is_s14_orphan_tl or (_max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days):
                     from src.execution.position_ledger import is_core_or_macro_sleeve as _is_core_so
                     if (not _is_s14_orphan_tl) and (
                         _is_core_so(

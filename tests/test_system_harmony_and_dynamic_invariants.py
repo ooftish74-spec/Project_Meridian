@@ -594,11 +594,12 @@ def test_corporate_after_tax_cagr_closed_form_and_allocator_signal_prior_harmony
     import math
     from src.allocation.alpha_allocator import AlphaAllocator
     from src.params.dynamic_quant_models import (
+        apply_probe_ev_tilt,
         compute_corporate_after_tax_cagr_metrics,
         normalize_signal_horizon_expectation,
     )
 
-    # 1. Track 2 (Buffett QVM) multi-year DCF Margin-of-Safety (215.72%) must normalize to [0.15, 0.25] single-horizon reward
+    # 1. Track 2 (Buffett QVM) multi-year DCF Margin-of-Safety (215.72%) must normalize to [0.15, 0.25] single-horizon reward & 20d horizon
     qvm_sig = {
         "stream_id": "S3_B",
         "track": "TRACK_2_BUFFETT_QVM",
@@ -612,10 +613,37 @@ def test_corporate_after_tax_cagr_closed_form_and_allocator_signal_prior_harmony
         "size_pct": 0.20,
     }
     norm_qvm = normalize_signal_horizon_expectation(qvm_sig, stream_id="S3")
-    # 215.72% * 0.10 = 21.572% -> 0.21572 in [0.15, 0.25]; tactical risk capped at 0.08
+    # 215.72% * 0.10 = 21.572% -> 0.21572 in [0.15, 0.25]; tactical risk capped at 0.08; Track 2 horizon = 20.0d
     assert norm_qvm["reward_dec"] == pytest.approx(0.21572, rel=1e-9)
     assert norm_qvm["risk_dec"] == pytest.approx(0.08, rel=1e-9)
     assert norm_qvm["p_win"] == pytest.approx(0.65, rel=1e-9)
+    assert norm_qvm["horizon_days"] == pytest.approx(20.0, rel=1e-9)
+
+    # 1b. S5 yield-parking placeholder (tp_pct=99.0, sl_pct=99.0) must normalize to money-market risk-free rate & 5bps risk
+    parking_sig = {
+        "stream_id": "S5",
+        "ticker": "459580",
+        "direction": "long",
+        "confidence": 0.90,
+        "tp_pct": 99.0,
+        "sl_pct": 99.0,
+        "size_pct": 0.10,
+    }
+    norm_park = normalize_signal_horizon_expectation(parking_sig, stream_id="S5")
+    assert norm_park["is_parking"] is True
+    assert norm_park["risk_dec"] == pytest.approx(0.0005, rel=1e-9)
+    assert norm_park["p_win"] == pytest.approx(0.95, rel=1e-9)
+    assert norm_park["reward_dec"] == pytest.approx((0.0325 / 252.0) * 5.0, rel=1e-9)
+
+    # 1c. apply_probe_ev_tilt differentiates probe-capped signals by relative ev_margin while preserving total size_pct
+    tilted = apply_probe_ev_tilt(
+        [
+            {"ticker": "LOW_EV", "size_pct": 0.05, "ev_margin": 1.0, "is_probe": True},
+            {"ticker": "HIGH_EV", "size_pct": 0.05, "ev_margin": 4.0, "is_probe": True},
+        ]
+    )
+    assert tilted[1]["size_pct"] > tilted[0]["size_pct"]
+    assert (tilted[0]["size_pct"] + tilted[1]["size_pct"]) == pytest.approx(0.10, abs=1e-4)
 
     # 2. Hand-computed closed-form oracle for compute_corporate_after_tax_cagr_metrics
     # Single stream S2 with weight 1.0, 1 signal: p=0.65, TP=0.10 (10%), SL=0.05 (5%), H=5 days, C_RT=0.0021
