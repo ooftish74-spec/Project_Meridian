@@ -2973,7 +2973,13 @@ class StreamOrchestrator:
         ★ 스트림별 예산 한도 적용: S1=₩20M, S2=₩40M, S3=₩30M, S4=₩64M.
         """
         orders = []
-        lev_level = leverage_result['judgment']['leverage_level']
+        lev_level = float(
+            ((leverage_result or {}).get('judgment') or {}).get(
+                'leverage_level',
+                (leverage_result or {}).get('final_leverage', 1.0),
+            )
+            or 1.0
+        )
         initial_capital = cfg.get('portfolio.initial_capital')
 
         # ★ 전체 포트폴리오 NAV 기반 동적 예산 배분
@@ -3107,6 +3113,17 @@ class StreamOrchestrator:
                     _fx_ub = float(_CDG_UB().get_usdkrw_rate() or 0.0)
                 except Exception:
                     _fx_ub = 0.0
+            _pending_exits_gen = {
+                str(_x).split(':')[-1].strip().upper()
+                for _x in (getattr(self, '_pending_exit_tickers', set()) or set())
+                if _x
+            }
+            if isinstance(market_data, dict) and market_data.get('pending_exit_tickers'):
+                _pending_exits_gen.update(
+                    str(_x).split(':')[-1].strip().upper()
+                    for _x in (market_data.get('pending_exit_tickers') or [])
+                    if _x
+                )
             for _pk, _pv in _positions.items():
                 if not isinstance(_pv, dict):
                     continue
@@ -3115,6 +3132,8 @@ class StreamOrchestrator:
                 # 두 형식 모두 _pv.get('ticker') 또는 _pk(= ticker 자체)로 처리
                 _t = _pv.get('ticker', '') or _pk
                 _clean_tk_ub = str(_t).split(':')[-1].strip() if _t else ''
+                if _clean_tk_ub and _clean_tk_ub.upper() in _pending_exits_gen:
+                    continue
                 if _clean_tk_ub:
                     existing_tickers.add(_clean_tk_ub)
 
@@ -3199,6 +3218,9 @@ class StreamOrchestrator:
         # 또한 활성 알파 매수 시그널이 존재할 때는 국내 파킹 ETF(459580, 357870 등) 수동 파킹 시그널이
         # 유휴 예산 재분배와 [Final Gate S5] 원화 매수 한도를 잠식하지 않도록 사전 제외 (최종 잉여 현금은 Step 8.4 S_YIELD가 처리)
         _INTRADAY_PARKING_BLOCK_TKS = {'459580', '423160', '449170', '430740', '357870', '357330'}  # hardcode-ok: L0 KRX parking ETF codes
+        _LONG_LEV_2X_3X_TKS = set("122630 233740 123320 TQQQ SOXL SPXL UPRO".split())  # hardcode-ok: L0 2X/3X long ETP codes
+        _SHORT_LEV_3X_TKS = set("SQQQ SOXS SPXU".split())  # hardcode-ok: L0 3X short ETP codes
+        _reg_l_gen = str(regime or 'caution').lower()
         _has_non_parking_alpha_buy = any(
             isinstance(_s, dict)
             and str(_s.get('ticker', '')).split(':')[-1].strip() not in _INTRADAY_PARKING_BLOCK_TKS
@@ -3207,22 +3229,39 @@ class StreamOrchestrator:
             for _s_list in signals.values()
             for _s in (_s_list or [])
         )
-        if getattr(self, 'exec_mode', 'live') in ('live', 'paper', 'mock') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))) and _has_non_parking_alpha_buy:
+        if getattr(self, 'exec_mode', 'live') in ('live', 'paper', 'mock') and (not _in_pytest_gen or bool((market_data or {}).get('enforce_intraday_parking_guard', False))):
             for _p_sid in list(signals.keys()):
                 _before_p = len(signals[_p_sid] or [])
                 signals[_p_sid] = [
                     _s for _s in (signals[_p_sid] or [])
                     if not (
                         isinstance(_s, dict)
-                        and str(_s.get('ticker', '')).split(':')[-1].strip() in _INTRADAY_PARKING_BLOCK_TKS
                         and str(_s.get('direction', _s.get('action', 'long'))).lower() in ('long', 'buy')
-                        and not bool(_s.get('is_yield_sweep', False))
+                        and (
+                            (
+                                _has_non_parking_alpha_buy
+                                and str(_s.get('ticker', '')).split(':')[-1].strip() in _INTRADAY_PARKING_BLOCK_TKS
+                                and not bool(_s.get('is_yield_sweep', False))
+                            )
+                            or (
+                                str(_s.get('strategy', '')).lower() == 'overnight_overlay'
+                                and (_now_t_gen < _dtime_gen(15, 15) or _reg_l_gen not in ('bull', 'momentum_surge'))
+                            )
+                            or (
+                                str(_s.get('ticker', '')).split(':')[-1].strip().upper() in _LONG_LEV_2X_3X_TKS
+                                and _reg_l_gen not in ('bull', 'momentum_surge')
+                            )
+                            or (
+                                str(_s.get('ticker', '')).split(':')[-1].strip().upper() in _SHORT_LEV_3X_TKS
+                                and _reg_l_gen not in ('bear', 'crash', 'crisis')
+                            )
+                        )
                     )
                 ]
                 if len(signals[_p_sid]) < _before_p:
                     logger.info(
-                        f"  🏦 [Intraday Parking Crowd-Out Guard] {_p_sid}: 장중({_now_t_gen.strftime('%H:%M')}) 파킹 ETF 매수 시그널 "
-                        f"{_before_p - len(signals[_p_sid])}건 사전 제외 → 예산을 활성 알파/인버스 스트림으로 100% 전환"
+                        f"  🏦 [Intraday Parking & Regime ETP Crowd-Out Guard] {_p_sid}: 장중({_now_t_gen.strftime('%H:%M')}, regime={_reg_l_gen}) "
+                        f"파킹/비적합 레버리지 매수 시그널 {_before_p - len(signals[_p_sid])}건 사전 제외 → 예산을 활성 알파/인버스 스트림으로 100% 전환"
                     )
 
         # ★ [Session Closed-Market Signal Crowd-Out Guard]
@@ -3363,6 +3402,60 @@ class StreamOrchestrator:
         _def_set_gen = set(_qe_gen.get_defensive_exempt_tickers())
         _safe_nav_gen = max(1.0, float(nav or 0.0))
 
+        # ★ [Market-Neutral Hedge Completion Reserve]
+        # S14_PAIR_ALPHA에서 롱 레그(pair_partner)가 이미 실계좌에 보유 중이나
+        # 대응 인버스 헷지 레그(114800, PSQ 등)가 50% 미만으로 과소 헷지된 경우,
+        # 타 세션(예: US) 기보유 평가액으로 인해 스트림 잔여 예산이 0원이 되었더라도
+        # 기보유 롱 레그와 1:1 마켓뉴트럴 균형을 완성하기 위한 부족분(_deficit_krw)을 최우선 리스크 중립화 예비금으로 보장
+        _s14_hedge_completion_map = {}
+        _s14_hedge_only_mode = False
+        for _s14_key in ('S14_PAIR_ALPHA', 'S14'):
+            for _s_hc in (signals.get(_s14_key) or []):
+                if not isinstance(_s_hc, dict):
+                    continue
+                if str(_s_hc.get('direction', _s_hc.get('action', 'long'))).lower() not in ('long', 'buy'):
+                    continue
+                _pid_hc = str(_s_hc.get('pair_id', '') or '').strip()
+                _inv_tk_hc = str(_s_hc.get('ticker', '')).split(':')[-1].strip().upper()
+                _prt_tk_hc = str(_s_hc.get('pair_partner', '')).split(':')[-1].strip().upper()
+                if not (_pid_hc and _inv_tk_hc in _inv_set_gen and _prt_tk_hc):
+                    continue
+                if (
+                    _any_session_open
+                    and getattr(self, 'exec_mode', 'live') in ('live', 'paper')
+                    and not getattr(self, '_ignore_market_hours', False)
+                    and not self._is_ticker_session_open_for_live_exit(_inv_tk_hc, market_data)
+                ):
+                    continue
+                _prt_ch = current_holdings.get(_prt_tk_hc)
+                _prt_eval = float((_prt_ch or {}).get('eval_krw', 0.0) or 0.0)
+                _inv_ch = current_holdings.get(_inv_tk_hc)
+                _inv_eval = float((_inv_ch or {}).get('eval_krw', 0.0) or 0.0)
+                if _prt_eval > 0.0 and _inv_eval < _prt_eval * 0.50:
+                    _def_krw = max(0.0, _prt_eval - _inv_eval)
+                    if _def_krw >= float(pget('a3.min_trade_amount', 10000)):
+                        _s14_hedge_completion_map[_pid_hc] = {
+                            'partner_tk': _prt_tk_hc,
+                            'inv_tk': _inv_tk_hc,
+                            'partner_eval_krw': _prt_eval,
+                            'inv_eval_krw': _inv_eval,
+                            'deficit_krw': _def_krw,
+                        }
+        if _s14_hedge_completion_map:
+            _req_hc_bgt = sum(float(_v['deficit_krw']) for _v in _s14_hedge_completion_map.values())
+            _cur_s14_bgt = max(
+                float(stream_budgets.get('S14_PAIR_ALPHA', 0.0) or 0.0),
+                float(stream_budgets.get('S14', 0.0) or 0.0),
+            )
+            if _cur_s14_bgt < _req_hc_bgt:
+                _s14_hedge_only_mode = True
+                stream_budgets['S14_PAIR_ALPHA'] = _req_hc_bgt
+                stream_budgets['S14'] = _req_hc_bgt
+                logger.info(
+                    f"  🛡️ [S14 Market-Neutral Hedge Completion Reserve] 기보유 롱 레그 대비 과소 헷지된 페어 "
+                    f"{list(_s14_hedge_completion_map.keys())} 감지 ➔ 헷지 완성 예산 ₩{_req_hc_bgt:,.0f} 배정"
+                )
+
         # 포트폴리오 전체 양(+)의 베타 스트림 예산 비중 합산 -> 이중 레짐 페널티 방지 및 정확한 포트폴리오 노출 상한 E_eff 산출
         _pos_beta_budget_krw = 0.0
         for _sid_b, _sigs_b in signals.items():
@@ -3391,11 +3484,20 @@ class StreamOrchestrator:
                     and not self._is_ticker_session_open_for_live_exit(str(_s.get('ticker', '')), market_data)
                 )
             ]
+            if stream_id in ('S14', 'S14_PAIR_ALPHA') and _s14_hedge_only_mode and _s14_hedge_completion_map:
+                stream_signals = [
+                    _s for _s in stream_signals
+                    if str(_s.get('pair_id', '') or '').strip() in _s14_hedge_completion_map
+                ]
             budget = stream_budgets.get(stream_id, 0)
             if budget <= 0 and stream_id == 'S10_MEGA_TREND':
                 budget = stream_budgets.get('S10', 0)
             elif budget <= 0 and stream_id == 'S10':
                 budget = stream_budgets.get('S10_MEGA_TREND', 0)
+            elif budget <= 0 and stream_id == 'S14_PAIR_ALPHA':
+                budget = stream_budgets.get('S14', 0)
+            elif budget <= 0 and stream_id == 'S14':
+                budget = stream_budgets.get('S14_PAIR_ALPHA', 0)
 
             if budget <= 0:
                 logger.debug(f"    {stream_id}: 예산 없음 — 주문 생성 스킵")
@@ -3432,7 +3534,12 @@ class StreamOrchestrator:
                     for sig in stream_signals:
                         if 'market_data' not in sig and market_data:
                             sig['market_data'] = market_data
-                        sig['confidence'] = _alloc.compute_unified_factor_score(sig, market_data)
+                        _prev_conf_u = float(sig.get('confidence', 0.0) or 0.0)
+                        _uf_conf_u = float(_alloc.compute_unified_factor_score(sig, market_data) or 0.0)
+                        if sig.get('pair_id') or stream_id in ('S14', 'S14_PAIR_ALPHA'):
+                            sig['confidence'] = max(_prev_conf_u, _uf_conf_u)
+                        else:
+                            sig['confidence'] = _uf_conf_u
                 except Exception as _e:
                     logger.warning(f"Failed to compute unified factor score: {_e}")
                 
@@ -3601,7 +3708,7 @@ class StreamOrchestrator:
                 if isinstance(_ch_entry, dict) and float(_ch_entry.get('qty', 0.0) or 0.0) > 0:
                     _held_qty_raw = int(float(_ch_entry.get('qty', 0.0) or 0.0))
                     _held_eval_krw_raw = float(_ch_entry.get('eval_krw', 0.0) or 0.0)
-                elif portfolio:
+                elif portfolio and _t_clean not in _pending_exits_gen:
                     pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
                     pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
                     for pos in pos_iterable:
@@ -3636,6 +3743,15 @@ class StreamOrchestrator:
                     current_amount = float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0)) + current_eval_krw
 
                 target_order_krw = target_amount
+                if _sig_pid and _sig_pid in _s14_hedge_completion_map:
+                    _hc_item = _s14_hedge_completion_map[_sig_pid]
+                    if _t_clean == _hc_item['partner_tk']:
+                        target_order_krw = min(target_order_krw, float(_hc_item['partner_eval_krw']))
+                    elif _t_clean == _hc_item['inv_tk']:
+                        target_order_krw = float(_hc_item['partner_eval_krw'])
+                        current_eval_krw = float(_hc_item['inv_eval_krw'])
+                        current_amount = current_eval_krw
+
                 _dup_hold_ratio = 1.0 / 2.0
                 if current_qty > 0 and target_order_krw > 0:
                     if current_eval_krw >= target_order_krw * _dup_hold_ratio:
@@ -3660,7 +3776,7 @@ class StreamOrchestrator:
                     continue
 
                 # [Constantinides-Leland 3제곱근 무거래 영역 & Grinold-Kahn 이산 수량 한계 순효용 검증]
-                if current_amount > 0 and target_amount > 0:
+                if current_amount > 0 and target_amount > 0 and not _is_pair_shared_inv:
                     try:
                         from src.utils.dynamic_quant_engine import get_quant_engine
                         _dqe_ord = get_quant_engine()
@@ -3781,6 +3897,7 @@ class StreamOrchestrator:
                     f"    📊 {sid}: {_n}건 ₩{_amt:,.0f} / 예산 ₩{_bgt:,.0f}"
                     + (f" ({_amt/_bgt*100:.0f}%)" if _bgt > 0 else " (예산 없음)"))
 
+        self._pending_exit_tickers = set()
         return orders
 
     def _evaluate_exits(self, market_data: Dict, regime: str, portfolio: Dict = None) -> List[Dict]:
@@ -3793,6 +3910,7 @@ class StreamOrchestrator:
             청산 주문 리스트 (direction='short')
         """
         exit_orders = []
+        self._pending_exit_tickers = set()
         try:
             positions = {}
             if portfolio and 'positions' in portfolio:
@@ -4163,14 +4281,16 @@ class StreamOrchestrator:
                     _tk_exit = str(pos.get('ticker', pos_key.split(':')[-1]))
                     _is_jp_exit = _tk_exit.upper().endswith('.T')
                     _is_us_exit = (not _is_kr_tk(_tk_exit)) and (not _is_jp_exit)
-                    from src.data_collection.central_data_gateway import CentralDataGateway
-                    _dyn_fx_exit = CentralDataGateway().get_usdkrw_rate()
-                    _jpy_fx_exit = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
                     if _is_jp_exit:
+                        _jpy_fx_exit = float(((market_data or {}).get('signal_cache') or {}).get('jpykrw', cfg.get('fx.jpykrw_fallback', 9.0)) or 9.0)
                         if _qty_exit > 0 and _p_exit > 0:
                             _amt_exit = _qty_exit * _p_exit * _jpy_fx_exit
                     elif _is_us_exit:
-                        if _qty_exit > 0 and _p_exit > 0 and _dyn_fx_exit:
+                        _dyn_fx_exit = float((market_data or {}).get('usdkrw') or ((market_data or {}).get('signal_cache') or {}).get('usdkrw') or 0.0)
+                        if _dyn_fx_exit <= 0:
+                            from src.data_collection.central_data_gateway import CentralDataGateway
+                            _dyn_fx_exit = float(CentralDataGateway().get_usdkrw_rate() or 0.0)
+                        if _qty_exit > 0 and _p_exit > 0 and _dyn_fx_exit > 0:
                             _amt_exit = _qty_exit * _p_exit * _dyn_fx_exit
                     elif not _amt_exit and _qty_exit > 0 and _p_exit > 0:
                         _amt_exit = _qty_exit * _p_exit
@@ -4217,6 +4337,11 @@ class StreamOrchestrator:
         except Exception as _etf_err:
             logger.error(f"    [ETF Stop] check_etf_stops 실패: {_etf_err}", exc_info=True)
 
+        self._pending_exit_tickers = {
+            str(eo.get('ticker', '')).split(':')[-1].strip().upper()
+            for eo in exit_orders
+            if isinstance(eo, dict) and eo.get('ticker')
+        }
         return exit_orders
 
     def _apply_dd_overlay(self, dd_action: str, portfolio: Dict, regime: str = 'caution') -> List[Dict]:

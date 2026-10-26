@@ -486,6 +486,108 @@ def test_krx_pair_hedge_replenishment_and_orphan_exit_invariants():
     assert "069620" in exited_tickers
     assert "012750" not in exited_tickers
     assert "305720" not in exited_tickers
+    assert {"091180", "457190", "069620"}.issubset(orch._pending_exit_tickers)
+
+    # 3. Verify _generate_orders completes 114800 hedge parity (2,225,160 - 7,524 = 2,217,636 KRW)
+    #    even when S14_PAIR_ALPHA holds 5.74M KRW in US positions, and blocks 122630/SQQQ in caution regime.
+    full_portfolio = {
+        "total_nav": 17_962_720.0,
+        "positions": {
+            **portfolio["positions"],
+            "114800": {
+                "ticker": "114800",
+                "quantity": 6,
+                "current_price": 1254.0,
+                "eval_krw": 7524.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "track": "TRACK_1_CORE",
+            },
+            "XLE": {
+                "ticker": "XLE",
+                "quantity": 28,
+                "current_price": 56.24,
+                "eval_krw": 2_336_419.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "track": "TRACK_1_CORE",
+            },
+            "XLV": {
+                "ticker": "XLV",
+                "quantity": 10,
+                "current_price": 147.82,
+                "eval_krw": 2_193_971.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "track": "TRACK_1_CORE",
+            },
+            "PSQ": {
+                "ticker": "PSQ",
+                "quantity": 47,
+                "current_price": 17.29,
+                "eval_krw": 1_206_010.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "track": "TRACK_1_CORE",
+            },
+        },
+    }
+    signals_for_gen = {
+        "S1": [
+            {"ticker": "SQQQ", "direction": "long", "size_pct": 0.20, "price": 72.14, "confidence": 0.70, "tp_pct": 3.0, "sl_pct": 1.5},
+        ],
+        "S5": [
+            {"ticker": "122630", "direction": "long", "strategy": "overnight_overlay", "size_pct": 0.08, "price": 90090.0, "confidence": 0.70, "tp_pct": 1.5, "sl_pct": 1.0},
+            {"ticker": "459580", "direction": "long", "strategy": "yield_parking", "size_pct": 0.40, "price": 105455.0, "confidence": 0.65, "tp_pct": 0.5, "sl_pct": 0.3},
+        ],
+        "S14_PAIR_ALPHA": [
+            {
+                "stream_id": "S14_PAIR_ALPHA",
+                "ticker": "305720",
+                "name": "KODEX 2차전지산업",
+                "direction": "long",
+                "size_pct": 0.1442,
+                "price": 13245.0,
+                "confidence": 0.664,
+                "tp_pct": 2.95,
+                "sl_pct": 1.97,
+                "pair_id": "PAIR_KR_SECONDARY_BATTERY_305720_114800",
+                "pair_partner": "114800",
+                "pair_vol_parity_scale": 0.7208,
+                "is_market_neutral": True,
+            },
+            {
+                "stream_id": "S14_PAIR_ALPHA",
+                "ticker": "114800",
+                "name": "KODEX 인버스",
+                "direction": "long",
+                "size_pct": 0.20,
+                "price": 1254.0,
+                "confidence": 0.664,
+                "tp_pct": 2.0,
+                "sl_pct": 1.2,
+                "pair_id": "PAIR_KR_SECONDARY_BATTERY_305720_114800",
+                "pair_partner": "305720",
+                "pair_vol_parity_scale": 1.0,
+                "is_hedge": True,
+                "is_market_neutral": True,
+            },
+        ],
+    }
+    weights_for_gen = {"S1": 0.05, "S5": 0.10, "S14_PAIR_ALPHA": 0.292}
+    orch.exec_mode = "live"
+    orch._ignore_market_hours = True
+    gen_orders = orch._generate_orders(
+        signals=signals_for_gen,
+        weights=weights_for_gen,
+        max_exposure=0.84,
+        leverage_result={"judgment": {"leverage_level": 1.0}},
+        portfolio=full_portfolio,
+        regime="caution",
+        market_data={"enforce_intraday_parking_guard": True, "vix": 18.0, "signal_cache": {"vix": 18.0, "usdkrw": 1484.19}},
+    )
+    ordered_by_tk = {o["ticker"]: o["amount_krw"] for o in gen_orders}
+    assert "122630" not in ordered_by_tk
+    assert "SQQQ" not in ordered_by_tk
+    assert "305720" not in ordered_by_tk
+    assert ordered_by_tk.get("114800") == 2_217_636
+
 
 
 
