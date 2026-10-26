@@ -4159,7 +4159,7 @@ class StreamOrchestrator:
                         _entry = pd.to_datetime(entry_date_str).date()
                         _curr_raw = (market_data or {}).get('date') if isinstance(market_data, dict) else None
                         if not _curr_raw:
-                            _curr_raw = date.today()
+                            _curr_raw = now_kst().date()
                         _curr = pd.to_datetime(_curr_raw).date()
                         _use_tday_hold = bool(
                             (isinstance(market_data, dict) and market_data.get('enforce_trading_days_hold'))
@@ -4204,6 +4204,19 @@ class StreamOrchestrator:
                         logger.warning(f"    ⚠️ [DynamicHalfLifeEngine] 산출 예외: {_dh_err}")
                         _max_hold_days = DynamicConfig().get(f'exit.max_hold_days.{_cur_regime}', 5)
 
+                _is_s14_pos_tl = (
+                    stream_id in ('S14', 'S14_PAIR_ALPHA')
+                    or 'pair' in str(pos.get('strategy', '')).lower()
+                )
+                _is_s14_orphan_tl = False
+                if _is_s14_pos_tl:
+                    if _is_kr_tk(str(_pos_ticker_up)) and _active_s14_kr_tickers and _pos_ticker_up not in _active_s14_kr_tickers:
+                        _is_s14_orphan_tl = True
+                    elif (not _is_kr_tk(str(_pos_ticker_up))) and _active_s14_us_tickers and _pos_ticker_up not in _active_s14_us_tickers:
+                        _is_s14_orphan_tl = True
+                if _is_s14_orphan_tl and _max_hold_days is not None:
+                    _max_hold_days = min(float(_max_hold_days), 1.0)
+
                 if _max_hold_days:
                     logger.info(f"    [DEBUG L4 Dynamic Math] {_pos_ticker}: days_held={days_held}, dynamic_max_hold={_max_hold_days:.2f}d, pos={pos}")
 
@@ -4233,16 +4246,6 @@ class StreamOrchestrator:
                 # 코어 슬리브 및 현재 활성 매수 시그널 유지 종목은 면제 (단, 시그널이 소멸된 S14 고아 레그는 청산 허용)
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
                     from src.execution.position_ledger import is_core_or_macro_sleeve as _is_core_so
-                    _is_s14_pos_tl = (
-                        stream_id in ('S14', 'S14_PAIR_ALPHA')
-                        or 'pair' in str(pos.get('strategy', '')).lower()
-                    )
-                    _is_s14_orphan_tl = False
-                    if _is_s14_pos_tl:
-                        if _is_kr_tk(str(_pos_ticker_up)) and _active_s14_kr_tickers and _pos_ticker_up not in _active_s14_kr_tickers:
-                            _is_s14_orphan_tl = True
-                        elif (not _is_kr_tk(str(_pos_ticker_up))) and _active_s14_us_tickers and _pos_ticker_up not in _active_s14_us_tickers:
-                            _is_s14_orphan_tl = True
                     if (not _is_s14_orphan_tl) and (
                         _is_core_so(
                             stream_id,
