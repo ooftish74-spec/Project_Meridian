@@ -350,18 +350,21 @@ class UniversalExitEngine:
             # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산) ──
             if not scaled_out:
                 try:
+                    from src.execution.position_ledger import (
+                        count_trading_days_held as _cnt_td_uee,
+                        is_core_or_macro_sleeve as _is_core_uee,
+                    )
                     from src.risk.time_decay_exit import TimeDecayExitEvaluator
-                    holding_days = float(pos.get('holding_days', 0.0) or 0.0)
+                    _explicit_hd = pos.get('holding_days')
+                    holding_days = float(_explicit_hd or 0.0)
                     if holding_days <= 0:
-                        _ed_str = str(pos.get('entry_date', '') or '')[:10]
+                        _ed_str = str(pos.get('entry_date') or _l_meta.get('entry_date') or '')[:10]
                         if _ed_str:
-                            try:
-                                from datetime import date as _dt_date
-                                holding_days = float(max(0, (_dt_date.today() - _dt_date.fromisoformat(_ed_str)).days))
-                            except Exception:
-                                holding_days = 0.0
+                            holding_days = float(_cnt_td_uee(_ed_str, is_kr=is_kr_tk))
                         elif pos.get('holding_minutes'):
                             holding_days = float(pos.get('holding_minutes', 0.0)) / (24.0 * 60.0)
+                    if _explicit_hd is None and _is_core_uee(stream_id, track=pos_track, strategy=pos_strategy, ticker=str(ticker)):
+                        holding_days = 0.0
                     time_decay_eval = TimeDecayExitEvaluator().evaluate_time_decay(
                         position=pos,
                         current_price=price,

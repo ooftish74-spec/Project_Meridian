@@ -408,4 +408,87 @@ def test_oct26_us_session_and_evening_pipeline_invariants(tmp_path, monkeypatch)
     assert exits_us == []
 
 
+def test_zero_fragmentation_and_no_fabricated_fallbacks(tmp_path, monkeypatch):
+    """Verify:
+    1) SSoT canonicalize_stream_id, is_core_or_macro_sleeve, and count_trading_days_held in position_ledger.py.
+    2) UniversalExitEngine protects US core sleeves (PG/S3_A, TLT/S3_C) from weekend calendar-day Time-Decay liquidation.
+    3) S14SectorPairStream._extract_returns_and_volatility returns (0.0, 0.0) instead of fabricated (0.0, 0.20) when parquet is missing.
+    4) USNightExecutionEngine skips trailing-stop evaluation instead of fabricating ticker_atr=0.015 when no empirical ATR exists.
+    """
+    from src.execution.position_ledger import (
+        canonicalize_stream_id,
+        count_trading_days_held,
+        is_core_or_macro_sleeve,
+    )
+    from src.risk.universal_exit_engine import UniversalExitEngine
+    from src.streams.s14_pair_alpha.sector_pair_stream import S14SectorPairStream
+    from src.execution.us_night_engine import USNightExecutionEngine
+
+    # 1. SSoT canonicalization & trading-day counter
+    assert canonicalize_stream_id("S3_A") == "S3_A"
+    assert canonicalize_stream_id("S3_C") == "S3_C"
+    assert canonicalize_stream_id("S3_ACTIVE_MACRO") == "S3"
+    assert canonicalize_stream_id("S6_US_SECTOR") == "S6"
+    assert is_core_or_macro_sleeve("S3_A") is True
+    assert is_core_or_macro_sleeve("S3_C") is True
+    assert is_core_or_macro_sleeve("S6") is True
+    assert is_core_or_macro_sleeve("S2") is False
+    # Friday 2026-10-23 -> Monday 2026-10-26 is 1 trading day (Saturday Oct 24 & Sunday Oct 25 excluded)
+    assert count_trading_days_held("2026-10-23", is_kr=False, as_of_date="2026-10-26") == 1
+    assert count_trading_days_held("2026-10-23", is_kr=True, as_of_date="2026-10-26") == 1
+
+    # 2. UniversalExitEngine: PG (S3_A) and TLT (S3_C) entered on 2026-10-23 must NOT trigger 3-day Time-Decay on Monday
+    uee = UniversalExitEngine()
+    uee._atr_cache["PG"] = 0.012
+    uee._atr_cache["TLT"] = 0.011
+    res_uee = uee.evaluate_all_positions(
+        {
+            "PG": {
+                "ticker": "PG",
+                "stream_id": "S3_A",
+                "quantity": 2,
+                "entry_price": 159.40,
+                "current_price": 159.50,
+                "highest_price": 159.60,
+                "lowest_price": 159.35,
+                "entry_date": "2026-10-23",
+                "holding_minutes": 1440.0,
+            },
+            "TLT": {
+                "ticker": "TLT",
+                "stream_id": "S3_C",
+                "quantity": 2,
+                "entry_price": 81.75,
+                "current_price": 81.65,
+                "highest_price": 81.80,
+                "lowest_price": 81.60,
+                "entry_date": "2026-10-23",
+                "holding_minutes": 1440.0,
+            },
+        },
+        market_data={"vix": 19.1, "signal_cache": {"vix": 19.1, "usdkrw": 1325.0}},
+        regime="caution",
+    )
+    assert res_uee["exit_orders"] == []
+
+    # 3. S14SectorPairStream: missing parquet returns (0.0, 0.0), never fabricated (0.0, 0.20)
+    s14 = S14SectorPairStream()
+    ret_missing, vol_missing = s14._extract_returns_and_volatility("NON_EXISTENT_TICKER_XYZ", market="US", days=20)
+    assert (ret_missing, vol_missing) == (0.0, 0.0)
+
+    # 4. USNightExecutionEngine: when both atr_map and empirical ATR are 0, skips instead of fabricating 0.015
+    import src.risk.universal_exit_engine as uee_mod
+    import src.utils.dynamic_quant_engine as dqe_mod
+    monkeypatch.setattr(uee_mod.UniversalExitEngine, "compute_ticker_atr", lambda self, tk: 0.0)
+    monkeypatch.setattr(dqe_mod.DynamicQuantEngine, "get_asset_metrics", lambda self, tk: {"vol_daily": 0.0})
+    us_eng = USNightExecutionEngine()
+    us_eng.holdings = {"FAKE_US": {"ticker": "FAKE_US", "qty": 5, "entry_price": 100.0, "highest_price": 100.0}}
+    exits_no_atr = us_eng.update_trailing_stop(
+        current_prices={"FAKE_US": 97.5},
+        atr_map={},
+    )
+    assert exits_no_atr == []
+
+
+
 

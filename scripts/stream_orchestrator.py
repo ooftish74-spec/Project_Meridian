@@ -4011,18 +4011,12 @@ class StreamOrchestrator:
                             )
                         )
                         if _use_tday_hold and _curr > _entry:
-                            from src.utils.market_calendar import MarketCalendar as _MC_dh, is_us_trading_day as _is_us_td_dh
-                            _cal_dh = _MC_dh()
-                            _is_kr_dh = _is_kr_tk(str(_pos_ticker_up))
-                            _t_cnt = 0
-                            _d_iter = _entry + _td_dh(days=1)
-                            while _d_iter <= _curr:
-                                _d_str_dh = _d_iter.strftime('%Y-%m-%d')
-                                _is_td = _cal_dh.is_trading_day(_d_str_dh) if _is_kr_dh else _is_us_td_dh(_d_str_dh)
-                                if _is_td:
-                                    _t_cnt += 1
-                                _d_iter += _td_dh(days=1)
-                            days_held = _t_cnt
+                            from src.execution.position_ledger import count_trading_days_held as _cnt_td_dh
+                            days_held = _cnt_td_dh(
+                                str(_entry.strftime('%Y-%m-%d')),
+                                is_kr=_is_kr_tk(str(_pos_ticker_up)),
+                                as_of_date=_curr,
+                            )
                         else:
                             days_held = max(0, (_curr - _entry).days)
                     except Exception as e:
@@ -4078,13 +4072,15 @@ class StreamOrchestrator:
                 # ── Time Limit (보유기간 만료 강제 청산) ──
                 # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3/S3_A/S3_B/S3_C, S4, S6, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
+                    from src.execution.position_ledger import is_core_or_macro_sleeve as _is_core_so
                     if (
-                        stream_id in (
-                            'S0', 'S3', 'S3_A', 'S3_B', 'S3_C', 'S3_ACTIVE_MACRO',
-                            'S4', 'S6', 'S6_US_SECTOR', 'S10', 'S10_MEGA_TREND',
-                            'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA',
+                        _is_core_so(
+                            stream_id,
+                            track=str(pos.get('track', '')),
+                            strategy=str(pos.get('strategy', '')),
+                            ticker=str(_pos_ticker_up),
                         )
-                        or str(pos.get('track', '')).upper() in ('TRACK_1_CORE', 'TRACK_2_BUFFETT_QVM')
+                        or stream_id in ('S_RECON', 'LIVE_SSOT')
                     ):
                         logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 단기 타임리밋 면제")
                     else:

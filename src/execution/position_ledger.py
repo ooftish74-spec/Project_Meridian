@@ -99,6 +99,123 @@ def infer_canonical_stream_and_track(
     return "S6", "TRACK_1_TACTICAL"
 
 
+_CORE_OR_MACRO_SLEEVES = frozenset(
+    {
+        "S0",
+        "S3",
+        "S3_A",
+        "S3_B",
+        "S3_C",
+        "S3_ACTIVE_MACRO",
+        "S4",
+        "S6",
+        "S6_US_SECTOR",
+        "S10",
+        "S10_MEGA_TREND",
+        "S10_POST_MORTEM",
+        "S14",
+        "S14_PAIR_ALPHA",
+        "S_YIELD",
+        "S_BETA",
+        "TRACK_1_CORE",
+        "TRACK_2_BUFFETT_QVM",
+    }
+)
+
+
+def canonicalize_stream_id(
+    stream_id: str,
+    track: str = "",
+    strategy: str = "",
+    ticker: str = "",
+) -> str:
+    """Normalize stream/sub-sleeve identifiers into canonical form while preserving sub-sleeve granularity (S3_A, S3_B, S3_C)."""
+    raw = str(stream_id or "").strip().upper()
+    tr = str(track or "").strip().upper()
+    st = str(strategy or "").strip().lower()
+    if raw in ("S3_B", "TRACK_2_BUFFETT_QVM") or tr == "TRACK_2_BUFFETT_QVM" or "buffett" in st or "qvm" in st:
+        return "S3_B"
+    if raw in ("S3_A", "S3_C"):
+        return raw
+    if raw in ("S3", "S3_ACTIVE_MACRO"):
+        return "S3"
+    if raw in ("S6", "S6_US_SECTOR"):
+        return "S6"
+    if raw in ("S10", "S10_POST_MORTEM", "S10_MEGA_TREND"):
+        return "S10"
+    if raw in ("S14", "S14_PAIR_ALPHA"):
+        return "S14_PAIR_ALPHA"
+    if raw and raw not in _UNATTRIBUTED_STREAM_TAGS:
+        return raw
+    if ticker:
+        sid, _ = infer_canonical_stream_and_track(ticker)
+        return sid
+    return "S4"
+
+
+def is_core_or_macro_sleeve(
+    stream_id: str,
+    track: str = "",
+    strategy: str = "",
+    ticker: str = "",
+) -> bool:
+    """Return True if the position belongs to a structural macro/sector/core or Buffett sleeve exempt from short-term day-trading Time-Decay/Time-Limit liquidation."""
+    raw = str(stream_id or "").strip().upper()
+    tr = str(track or "").strip().upper()
+    st = str(strategy or "").strip().lower()
+    if (
+        raw in _CORE_OR_MACRO_SLEEVES
+        or tr in ("TRACK_1_CORE", "TRACK_2_BUFFETT_QVM")
+        or st in ("buffett_qvm", "qvm_value", "macro_asset", "safe_haven", "us_core_equity")
+    ):
+        return True
+    canon = canonicalize_stream_id(stream_id, track=track, strategy=strategy, ticker=ticker)
+    return canon in _CORE_OR_MACRO_SLEEVES
+
+
+def count_trading_days_held(
+    entry_date_str: str,
+    is_kr: bool = True,
+    as_of_date: Any = None,
+) -> int:
+    """Count exchange trading days in (entry_date, as_of_date], excluding weekends and market holidays."""
+    ed_raw = str(entry_date_str or "").strip()[:10]
+    if not ed_raw:
+        return 0
+    try:
+        from datetime import date as _dt_date, timedelta as _td
+        from src.utils.market_calendar import MarketCalendar, is_us_trading_day
+
+        entry_d = datetime.strptime(ed_raw, "%Y-%m-%d").date()
+        if as_of_date is None:
+            curr_d = datetime.now().date()
+        elif isinstance(as_of_date, datetime):
+            curr_d = as_of_date.date()
+        elif isinstance(as_of_date, _dt_date):
+            curr_d = as_of_date
+        else:
+            curr_d = datetime.strptime(str(as_of_date)[:10], "%Y-%m-%d").date()
+
+        raw_days = (curr_d - entry_d).days
+        if raw_days <= 0:
+            return 0
+        if raw_days > 365:
+            return raw_days
+        mcal = MarketCalendar() if is_kr else None
+        t_days = 0
+        for step in range(1, raw_days + 1):
+            d_chk = entry_d + _td(days=step)
+            if is_kr:
+                if mcal.is_trading_day(d_chk):
+                    t_days += 1
+            else:
+                if is_us_trading_day(d_chk):
+                    t_days += 1
+        return t_days
+    except Exception:
+        return 0
+
+
 class PositionLedgerManager:
     """실계좌 포지션 최초 진입일 및 최고가(HWM) 영구 추적 관리자."""
 

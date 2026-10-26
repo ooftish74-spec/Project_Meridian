@@ -404,19 +404,26 @@ class USNightExecutionEngine:
             entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
             drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
 
-            # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 DynamicQuantEngine 실측 일간 변동성 조회)
+            # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 UniversalExitEngine 실측 ATR / DynamicQuantEngine 조회)
             ticker_atr = 0.0
             if atr_map and ticker in atr_map and float(atr_map[ticker] or 0.0) > 0:
                 ticker_atr = float(atr_map[ticker])
             else:
                 try:
-                    from src.utils.dynamic_quant_engine import get_quant_engine
-                    _m = get_quant_engine().get_asset_metrics(ticker)
-                    ticker_atr = float(_m.get("vol_daily", 0.0) or 0.0)
+                    from src.risk.universal_exit_engine import UniversalExitEngine
+                    ticker_atr = float(UniversalExitEngine().compute_ticker_atr(str(ticker)) or 0.0)
                 except Exception:
                     ticker_atr = 0.0
+                if ticker_atr <= 0:
+                    try:
+                        from src.utils.dynamic_quant_engine import get_quant_engine
+                        _m = get_quant_engine().get_asset_metrics(ticker)
+                        ticker_atr = float(_m.get("vol_daily", 0.0) or 0.0)
+                    except Exception:
+                        ticker_atr = 0.0
             if ticker_atr <= 0:
-                ticker_atr = 0.015
+                logger.warning(f"  ⚠️ [USNightEngine] {ticker}: 실측 ATR/변동성 미확보(ticker_atr<=0) → 임의 상수 폴백 없이 평가 스킵")
+                continue
 
             atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))

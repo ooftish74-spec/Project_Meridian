@@ -191,22 +191,26 @@ def main():
                 except Exception as _retry_e:
                     logger.debug(f"  장중 재진입 예외: {_retry_e}")
 
-                # 실시간 signal_cache에서 텔레메트리 연동 (하드코딩 더미 제거)
-                _telemetry = {'vkospi': 18.5, 'ofi_z': 0.0, 'lead_lag': 0.0}
+                # 실시간 signal_cache에서 텔레메트리 연동 (하드코딩 더미 18.5 완전 제거)
                 _sc_data: dict = {}
                 _sc_file = results_dir / 'signal_cache.json'
+                _vq_base = float(get_quant_engine().get_vix_regime_quantiles().get('baseline', 0.0) or 0.0)
+                _telemetry = {'vkospi': _vq_base, 'ofi_z': 0.0, 'lead_lag': 0.0}
                 if _sc_file.exists():
                     try:
                         _sc_data = json.loads(_sc_file.read_text(encoding='utf-8'))
                         _inv_flow_sc = _sc_data.get('investor_flow') if isinstance(_sc_data.get('investor_flow'), dict) else {}
-                        _telemetry['vkospi'] = float(_sc_data.get('vkospi', 18.5))
+                        _raw_vk = _sc_data.get('vkospi', _sc_data.get('vix', _vq_base))
+                        if isinstance(_raw_vk, dict):
+                            _raw_vk = _raw_vk.get('current', _raw_vk.get('close', _vq_base))
+                        _telemetry['vkospi'] = float(_raw_vk or _vq_base)
                         _telemetry['ofi_z'] = float(_sc_data.get('ofi_z', _sc_data.get('OFI_RATIO', 0.0)) or 0.0)
                         _telemetry['lead_lag'] = float(_sc_data.get('lead_lag', _sc_data.get('lead_lag_score', 0.0)) or 0.0)
                         _f_net_val = float(_sc_data.get('foreign_net_buy', _inv_flow_sc.get('foreign_net_5d', 0.0)) or 0.0)
                         _telemetry['foreign_net_buy'] = _f_net_val
                         _telemetry['foreign_flow_krw'] = _f_net_val
-                    except Exception:
-                        pass
+                    except Exception as _sc_err:
+                        logger.debug(f"  [Telemetry] signal_cache 로드 예외: {_sc_err}")
 
                 # signal_cache 타임스탬프 변경 시에만 Online Bayesian Particle Filter 업데이트 (정적 입력 5초 반복에 의한 분산 붕괴 원천 차단)
                 _sc_ts = _sc_data.get('updated_at') or _sc_data.get('timestamp') or _sc_data.get('last_overnight_update')
@@ -215,7 +219,7 @@ def main():
                         _sc_ts = str(_sc_file.stat().st_mtime)
                     except Exception:
                         _sc_ts = None
-                if _sc_ts != getattr(main, '_last_pf_sc_ts', None) or not hasattr(main, '_last_bayesian_res'):
+                if _sc_data and (_sc_ts != getattr(main, '_last_pf_sc_ts', None) or not hasattr(main, '_last_bayesian_res')):
                     main._last_pf_sc_ts = _sc_ts
                     main._last_bayesian_res = main._bayesian_filter.update(_telemetry)
                     main._bayesian_filter.save_state(str(results_dir / 'bayesian_filter_state.json'))

@@ -67,16 +67,16 @@ class S14SectorPairStream(BaseStream):
                     if len(closes) >= days + 1:
                         ret = float((closes[-1] - closes[-days-1]) / closes[-days-1])
                         log_rets = np.diff(np.log(closes[-days-1:]))
-                        vol = float(np.std(log_rets) * np.sqrt(252)) if len(log_rets) > 1 else 0.20
+                        vol = float(np.std(log_rets) * np.sqrt(252)) if len(log_rets) > 1 else float(abs(log_rets[0]) * np.sqrt(252))
                         return ret, max(vol, 0.05)
                     elif len(closes) >= 2:
                         ret = float((closes[-1] - closes[0]) / closes[0])
                         log_rets = np.diff(np.log(closes))
-                        vol = float(np.std(log_rets) * np.sqrt(252)) if len(log_rets) > 1 else 0.20
+                        vol = float(np.std(log_rets) * np.sqrt(252)) if len(log_rets) > 1 else float(abs(log_rets[0]) * np.sqrt(252))
                         return ret, max(vol, 0.05)
         except Exception as e:
             logger.debug(f"[_extract_returns_and_volatility] {ticker} 계산 예외: {e}")
-        return 0.0, 0.20
+        return 0.0, 0.0
 
     def compute_market_ker(self, market_or_prices: Any = 'US') -> float:
         """시장 대표 지수 또는 가격 시계열의 Kaufman Efficiency Ratio (KER) 산출."""
@@ -160,7 +160,7 @@ class S14SectorPairStream(BaseStream):
         else:
             for sec, ticker in US_SECTOR_ETF_MAP.items():
                 ret, vol = self._extract_returns_and_volatility(ticker, market='US', days=20)
-                if ret != 0.0 or vol != 0.20:
+                if vol > 0.0:
                     us_sector_returns[sec] = ret
                     us_volatility_map[sec] = vol
 
@@ -243,7 +243,7 @@ class S14SectorPairStream(BaseStream):
         else:
             for sec, ticker in DEFAULT_SECTOR_ETF_MAP.items():
                 ret, vol = self._extract_returns_and_volatility(ticker, market='KR', days=20)
-                if ret != 0.0 or vol != 0.20:
+                if vol > 0.0:
                     kr_sector_returns[sec] = ret
                     kr_volatility_map[sec] = vol
 
