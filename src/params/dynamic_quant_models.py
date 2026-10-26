@@ -1305,6 +1305,9 @@ _MAX_SIG_CONF = 0.98
 _MIN_SIG_SL_DEC = 0.002
 _DEFAULT_RT_FRICTION = 0.0021
 _ETP_RT_FRICTION = 0.0006
+_DEFAULT_REWARD_REALIZATION = 0.55
+_DEFAULT_LOSS_MITIGATION = 0.75
+_DEFAULT_KELLY_DEPLOYMENT = 0.75
 _STREAM_DEFAULT_HORIZONS: Dict[str, float] = {
     'S0': 5.0,
     'S1': 2.0,
@@ -1350,11 +1353,11 @@ def normalize_signal_horizon_expectation(
 
     raw_tp = sig.get('tp_pct')
     tp_val = float(raw_tp) if raw_tp is not None and math.isfinite(float(raw_tp)) else 0.0
-    tp_dec = (tp_val / 100.0) if tp_val > 1.0 else tp_val
+    tp_dec = tp_val / 100.0
 
     raw_sl = sig.get('sl_pct')
     sl_val = abs(float(raw_sl)) if raw_sl is not None and math.isfinite(float(raw_sl)) else 0.0
-    sl_dec = (sl_val / 100.0) if sl_val > 1.0 else sl_val
+    sl_dec = sl_val / 100.0
     if sl_dec <= 0.0:
         sl_dec = _DEFAULT_SIG_SL_DEC
 
@@ -1427,20 +1430,25 @@ def compute_corporate_after_tax_cagr_metrics(
     loss_shield_efficiency: float = _CORP_LOSS_SHIELD_EFF,
     risk_free_rate_ann: float = _DEFAULT_RF_ANN,
     target_cagr: float = _TARGET_CORP_CAGR,
+    reward_realization_factor: float = _DEFAULT_REWARD_REALIZATION,
+    loss_mitigation_factor: float = _DEFAULT_LOSS_MITIGATION,
+    kelly_deployment_ratio: float = _DEFAULT_KELLY_DEPLOYMENT,
 ) -> Dict[str, Any]:
     """Compute closed-form K-IFRS Corporate After-Tax Expected Growth & Annualized CAGR.
 
     Mathematical Formulation:
-        1. Per-signal pre-tax & after-tax expected single-horizon return:
-            mu_{gross,i}    = p_i * R_i - (1 - p_i) * SL_i - C_{RT,i}
-            mu_{net,corp,i} = p_i * (1 - tau_corp) * R_i
-                              - (1 - p_i) * (1 - eta_shield * tau_corp) * SL_i
+        1. Finite-horizon barrier & Chandelier-stop conditional payoff expectation:
+            R_{eff,i}       = kappa_reward * R_i,   SL_{eff,i} = kappa_loss * SL_i
+            mu_{gross,i}    = p_i * R_{eff,i} - (1 - p_i) * SL_{eff,i} - C_{RT,i}
+            mu_{net,corp,i} = p_i * (1 - tau_corp) * R_{eff,i}
+                              - (1 - p_i) * (1 - eta_shield * tau_corp) * SL_{eff,i}
                               - (1 - tau_corp) * C_{RT,i}
         2. Single-horizon outcome variance & Ito geometric variance drag:
-            sigma_{trade,i}^2 = p_i * (1 - p_i) * ((1 - tau_corp)*R_i + (1 - eta_shield*tau_corp)*SL_i)^2
+            sigma_{trade,i}^2 = p_i * (1 - p_i) * ((1 - tau_corp)*R_{eff,i} + (1 - eta_shield*tau_corp)*SL_{eff,i})^2
             g_{daily,net,i}   = (mu_{net,corp,i} - 0.5 * sigma_{trade,i}^2) / H_i
-        3. Portfolio daily compound growth rate & annualized Corporate After-Tax CAGR:
-            G_{daily,net,corp} = sum_s W_s * g_{daily,net,s} + max(0, 1 - sum_s W_s) * r_{f,daily} * (1 - tau_corp)
+        3. Portfolio daily compound growth rate (under fractional Kelly deployment upsilon_deploy) & CAGR:
+            G_{daily,net,corp} = upsilon_deploy * sum_s W_s * g_{daily,net,s}
+                                 + max(0, 1 - upsilon_deploy * sum_s W_s) * r_{f,daily} * (1 - tau_corp)
             CAGR_{net,corp}    = exp(252 * G_{daily,net,corp}) - 1
     """
     nav = max(1.0, float(portfolio_nav_krw) if math.isfinite(float(portfolio_nav_krw)) else 1.0)
@@ -1452,6 +1460,9 @@ def compute_corporate_after_tax_cagr_metrics(
     rf_daily_gross = rf_ann / _TRADING_DAYS_ANN
     hurdle_cagr = max(0.0, float(target_cagr))
     hurdle_daily = math.log(1.0 + hurdle_cagr) / _TRADING_DAYS_ANN
+    k_rew = _clamp(float(reward_realization_factor), _MIN_SIG_CONF, 1.0)
+    k_loss = _clamp(float(loss_mitigation_factor), _MIN_SIG_CONF, 1.0)
+    u_dep = _clamp(float(kelly_deployment_ratio), _MIN_SIG_CONF, 1.0)
 
     def _eval_streams(tau_c: float) -> Tuple[Dict[str, Dict[str, float]], float, float]:
         stream_stats: Dict[str, Dict[str, float]] = {}
@@ -1499,8 +1510,8 @@ def compute_corporate_after_tax_cagr_metrics(
                 norm = normalize_signal_horizon_expectation(s_item, stream_id=sid)
                 w_i = norm['size_weight']
                 p_i = norm['p_win']
-                r_i = norm['reward_dec']
-                sl_i = norm['risk_dec']
+                r_i = norm['reward_dec'] * k_rew
+                sl_i = norm['risk_dec'] * k_loss
                 h_i = norm['horizon_days']
                 c_i = norm['round_trip_cost']
 
@@ -1541,10 +1552,11 @@ def compute_corporate_after_tax_cagr_metrics(
             w_s = max(0.0, float(w_val) if math.isfinite(float(w_val)) else 0.0)
             if w_s <= 0.0:
                 continue
-            alloc_sum += w_s
+            eff_w_s = u_dep * w_s
+            alloc_sum += eff_w_s
             st = stream_stats.get(sid) or {}
-            port_g_gross += w_s * float(st.get('daily_gross_growth', 0.0))
-            port_g_net += w_s * float(st.get('daily_net_corp_growth', 0.0))
+            port_g_gross += eff_w_s * float(st.get('daily_gross_growth', 0.0))
+            port_g_net += eff_w_s * float(st.get('daily_net_corp_growth', 0.0))
 
         idle_w = max(0.0, 1.0 - alloc_sum)
         port_g_gross += idle_w * rf_daily_gross

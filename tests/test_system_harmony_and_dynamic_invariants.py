@@ -642,20 +642,26 @@ def test_corporate_after_tax_cagr_closed_form_and_allocator_signal_prior_harmony
     tau = 0.099
     eta = 0.70
     p = 0.65
-    r_gross = 0.10
-    sl_gross = 0.05
+    k_rew = 0.55
+    k_loss = 0.75
+    u_dep = 0.75
+    rf_daily = 0.0325 / 252.0
+    r_gross = 0.10 * k_rew
+    sl_gross = 0.05 * k_loss
     c_rt = 0.0021
     h = 5.0
     mu_gross = p * r_gross - (1.0 - p) * sl_gross - c_rt
     var_gross = p * (1.0 - p) * ((r_gross + sl_gross) ** 2)
-    expected_g_gross = (mu_gross - 0.5 * var_gross) / h
+    stream_g_gross = (mu_gross - 0.5 * var_gross) / h
+    expected_g_gross = u_dep * stream_g_gross + (1.0 - u_dep) * rf_daily
 
     net_r = (1.0 - tau) * r_gross
     net_sl = (1.0 - eta * tau) * sl_gross
     net_c = (1.0 - tau) * c_rt
     mu_net = p * net_r - (1.0 - p) * net_sl - net_c
     var_net = p * (1.0 - p) * ((net_r + net_sl) ** 2)
-    expected_g_net = (mu_net - 0.5 * var_net) / h
+    stream_g_net = (mu_net - 0.5 * var_net) / h
+    expected_g_net = u_dep * stream_g_net + (1.0 - u_dep) * rf_daily * (1.0 - tau)
     expected_cagr_net = math.exp(252.0 * expected_g_net) - 1.0
 
     assert res_cagr["effective_corporate_tax_rate"] == pytest.approx(tau, rel=1e-9)
