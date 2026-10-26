@@ -4155,12 +4155,11 @@ class StreamOrchestrator:
                     try:
                         import os as _os_dh
                         import pandas as pd
-                        from datetime import date, timedelta as _td_dh
-                        from src.utils.market_calendar import now_kst as _now_kst_dh
+                        from datetime import datetime as _dt_dh, timezone as _tz_dh, timedelta as _td_dh
                         _entry = pd.to_datetime(entry_date_str).date()
                         _curr_raw = (market_data or {}).get('date') if isinstance(market_data, dict) else None
                         if not _curr_raw:
-                            _curr_raw = _now_kst_dh().date()
+                            _curr_raw = _dt_dh.now(_tz_dh(_td_dh(hours=9))).date()
                         _curr = pd.to_datetime(_curr_raw).date()
                         _use_tday_hold = bool(
                             (isinstance(market_data, dict) and market_data.get('enforce_trading_days_hold'))
