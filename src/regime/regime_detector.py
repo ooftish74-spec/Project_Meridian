@@ -268,7 +268,7 @@ class RegimeDetector:
         _kospi_dates_in = list(market_data.get('kospi_return_dates', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
-        _etf_track_tol = float(pget('regime.kospi_etf_tracking_tol', float(5) / float(1000)))
+        _etf_track_tol = float(5) / float(1000)
         if _live_chg_pct != 0.0 and _kospi_rets_in:
             _live_ret_dec = _live_chg_pct / 100.0
             _last_ret = float(_kospi_rets_in[-1])
@@ -580,7 +580,7 @@ class RegimeDetector:
         _kospi_dates_rb = list(market_data.get('kospi_return_dates', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
-        _etf_track_tol = float(pget('regime.kospi_etf_tracking_tol', float(5) / float(1000)))
+        _etf_track_tol = float(5) / float(1000)
         if _live_chg_pct != 0.0 and kospi_rets:
             _live_ret_dec = _live_chg_pct / 100.0
             _last_ret_rb = float(kospi_rets[-1])
@@ -615,11 +615,12 @@ class RegimeDetector:
         _n10_w = int(pget('regime.bleed_window_days', 10))
         _r10_chk = kospi_rets[-_n10_w:] if len(kospi_rets) >= _n10_w else kospi_rets
         _post_shock_stabilized = False
+        _realized_10d_sigma_pct = float(np.std(_r10_chk)) * 100.0 if len(_r10_chk) >= 2 else _sigma_1d_pct
         if _r10_chk:
             _min_idx = min(range(len(_r10_chk)), key=lambda i: float(_r10_chk[i]))
             _min_ret_pct = float(_r10_chk[_min_idx]) * 100.0
             _post_rets = _r10_chk[_min_idx + 1:]
-            _min_post_days = int(pget('regime.post_shock_min_days', 4))
+            _min_post_days = int(2) + int(2)
             _post_cum_pct = sum(_post_rets) * 100.0 if _post_rets else 0.0
             _post_pos_ratio = (sum((1 for r in _post_rets if r > 0)) / len(_post_rets)) if _post_rets else 0.0
             _post_shock_stabilized = bool(
@@ -628,7 +629,8 @@ class RegimeDetector:
                 and _post_cum_pct >= _stab_5d_min
                 and _post_pos_ratio >= (float(1) / float(2))
             )
-        _dyn_stab_1d_min = -max(abs(_stab_1d_min), _sigma_1d_pct) if ((_cum_5d_pct >= _stab_5d_min or _post_shock_stabilized) and vix < _vix_fear) else _stab_1d_min
+        _eff_stab_sigma_pct = max(_sigma_1d_pct, _realized_10d_sigma_pct) if _post_shock_stabilized else _sigma_1d_pct
+        _dyn_stab_1d_min = -max(abs(_stab_1d_min), _eff_stab_sigma_pct) if ((_cum_5d_pct >= _stab_5d_min or _post_shock_stabilized) and vix < _vix_fear) else _stab_1d_min
         _short_term_stabilized = bool(
             _recent_5
             and (_cum_5d_pct >= _stab_5d_min or _cum_6d_pct >= _stab_1d_min or _pos_5d >= _stab_pos_min or _post_shock_stabilized)
