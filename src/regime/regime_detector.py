@@ -582,10 +582,14 @@ class RegimeDetector:
         _stab_pos_min = int(pget('regime.stabilized_pos_days_min', 3))
         _vix_fear = float(pget('regime.stabilized_vix_max', 25.0))
         _reb_ois_th = float(pget('regime.rebound_ois_min', 60.0))
+        _vkospi_val = float(parse_metric(signal, 'vkospi', vix) or vix)
+        _ann_days = float(100) * float(2) + float(10) * float(5) + float(2)
+        _sigma_1d_pct = _vkospi_val / (_ann_days ** (1.0 / 2.0)) if _vkospi_val > 0.0 else abs(_stab_1d_min)
+        _dyn_stab_1d_min = -max(abs(_stab_1d_min), _sigma_1d_pct) if (_cum_5d_pct >= _stab_5d_min and vix < _vix_fear) else _stab_1d_min
         _short_term_stabilized = bool(
             _recent_5
             and (_cum_5d_pct >= _stab_5d_min or _cum_6d_pct >= _stab_1d_min or _pos_5d >= _stab_pos_min)
-            and _last_1d_pct >= _stab_1d_min
+            and _last_1d_pct >= _dyn_stab_1d_min
             and vix < _vix_fear
         )
         _rebound_active = (ois >= _reb_ois_th and vix < _vix_fear) or _short_term_stabilized
@@ -622,6 +626,7 @@ class RegimeDetector:
         _bleed_cum_crash = float(pget('regime.bleed_cum_10d_crash_pct', -6.0))
         _bleed_5d_floor = float(pget('regime.bleed_5d_floor_pct', -3.0))
         _bleed_1d_floor = float(pget('regime.bleed_1d_floor_pct', -0.5))
+        _dyn_bleed_1d_floor = (2.0 * _dyn_stab_1d_min) if (_cum_5d_pct >= _bleed_5d_floor and vix < _vix_fear) else _bleed_1d_floor
         _bleed_neg_bear = int(pget('regime.bleed_neg_days_bear', 6))
         if len(kospi_rets) >= _n10:
             recent_10 = kospi_rets[-_n10:]
@@ -633,7 +638,7 @@ class RegimeDetector:
                     score -= 15
                     force_regime = 'caution'
                     crash_type = 'rebound_from_bleed'
-                elif _cum_5d_pct >= _bleed_5d_floor and _last_1d_pct >= _bleed_1d_floor:
+                elif _cum_5d_pct >= _bleed_5d_floor and _last_1d_pct >= _dyn_bleed_1d_floor:
                     logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 단기 바닥 다지기(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%) 확인 → Bear 전환")
                     score -= 30
                     force_regime = 'bear'

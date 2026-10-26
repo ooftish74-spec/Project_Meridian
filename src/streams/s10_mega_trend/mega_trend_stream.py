@@ -117,6 +117,17 @@ class S10MegaTrendStream(BaseStream):
         seen_tickers = set()
         _held_set = set()
         _pf_md = market_data.get('portfolio') if isinstance(market_data.get('portfolio'), dict) else {}
+
+        def _is_foreign_stream_pos(pos_d: Dict) -> bool:
+            _p_sid = str(pos_d.get('stream_id') or pos_d.get('stream') or '').strip().upper()
+            _p_trk = str(pos_d.get('track') or '').strip().upper()
+            _p_str = str(pos_d.get('strategy') or '').strip().lower()
+            if _p_trk == 'TRACK_2_BUFFETT_QVM' or _p_str in ('buffett_qvm', 'qvm_value', 'ml_alpha', 'kr_sector_pair_alpha'):
+                return True
+            if _p_sid and _p_sid not in ('S10', 'S10_MEGA_TREND', 'UNKNOWN', 'NONE', 'LIVE_SSOT', 'S_RECON'):
+                return True
+            return False
+
         for _h_src in (
             market_data.get('held_tickers'),
             market_data.get('holdings'),
@@ -127,14 +138,22 @@ class S10MegaTrendStream(BaseStream):
         ):
             if isinstance(_h_src, dict):
                 for _hk, _hv in _h_src.items():
-                    if isinstance(_hv, dict) and _hv.get('ticker'):
-                        _held_set.add(str(_hv['ticker']))
+                    if isinstance(_hv, dict):
+                        if _is_foreign_stream_pos(_hv):
+                            continue
+                        if _hv.get('ticker'):
+                            _held_set.add(str(_hv['ticker']))
+                        elif _hk:
+                            _held_set.add(str(_hk))
                     elif _hk:
                         _held_set.add(str(_hk))
             elif isinstance(_h_src, (list, tuple, set)):
                 for _item in _h_src:
-                    if isinstance(_item, dict) and _item.get('ticker'):
-                        _held_set.add(str(_item['ticker']))
+                    if isinstance(_item, dict):
+                        if _is_foreign_stream_pos(_item):
+                            continue
+                        if _item.get('ticker'):
+                            _held_set.add(str(_item['ticker']))
                     elif isinstance(_item, str) and _item:
                         _held_set.add(_item)
 

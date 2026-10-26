@@ -1408,15 +1408,38 @@ class StreamOrchestrator:
                 for eo in exit_orders
                 if eo.get('ticker')
             }
+            try:
+                from src.measurement.data_nogo_store import load_active_data_nogo as _load_dng_swap
+                _act_dng_sw = _load_dng_swap() or {}
+                for _tk_dng in (_act_dng_sw.get('ticker') or []):
+                    if _tk_dng:
+                        _swap_lockout_set.add(str(_tk_dng).strip().upper())
+            except Exception:
+                pass
             if getattr(self, 'exec_mode', 'live') == 'live':
                 try:
                     from src.execution.position_ledger import PositionLedgerManager as _PLM_Swap
                     _swap_lockout_set |= {str(k).upper() for k in (_PLM_Swap().get_daily_exit_details() or {}).keys()}
                 except Exception:
                     pass
+                try:
+                    import json as _json_dlq_sw
+                    _dlq_sw_p = _ROOT / 'results' / 'failed_orders.json'
+                    if _dlq_sw_p.exists():
+                        for _it_sw in (_json_dlq_sw.loads(_dlq_sw_p.read_text(encoding='utf-8')) or []):
+                            if isinstance(_it_sw, dict):
+                                _rs_sw = str(_it_sw.get('reason', _it_sw.get('error', '')) or '')
+                                _st_sw = str(_it_sw.get('status', '') or '')
+                                if _st_sw == 'halted_permanent' or 'APBK0066' in _rs_sw or '거래정지' in _rs_sw:
+                                    _od_sw = _it_sw.get('order_dict') or _it_sw.get('order') or _it_sw
+                                    if isinstance(_od_sw, dict) and _od_sw.get('ticker'):
+                                        _swap_lockout_set.add(str(_od_sw['ticker']).strip().upper())
+                except Exception:
+                    pass
             from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_swap
             _us_eff_reg_swap = _get_qe_swap().resolve_effective_us_regime(regime, market_data)
             _US_INV_SWAP_BLOCK = {'SOXS', 'SQQQ', 'PSQ', 'SH', 'SDOW', 'SPXS', 'SPXU', 'QID'} if _us_eff_reg_swap not in ('bear', 'crash') else set()
+            _all_active_long_sigs = []
             _candidate_sigs = []
             for _sid, _sigs in all_signals.items():
                 if _sid in ('S0', 'S4', 'S5', 'S_YIELD'):
@@ -1427,14 +1450,26 @@ class StreamOrchestrator:
                     _tk = str(_s.get('ticker', '')).strip()
                     if (
                         _tk
-                        and _tk not in _ordered_tickers
-                        and _tk.upper() not in _held_swap_set
                         and _tk.upper() not in _PARKING_SWAP_SKIP
                         and _tk.upper() not in _swap_lockout_set
                         and _tk.upper() not in _US_INV_SWAP_BLOCK
                         and _s.get('direction', _s.get('action', 'long')) in ('long', 'buy', 'BUY')
                     ):
-                        _candidate_sigs.append(_s)
+                        _all_active_long_sigs.append(_s)
+                        if _tk not in _ordered_tickers and _tk.upper() not in _held_swap_set:
+                            _candidate_sigs.append(_s)
+
+            # [Co-Domain Unification] 기보유 종목이 현재 사이클에서도 활성 매수 시그널을 보유한 경우 실제 시그널 EV_adj를 market_data에 주입하여 부당 스왑 매도 원천 차단
+            if _all_active_long_sigs:
+                _ranked_all_active = _router.rank_signals_by_ev_adj(_all_active_long_sigs, market_data)
+                _active_ev_map = dict(market_data.get('active_signal_ev_map') or {})
+                for _ra_s in _ranked_all_active:
+                    _ra_tk = str(_ra_s.get('ticker', '')).strip().upper()
+                    _ra_ev = float(_ra_s.get('ev_adj', 0.0) or 0.0)
+                    if _ra_tk and _ra_ev > 0.0:
+                        _active_ev_map[_ra_tk] = max(float(_active_ev_map.get(_ra_tk, 0.0) or 0.0), _ra_ev)
+                market_data['active_signal_ev_map'] = _active_ev_map
+            market_data['data_nogo_tickers'] = list(_swap_lockout_set)
 
             # Step 3: 자본 스왑 라우팅 집행 (기존 최저 EV 보유자산 매도 대금으로만 신규 고EV 자산 교체 매수 — 미배정 현금 임의 집행 차단)
             _swap_orders = _router.route_intraday_capital(_candidate_sigs, market_data, total_cash_krw=0.0, portfolio=portfolio, enforce_session_gate=True)
@@ -3531,6 +3566,13 @@ class StreamOrchestrator:
                     long_budget_share=_long_budget_share,
                 )
                 target_amount = target_amount * _exp_mult_sig * lev_level
+                # [Portfolio-Level Single-Stock Concentration Cap] 개별 주식 종목이 단일 스트림 내 독점 시그널일 때도 전체 NAV 대비 단일 종목 한도(기본 15%) 초과 누적 매수 원천 차단
+                _max_single_stock_pct = float(pget('sizer.max_single_position_pct', 0.15))
+                if (
+                    stream_id not in ('S0', 'S_BETA', 'S4', 'S5', 'S_YIELD', 'S14', 'S14_PAIR_ALPHA', 'S7')
+                    and not _sig_is_hdg
+                ):
+                    target_amount = min(target_amount, _safe_nav_gen * _max_single_stock_pct)
 
                 # 현재 보유 금액 및 타 스트림 선행 발주 금액 파악 (중복 매수 방지)
                 # 단, 마켓뉴트럴 페어(pair_id)의 공유 인버스 헷지 레그(예: 114800, PSQ)는 각 활성 페어의 독립 슬라이스이므로 선행 누적분 차감 면제
@@ -3794,6 +3836,15 @@ class StreamOrchestrator:
                 except Exception:
                     pass
 
+            _EXIT_CANON_MAP = {
+                'S_BETA': 'S0',
+                'S_YIELD': 'S5',
+                'S10': 'S10_MEGA_TREND',
+                'S11': 'S11_HIGHBETA_SNIPER',
+                'S12': 'S12_DERIVATIVE_SQUEEZE',
+                'S13': 'S13_JAPAN_ALPHA',
+                'S14': 'S14_PAIR_ALPHA',
+            }
             _explicit_exit_map = {}
             for _esid, _esigs in (getattr(self, '_latest_signals', None) or {}).items():
                 for _es in (_esigs or []):
@@ -3803,7 +3854,7 @@ class StreamOrchestrator:
                     ):
                         _etk = str(_es.get('ticker', '')).split(':')[-1].upper()
                         if _etk:
-                            _explicit_exit_map[_etk] = (_esid, _es)
+                            _explicit_exit_map.setdefault(_etk, []).append((_esid, _es))
 
             # [Task 3 Phase50: ATR Elastic Band] VKOSPI 정비례 고무줄 밴드 — Whipsaw 방지
             # 원칙: 고변동성 시장은 잔파도가 크므로 밴드를 넓혀 털림 방지
@@ -3855,15 +3906,30 @@ class StreamOrchestrator:
                 if not self._is_ticker_session_open_for_live_exit(_pos_ticker_up, market_data):
                     continue
 
-                # ── S10 및 S3_B 등 스트림 명시적 Exit 시그널(direction='exit') 우선 점검 ──
-                _explicit_exit_info = _explicit_exit_map.get(_pos_ticker_up)
-
-                # ── S_BETA, S10, S_YIELD, 그리고 Track 2 버핏 해자 복리 슬리브(S3_B / TRACK_2_BUFFETT_QVM)는 단기 L4 TP/SL/Trail에서 완전 면제 (단, 명시적 4대 법칙 exit 시그널은 즉시 집행) ──
+                # ── S_BETA, S10, S_YIELD, 그리고 Track 2 버핏 해자 복리 슬리브(S3_B / TRACK_2_BUFFETT_QVM)는 단기 L4 TP/SL/Trail에서 완전 면제 (단, 소유 스트림 일치 명시적 exit 시그널은 즉시 집행) ──
                 _is_track2_pos = (
                     stream_id in ('S3_B', 'TRACK_2_BUFFETT_QVM')
                     or str(pos.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM'
                     or str(pos.get('strategy', '')).lower() in ('buffett_qvm', 'qvm_value')
                 )
+                _explicit_exit_info = None
+                _pos_canon_sid = 'S3_B' if _is_track2_pos else _EXIT_CANON_MAP.get(stream_id, stream_id)
+                for _cand_esid, _cand_es in (_explicit_exit_map.get(_pos_ticker_up) or []):
+                    _sig_sid_raw = str(_cand_es.get('stream_id') or _cand_esid or '').strip().upper()
+                    _sig_canon_sid = _EXIT_CANON_MAP.get(_sig_sid_raw, _sig_sid_raw)
+                    if _sig_canon_sid == _pos_canon_sid:
+                        _explicit_exit_info = (_cand_esid, _cand_es)
+                        break
+                    if _sig_sid_raw in ('S3_B', 'TRACK_2_BUFFETT_QVM') and _is_track2_pos:
+                        _explicit_exit_info = (_cand_esid, _cand_es)
+                        break
+                    if _sig_sid_raw in ('S10', 'S10_MEGA_TREND') and (
+                        stream_id in ('S10', 'S10_MEGA_TREND')
+                        or str(pos.get('strategy', '')).lower() in ('s10_megatrend', 'mega_trend')
+                    ):
+                        _explicit_exit_info = (_cand_esid, _cand_es)
+                        break
+
                 if (stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD') or _is_track2_pos) and not _explicit_exit_info:
                     continue  # Track 2 및 코어 슬리브는 단기 TP/SL 대상에서 제외
 
@@ -4223,11 +4289,26 @@ class StreamOrchestrator:
                     p = 0.0
             return p
 
+        import os as _os_fg
         w_sell = float(cfg.get('execution.cash_cap_sell_proceeds_weight', 0.0) or 0.0)
         fee_buf = float(pget('execution.cash_cap_fee_buffer', 0.003) or 0.003)
         _pf = portfolio or {}
         cash = {'KRW': (float(_pf.get('cash') or 0) if 'cash' in _pf else None),
                 'USD': (float(_pf.get('cash_usd') or 0) if 'cash_usd' in _pf else None)}
+        if (
+            getattr(self, 'exec_mode', 'live') == 'live'
+            and not _os_fg.environ.get('PYTEST_CURRENT_TEST')
+            and _os_fg.environ.get('MERIDIAN_TEST_MODE') != '1'
+        ):
+            try:
+                _live_tr = self.execution_engine._get_trader('DEFAULT')
+                if _live_tr is not None and hasattr(_live_tr, 'fetch_live_balance'):
+                    _live_tr.fetch_live_balance()
+                    _live_krw = float(getattr(getattr(_live_tr, 'account', None), 'cash', 0.0) or 0.0)
+                    if _live_krw > 0.0:
+                        cash['KRW'] = min(float(cash['KRW']), _live_krw) if cash['KRW'] is not None else _live_krw
+            except Exception as _fg_bal_e:
+                logger.debug(f"  [Final Gate] live balance sync skipped: {_fg_bal_e}")
 
         out = []
         for ccy in ('KRW', 'USD'):
@@ -4241,10 +4322,24 @@ class StreamOrchestrator:
                 out.extend(buys)
                 continue
             priced, unpriced = [], []
+            _dropped_pair_ids = set()
             for o in buys:
-                (priced if _px(o) > 0 else unpriced).append(o)
+                if _px(o) > 0:
+                    priced.append(o)
+                else:
+                    unpriced.append(o)
+                    if o.get('pair_id'):
+                        _dropped_pair_ids.add(str(o.get('pair_id')))
             for o in unpriced:
                 logger.error(f"  🛑 [Final Gate] {o.get('ticker')}: 가격 미확보로 현금 제약 검증 불가 → 매수 제거")
+            if _dropped_pair_ids:
+                _clean_priced = []
+                for o in priced:
+                    if str(o.get('pair_id', '') or '') in _dropped_pair_ids:
+                        logger.warning(f"  🛑 [Final Gate Pair Atomic] {o.get('ticker')}: 페어 파트너 가격 미확보로 동반 제거 (pair_id={o.get('pair_id')})")
+                    else:
+                        _clean_priced.append(o)
+                priced = _clean_priced
             need = sum(_px(o) * int(o.get('quantity', 0) or 0) for o in priced) * (1.0 + fee_buf)
             avail = max(0.0, cash[ccy] + w_sell * sum(_px(o) * int(o.get('quantity', 0) or 0) for o in sells))
             if need <= avail or need <= 0:
@@ -4252,15 +4347,23 @@ class StreamOrchestrator:
                 continue
             s = avail / need
             logger.critical(f"  🛡️ [Final Gate S5] {ccy} 매수 필요 {need:,.2f} > 가용 {avail:,.2f} → 비례 축소 s={s:.3f}")
+            _scaled_candidates = []
             for o in priced:
                 q0 = int(o.get('quantity', 0) or 0)
                 q1 = int(q0 * s)
                 if q1 <= 0:
                     logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → 0주 (제거)")
+                    if o.get('pair_id'):
+                        _dropped_pair_ids.add(str(o.get('pair_id')))
                     continue
                 o['quantity'] = q1
                 o['cash_cap_scale'] = round(s, 4)
                 logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → {q1}주")
+                _scaled_candidates.append(o)
+            for o in _scaled_candidates:
+                if str(o.get('pair_id', '') or '') and str(o.get('pair_id', '') or '') in _dropped_pair_ids:
+                    logger.warning(f"    ↳ [Pair Atomic Drop] {o.get('ticker')}: 페어 파트너 수량 0주 절삭으로 동반 제거 (pair_id={o.get('pair_id')})")
+                    continue
                 out.append(o)
         # 현금 정보가 없는 통화(JPY)는 기존 로직 유지(경고)
         for o in orders:

@@ -877,7 +877,10 @@ class ExecutionEngine:
                         fill = await loop.run_in_executor(None, _trader.wait_for_fill, fill, _wait_timeout)
                     if fill.status in ('filled', 'filled_market_fallback', 'partially_filled'):
                         filled_qty += fill.filled_quantity
-                        remaining_qty -= fill.filled_quantity
+                        if getattr(fill, '_cash_clamped', False) and fill.status in ('filled', 'filled_market_fallback'):
+                            remaining_qty = 0
+                        else:
+                            remaining_qty = max(0, remaining_qty - fill.filled_quantity)
                         final_fills.append(fill)
                         last_status = 'filled' if remaining_qty == 0 else 'partially_filled'
                         if last_status == 'partially_filled':
@@ -885,12 +888,12 @@ class ExecutionEngine:
                             await asyncio.sleep(0.5)
                             continue
                     else:
-                        last_status = fill.status
+                        last_status = 'partially_filled' if filled_qty > 0 else fill.status
                         last_error = getattr(fill, 'error_message', None) or getattr(fill, 'note', None) or getattr(fill, 'status', 'fill_rejected')
                         final_fills.append(fill)
                         break
                 except Exception as e:
-                    last_status = 'error'
+                    last_status = 'partially_filled' if filled_qty > 0 else 'error'
                     last_error = str(e)
                     break
             return {'order': order, 'status': last_status, 'fills': final_fills, 'error': last_error, 'tif': tif}
@@ -922,6 +925,12 @@ class ExecutionEngine:
             ticker = order.get('ticker', '?')
             action = order.get('action', 'buy')
             stream_id = order.get('stream_id') or order.get('stream', '')
+            fills = res.get('fills', [])
+            _has_valid_fill = any(
+                int(getattr(f, 'filled_quantity', 0) or 0) > 0
+                or getattr(f, 'status', '') in ('filled', 'filled_market_fallback', 'partially_filled')
+                for f in (fills or [])
+            )
             if res['status'] == 'failed' or res['status'] == 'rejected' or res['status'] == 'error':
                 result.n_rejected += 1
                 _err_r = res.get('error', 'Failed')
@@ -929,13 +938,13 @@ class ExecutionEngine:
                 if '초기화 실패' in res.get('error', ''):
                     # ★ Wave 0: live/paper에서 가상(shadow) 체결로 대체 금지 — 실제로 체결되지 않은 주문이 체결로 기록됨
                     logger.critical(f"  🚨 [Execution] {ticker}: KISTrader 초기화 실패 — 가상 체결 대체 없이 거부 처리")
-                continue
+                if not _has_valid_fill:
+                    continue
             if res['status'] in ('unknown', 'submitted_market_fallback'):
                 # ★ Wave 0 E6/E7: 체결 여부 미확정 — 재주문 금지, 잔고 대사로 확정해야 함
                 _msg_u = f"{ticker}: UNRESOLVED order status '{res['status']}' — no resend; broker reconcile required"
                 result.errors.append(_msg_u)
                 logger.critical(f"  🚨 [Execution] {_msg_u}")
-            fills = res.get('fills', [])
             if fills:
                 for fill in fills:
                     _f_qty = int(getattr(fill, 'filled_quantity', 0) or 0)

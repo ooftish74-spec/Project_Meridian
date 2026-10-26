@@ -131,6 +131,16 @@ def load_active_data_nogo(path: Optional[Path] = None, now: Optional[datetime] =
     return out
 
 
+def is_data_nogo(asset: str, kind: str = 'ticker', path: Optional[Path] = None, now: Optional[datetime] = None) -> bool:
+    """특정 자산(종목 또는 매크로)이 현재 활성 DATA_NOGO 상태인지 판정."""
+    target = str(asset or '').strip().upper()
+    if not target:
+        return False
+    active = load_active_data_nogo(path=path, now=now)
+    bucket = active.get(kind, []) if isinstance(active, dict) else []
+    return any(str(x).strip().upper() == target for x in (bucket or []))
+
+
 def clear_data_nogo(asset: str, kind: str = 'macro', path: Optional[Path] = None) -> bool:
     """수동 해제 (운영자용)."""
     from src.utils.file_ops import safe_json_update

@@ -708,10 +708,21 @@ class KISTraderAdapter:
                 if us_avail > 0:
                     avail_cash_krw = max(avail_cash_krw, us_avail * fx_rate)
 
+            if order.side == 'buy':
+                try:
+                    from src.measurement.data_nogo_store import is_data_nogo as _is_dng
+                    if _is_dng(str(order.ticker), kind='ticker'):
+                        raise ValueError(f"HALTED_DATA_NOGO: 거래정지/Data-NoGo 등록 종목 매수 차단 ({order.ticker})")
+                except ValueError:
+                    raise
+                except Exception:
+                    pass
+
             if avail_cash_krw > 0 and order.side == 'buy' and order_price_krw > 0:
                 if order_val_krw > avail_cash_krw:
                     logger.warning(f"  🛡️ [Cash-Only Guard] 가용 자금(₩{avail_cash_krw:,.0f}) 초과 미수 매수 차단: ₩{order_val_krw:,.0f}")
                     order.quantity = int(avail_cash_krw // order_price_krw)
+                    setattr(order, '_cash_clamped', True)
                     if order.quantity <= 0:
                         raise ValueError(f"Insufficient cash: ₩{avail_cash_krw:,.0f} for {order.ticker} (단가: ₩{order_price_krw:,.0f})")
                 
@@ -894,8 +905,23 @@ class KISTraderAdapter:
                         raise requests.exceptions.RequestException(f'Gateway rejected before processing: {msg_cd}')
                     order.status = 'rejected'
                     logger.error(f"  ❌ API 주문 거부: {data}")
+                    _msg1_str = str(data.get('msg1', '') or '')
+                    if msg_cd == 'APBK0066' or '거래정지' in _msg1_str:
+                        try:
+                            from src.measurement.data_nogo_store import record_data_nogo as _rec_dng
+                            _halt_ttl = float(100) * float(10 - 2.8)
+                            _rec_dng(
+                                str(order.ticker),
+                                reason=f"KIS 거래정지 거부 ({msg_cd}): {_msg1_str}",
+                                kind='ticker',
+                                ttl_hours=_halt_ttl,
+                                source='kis_adapter',
+                            )
+                            logger.critical(f"  🛑 [Halted Stock Isolation] {order.ticker} 거래정지({msg_cd}) 확인 → Data No-Go 영구 격리")
+                        except Exception as _dng_e:
+                            logger.warning(f"  ⚠️ Data No-Go 기록 실패 ({order.ticker}): {_dng_e}")
                     if self._dlq:
-                        self._dlq.add(dataclasses.asdict(order), f"API 거부: {data.get('msg1')}")
+                        self._dlq.add(dataclasses.asdict(order), f"API 거부 ({msg_cd}): {_msg1_str}")
                     self.orders.append(order)
                     self._save_state()
                     return order

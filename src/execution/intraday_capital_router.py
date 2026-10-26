@@ -367,13 +367,18 @@ class IntradayCapitalRouter:
             if not ticker:
                 continue
 
-            # [Track 2 Isolation] Buffett-Moat QVM (S3_B / TRACK_2_BUFFETT_QVM) 장기 복리 종목은
-            # 단기 전술 스트림(Track 1)의 Cross-Asset Alpha Swap 자금원(강제 편출 대상)에서 100% 제외
+            # [Track 2 & Pair Isolation] Buffett-Moat QVM (S3_B / TRACK_2_BUFFETT_QVM) 장기 복리 종목 및
+            # S14 마켓뉴트럴 페어 레그는 단기 전술 스트림(Track 1)의 Cross-Asset Alpha Swap 자금원에서 100% 제외
             _l_meta_ev = _plm_ev.get_position_meta(str(ticker)) if _plm_ev is not None else {}
             _sid_ev = pos.get('stream_id') or pos.get('stream') or _l_meta_ev.get('stream_id', '')
             _trk_ev = pos.get('track') or _l_meta_ev.get('track', '')
             _str_ev = pos.get('strategy') or _l_meta_ev.get('strategy', '')
-            if _sid_ev == 'S3_B' or _trk_ev == 'TRACK_2_BUFFETT_QVM' or _str_ev in ('buffett_qvm', 'qvm_value'):
+            if (
+                _sid_ev in ('S3_B', 'S14', 'S14_PAIR_ALPHA', 'S7')
+                or _trk_ev == 'TRACK_2_BUFFETT_QVM'
+                or _str_ev in ('buffett_qvm', 'qvm_value', 'kr_sector_pair_alpha', 'sector_pair_alpha')
+                or bool(pos.get('pair_id') or _l_meta_ev.get('pair_id'))
+            ):
                 continue
 
             # 현금성 자산(KOFR, CD금리, 단기채)은 스왑 편출 우선순위 최하위 또는 별도 안전자산으로 보호
@@ -507,6 +512,17 @@ class IntradayCapitalRouter:
             _raw_tk = str(sig.get('ticker', '')).strip()
             from src.utils.ticker_canonical import canonical_ticker
             ticker = canonical_ticker(_raw_tk, context='intraday_capital_router.rank')
+
+            try:
+                from src.measurement.data_nogo_store import is_data_nogo as _is_dng_rt
+                if _is_dng_rt(str(ticker), kind='ticker'):
+                    logger.info(f"  🛑 [Router Data-NoGo Guard] {ticker}: 거래정지/Data-NoGo 등록 종목 ➔ 라우팅/스왑 차단")
+                    continue
+            except Exception:
+                pass
+            if isinstance(market_data.get('data_nogo_tickers'), (list, tuple, set)) and str(ticker).upper() in {str(x).upper() for x in market_data.get('data_nogo_tickers', [])}:
+                logger.info(f"  🛑 [Router Data-NoGo Guard] {ticker}: 거래정지/Data-NoGo 목록 종목 ➔ 라우팅/스왑 차단")
+                continue
 
             if (enforce_session_gate or market_data.get('enforce_session_gate', False)) and str(ticker).upper() in _existing_held:
                 logger.info(f"  🛡️ [Router Position Guard] {ticker}: 이미 보유 중인 종목 ➔ 중복 추가 매수 스킵")
@@ -670,17 +686,24 @@ class IntradayCapitalRouter:
 
                     # [Co-domain Unification] 현재 사이클 신규 매수 시그널에 동일 보유 종목이 포함되어 있다면 그 높은 기대값을 상속
                     active_sig_ev_map = {
-                        str(s.get('ticker', '')).strip(): float(s.get('ev_adj', 0.0))
-                        for s in ranked_signals
-                        if (s.get('direction') == 'buy' or s.get('action') == 'buy') and float(s.get('ev_adj', 0.0)) > 0
+                        str(k).strip().upper(): float(v or 0.0)
+                        for k, v in (market_data.get('active_signal_ev_map') or {}).items()
+                        if float(v or 0.0) > 0.0
                     }
+                    for s in ranked_signals:
+                        _s_dir = str(s.get('direction', s.get('action', s.get('side', 'buy')))).lower()
+                        _s_ev = float(s.get('ev_adj', 0.0) or 0.0)
+                        _s_tk = str(s.get('ticker', '')).strip().upper()
+                        if _s_tk and _s_dir in ('buy', 'long') and _s_ev > 0.0:
+                            active_sig_ev_map[_s_tk] = max(active_sig_ev_map.get(_s_tk, 0.0), _s_ev)
 
                     for h_ticker, h_ev in holdings_ev.items():
                         h_pos_info = holdings_dict.get(h_ticker) if isinstance(holdings_dict, dict) else {}
                         if isinstance(h_pos_info, dict) and (
-                            h_pos_info.get('stream_id') == 'S3_B'
+                            h_pos_info.get('stream_id') in ('S3_B', 'S14', 'S14_PAIR_ALPHA', 'S7')
                             or h_pos_info.get('track') == 'TRACK_2_BUFFETT_QVM'
-                            or h_pos_info.get('strategy') in ('buffett_qvm', 'qvm_value')
+                            or h_pos_info.get('strategy') in ('buffett_qvm', 'qvm_value', 'kr_sector_pair_alpha', 'sector_pair_alpha')
+                            or bool(h_pos_info.get('pair_id'))
                         ):
                             continue
                         h_is_us = not is_kr_ticker(h_ticker)
@@ -689,7 +712,7 @@ class IntradayCapitalRouter:
                                 h_tradable, _ = is_ticker_tradable_now(h_ticker)
                                 if not h_tradable:
                                     continue
-                            eff_h_ev = max(float(h_ev), active_sig_ev_map.get(str(h_ticker).strip(), 0.0))
+                            eff_h_ev = max(float(h_ev), active_sig_ev_map.get(str(h_ticker).strip().upper(), 0.0))
                             eligible_holdings[h_ticker] = eff_h_ev
 
                     if eligible_holdings:

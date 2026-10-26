@@ -414,10 +414,15 @@ class OrderDLQ:
         items = self._load()
         order_id = order_dict.get('order_id')
 
+        _is_halted = ('APBK0066' in str(reason) or '거래정지' in str(reason) or 'HALTED_DATA_NOGO' in str(reason))
+        _dlq_status = 'halted_permanent' if _is_halted else 'pending_retry'
+
         # 중복 방지
         for item in items:
             if item.get('order_dict', {}).get('order_id') == order_id:
                 item['reason'] = reason
+                if _is_halted:
+                    item['status'] = 'halted_permanent'
                 item['timestamp'] = datetime.now().isoformat()
                 self._save(items)
                 logger.debug(f"  💾 DLQ 갱신: {order_id} → {reason}")
@@ -428,7 +433,7 @@ class OrderDLQ:
             'timestamp': datetime.now().isoformat(),
             'order_dict': order_dict,
             'reason': reason,
-            'status': 'pending_retry',
+            'status': _dlq_status,
         }
         items.append(dlq_item)
         self._save(items)

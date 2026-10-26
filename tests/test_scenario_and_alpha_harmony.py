@@ -183,3 +183,132 @@ def test_regime_and_inverse_guards_eradicate_false_crash_and_wrong_way_inverse()
     emitted_tks = {s["ticker"] for s in sigs}
     assert "SOXS" not in emitted_tks
 
+
+def test_oct26_forensic_five_root_causes_closed_form(tmp_path, monkeypatch):
+    """Verify closed-form fixes for all 5 root causes identified in the 2026-10-26 forensic audit."""
+    import math
+    from src.regime.regime_detector import RegimeDetector
+    from src.execution.intraday_capital_router import IntradayCapitalRouter
+    from src.execution.api_resilience import OrderDLQ
+    from src.measurement import data_nogo_store as dng_mod
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    # 1. RegimeDetector dynamic 1D volatility floor: sigma_1d = 23.05 / sqrt(252) = 1.4520135171437811%
+    det = RegimeDetector()
+    sigma_1d = 23.05 / math.sqrt(252.0)
+    assert sigma_1d == pytest.approx(1.4520135171437811, rel=1e-9)
+    # Intraday dip of -0.60% (< 1 sigma) after 5D stabilization (+1.7%) must stay in 'caution', NOT flip to 'crash'
+    rets_intraday_dip = [-0.04, -0.05, -0.045, -0.036, 0.00, 0.008, 0.007, 0.008, -0.006]
+    # Ensure 10 elements
+    rets_10_dip = [-0.04, -0.05, -0.045, -0.036, -0.01, 0.008, 0.007, 0.008, 0.000, -0.006]
+    sig_dip = {"vix": 19.69, "vkospi": 23.05, "usdkrw": 1445.0, "kospi": 2690.0, "kospi_ma20": 3070.0, "ois": 51.0}
+    res_dip = det._rule_based(sig_dip, {"kospi_returns": rets_10_dip})
+    assert res_dip["regime"] == "caution"
+    assert res_dip["crash_type"] == "rebound_from_bleed"
+
+    # 2. Data No-Go & OrderDLQ halted stock isolation (APBK0066 -> halted_permanent + data_nogo)
+    dng_path = tmp_path / "data_nogo.json"
+    monkeypatch.setattr(dng_mod, "DEFAULT_PATH", dng_path)
+    dng_mod.record_data_nogo("012510", reason="KIS 거래정지 거부 (APBK0066)", kind="ticker", ttl_hours=720.0)
+    assert dng_mod.is_data_nogo("012510", kind="ticker") is True
+    assert dng_mod.is_data_nogo("005930", kind="ticker") is False
+
+    dlq = OrderDLQ()
+    dlq.dlq_file = tmp_path / "failed_orders.json"
+    dlq.add({"order_id": "ORD1", "ticker": "012510", "side": "buy"}, "API 거부 (APBK0066): 거래정지종목")
+    saved_dlq = dlq._load()
+    assert len(saved_dlq) == 1
+    assert saved_dlq[0]["status"] == "halted_permanent"
+
+    # 3. IntradayCapitalRouter:
+    # (a) Blocks data_nogo ticker '012510' from triggering cross_alpha_swap_sell
+    # (b) Co-domain Unification inherits active_signal_ev_map (1.20) for held S2 stock '457190'
+    # (c) Protects S14_PAIR_ALPHA legs ('305720', '114800') from cross_alpha_swap_sell
+    router = IntradayCapitalRouter()
+    portfolio_swap = {
+        "cash": 0.0,
+        "holdings": {
+            "457190": {"ticker": "457190", "qty": 12, "current_price": 135000.0, "stream_id": "S2"},
+            "305720": {"ticker": "305720", "qty": 168, "current_price": 12185.0, "stream_id": "S14_PAIR_ALPHA"},
+            "114800": {"ticker": "114800", "qty": 218, "current_price": 2440.0, "stream_id": "S14_PAIR_ALPHA"},
+        },
+    }
+    md_swap = {
+        "current_prices": {"012510": 120000.0, "005930": 60000.0, "457190": 135000.0},
+        "holdings_ev": {"457190": 0.54},
+        "active_signal_ev_map": {"457190": 1.25},
+    }
+    # Halted 012510 is blocked by Data-NoGo, and 005930 (EV ~ 0.90) cannot swap out 457190 (inherited EV = 1.25)
+    swap_res = router.route_intraday_capital(
+        [
+            {"ticker": "012510", "stream_id": "S2", "direction": "long", "confidence": 0.95, "tp_pct": 12.0, "sl_pct": 3.0, "price": 120000.0},
+            {"ticker": "005930", "stream_id": "S2", "direction": "long", "confidence": 0.70, "tp_pct": 6.0, "sl_pct": 3.0, "price": 60000.0},
+        ],
+        md_swap,
+        total_cash_krw=0.0,
+        portfolio=portfolio_swap,
+    )
+    assert swap_res == []
+
+    # 4. StreamOrchestrator._evaluate_exits: S10_MEGA_TREND exit signal must NEVER liquidate S3_B ('000270')
+    orch = StreamOrchestrator(exec_mode="shadow")
+    sp_file = tmp_path / "results" / "shadow_portfolio.json"
+    sp_file.parent.mkdir(parents=True, exist_ok=True)
+    sp_file.write_text(
+        json.dumps({
+            "positions": {
+                "000270": {
+                    "ticker": "000270",
+                    "quantity": 10,
+                    "current_price": 113800.0,
+                    "unrealized_pnl_pct": -0.26,
+                    "stream_id": "S3_B",
+                    "track": "TRACK_2_BUFFETT_QVM",
+                    "strategy": "buffett_qvm",
+                },
+                "012450": {
+                    "ticker": "012450",
+                    "quantity": 2,
+                    "current_price": 800000.0,
+                    "unrealized_pnl_pct": -1.0,
+                    "stream_id": "S10_MEGA_TREND",
+                    "strategy": "S10_MegaTrend",
+                },
+            }
+        }),
+        encoding="utf-8",
+    )
+    import scripts.stream_orchestrator as so_mod
+    monkeypatch.setattr(so_mod, "_ROOT", tmp_path)
+    monkeypatch.setattr(orch, "_is_ticker_session_open_for_live_exit", lambda *a, **kw: True)
+    orch._latest_signals = {
+        "S10_MEGA_TREND": [
+            {"stream_id": "S10_MEGA_TREND", "ticker": "000270", "direction": "exit", "action": "exit", "reason": "Regime crash"},
+            {"stream_id": "S10_MEGA_TREND", "ticker": "012450", "direction": "exit", "action": "exit", "reason": "Regime crash"},
+        ]
+    }
+    exits = orch._evaluate_exits(regime="crash", market_data={"signal_cache": {"vix": 20.0, "vkospi": 22.0}})
+    exit_tks = {e["ticker"] for e in exits}
+    assert "000270" not in exit_tks, "S10 exit signal must never liquidate S3_B position 000270!"
+    assert "012450" in exit_tks, "S10 exit signal must liquidate S10 position 012450!"
+
+    # 5. StreamOrchestrator._apply_final_execution_gate: pair-atomic scaling & pair-atomic drop
+    pair_orders = [
+        {"ticker": "305720", "action": "buy", "quantity": 100, "price": 10000.0, "pair_id": "PAIR_1"},
+        {"ticker": "114800", "action": "buy", "quantity": 400, "price": 2500.0, "pair_id": "PAIR_1"},
+    ]
+    # Total need = (1,000,000 + 1,000,000) * 1.003 = 2,006,000. Available cash = 1,003,000 -> s = 0.5 exactly
+    scaled_pair = orch._apply_final_execution_gate(pair_orders, {"cash": 1003000.0}, {})
+    assert len(scaled_pair) == 2
+    assert scaled_pair[0]["quantity"] == 50
+    assert scaled_pair[1]["quantity"] == 200
+
+    # If one leg scales to 0 shares, both legs of PAIR_1 must be dropped atomically
+    tiny_pair = [
+        {"ticker": "305720", "action": "buy", "quantity": 1, "price": 500000.0, "pair_id": "PAIR_2"},
+        {"ticker": "114800", "action": "buy", "quantity": 200, "price": 2500.0, "pair_id": "PAIR_2"},
+    ]
+    dropped_pair = orch._apply_final_execution_gate(tiny_pair, {"cash": 400000.0}, {})
+    assert dropped_pair == []
+
+

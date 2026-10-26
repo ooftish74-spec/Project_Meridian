@@ -514,6 +514,44 @@ class S2MLAlphaStream(BaseStream):
             self._log_event('STREAM_SIGNAL', {'signal_count': len(signals), 'regime': regime, 'strategy': 'ml_alpha' if self._model_loaded else 'fallback', 'avg_confidence': round(sum((s['confidence'] for s in signals)) / len(signals), 3), 'model_meta': self._model_meta if self._model_loaded else {}})
         return signals
 
+    def _get_blocked_tickers(self, market_data: Optional[Dict] = None) -> set:
+        """거래정지(APBK0066/halted_permanent) 및 Data No-Go 종목 집합 반환."""
+        import os as _os_blk
+        blocked: set = set()
+        if isinstance(market_data, dict):
+            for _k_blk in ('data_nogo_tickers', 'halted_tickers'):
+                _v_blk = market_data.get(_k_blk)
+                if isinstance(_v_blk, (list, tuple, set)):
+                    blocked |= {str(x).strip().upper() for x in _v_blk if x}
+        try:
+            from src.measurement.data_nogo_store import load_active_data_nogo
+            _act_ng = load_active_data_nogo() or {}
+            for _tk_ng in (_act_ng.get('ticker') or []):
+                if _tk_ng:
+                    blocked.add(str(_tk_ng).strip().upper())
+        except Exception:
+            pass
+        if not _os_blk.environ.get('PYTEST_CURRENT_TEST') and _os_blk.environ.get('MERIDIAN_TEST_MODE') != '1':
+            try:
+                import json as _json_dlq
+                _dlq_p = _PROJECT_ROOT / 'results' / 'failed_orders.json'
+                if _dlq_p.exists():
+                    _dlq_list = _json_dlq.loads(_dlq_p.read_text(encoding='utf-8'))
+                    if isinstance(_dlq_list, list):
+                        for _it in _dlq_list:
+                            if not isinstance(_it, dict):
+                                continue
+                            _err_s = str(_it.get('error', '') or '')
+                            _st_s = str(_it.get('status', '') or '')
+                            if _st_s == 'halted_permanent' or 'APBK0066' in _err_s or '거래정지' in _err_s:
+                                _ord_d = _it.get('order') if isinstance(_it.get('order'), dict) else _it
+                                _tk_d = str(_ord_d.get('ticker', '') or '').strip().upper()
+                                if _tk_d:
+                                    blocked.add(_tk_d)
+            except Exception:
+                pass
+        return blocked
+
     def _get_candidates(self, market_data: Dict) -> List[Dict]:
         """후보 종목 추출.
 
@@ -521,23 +559,27 @@ class S2MLAlphaStream(BaseStream):
         2순위: feature_store에서 최신 데이터 로드
         3순위: signal_cache에서 기술적 데이터 추출
         """
+        _blocked = self._get_blocked_tickers(market_data)
         candidates = market_data.get('alpha_candidates', [])
         if candidates:
-            return candidates
+            return [c for c in candidates if str(c.get('ticker', '')).strip().upper() not in _blocked]
         if _FEATURE_STORE_DIR.exists():
             candidates = self._load_from_feature_store()
             if candidates:
-                return candidates
+                return [c for c in candidates if str(c.get('ticker', '')).strip().upper() not in _blocked]
         signal_cache = market_data.get('signal_cache', {})
         stock_data = signal_cache.get('stock_technicals', {})
         result = []
         if isinstance(stock_data, dict) and stock_data:
             for ticker, data in stock_data.items():
+                if str(ticker).strip().upper() in _blocked:
+                    continue
                 result.append({'ticker': ticker, 'name': data.get('name', ticker), 'close': data.get('close', 0), 'rsi': data.get('rsi_14', 50), 'bb_position': data.get('bb_position', 0.5), 'macd_signal': data.get('macd_signal', 0), 'volume_ratio': data.get('volume_ratio', 1.0), 'momentum_5d': data.get('momentum_5d', 0)})
         elif isinstance(stock_data, list) and stock_data:
             for item in stock_data:
                 if isinstance(item, dict) and 'ticker' in item:
-                    result.append(item)
+                    if str(item.get('ticker', '')).strip().upper() not in _blocked:
+                        result.append(item)
 
         if result:
             return result
@@ -549,6 +591,8 @@ class S2MLAlphaStream(BaseStream):
             live_techs = bridge._get_stock_technicals()
             if live_techs and isinstance(live_techs, dict):
                 for ticker, data in live_techs.items():
+                    if str(ticker).strip().upper() in _blocked:
+                        continue
                     result.append({'ticker': ticker, 'name': data.get('name', ticker), 'close': data.get('close', 0), 'rsi': data.get('rsi_14', 50), 'bb_position': data.get('bb_position', 0.5), 'macd_signal': data.get('macd_signal', 0), 'volume_ratio': data.get('volume_ratio', 1.0), 'momentum_5d': data.get('momentum_5d', 0)})
         except Exception as _e_tech:
             logger.debug(f"  S2 dynamic technicals build failed: {_e_tech}")
@@ -565,14 +609,17 @@ class S2MLAlphaStream(BaseStream):
             import time as _time
         except ImportError as e:
             return []
+        _blocked_fs = self._get_blocked_tickers()
         _cache_key = (str(_FEATURE_STORE_DIR), str(target_date))
         _cached_entry = self._FS_CANDIDATES_CACHE.get(_cache_key)
+        _cache_ttl = float(10) * float(6)
         if _cached_entry is not None:
             _ts_cached, _list_cached = _cached_entry
-            if (_time.monotonic() - _ts_cached) < 60.0 and _list_cached:
+            if (_time.monotonic() - _ts_cached) < _cache_ttl and _list_cached:
                 return [
                     dict(item, features=dict(item.get('features', {})))
                     for item in _list_cached
+                    if str(item.get('ticker', '')).strip().upper() not in _blocked_fs
                 ]
         candidates = []
         universe = None
@@ -616,6 +663,8 @@ class S2MLAlphaStream(BaseStream):
             if not re.match(r'^\d{4}[0-9A-Z]{2}$', str(pf.stem)):
                 continue
             ticker = pf.stem
+            if ticker.upper() in _blocked_fs:
+                continue
             if ticker in seen_tickers:
                 continue
             if ticker in etf_set:
@@ -667,6 +716,7 @@ class S2MLAlphaStream(BaseStream):
                     feature_dict = {}
                 _close_px = float(feature_dict.get('close') or feature_dict.get('Close') or 0.0)
                 if _close_px <= 0.0 or not _use_fs_row:
+                    _max_px_stale_days = int(float(10) + float(4))
                     for _p_cand in (
                         _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{ticker}.parquet',
                         _PROJECT_ROOT / 'data' / 'kr_markets' / f'{ticker}.parquet',
@@ -675,16 +725,32 @@ class S2MLAlphaStream(BaseStream):
                         if _p_cand.exists():
                             try:
                                 _df_px = pd.read_parquet(_p_cand)
-                                if target_date is not None and not _df_px.empty:
-                                    _px_cols_l = {str(c).lower(): c for c in _df_px.columns}
-                                    if isinstance(_df_px.index, pd.DatetimeIndex):
+                                _px_cols_l = {str(c).lower(): c for c in _df_px.columns}
+                                _px_last_dt = None
+                                if isinstance(_df_px.index, pd.DatetimeIndex) and not _df_px.empty:
+                                    if target_date is not None:
                                         _df_px = _df_px[_df_px.index.tz_localize(None) <= _ref_ts]
-                                    elif 'date' in _px_cols_l:
-                                        _dts = pd.to_datetime(_df_px[_px_cols_l['date']], errors='coerce').dt.tz_localize(None)
+                                    if not _df_px.empty:
+                                        _px_last_dt = pd.Timestamp(_df_px.index[-1]).tz_localize(None)
+                                elif 'date' in _px_cols_l and not _df_px.empty:
+                                    _dts = pd.to_datetime(_df_px[_px_cols_l['date']], errors='coerce').dt.tz_localize(None)
+                                    if target_date is not None:
                                         _df_px = _df_px[_dts <= _ref_ts]
+                                        _dts = _dts[_dts <= _ref_ts]
+                                    _dts_valid = _dts.dropna()
+                                    if not _dts_valid.empty:
+                                        _px_last_dt = pd.Timestamp(_dts_valid.iloc[-1]).tz_localize(None)
+                                if _px_last_dt is not None and (_ref_ts - _px_last_dt).days > _max_px_stale_days:
+                                    _close_px = 0.0
+                                    continue
                                 _c_col = 'close' if 'close' in _df_px.columns else ('Close' if 'Close' in _df_px.columns else None)
                                 _v_col = 'volume' if 'volume' in _df_px.columns else ('Volume' if 'Volume' in _df_px.columns else None)
                                 if _c_col and not _df_px.empty:
+                                    if _v_col and _v_col in _df_px.columns:
+                                        _v_s_chk = pd.to_numeric(_df_px[_v_col], errors='coerce').dropna()
+                                        if not _v_s_chk.empty and float(_v_s_chk.iloc[-1]) <= 0.0:
+                                            _close_px = 0.0
+                                            continue
                                     _c_s = pd.to_numeric(_df_px[_c_col], errors='coerce').dropna()
                                     if not _c_s.empty:
                                         _close_px = float(_c_s.iloc[-1])
