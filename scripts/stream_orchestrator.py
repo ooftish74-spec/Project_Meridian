@@ -1193,31 +1193,47 @@ class StreamOrchestrator:
         s0_sigs = all_signals.get('S0', [])
 
         # ★ [SSOT Wiring Fix] all_signals를 _stream_signals로 주입하여 섹터 한도(_enforce_sector_limits) 및 직교화 활성화
+        from src.params.dynamic_quant_models import (
+            compute_corporate_after_tax_cagr_metrics,
+            normalize_signal_horizon_expectation,
+        )
         stream_metrics['_stream_signals'] = all_signals
         for _sid_er, _sigs_er in all_signals.items():
             if not isinstance(_sigs_er, list):
                 continue
             _er_num = 0.0
+            _p_num = 0.0
+            _rk_num = 0.0
             _er_den = 0.0
+            _n_buy_er = 0
             for _s_er in _sigs_er:
-                if not isinstance(_s_er, dict) or _s_er.get('strategy') == '_sys_meta' or _s_er.get('direction') == 'exit':
+                if not isinstance(_s_er, dict) or _s_er.get('strategy') == '_sys_meta':
                     continue
-                _w_er = max(0.0, float(_s_er.get('size_pct', 0.0) or 0.0))
+                _dir_s = str(_s_er.get('direction', 'long')).lower()
+                if not _s_er.get('action'):
+                    _s_er['action'] = 'exit' if _dir_s == 'exit' else ('sell' if _dir_s in ('short', 'sell') else 'buy')
+                if not _s_er.get('stream_id'):
+                    _s_er['stream_id'] = _sid_er
+                if _dir_s in ('exit', 'short', 'sell') or str(_s_er.get('action', '')).lower() in ('exit', 'sell'):
+                    continue
+                _norm_er = normalize_signal_horizon_expectation(_s_er, stream_id=_sid_er)
+                _w_er = _norm_er['size_weight']
                 if _w_er <= 0.0:
                     continue
-                _r_er = max(
-                    float(_s_er.get('expected_return') or 0.0),
-                    float(_s_er.get('expected_value') or 0.0),
-                    float(_s_er.get('gk_expected_alpha') or 0.0),
-                    float(_s_er.get('expected_return_pct') or 0.0) / 100.0,
-                )
+                _r_er = _norm_er['reward_dec']
                 if _r_er > 0.0:
                     _er_num += _w_er * _r_er
+                    _p_num += _w_er * _norm_er['p_win']
+                    _rk_num += _w_er * _norm_er['risk_dec']
                     _er_den += _w_er
+                    _n_buy_er += 1
             if _er_den > 0.0:
                 stream_metrics.setdefault(_sid_er, {})
                 if isinstance(stream_metrics[_sid_er], dict):
                     stream_metrics[_sid_er]['expected_return'] = _er_num / _er_den
+                    stream_metrics[_sid_er]['signal_win_rate'] = _p_num / _er_den
+                    stream_metrics[_sid_er]['signal_risk'] = _rk_num / _er_den
+                    stream_metrics[_sid_er]['n_live_signals'] = _n_buy_er
 
         if '_s2_oos_validation' not in stream_metrics:
             try:
@@ -1231,6 +1247,22 @@ class StreamOrchestrator:
         weights = self.allocator.allocate(stream_metrics, regime, market_data, s0_sigs=s0_sigs)
         result['allocation'] = weights
         logger.info(f"    📊 배분: {weights}")
+        try:
+            _nav_cagr = float((portfolio or {}).get('total_nav') or (portfolio or {}).get('cash') or 1.0)
+            _cagr_eval = compute_corporate_after_tax_cagr_metrics(
+                stream_weights=weights,
+                stream_signals=all_signals,
+                portfolio_nav_krw=_nav_cagr,
+            )
+            result['corporate_after_tax_cagr'] = _cagr_eval
+            logger.info(
+                f"    📈 [Corporate After-Tax CAGR] 기대 세후 CAGR={_cagr_eval['expected_corporate_after_tax_cagr_pct']:.2f}% "
+                f"(일복리={_cagr_eval['portfolio_daily_net_corp_growth']*100:.4f}%/d, "
+                f"법인세율={_cagr_eval['effective_corporate_tax_rate']*100:.2f}%, "
+                f"50% 허들 달성={_cagr_eval['meets_50pct_cagr_hurdle']})"
+            )
+        except Exception as _cagr_e:
+            logger.debug(f"Corporate After-Tax CAGR 산출 생략: {_cagr_e}")
 
         # ── Step 6: 레버리지 판정 ──
         logger.info("  📋 Step 6: 레버리지 판정")

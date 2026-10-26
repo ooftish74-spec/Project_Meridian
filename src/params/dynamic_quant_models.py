@@ -58,7 +58,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from statistics import NormalDist
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 try:
     from src.params import pget
@@ -1279,3 +1279,304 @@ def normalize_volatility_parity_pair_weights(
             'eta_mr': eta_mr,
         })
     return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Model ⑩: K-IFRS Corporate After-Tax Geometric Growth (Kelly Velocity & CAGR)
+# ─────────────────────────────────────────────────────────────────────────────
+_TRADING_DAYS_ANN = 252.0
+_CORP_TAX_SME_BRACKET_KRW = 200_000_000.0
+_CORP_TAX_SME_RATE = 0.099
+_CORP_TAX_MID_RATE = 0.209
+_CORP_LOSS_SHIELD_EFF = 0.70
+_DEFAULT_HORIZON_DAYS = 5.0
+_DEFAULT_RF_ANN = 0.0325
+_TARGET_CORP_CAGR = 0.50
+_MAX_SINGLE_HORIZON_RET = 0.50
+_QVM_CONVERGENCE_SLICE = 0.10
+_QVM_MIN_HORIZON_RET = 0.15
+_QVM_MAX_HORIZON_RET = 0.25
+_QVM_TACTICAL_RISK_CAP = 0.08
+_DEFAULT_SIG_CONF = 0.60
+_DEFAULT_SIG_TP_DEC = 0.08
+_DEFAULT_SIG_SL_DEC = 0.04
+_MIN_SIG_CONF = 0.05
+_MAX_SIG_CONF = 0.98
+_MIN_SIG_SL_DEC = 0.002
+_DEFAULT_RT_FRICTION = 0.0021
+_ETP_RT_FRICTION = 0.0006
+_STREAM_DEFAULT_HORIZONS: Dict[str, float] = {
+    'S0': 5.0,
+    'S1': 2.0,
+    'S2': 5.0,
+    'S3': 10.0,
+    'S5': 5.0,
+    'S10': 10.0,
+    'S10_MEGA_TREND': 10.0,
+    'S11': 3.0,
+    'S11_HIGHBETA_SNIPER': 3.0,
+    'S12': 3.0,
+    'S12_DERIVATIVE_SQUEEZE': 3.0,
+    'S13': 5.0,
+    'S13_JAPAN_ALPHA': 5.0,
+    'S14': 5.0,
+    'S14_PAIR_ALPHA': 5.0,
+}
+
+
+def normalize_signal_horizon_expectation(
+    sig: Dict[str, Any],
+    stream_id: str = '',
+) -> Dict[str, float]:
+    """Normalize a signal dictionary's single-horizon reward, risk, confidence, and holding period.
+
+    Prevents multi-year DCF Margin-of-Safety percentages (e.g., S3 Track 2 215% MoS)
+    from corrupting single-period expected return (> 1.0) in AlphaAllocator.
+    """
+    sid = str(stream_id or sig.get('stream_id') or '').strip()
+    track = str(sig.get('track') or '').strip().upper()
+    strategy = str(sig.get('strategy') or '').strip().lower()
+    is_track2 = (
+        track == 'TRACK_2_BUFFETT_QVM'
+        or sid.upper() == 'S3_B'
+        or strategy in ('buffett_qvm', 'qvm_value')
+    )
+
+    raw_conf = sig.get('confidence')
+    conf_val = float(raw_conf) if raw_conf is not None and math.isfinite(float(raw_conf)) else _DEFAULT_SIG_CONF
+    if conf_val > 1.0:
+        conf_val = conf_val / 100.0
+    p_win = _clamp(conf_val, _MIN_SIG_CONF, _MAX_SIG_CONF)
+
+    raw_tp = sig.get('tp_pct')
+    tp_val = float(raw_tp) if raw_tp is not None and math.isfinite(float(raw_tp)) else 0.0
+    tp_dec = (tp_val / 100.0) if tp_val > 1.0 else tp_val
+
+    raw_sl = sig.get('sl_pct')
+    sl_val = abs(float(raw_sl)) if raw_sl is not None and math.isfinite(float(raw_sl)) else 0.0
+    sl_dec = (sl_val / 100.0) if sl_val > 1.0 else sl_val
+    if sl_dec <= 0.0:
+        sl_dec = _DEFAULT_SIG_SL_DEC
+
+    raw_er = sig.get('expected_return')
+    er_val = float(raw_er) if raw_er is not None and math.isfinite(float(raw_er)) else 0.0
+    raw_er_pct = sig.get('expected_return_pct')
+    er_pct_dec = (
+        float(raw_er_pct) / 100.0
+        if raw_er_pct is not None and math.isfinite(float(raw_er_pct))
+        else 0.0
+    )
+
+    if is_track2:
+        raw_mos = sig.get('margin_of_safety_pct')
+        mos_pct = float(raw_mos) if raw_mos is not None and math.isfinite(float(raw_mos)) else 0.0
+        if mos_pct <= 0.0 and er_val > _MAX_SINGLE_HORIZON_RET:
+            mos_pct = er_val * 100.0
+        conv_ret = (mos_pct / 100.0) * _QVM_CONVERGENCE_SLICE if mos_pct > 0.0 else _QVM_MIN_HORIZON_RET
+        reward_dec = _clamp(conv_ret, _QVM_MIN_HORIZON_RET, _QVM_MAX_HORIZON_RET)
+        risk_dec = _clamp(sl_dec, _MIN_SIG_SL_DEC, _QVM_TACTICAL_RISK_CAP)
+    else:
+        cand_er = er_val if (0.0 < er_val <= _MAX_SINGLE_HORIZON_RET) else (
+            er_pct_dec if (0.0 < er_pct_dec <= _MAX_SINGLE_HORIZON_RET) else 0.0
+        )
+        cand_tp = tp_dec if (0.0 < tp_dec <= _MAX_SINGLE_HORIZON_RET) else 0.0
+        reward_dec = max(cand_er, cand_tp)
+        if reward_dec <= 0.0:
+            reward_dec = _DEFAULT_SIG_TP_DEC
+        reward_dec = _clamp(reward_dec, _MIN_SIG_SL_DEC, _MAX_SINGLE_HORIZON_RET)
+        risk_dec = _clamp(sl_dec, _MIN_SIG_SL_DEC, _MAX_SINGLE_HORIZON_RET)
+
+    raw_hold = sig.get('max_hold_days')
+    hold_days = (
+        float(raw_hold)
+        if raw_hold is not None and math.isfinite(float(raw_hold)) and float(raw_hold) >= 1.0
+        else _STREAM_DEFAULT_HORIZONS.get(sid, _DEFAULT_HORIZON_DAYS)
+    )
+
+    raw_c = sig.get('round_trip_cost')
+    if raw_c is not None and math.isfinite(float(raw_c)) and float(raw_c) >= 0.0:
+        c_rt = float(raw_c)
+    else:
+        is_etp_like = (
+            sid in ('S0', 'S5', 'S12', 'S12_DERIVATIVE_SQUEEZE', 'S14', 'S14_PAIR_ALPHA')
+            or bool(sig.get('is_hedge'))
+            or bool(sig.get('is_market_neutral'))
+        )
+        c_rt = _ETP_RT_FRICTION if is_etp_like else _DEFAULT_RT_FRICTION
+
+    raw_sz = sig.get('size_pct')
+    sz_val = float(raw_sz) if raw_sz is not None and math.isfinite(float(raw_sz)) and float(raw_sz) > 0.0 else 1.0
+
+    return {
+        'p_win': p_win,
+        'reward_dec': reward_dec,
+        'risk_dec': risk_dec,
+        'horizon_days': hold_days,
+        'round_trip_cost': c_rt,
+        'size_weight': sz_val,
+    }
+
+
+def compute_corporate_after_tax_cagr_metrics(
+    stream_weights: Dict[str, float],
+    stream_signals: Dict[str, Sequence[Dict[str, Any]]],
+    portfolio_nav_krw: float = 20_000_000.0,
+    corp_tax_rate_sme: float = _CORP_TAX_SME_RATE,
+    corp_tax_rate_mid: float = _CORP_TAX_MID_RATE,
+    sme_bracket_krw: float = _CORP_TAX_SME_BRACKET_KRW,
+    loss_shield_efficiency: float = _CORP_LOSS_SHIELD_EFF,
+    risk_free_rate_ann: float = _DEFAULT_RF_ANN,
+    target_cagr: float = _TARGET_CORP_CAGR,
+) -> Dict[str, Any]:
+    """Compute closed-form K-IFRS Corporate After-Tax Expected Growth & Annualized CAGR.
+
+    Mathematical Formulation:
+        1. Per-signal pre-tax & after-tax expected single-horizon return:
+            mu_{gross,i}    = p_i * R_i - (1 - p_i) * SL_i - C_{RT,i}
+            mu_{net,corp,i} = p_i * (1 - tau_corp) * R_i
+                              - (1 - p_i) * (1 - eta_shield * tau_corp) * SL_i
+                              - (1 - tau_corp) * C_{RT,i}
+        2. Single-horizon outcome variance & Ito geometric variance drag:
+            sigma_{trade,i}^2 = p_i * (1 - p_i) * ((1 - tau_corp)*R_i + (1 - eta_shield*tau_corp)*SL_i)^2
+            g_{daily,net,i}   = (mu_{net,corp,i} - 0.5 * sigma_{trade,i}^2) / H_i
+        3. Portfolio daily compound growth rate & annualized Corporate After-Tax CAGR:
+            G_{daily,net,corp} = sum_s W_s * g_{daily,net,s} + max(0, 1 - sum_s W_s) * r_{f,daily} * (1 - tau_corp)
+            CAGR_{net,corp}    = exp(252 * G_{daily,net,corp}) - 1
+    """
+    nav = max(1.0, float(portfolio_nav_krw) if math.isfinite(float(portfolio_nav_krw)) else 1.0)
+    tau_sme = _clamp(float(corp_tax_rate_sme), 0.0, 1.0)
+    tau_mid = _clamp(float(corp_tax_rate_mid), tau_sme, 1.0)
+    b_sme = max(1.0, float(sme_bracket_krw))
+    eta_sh = _clamp(float(loss_shield_efficiency), 0.0, 1.0)
+    rf_ann = max(0.0, float(risk_free_rate_ann))
+    rf_daily_gross = rf_ann / _TRADING_DAYS_ANN
+    hurdle_cagr = max(0.0, float(target_cagr))
+    hurdle_daily = math.log(1.0 + hurdle_cagr) / _TRADING_DAYS_ANN
+
+    def _eval_streams(tau_c: float) -> Tuple[Dict[str, Dict[str, float]], float, float]:
+        stream_stats: Dict[str, Dict[str, float]] = {}
+        all_sids = set(stream_weights.keys()) | set(stream_signals.keys())
+        for sid in all_sids:
+            sigs = stream_signals.get(sid) or []
+            buy_sigs = [
+                s for s in sigs
+                if isinstance(s, dict)
+                and s.get('strategy') != '_sys_meta'
+                and str(s.get('direction', 'long')).lower() not in ('exit', 'short', 'sell')
+                and str(s.get('action', 'buy')).lower() not in ('exit', 'sell')
+            ]
+            if not buy_sigs:
+                if sid in ('S5', 'S_YIELD', 'S0'):
+                    stream_stats[sid] = {
+                        'daily_gross_growth': rf_daily_gross,
+                        'daily_net_corp_growth': rf_daily_gross * (1.0 - tau_c),
+                        'expected_return': rf_daily_gross * _DEFAULT_HORIZON_DAYS,
+                        'signal_win_rate': _DEFAULT_SIG_CONF,
+                        'signal_risk': _MIN_SIG_SL_DEC,
+                        'horizon_days': _DEFAULT_HORIZON_DAYS,
+                        'n_live_signals': 0.0,
+                    }
+                else:
+                    stream_stats[sid] = {
+                        'daily_gross_growth': 0.0,
+                        'daily_net_corp_growth': 0.0,
+                        'expected_return': 0.0,
+                        'signal_win_rate': 0.0,
+                        'signal_risk': 0.0,
+                        'horizon_days': _STREAM_DEFAULT_HORIZONS.get(sid, _DEFAULT_HORIZON_DAYS),
+                        'n_live_signals': 0.0,
+                    }
+                continue
+
+            w_sum = 0.0
+            g_gross_acc = 0.0
+            g_net_acc = 0.0
+            er_acc = 0.0
+            p_acc = 0.0
+            rk_acc = 0.0
+            h_acc = 0.0
+            for s_item in buy_sigs:
+                norm = normalize_signal_horizon_expectation(s_item, stream_id=sid)
+                w_i = norm['size_weight']
+                p_i = norm['p_win']
+                r_i = norm['reward_dec']
+                sl_i = norm['risk_dec']
+                h_i = norm['horizon_days']
+                c_i = norm['round_trip_cost']
+
+                mu_gross_i = p_i * r_i - (1.0 - p_i) * sl_i - c_i
+                var_gross_i = p_i * (1.0 - p_i) * ((r_i + sl_i) ** 2)
+                g_gross_i = (mu_gross_i - _HALF * var_gross_i) / h_i
+
+                net_r_i = (1.0 - tau_c) * r_i
+                net_sl_i = (1.0 - eta_sh * tau_c) * sl_i
+                net_c_i = (1.0 - tau_c) * c_i
+                mu_net_i = p_i * net_r_i - (1.0 - p_i) * net_sl_i - net_c_i
+                var_net_i = p_i * (1.0 - p_i) * ((net_r_i + net_sl_i) ** 2)
+                g_net_i = (mu_net_i - _HALF * var_net_i) / h_i
+
+                w_sum += w_i
+                g_gross_acc += w_i * g_gross_i
+                g_net_acc += w_i * g_net_i
+                er_acc += w_i * r_i
+                p_acc += w_i * p_i
+                rk_acc += w_i * sl_i
+                h_acc += w_i * h_i
+
+            inv_w = 1.0 / max(w_sum, _EPS)
+            stream_stats[sid] = {
+                'daily_gross_growth': g_gross_acc * inv_w,
+                'daily_net_corp_growth': g_net_acc * inv_w,
+                'expected_return': er_acc * inv_w,
+                'signal_win_rate': p_acc * inv_w,
+                'signal_risk': rk_acc * inv_w,
+                'horizon_days': h_acc * inv_w,
+                'n_live_signals': float(len(buy_sigs)),
+            }
+
+        port_g_gross = 0.0
+        port_g_net = 0.0
+        alloc_sum = 0.0
+        for sid, w_val in stream_weights.items():
+            w_s = max(0.0, float(w_val) if math.isfinite(float(w_val)) else 0.0)
+            if w_s <= 0.0:
+                continue
+            alloc_sum += w_s
+            st = stream_stats.get(sid) or {}
+            port_g_gross += w_s * float(st.get('daily_gross_growth', 0.0))
+            port_g_net += w_s * float(st.get('daily_net_corp_growth', 0.0))
+
+        idle_w = max(0.0, 1.0 - alloc_sum)
+        port_g_gross += idle_w * rf_daily_gross
+        port_g_net += idle_w * rf_daily_gross * (1.0 - tau_c)
+        return stream_stats, port_g_gross, port_g_net
+
+    # Pass 1: evaluate gross growth to determine K-IFRS corporate tax bracket (SME <= 200M KRW vs Mid > 200M KRW)
+    _, port_g_gross_0, _ = _eval_streams(tau_sme)
+    cagr_gross = math.exp(_TRADING_DAYS_ANN * port_g_gross_0) - 1.0
+    est_gross_profit_krw = nav * max(0.0, cagr_gross)
+    if est_gross_profit_krw <= b_sme:
+        eff_corp_tax_rate = tau_sme
+    else:
+        eff_corp_tax_rate = (
+            b_sme * tau_sme + (est_gross_profit_krw - b_sme) * tau_mid
+        ) / est_gross_profit_krw
+
+    # Pass 2: exact corporate after-tax growth under blended K-IFRS rate
+    stream_stats_final, port_g_gross, port_g_net_corp = _eval_streams(eff_corp_tax_rate)
+    cagr_net_corp = math.exp(_TRADING_DAYS_ANN * port_g_net_corp) - 1.0
+
+    return {
+        'portfolio_daily_gross_growth': port_g_gross,
+        'portfolio_daily_net_corp_growth': port_g_net_corp,
+        'required_daily_net_growth': hurdle_daily,
+        'expected_gross_cagr': cagr_gross,
+        'expected_corporate_after_tax_cagr': cagr_net_corp,
+        'expected_corporate_after_tax_cagr_pct': round(cagr_net_corp * 100.0, 2),
+        'target_cagr': hurdle_cagr,
+        'meets_50pct_cagr_hurdle': bool(cagr_net_corp >= hurdle_cagr),
+        'effective_corporate_tax_rate': eff_corp_tax_rate,
+        'estimated_annual_gross_profit_krw': round(est_gross_profit_krw, 0),
+        'stream_growth_metrics': stream_stats_final,
+    }
+

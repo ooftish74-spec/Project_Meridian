@@ -589,5 +589,134 @@ def test_krx_pair_hedge_replenishment_and_orphan_exit_invariants():
     assert ordered_by_tk.get("114800") == 2_217_636
 
 
+def test_corporate_after_tax_cagr_closed_form_and_allocator_signal_prior_harmony():
+    """Verify closed-form K-IFRS Corporate After-Tax CAGR model and AlphaAllocator live-signal prior harmony."""
+    import math
+    from src.allocation.alpha_allocator import AlphaAllocator
+    from src.params.dynamic_quant_models import (
+        compute_corporate_after_tax_cagr_metrics,
+        normalize_signal_horizon_expectation,
+    )
+
+    # 1. Track 2 (Buffett QVM) multi-year DCF Margin-of-Safety (215.72%) must normalize to [0.15, 0.25] single-horizon reward
+    qvm_sig = {
+        "stream_id": "S3_B",
+        "track": "TRACK_2_BUFFETT_QVM",
+        "ticker": "086280",
+        "direction": "long",
+        "confidence": 0.65,
+        "margin_of_safety_pct": 215.72,
+        "expected_return": 2.1572,
+        "tp_pct": 100.0,
+        "sl_pct": 30.0,
+        "size_pct": 0.20,
+    }
+    norm_qvm = normalize_signal_horizon_expectation(qvm_sig, stream_id="S3")
+    # 215.72% * 0.10 = 21.572% -> 0.21572 in [0.15, 0.25]; tactical risk capped at 0.08
+    assert norm_qvm["reward_dec"] == pytest.approx(0.21572, rel=1e-9)
+    assert norm_qvm["risk_dec"] == pytest.approx(0.08, rel=1e-9)
+    assert norm_qvm["p_win"] == pytest.approx(0.65, rel=1e-9)
+
+    # 2. Hand-computed closed-form oracle for compute_corporate_after_tax_cagr_metrics
+    # Single stream S2 with weight 1.0, 1 signal: p=0.65, TP=0.10 (10%), SL=0.05 (5%), H=5 days, C_RT=0.0021
+    # NAV = 20,000,000 KRW -> annual gross profit < 200M KRW -> SME corporate tax rate tau_corp = 0.099, eta_shield = 0.70
+    test_sigs = {
+        "S2": [
+            {
+                "ticker": "005930",
+                "direction": "long",
+                "confidence": 0.65,
+                "tp_pct": 10.0,
+                "sl_pct": 5.0,
+                "max_hold_days": 5,
+                "round_trip_cost": 0.0021,
+                "size_pct": 1.0,
+            }
+        ]
+    }
+    res_cagr = compute_corporate_after_tax_cagr_metrics(
+        stream_weights={"S2": 1.0},
+        stream_signals=test_sigs,
+        portfolio_nav_krw=20_000_000.0,
+    )
+    tau = 0.099
+    eta = 0.70
+    p = 0.65
+    r_gross = 0.10
+    sl_gross = 0.05
+    c_rt = 0.0021
+    h = 5.0
+    mu_gross = p * r_gross - (1.0 - p) * sl_gross - c_rt
+    var_gross = p * (1.0 - p) * ((r_gross + sl_gross) ** 2)
+    expected_g_gross = (mu_gross - 0.5 * var_gross) / h
+
+    net_r = (1.0 - tau) * r_gross
+    net_sl = (1.0 - eta * tau) * sl_gross
+    net_c = (1.0 - tau) * c_rt
+    mu_net = p * net_r - (1.0 - p) * net_sl - net_c
+    var_net = p * (1.0 - p) * ((net_r + net_sl) ** 2)
+    expected_g_net = (mu_net - 0.5 * var_net) / h
+    expected_cagr_net = math.exp(252.0 * expected_g_net) - 1.0
+
+    assert res_cagr["effective_corporate_tax_rate"] == pytest.approx(tau, rel=1e-9)
+    assert res_cagr["portfolio_daily_gross_growth"] == pytest.approx(expected_g_gross, rel=1e-9)
+    assert res_cagr["portfolio_daily_net_corp_growth"] == pytest.approx(expected_g_net, rel=1e-9)
+    assert res_cagr["expected_corporate_after_tax_cagr"] == pytest.approx(expected_cagr_net, rel=1e-9)
+    assert res_cagr["meets_50pct_cagr_hurdle"] is True
+    assert res_cagr["expected_corporate_after_tax_cagr"] >= 0.50
+
+    # 3. AlphaAllocator live production harmony: empty streams (n_days=0 without total_trades key) are zeroed
+    #    while active signal streams (S2, S3, S10_MEGA_TREND, S14_PAIR_ALPHA, S0) achieve >= 50% Corporate After-Tax CAGR
+    live_sigs_all = {
+        "S0": [{"ticker": "252670", "direction": "long", "confidence": 0.60, "tp_pct": 5.0, "sl_pct": 2.5, "size_pct": 1.0}],
+        "S1": [],
+        "S2": [
+            {"ticker": "009150", "direction": "long", "confidence": 0.66, "tp_pct": 10.79, "sl_pct": 5.56, "size_pct": 0.125},
+            {"ticker": "MU", "direction": "long", "confidence": 0.66, "tp_pct": 10.79, "sl_pct": 5.56, "size_pct": 0.125},
+        ],
+        "S3": [
+            {"ticker": "005930", "direction": "long", "confidence": 0.68, "tp_pct": 14.74, "sl_pct": 7.12, "size_pct": 0.25},
+            qvm_sig,
+        ],
+        "S5": [{"ticker": "459580", "direction": "long", "confidence": 0.65, "tp_pct": 1.5, "sl_pct": 0.5, "size_pct": 0.50}],
+        "S10_MEGA_TREND": [
+            {"ticker": "NVDA", "direction": "long", "confidence": 0.72, "tp_pct": 15.0, "sl_pct": 5.0, "size_pct": 0.33},
+        ],
+        "S11_HIGHBETA_SNIPER": [],
+        "S12_DERIVATIVE_SQUEEZE": [],
+        "S13_JAPAN_ALPHA": [],
+        "S14_PAIR_ALPHA": [
+            {"ticker": "305720", "direction": "long", "confidence": 0.664, "tp_pct": 4.5, "sl_pct": 2.0, "expected_return": 0.055, "size_pct": 0.15, "is_market_neutral": True},
+            {"ticker": "114800", "direction": "long", "confidence": 0.664, "tp_pct": 4.5, "sl_pct": 2.0, "expected_return": 0.055, "size_pct": 0.15, "is_hedge": True, "is_market_neutral": True},
+        ],
+    }
+    prod_like_metrics = {
+        "S0": {"n_days": 0, "win_rate": 0.0, "active_positions": 1},
+        "S1": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S2": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S3": {"n_days": 0, "win_rate": 0.0, "active_positions": 5},
+        "S5": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S10_MEGA_TREND": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S11_HIGHBETA_SNIPER": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S12_DERIVATIVE_SQUEEZE": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S13_JAPAN_ALPHA": {"n_days": 0, "win_rate": 0.0, "active_positions": 0},
+        "S14_PAIR_ALPHA": {"n_days": 5, "win_rate": 0.2, "daily_returns": [-0.001, -0.002, -0.001, 0.001, -0.001], "active_positions": 2},
+        "_stream_signals": live_sigs_all,
+    }
+    alloc = AlphaAllocator()
+    weights = alloc.allocate(prod_like_metrics, regime="caution", market_data={"vix": 18.0, "signal_cache": {"vix": 18.0, "qqq_ker": 0.25}})
+    for empty_sid in ("S1", "S11_HIGHBETA_SNIPER", "S12_DERIVATIVE_SQUEEZE", "S13_JAPAN_ALPHA"):
+        assert weights.get(empty_sid, 0.0) == pytest.approx(0.0, abs=1e-6)
+
+    port_cagr_eval = compute_corporate_after_tax_cagr_metrics(
+        stream_weights=weights,
+        stream_signals=live_sigs_all,
+        portfolio_nav_krw=15_285_542.0,
+    )
+    assert port_cagr_eval["expected_corporate_after_tax_cagr"] >= 0.50
+    assert port_cagr_eval["meets_50pct_cagr_hurdle"] is True
+
+
+
 
 

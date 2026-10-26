@@ -505,8 +505,12 @@ class S3FactorStream(BaseStream):
                 'noise_stop_loss_exempt': bool(is_qvm_pick),
             }
             if is_qvm_pick:
-                _sig_item['expected_return_pct'] = round(max(float(pick.get('margin_of_safety_pct', 20.0) or 20.0), 20.0), 2)
-                _sig_item['margin_of_safety_pct'] = float(pick.get('margin_of_safety_pct', 0.0) or 0.0)
+                _mos_raw = float(pick.get('margin_of_safety_pct', 0.0) or 0.0)
+                _qvm_slice_pct = (_mos_raw / 10.0) if _mos_raw > 0.0 else 0.0
+                _qvm_min_pct = 15.0
+                _qvm_max_pct = 25.0
+                _sig_item['expected_return_pct'] = round(min(_qvm_max_pct, max(_qvm_min_pct, _qvm_slice_pct)), 2)
+                _sig_item['margin_of_safety_pct'] = _mos_raw
                 _sig_item['f_score'] = int(pick.get('f_score', 6) or 6)
                 _sig_item['ohlson_prob'] = float(pick.get('ohlson_prob', 0.0) or 0.0)
                 _sig_item['roic_wacc_spread_pct'] = float(pick.get('roic_wacc_spread_pct', 0.0) or 0.0)

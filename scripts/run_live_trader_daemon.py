@@ -310,30 +310,39 @@ def main():
                             try:
                                 from src.utils.file_ops import atomic_write_json
                                 _ls_path = results_dir / 'latest_signals.json'
+                                _raw_ls: dict = {}
                                 _existing_ls: dict[str, list] = {}
                                 if _ls_path.exists():
                                     with open(_ls_path, 'r', encoding='utf-8') as _lf:
-                                        _raw_ls = json.load(_lf)
-                                    if isinstance(_raw_ls, dict):
-                                        for _k_ls, _v_ls in _raw_ls.items():
+                                        _loaded_ls = json.load(_lf)
+                                    if isinstance(_loaded_ls, dict):
+                                        _raw_ls = dict(_loaded_ls)
+                                        _inner_sigs = _raw_ls.get('signals') if isinstance(_raw_ls.get('signals'), dict) else _raw_ls
+                                        for _k_ls, _v_ls in _inner_sigs.items():
                                             if isinstance(_v_ls, list):
                                                 _existing_ls[str(_k_ls)] = [x for x in _v_ls if isinstance(x, dict)]
                                 for _es in _entry_sigs:
                                     _tk = _es['ticker']
                                     _sid_es = str(_es.get('stream_id') or _es.get('stream') or 'S1')
                                     _sig_list = [x for x in _existing_ls.get(_sid_es, []) if isinstance(x, dict) and x.get('ticker') != _tk]
-                                    _sig_list.append({
+                                    _entry_item = dict(_es)
+                                    _entry_item.update({
                                         'stream_id': _sid_es,
                                         'ticker': _tk,
-                                        'action': 'BUY',
+                                        'action': 'buy',
                                         'direction': _es.get('direction', 'long'),
-                                        'confidence': _es.get('confidence', 0.85),
-                                        'strategy': 'intraday_dynamic_breakout',
-                                        'score': _es.get('score', 1.8),
-                                        'timestamp': datetime.now().isoformat()
+                                        'confidence': _es.get('confidence', 1.0),
+                                        'size_pct': _es.get('size_pct') or (1.0 / 10.0),
+                                        'strategy': _es.get('strategy') or 'intraday_dynamic_breakout',
+                                        'score': _es.get('score', 1.0),
+                                        'timestamp': datetime.now().isoformat(),
                                     })
+                                    _sig_list.append(_entry_item)
                                     _existing_ls[_sid_es] = _sig_list
-                                atomic_write_json(_ls_path, _existing_ls)
+                                _out_ls = dict(_raw_ls) if _raw_ls else {'date': datetime.now().strftime('%Y-%m-%d')}
+                                _out_ls['timestamp'] = datetime.now().isoformat()
+                                _out_ls['signals'] = _existing_ls
+                                atomic_write_json(_ls_path, _out_ls)
 
                                 # [Bayesian State-Divergence & FDR Multiple-Testing Trigger]
                                 # 고정 비율(1.0) 비교 대신, 직전 최적화 시점 대비 레짐 사후확률 전변동 거리(D_TV) + 내재변동성 변위가

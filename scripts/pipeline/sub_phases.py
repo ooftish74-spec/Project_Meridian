@@ -1404,8 +1404,13 @@ def _phase_overnight():
             _ls_file = _PROJECT_ROOT / 'results' / 'latest_signals.json'
             if _ls_file.exists():
                 _ls_data = json.loads(_ls_file.read_text())
-                _s3_buys = [s for s in _ls_data.get('signals', {}).get('S3', [])
-                            if s.get('action') in ('buy', 'long', 'BUY', 'LONG')]
+                _s3_buys = [
+                    s for s in _ls_data.get('signals', {}).get('S3', [])
+                    if isinstance(s, dict) and (
+                        s.get('action') in ('buy', 'long', 'BUY', 'LONG')
+                        or s.get('direction') in ('buy', 'long', 'BUY', 'LONG')
+                    )
+                ]
             _s3_conf = round(sum(s.get('confidence', 0.0) for s in _s3_buys) / len(_s3_buys), 4) if _s3_buys else 0.0
 
             _update_signal_cache({

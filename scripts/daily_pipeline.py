@@ -590,16 +590,18 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                         if _sigs:
                             _morning_signals[_stream.stream_id] = []
                             for _sig in (_sigs or [])[:20]:
-                                if _sig.get('ticker') == '_SYS_META':
+                                if not isinstance(_sig, dict) or _sig.get('ticker') == '_SYS_META' or _sig.get('strategy') == '_sys_meta':
                                     continue
-                                _morning_signals[_stream.stream_id].append({
-                                    'ticker': _sig.get('ticker', ''),
-                                    'name': _sig.get('name', ''),
-                                    'direction': _sig.get('direction', 'long'),
-                                    'confidence': round(
-                                        _sig.get('confidence', 0), 3),
-                                    'strategy': _sig.get('strategy', ''),
-                                })
+                                _sig_item_m = dict(_sig)
+                                _dir_m = str(_sig_item_m.get('direction', 'long') or 'long')
+                                _sig_item_m['stream_id'] = _sig_item_m.get('stream_id') or _stream.stream_id
+                                _sig_item_m['ticker'] = _sig_item_m.get('ticker', '')
+                                _sig_item_m['name'] = _sig_item_m.get('name', '')
+                                _sig_item_m['direction'] = _dir_m
+                                _sig_item_m['action'] = _sig_item_m.get('action') or ('exit' if _dir_m.lower() == 'exit' else ('sell' if _dir_m.lower() in ('short', 'sell') else 'buy'))
+                                _sig_item_m['confidence'] = round(float(_sig_item_m.get('confidence', 0.0) or 0.0), 4)
+                                _sig_item_m['strategy'] = _sig_item_m.get('strategy', '')
+                                _morning_signals[_stream.stream_id].append(_sig_item_m)
                     except Exception as _se:
                         logger.debug(
                             f"    {_stream.stream_id} 시그널 생성 실패: {_se}")
@@ -850,7 +852,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                        f"{exec_info.get('n_orders', 0)} "
                        f"(mode={exec_info.get('mode', '?')})")
 
-        # ★ pipeline_state.json timestamp 갱신 (Aging 방지)
+        # ★ pipeline_state.json timestamp 갱신 (Aging 방지) 및 스트림 가중치·세후 CAGR SSOT 동기화
         try:
             _ps_path = _PROJECT_ROOT / 'results' / 'pipeline_state.json'
             if _ps_path.exists():
@@ -858,6 +860,16 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 _ps_data['updated_at'] = datetime.now().isoformat()
                 _ps_data['updated_by'] = 'daily_pipeline.market'
                 _ps_data['market_regime'] = result.get('regime', _ps_data.get('kr_regime', 'unknown'))
+                if result.get('allocation'):
+                    _ps_data['stream_weights'] = dict(result.get('allocation') or {})
+                if result.get('regime_probs'):
+                    _ps_data['regime_probs'] = dict(result.get('regime_probs') or {})
+                if isinstance(result.get('risk'), dict) and result['risk'].get('max_exposure') is not None:
+                    _ps_data['max_exposure'] = result['risk']['max_exposure']
+                if isinstance(result.get('leverage'), dict) and result['leverage'].get('judgment'):
+                    _ps_data['leverage_judgment'] = result['leverage']['judgment']
+                if result.get('corporate_after_tax_cagr'):
+                    _ps_data['corporate_after_tax_cagr'] = result['corporate_after_tax_cagr']
                 atomic_write_json(_ps_path, 
                     _ps_data, indent=2)
         except Exception as _phase_err:  # [Phase 70-E] Silent Error 철거
@@ -892,7 +904,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as _e:
             logger.error(f"  stream_metrics 저장 실패: {_e}", exc_info=True)
 
-        # (2) latest_signals.json: 최신 매매 신호
+        # (2) latest_signals.json: 최신 매매 신호 (전 필드 무손실 보존)
         try:
             _signals_out = {
                 'date': today.isoformat(),
@@ -900,20 +912,25 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 'regime': result.get('regime', 'unknown'),
                 'n_orders': len(result.get('orders', [])),
                 'n_filled': exec_info.get('n_filled', 0),
+                'stream_weights': dict(result.get('allocation') or {}),
+                'corporate_after_tax_cagr': result.get('corporate_after_tax_cagr') or {},
                 'signals': {},
             }
             for _sid, _sigs in result.get('signals', {}).items():
                 _signals_out['signals'][_sid] = []
                 for _sig in (_sigs or [])[:20]:
-                    if _sig.get('ticker') == '_SYS_META':
+                    if not isinstance(_sig, dict) or _sig.get('ticker') == '_SYS_META' or _sig.get('strategy') == '_sys_meta':
                         continue
-                    _signals_out['signals'][_sid].append({
-                        'ticker': _sig.get('ticker', ''),
-                        'name': _sig.get('name', ''),
-                        'direction': _sig.get('direction', 'long'),
-                        'confidence': round(_sig.get('confidence', 0), 3),
-                        'strategy': _sig.get('strategy', ''),
-                    })
+                    _sig_item = dict(_sig)
+                    _dir_s = str(_sig_item.get('direction', 'long') or 'long')
+                    _sig_item['stream_id'] = _sig_item.get('stream_id') or _sid
+                    _sig_item['ticker'] = _sig_item.get('ticker', '')
+                    _sig_item['name'] = _sig_item.get('name', '')
+                    _sig_item['direction'] = _dir_s
+                    _sig_item['action'] = _sig_item.get('action') or ('exit' if _dir_s.lower() == 'exit' else ('sell' if _dir_s.lower() in ('short', 'sell') else 'buy'))
+                    _sig_item['confidence'] = round(float(_sig_item.get('confidence', 0.0) or 0.0), 4)
+                    _sig_item['strategy'] = _sig_item.get('strategy', '')
+                    _signals_out['signals'][_sid].append(_sig_item)
             _ls_path = _PROJECT_ROOT / 'results' / 'latest_signals.json'
             atomic_write_json(_ls_path, 
                 _signals_out, indent=2)

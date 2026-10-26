@@ -314,10 +314,17 @@ class AlphaAllocator:
             _is_cold_start = (len(daily_returns) == 0) and (_has_zero_days or _has_zero_trades or (n_obs == 0 and not _has_explicit_payoff))
             if _is_cold_start and sid in _AUX_STREAM_SET:
                 _cold_start_aux_streams.add(sid)
-            _sid_live_sigs = _all_sigs_in.get(sid) or []
+            _sid_raw_sigs = _all_sigs_in.get(sid) or []
+            _sid_live_sigs = [
+                _s for _s in _sid_raw_sigs
+                if isinstance(_s, dict)
+                and _s.get('strategy') != '_sys_meta'
+                and str(_s.get('direction', 'long')).lower() not in ('exit', 'short', 'sell')
+                and str(_s.get('action', 'buy')).lower() not in ('exit', 'sell')
+            ]
             if (
-                _has_active_empirical
-                and _has_zero_trades
+                (_has_active_empirical or bool(_all_sigs_in))
+                and (_has_zero_trades or _has_zero_days)
                 and int(metrics.get('active_positions') or 0) == 0
                 and len(_sid_live_sigs) == 0
                 and sid not in ('S0', 'S5')
@@ -327,66 +334,117 @@ class AlphaAllocator:
             n_0 = 20
             lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
 
+            # [Signal-Informed Empirical Bayes Prior]
+            # When a stream has active live buy signals (or explicit signal_win_rate / signal_risk),
+            # form the Bayesian conjugate prior from the horizon-normalized live signal expectation
+            # rather than erasing live signal alpha with a static 0.02/0.01 constant when n_obs == 0.
+            _prior_p_win = self._ev_default_p_win
+            _prior_reward = self._ev_default_reward
+            _prior_risk = self._ev_default_risk
+            if _sid_live_sigs or metrics.get('signal_win_rate') is not None:
+                try:
+                    from src.params.dynamic_quant_models import normalize_signal_horizon_expectation
+                    if _sid_live_sigs:
+                        _w_s_sum = 0.0
+                        _p_s_acc = 0.0
+                        _r_s_acc = 0.0
+                        _k_s_acc = 0.0
+                        _ref_h = 5.0
+                        for _ls in _sid_live_sigs:
+                            _nm = normalize_signal_horizon_expectation(_ls, stream_id=sid)
+                            _ws = _nm['size_weight']
+                            _h_scale = math.sqrt(_ref_h / max(1.0, _nm['horizon_days']))
+                            _h_vel = _ref_h / max(1.0, _nm['horizon_days'])
+                            _w_s_sum += _ws
+                            _p_s_acc += _ws * _nm['p_win']
+                            _r_s_acc += _ws * (_nm['reward_dec'] * _h_vel)
+                            _k_s_acc += _ws * (_nm['risk_dec'] * _h_scale)
+                        _inv_ws = 1.0 / max(_w_s_sum, 1e-12)
+                        _sig_p = _p_s_acc * _inv_ws
+                        _sig_r = _r_s_acc * _inv_ws
+                        _sig_k = _k_s_acc * _inv_ws
+                        _n_sig_eff = float(len(_sid_live_sigs))
+                    else:
+                        _sig_p = float(metrics.get('signal_win_rate') or self._ev_default_p_win)
+                        if _sig_p > 1.0:
+                            _sig_p = _sig_p / 100.0
+                        _sig_r = abs(float(metrics.get('expected_return') or self._ev_default_reward))
+                        if _sig_r > 1.0:
+                            _sig_r = _sig_r / 100.0
+                        _sig_k = abs(float(metrics.get('signal_risk') or self._ev_default_risk))
+                        if _sig_k > 1.0:
+                            _sig_k = _sig_k / 100.0
+                        _n_sig_eff = float(metrics.get('n_live_signals') or 2.0)
+                    _n0_sig = 2.0
+                    _lam_sig = _n_sig_eff / (_n_sig_eff + _n0_sig) if _n_sig_eff > 0.0 else 0.0
+                    _prior_p_win = _lam_sig * _sig_p + (1.0 - _lam_sig) * self._ev_default_p_win
+                    _prior_reward = _lam_sig * _sig_r + (1.0 - _lam_sig) * self._ev_default_reward
+                    _prior_risk = _lam_sig * _sig_k + (1.0 - _lam_sig) * self._ev_default_risk
+                except Exception:
+                    pass
+
             raw_p_win = metrics.get('win_rate', metrics.get('p_win'))
             if _is_cold_start:
-                p_win = self._ev_default_p_win
+                p_win = _prior_p_win
             elif raw_p_win is not None:
                 p_win = float(raw_p_win)
                 if math.isnan(p_win) or p_win <= 0.0:
-                    p_win = self._ev_default_p_win
+                    p_win = _prior_p_win
                 elif p_win > 1.0:
                     p_win = p_win / 100.0
                 if n_obs > 0:
-                    p_win = lam_n * p_win + (1.0 - lam_n) * self._ev_default_p_win
+                    p_win = lam_n * p_win + (1.0 - lam_n) * _prior_p_win
             elif daily_returns:
                 emp_p_win = float(len(pos_rets)) / float(len(daily_returns))
-                p_win = lam_n * emp_p_win + (1.0 - lam_n) * self._ev_default_p_win
+                p_win = lam_n * emp_p_win + (1.0 - lam_n) * _prior_p_win
             else:
-                p_win = self._ev_default_p_win
+                p_win = _prior_p_win
 
             if metrics.get('avg_win') is not None:
-                reward = abs(float(metrics.get('avg_win') or 0.0)) or self._ev_default_reward
+                reward = abs(float(metrics.get('avg_win') or 0.0)) or _prior_reward
                 if reward > 1.0:
                     reward = reward / 100.0
                 if n_obs > 0 or _is_cold_start:
-                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
+                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
             elif metrics.get('avg_win_pct') is not None:
-                reward = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0 or self._ev_default_reward
+                reward = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0 or _prior_reward
                 if n_obs > 0 or _is_cold_start:
-                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
+                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
             elif metrics.get('expected_return') is not None:
-                reward = abs(float(metrics.get('expected_return') or 0.0)) or self._ev_default_reward
+                reward = abs(float(metrics.get('expected_return') or 0.0)) or _prior_reward
                 if reward > 1.0:
                     reward = reward / 100.0
-                if n_obs > 0 or _is_cold_start:
-                    reward = lam_n * reward + (1.0 - lam_n) * self._ev_default_reward
+                if n_obs > 0:
+                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
+                elif _is_cold_start:
+                    reward = _prior_reward
             elif daily_returns:
-                emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else self._ev_default_reward
-                reward = lam_n * emp_rew + (1.0 - lam_n) * self._ev_default_reward
+                emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else _prior_reward
+                reward = lam_n * emp_rew + (1.0 - lam_n) * _prior_reward
             else:
-                reward = self._ev_default_reward
+                reward = _prior_reward
 
             if metrics.get('avg_loss') is not None:
-                risk = abs(float(metrics.get('avg_loss') or 0.0)) or self._ev_default_risk
+                risk = abs(float(metrics.get('avg_loss') or 0.0)) or _prior_risk
                 if risk > 1.0:
                     risk = risk / 100.0
                 if n_obs > 0:
-                    risk = lam_n * risk + (1.0 - lam_n) * self._ev_default_risk
+                    risk = lam_n * risk + (1.0 - lam_n) * _prior_risk
             elif metrics.get('avg_loss_pct') is not None:
-                risk = abs(float(metrics.get('avg_loss_pct') or 0.0)) / 100.0 or self._ev_default_risk
+                risk = abs(float(metrics.get('avg_loss_pct') or 0.0)) / 100.0 or _prior_risk
                 if n_obs > 0:
-                    risk = lam_n * risk + (1.0 - lam_n) * self._ev_default_risk
+                    risk = lam_n * risk + (1.0 - lam_n) * _prior_risk
             elif daily_returns:
-                emp_risk = float(sum(neg_rets) / len(neg_rets)) if neg_rets else (abs(float(metrics.get('volatility') or 0.0)) or self._ev_default_risk)
+                emp_risk = float(sum(neg_rets) / len(neg_rets)) if neg_rets else (abs(float(metrics.get('volatility') or 0.0)) or _prior_risk)
                 if emp_risk > 1.0:
                     emp_risk = emp_risk / 100.0
-                risk = lam_n * emp_risk + (1.0 - lam_n) * self._ev_default_risk
+                risk = lam_n * emp_risk + (1.0 - lam_n) * _prior_risk
             elif metrics.get('volatility') is not None:
-                risk = abs(float(metrics.get('volatility') or 0.0)) or self._ev_default_risk
+                risk = abs(float(metrics.get('volatility') or 0.0)) or _prior_risk
                 if risk > 1.0:
                     risk = risk / 100.0
             else:
-                risk = self._ev_default_risk
+                risk = _prior_risk
 
             if math.isnan(p_win): p_win = self._ev_default_p_win
             if math.isnan(reward): reward = self._ev_default_reward
@@ -731,7 +789,15 @@ class AlphaAllocator:
                         if _aux_sid in _explicit_zero_streams:
                             _m_aux = (stream_metrics or {}).get(_aux_sid, {}) or {}
                             _n_tr_aux = float(int(_m_aux.get('total_trades') or 0))
-                            _live_sigs_aux = float(len((stream_signals or {}).get(_aux_sid, []) or []))
+                            _raw_aux_sigs = _all_sigs_in.get(_aux_sid, []) or []
+                            _buy_aux_sigs = [
+                                _as for _as in _raw_aux_sigs
+                                if isinstance(_as, dict)
+                                and _as.get('strategy') != '_sys_meta'
+                                and str(_as.get('direction', 'long')).lower() not in ('exit', 'short', 'sell')
+                                and str(_as.get('action', 'buy')).lower() not in ('exit', 'sell')
+                            ]
+                            _live_sigs_aux = float(len(_buy_aux_sigs))
                             _n_eff_aux = _n_tr_aux + _live_sigs_aux
                             _eb_zero_shrink = _n_eff_aux / (_n_eff_aux + _eb_n0) if _n_eff_aux > 0.0 else 0.0
                             _raw_prior_w = _raw_prior_w * _eb_zero_shrink
