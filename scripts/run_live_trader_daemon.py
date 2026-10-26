@@ -625,6 +625,50 @@ def main():
                                         if (_now_us_ts - _ts) < 300.0 and (_k in _held_us_tickers or is_kr_ticker(str(_k)))
                                     }
                                     exit_orders = us_engine.update_trailing_stop(curr_prices)
+                                    _existing_exit_tks = {str(eo.get('ticker')) for eo in exit_orders if eo.get('ticker')}
+                                    try:
+                                        from src.risk.universal_exit_engine import UniversalExitEngine
+                                        from src.execution.position_ledger import PositionLedgerManager
+                                        _uee_us_pos = {}
+                                        _plm_us = PositionLedgerManager()
+                                        for h in us_engine.holdings:
+                                            _tk_u = str(h.get('ticker', '')).strip()
+                                            if not _tk_u or _tk_u in _existing_exit_tks:
+                                                continue
+                                            _cp_u = float(curr_prices.get(_tk_u, h.get('current_price', 0.0)) or 0.0)
+                                            _ep_u = float(h.get('entry_price', h.get('avg_price', 0.0)) or 0.0)
+                                            if _cp_u <= 0 or _ep_u <= 0:
+                                                continue
+                                            _ret_u = ((_cp_u - _ep_u) / _ep_u) * 100.0
+                                            _meta_u = _plm_us.get_position_meta(_tk_u)
+                                            _uee_us_pos[f"LIVE_SSOT:{_tk_u}"] = {
+                                                'ticker': _tk_u,
+                                                'stream_id': _meta_u.get('stream_id') or 'LIVE_SSOT',
+                                                'strategy': _meta_u.get('strategy') or '',
+                                                'track': _meta_u.get('track') or '',
+                                                'quantity': int(h.get('quantity', h.get('qty', 0)) or 0),
+                                                'entry_price': _ep_u,
+                                                'current_price': _cp_u,
+                                                'unrealized_pnl_pct': _ret_u,
+                                                'peak_pnl_pct': float(h.get('peak_pnl_pct', _ret_u) or _ret_u),
+                                                'peak_price': float(h.get('peak_price', h.get('highest_price', _cp_u)) or _cp_u),
+                                                'trail_activated': bool(h.get('trail_activated', False)),
+                                                'entry_date': str(h.get('entry_date') or _meta_u.get('entry_date') or today_str),
+                                                'market': 'US',
+                                            }
+                                        if _uee_us_pos:
+                                            _uee_res_us = UniversalExitEngine().evaluate_all_positions(
+                                                _uee_us_pos,
+                                                market_data={'signal_cache': _sc_data},
+                                                regime=str(_bayesian_res.get('dominant_regime', 'caution') or 'caution'),
+                                            )
+                                            for _uo in _uee_res_us.get('exit_orders', []):
+                                                _utk = str(_uo.get('ticker', '')).strip()
+                                                if _utk and _utk not in _existing_exit_tks:
+                                                    exit_orders.append(_uo)
+                                                    _existing_exit_tks.add(_utk)
+                                    except Exception as _uee_us_err:
+                                        logger.debug(f"  [US UniversalExitEngine] 평가 폴백: {_uee_us_err}")
                                     for eo in exit_orders:
                                         _tk_us = eo['ticker']
                                         if _tk_us in main._exit_orders_in_flight:

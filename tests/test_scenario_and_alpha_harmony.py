@@ -477,6 +477,7 @@ def test_zero_fragmentation_and_no_fabricated_fallbacks(tmp_path, monkeypatch):
     assert (ret_missing, vol_missing) == (0.0, 0.0)
 
     # 4. USNightExecutionEngine: when both atr_map and empirical ATR are 0, skips instead of fabricating 0.015
+    import pytest
     import src.risk.universal_exit_engine as uee_mod
     import src.utils.dynamic_quant_engine as dqe_mod
     monkeypatch.setattr(uee_mod.UniversalExitEngine, "compute_ticker_atr", lambda self, tk: 0.0)
@@ -488,6 +489,50 @@ def test_zero_fragmentation_and_no_fabricated_fallbacks(tmp_path, monkeypatch):
         atr_map={},
     )
     assert exits_no_atr == []
+
+    # 5. USNightExecutionEngine enforces optimal stopping hard_sl_limit_pct (tighten_only), stopping PG at -2.49% <= -2.40%
+    monkeypatch.setattr(uee_mod.UniversalExitEngine, "compute_ticker_atr", lambda self, tk: 0.0196)
+    us_eng_pg = USNightExecutionEngine()
+    us_eng_pg.holdings = {"PG": {"ticker": "PG", "qty": 1, "entry_price": 163.87, "highest_price": 164.30}}
+    exits_pg = us_eng_pg.update_trailing_stop(current_prices={"PG": 159.78})
+    assert len(exits_pg) == 1
+    assert exits_pg[0]["ticker"] == "PG"
+    assert exits_pg[0]["action"] == "sell"
+
+    # 6. SectorPairAlphaEngine + PositionSizer: no 3X SOXS in US pairs & exact Volatility Parity under Probe Sizing
+    from src.allocation.sector_pair_alpha_engine import SectorPairAlphaEngine
+    from src.execution.position_sizer import PositionSizer
+    from src.execution.position_ledger import infer_canonical_stream_and_track
+
+    pair_eng = SectorPairAlphaEngine()
+    pair_res = pair_eng.generate_pair_signals(
+        sector_returns={"energy": 0.05, "semi": -0.04, "health": 0.03, "tech": -0.02},
+        market="US",
+        volatility_map={"energy": 0.15, "semi": 0.30, "health": 0.12, "tech": 0.24},
+    )
+    pair_tks = [o["ticker"] for o in pair_res["pair_orders"]]
+    assert "SOXS" not in pair_tks
+    assert "PSQ" in pair_tks
+    sizer = PositionSizer()
+    o_long = next(o for o in pair_res["pair_orders"] if o["ticker"] == "XLE")
+    o_short = next(o for o in pair_res["pair_orders"] if o["pair_id"] == o_long["pair_id"] and o["ticker"] != "XLE")
+    assert o_long["pair_vol_parity_scale"] == pytest.approx(1.0, rel=1e-9)
+    assert o_short["pair_vol_parity_scale"] == pytest.approx(0.5, rel=1e-9)
+    sz_long = sizer.compute(
+        {"ticker": "XLE", "confidence": 0.85, "tp_pct": 5.0, "sl_pct": 2.0, "pair_vol_parity_scale": o_long["pair_vol_parity_scale"]},
+        portfolio_value=18_000_000.0,
+        regime="caution",
+        vix=19.0,
+    )["final_size"]
+    sz_short = sizer.compute(
+        {"ticker": "PSQ", "confidence": 0.85, "tp_pct": 5.0, "sl_pct": 2.0, "pair_vol_parity_scale": o_short["pair_vol_parity_scale"]},
+        portfolio_value=18_000_000.0,
+        regime="caution",
+        vix=19.0,
+    )["final_size"]
+    assert sz_long * 0.15 == pytest.approx(sz_short * 0.30, rel=1e-6)
+    assert infer_canonical_stream_and_track("XLE", holding_info={"strategy": "us_sector_pair_alpha"}) == ("S14_PAIR_ALPHA", "TRACK_1_TACTICAL")
+
 
 
 

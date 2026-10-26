@@ -180,7 +180,7 @@ class S14SectorPairStream(BaseStream):
                 _reg_us = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
                 _vix_caut_lim = float(_dqe_s14.get_vix_regime_quantiles()['caution'])
                 _ois_bull_lim = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
-                _us_inv_map = {'semi': 'SOXS', 'tech': 'PSQ', 'SOXX': 'SOXS', 'XLK': 'PSQ'}
+                _us_inv_map = {'semi': 'PSQ', 'tech': 'PSQ', 'SOXX': 'PSQ', 'XLK': 'PSQ'}
                 _us_inv_blocked = (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull'
                 for order in (us_pair_res.get('pair_orders', []) if not _us_inv_blocked else []):
                     t_dir = order.get('direction', 'long').lower()
@@ -190,7 +190,7 @@ class S14SectorPairStream(BaseStream):
                     
                     if is_inv_hedge:
                         sec_key = str(order.get('sector', '')).lower()
-                        if ticker in ('SH', 'PSQ', 'SOXS', 'SQQQ'):
+                        if ticker in ('SH', 'PSQ'):
                             ticker_to_trade = ticker
                         else:
                             ticker_to_trade = _us_inv_map.get(sec_key, _us_inv_map.get(ticker, 'SH'))
@@ -203,7 +203,18 @@ class S14SectorPairStream(BaseStream):
                         action_to_trade = 'buy'
                         leg_label = 'LONG'
 
-                    # 연속적 노이즈 강도에 따른 동적 포지션 크기 스케일링
+                    # 연속적 노이즈 강도에 따른 동적 포지션 크기 스케일링 (실측 인버스 ETF 변동성 역가중 반영)
+                    _, _leg_vol = self._extract_returns_and_volatility(ticker_to_trade, market='US', days=20)
+                    _partner_tk = str(order.get('pair_partner', '') or '')
+                    if _partner_tk in ('SOXS', 'SQQQ'):  # hardcode-ok
+                        _partner_tk = 'PSQ'  # hardcode-ok
+                    _, _partner_vol = self._extract_returns_and_volatility(_partner_tk, market='US', days=20) if _partner_tk else (0.0, 0.0)
+                    if _leg_vol > 0 and _partner_vol > 0:
+                        _inv_l = 1.0 / max(_leg_vol, 1e-4)
+                        _inv_p = 1.0 / max(_partner_vol, 1e-4)
+                        _parity_scale = round(_inv_l / max(_inv_l, _inv_p), 4)
+                    else:
+                        _parity_scale = float(order.get('pair_vol_parity_scale', 1.0) or 1.0)
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_us, 4)
                     try:
                         _bar_us = _dqe_s14.compute_dynamic_exit_barriers(ticker_to_trade)
@@ -215,8 +226,9 @@ class S14SectorPairStream(BaseStream):
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': ticker_to_trade,
-                        'pair_id': order.get('pair_id', ''),
-                        'pair_partner': order.get('pair_partner', ''),
+                        'pair_id': str(order.get('pair_id', '')).replace('SOXS', 'PSQ'),
+                        'pair_partner': _partner_tk,
+                        'pair_vol_parity_scale': _parity_scale,
                         'name': f"US Pair {order['sector'].upper()} ({leg_label})",
                         'direction': direction_to_trade,
                         'action': action_to_trade,

@@ -206,7 +206,10 @@ class PositionSizer:
         # ★ 대표님 지시 반영: 횡보장(caution) 미세 정찰대(Probe Sizing = 3% NAV) 공격적 투입!
         is_probe = False
         if regime in ('caution', 'neutral'):
-            probe_cap = pget('sizer.probe_sizing_pct.caution', 0.03)
+            probe_cap = float(pget('sizer.probe_sizing_pct.caution', 0.03))
+            _parity_sc = float(signal.get('pair_vol_parity_scale', 1.0) or 1.0)
+            if 0.0 < _parity_sc < 1.0:
+                probe_cap = probe_cap * _parity_sc
             final_size = min(final_size, probe_cap)
             is_probe = True
             logger.info(f"  🎯 [Probe Sizing] {ticker}: 횡보장 미세 정찰대({final_size:.2%} NAV) 공격적 투입 확정")

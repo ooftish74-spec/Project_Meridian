@@ -56,6 +56,10 @@ def infer_canonical_stream_and_track(
     raw_sid = str(info.get("stream_id") or "").strip()
     raw_track = str(info.get("track") or "").strip()
     raw_strat = str(info.get("strategy") or "").strip()
+    raw_pair_id = str(info.get("pair_id") or "").strip()
+
+    if raw_pair_id or "pair" in raw_strat.lower():
+        return "S14_PAIR_ALPHA", (raw_track or "TRACK_1_TACTICAL")
 
     if raw_sid and raw_sid.upper() not in _UNATTRIBUTED_STREAM_TAGS:
         if not raw_track:
@@ -285,7 +289,7 @@ class PositionLedgerManager:
         holding_info: Optional[Dict[str, Any]] = None,
         holdings_map: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, str]:
-        """Infer canonical (stream_id, track) from holding metadata, sibling kis_portfolio.json, or canonical ticker map."""
+        """Infer canonical (stream_id, track) from holding metadata, sibling kis_portfolio.json / latest_signals.json, or canonical ticker map."""
         h_map = holdings_map if isinstance(holdings_map, dict) else {}
         if not holding_info and not h_map:
             kp_candidate = self.ledger_path.parent / "kis_portfolio.json"
@@ -296,6 +300,22 @@ class PositionLedgerManager:
                         h_map = kp_data["holdings"]
                 except Exception:
                     h_map = {}
+        clean_tk = str(ticker or "").split(":")[-1].strip().upper()
+        info_cand = holding_info if isinstance(holding_info, dict) else (h_map.get(clean_tk) if isinstance(h_map, dict) else None)
+        raw_sid_cand = str((info_cand or {}).get("stream_id") or "").strip().upper()
+        if not raw_sid_cand or raw_sid_cand in _UNATTRIBUTED_STREAM_TAGS:
+            ls_candidate = self.ledger_path.parent / "latest_signals.json"
+            if ls_candidate.exists():
+                try:
+                    ls_data = json.loads(ls_candidate.read_text(encoding="utf-8"))
+                    sigs_dict = ls_data.get("signals", ls_data) if isinstance(ls_data, dict) else {}
+                    if isinstance(sigs_dict, dict):
+                        s14_list = sigs_dict.get("S14_PAIR_ALPHA") or []
+                        for sig in s14_list:
+                            if isinstance(sig, dict) and str(sig.get("ticker", "")).strip().upper() == clean_tk:
+                                return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
+                except Exception:
+                    pass
         return infer_canonical_stream_and_track(ticker, holding_info=holding_info, holdings_map=h_map)
 
     def record_entry(

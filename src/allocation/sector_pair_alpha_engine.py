@@ -51,7 +51,7 @@ US_SECTOR_ETF_MAP = {
 
 US_INVERSE_ETF_MAP = {
     'tech':          'PSQ',
-    'semi':          'SOXS',
+    'semi':          'PSQ',
     'energy':        'SH',
     'financial':     'SH',
     'health':        'SH',
@@ -188,6 +188,9 @@ class SectorPairAlphaEngine:
 
             weight_strong = pair_budget * (inv_vol_s / total_inv_vol)
             weight_weak = pair_budget * (inv_vol_w / total_inv_vol)
+            max_inv_vol = max(inv_vol_s, inv_vol_w, 1e-8)
+            parity_scale_strong = round(inv_vol_s / max_inv_vol, 4)
+            parity_scale_weak = round(inv_vol_w / max_inv_vol, 4)
 
             long_ticker = etf_map.get(strong_sec, strong_sec)
             underlying_short_ticker = etf_map.get(weak_sec, weak_sec)
@@ -209,6 +212,7 @@ class SectorPairAlphaEngine:
                 'direction': 'long',
                 'action': 'buy',
                 'target_weight': round(weight_strong, 4),
+                'pair_vol_parity_scale': parity_scale_strong,
                 'z_score': round(strong_z, 2),
                 'confidence': round(min(0.99, max(0.50, conf_strong)), 3),
                 'reason': f'Market-Neutral Pair Long #{idx+1} (Sector {strong_sec}, Z={strong_z:+.2f}σ, RiskParity={inv_vol_s/total_inv_vol:.1%})'
@@ -224,6 +228,7 @@ class SectorPairAlphaEngine:
                 'action': 'buy_inverse',
                 'is_inverse_hedge': True,
                 'target_weight': round(weight_weak, 4),
+                'pair_vol_parity_scale': parity_scale_weak,
                 'z_score': round(weak_z, 2),
                 'confidence': round(min(0.99, max(0.50, conf_weak)), 3),
                 'reason': f'Market-Neutral Pair Short Hedge #{idx+1} via {short_ticker} (Sector {weak_sec}, Z={weak_z:+.2f}σ, RiskParity={inv_vol_w/total_inv_vol:.1%})'

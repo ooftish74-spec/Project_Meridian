@@ -429,6 +429,21 @@ class USNightExecutionEngine:
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
             dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
             dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
+            if not (atr_map and ticker in atr_map):
+                try:
+                    import math as _math_usn
+                    from src.utils.dynamic_quant_engine import get_quant_engine
+                    _opt_usn = get_quant_engine().compute_optimal_stopping_params(
+                        ticker=str(ticker),
+                        regime=str(cfg.get('market.current_regime', 'caution')).lower(),
+                        price=price,
+                        atr_pct=ticker_atr / _math_usn.sqrt(8.0 / _math_usn.pi),
+                    )
+                    _opt_sl_dec = abs(float(_opt_usn.get('hard_sl_limit_pct', 0.0) or 0.0)) / 100.0
+                    if _opt_sl_dec > 0:
+                        dynamic_hard_stop_pct = min(dynamic_hard_stop_pct, max(0.015, _opt_sl_dec))
+                except Exception:
+                    pass
             effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
             exit_reason = None

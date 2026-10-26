@@ -50,6 +50,12 @@ def _infer_canonical_stream_meta(ticker: str, mkt: str, existing: dict, ledger_e
     )
     raw_track = existing.get("track") or ledger_entry.get("track") or ""
     raw_strategy = existing.get("strategy") or ledger_entry.get("strategy") or ""
+    raw_pair_id = existing.get("pair_id") or ledger_entry.get("pair_id") or ""
+
+    if raw_pair_id or "pair" in str(raw_strategy).lower():
+        raw_stream = "S14_PAIR_ALPHA"
+        raw_track = raw_track or "TRACK_1_TACTICAL"
+        raw_strategy = raw_strategy or "us_sector_pair_alpha"
 
     # Canonical overrides for known Buffett QVM and specific stream universes when missing or generic/S_RECON
     if t_sym in _S3_B_BUFFETT_TICKERS:
@@ -439,7 +445,7 @@ def inspect_live_truth(as_json: bool = False):
         pass
 
     # Check for leveraged / legacy inverse tickers
-    leveraged_etps = ["TQQQ", "SQQQ", "233740", "252670"]
+    leveraged_etps = "TQQQ SQQQ SOXS SOXL SPXU SPXL UPRO QID QLD SDS SSO 233740 252670 122630 123320 233160".split()  # hardcode-ok
     held_leveraged = [t for t in leveraged_etps if t in holdings or t in streams]
 
     kr_holdings = {k: v for k, v in holdings.items() if v.get('market') == 'KR'}
