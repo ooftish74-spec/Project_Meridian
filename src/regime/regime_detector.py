@@ -265,11 +265,25 @@ class RegimeDetector:
             watchdog_triggered = True
         from src.utils.metric_parser import parse_metric
         _kospi_rets_in = list(market_data.get('kospi_returns', []) or [])
+        _kospi_dates_in = list(market_data.get('kospi_return_dates', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
+        _etf_track_tol = float(pget('regime.kospi_etf_tracking_tol', float(5) / float(1000)))
         if _live_chg_pct != 0.0 and _kospi_rets_in:
             _live_ret_dec = _live_chg_pct / 100.0
-            if abs(float(_kospi_rets_in[-1]) - _live_ret_dec) > _ret_eps:
+            _last_ret = float(_kospi_rets_in[-1])
+            _sig_date_str = str(signal.get('date') or signal.get('updated_at') or signal.get('timestamp') or '')[:10]
+            _last_date_str = str(_kospi_dates_in[-1])[:10] if _kospi_dates_in else ''
+            _same_date = bool(_sig_date_str and _last_date_str and _sig_date_str == _last_date_str)
+            _same_session_etf_proxy = bool(
+                not _kospi_dates_in
+                and (_last_ret * _live_ret_dec > 0.0)
+                and abs(_last_ret - _live_ret_dec) <= _etf_track_tol
+            )
+            if _same_date or _same_session_etf_proxy:
+                _kospi_rets_in[-1] = _live_ret_dec
+                market_data = dict(market_data, kospi_returns=_kospi_rets_in)
+            elif abs(_last_ret - _live_ret_dec) > _ret_eps:
                 _kospi_rets_in.append(_live_ret_dec)
                 market_data = dict(market_data, kospi_returns=_kospi_rets_in)
         rule_result = self._rule_based(signal, market_data)
@@ -563,11 +577,24 @@ class RegimeDetector:
             if _opt_v is None:
                 continue
         kospi_rets = list(market_data.get('kospi_returns', []) or [])
+        _kospi_dates_rb = list(market_data.get('kospi_return_dates', []) or [])
         _live_chg_pct = float(parse_metric(signal, 'kospi_change_pct', parse_metric(signal, 'kospi_change_1d', 0.0)) or 0.0)
         _ret_eps = float(pget('regime.kospi_ret_sync_eps', 1e-4))
+        _etf_track_tol = float(pget('regime.kospi_etf_tracking_tol', float(5) / float(1000)))
         if _live_chg_pct != 0.0 and kospi_rets:
             _live_ret_dec = _live_chg_pct / 100.0
-            if abs(float(kospi_rets[-1]) - _live_ret_dec) > _ret_eps:
+            _last_ret_rb = float(kospi_rets[-1])
+            _sig_date_rb = str(signal.get('date') or signal.get('updated_at') or signal.get('timestamp') or '')[:10]
+            _last_date_rb = str(_kospi_dates_rb[-1])[:10] if _kospi_dates_rb else ''
+            _same_date_rb = bool(_sig_date_rb and _last_date_rb and _sig_date_rb == _last_date_rb)
+            _same_session_proxy_rb = bool(
+                not _kospi_dates_rb
+                and (_last_ret_rb * _live_ret_dec > 0.0)
+                and abs(_last_ret_rb - _live_ret_dec) <= _etf_track_tol
+            )
+            if _same_date_rb or _same_session_proxy_rb:
+                kospi_rets[-1] = _live_ret_dec
+            elif abs(_last_ret_rb - _live_ret_dec) > _ret_eps:
                 kospi_rets.append(_live_ret_dec)
         _n5 = int(pget('regime.short_window_5d', 5))
         _n6 = int(pget('regime.short_window_6d', 6))
@@ -585,10 +612,26 @@ class RegimeDetector:
         _vkospi_val = float(parse_metric(signal, 'vkospi', vix) or vix)
         _ann_days = float(100) * float(2) + float(10) * float(5) + float(2)
         _sigma_1d_pct = _vkospi_val / (_ann_days ** (1.0 / 2.0)) if _vkospi_val > 0.0 else abs(_stab_1d_min)
-        _dyn_stab_1d_min = -max(abs(_stab_1d_min), _sigma_1d_pct) if (_cum_5d_pct >= _stab_5d_min and vix < _vix_fear) else _stab_1d_min
+        _n10_w = int(pget('regime.bleed_window_days', 10))
+        _r10_chk = kospi_rets[-_n10_w:] if len(kospi_rets) >= _n10_w else kospi_rets
+        _post_shock_stabilized = False
+        if _r10_chk:
+            _min_idx = min(range(len(_r10_chk)), key=lambda i: float(_r10_chk[i]))
+            _min_ret_pct = float(_r10_chk[_min_idx]) * 100.0
+            _post_rets = _r10_chk[_min_idx + 1:]
+            _min_post_days = int(pget('regime.post_shock_min_days', 4))
+            _post_cum_pct = sum(_post_rets) * 100.0 if _post_rets else 0.0
+            _post_pos_ratio = (sum((1 for r in _post_rets if r > 0)) / len(_post_rets)) if _post_rets else 0.0
+            _post_shock_stabilized = bool(
+                len(_post_rets) >= _min_post_days
+                and _min_ret_pct <= -(float(2) * _sigma_1d_pct)
+                and _post_cum_pct >= _stab_5d_min
+                and _post_pos_ratio >= (float(1) / float(2))
+            )
+        _dyn_stab_1d_min = -max(abs(_stab_1d_min), _sigma_1d_pct) if ((_cum_5d_pct >= _stab_5d_min or _post_shock_stabilized) and vix < _vix_fear) else _stab_1d_min
         _short_term_stabilized = bool(
             _recent_5
-            and (_cum_5d_pct >= _stab_5d_min or _cum_6d_pct >= _stab_1d_min or _pos_5d >= _stab_pos_min)
+            and (_cum_5d_pct >= _stab_5d_min or _cum_6d_pct >= _stab_1d_min or _pos_5d >= _stab_pos_min or _post_shock_stabilized)
             and _last_1d_pct >= _dyn_stab_1d_min
             and vix < _vix_fear
         )

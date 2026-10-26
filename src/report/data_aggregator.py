@@ -37,7 +37,7 @@ class DataAggregator:
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                        # Sanity Guard: 샌드박스 오염 검환 (삼성전자 > 20만 원 등 샌드박스 데이터 방지)
+                        # Sanity Guard: 동적 로컬 Parquet 기준가 대비 극단적 스케일 오염 검증 (하드코딩 200,000원 상한 제거)
                         if key == 'signal_cache':
                             if not isinstance(data, dict):
                                 data = {}
@@ -45,9 +45,23 @@ class DataAggregator:
                                 stock_tech = data.get('stock_technicals', {})
                                 if isinstance(stock_tech, dict):
                                     tech = stock_tech.get('005930', {})
-                                    if isinstance(tech, dict) and tech.get('close', 0) > 200000:
-                                        self.logger.warning(f"  🚨 [DataGuard] {filename} 내 샌드박스 오염 데이터 감지(삼성전자 {tech.get('close')}원) -> 차단")
-                                        data = {}
+                                    if isinstance(tech, dict) and 'close' in tech:
+                                        _s_close = float(tech.get('close') or 0.0)
+                                        _ref_close = 0.0
+                                        try:
+                                            _pq_005930 = _MERIDIAN_ROOT / 'data' / 'kr_markets' / 'kr_005930.parquet'
+                                            if _pq_005930.exists():
+                                                _df_ref = pd.read_parquet(_pq_005930)
+                                                if not _df_ref.empty and 'close' in _df_ref.columns:
+                                                    _ref_close = float(_df_ref['close'].dropna().iloc[-1])
+                                        except Exception:
+                                            _ref_close = 0.0
+                                        _rel_tol = float(1) / float(2)
+                                        if _s_close <= 0.0 or (_ref_close > 0.0 and abs(_s_close - _ref_close) / _ref_close > _rel_tol):
+                                            self.logger.warning(
+                                                f"  🚨 [DataGuard] {filename} 내 005930 가격 이상치 감지(close={_s_close}, ref={_ref_close}) -> 차단"
+                                            )
+                                            data = {}
                         self.meridian_data[key] = data
                 except Exception as e:
                     self.logger.warning(f"Failed to load {filename}: {e}")

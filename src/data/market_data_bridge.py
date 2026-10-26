@@ -609,7 +609,7 @@ class MarketDataBridge:
                 'kospi_returns': [float, ...],
             }
         """
-        result = {'vix_history': [], 'kospi_returns': []}
+        result = {'vix_history': [], 'kospi_returns': [], 'kospi_return_dates': []}
         for vix_pq in [_DATA_DIR / 'kr_markets' / 'cross_vix.parquet', _DATA_DIR / 'us_stocks' / 'prices' / '^VIX.parquet', _DATA_DIR / 'kr_markets' / 'VIX.parquet']:
             if vix_pq.exists():
                 try:
@@ -637,12 +637,23 @@ class MarketDataBridge:
             kospi_pq = _DATA_DIR / 'kr_markets' / 'kr_indices' / 'kospi.parquet'
         
         fetched = False
+        def _extract_ret_dates(df_obj, rets_series) -> List[str]:
+            try:
+                if 'date' in df_obj.columns:
+                    raw_idx = df_obj.loc[rets_series.index, 'date']
+                else:
+                    raw_idx = rets_series.index
+                return [pd.to_datetime(x).strftime('%Y-%m-%d') for x in raw_idx]
+            except Exception:
+                return []
+
         if kospi_pq.exists():
             try:
                 df = pd.read_parquet(kospi_pq)
                 if 'close' in df.columns:
                     rets = df['close'].pct_change().dropna().tail(days)
                     result['kospi_returns'] = rets.tolist()
+                    result['kospi_return_dates'] = _extract_ret_dates(df, rets)
                     fetched = True
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
                 import logging
@@ -659,6 +670,7 @@ class MarketDataBridge:
                 if df is not None and not df.empty:
                     rets = df['종가'].pct_change().dropna().tail(days)
                     result['kospi_returns'] = rets.tolist()
+                    result['kospi_return_dates'] = _extract_ret_dates(df, rets)
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).debug(f"KOSPI regime fallback failed: {e}")

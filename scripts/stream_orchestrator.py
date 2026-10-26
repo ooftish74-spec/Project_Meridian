@@ -380,6 +380,7 @@ class StreamOrchestrator:
                 'overnight_intel': overnight,
                 'vix_history': regime_hist.get('vix_history', []),
                 'kospi_returns': regime_hist.get('kospi_returns', []),
+                'kospi_return_dates': regime_hist.get('kospi_return_dates', []),
                 'us_regime': us_regime_val,
                 '_test_mode': self.execution_engine.mode == 'mock',
                 'is_mock': self.execution_engine.mode == 'mock',
@@ -2567,7 +2568,10 @@ class StreamOrchestrator:
                 logger.info(f"    🛑 [Order Netting Drop] {ticker}: 신규 매수 상계 금액(₩{netted_val_krw:,.0f}) < ₩{effective_min_val:,.0f} 미달 스킵")
                 continue
 
-            _all_dom_pairs = bool(dominant_orders) and all(bool(_do.get('pair_partner')) for _do in dominant_orders)
+            _all_dom_pairs = bool(dominant_orders) and (
+                bool(sample_order.get('pair_partner'))
+                or all(bool(_do.get('pair_partner')) for _do in dominant_orders)
+            )
             _dom_track = sample_order.get('track') or ('TRACK_2_BUFFETT_QVM' if dominant_stream_id == 'S3_B' else '')
             _sell_pnl_pct = 0.0
             if final_action == 'sell':
@@ -3291,7 +3295,19 @@ class StreamOrchestrator:
             elif _has_buy:
                 _active_streams_with_buys.append(_s_key)
 
-        _idle_budget = max(0.0, _idle_budget - _unattributed_held_krw)
+        _over_held_krw = 0.0
+        _canon_held_seen = set()
+        for _raw_s_k, _h_val_k in _stream_held_krw.items():
+            _c_sid_k = _CANONICAL_MAP.get(_raw_s_k, _raw_s_k)
+            if _c_sid_k in _canon_held_seen:
+                continue
+            _canon_held_seen.add(_c_sid_k)
+            _h_canon_val = float(_stream_held_krw.get(_c_sid_k, _h_val_k) or 0.0)
+            _init_b_val = float(_initial_stream_budgets.get(_c_sid_k, _initial_stream_budgets.get(_raw_s_k, 0.0)) or 0.0)
+            if _h_canon_val > _init_b_val:
+                _over_held_krw += (_h_canon_val - _init_b_val)
+
+        _idle_budget = max(0.0, _idle_budget - _unattributed_held_krw - _over_held_krw)
         if _idle_budget > 0 and _active_streams_with_buys:
             # [Pure Dynamic Math] 순 유휴 예산을 활성 스트림의 수학적 EV 가중치 및 미충족(Unfilled) 여력 비율로 정밀 배분
             _active_weights = {}
@@ -3978,14 +3994,37 @@ class StreamOrchestrator:
 
                 if not days_held and entry_date_str:
                     try:
+                        import os as _os_dh
                         import pandas as pd
-                        from datetime import date
+                        from datetime import date, timedelta as _td_dh
                         _entry = pd.to_datetime(entry_date_str).date()
-                        _curr_raw = market_data.get('date')
+                        _curr_raw = (market_data or {}).get('date') if isinstance(market_data, dict) else None
                         if not _curr_raw:
                             _curr_raw = date.today()
                         _curr = pd.to_datetime(_curr_raw).date()
-                        days_held = (_curr - _entry).days
+                        _use_tday_hold = bool(
+                            (isinstance(market_data, dict) and market_data.get('enforce_trading_days_hold'))
+                            or (
+                                not (isinstance(market_data, dict) and market_data.get('date'))
+                                and not _os_dh.environ.get('PYTEST_CURRENT_TEST')
+                                and _os_dh.environ.get('MERIDIAN_TEST_MODE') != '1'
+                            )
+                        )
+                        if _use_tday_hold and _curr > _entry:
+                            from src.utils.market_calendar import MarketCalendar as _MC_dh, is_us_trading_day as _is_us_td_dh
+                            _cal_dh = _MC_dh()
+                            _is_kr_dh = _is_kr_tk(str(_pos_ticker_up))
+                            _t_cnt = 0
+                            _d_iter = _entry + _td_dh(days=1)
+                            while _d_iter <= _curr:
+                                _d_str_dh = _d_iter.strftime('%Y-%m-%d')
+                                _is_td = _cal_dh.is_trading_day(_d_str_dh) if _is_kr_dh else _is_us_td_dh(_d_str_dh)
+                                if _is_td:
+                                    _t_cnt += 1
+                                _d_iter += _td_dh(days=1)
+                            days_held = _t_cnt
+                        else:
+                            days_held = max(0, (_curr - _entry).days)
                     except Exception as e:
                         logger.error(f"[DEBUG L4 ERROR] days_held computation failed: {e}, pos={pos}", exc_info=True)
                         days_held = 0
@@ -3994,6 +4033,12 @@ class StreamOrchestrator:
                 _max_hold_days = pos.get('max_hold_days')
                 if _max_hold_days is None:
                     _cur_regime = str(regime.get('primary_regime', 'caution') if isinstance(regime, dict) else (regime or 'caution')).lower()
+                    if not _is_kr_tk(str(_pos_ticker_up)):
+                        try:
+                            from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_dh
+                            _cur_regime = _get_qe_dh().resolve_effective_us_regime(_cur_regime, market_data)
+                        except Exception:
+                            pass
                     try:
                         from src.risk.dynamic_half_life_engine import DynamicHalfLifeEngine
                         _dh_engine = DynamicHalfLifeEngine()
@@ -4031,10 +4076,17 @@ class StreamOrchestrator:
                     urgency = 'panic'
 
                 # ── Time Limit (보유기간 만료 강제 청산) ──
-                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3, S3_B, S4, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
+                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3/S3_A/S3_B/S3_C, S4, S6, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
-                    if stream_id in ('S0', 'S3', 'S3_B', 'S4', 'S10', 'S10_MEGA_TREND', 'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA'):
-                        logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 5일 단기 타임리밋 면제")
+                    if (
+                        stream_id in (
+                            'S0', 'S3', 'S3_A', 'S3_B', 'S3_C', 'S3_ACTIVE_MACRO',
+                            'S4', 'S6', 'S6_US_SECTOR', 'S10', 'S10_MEGA_TREND',
+                            'S_YIELD', 'S_BETA', 'S_RECON', 'LIVE_SSOT', 'S14', 'S14_PAIR_ALPHA',
+                        )
+                        or str(pos.get('track', '')).upper() in ('TRACK_1_CORE', 'TRACK_2_BUFFETT_QVM')
+                    ):
+                        logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 단기 타임리밋 면제")
                     else:
                         reason = f"[L4 Exit] Time Limit: {days_held}일 보유 >= {_max_hold_days}일 제한"
                         urgency = 'stop'

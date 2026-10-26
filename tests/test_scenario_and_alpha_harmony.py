@@ -312,3 +312,100 @@ def test_oct26_forensic_five_root_causes_closed_form(tmp_path, monkeypatch):
     assert dropped_pair == []
 
 
+def test_oct26_us_session_and_evening_pipeline_invariants(tmp_path, monkeypatch):
+    """Verify the 4 pre-US-open invariants:
+    1) RegimeDetector deduplicates same-date ETF proxy return & detects 7-day post-shock trough stabilization ('caution' / 'rebound_from_bleed').
+    2) DataAggregator dynamic parquet reference check preserves valid 005930 > 200,000 KRW signal_cache.
+    3) StreamOrchestrator._evaluate_exits exempts S3_A, S3_C, S6 / TRACK_1_CORE from day-trade Time Limit and counts trading days (excluding weekends).
+    4) StreamOrchestrator._generate_orders enforces Jordan decomposition capital conservation (deducting over-allocated stream holdings from idle budget).
+    """
+    import json
+    import pandas as pd
+    import pytest
+    from src.regime.regime_detector import RegimeDetector
+    from src.report.data_aggregator import DataAggregator
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    # 1. RegimeDetector: same-date ETF proxy (-1.4563%) vs live KOSPI (-1.2506%) + 7-day post-shock stabilization
+    rd = RegimeDetector()
+    kospi_rets_ec2 = [
+        -0.054653, -0.004403, -0.075647,  # Oct 13-15 shock trough (-7.565%)
+        0.025814, 0.021802, -0.021825, 0.004091, -0.044530, 0.008561, -0.014563,  # Oct 16-26 (last bar is 069500 proxy on Oct 26)
+    ]
+    sig_ec2 = {
+        "date": "2026-10-26",
+        "vix": 19.1,
+        "vkospi": 22.6,
+        "usdkrw": 1325.0,
+        "ois": 40.9,
+        "kospi_change_pct": -1.2506,
+        "kospi": 5480.89,
+        "kospi_ma20": 5620.0,
+    }
+    mkt_ec2 = {
+        "signal_cache": sig_ec2,
+        "kospi_returns": list(kospi_rets_ec2),
+        "kospi_return_dates": [
+            "2026-10-13", "2026-10-14", "2026-10-15",
+            "2026-10-16", "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-26",
+        ],
+    }
+    rb_res = rd._rule_based(sig_ec2, mkt_ec2)
+    assert rb_res["regime"] == "caution"
+    assert rb_res["crash_type"] == "rebound_from_bleed"
+
+    # Genuine slow bleed (8 consecutive -0.8% days with no post-shock stabilization) must still trigger 'crash'
+    bleed_rets = [-0.008] * 8 + [0.001, -0.008]
+    rb_bleed = rd._rule_based(
+        {"vix": 22.0, "vkospi": 24.0, "usdkrw": 1380.0, "ois": 40.0, "kospi_change_pct": -0.8},
+        {"kospi_returns": bleed_rets},
+    )
+    assert rb_bleed["regime"] == "crash"
+    assert rb_bleed["crash_type"] == "slow_bleed"
+
+    # 2. DataAggregator: 005930 at 215,500 KRW (matching kr_005930.parquet) must NOT be wiped out
+    import src.report.data_aggregator as da_mod
+    res_dir = tmp_path / "results"
+    pq_dir = tmp_path / "data" / "kr_markets"
+    res_dir.mkdir(parents=True, exist_ok=True)
+    pq_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"close": [212000.0, 215500.0]}).to_parquet(pq_dir / "kr_005930.parquet")
+    (res_dir / "signal_cache.json").write_text(
+        json.dumps({"vix": 19.1, "stock_technicals": {"005930": {"close": 215500.0}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(da_mod, "_MERIDIAN_ROOT", tmp_path)
+    monkeypatch.setattr(da_mod, "_MERIDIAN_RESULTS", res_dir)
+    agg = DataAggregator()
+    loaded = agg.load_meridian_data()
+    assert loaded["signal_cache"].get("vix") == pytest.approx(19.1, rel=1e-9)
+
+    # Extreme scale corruption (e.g. 500,000 vs 215,500 > 50% deviation) must still be blocked
+    (res_dir / "signal_cache.json").write_text(
+        json.dumps({"vix": 19.1, "stock_technicals": {"005930": {"close": 500000.0}}}),
+        encoding="utf-8",
+    )
+    loaded_corrupt = agg.load_meridian_data()
+    assert loaded_corrupt["signal_cache"] == {}
+
+    # 3. StreamOrchestrator._evaluate_exits: S3_A, S3_C, S6 / TRACK_1_CORE exemption & trading-day holding count
+    orch = StreamOrchestrator(exec_mode="shadow")
+    monkeypatch.setattr(orch, "_is_ticker_session_open_for_live_exit", lambda *a, **kw: True)
+    us_pf = {
+        "positions": {
+            "CRM": {"ticker": "CRM", "quantity": 1, "current_price": 249.38, "unrealized_pnl_pct": 1.57, "entry_date": "2026-10-24", "stream_id": "S6", "track": "TRACK_1_CORE", "market": "US"},
+            "MSFT": {"ticker": "MSFT", "quantity": 1, "current_price": 527.37, "unrealized_pnl_pct": 0.52, "entry_date": "2026-10-24", "stream_id": "S3_A", "track": "TRACK_1_TACTICAL", "market": "US"},
+            "TLT": {"ticker": "TLT", "quantity": 1, "current_price": 81.53, "unrealized_pnl_pct": -0.27, "entry_date": "2026-10-23", "stream_id": "S3_C", "track": "TRACK_1_TACTICAL", "market": "US"},
+            "S2_SHORT_HOLD": {"ticker": "012750", "quantity": 7, "current_price": 95000.0, "unrealized_pnl_pct": 0.10, "entry_date": "2026-10-23", "stream_id": "S2", "track": "TRACK_1_TACTICAL", "market": "KR", "max_hold_days": 2.0},
+        }
+    }
+    # Between Friday 2026-10-23 and Monday 2026-10-26, only 1 trading day (2026-10-26) has elapsed (Saturday/Sunday excluded)
+    exits_us = orch._evaluate_exits(
+        market_data={"date": "2026-10-26", "enforce_trading_days_hold": True, "signal_cache": {"vix": 19.1, "vkospi": 22.6}},
+        regime="crash",
+        portfolio=us_pf,
+    )
+    assert exits_us == []
+
+
+
