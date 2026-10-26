@@ -1384,10 +1384,9 @@ def normalize_signal_horizon_expectation(
 
     if is_parking_sig:
         p_win = _PARKING_P_WIN
-        reward_dec = (
-            er_val
-            if (0.0 < er_val < _MAX_SINGLE_HORIZON_RET)
-            else (_DEFAULT_RF_ANN / _TRADING_DAYS_ANN) * _DEFAULT_HORIZON_DAYS
+        reward_dec = max(
+            er_val if (0.0 < er_val < _MAX_SINGLE_HORIZON_RET) else 0.0,
+            (_DEFAULT_RF_ANN / _TRADING_DAYS_ANN) * _DEFAULT_HORIZON_DAYS,
         )
         risk_dec = _PARKING_RISK_DEC
     elif is_track2:
@@ -1550,6 +1549,9 @@ def compute_corporate_after_tax_cagr_metrics(
                     p_i = p_raw
                     r_i = norm['reward_dec']
                     sl_i = norm['risk_dec']
+                    h_i = norm['horizon_days']
+                    g_gross_i = rf_daily_gross
+                    g_net_i = rf_daily_gross * (1.0 - tau_c)
                 else:
                     p_i = (
                         _PROB_CALIBRATION_KNOT + _PROB_TAIL_SLOPE * (p_raw - _PROB_CALIBRATION_KNOT)
@@ -1561,19 +1563,19 @@ def compute_corporate_after_tax_cagr_metrics(
                     if is_pair_stream:
                         r_i *= _PAIR_SPREAD_REWARD_SCALE
                         sl_i *= _PAIR_CORR_RISK_SCALE
-                h_i = norm['horizon_days']
-                c_i = norm['round_trip_cost']
+                    h_i = norm['horizon_days']
+                    c_i = norm['round_trip_cost']
 
-                mu_gross_i = p_i * r_i - (1.0 - p_i) * sl_i - c_i
-                var_gross_i = p_i * (1.0 - p_i) * ((r_i + sl_i) ** 2)
-                g_gross_i = (mu_gross_i - _HALF * var_gross_i) / h_i
+                    mu_gross_i = p_i * r_i - (1.0 - p_i) * sl_i - c_i
+                    var_gross_i = p_i * (1.0 - p_i) * ((r_i + sl_i) ** 2)
+                    g_gross_i = (mu_gross_i - _HALF * var_gross_i) / h_i
 
-                net_r_i = (1.0 - tau_c) * r_i
-                net_sl_i = (1.0 - eta_sh * tau_c) * sl_i
-                net_c_i = (1.0 - tau_c) * c_i
-                mu_net_i = p_i * net_r_i - (1.0 - p_i) * net_sl_i - net_c_i
-                var_net_i = p_i * (1.0 - p_i) * ((net_r_i + net_sl_i) ** 2)
-                g_net_i = (mu_net_i - _HALF * var_net_i) / h_i
+                    net_r_i = (1.0 - tau_c) * r_i
+                    net_sl_i = (1.0 - eta_sh * tau_c) * sl_i
+                    net_c_i = (1.0 - tau_c) * c_i
+                    mu_net_i = p_i * net_r_i - (1.0 - p_i) * net_sl_i - net_c_i
+                    var_net_i = p_i * (1.0 - p_i) * ((net_r_i + net_sl_i) ** 2)
+                    g_net_i = (mu_net_i - _HALF * var_net_i) / h_i
 
                 w_sum += w_i
                 g_gross_acc += w_i * g_gross_i
