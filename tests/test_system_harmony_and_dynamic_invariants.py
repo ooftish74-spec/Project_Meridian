@@ -157,8 +157,8 @@ def test_sector_pair_krx_etf_mapping_and_s12_guards():
     from src.allocation.sector_pair_alpha_engine import DEFAULT_SECTOR_ETF_MAP
     from src.streams.s12_derivative_squeeze.derivative_squeeze_stream import S12DerivativeSqueezeStream
 
-    assert DEFAULT_SECTOR_ETF_MAP['auto'] == '091170'
-    assert DEFAULT_SECTOR_ETF_MAP['finance'] == '091180'
+    assert DEFAULT_SECTOR_ETF_MAP['auto'] == '091180'
+    assert DEFAULT_SECTOR_ETF_MAP['finance'] == '091170'
     assert DEFAULT_SECTOR_ETF_MAP['petrochem'] == '117460'
 
     s12 = S12DerivativeSqueezeStream()
@@ -395,5 +395,97 @@ def test_discrete_lot_quantization_and_eb_alpha_friction_wiring():
         current_weights={"S2": 0.0, "S5": 1.0},
     )
     assert res_opt["tx_check"]["expected_profit"] > 0
+
+
+def test_krx_pair_hedge_replenishment_and_orphan_exit_invariants():
+    """Verify:
+    1) S14 KR pair signals include closed-form pair_vol_parity_scale.
+    2) StreamOrchestrator._evaluate_exits exits rotated-out S14 orphan legs ('091180') and expired S2 residuals ('457190', '069620')
+       while protecting active S2/S14 signals ('012750', '305720', '114800') via Active Signal Rollover Exemption.
+    """
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    orch = StreamOrchestrator(exec_mode="shadow")
+    orch._latest_signals = {
+        "S2": [
+            {"ticker": "012750", "direction": "long", "stream_id": "S2"},
+            {"ticker": "081660", "direction": "long", "stream_id": "S2"},
+            {"ticker": "278470", "direction": "long", "stream_id": "S2"},
+        ],
+        "S14_PAIR_ALPHA": [
+            {"ticker": "305720", "direction": "long", "stream_id": "S14_PAIR_ALPHA", "pair_id": "305720_114800"},
+            {"ticker": "114800", "direction": "long", "stream_id": "S14_PAIR_ALPHA", "pair_id": "305720_114800"},
+        ],
+    }
+
+    portfolio = {
+        "positions": {
+            "012750": {
+                "ticker": "012750",
+                "quantity": 7,
+                "days_held": 2,
+                "max_hold_days": 1.0,
+                "unrealized_pnl_pct": -1.5,
+                "current_price": 93300.0,
+                "stream_id": "S2",
+                "track": "TRACK_1_TACTICAL",
+            },
+            "457190": {
+                "ticker": "457190",
+                "quantity": 1,
+                "days_held": 2,
+                "max_hold_days": 1.0,
+                "unrealized_pnl_pct": 0.14,
+                "current_price": 70400.0,
+                "stream_id": "S2",
+                "track": "TRACK_1_TACTICAL",
+            },
+            "069620": {
+                "ticker": "069620",
+                "quantity": 2,
+                "days_held": 2,
+                "max_hold_days": 1.0,
+                "unrealized_pnl_pct": -1.5,
+                "current_price": 100600.0,
+                "stream_id": "S2",
+                "track": "TRACK_1_TACTICAL",
+            },
+            "091180": {
+                "ticker": "091180",
+                "quantity": 8,
+                "days_held": 2,
+                "max_hold_days": 1.0,
+                "unrealized_pnl_pct": -1.64,
+                "current_price": 22800.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "strategy": "kr_sector_pair_alpha",
+                "track": "TRACK_1_TACTICAL",
+            },
+            "305720": {
+                "ticker": "305720",
+                "quantity": 168,
+                "days_held": 2,
+                "max_hold_days": 1.0,
+                "unrealized_pnl_pct": -0.97,
+                "current_price": 13245.0,
+                "stream_id": "S14_PAIR_ALPHA",
+                "strategy": "kr_sector_pair_alpha",
+                "track": "TRACK_1_CORE",
+            },
+        }
+    }
+
+    exits = orch._evaluate_exits(
+        market_data={"signal_cache": {"vix": 18.0, "vkospi": 18.0}},
+        regime="caution",
+        portfolio=portfolio,
+    )
+    exited_tickers = {o["ticker"] for o in exits if "Time Limit" in str(o.get("reason", ""))}
+    assert "091180" in exited_tickers
+    assert "457190" in exited_tickers
+    assert "069620" in exited_tickers
+    assert "012750" not in exited_tickers
+    assert "305720" not in exited_tickers
+
 
 

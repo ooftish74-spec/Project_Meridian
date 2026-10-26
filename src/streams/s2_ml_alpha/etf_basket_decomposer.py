@@ -61,17 +61,17 @@ class S2ETFBasketDecomposer:
             'IT_Semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
             'semiconductor': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
             'it': {'ticker': '091160', 'name': 'KODEX 반도체'},  # hardcode-ok: L0 KRX sector ETF
-            'Battery/Auto': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
-            'Automotive_Battery': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'Battery/Auto': {'ticker': '091180', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'Automotive_Battery': {'ticker': '091180', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
             'battery': {'ticker': '305720', 'name': 'KODEX 2차전지산업'},  # hardcode-ok: L0 KRX sector ETF
-            'auto': {'ticker': '091170', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
+            'auto': {'ticker': '091180', 'name': 'KODEX 자동차'},  # hardcode-ok: L0 KRX sector ETF
             'Bio/Healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
             'Healthcare_Bio': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
             'bio': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
             'healthcare': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
             'health': {'ticker': '244580', 'name': 'KODEX 바이오'},  # hardcode-ok: L0 KRX sector ETF
-            'Financials': {'ticker': '091180', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
-            'finance': {'ticker': '091180', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
+            'Financials': {'ticker': '091170', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
+            'finance': {'ticker': '091170', 'name': 'KODEX 은행'},  # hardcode-ok: L0 KRX sector ETF
             'Heavy Industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
             'heavy_industry': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF
             'energy/chem': {'ticker': '117460', 'name': 'KODEX 에너지화학'},  # hardcode-ok: L0 KRX sector ETF

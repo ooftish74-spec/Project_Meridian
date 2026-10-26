@@ -305,6 +305,17 @@ class S14SectorPairStream(BaseStream):
                         leg_label = 'LONG'
                         partner_tk = _kr_1x_inv
 
+                    _, _leg_vol_kr = self._extract_returns_and_volatility(str(trade_ticker), market='KR', days=20)
+                    _, _partner_vol_kr = (
+                        self._extract_returns_and_volatility(str(partner_tk), market='KR', days=20)
+                        if partner_tk else (0.0, 0.0)
+                    )
+                    if _leg_vol_kr > 0 and _partner_vol_kr > 0:
+                        _inv_l_kr = 1.0 / max(_leg_vol_kr, 1e-4)
+                        _inv_p_kr = 1.0 / max(_partner_vol_kr, 1e-4)
+                        _parity_scale_kr = round(_inv_l_kr / max(_inv_l_kr, _inv_p_kr), 4)
+                    else:
+                        _parity_scale_kr = float(order.get('pair_vol_parity_scale', 1.0) or 1.0)
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_kr, 4)
                     try:
                         _bar_kr = _dqe_kr.compute_dynamic_exit_barriers(trade_ticker)
@@ -318,6 +329,7 @@ class S14SectorPairStream(BaseStream):
                         'ticker': trade_ticker,
                         'pair_id': order.get('pair_id', ''),
                         'pair_partner': partner_tk,
+                        'pair_vol_parity_scale': _parity_scale_kr,
                         'name': f"KR Pair {order['sector'].upper()} ({leg_label})",
                         'direction': trade_dir,
                         'action': 'buy',

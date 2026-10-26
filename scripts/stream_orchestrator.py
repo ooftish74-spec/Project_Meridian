@@ -3339,6 +3339,7 @@ class StreamOrchestrator:
         _meta_keys = [
             'tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days',
             'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner',
+            'pair_vol_parity_scale',
             'is_hedge', 'is_market_neutral', 'beta', 'gk_expected_alpha', 'score_z',
             'track', 'noise_stop_loss_exempt', 'margin_of_safety_pct', 'f_score',
             'ohlson_prob', 'roic_wacc_spread_pct',
@@ -3591,51 +3592,71 @@ class StreamOrchestrator:
                     target_amount = min(target_amount, _safe_nav_gen * _max_single_stock_pct)
 
                 # 현재 보유 금액 및 타 스트림 선행 발주 금액 파악 (중복 매수 방지)
-                # 단, 마켓뉴트럴 페어(pair_id)의 공유 인버스 헷지 레그(예: 114800, PSQ)는 각 활성 페어의 독립 슬라이스이므로 선행 누적분 차감 면제
+                # 단, 마켓뉴트럴 페어(pair_id)의 공유 인버스 헷지 레그(예: 114800, PSQ)는 각 활성 페어의 독립 슬라이스이므로
+                # 동일 사이클 내 선행 페어 발주분 차감은 면제하되, 계좌 기보유 평가액은 슬라이스 비중(size_pct)만큼 안분 차감하여 중복 과매수 차단
                 _is_pair_shared_inv = bool(_sig_pid) and (_t_clean in _inv_set_gen)
-                current_amount = 0.0 if _is_pair_shared_inv else float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
-                current_qty = 0
-                current_eval_krw = 0.0
-                if not _is_pair_shared_inv:
-                    _ch_entry = current_holdings.get(_t_clean)
-                    if isinstance(_ch_entry, dict) and float(_ch_entry.get('qty', 0.0) or 0.0) > 0:
-                        current_qty = int(float(_ch_entry.get('qty', 0.0) or 0.0))
-                        current_eval_krw = float(_ch_entry.get('eval_krw', 0.0) or 0.0)
-                        current_amount += current_eval_krw
-                    elif portfolio:
-                        pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
-                        pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
-                        for pos in pos_iterable:
-                            if isinstance(pos, dict):
-                                pos_t = pos.get('ticker', '')
-                                if pos_t and _t and pos_t.split(':')[-1].upper() == _t_clean:
-                                    _p_qty = float(pos.get('quantity', pos.get('qty', 0)) or 0.0)
-                                    _p_px = float(pos.get('current_price', 0.0) or pos.get('avg_price', 0.0) or pos.get('entry_price', 0.0) or sig.get('price', 0.0) or 0.0)
-                                    _p_amt = float(pos.get('eval_krw', 0.0) or pos.get('eval_amount_krw', 0.0) or pos.get('amount_krw', 0.0) or pos.get('amount', 0.0) or pos.get('market_value', 0.0) or 0.0)
-                                    if _p_amt <= 0:
-                                        _p_amt = _p_qty * _p_px
-                                    current_eval_krw += _p_amt
-                                    current_amount += _p_amt
-                                    current_qty += int(_p_qty)
+                _held_qty_raw = 0
+                _held_eval_krw_raw = 0.0
+                _ch_entry = current_holdings.get(_t_clean)
+                if isinstance(_ch_entry, dict) and float(_ch_entry.get('qty', 0.0) or 0.0) > 0:
+                    _held_qty_raw = int(float(_ch_entry.get('qty', 0.0) or 0.0))
+                    _held_eval_krw_raw = float(_ch_entry.get('eval_krw', 0.0) or 0.0)
+                elif portfolio:
+                    pos_source = portfolio.get('positions') or portfolio.get('holdings') or {}
+                    pos_iterable = pos_source.values() if isinstance(pos_source, dict) else pos_source
+                    for pos in pos_iterable:
+                        if isinstance(pos, dict):
+                            pos_t = pos.get('ticker', '')
+                            if pos_t and _t and pos_t.split(':')[-1].upper() == _t_clean:
+                                _p_qty = float(pos.get('quantity', pos.get('qty', 0)) or 0.0)
+                                _p_px = float(pos.get('current_price', 0.0) or pos.get('avg_price', 0.0) or pos.get('entry_price', 0.0) or sig.get('price', 0.0) or 0.0)
+                                _p_amt = float(pos.get('eval_krw', 0.0) or pos.get('eval_amount_krw', 0.0) or pos.get('amount_krw', 0.0) or pos.get('amount', 0.0) or pos.get('market_value', 0.0) or 0.0)
+                                if _p_amt <= 0:
+                                    _p_amt = _p_qty * _p_px
+                                _held_eval_krw_raw += _p_amt
+                                _held_qty_raw += int(_p_qty)
+
+                if _is_pair_shared_inv:
+                    _same_inv_sigs = [
+                        _s for _s in stream_signals
+                        if isinstance(_s, dict)
+                        and str(_s.get('ticker', '')).split(':')[-1].upper() == _t_clean
+                        and float(_s.get('size_pct', 0.0) or 0.0) > 0
+                    ]
+                    _tot_inv_sz = sum(float(_s.get('size_pct', 0.0) or 0.0) for _s in _same_inv_sigs)
+                    _slice_share = (float(size_pct) / _tot_inv_sz) if _tot_inv_sz > 0 else 1.0
+                    current_eval_krw = _held_eval_krw_raw * _slice_share
+                    current_qty = int(round(_held_qty_raw * _slice_share)) if _held_eval_krw_raw > 0 else 0
+                    if _held_eval_krw_raw > 0 and current_qty == 0 and _held_qty_raw > 0:
+                        current_qty = 1
+                    current_amount = current_eval_krw
+                else:
+                    current_qty = _held_qty_raw
+                    current_eval_krw = _held_eval_krw_raw
+                    current_amount = float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0)) + current_eval_krw
 
                 target_order_krw = target_amount
                 _dup_hold_ratio = 1.0 / 2.0
-                if not _is_pair_shared_inv and current_qty > 0 and target_order_krw > 0:
+                if current_qty > 0 and target_order_krw > 0:
                     if current_eval_krw >= target_order_krw * _dup_hold_ratio:
                         logger.info(
                             f"    🛡️ [Duplicate-Buy Guard] {_t}: 기보유 평가액 ₩{current_eval_krw:,.0f} "
                             f">= 목표 발주액 ₩{target_order_krw:,.0f}의 50% (수량={current_qty}) ➔ 중복 매수 스킵"
                         )
-                        _abort_pair(_sig_pid)
                         continue
                     target_amount = max(0.0, target_order_krw - current_eval_krw)
-                    gap = target_amount - float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0))
+                    gap = (
+                        target_amount
+                        if _is_pair_shared_inv
+                        else (target_amount - float(_cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0)))
+                    )
                 else:
                     gap = target_amount - current_amount
 
-                # 목표 달성 또는 초과 시 매수 스킵 (시그널 소멸 시에도 자동 스킵됨)
+                # 목표 달성 또는 초과 시 매수 스킵 (단, 기보유 수량 current_qty > 0 인 경우 반대쪽 헷지 레그 보충을 위해 페어 전체 취소 금지)
                 if gap <= 0:
-                    _abort_pair(_sig_pid)
+                    if current_qty == 0:
+                        _abort_pair(_sig_pid)
                     continue
 
                 # [Constantinides-Leland 3제곱근 무거래 영역 & Grinold-Kahn 이산 수량 한계 순효용 검증]
@@ -3655,7 +3676,8 @@ class StreamOrchestrator:
                                 f"    🛡️ [Constantinides No-Trade Band Skip] {_t}: 기보유 ₩{current_amount:,.0f} vs 목표 ₩{target_amount:,.0f} "
                                 f"(괴리 {gap/target_amount*100:.1f}% < 동적 무거래 반폭 {_nt_band*100:.1f}%) ➔ 추가매수 스킵"
                             )
-                            _abort_pair(_sig_pid)
+                            if current_qty == 0:
+                                _abort_pair(_sig_pid)
                             continue
                         if _sig_px > 0 and current_qty > 0:
                             if _is_kr_tk(str(_t_clean)):
@@ -3671,7 +3693,8 @@ class StreamOrchestrator:
                                     _usd_fx_ord = float(_CDG_ord().get_usdkrw_rate() or 0.0)
                                 if _usd_fx_ord <= 0:
                                     logger.warning(f"    🛑 [FX Guard] {_t}: USD/KRW 미상 → 해외 추가매수 생략")
-                                    _abort_pair(_sig_pid)
+                                    if current_qty == 0:
+                                        _abort_pair(_sig_pid)
                                     continue
                                 _eff_px_krw = _sig_px * _usd_fx_ord
                             _dq_est = max(1, int(gap / max(_eff_px_krw, 1.0)))
@@ -3690,11 +3713,13 @@ class StreamOrchestrator:
                                     f"    🛡️ [Grinold-Kahn Discrete-Lot Skip] {_t}: Δq=+{_dq_est}주 "
                                     f"(한계순효용 {_util_res['net_marginal_utility_pct']:+.3f}%, 사유={_util_res['reason']}) ➔ 추가매수 스킵"
                                 )
-                                _abort_pair(_sig_pid)
+                                if current_qty == 0:
+                                    _abort_pair(_sig_pid)
                                 continue
                     except Exception:
                         if (gap / target_amount) < 0.20:
-                            _abort_pair(_sig_pid)
+                            if current_qty == 0:
+                                _abort_pair(_sig_pid)
                             continue
                     
                 # 🎯 [User Rule] 100% 일시불 즉시 진입 (분할매수/DCA 100% 원천 차단)
@@ -3702,7 +3727,8 @@ class StreamOrchestrator:
 
                 min_trade = pget('a3.min_trade_amount', 10000)
                 if amount_krw < min_trade:
-                    _abort_pair(_sig_pid)
+                    if current_qty == 0:
+                        _abort_pair(_sig_pid)
                     continue
 
                 _cumulative_ordered_krw_by_ticker[_t_clean] = _cumulative_ordered_krw_by_ticker.get(_t_clean, 0.0) + amount_krw
@@ -3862,15 +3888,30 @@ class StreamOrchestrator:
                 'S14': 'S14_PAIR_ALPHA',
             }
             _explicit_exit_map = {}
+            _active_long_tickers_all = set()
+            _active_s14_kr_tickers = set()
+            _active_s14_us_tickers = set()
             for _esid, _esigs in (getattr(self, '_latest_signals', None) or {}).items():
+                _esid_u = str(_esid or '').strip().upper()
                 for _es in (_esigs or []):
-                    if isinstance(_es, dict) and (
+                    if not isinstance(_es, dict):
+                        continue
+                    _etk = str(_es.get('ticker', '')).split(':')[-1].strip().upper()
+                    if not _etk:
+                        continue
+                    if (
                         str(_es.get('direction', '')).lower() == 'exit'
                         or str(_es.get('action', '')).lower() == 'exit'
                     ):
-                        _etk = str(_es.get('ticker', '')).split(':')[-1].upper()
-                        if _etk:
-                            _explicit_exit_map.setdefault(_etk, []).append((_esid, _es))
+                        _explicit_exit_map.setdefault(_etk, []).append((_esid, _es))
+                    elif str(_es.get('direction', 'long')).lower() in ('long', 'buy'):
+                        _active_long_tickers_all.add(_etk)
+                        _es_sid_u = str(_es.get('stream_id') or _esid_u).strip().upper()
+                        if _es_sid_u in ('S14', 'S14_PAIR_ALPHA'):
+                            if _is_kr_tk(_etk):
+                                _active_s14_kr_tickers.add(_etk)
+                            else:
+                                _active_s14_us_tickers.add(_etk)
 
             # [Task 3 Phase50: ATR Elastic Band] VKOSPI 정비례 고무줄 밴드 — Whipsaw 방지
             # 원칙: 고변동성 시장은 잔파도가 크므로 밴드를 넓혀 털림 방지
@@ -4070,10 +4111,21 @@ class StreamOrchestrator:
                     urgency = 'panic'
 
                 # ── Time Limit (보유기간 만료 강제 청산) ──
-                # 단기 데이트레이딩(S1, S11 등)에만 적용하며, 코어 슬리브(S0, S3/S3_A/S3_B/S3_C, S4, S6, S10, S_YIELD, S_BETA, S14_PAIR_ALPHA)는 면제
+                # 단기 데이트레이딩(S1, S11 등) 및 시그널 소멸 종목에만 적용하며,
+                # 코어 슬리브 및 현재 활성 매수 시그널 유지 종목은 면제 (단, 시그널이 소멸된 S14 고아 레그는 청산 허용)
                 elif _max_hold_days is not None and _max_hold_days > 0 and days_held >= _max_hold_days:
                     from src.execution.position_ledger import is_core_or_macro_sleeve as _is_core_so
-                    if (
+                    _is_s14_pos_tl = (
+                        stream_id in ('S14', 'S14_PAIR_ALPHA')
+                        or 'pair' in str(pos.get('strategy', '')).lower()
+                    )
+                    _is_s14_orphan_tl = False
+                    if _is_s14_pos_tl:
+                        if _is_kr_tk(str(_pos_ticker_up)) and _active_s14_kr_tickers and _pos_ticker_up not in _active_s14_kr_tickers:
+                            _is_s14_orphan_tl = True
+                        elif (not _is_kr_tk(str(_pos_ticker_up))) and _active_s14_us_tickers and _pos_ticker_up not in _active_s14_us_tickers:
+                            _is_s14_orphan_tl = True
+                    if (not _is_s14_orphan_tl) and (
                         _is_core_so(
                             stream_id,
                             track=str(pos.get('track', '')),
@@ -4081,8 +4133,9 @@ class StreamOrchestrator:
                             ticker=str(_pos_ticker_up),
                         )
                         or stream_id in ('S_RECON', 'LIVE_SSOT')
+                        or (_pos_ticker_up in _active_long_tickers_all)
                     ):
-                        logger.debug(f"    🛡️ [Core Sleeve Time Exemption] {_pos_ticker} ({stream_id}) 코어 자산은 단기 타임리밋 면제")
+                        logger.debug(f"    🛡️ [Core/Active Signal Time Exemption] {_pos_ticker} ({stream_id}) 단기 타임리밋 면제")
                     else:
                         reason = f"[L4 Exit] Time Limit: {days_held}일 보유 >= {_max_hold_days}일 제한"
                         urgency = 'stop'

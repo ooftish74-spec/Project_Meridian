@@ -28,13 +28,13 @@ cfg = DynamicConfig()
 
 DEFAULT_SECTOR_ETF_MAP = {
     'semi':      '091160',  # KODEX 반도체
-    'auto':      '091170',  # KODEX 자동차
+    'auto':      '091180',  # KODEX 자동차
     'battery':   '305720',  # KODEX 2차전지
     'ship':      '139260',  # KODEX 조선
     'steel':     '139230',  # KODEX 철강
     'petrochem': '117460',  # KODEX 에너지화학
     'beauty':    '228800',  # KODEX 화장품
-    'finance':   '091180',  # KODEX 은행
+    'finance':   '091170',  # KODEX 은행
 }
 
 US_SECTOR_ETF_MAP = {
