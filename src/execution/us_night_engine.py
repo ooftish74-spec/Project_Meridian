@@ -18,7 +18,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from config.dynamic_config import DynamicConfig
 from src.utils.file_ops import atomic_write_json
@@ -184,6 +184,9 @@ class USNightExecutionEngine:
                         self.holdings.append({
                             'ticker': t,
                             'name': h.get('name', t),
+                            'stream_id': str(h.get('stream_id') or hwm.get('stream_id') or ''),
+                            'strategy': str(h.get('strategy') or hwm.get('strategy') or ''),
+                            'track': str(h.get('track') or hwm.get('track') or ''),
                             'entry_price': entry_p,
                             'current_price': curr_p,
                             'highest_price': final_peak,
@@ -377,6 +380,33 @@ class USNightExecutionEngine:
         from src.execution.position_ledger import PositionLedgerManager
         ledger_mgr = PositionLedgerManager()
         _adapter = getattr(self, 'adapter', None)
+
+        # ── [US Market-Neutral Pair Spread Pre-Scan (S14_PAIR_ALPHA)] ──
+        _us_held_tks = {str(h.get('ticker') or k).strip().upper() for k, h in iter_items if isinstance(h, dict)}
+        _us_pair_legs: Dict[str, Tuple[float, float, float]] = {}
+        for _k_s, _h_s in iter_items:
+            if not isinstance(_h_s, dict):
+                continue
+            _tk_s = str(_h_s.get('ticker') or _k_s).strip().upper()
+            _px_s = float(current_prices.get(_tk_s, _h_s.get('current_price', 0.0)) or 0.0)
+            _ep_s = float(_h_s.get('entry_price', _px_s) or _px_s)
+            _qty_s = float(_h_s.get('quantity', _h_s.get('qty', 1)) or 1.0)
+            if _px_s <= 0 or _ep_s <= 0 or _qty_s <= 0:
+                continue
+            _meta_s = ledger_mgr.get_position_meta(_tk_s)
+            _sid_s = str(_h_s.get('stream_id') or _meta_s.get('stream_id') or '').strip().upper()
+            _str_s = str(_h_s.get('strategy') or _meta_s.get('strategy') or '').strip().lower()
+            _is_pair_s = (
+                _sid_s in ('S14', 'S14_PAIR_ALPHA')
+                or 'pair' in _str_s
+                or (_tk_s in {'XLE', 'XLV', 'PSQ'} and 'PSQ' in _us_held_tks and bool(_us_held_tks & {'XLE', 'XLV'}))
+            )
+            if _is_pair_s:
+                _ret_s = (_px_s - _ep_s) / _ep_s
+                _pk_px_s = max(_px_s, _ep_s, float(_h_s.get('highest_price', _h_s.get('peak_price', _ep_s)) or _ep_s))
+                _drp_s = (_px_s - _pk_px_s) / _pk_px_s if _pk_px_s > 0 else 0.0
+                _us_pair_legs[_tk_s] = (_qty_s * _px_s, _ret_s, _drp_s)
+
         for tk_key, h in iter_items:
             ticker = str(h.get('ticker') or tk_key).strip()
             if not ticker:
@@ -401,8 +431,24 @@ class USNightExecutionEngine:
             h['peak_price'] = highest_price
             h['highest_price'] = highest_price
 
+            # Track 2 Buffett QVM (S3_B) 포지션은 단기 US 야간 손절/트레일링 면제 (4대 매도 헌법 관할)
+            _sid_h = str(h.get('stream_id') or hwm.get('stream_id') or '').strip().upper()
+            _trk_h = str(h.get('track') or hwm.get('track') or '').strip().upper()
+            _str_h = str(h.get('strategy') or hwm.get('strategy') or '').strip().lower()
+            if _sid_h in ('S3_B', 'TRACK_2_BUFFETT_QVM') or _trk_h == 'TRACK_2_BUFFETT_QVM' or _str_h in ('buffett_qvm', 'qvm_value'):
+                if holdings_is_dict:
+                    remaining_dict[tk_key] = h
+                else:
+                    remaining_list.append(h)
+                continue
+
             entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
             drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
+            if ticker.upper() in _us_pair_legs and len(_us_pair_legs) >= 2:
+                _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
+                if _tot_p_val > 0:
+                    entry_return = sum(v[0] * v[1] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
+                    drop_pct = sum(v[0] * v[2] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
 
             # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 UniversalExitEngine 실측 ATR / DynamicQuantEngine 조회)
             ticker_atr = 0.0

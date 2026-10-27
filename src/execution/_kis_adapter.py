@@ -903,6 +903,63 @@ class KISTraderAdapter:
                             headers = self._get_headers()
                             headers['tr_id'] = active_tr_id
                         raise requests.exceptions.RequestException(f'Gateway rejected before processing: {msg_cd}')
+                    # [KRX Upper-Limit Margin Guard (APBK0952)]
+                    # KIS 국내 시장가 매수(ORD_DVSN='01')는 상한가(+30%) 기준으로 증거금을 계산하므로 가용현금 77%~99% 구간에서 APBK0952 거부가 발생함.
+                    # 거부 시 주문은 거래소에 접수되지 않았음이 100% 확정되므로, 즉시 체결가능 지정가(현재가+3틱, ORD_DVSN='00') 및 매수가능수량(TTTC8908R)으로 1회 자동 정정 재시도!
+                    if (
+                        (not is_us_stock)
+                        and order.side == 'buy'
+                        and msg_cd == 'APBK0952'
+                        and not getattr(order, '_apbk0952_retried', False)
+                    ):
+                        _ref_px = float(_eff_price if _eff_price > 0 else (self._get_current_price(order.ticker) or 0.0))
+                        if _ref_px > 0:
+                            _mkt_lim_px = _snap_to_exchange_tick(_ref_px * (1.0 + 3.0 / 1000.0), order.ticker)  # hardcode-ok
+                            if _mkt_lim_px > 0:
+                                _psbl_qty = 0
+                                try:
+                                    _h_ps = self._get_headers()
+                                    _h_ps['tr_id'] = 'VTTC8908R' if self.mode == 'paper' else 'TTTC8908R'
+                                    _p_ps = {
+                                        'CANO': acnt[0],
+                                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                                        'PDNO': order.ticker,
+                                        'ORD_UNPR': str(int(_mkt_lim_px)),
+                                        'ORD_DVSN': '00',
+                                        'CMA_EVLU_AMT_ICLD_YN': 'Y',
+                                        'OVRS_ICLD_YN': 'Y',
+                                    }
+                                    _r_ps = requests.get(
+                                        f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-order",
+                                        headers=_h_ps,
+                                        params=_p_ps,
+                                        timeout=5,
+                                    ).json()
+                                    if _r_ps.get('rt_cd') == '0':
+                                        _psbl_qty = int(float((_r_ps.get('output') or {}).get('nrcvb_buy_qty', 0) or 0))
+                                except Exception:
+                                    _psbl_qty = 0
+                                if _psbl_qty <= 0 and avail_cash_krw > 0:
+                                    _psbl_qty = int((avail_cash_krw * (995.0 / 1000.0)) // _mkt_lim_px)  # hardcode-ok
+                                if _psbl_qty <= 0:
+                                    _psbl_qty = max(1, int(order.quantity * (97.0 / 100.0)))  # hardcode-ok
+                                _new_q = min(int(order.quantity), int(_psbl_qty))
+                                if _new_q > 0:
+                                    setattr(order, '_apbk0952_retried', True)
+                                    setattr(order, '_cash_clamped', True)
+                                    order.quantity = _new_q
+                                    order.price = _mkt_lim_px
+                                    order.order_type = 'limit'
+                                    ord_dvsn = '00'
+                                    ord_price = str(int(_mkt_lim_px))
+                                    body['ORD_DVSN'] = '00'
+                                    body['ORD_UNPR'] = ord_price
+                                    body['ORD_QTY'] = str(_new_q)
+                                    logger.warning(
+                                        f"  🛡️ [APBK0952 Upper-Limit Margin Fallback] {order.ticker}: 시장가 상한가(+30%) 증거금 초과 거부 ➔ "
+                                        f"즉시체결 지정가(₩{int(_mkt_lim_px):,}, {_new_q}주, ORD_DVSN=00)로 자동 전환 재전송!"
+                                    )
+                                    continue
                     order.status = 'rejected'
                     logger.error(f"  ❌ API 주문 거부: {data}")
                     _msg1_str = str(data.get('msg1', '') or '')
@@ -2627,8 +2684,14 @@ class KISTraderAdapter:
                                     repeg_res = self.sell(ticker=ticker, quantity=rem_qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
                                     repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'sell', 'repeg_order': repeg_res})
                                 else:
-                                    logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {rem_qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
-                                    repeg_res = self.buy(ticker=ticker, quantity=rem_qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
+                                    _cur_kr_px = float(self._get_current_price(ticker) or 0.0)
+                                    if _cur_kr_px > 0:
+                                        _repeg_kr_px = _snap_to_exchange_tick(_cur_kr_px * (1.0 + 3.0 / 1000.0), ticker)  # hardcode-ok
+                                        logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {rem_qty}주 매수 미체결({order_no}) ➔ 즉시체결 지정가(₩{int(_repeg_kr_px):,}) 매수 정정!")
+                                        repeg_res = self.buy(ticker=ticker, quantity=rem_qty, price=_repeg_kr_px, order_type='limit', exchange='KRX', urgency='repeg')
+                                    else:
+                                        logger.warning(f"  ⚡ [KRX Auto Re-Peg] {ticker} {rem_qty}주 매수 미체결({order_no}) ➔ 즉시 시장가 매수 정정!")
+                                        repeg_res = self.buy(ticker=ticker, quantity=rem_qty, price=0, order_type='01', exchange='KRX', urgency='repeg')
                                     repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
                 except Exception as _krx_e:
                     logger.debug(f"  [KRX Auto Re-Peg] 국내 미체결 스캔 예외: {_krx_e}")

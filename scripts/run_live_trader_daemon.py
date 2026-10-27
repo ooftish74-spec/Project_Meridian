@@ -285,7 +285,12 @@ def main():
                         except Exception:
                             pass
 
-                        _raw_entry_sigs = main._entry_monitor.scan_intraday_entries(held_tickers=held_set)
+                        _is_kr_underinvested = (_kr_cash_avail > max(500_000.0, _kr_eval_sum * 0.25))
+                        _raw_entry_sigs = (
+                            main._entry_monitor.scan_intraday_entries(held_tickers=held_set)
+                            if _is_kr_underinvested
+                            else []
+                        )
                         _entry_sigs = []
                         for _es in _raw_entry_sigs:
                             _tk_e = str(_es.get('ticker', '')).upper()

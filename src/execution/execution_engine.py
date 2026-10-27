@@ -971,7 +971,15 @@ class ExecutionEngine:
                         result.estimated_commission += fill.commission
                         result.estimated_slippage += fill.slippage * fill.filled_quantity
                         result.fills.append({'timestamp': fill.fill_timestamp, 'stream': stream_id, 'ticker': ticker, 'action': action, 'quantity': fill.filled_quantity, 'fill_price': fill.filled_price, 'commission': fill.commission, 'exchange': fill.exchange, 'time_in_force': res.get('tif', 'DAY'), 'mode': self.mode, 'status': fill.status})
-                        if action not in ('buy', 'add_on') and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                        _is_partial_trim_sell = (
+                            str(order.get('sell_type') or '').lower() in ('rebalance_trim', 'partial_trim')
+                            or str(order.get('strategy') or '').lower() in ('cross_alpha_swap_sell', 'rebalance_trim', 'partial_trim')
+                            or str(order.get('exit_type') or '').lower() in ('scale_out_50pct',)
+                            or '부분감량' in str(order.get('reason') or '')
+                            or 'Swap Sell' in str(order.get('reason') or '')
+                            or 'Swap Sell' in str(order.get('exit_reason') or '')
+                        )
+                        if action not in ('buy', 'add_on') and (not _is_partial_trim_sell) and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                             try:
                                 from src.execution.position_ledger import PositionLedgerManager
                                 _plm_ex = PositionLedgerManager()
@@ -991,6 +999,14 @@ class ExecutionEngine:
                             except Exception as _led_err:
                                 logger.debug(f"  [PositionLedger] record_daily_exit skip ({ticker}): {_led_err}")
                     else:
+                        _is_partial_trim_sub = (
+                            str(order.get('sell_type') or '').lower() in ('rebalance_trim', 'partial_trim')
+                            or str(order.get('strategy') or '').lower() in ('cross_alpha_swap_sell', 'rebalance_trim', 'partial_trim')
+                            or str(order.get('exit_type') or '').lower() in ('scale_out_50pct',)
+                            or '부분감량' in str(order.get('reason') or '')
+                            or 'Swap Sell' in str(order.get('reason') or '')
+                            or 'Swap Sell' in str(order.get('exit_reason') or '')
+                        )
                         if action in ('buy', 'add_on') and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                             try:
                                 from src.execution.position_ledger import PositionLedgerManager
@@ -1003,7 +1019,7 @@ class ExecutionEngine:
                                 )
                             except Exception:
                                 pass
-                        elif action not in ('buy', 'add_on') and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
+                        elif action not in ('buy', 'add_on') and (not _is_partial_trim_sub) and fill.status == 'submitted' and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST') and os.environ.get('MERIDIAN_TEST_MODE') != '1':
                             try:
                                 from src.execution.position_ledger import PositionLedgerManager
                                 _plm_ex_s = PositionLedgerManager()

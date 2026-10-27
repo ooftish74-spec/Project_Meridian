@@ -163,8 +163,50 @@ class UniversalExitEngine:
         except Exception:
             _plm_uee = None
 
+        # ── [Market-Neutral Pair Spread Pre-Scan (S14_PAIR_ALPHA)] ──
+        # 롱/인버스 헷지 페어(예: 305720+114800, XLE/XLV+PSQ)는 개별 레그 방향성 노이즈가 아닌
+        # 자본가중 합산 스프레드(Capital-Weighted Pair Spread PnL)로 손절/트레일링을 평가하고,
+        # 헷지 비율을 붕괴시키는 단일 레그 반익절(Scale-Out)/본전청산(Profit-Lock)/시간감쇠(Time-Decay)를 차단한다.
+        _kr_pair_legs: Dict[str, Tuple[float, float, float]] = {}
+        _us_pair_legs: Dict[str, Tuple[float, float, float]] = {}
+        _all_tks_upper = {
+            str(p.get('ticker', k.split(':')[-1] if ':' in str(k) else k)).strip().upper()
+            for k, p in positions.items()
+            if isinstance(p, dict) and float(p.get('quantity', p.get('qty', 0)) or 0) > 0
+        }
+        _KR_PAIR_CANDS = {'091160', '091170', '305720', '117460', '114800'}  # hardcode-ok
+        _US_PAIR_CANDS = {'XLE', 'XLV', 'PSQ'}  # hardcode-ok
+        for _pk_scan, _pos_scan in positions.items():
+            if not isinstance(_pos_scan, dict):
+                continue
+            _q_s = float(_pos_scan.get('quantity', _pos_scan.get('qty', 0)) or 0)
+            if _q_s <= 0:
+                continue
+            _tk_s = str(_pos_scan.get('ticker', str(_pk_scan).split(':')[-1] if ':' in str(_pk_scan) else _pk_scan)).strip().upper()
+            _lm_s = _plm_uee.get_position_meta(_tk_s) if _plm_uee is not None else {}
+            _sid_s = str(_pos_scan.get('stream_id') or _pos_scan.get('stream') or _lm_s.get('stream_id') or '').strip().upper()
+            _str_s = str(_pos_scan.get('strategy') or _lm_s.get('strategy') or '').strip().lower()
+            _is_pair_s = (
+                _sid_s in ('S14', 'S14_PAIR_ALPHA')
+                or 'pair' in _str_s
+                or bool(_pos_scan.get('pair_id'))
+                or (_tk_s in _KR_PAIR_CANDS and '114800' in _all_tks_upper and bool(_all_tks_upper & {'091160', '091170', '305720', '117460'}))
+                or (_tk_s in _US_PAIR_CANDS and 'PSQ' in _all_tks_upper and bool(_all_tks_upper & {'XLE', 'XLV'}))
+            )
+            if _is_pair_s:
+                _px_s = float(_pos_scan.get('current_price', _pos_scan.get('price', _pos_scan.get('entry_price', _pos_scan.get('avg_price', 1.0)))) or 1.0)
+                _ep_s = float(_pos_scan.get('entry_price', _pos_scan.get('avg_price', _px_s)) or _px_s)
+                _val_s = float(_pos_scan.get('eval_krw', _pos_scan.get('amount', 0.0)) or (_q_s * max(_px_s, 1e-6)))
+                _pnl_s = float(_pos_scan.get('unrealized_pnl_pct', _pos_scan.get('pnl_pct', _pos_scan.get('return_pct', ((_px_s - _ep_s) / _ep_s * 100.0) if _ep_s > 0 else 0.0))) or 0.0)
+                _pk_pnl_s = max(_pnl_s, float(_pos_scan.get('peak_pnl_pct', _pnl_s) or _pnl_s))
+                if _is_kr_uee(_tk_s):
+                    _kr_pair_legs[_tk_s] = (_val_s, _pnl_s, _pk_pnl_s)
+                else:
+                    _us_pair_legs[_tk_s] = (_val_s, _pnl_s, _pk_pnl_s)
+
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
+            _tk_u = str(ticker).strip().upper()
             _l_meta = _plm_uee.get_position_meta(str(ticker)) if _plm_uee is not None else {}
             stream_id = pos.get('stream_id') or pos.get('stream') or _l_meta.get('stream_id') or (pos_key.split(':')[0] if ':' in pos_key else 'S4')
             pos_track = pos.get('track') or _l_meta.get('track', '')
@@ -173,6 +215,11 @@ class UniversalExitEngine:
             
             if qty <= 0:
                 continue
+
+            _pair_bucket = _kr_pair_legs if _is_kr_uee(str(ticker)) else _us_pair_legs
+            _is_active_pair_leg = (_tk_u in _pair_bucket and len(_pair_bucket) >= 2)
+            if _is_active_pair_leg:
+                stream_id = 'S14_PAIR_ALPHA'
 
             # S_BETA 헷지 포지션 및 파킹 자산은 전사 Exit에서 제외
             if stream_id in ('S_BETA', 'BETA', 'S_YIELD') or str(ticker).upper() in _PARKING_EXEMPT:
@@ -230,6 +277,11 @@ class UniversalExitEngine:
 
             pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
             peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
+            if _is_active_pair_leg:
+                _p_val_tot = sum(v[0] for v in _pair_bucket.values() if v[0] > 0)
+                if _p_val_tot > 0:
+                    pnl_pct = sum(v[0] * v[1] for v in _pair_bucket.values() if v[0] > 0) / _p_val_tot
+                    peak_pnl = max(pnl_pct, sum(v[0] * v[2] for v in _pair_bucket.values() if v[0] > 0) / _p_val_tot)
             atr_pct = self.compute_ticker_atr(ticker)
 
             # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
@@ -248,10 +300,10 @@ class UniversalExitEngine:
             min_holding_required = _opt['min_holding_minutes']
             holding_minutes = float(pos.get('holding_minutes', pos.get('holding_time_min', min_holding_required * 2.0)))
 
-            # ── 0. [Profit-Lock Break-Even Escalation] (마찰비용+변동성 결합 동적 본전 보존 장벽) ──
+            # ── 0. [Profit-Lock Break-Even Escalation] (마찰비용+변동성 결합 동적 본전 보존 장벽; 페어 레그 단일 청산 금지) ──
             profit_lock_trigger = _opt['profit_lock_trigger_pct']
             break_even_floor = _opt['break_even_floor_pct']
-            if holding_minutes >= min_holding_required and peak_pnl >= profit_lock_trigger:
+            if (not _is_active_pair_leg) and holding_minutes >= min_holding_required and peak_pnl >= profit_lock_trigger:
                 if pnl_pct < break_even_floor:
                     detail = f"🔒 [Profit-Lock Escalation] {ticker} ({stream_id}): 고점 P&L {peak_pnl:+.1f}% >= {profit_lock_trigger:.1f}% 달성 후 P&L {pnl_pct:+.2f}% < 동적 본전 지지선 +{break_even_floor:.2f}% 이탈 (보유 {holding_minutes:.0f}m >= {min_holding_required:.0f}m) ➔ 이익 보존 100% 청산"
                     logger.info(f"  {detail}")
@@ -324,12 +376,12 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 4. Dynamic Scale-Out Runner (정보비율 IR 기반 동적 분할 차익실현) ──
+            # ── 4. Dynamic Scale-Out Runner (정보비율 IR 기반 동적 분할 차익실현; 페어 레그 단일 반익절 금지) ──
             scaled_out = bool(pos.get('scaled_out', False))
             scale_out_target = _opt['scale_out_target_pct']
             scale_out_ratio = _opt['scale_out_ratio']
             
-            if not scaled_out and pnl_pct >= scale_out_target:
+            if (not _is_active_pair_leg) and (not scaled_out) and pnl_pct >= scale_out_target:
                 if qty <= 1:
                     logger.info(f"  🎯 [Scale-Out Skip] {ticker} ({stream_id}): 잔고 1주 이하 ({qty}주)로 분할 매도 스킵 ➔ 100% 러너 포지션으로 유지")
                     continue
@@ -347,8 +399,8 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산) ──
-            if not scaled_out:
+            # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산; 페어 레그 제외) ──
+            if (not _is_active_pair_leg) and (not scaled_out):
                 try:
                     from src.execution.position_ledger import (
                         count_trading_days_held as _cnt_td_uee,

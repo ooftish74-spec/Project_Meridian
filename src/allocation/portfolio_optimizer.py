@@ -554,6 +554,23 @@ class PortfolioOptimizer:
                 metrics['_s2_oos_validation'] = oos_val
         except Exception:
             pass
+        try:
+            import os as _os_po
+            _allow_live_enrich = (not _os_po.environ.get('PYTEST_CURRENT_TEST')) or (str(_RESULTS) != str(_PROJECT_ROOT / 'results'))
+            if _allow_live_enrich:
+                _ls_f = _RESULTS / 'latest_signals.json'
+                if _ls_f.exists() and '_stream_signals' not in metrics:
+                    _ls_d = json.loads(_ls_f.read_text(encoding='utf-8'))
+                    _sigs_d = _ls_d.get('signals', _ls_d) if isinstance(_ls_d, dict) else {}
+                    if isinstance(_sigs_d, dict) and _sigs_d:
+                        metrics['_stream_signals'] = _sigs_d
+                _sc_f = _RESULTS / 'signal_cache.json'
+                if _sc_f.exists() and '_market_data' not in metrics:
+                    _sc_d = json.loads(_sc_f.read_text(encoding='utf-8'))
+                    if isinstance(_sc_d, dict) and _sc_d:
+                        metrics['_market_data'] = {'signal_cache': _sc_d}
+        except Exception:
+            pass
         return metrics
 
     def _load_current_weights(self) -> Dict[str, float]:

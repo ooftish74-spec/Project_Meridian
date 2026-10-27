@@ -73,6 +73,13 @@ def infer_canonical_stream_and_track(
                 raw_track = "TRACK_1_TACTICAL"
         return raw_sid, raw_track
 
+    if isinstance(holdings_map, dict) and holdings_map:
+        _h_tks = {str(k).split(":")[-1].strip().upper() for k in holdings_map.keys()}
+        if clean_tk == "114800" and (_h_tks & _S14_KR_SECTOR_PAIR_ETFS):
+            return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
+        if clean_tk in ("PSQ", "XLE", "XLV") and "PSQ" in _h_tks and (_h_tks & {"XLE", "XLV"}):
+            return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
+
     if clean_tk in _S3B_KR_TRACK2_STOCKS:
         return "S3_B", "TRACK_2_BUFFETT_QVM"
     if clean_tk in _S0_KR_INDEX_HEDGING_ETFS:
@@ -310,10 +317,33 @@ class PositionLedgerManager:
                     ls_data = json.loads(ls_candidate.read_text(encoding="utf-8"))
                     sigs_dict = ls_data.get("signals", ls_data) if isinstance(ls_data, dict) else {}
                     if isinstance(sigs_dict, dict):
-                        s14_list = sigs_dict.get("S14_PAIR_ALPHA") or []
-                        for sig in s14_list:
-                            if isinstance(sig, dict) and str(sig.get("ticker", "")).strip().upper() == clean_tk:
-                                return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
+                        _priority_streams = (
+                            "S14_PAIR_ALPHA",
+                            "S3_B",
+                            "S10_MEGA_TREND",
+                            "S2",
+                            "S3",
+                            "S6",
+                            "S1",
+                            "S0",
+                            "S5",
+                        )
+                        for _psid in list(_priority_streams) + [k for k in sigs_dict.keys() if k not in _priority_streams]:
+                            _s_list = sigs_dict.get(_psid) or []
+                            if not isinstance(_s_list, list):
+                                continue
+                            for sig in _s_list:
+                                if not isinstance(sig, dict):
+                                    continue
+                                if str(sig.get("direction", "long")).lower() not in ("long", "buy"):
+                                    continue
+                                if str(sig.get("ticker", "")).split(":")[-1].strip().upper() == clean_tk:
+                                    _sig_sid = str(sig.get("stream_id") or _psid).strip()
+                                    _sig_trk = str(sig.get("track") or "").strip()
+                                    _sig_str = str(sig.get("strategy") or "").strip().lower()
+                                    if _sig_sid.upper() in ("S3_B", "TRACK_2_BUFFETT_QVM") or _sig_trk == "TRACK_2_BUFFETT_QVM" or "buffett" in _sig_str or "qvm" in _sig_str:
+                                        return "S3_B", "TRACK_2_BUFFETT_QVM"
+                                    return canonicalize_stream_id(_sig_sid, track=_sig_trk, strategy=_sig_str, ticker=clean_tk), (_sig_trk or "TRACK_1_TACTICAL")
                 except Exception:
                     pass
         return infer_canonical_stream_and_track(ticker, holding_info=holding_info, holdings_map=h_map)
@@ -796,7 +826,7 @@ class PositionLedgerManager:
             # 1. 활성 종목 동기화
             for ticker in ticker_list:
                 h_info = h_map.get(ticker) if isinstance(h_map, dict) else None
-                inferred_sid, inferred_trk = infer_canonical_stream_and_track(
+                inferred_sid, inferred_trk = self.infer_stream_and_track(
                     ticker,
                     holding_info=h_info if isinstance(h_info, dict) else None,
                     holdings_map=h_map,
@@ -814,7 +844,11 @@ class PositionLedgerManager:
                         ledger[ticker]["created_at"] = datetime.now().isoformat()
                         updated = True
                     cur_sid = str(ledger[ticker].get("stream_id") or "").strip()
-                    if not cur_sid or cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS:
+                    if (
+                        not cur_sid
+                        or cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS
+                        or (inferred_sid == "S14_PAIR_ALPHA" and cur_sid in ("S0", "S3") and str(ticker).upper() in ("114800", "PSQ", "XLE", "XLV"))
+                    ):
                         ledger[ticker]["stream_id"] = inferred_sid
                         updated = True
                     cur_trk = str(ledger[ticker].get("track") or "").strip()

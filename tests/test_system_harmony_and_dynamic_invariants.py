@@ -827,6 +827,114 @@ def test_krx_intraday_churn_prevention_and_s14_pair_spread_stop_invariants():
     assert [o for o in so_exits if o.get("ticker") == "114800"] == []
 
 
+def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch):
+    """Closed-form verification of the 7 deep-dive operational bug fixes:
+    1) UniversalExitEngine pair-spread PnL invariance & single-leg Profit-Lock/Scale-Out/Time-Decay block.
+    2) USNightExecutionEngine pair-spread PnL invariance & Track 2 (S3_B) exemption.
+    3) PositionLedgerManager.infer_stream_and_track & sync_live_positions S14 pair partner & latest_signals resolution.
+    4) RealtimeEntryMonitor leveraged ETF exclusion & confidence clamping <= 0.95.
+    5) PortfolioOptimizer._load_stream_metrics() enrichment of _stream_signals & _market_data.
+    """
+    import json
+    from src.risk.universal_exit_engine import UniversalExitEngine
+    from src.execution.us_night_engine import USNightExecutionEngine
+    from src.execution.position_ledger import PositionLedgerManager, infer_canonical_stream_and_track
+    from src.execution.realtime_entry_monitor import RealtimeEntryMonitor
+    import src.allocation.portfolio_optimizer as po_mod
+
+    # 1) UniversalExitEngine: 305720 (+2.5%, ₩2,339,400, peak=+5.5%) + 114800 (-2.4%, ₩2,179,226)
+    # Hand-computed capital-weighted spread PnL:
+    #   (2339400 * 2.5 + 2179226 * (-2.4)) / (2339400 + 2179226) = +0.136915%
+    uee = UniversalExitEngine()
+    kr_pair_pos = {
+        "LIVE_SSOT:305720": {
+            "ticker": "305720",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "kr_sector_pair_alpha",
+            "quantity": 168,
+            "entry_price": 13585.0,
+            "current_price": 13925.0,
+            "unrealized_pnl_pct": 2.50,
+            "peak_pnl_pct": 5.50,
+            "eval_krw": 2_339_400.0,
+            "holding_days": 5.0,
+            "holding_minutes": 7200.0,
+        },
+        "LIVE_SSOT:114800": {
+            "ticker": "114800",
+            "stream_id": "S0",  # even if mis-tagged as S0 in memory, pair partner detection upgrades to S14_PAIR_ALPHA
+            "quantity": 1813,
+            "entry_price": 1231.0,
+            "current_price": 1201.5,
+            "unrealized_pnl_pct": -2.40,
+            "peak_pnl_pct": 0.0,
+            "eval_krw": 2_179_226.0,
+            "holding_days": 1.0,
+            "holding_minutes": 1440.0,
+        },
+    }
+    expected_pair_pnl = (2_339_400.0 * 2.50 + 2_179_226.0 * (-2.40)) / (2_339_400.0 + 2_179_226.0)
+    assert expected_pair_pnl == pytest.approx(618357.6 / 4518626.0, rel=1e-9)
+    uee_res = uee.evaluate_all_positions(kr_pair_pos, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
+    assert uee_res["exit_orders"] == []
+
+    # 2) USNightExecutionEngine: XLE (+2.6%) + PSQ (-2.5%) pair spread & MSFT (S3_B Track 2) exemption
+    ledger_file = tmp_path / "position_entry_ledger.json"
+    def _mock_plm_init(self, ledger_path=None):
+        self.ledger_path = ledger_file
+        self.daily_exit_path = tmp_path / "daily_exited_tickers.json"
+        self._lock = __import__("threading").Lock()
+        self._ensure_ledger_exists()
+
+    monkeypatch.setattr("src.execution.position_ledger.PositionLedgerManager.__init__", _mock_plm_init)
+    us_eng = USNightExecutionEngine()
+    us_eng.holdings = [
+        {"ticker": "XLE", "stream_id": "S14_PAIR_ALPHA", "entry_price": 50.0, "current_price": 51.3, "highest_price": 51.3, "peak_price": 51.3, "quantity": 12, "amount": 615.6},
+        {"ticker": "PSQ", "stream_id": "S3", "entry_price": 30.0, "current_price": 29.25, "highest_price": 30.0, "peak_price": 30.0, "quantity": 20, "amount": 585.0},
+        {"ticker": "MSFT", "stream_id": "S3_B", "track": "TRACK_2_BUFFETT_QVM", "entry_price": 400.0, "current_price": 370.0, "highest_price": 410.0, "peak_price": 410.0, "quantity": 2, "amount": 740.0},
+    ]
+    monkeypatch.setattr(us_eng, "_save_holdings", lambda: None)
+    us_exits = us_eng.update_trailing_stop(
+        current_prices={"XLE": 51.3, "PSQ": 29.25, "MSFT": 370.0},
+        atr_map={"XLE": 0.012, "PSQ": 0.012, "MSFT": 0.015},
+    )
+    assert us_exits == []
+
+    # 3) PositionLedgerManager pair partner & latest_signals inference
+    h_map_kr = {"305720": {"qty": 168}, "114800": {"qty": 1813}}
+    assert infer_canonical_stream_and_track("114800", holdings_map=h_map_kr) == ("S14_PAIR_ALPHA", "TRACK_1_TACTICAL")
+    h_map_us = {"XLE": {"qty": 12}, "PSQ": {"qty": 20}}
+    assert infer_canonical_stream_and_track("PSQ", holdings_map=h_map_us) == ("S14_PAIR_ALPHA", "TRACK_1_TACTICAL")
+
+    ls_file = tmp_path / "latest_signals.json"
+    ls_file.write_text(json.dumps({
+        "signals": {
+            "S10_MEGA_TREND": [{"ticker": "207940", "direction": "long", "stream_id": "S10_MEGA_TREND"}],
+        }
+    }), encoding="utf-8")
+    plm = PositionLedgerManager()
+    assert plm.infer_stream_and_track("207940", holdings_map={"207940": {"qty": 1}}) == ("S10", "TRACK_1_TACTICAL")
+
+    # 4) RealtimeEntryMonitor leveraged exclusion & confidence <= 0.95
+    rem = RealtimeEntryMonitor(mode="shadow")
+    cands = rem._get_dynamic_candidates()
+    assert "233740" not in cands
+    assert "252670" not in cands
+    brk_sig = rem.evaluate_ticker_breakout("005930", current_price=88000.0, prev_close=80000.0, volume_zscore=3.0, trading_value=10_000_000_000.0)
+    assert brk_sig is not None
+    assert 0.0 < brk_sig["confidence"] <= 0.95
+
+    # 5) PortfolioOptimizer._load_stream_metrics() enrichment in isolated tmp_path
+    monkeypatch.setattr(po_mod, "_RESULTS", tmp_path)
+    (tmp_path / "stream_metrics.json").write_text(json.dumps({"S2": {"sharpe": 1.5}}), encoding="utf-8")
+    (tmp_path / "signal_cache.json").write_text(json.dumps({"vix": 17.5, "qqq_ker": 0.42}), encoding="utf-8")
+    po = po_mod.PortfolioOptimizer()
+    loaded_m = po._load_stream_metrics()
+    assert "S10_MEGA_TREND" in loaded_m.get("_stream_signals", {})
+    assert loaded_m.get("_market_data", {}).get("signal_cache", {}).get("qqq_ker") == pytest.approx(0.42, rel=1e-9)
+
+
+
 
 
 

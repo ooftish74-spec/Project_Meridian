@@ -50,15 +50,16 @@ class RealtimeEntryMonitor:
         self.consensus_engine = TripleFeedConsensusEngine()
 
     def _get_dynamic_candidates(self) -> List[str]:
-        """dynamic_universe.json 및 universe_loader에서 동적 종목군 로드."""
+        """dynamic_universe.json 및 universe_loader에서 동적 종목군 로드 (2X 레버리지/곱버스 ETP 제외)."""
+        _lev_exclude = {'122630', '233740', '123320', '233160', '252670', '251340'}  # hardcode-ok
         try:
             from src.data_collection.universe_loader import get_universe_tickers
-            tickers = get_universe_tickers(include_etf=True, market='KR+ETF')
+            tickers = [t for t in get_universe_tickers(include_etf=True, market='KR+ETF') if str(t) not in _lev_exclude]
             if tickers:
                 return tickers[:50]  # 상위 50개 모니터링 후보
         except Exception as e:
             logger.warning(f"  ⚠️ [EntryMonitor] 유니버스 로드 실패: {e}")
-        return ['069500', '233740', '252670', '005930', '000660', '009540', '091160']
+        return ['069500', '005930', '000660', '009540', '091160']
 
     def check_liquidity_and_spread(
         self,
@@ -146,7 +147,7 @@ class RealtimeEntryMonitor:
         if combined_score >= self._threshold_sigma:
             self._last_signal_ts[ticker] = now
             direction = 'long'
-            confidence = round(min(1.5, 0.85 + (combined_score - self._threshold_sigma) * 0.2), 2)
+            confidence = round(min(0.95, 0.70 + (combined_score - self._threshold_sigma) * 0.10), 2)
             tag = "🔴 [Intraday Bear Breakout]" if ticker.upper() in bear_etfs else "🚀 [Intraday Breakout]"
             logger.info(f"  {tag} {ticker} 장중 수급 펄스 포착! (Score={combined_score:.2f}σ, Confidence={confidence})")
             return {
@@ -164,7 +165,7 @@ class RealtimeEntryMonitor:
         elif combined_score <= -self._threshold_sigma and ticker.upper() in bear_etfs:
             # 곱버스/인버스 하방 저격 (시장 급락 시 인버스 ETP 저격 진입)
             self._last_signal_ts[ticker] = now
-            confidence = round(min(1.5, 0.85 + (abs(combined_score) - self._threshold_sigma) * 0.2), 2)
+            confidence = round(min(0.95, 0.70 + (abs(combined_score) - self._threshold_sigma) * 0.10), 2)
             logger.info(f"  🔴 [Intraday Breakdown Signal] {ticker} 장중 숏/인버스 수급 펄스 포착! (Score={combined_score:.2f}σ, Confidence={confidence})")
             return {
                 'ticker': ticker,
@@ -206,7 +207,8 @@ class RealtimeEntryMonitor:
                         continue
                     curr_p = float(df['종가'].iloc[-1])
                     open_p = float(df['시가'].iloc[-1])
-                    if open_p <= 0:
+                    prev_close = float(df['종가'].iloc[-2]) if len(df) >= 2 else open_p
+                    if open_p <= 0 or prev_close <= 0 or curr_p <= open_p:
                         continue
                     
                     vol = float(df['거래량'].iloc[-1])
@@ -216,7 +218,7 @@ class RealtimeEntryMonitor:
                     vol_zscore = min(3.0, (vol - avg_vol) / max(1.0, std_vol)) if vol > avg_vol else 0.0
                     trading_val = float(df['거래대금'].iloc[-1]) if '거래대금' in df.columns else (vol * curr_p)
 
-                    sig = self.evaluate_ticker_breakout(ticker, curr_p, open_p, vol_zscore, trading_value=trading_val)
+                    sig = self.evaluate_ticker_breakout(ticker, curr_p, prev_close, vol_zscore, trading_value=trading_val)
                     if sig:
                         signals.append(sig)
                 except Exception as _t_err:

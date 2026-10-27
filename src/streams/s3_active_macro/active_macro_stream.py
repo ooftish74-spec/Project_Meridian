@@ -563,6 +563,19 @@ class S3FactorStream(BaseStream):
                     for _inv_tk, _idx_chg_1d in _us_inv_map.items():
                         _h_inv = _kp_inv_holdings.get(_inv_tk)
                         if isinstance(_h_inv, dict) and float(_h_inv.get('qty', _h_inv.get('quantity', 0)) or 0) > 0:
+                            _inv_sid = str(_h_inv.get('stream_id') or '').strip().upper()
+                            _inv_strat = str(_h_inv.get('strategy') or '').strip().lower()
+                            _is_s14_pair_hedge = (
+                                _inv_sid in ('S14', 'S14_PAIR_ALPHA')
+                                or 'pair' in _inv_strat
+                                or (_inv_tk == 'PSQ' and any(
+                                    isinstance(_kp_inv_holdings.get(_ptk), dict)
+                                    and float(_kp_inv_holdings[_ptk].get('qty', _kp_inv_holdings[_ptk].get('quantity', 0)) or 0) > 0
+                                    for _ptk in ('XLE', 'XLV')
+                                ))
+                            )
+                            if _is_s14_pair_hedge:
+                                continue
                             if _inv_tk not in _selected_long_tks and (us_regime not in ('bear', 'crash') or _idx_chg_1d > 0.0):
                                 _inv_reason = f"US Inverse Invalidation Exit ({_inv_tk}: us_regime={us_regime}, index_1d={_idx_chg_1d:+.2f}%)"
                                 logger.info(f"  🔔 [S3 Inverse Exit] {_inv_reason}")
