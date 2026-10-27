@@ -630,6 +630,100 @@ def test_global_5_axis_macro_stress_and_stagflation_synergy(monkeypatch, tmp_pat
     assert tc_boosted[0]["confidence"] > tc_base[0]["confidence"]
 
 
+def test_discrete_lot_knapsack_s14_chop_and_corporate_tax_shield_closed_form():
+    """Verify:
+    1) StreamOrchestrator._apply_final_execution_gate Discrete-Lot Knapsack Recovery restores top-EV 1-lot orders instead of truncating all to 0.
+    2) S14SectorPairStream.generate_signals preserves market-neutral pair signals in chop (KER < 0.40, regime='caution') even when OIS >= 55.
+    3) StreamOrchestrator._evaluate_exits protects held S14 pairs via capital-weighted spread PnL even when _latest_signals is empty.
+    4) TaxLossHarvestingEngine.compute_corporate_tax_shield_swap_bonus matches closed-form K-IFRS tax shield formula.
+    """
+    import pytest
+    from scripts.stream_orchestrator import StreamOrchestrator
+    from src.streams.s14_pair_alpha.sector_pair_stream import S14SectorPairStream
+    from src.tax.tax_loss_harvesting_engine import TaxLossHarvestingEngine
+
+    orch = StreamOrchestrator.__new__(StreamOrchestrator)
+    orch.exec_mode = "shadow"
+    orch._exit_only_reason = None
+    orch.execution_engine = type("E", (), {"_estimate_price": staticmethod(lambda t: 0.0)})()
+
+    # 1. Discrete-Lot Knapsack Recovery: 3 x 1-share US orders ($290, $420, $300 -> need $1013.03 > avail $750.0, s = 0.74035)
+    us_one_lot_orders = [
+        {"ticker": "V", "action": "buy", "quantity": 1, "price": 290.0, "confidence": 0.90, "expected_return_pct": 4.0},
+        {"ticker": "MSFT", "action": "buy", "quantity": 1, "price": 420.0, "confidence": 0.85, "expected_return_pct": 3.5},
+        {"ticker": "CRM", "action": "buy", "quantity": 1, "price": 300.0, "confidence": 0.80, "expected_return_pct": 3.0},
+    ]
+    recovered = orch._apply_final_execution_gate(us_one_lot_orders, {"cash": 1e9, "cash_usd": 750.0}, {})
+    assert [o["ticker"] for o in recovered] == ["V", "MSFT"]
+    assert all(o["quantity"] == 1 for o in recovered)
+    total_usd_cost = sum(o["price"] * o["quantity"] * 1.003 for o in recovered)
+    assert total_usd_cost == pytest.approx((290.0 + 420.0) * 1.003, rel=1e-9)
+    assert total_usd_cost <= 750.0
+
+    # 2. S14SectorPairStream in chop (qqq_ker=0.18, regime='caution') with high OIS (88.2) & VIX 16.86 emits market-neutral pair
+    s14 = S14SectorPairStream()
+    s14_sigs = s14.generate_signals(
+        regime="caution",
+        market_data={
+            "qqq_ker": 0.18,
+            "kospi_ker": 0.22,
+            "vix": 16.86,
+            "ois": 88.2,
+            "us_sector_returns": {"energy": 0.06, "health": 0.02, "tech": -0.01, "semi": -0.04},
+            "us_volatility_map": {"energy": 0.16, "health": 0.14, "tech": 0.22, "semi": 0.28},
+        },
+    )
+    us_s14_sigs = [s for s in s14_sigs if s.get("market") == "US"]
+    assert len(us_s14_sigs) == 2
+    assert {s["ticker"] for s in us_s14_sigs} == {"XLE", "SH"}
+
+    # 3. Held S14 pair protection in _evaluate_exits when _latest_signals is empty (Step 2 before Step 4)
+    orch_exit = StreamOrchestrator(exec_mode="shadow")
+    orch_exit._latest_signals = {}
+    held_s14_portfolio = {
+        "positions": {
+            "XLE": {
+                "ticker": "XLE",
+                "stream_id": "S14_PAIR_ALPHA",
+                "strategy": "us_sector_pair_alpha",
+                "quantity": 10,
+                "entry_price": 56.83,
+                "current_price": 55.10,
+                "unrealized_pnl_pct": -3.04,
+                "sl_pct": 2.0,
+                "eval_krw": 800_000.0,
+            },
+            "SH": {
+                "ticker": "SH",
+                "stream_id": "S14_PAIR_ALPHA",
+                "strategy": "us_sector_pair_alpha",
+                "quantity": 20,
+                "entry_price": 40.00,
+                "current_price": 41.80,
+                "unrealized_pnl_pct": 4.50,
+                "sl_pct": 2.0,
+                "eval_krw": 800_000.0,
+            },
+        }
+    }
+    exits_s14 = orch_exit._evaluate_exits(
+        market_data={"signal_cache": {"vix": 17.5, "vkospi": 17.3}},
+        regime="caution",
+        portfolio=held_s14_portfolio,
+    )
+    assert [e for e in exits_s14 if e.get("ticker") in ("XLE", "SH")] == []
+
+    # 4. TaxLossHarvestingEngine closed-form corporate tax shield swap bonus
+    tlh = TaxLossHarvestingEngine(harvest_month=12)
+    bonus = tlh.compute_corporate_tax_shield_swap_bonus(
+        unrealized_loss_krw=-1_500_000.0,
+        position_val_krw=10_000_000.0,
+        taxable_profit_krw=20_000_000.0,
+    )
+    # 1,500,000 * 0.099 / 10,000,000 * 100 = 1.485%
+    assert bonus == pytest.approx(1.485, rel=1e-9)
+
+
 
 
 

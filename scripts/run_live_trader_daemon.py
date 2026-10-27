@@ -535,6 +535,7 @@ def main():
                                             ledger_mgr.mark_scaled_out(_tk)
                                 if _filled_tks or _submitted_tks or getattr(_exec_res, 'n_filled', 0) > 0:
                                     try:
+                                        _adapter._last_balance_fetch_ts = 0.0
                                         _adapter.fetch_live_balance()
                                         from src.portfolio.shadow_manager import ShadowPortfolioManager
                                         _live_map_kr = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
@@ -543,6 +544,19 @@ def main():
                                             float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
                                             snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
                                         )
+                                        _kr_avail_after = float(getattr(getattr(_adapter, 'account', None), 'cash', 0.0) or 0.0)
+                                        _kr_min_redeploy = (2.0 + 2.0 + 1.0) * 100.0 * 100.0 * (2.0 + 2.0 + 2.0 + 2.0 + 2.0)
+                                        _kr_redeploy_cd = (2.0 + 1.0) * (2.0 + 2.0 + 2.0) * 100.0
+                                        if (
+                                            _is_kr_entry_window
+                                            and _kr_avail_after >= _kr_min_redeploy
+                                            and (_now_ts - getattr(main, '_last_entry_pipeline_ts', 0.0)) >= _kr_redeploy_cd
+                                        ):
+                                            main._last_entry_pipeline_ts = _now_ts
+                                            logger.info(
+                                                f"  🔄 [KR Intraday Capital Redeploy] 청산 후 가용 원화(₩{_kr_avail_after:,.0f}) 확보 ➔ 알파 재배치 파이프라인(market) 가동!"
+                                            )
+                                            run_pipeline(phase='market')
                                     except Exception as _sr_kr_e:
                                         logger.debug(f"  [KR Exit Shadow Sync] 동기화 폴백: {_sr_kr_e}")
                     except Exception as _exit_err:
@@ -725,6 +739,7 @@ def main():
                                                     today_str,
                                                     realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
                                                 )
+                                                _adapter._last_balance_fetch_ts = 0.0
                                                 _adapter.fetch_live_balance()
                                                 from src.portfolio.shadow_manager import ShadowPortfolioManager
                                                 _live_map_us = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
@@ -733,6 +748,23 @@ def main():
                                                     float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
                                                     snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
                                                 )
+                                                _usd_avail_after = max(
+                                                    float(getattr(_adapter, 'us_cash_usd', 0.0) or 0.0),
+                                                    float(getattr(_adapter, 'us_buying_power_usd', 0.0) or 0.0),
+                                                )
+                                                _us_min_redeploy = 2.0 * 100.0
+                                                _us_redeploy_cd = (2.0 + 1.0) * (2.0 + 2.0 + 2.0) * 100.0
+                                                _us_in_redeploy_win = not (is_us_morning and now.hour >= (_us_close_h_chk - 1))
+                                                if (
+                                                    _us_in_redeploy_win
+                                                    and _usd_avail_after >= _us_min_redeploy
+                                                    and (_now_us_ts - getattr(main, '_last_us_redeploy_ts', 0.0)) >= _us_redeploy_cd
+                                                ):
+                                                    main._last_us_redeploy_ts = _now_us_ts
+                                                    logger.info(
+                                                        f"  🔄 [US Intraday Capital Redeploy] 청산 후 가용 달러(${_usd_avail_after:,.2f}) 확보 ➔ US 알파 재배치 파이프라인(us_regular) 가동!"
+                                                    )
+                                                    run_pipeline(phase='us_regular')
                                             except Exception:
                                                 pass
                             except Exception as _ex_err:

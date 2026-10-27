@@ -1775,16 +1775,27 @@ class StreamOrchestrator:
                     )
                     continue
 
-            # [Task 2] S3 Pyramiding (불타기) 허용
+            # [Task 2] S3 Pyramiding (불타기) — 기보유 수익 구간(unrealized_pnl_pct > 0) 종목에 한해 허용
             if _stream in ('S3', 'S3_A') and _action in ('BUY', 'LONG'):
+                _held_profit_pct = 0.0
+                for _pk_pyr, _pv_pyr in ((portfolio or {}).get('positions') or (portfolio or {}).get('holdings') or {}).items():
+                    if isinstance(_pv_pyr, dict):
+                        _ptk_pyr = str(_pv_pyr.get('ticker') or str(_pk_pyr).split(':')[-1]).strip().upper()
+                        if _ptk_pyr == _tk_u and float(_pv_pyr.get('quantity', _pv_pyr.get('qty', 0)) or 0) > 0:
+                            _held_profit_pct = float(
+                                _pv_pyr.get('unrealized_pnl_pct', _pv_pyr.get('return_pct', _pv_pyr.get('pnl_pct', 0.0))) or 0.0
+                            )
+                            break
                 _conf = float(_ord.get('confidence', 0.0))
                 _pyramid_conf_th  = float(cfg.get('s3.pyramiding_conf_threshold', max(0.65, _dyn_caution_cut + 0.10)))
                 _pyramid_scale    = float(cfg.get('s3.pyramiding_scale_factor',   2.00))  # (conf-th)*scale = max boost
-                if _conf >= _pyramid_conf_th:
+                if _held_profit_pct > 0.0 and _conf >= _pyramid_conf_th:
                     _pyramid_mult = 1.0 + (_conf - _pyramid_conf_th) * _pyramid_scale
                     if 'amount_krw' in _ord:
                         _ord['amount_krw'] = _ord['amount_krw'] * _pyramid_mult
-                        logger.info(f"  🔥 [Pyramiding] {_stream} 강한 확신(conf={_conf:.2f}): 투자 스케일 {_pyramid_mult:.2f}x 확대")
+                        logger.info(
+                            f"  🔥 [Pyramiding] {_stream}({_tk_u}) 수익구간(+{_held_profit_pct:.2f}%) + 강한 확신(conf={_conf:.2f}): 투자 스케일 {_pyramid_mult:.2f}x 확대"
+                        )
 
 
             # MICRO_BOUND BUY → regime 무관, IntradayMicroGuard만 체크
@@ -2830,9 +2841,23 @@ class StreamOrchestrator:
         try:
             positions_list = portfolio.get('positions', [])
             if isinstance(positions_list, dict):
-                positions_list = [{'ticker': k, 'unrealized_pnl': v.get('unrealized_pnl', 0.0)} for k, v in positions_list.items()]
+                positions_list = [
+                    {
+                        'ticker': k,
+                        'unrealized_pnl': v.get('unrealized_pnl', 0.0),
+                        'current_val': v.get('eval_krw', v.get('amount', 0.0)),
+                    }
+                    for k, v in positions_list.items()
+                ]
+            _realized_profit_krw = float(portfolio.get('realized_pnl', 0.0) or 0.0)
+            if _realized_profit_krw <= 0.0:
+                _realized_profit_krw = sum(
+                    max(0.0, float(p.get('unrealized_pnl', 0.0) or 0.0))
+                    for p in positions_list
+                    if isinstance(p, dict)
+                )
             tax_res = self.tax_harvest_engine.evaluate_tax_loss_harvesting(
-                positions_list, current_year_realized_profit=float(portfolio.get('realized_pnl', 0.0)), current_month=datetime.now().month
+                positions_list, current_year_realized_profit=_realized_profit_krw, current_month=datetime.now().month
             )
             result['tax_loss_harvesting'] = tax_res
         except Exception as e:
@@ -2852,6 +2877,8 @@ class StreamOrchestrator:
         except Exception as e:
             logger.debug(f"ConflictAuditLedger logging skipped: {e}")
 
+        result['raw_order_intents'] = list(orders)
+        result['orders'] = list(exec_orders)
         exec_result = self.execution_engine.execute(exec_orders, portfolio)
         result['execution'] = exec_result.to_dict()
         logger.info(
@@ -4203,6 +4230,33 @@ class StreamOrchestrator:
                             else:
                                 _active_s14_us_tickers.add(_etk)
 
+            if not _active_s14_kr_tickers or not _active_s14_us_tickers:
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_s14_h
+                    _inv_set_s14_h = set(_get_qe_s14_h().get_inverse_hedge_tickers())
+                except Exception:
+                    _inv_set_s14_h = {'114800', '252670', 'PSQ', 'SH', 'SQQQ', 'SOXS'}  # hardcode-ok
+                _held_s14_kr_long, _held_s14_kr_inv = set(), set()
+                _held_s14_us_long, _held_s14_us_inv = set(), set()
+                for _hpk, _hpv in (positions or {}).items():
+                    if not isinstance(_hpv, dict):
+                        continue
+                    _h_qty = float(_hpv.get('quantity', _hpv.get('qty', 0)) or 0.0)
+                    if _h_qty <= 0.0:
+                        continue
+                    _h_tk = str(_hpv.get('ticker', str(_hpk).split(':')[-1])).split(':')[-1].strip().upper()
+                    _h_sid = str(_hpv.get('stream_id', str(_hpk).split(':')[0] if ':' in str(_hpk) else '')).strip().upper()
+                    _h_strat = str(_hpv.get('strategy', '')).strip().lower()
+                    if _h_sid in ('S14', 'S14_PAIR_ALPHA') or 'pair' in _h_strat:
+                        if _is_kr_tk(_h_tk):
+                            (_held_s14_kr_inv if _h_tk in _inv_set_s14_h else _held_s14_kr_long).add(_h_tk)
+                        else:
+                            (_held_s14_us_inv if _h_tk in _inv_set_s14_h else _held_s14_us_long).add(_h_tk)
+                if not _active_s14_kr_tickers and _held_s14_kr_long and _held_s14_kr_inv:
+                    _active_s14_kr_tickers = _held_s14_kr_long | _held_s14_kr_inv
+                if not _active_s14_us_tickers and _held_s14_us_long and _held_s14_us_inv:
+                    _active_s14_us_tickers = _held_s14_us_long | _held_s14_us_inv
+
             # [Task 3 Phase50: ATR Elastic Band] VKOSPI 정비례 고무줄 밴드 — Whipsaw 방지
             # 원칙: 고변동성 시장은 잔파도가 크므로 밴드를 넓혀 털림 방지
             #       저변동성 시장은 밴드를 조여 이익을 빠르게 확정
@@ -4801,6 +4855,12 @@ class StreamOrchestrator:
                         _live_krw = min(_live_krw, float(_live_nrcvb)) if _live_krw > 0.0 else float(_live_nrcvb)
                     if _live_krw >= 0.0:
                         cash['KRW'] = min(float(cash['KRW']), _live_krw) if cash['KRW'] is not None else _live_krw
+                    _live_usd = max(
+                        float(getattr(_live_tr, 'us_cash_usd', 0.0) or 0.0),
+                        float(getattr(_live_tr, 'us_buying_power_usd', 0.0) or 0.0),
+                    )
+                    if _live_usd > 0.0 or (cash['USD'] is None and hasattr(_live_tr, 'us_cash_usd')):
+                        cash['USD'] = _live_usd
             except Exception as _fg_bal_e:
                 logger.debug(f"  [Final Gate] live balance sync skipped: {_fg_bal_e}")
 
@@ -4842,23 +4902,54 @@ class StreamOrchestrator:
             s = avail / need
             logger.critical(f"  🛡️ [Final Gate S5] {ccy} 매수 필요 {need:,.2f} > 가용 {avail:,.2f} → 비례 축소 s={s:.3f}")
             _scaled_candidates = []
+            _zero_truncated_unpaired = []
             for o in priced:
                 q0 = int(o.get('quantity', 0) or 0)
                 q1 = int(q0 * s)
                 if q1 <= 0:
-                    logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → 0주 (제거)")
                     if o.get('pair_id'):
+                        logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → 0주 (제거)")
                         _dropped_pair_ids.add(str(o.get('pair_id')))
+                    elif q0 >= 1:
+                        _zero_truncated_unpaired.append((q0, o))
                     continue
                 o['quantity'] = q1
                 o['cash_cap_scale'] = round(s, 4)
                 logger.warning(f"    ↳ {o.get('ticker')}: {q0}주 → {q1}주")
                 _scaled_candidates.append(o)
+            _kept_candidates = []
             for o in _scaled_candidates:
                 if str(o.get('pair_id', '') or '') and str(o.get('pair_id', '') or '') in _dropped_pair_ids:
                     logger.warning(f"    ↳ [Pair Atomic Drop] {o.get('ticker')}: 페어 파트너 수량 0주 절삭으로 동반 제거 (pair_id={o.get('pair_id')})")
                     continue
-                out.append(o)
+                _kept_candidates.append(o)
+            if _zero_truncated_unpaired:
+                _used_after_scale = sum(
+                    _px(o) * int(o.get('quantity', 0) or 0) for o in _kept_candidates
+                ) * (1.0 + fee_buf)
+                _rem_avail = max(0.0, avail - _used_after_scale)
+                _zero_truncated_unpaired.sort(
+                    key=lambda item: float(item[1].get('confidence', 0.0) or 1.0)
+                    * max(
+                        float(item[1].get('expected_return_pct', 0.0) or 0.0),
+                        float(item[1].get('score', 0.0) or 0.0),
+                        1.0,
+                    ),
+                    reverse=True,
+                )
+                for _q0_z, _oz in _zero_truncated_unpaired:
+                    _one_lot_cost = _px(_oz) * (1.0 + fee_buf)
+                    if _one_lot_cost <= _rem_avail and _one_lot_cost > 0.0:
+                        _oz['quantity'] = 1
+                        _oz['cash_cap_scale'] = round(1.0 / float(max(1, _q0_z)), 4)
+                        _rem_avail -= _one_lot_cost
+                        _kept_candidates.append(_oz)
+                        logger.info(
+                            f"    ↳ [Discrete-Lot Knapsack] {_oz.get('ticker')}: {_q0_z}주 → 1주 복원 (비용 {_one_lot_cost:,.2f} <= 잔여가용)"
+                        )
+                    else:
+                        logger.warning(f"    ↳ {_oz.get('ticker')}: {_q0_z}주 → 0주 (제거)")
+            out.extend(_kept_candidates)
         # 현금 정보가 없는 통화(JPY)는 기존 로직 유지(경고)
         for o in orders:
             if _ccy(o) == 'JPY':

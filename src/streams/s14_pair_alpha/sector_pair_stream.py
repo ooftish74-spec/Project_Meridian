@@ -174,18 +174,13 @@ class S14SectorPairStream(BaseStream):
             if us_pair_res.get('pair_active') and us_pair_res.get('spread_z', 0.0) >= active_spread_threshold:
                 from src.utils.dynamic_quant_engine import get_quant_engine
                 _dqe_s14 = get_quant_engine()
-                _sc_us = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
-                _vix_us = float((market_data or {}).get('vix') or _sc_us.get('vix', 20.0) or 20.0)
-                _ois_us = float((market_data or {}).get('ois') or _sc_us.get('ois', 50.0) or 50.0)
                 _reg_us = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
-                _vix_caut_lim = float(_dqe_s14.get_vix_regime_quantiles()['caution'])
-                _ois_bull_lim = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _us_inv_map = {'semi': 'PSQ', 'tech': 'PSQ', 'SOXX': 'PSQ', 'XLK': 'PSQ'}
                 _us_tech_long_set = {
                     str(US_SECTOR_ETF_MAP.get('semi', '')).strip().upper(),
                     str(US_SECTOR_ETF_MAP.get('tech', '')).strip().upper(),
                 }
-                _us_inv_blocked = (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull'
+                _us_inv_blocked = _reg_us == 'bull'
                 _raw_us_orders = list(us_pair_res.get('pair_orders', []) if not _us_inv_blocked else [])
                 # 단일 배치 내 US 페어는 최상위 Spread-Z 1쌍만 채택하여 SH vs PSQ 교차 인버스 충돌 및 반쪽 헤지 탈락 원천 차단
                 _allowed_us_pids = set()
@@ -291,13 +286,8 @@ class S14SectorPairStream(BaseStream):
                 _dqe_kr = get_quant_engine()
                 _kr_inv_list = _dqe_kr.get_inverse_hedge_tickers('KR')
                 _kr_1x_inv = _kr_inv_list[-1] if _kr_inv_list else '114800'
-                _sc_kr = (market_data or {}).get('signal_cache', {}) if isinstance(market_data, dict) else {}
-                _vix_kr = float((market_data or {}).get('vix') or _sc_kr.get('vix', 20.0) or 20.0)
-                _ois_kr = float((market_data or {}).get('ois') or _sc_kr.get('ois', 50.0) or 50.0)
-                _vix_caut_kr = float(_dqe_kr.get_vix_regime_quantiles()['caution'])
-                _ois_bull_kr = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _reg_kr = str((market_data or {}).get('regime') or regime or 'caution').lower() if isinstance(market_data, dict) else str(regime or 'caution').lower()
-                _kr_inv_blocked = (_vix_kr < _vix_caut_kr and _ois_kr >= _ois_bull_kr) or _reg_kr == 'bull'
+                _kr_inv_blocked = _reg_kr == 'bull'
                 _seen_kr_hedge_tickers = set()
                 _allowed_kr_pids = set()
                 for _cand_o in (kr_pair_res.get('pair_orders', []) if not _kr_inv_blocked else []):
