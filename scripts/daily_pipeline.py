@@ -1067,7 +1067,8 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     _all_tickers = set()
                     for pk in _mgr.positions:
                         _, _tk = _mgr._parse_position_key(pk)
-                        _all_tickers.add(_tk)
+                        if str(_tk).isdigit():
+                            _all_tickers.add(_tk)
 
                     _exit_prices = {}
                     for _tk in _all_tickers:

@@ -407,7 +407,9 @@ class StreamOrchestrator:
                         raw_holdings = kis_data.get('holdings', {})
                         acct_data = kis_data.get('account', {})
                         total_nav = float(acct_data.get('total_equity') or kis_data.get('nav') or acct_data.get('nav', total_nav))
-                        cash = float(acct_data.get('cash', cash))
+                        _raw_cash_k = float(acct_data.get('cash', cash))
+                        _nrcvb_k = acct_data.get('nrcvb_buy_amt_krw', kis_data.get('nrcvb_buy_amt_krw'))
+                        cash = min(_raw_cash_k, float(_nrcvb_k)) if _nrcvb_k is not None else _raw_cash_k
                         # ★ Wave 1 Track C: 리터럴 1334.3 제거 — 스냅샷 환율 → (필요 시) 게이트웨이(신선도 한도 내) → 미확보
                         _fx_orch = float(acct_data.get('fx_rate') or kis_data.get('fx_rate') or 0.0) or None
                         _fx_orch_tried = False
@@ -2921,8 +2923,13 @@ class StreamOrchestrator:
                     if _stk != _buy_tk and _held_qty_by_ticker.get(_stk, 0) > 0 and _stk not in _active_sell_tks
                 ]
                 if _held_siblings:
-                    # 만약 고배율 주력 인버스(252670/SQQQ) 매수 진입 시 소액 1X 인버스(114800/SH/PSQ)가 기보유 중이면 1X 인버스 자동 교체 매도(Consolidation)
-                    if _buy_tk in ('252670', 'SQQQ'):
+                    # 만약 기보유 인버스(114800/PSQ)가 S14 마켓뉴트럴 페어(305720/091160/091170/117460 또는 XLE/XLV)의 헷지 레그로 작동 중이면
+                    # 곱버스(252670/SQQQ) 진입을 위해 페어 헷지를 강제 청산(Consolidation)하는 것을 금지하고, 중복 곱버스 매수를 차단한다.
+                    _is_active_pair_hedge_held = (
+                        ('114800' in _held_siblings and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in ('091160', '091170', '305720', '117460')))
+                        or ('PSQ' in _held_siblings and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in ('XLE', 'XLV')))
+                    )
+                    if _buy_tk in ('252670', 'SQQQ') and not _is_active_pair_hedge_held:
                         for _stk in _held_siblings:
                             _s_qty = int(_held_qty_by_ticker.get(_stk, 0) or 0)
                             if _s_qty > 0:
@@ -2946,7 +2953,7 @@ class StreamOrchestrator:
                                 })
                                 _active_sell_tks.add(_stk)
                     else:
-                        # 이미 곱버스(252670/SQQQ) 또는 다른 인버스를 보유 중인데 1X 인버스(114800 등)가 추가로 들어오면 신규 매수 차단
+                        # 이미 곱버스(252670/SQQQ), 활성 S14 페어 헷지(114800/PSQ), 또는 다른 인버스를 보유 중인데 추가 인버스가 들어오면 신규 매수 차단
                         logger.warning(
                             f"  🛡️ [Inverse Mutex Guard] 기보유 인버스({_held_siblings}) 존재 → 중복 인버스({_buy_tk}, ₩{_buy_notional:,.0f}) 신규 매수 차단"
                         )
@@ -4151,7 +4158,22 @@ class StreamOrchestrator:
                 )
                 _explicit_exit_info = None
                 _pos_canon_sid = 'S3_B' if _is_track2_pos else _EXIT_CANON_MAP.get(stream_id, stream_id)
+                _is_s14_pair_member_ex = (
+                    _pos_canon_sid == 'S14_PAIR_ALPHA'
+                    or 'pair' in str(pos.get('strategy', '')).lower()
+                    or (_pos_ticker_up in _active_s14_kr_tickers and len(_active_s14_kr_tickers) >= 2)
+                    or (_pos_ticker_up in _active_s14_us_tickers and len(_active_s14_us_tickers) >= 2)
+                )
                 for _cand_esid, _cand_es in (_explicit_exit_map.get(_pos_ticker_up) or []):
+                    _emitter_sid_u = str(_cand_esid or '').strip().upper()
+                    _cand_strat_l = str(_cand_es.get('strategy') or '').strip().lower()
+                    # S14 마켓뉴트럴 페어 레그(114800, PSQ 등)는 오직 S14 스트림이 발행한 청산 시그널로만 명시 청산되며,
+                    # S3 등 타 스트림의 단독 인버스 청산(s3_inverse_regime_invalidation)이 페어 헷지를 가로채 청산하는 것을 원천 차단
+                    if _is_s14_pair_member_ex and (
+                        _emitter_sid_u not in ('S14', 'S14_PAIR_ALPHA')
+                        or _cand_strat_l == 's3_inverse_regime_invalidation'
+                    ):
+                        continue
                     _sig_sid_raw = str(_cand_es.get('stream_id') or _cand_esid or '').strip().upper()
                     _sig_canon_sid = _EXIT_CANON_MAP.get(_sig_sid_raw, _sig_sid_raw)
                     if _sig_canon_sid == _pos_canon_sid:
@@ -4620,7 +4642,10 @@ class StreamOrchestrator:
                 if _live_tr is not None and hasattr(_live_tr, 'fetch_live_balance'):
                     _live_tr.fetch_live_balance()
                     _live_krw = float(getattr(getattr(_live_tr, 'account', None), 'cash', 0.0) or 0.0)
-                    if _live_krw > 0.0:
+                    _live_nrcvb = getattr(_live_tr, 'nrcvb_buy_amt_krw', None)
+                    if _live_nrcvb is not None and float(_live_nrcvb) >= 0.0:
+                        _live_krw = min(_live_krw, float(_live_nrcvb)) if _live_krw > 0.0 else float(_live_nrcvb)
+                    if _live_krw >= 0.0:
                         cash['KRW'] = min(float(cash['KRW']), _live_krw) if cash['KRW'] is not None else _live_krw
             except Exception as _fg_bal_e:
                 logger.debug(f"  [Final Gate] live balance sync skipped: {_fg_bal_e}")

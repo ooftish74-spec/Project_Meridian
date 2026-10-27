@@ -947,6 +947,64 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
     assert hwm_avg_down["peak_price"] == pytest.approx(1205.0, rel=1e-9)
     assert hwm_avg_down["trail_activated"] is False
 
+    # 7) Cross-stream interaction guards:
+    # (a) _enforce_pair_and_inverse_mutex_guards must NOT liquidate 114800 when 114800 is paired with 305720,
+    #     and must instead block the duplicate 252670 buy order from S5.
+    from scripts.stream_orchestrator import StreamOrchestrator
+    orch = StreamOrchestrator(exec_mode="shadow")
+    guarded_orders = orch._enforce_pair_and_inverse_mutex_guards(
+        exec_orders=[{"ticker": "252670", "action": "buy", "quantity": 120, "price": 830.0, "stream_id": "S5"}],
+        held_qty_by_ticker={"305720": 168, "114800": 1780},
+    )
+    assert [o for o in guarded_orders if o.get("ticker") == "114800" and o.get("action") == "sell"] == []
+    assert [o for o in guarded_orders if o.get("ticker") == "252670" and o.get("action") == "buy"] == []
+
+    # (b) _evaluate_exits must ignore S3's s3_inverse_regime_invalidation exit signal on PSQ when PSQ is an active S14_PAIR_ALPHA leg
+    orch._latest_signals = {
+        "S3": [
+            {
+                "ticker": "PSQ",
+                "direction": "exit",
+                "strategy": "s3_inverse_regime_invalidation",
+                "stream_id": "S14_PAIR_ALPHA",
+                "reason": "S3 Inverse Guard trigger",
+            }
+        ],
+        "S14_PAIR_ALPHA": [
+            {"ticker": "XLE", "direction": "long", "stream_id": "S14_PAIR_ALPHA"},
+            {"ticker": "PSQ", "direction": "long", "stream_id": "S14_PAIR_ALPHA"},
+        ],
+    }
+    us_pair_pos = {
+        "XLE": {
+            "ticker": "XLE",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "us_sector_pair_alpha",
+            "quantity": 10,
+            "entry_price": 56.83,
+            "current_price": 55.66,
+            "unrealized_pnl_pct": -2.06,
+            "eval_krw": 800_725.0,
+        },
+        "PSQ": {
+            "ticker": "PSQ",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "us_sector_pair_alpha",
+            "quantity": 43,
+            "entry_price": 29.88,
+            "current_price": 29.40,
+            "unrealized_pnl_pct": -1.61,
+            "eval_krw": 1_820_234.0,
+        },
+    }
+    exits_psq = orch._evaluate_exits(
+        market_data={"signal_cache": {"vix": 17.5, "vkospi": 17.3}},
+        regime="caution",
+        portfolio={"positions": us_pair_pos},
+    )
+    assert [o for o in exits_psq if o.get("ticker") == "PSQ"] == []
+
+
 
 
 
