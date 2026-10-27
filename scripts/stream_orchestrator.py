@@ -679,11 +679,16 @@ class StreamOrchestrator:
             result['data_nogo_reason'] = _nogo_info.get('reason')
             if _nogo_info.get('mode') == 'exit_only':
                 result['status'] = 'data_nogo_exit_only'
-            logger.critical(
-                f"  🚨 [Phase 70 DATA_NOGO] 데이터 신뢰도 상실 — {_nogo_info.get('mode')} "
-                f"(신규 진입 차단, 청산 허용): {_nogo_info.get('reason')} "
-                f"tickers={_nogo_info.get('tickers') or []}"
-            )
+                logger.critical(
+                    f"  🚨 [Phase 70 DATA_NOGO] 데이터 신뢰도 상실 — {_nogo_info.get('mode')} "
+                    f"(신규 진입 차단, 청산 허용): {_nogo_info.get('reason')} "
+                    f"tickers={_nogo_info.get('tickers') or []}"
+                )
+            else:
+                logger.info(
+                    f"  ℹ️ [Phase 70 DATA_NOGO] 개별 거래정지/결측 종목 신규 진입 차단 (정상 운용 유지): "
+                    f"{_nogo_info.get('reason')} tickers={_nogo_info.get('tickers') or []}"
+                )
 
         # ── Step 1: Kill Switch 확인 ──
         logger.info("  📋 Step 1: Kill Switch 확인")

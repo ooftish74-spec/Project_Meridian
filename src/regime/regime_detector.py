@@ -221,7 +221,7 @@ class RegimeDetector:
                 from src.data.market_data_bridge import MarketDataBridge
                 _hist = MarketDataBridge().get_regime_history()
                 if isinstance(_hist, dict):
-                    for _hk in ('kospi_returns', 'vix_history', 'vkospi_history', 'volume_history'):
+                    for _hk in ('kospi_returns', 'kospi_return_dates', 'vix_history', 'vkospi_history', 'volume_history'):
                         if not market_data.get(_hk) and _hist.get(_hk):
                             market_data[_hk] = _hist[_hk]
             except Exception:
@@ -673,6 +673,7 @@ class RegimeDetector:
         _bleed_1d_floor = float(pget('regime.bleed_1d_floor_pct', -0.5))
         _dyn_bleed_1d_floor = (2.0 * _dyn_stab_1d_min) if (_cum_5d_pct >= _bleed_5d_floor and vix < _vix_fear) else _bleed_1d_floor
         _bleed_neg_bear = int(pget('regime.bleed_neg_days_bear', 6))
+        _rebound_pen = 15
         if len(kospi_rets) >= _n10:
             recent_10 = kospi_rets[-_n10:]
             neg_count = sum((1 for r in recent_10 if r < 0))
@@ -680,7 +681,7 @@ class RegimeDetector:
             if neg_count >= _bleed_neg_crash or cum_ret_10d < _bleed_cum_crash:
                 if _rebound_active:
                     logger.info(f"  [RegimeDetector] 10일 누적 낙폭({cum_ret_10d:.1f}%) 존재하나 단기 안정화/반등(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%, OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
-                    score -= 15
+                    score -= _rebound_pen
                     force_regime = 'caution'
                     crash_type = 'rebound_from_bleed'
                 elif _cum_5d_pct >= _bleed_5d_floor and _last_1d_pct >= _dyn_bleed_1d_floor:
@@ -694,9 +695,15 @@ class RegimeDetector:
                     force_regime = 'crash'
                     crash_type = 'slow_bleed'
             elif neg_count >= _bleed_neg_bear or cum_ret_10d < _bleed_5d_floor:
-                logger.info(f"  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환")
-                score -= 30
-                force_regime = force_regime or ('caution' if _rebound_active else 'bear')
+                if _rebound_active:
+                    logger.info(f"  [RegimeDetector] 10일 누적 조정({cum_ret_10d:.1f}%) 존재하나 단기 안정화/반등(5D={_cum_5d_pct:+.1f}%, 1D={_last_1d_pct:+.2f}%, OIS={ois:.1f}, VIX={vix:.1f}) 확인 → Caution(기술적 반등/경계) 전환")
+                    score -= _rebound_pen
+                    force_regime = force_regime or 'caution'
+                    crash_type = 'rebound_from_bleed'
+                else:
+                    logger.info(f"  [RegimeDetector] 하락 모멘텀 감지 (10일간 {neg_count}회 음봉, 누적 {cum_ret_10d:.1f}%) → Bear 강제 전환")
+                    score -= 30
+                    force_regime = force_regime or 'bear'
         export_yoy = parse_metric(signal, 'export_yoy', 0.0)
         macro_cycle = market_data.get('alpha_macro_cycle', 'Expansion')
         argus_scitech = parse_metric(signal, 'argus_scitech', 1.0)

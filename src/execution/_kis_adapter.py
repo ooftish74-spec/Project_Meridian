@@ -2171,17 +2171,24 @@ class KISTraderAdapter:
                                 _plm_sync = _PLM_Sync()
                                 _kp_path = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
                                 _live_holdings = {}
+                                _pct_scale = 100.0
+                                _tot_invested_krw = 0
+                                _tot_cost_krw = 0
                                 for _tk, _p in self.positions.items():
                                     _is_us = not _is_kr_tk(_tk)
                                     _fx = fx_rate if _is_us else 1.0
-                                    _pnl_pct = round(((float(_p.current_price) / float(_p.avg_price)) - 1.0) * 100.0, 2) if float(_p.avg_price) > 0 else 0.0
+                                    _pnl_pct = round(((float(_p.current_price) / float(_p.avg_price)) - 1.0) * _pct_scale, 2) if float(_p.avg_price) > 0 else 0.0
+                                    _eval_krw = round(float(_p.quantity) * float(_p.current_price) * _fx)
+                                    _cost_krw = round(float(_p.quantity) * float(_p.avg_price) * _fx)
+                                    _tot_invested_krw += _eval_krw
+                                    _tot_cost_krw += _cost_krw
                                     _p_meta = _plm_sync.get_position_meta(_tk)
                                     _h_entry = {
                                         'name': getattr(_p, 'name', _tk),
                                         'qty': int(_p.quantity),
                                         'avg_price': float(_p.avg_price),
                                         'current_price': float(_p.current_price),
-                                        'eval_krw': round(float(_p.quantity) * float(_p.current_price) * _fx),
+                                        'eval_krw': _eval_krw,
                                         'pnl_pct': _pnl_pct,
                                         'return_pct': _pnl_pct,
                                         'currency': 'USD' if _is_us else 'KRW',
@@ -2194,10 +2201,16 @@ class KISTraderAdapter:
                                     if _p_meta.get('track'):
                                         _h_entry['track'] = _p_meta['track']
                                     _live_holdings[_tk] = _h_entry
+                                _nav_krw = round(float(self.account.total_equity))
+                                _invest_pct = round((_tot_invested_krw / _nav_krw) * _pct_scale, 2) if _nav_krw > 0 else 0.0
+                                _cash_pct = round(max(0.0, _pct_scale - _invest_pct), 2)
+                                _unrealized_pnl_krw = int(_tot_invested_krw - _tot_cost_krw)
                                 _acct_patch = {
-                                    'nav': round(float(self.account.total_equity)),
-                                    'total_equity': round(float(self.account.total_equity)),
+                                    'nav': _nav_krw,
+                                    'total_equity': _nav_krw,
                                     'cash': round(float(self.account.cash)),
+                                    'invested': int(_tot_invested_krw),
+                                    'invest_pct': _invest_pct,
                                     'ord_psbl_cash_krw': round(float(getattr(self, 'ord_psbl_cash_raw_krw', self.account.cash))),
                                     'nrcvb_buy_amt_krw': round(float(getattr(self, 'nrcvb_buy_amt_krw', self.account.cash))),
                                     'withdrawable_cash_krw': round(float(getattr(self, 'withdrawable_cash_krw', 0.0))),
@@ -2233,7 +2246,20 @@ class KISTraderAdapter:
                                         _kp_acct = {}
                                     _kp_acct.update(_acct_patch)
                                     _kp_data['account'] = _kp_acct
-                                    _kp_data['nav'] = round(float(self.account.total_equity))
+                                    _kp_sum = _kp_data.get('summary', {})
+                                    if not isinstance(_kp_sum, dict):
+                                        _kp_sum = {}
+                                    _realized_pnl_krw = int(_kp_sum.get('total_realized_pnl', 0) or 0)
+                                    _kp_sum.update({
+                                        'total_positions': len(_live_holdings),
+                                        'total_unrealized_pnl': _unrealized_pnl_krw,
+                                        'total_pnl': _realized_pnl_krw + _unrealized_pnl_krw,
+                                        'invested_krw': int(_tot_invested_krw),
+                                        'invest_pct': _invest_pct,
+                                        'cash_pct': _cash_pct,
+                                    })
+                                    _kp_data['summary'] = _kp_sum
+                                    _kp_data['nav'] = _nav_krw
                                     return _kp_data
 
                                 safe_json_update(_kp_path, _kp_mutator, default={}, indent=2)

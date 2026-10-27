@@ -398,3 +398,40 @@ def test_dart_daily_collector_sync_to_financials_history(tmp_path, monkeypatch):
     assert ann_2025['shares_outstanding'] == 5_969_782_550
 
 
+def test_calculate_margin_of_safety_derives_roe_from_accounting_identity():
+    """Verify closed-form MoS when stock['roe'] is omitted and derived from net_income / total_equity."""
+    sleeve = StrategicQVMCompoundingSleeve()
+    # Closed-form oracle:
+    # ROE = 200 / 1000 = 0.20 (20.0%)
+    # base_per = 10.0 + 0.20 * 10.0 = 12.0
+    # estimated_op = 150.0 * (1.0 + 0.20) = 180.0
+    # target_mcap = 180.0 * 12.0 = 2160.0
+    # mos_pct = (2160.0 - 1800.0) / 1800.0 * 100.0 = +20.0%
+    unscored_stock = {
+        'market_cap': 1800.0,
+        'operating_income': 150.0,
+        'net_income': 200.0,
+        'total_equity': 1000.0,
+    }
+    mos = sleeve.calculate_margin_of_safety(unscored_stock)
+    assert mos == pytest.approx(20.0, rel=1e-9)
+
+
+def test_data_nogo_ticker_entry_block_populates_explicit_reason(tmp_path):
+    """Verify single-ticker entry block populates explicit reason without global exit_only."""
+    from datetime import datetime
+    from src.measurement.data_nogo_store import apply_data_nogo_to_run, record_data_nogo
+
+    nogo_file = tmp_path / 'data_nogo.json'
+    now_dt = datetime(2026, 10, 27, 15, 0, 0)
+    record_data_nogo('012510', reason='krx_halt_test', kind='ticker', path=nogo_file, now=now_dt)
+
+    md, info = apply_data_nogo_to_run({}, path=nogo_file, now=now_dt)
+    assert info['active'] is True
+    assert info['mode'] == 'ticker_entry_block'
+    assert info['reason'] == 'ticker_entry_block:012510'
+    assert md.get('exit_only') is not True
+    assert md.get('data_nogo_tickers') == ['012510']
+
+
+

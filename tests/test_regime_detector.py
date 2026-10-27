@@ -123,3 +123,27 @@ class TestRegimeDetectorEdgeCases:
             data = {'signal_cache': {'vix': vix_val}}
             result = self.detector.detect(market_data=data)
             assert result['regime'] in ('bull', 'caution', 'bear', 'crash')
+
+    def test_rebound_monotonicity_across_bleed_boundary(self):
+        """10일 누적 수익률이 -6.0% 아래(-6.5%)에서 위(-5.5%)로 개선될 때 반등 레짐(caution) 단조성 유지 검증."""
+        base_sig = {
+            'vix': 18.4,
+            'vkospi': 20.0,
+            'usdkrw': 1350.0,
+            'ois': 73.9,
+            'kospi_change_pct': 0.0,
+        }
+        # Case A: 10D cum_ret = -6.5% (< -6.0%), 5D = +2.5% (>= +1.5%), 1D = +2.0% (>= +0.5%)
+        rets_severe = [-0.02, -0.02, -0.02, -0.02, -0.01, 0.005, 0.005, -0.005, 0.0, 0.02]
+        # Case B: 10D cum_ret = -5.5% (-6.0% <= cum_ret < -3.0%), 5D = +2.5%, 1D = +2.0%
+        rets_improved = [-0.015, -0.015, -0.02, -0.02, -0.01, 0.005, 0.005, -0.005, 0.0, 0.02]
+
+        res_severe = self.detector._rule_based(base_sig, {'kospi_returns': rets_severe})
+        res_improved = self.detector._rule_based(base_sig, {'kospi_returns': rets_improved})
+
+        assert res_severe['regime'] == 'caution'
+        assert res_severe['crash_type'] == 'rebound_from_bleed'
+        assert res_improved['regime'] == 'caution'
+        assert res_improved['crash_type'] == 'rebound_from_bleed'
+        assert res_improved['score'] >= res_severe['score']
+

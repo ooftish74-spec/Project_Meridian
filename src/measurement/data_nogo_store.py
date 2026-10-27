@@ -184,6 +184,8 @@ def apply_data_nogo_to_run(market_data: Optional[Dict[str, Any]], legacy_flag: b
         reasons.append('store_corrupt(fail-closed)')
     global_nogo = bool(legacy or active['macro'] or active['corrupt'])
     tickers = sorted(set(active['ticker']))
+    if tickers and not reasons:
+        reasons.append(f"ticker_entry_block:{','.join(tickers)}")
     info = {'active': bool(global_nogo or tickers), 'mode': None, 'reason': '; '.join(reasons) or None,
             'macro_assets': sorted(set(active['macro'])), 'tickers': tickers,
             'store_corrupt': active['corrupt'], 'legacy_flag': legacy}

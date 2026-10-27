@@ -120,6 +120,7 @@ class StrategicQVMCompoundingSleeve:
         if current_mcap <= 0:
             return 0.0
 
+        _pct_scale = 100.0
         if target_mcap <= 0:
             _default_roe = 10.0
             _base_per_const = 10.0
@@ -129,7 +130,13 @@ class StrategicQVMCompoundingSleeve:
                 recent_op = float(stock.get('operating_income', 0) or 0)
             oe_val = float(stock.get('owner_earnings', 0) or 0)
             core_earnings = max(recent_op, oe_val)
-            roe = float(stock.get('roe', stock.get('roe_2yr', _default_roe)) or _default_roe) / 100.0
+            raw_roe = stock.get('roe', stock.get('roe_2yr'))
+            if raw_roe is None:
+                _ni = float(stock.get('net_income', 0) or 0)
+                _eq = float(stock.get('total_equity', 0) or 0)
+                if _ni != 0.0 and _eq > 0.0:
+                    raw_roe = (_ni / _eq) * _pct_scale
+            roe = float(raw_roe if raw_roe is not None else _default_roe) / _pct_scale
             base_per = _base_per_const + max(0.0, roe * _base_per_const)
             estimated_op = core_earnings * (1.0 + max(0.0, roe))
             target_mcap = estimated_op * base_per
@@ -137,7 +144,7 @@ class StrategicQVMCompoundingSleeve:
         if target_mcap <= 0 or current_mcap <= 0:
             return 0.0
 
-        mos_pct = ((target_mcap - current_mcap) / current_mcap) * 100.0
+        mos_pct = ((target_mcap - current_mcap) / current_mcap) * _pct_scale
         return float(mos_pct)
 
     def evaluate_value_trap_guard(self, stock: Dict[str, Any]) -> Dict[str, Any]:
