@@ -75,9 +75,14 @@ def infer_canonical_stream_and_track(
 
     if isinstance(holdings_map, dict) and holdings_map:
         _h_tks = {str(k).split(":")[-1].strip().upper() for k in holdings_map.keys()}
-        if clean_tk == "114800" and (_h_tks & _S14_KR_SECTOR_PAIR_ETFS):
+        try:
+            from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_plm
+            _kr_l_plm, _kr_i_plm, _us_l_plm, _us_i_plm = _get_s14_sets_plm()
+        except Exception:
+            _kr_l_plm, _kr_i_plm, _us_l_plm, _us_i_plm = _S14_KR_SECTOR_PAIR_ETFS, set(), set(), set()
+        if clean_tk in (_kr_l_plm | _kr_i_plm) and bool(_h_tks & _kr_i_plm) and bool(_h_tks & _kr_l_plm):
             return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
-        if clean_tk in ("PSQ", "XLE", "XLV") and "PSQ" in _h_tks and (_h_tks & {"XLE", "XLV"}):
+        if clean_tk in (_us_l_plm | _us_i_plm) and bool(_h_tks & _us_i_plm) and bool(_h_tks & _us_l_plm):
             return "S14_PAIR_ALPHA", "TRACK_1_TACTICAL"
 
     if clean_tk in _S3B_KR_TRACK2_STOCKS:
@@ -923,7 +928,7 @@ class PositionLedgerManager:
                     if (
                         not cur_sid
                         or cur_sid.upper() in _UNATTRIBUTED_STREAM_TAGS
-                        or (inferred_sid == "S14_PAIR_ALPHA" and cur_sid in ("S0", "S3") and str(ticker).upper() in ("114800", "PSQ", "XLE", "XLV"))
+                        or (inferred_sid == "S14_PAIR_ALPHA" and cur_sid in ("S0", "S3"))
                     ):
                         ledger[ticker]["stream_id"] = inferred_sid
                         updated = True

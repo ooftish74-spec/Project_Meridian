@@ -2923,11 +2923,13 @@ class StreamOrchestrator:
                     if _stk != _buy_tk and _held_qty_by_ticker.get(_stk, 0) > 0 and _stk not in _active_sell_tks
                 ]
                 if _held_siblings:
-                    # 만약 기보유 인버스(114800/PSQ)가 S14 마켓뉴트럴 페어(305720/091160/091170/117460 또는 XLE/XLV)의 헷지 레그로 작동 중이면
+                    # 만약 기보유 인버스(114800/PSQ/SH)가 S14 마켓뉴트럴 페어의 헷지 레그로 작동 중이면
                     # 곱버스(252670/SQQQ) 진입을 위해 페어 헷지를 강제 청산(Consolidation)하는 것을 금지하고, 중복 곱버스 매수를 차단한다.
+                    from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_so
+                    _kr_l_so, _kr_i_so, _us_l_so, _us_i_so = _get_s14_sets_so()
                     _is_active_pair_hedge_held = (
-                        ('114800' in _held_siblings and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in ('091160', '091170', '305720', '117460')))
-                        or ('PSQ' in _held_siblings and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in ('XLE', 'XLV')))
+                        (bool(set(_held_siblings) & _kr_i_so) and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in _kr_l_so))
+                        or (bool(set(_held_siblings) & _us_i_so) and any(_held_qty_by_ticker.get(_pt, 0) > 0 for _pt in _us_l_so))
                     )
                     if _buy_tk in ('252670', 'SQQQ') and not _is_active_pair_hedge_held:
                         for _stk in _held_siblings:

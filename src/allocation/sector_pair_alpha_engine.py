@@ -257,3 +257,15 @@ class SectorPairAlphaEngine:
             'active_pairs': active_pairs,
             'pair_orders': pair_orders
         }
+
+
+def get_dynamic_s14_pair_sets() -> Tuple[set, set, set, set]:
+    """S14 마켓뉴트럴 페어 유니버스(KR 롱 섹터, KR 인버스 헷지, US 롱 섹터, US 인버스 헷지) 동적 SSOT 집합 반환."""
+    kr_map = cfg.get('pair.sector_etf_map', DEFAULT_SECTOR_ETF_MAP) or DEFAULT_SECTOR_ETF_MAP
+    us_map = cfg.get('pair.us_sector_etf_map', US_SECTOR_ETF_MAP) or US_SECTOR_ETF_MAP
+    kr_long_set = {str(v).strip().upper() for v in kr_map.values() if str(v).strip()}
+    kr_inv_set = {str(v).strip().upper() for v in KR_INVERSE_ETF_MAP.values() if str(v).strip()}
+    us_long_set = {str(v).strip().upper() for v in us_map.values() if str(v).strip()}
+    us_inv_set = {str(v).strip().upper() for v in US_INVERSE_ETF_MAP.values() if str(v).strip()}
+    return kr_long_set, kr_inv_set, us_long_set, us_inv_set
+

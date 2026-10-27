@@ -382,6 +382,9 @@ class USNightExecutionEngine:
         _adapter = getattr(self, 'adapter', None)
 
         # ── [US Market-Neutral Pair Spread Pre-Scan (S14_PAIR_ALPHA)] ──
+        from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_usn
+        _, _, _us_l_usn, _us_i_usn = _get_s14_sets_usn()
+        _us_pair_cands_usn = _us_l_usn | _us_i_usn
         _us_held_tks = {str(h.get('ticker') or k).strip().upper() for k, h in iter_items if isinstance(h, dict)}
         _us_pair_legs: Dict[str, Tuple[float, float, float]] = {}
         for _k_s, _h_s in iter_items:
@@ -399,7 +402,7 @@ class USNightExecutionEngine:
             _is_pair_s = (
                 _sid_s in ('S14', 'S14_PAIR_ALPHA')
                 or 'pair' in _str_s
-                or (_tk_s in {'XLE', 'XLV', 'PSQ'} and 'PSQ' in _us_held_tks and bool(_us_held_tks & {'XLE', 'XLV'}))
+                or (_tk_s in _us_pair_cands_usn and bool(_us_held_tks & _us_i_usn) and bool(_us_held_tks & _us_l_usn))
             )
             if _is_pair_s:
                 _ret_s = (_px_s - _ep_s) / _ep_s

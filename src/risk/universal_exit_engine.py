@@ -174,8 +174,10 @@ class UniversalExitEngine:
             for k, p in positions.items()
             if isinstance(p, dict) and float(p.get('quantity', p.get('qty', 0)) or 0) > 0
         }
-        _KR_PAIR_CANDS = {'091160', '091170', '305720', '117460', '114800'}  # hardcode-ok
-        _US_PAIR_CANDS = {'XLE', 'XLV', 'PSQ'}  # hardcode-ok
+        from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_uee
+        _kr_l_uee, _kr_i_uee, _us_l_uee, _us_i_uee = _get_s14_sets_uee()
+        _KR_PAIR_CANDS = _kr_l_uee | _kr_i_uee
+        _US_PAIR_CANDS = _us_l_uee | _us_i_uee
         for _pk_scan, _pos_scan in positions.items():
             if not isinstance(_pos_scan, dict):
                 continue
@@ -190,8 +192,8 @@ class UniversalExitEngine:
                 _sid_s in ('S14', 'S14_PAIR_ALPHA')
                 or 'pair' in _str_s
                 or bool(_pos_scan.get('pair_id'))
-                or (_tk_s in _KR_PAIR_CANDS and '114800' in _all_tks_upper and bool(_all_tks_upper & {'091160', '091170', '305720', '117460'}))
-                or (_tk_s in _US_PAIR_CANDS and 'PSQ' in _all_tks_upper and bool(_all_tks_upper & {'XLE', 'XLV'}))
+                or (_tk_s in _KR_PAIR_CANDS and bool(_all_tks_upper & _kr_i_uee) and bool(_all_tks_upper & _kr_l_uee))
+                or (_tk_s in _US_PAIR_CANDS and bool(_all_tks_upper & _us_i_uee) and bool(_all_tks_upper & _us_l_uee))
             )
             if _is_pair_s:
                 _px_s = float(_pos_scan.get('current_price', _pos_scan.get('price', _pos_scan.get('entry_price', _pos_scan.get('avg_price', 1.0)))) or 1.0)

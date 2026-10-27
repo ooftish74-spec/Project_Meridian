@@ -272,12 +272,14 @@ class LeverageJudge:
                 for _pk, _pv in positions.items()
                 if isinstance(_pv, dict) and float(_pv.get('quantity', _pv.get('qty', 0)) or 0) > 0
             }
+            from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_lj
+            _kr_l_lj, _kr_i_lj, _us_l_lj, _us_i_lj = _get_s14_sets_lj()
             _is_s14_pair = (
                 stream_id in ('S14', 'S14_PAIR_ALPHA')
                 or 'pair' in _strat_lj
                 or bool(pos.get('pair_id'))
-                or (_tk_u_lj == '114800' and bool(_held_tks_lj & {'091160', '091170', '305720', '117460'}))
-                or (_tk_u_lj == 'PSQ' and bool(_held_tks_lj & {'XLE', 'XLV'}))
+                or (_tk_u_lj in _kr_i_lj and bool(_held_tks_lj & _kr_l_lj))
+                or (_tk_u_lj in _us_i_lj and bool(_held_tks_lj & _us_l_lj))
             )
             if _is_s14_pair:
                 continue
