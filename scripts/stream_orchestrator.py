@@ -4294,6 +4294,8 @@ class StreamOrchestrator:
                 )
                 _is_s14_orphan_tl = False
                 _is_active_s14_pair_leg = False
+                _pair_spread_peak_so = float(pnl_pct or 0.0)
+                _pair_spread_trail_so = False
                 if _is_s14_pos_tl:
                     if _is_kr_tk(str(_pos_ticker_up)) and _active_s14_kr_tickers and _pos_ticker_up not in _active_s14_kr_tickers:
                         _is_s14_orphan_tl = True
@@ -4307,6 +4309,11 @@ class StreamOrchestrator:
                         _pair_val_sum = 0.0
                         _pair_pnl_weighted = 0.0
                         _pair_leg_cnt = 0
+                        _pair_leg_vals_so: Dict[str, float] = {}
+                        _pair_leg_pxs_so: Dict[str, float] = {}
+                        _pair_leg_sigs_so: List[str] = []
+                        _pair_exp_pks_so: List[float] = []
+                        _pair_exp_trs_so: List[bool] = []
                         for _pk_p, _pv_p in positions.items():
                             if not isinstance(_pv_p, dict):
                                 continue
@@ -4314,15 +4321,54 @@ class StreamOrchestrator:
                             _q_p = float(_pv_p.get('quantity', _pv_p.get('qty', 0)) or 0.0)
                             if _tk_p in _s14_pair_set and _q_p > 0:
                                 _cp_p = float(_pv_p.get('current_price', _pv_p.get('avg_price', 1.0)) or 1.0)
+                                _ep_p = float(_pv_p.get('entry_price', _pv_p.get('avg_price', _cp_p)) or _cp_p)
                                 _val_p = float(_pv_p.get('eval_krw', _pv_p.get('amount', 0.0)) or (_q_p * _cp_p))
                                 _pnl_p = float(_pv_p.get('unrealized_pnl_pct', _pv_p.get('pnl_pct', 0.0)) or 0.0)
                                 if _val_p > 0:
                                     _pair_val_sum += _val_p
                                     _pair_pnl_weighted += _val_p * _pnl_p
                                     _pair_leg_cnt += 1
+                                    _pair_leg_vals_so[_tk_p] = _val_p
+                                    _pair_leg_pxs_so[_tk_p] = _cp_p
+                                    _pair_leg_sigs_so.append(f"{_tk_p}:{int(round(_q_p))}:{round(_ep_p, 4)}")
+                                    if _pv_p.get('pair_spread_peak_pnl_pct') is not None:
+                                        _pair_exp_pks_so.append(float(_pv_p['pair_spread_peak_pnl_pct']))
+                                    if _pv_p.get('pair_spread_trail_activated') is not None:
+                                        _pair_exp_trs_so.append(bool(_pv_p['pair_spread_trail_activated']))
                         if _pair_leg_cnt >= 2 and _pair_val_sum > 0:
                             pnl_pct = _pair_pnl_weighted / _pair_val_sum
                             _is_active_s14_pair_leg = True
+                            try:
+                                from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_pair_so
+                                _cur_reg_so = str(regime.get('primary_regime', 'caution') if isinstance(regime, dict) else (regime or 'caution')).lower()
+                                _pair_opt_so = _get_qe_pair_so().compute_pair_spread_stopping_params(
+                                    leg_weights=_pair_leg_vals_so,
+                                    regime=_cur_reg_so,
+                                    vix_level=_exit_vix,
+                                    total_pair_value_krw=_pair_val_sum,
+                                    leg_prices=_pair_leg_pxs_so,
+                                )
+                                sl_pct = abs(float(_pair_opt_so['hard_sl_limit_pct']))
+                                trail_activate = float(_pair_opt_so['trailing_trigger_pct'])
+                                trail_dist = float(_pair_opt_so['chandelier_drop_pct'])
+                                tp_pct = None  # 상방 고정 익절 상한 제거 → 무상한 ATR 샹들리에 트레일링 및 OU Z-Score 수렴으로 일원화
+                            except Exception:
+                                pass
+                            try:
+                                from src.execution.position_ledger import PositionLedgerManager as _PLM_Pair_SO
+                                _sp_hwm_so = _PLM_Pair_SO().update_pair_spread_hwm(
+                                    pair_tickers=list(_pair_leg_vals_so.keys()),
+                                    current_spread_pnl_pct=pnl_pct,
+                                    leg_signature="|".join(sorted(_pair_leg_sigs_so)),
+                                    trail_activate_threshold=float(trail_activate or 0.0),
+                                    explicit_spread_peak=max(_pair_exp_pks_so) if _pair_exp_pks_so else None,
+                                    explicit_trail_activated=any(_pair_exp_trs_so) if _pair_exp_trs_so else None,
+                                )
+                                _pair_spread_peak_so = float(_sp_hwm_so['pair_spread_peak_pnl_pct'])
+                                _pair_spread_trail_so = bool(_sp_hwm_so['pair_spread_trail_activated'])
+                            except Exception:
+                                _pair_spread_peak_so = max([pnl_pct] + _pair_exp_pks_so)
+                                _pair_spread_trail_so = bool(any(_pair_exp_trs_so) or (_pair_spread_peak_so >= float(trail_activate or 0.0)))
 
                 if _max_hold_days:
                     logger.info(f"    [DEBUG L4 Dynamic Math] {_pos_ticker}: days_held={days_held}, dynamic_max_hold={_max_hold_days:.2f}d, pos={pos}")
@@ -4368,14 +4414,19 @@ class StreamOrchestrator:
                         reason = f"[L4 Exit] Time Limit: {days_held}일 보유 >= {_max_hold_days}일 제한"
                         urgency = 'stop'
 
-                # ── Trailing Stop ──
-                # trail_activate_pct에 도달한 뒤 trail_distance_pct 이상 하락 시 청산
-                # 과거 또는 현재에 트레일링 활성화 조건을 1회 이상 달성한 경우, 고점 대비 하락폭 기준 청산
-                # (단, 마켓뉴트럴 S14 활성 페어는 비동시 단일 레그 peak_pnl과 합산 스프레드 pnl_pct 간 Jensen 부등식 괴리 방지를 위해 제외)
-                peak_pnl = pnl_pct if _is_active_s14_pair_leg else (float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else pnl_pct)
+                # ── Trailing Stop (단일 포지션은 개별 HWM, S14 활성 페어는 동시 스프레드 HWM 및 공분산 샹들리에 밴드 적용) ──
+                peak_pnl = (
+                    _pair_spread_peak_so
+                    if _is_active_s14_pair_leg
+                    else (float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else pnl_pct)
+                )
                 drawdown_from_peak = peak_pnl - pnl_pct
-                is_trail_activated = (not _is_active_s14_pair_leg) and (bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate))
-                if (not _is_active_s14_pair_leg and reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
+                is_trail_activated = (
+                    (_pair_spread_trail_so or (trail_activate is not None and peak_pnl >= trail_activate))
+                    if _is_active_s14_pair_leg
+                    else (bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate))
+                )
+                if (reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
                     reason = (
                         f"[L4 Exit] Trail: peak={peak_pnl:+.1f}% → "
                         f"now={pnl_pct:+.1f}% (↓{drawdown_from_peak:.1f}% "

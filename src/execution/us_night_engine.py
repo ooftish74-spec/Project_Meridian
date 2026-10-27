@@ -445,11 +445,8 @@ class USNightExecutionEngine:
             entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
             drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
             _is_active_us_pair = (ticker.upper() in _us_pair_legs and len(_us_pair_legs) >= 2)
-            if _is_active_us_pair:
-                _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
-                if _tot_p_val > 0:
-                    entry_return = sum(v[0] * v[1] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
-                    drop_pct = 0.0
+            _us_pair_peak_ret = entry_return
+            _us_pair_trail_act = False
 
             # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 UniversalExitEngine 실측 ATR / DynamicQuantEngine 조회)
             ticker_atr = 0.0
@@ -476,7 +473,44 @@ class USNightExecutionEngine:
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
             dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
             dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
-            if not (atr_map and ticker in atr_map):
+            effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
+
+            if _is_active_us_pair:
+                _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
+                if _tot_p_val > 0:
+                    entry_return = sum(v[0] * v[1] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_usn_p
+                    _qe_up = _get_qe_usn_p()
+                    _fx_up = float(_qe_up.get_fx_rate() or 0.0)
+                    _pair_opt_up = _qe_up.compute_pair_spread_stopping_params(
+                        leg_weights={k: v[0] for k, v in _us_pair_legs.items()},
+                        regime=str(cfg.get('market.current_regime', 'caution')).lower(),
+                        total_pair_value_krw=_tot_p_val * _fx_up,
+                    )
+                    dynamic_hard_stop_pct = abs(float(_pair_opt_up['hard_sl_limit_pct'])) / 100.0
+                    effective_activation_pct = float(_pair_opt_up['trailing_trigger_pct']) / 100.0
+                    dynamic_trailing_stop_pct = float(_pair_opt_up['chandelier_drop_pct']) / 100.0
+                except Exception:
+                    pass
+                _exp_up_pk = h.get('pair_spread_peak_pnl_pct')
+                _exp_up_tr = h.get('pair_spread_trail_activated')
+                try:
+                    _sp_hwm_up = ledger_mgr.update_pair_spread_hwm(
+                        pair_tickers=list(_us_pair_legs.keys()),
+                        current_spread_pnl_pct=entry_return * 100.0,
+                        leg_signature="|".join(sorted(_us_pair_legs.keys())),
+                        trail_activate_threshold=effective_activation_pct * 100.0,
+                        explicit_spread_peak=float(_exp_up_pk) if _exp_up_pk is not None else None,
+                        explicit_trail_activated=bool(_exp_up_tr) if _exp_up_tr is not None else None,
+                    )
+                    _us_pair_peak_ret = float(_sp_hwm_up['pair_spread_peak_pnl_pct']) / 100.0
+                    _us_pair_trail_act = bool(_sp_hwm_up['pair_spread_trail_activated'])
+                except Exception:
+                    _us_pair_peak_ret = max(entry_return, (float(_exp_up_pk) / 100.0) if _exp_up_pk is not None else entry_return)
+                    _us_pair_trail_act = bool(bool(_exp_up_tr) or (_us_pair_peak_ret >= effective_activation_pct))
+                drop_pct = entry_return - _us_pair_peak_ret
+            elif not (atr_map and ticker in atr_map):
                 try:
                     import math as _math_usn
                     from src.utils.dynamic_quant_engine import get_quant_engine
@@ -491,14 +525,16 @@ class USNightExecutionEngine:
                         dynamic_hard_stop_pct = min(dynamic_hard_stop_pct, max(0.015, _opt_sl_dec))
                 except Exception:
                     pass
-            effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
             exit_reason = None
-            # 1) Hard Stop-Loss (수익 활성화 전에도 종목별 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)
+            # 1) Hard Stop-Loss (수익 활성화 전에도 종목별/페어스프레드 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)
             if entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
-            # 2) Trailing Stop (고점이 진입가 대비 +effective_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화; 마켓뉴트럴 페어 레그는 단일 레그 트레일링 제외)
+            # 2) Trailing Stop (단일 종목은 개별 HWM, S14 활성 페어는 동시 스프레드 HWM 및 공분산 샹들리에 밴드 이탈 시 발화)
+            elif _is_active_us_pair and (_us_pair_trail_act or _us_pair_peak_ret >= effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+                exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
+                logger.info(f"🚨 [USNightEngine] {ticker} 페어 스프레드 샹들리에 트레일링 스탑 발화! (스프레드 고점 대비 {drop_pct*100:.2f}%, 한도=-{dynamic_trailing_stop_pct*100:.2f}%)")
             elif (not _is_active_us_pair) and entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
                 exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")

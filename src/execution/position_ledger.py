@@ -771,6 +771,68 @@ class PositionLedgerManager:
 
             return dict(info)
 
+    def update_pair_spread_hwm(
+        self,
+        pair_tickers: Any,
+        current_spread_pnl_pct: float,
+        leg_signature: str = "",
+        trail_activate_threshold: float = 0.0,
+        explicit_spread_peak: Optional[float] = None,
+        explicit_trail_activated: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """마켓뉴트럴 페어(S14_PAIR_ALPHA)의 동시(Simultaneous) 자본가중 스프레드 HWM 및 샹들리에 트레일링 활성화 상태 추적."""
+        tks = sorted({str(t).strip().upper() for t in (pair_tickers or []) if str(t).strip()})
+        cur_pnl = float(current_spread_pnl_pct or 0.0)
+        sig_str = str(leg_signature or ",".join(tks))
+        with self._lock:
+            ledger = self._load_file_unlocked()
+            existing_infos = [
+                ledger[t] for t in tks
+                if t in ledger and isinstance(ledger.get(t), dict)
+            ]
+            same_sig = bool(existing_infos) and all(
+                str(inf.get("pair_spread_sig", "")) == sig_str and "pair_spread_peak_pnl_pct" in inf
+                for inf in existing_infos
+            )
+            if same_sig:
+                prev_peak = max(
+                    float(inf.get("pair_spread_peak_pnl_pct", cur_pnl) or cur_pnl)
+                    for inf in existing_infos
+                )
+                prev_act = any(bool(inf.get("pair_spread_trail_activated", False)) for inf in existing_infos)
+            else:
+                prev_peak = cur_pnl
+                prev_act = False
+
+            if explicit_spread_peak is not None:
+                prev_peak = max(prev_peak, float(explicit_spread_peak))
+            if explicit_trail_activated is not None:
+                prev_act = bool(prev_act or explicit_trail_activated)
+
+            new_peak = round(max(prev_peak, cur_pnl), 6)
+            new_act = bool(prev_act or (float(trail_activate_threshold) > 0.0 and new_peak >= float(trail_activate_threshold)))
+
+            dirty = False
+            for inf in existing_infos:
+                if (
+                    inf.get("pair_spread_sig") != sig_str
+                    or inf.get("pair_spread_peak_pnl_pct") != new_peak
+                    or bool(inf.get("pair_spread_trail_activated", False)) != new_act
+                ):
+                    inf["pair_spread_sig"] = sig_str
+                    inf["pair_spread_peak_pnl_pct"] = new_peak
+                    inf["pair_spread_trail_activated"] = new_act
+                    dirty = True
+
+            if dirty:
+                self._save_file_unlocked(ledger)
+
+            return {
+                "pair_spread_peak_pnl_pct": new_peak,
+                "pair_spread_trail_activated": new_act,
+                "pair_spread_sig": sig_str,
+            }
+
     def get_hwm(self, ticker: str) -> Dict[str, Any]:
         """특정 종목의 HWM 및 스트림/트랙 메타데이터 조회."""
         with self._lock:

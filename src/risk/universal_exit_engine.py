@@ -198,11 +198,19 @@ class UniversalExitEngine:
                 _ep_s = float(_pos_scan.get('entry_price', _pos_scan.get('avg_price', _px_s)) or _px_s)
                 _val_s = float(_pos_scan.get('eval_krw', _pos_scan.get('amount', 0.0)) or (_q_s * max(_px_s, 1e-6)))
                 _pnl_s = float(_pos_scan.get('unrealized_pnl_pct', _pos_scan.get('pnl_pct', _pos_scan.get('return_pct', ((_px_s - _ep_s) / _ep_s * 100.0) if _ep_s > 0 else 0.0))) or 0.0)
-                _pk_pnl_s = max(_pnl_s, float(_pos_scan.get('peak_pnl_pct', _pnl_s) or _pnl_s))
+                _leg_meta_s = {
+                    "val": _val_s,
+                    "pnl": _pnl_s,
+                    "qty": _q_s,
+                    "price": _px_s,
+                    "entry_price": _ep_s,
+                    "explicit_spread_peak": _pos_scan.get('pair_spread_peak_pnl_pct'),
+                    "explicit_spread_trail": _pos_scan.get('pair_spread_trail_activated'),
+                }
                 if _is_kr_uee(_tk_s):
-                    _kr_pair_legs[_tk_s] = (_val_s, _pnl_s, _pk_pnl_s)
+                    _kr_pair_legs[_tk_s] = _leg_meta_s
                 else:
-                    _us_pair_legs[_tk_s] = (_val_s, _pnl_s, _pk_pnl_s)
+                    _us_pair_legs[_tk_s] = _leg_meta_s
 
         for pos_key, pos in positions.items():
             ticker = pos.get('ticker', pos_key.split(':')[-1] if ':' in pos_key else pos_key)
@@ -277,35 +285,77 @@ class UniversalExitEngine:
 
             pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
             peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
-            if _is_active_pair_leg:
-                _p_val_tot = sum(v[0] for v in _pair_bucket.values() if v[0] > 0)
-                if _p_val_tot > 0:
-                    pnl_pct = sum(v[0] * v[1] for v in _pair_bucket.values() if v[0] > 0) / _p_val_tot
-                    # 음(-)의 상관관계를 갖는 롱/인버스 레그의 비동시적 개별 고점 합산(Jensen 부등식 괴리)으로 인한
-                    # 허상 고점(Phantom Peak) 및 샹들리에 오발동을 차단하기 위해 동시 스프레드 기준으로 고정
-                    peak_pnl = pnl_pct
             atr_pct = self.compute_ticker_atr(ticker)
-
-            # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
-            # compute_ticker_atr는 True Range(ATR = sqrt(8/π) * σ_d ≈ 1.2533 * σ_d)를 반환하므로,
-            # 가우시안 일간 표준편차(σ_d)를 입력받는 compute_optimal_stopping_params 호출 시 sqrt(8/π)로 정규화하여 중복 팽창 방지
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
             _sigma_from_atr = atr_pct / math.sqrt(8.0 / math.pi)
-            _opt = _dqe.compute_optimal_stopping_params(
-                ticker=str(ticker),
-                regime=regime,
-                vix_level=_vix,
-                order_value_krw=max(order_val_krw, 500_000.0),
-                price=price,
-                atr_pct=_sigma_from_atr,
-            )
+            _pair_trail_act = False
+
+            if _is_active_pair_leg:
+                _p_val_tot = sum(v["val"] for v in _pair_bucket.values() if v["val"] > 0)
+                if _p_val_tot > 0:
+                    pnl_pct = sum(v["val"] * v["pnl"] for v in _pair_bucket.values() if v["val"] > 0) / _p_val_tot
+                _pair_val_krw = _p_val_tot * (1.0 if is_kr_tk else (_fx_rate or 0.0))
+                _leg_sigmas_uee = {
+                    k: (self.compute_ticker_atr(k) / math.sqrt(8.0 / math.pi))
+                    for k in _pair_bucket.keys()
+                }
+                _opt = _dqe.compute_pair_spread_stopping_params(
+                    leg_weights={k: v["val"] for k, v in _pair_bucket.items()},
+                    regime=regime,
+                    vix_level=_vix,
+                    total_pair_value_krw=_pair_val_krw,
+                    leg_prices={k: v["price"] for k, v in _pair_bucket.items()},
+                    leg_sigmas_pct=_leg_sigmas_uee,
+                )
+                _pair_sig = "|".join(
+                    f"{k}:{int(round(v['qty']))}:{round(v['entry_price'], 4)}"
+                    for k, v in sorted(_pair_bucket.items())
+                )
+                _exp_sp_pks = [
+                    float(v["explicit_spread_peak"])
+                    for v in _pair_bucket.values()
+                    if v.get("explicit_spread_peak") is not None
+                ]
+                _exp_sp_pk = max(_exp_sp_pks) if _exp_sp_pks else None
+                _exp_sp_tr = (
+                    any(bool(v.get("explicit_spread_trail", False)) for v in _pair_bucket.values())
+                    if any(v.get("explicit_spread_trail") is not None for v in _pair_bucket.values())
+                    else None
+                )
+                if _plm_uee is not None:
+                    _sp_hwm = _plm_uee.update_pair_spread_hwm(
+                        pair_tickers=list(_pair_bucket.keys()),
+                        current_spread_pnl_pct=pnl_pct,
+                        leg_signature=_pair_sig,
+                        trail_activate_threshold=_opt['trailing_trigger_pct'],
+                        explicit_spread_peak=_exp_sp_pk,
+                        explicit_trail_activated=_exp_sp_tr,
+                    )
+                    peak_pnl = float(_sp_hwm["pair_spread_peak_pnl_pct"])
+                    _pair_trail_act = bool(_sp_hwm["pair_spread_trail_activated"])
+                else:
+                    peak_pnl = max(pnl_pct, _exp_sp_pk if _exp_sp_pk is not None else pnl_pct)
+                    _pair_trail_act = bool(bool(_exp_sp_tr) or (peak_pnl >= _opt['trailing_trigger_pct']))
+            else:
+                # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
+                # compute_ticker_atr는 True Range(ATR = sqrt(8/π) * σ_d ≈ 1.2533 * σ_d)를 반환하므로,
+                # 가우시안 일간 표준편차(σ_d)를 입력받는 compute_optimal_stopping_params 호출 시 sqrt(8/π)로 정규화하여 중복 팽창 방지
+                _opt = _dqe.compute_optimal_stopping_params(
+                    ticker=str(ticker),
+                    regime=regime,
+                    vix_level=_vix,
+                    order_value_krw=max(order_val_krw, 500_000.0),
+                    price=price,
+                    atr_pct=_sigma_from_atr,
+                )
+
             min_holding_required = _opt['min_holding_minutes']
             holding_minutes = float(pos.get('holding_minutes', pos.get('holding_time_min', min_holding_required * 2.0)))
 
-            # ── 0. [Profit-Lock Break-Even Escalation] (마찰비용+변동성 결합 동적 본전 보존 장벽; 페어 레그 단일 청산 금지) ──
+            # ── 0. [Profit-Lock Break-Even Escalation] (마찰비용+변동성 결합 동적 본전 보존 장벽; 페어는 동시 스프레드 HWM 기준 평가) ──
             profit_lock_trigger = _opt['profit_lock_trigger_pct']
             break_even_floor = _opt['break_even_floor_pct']
-            if (not _is_active_pair_leg) and holding_minutes >= min_holding_required and peak_pnl >= profit_lock_trigger:
+            if holding_minutes >= min_holding_required and peak_pnl >= profit_lock_trigger:
                 if pnl_pct < break_even_floor:
                     detail = f"🔒 [Profit-Lock Escalation] {ticker} ({stream_id}): 고점 P&L {peak_pnl:+.1f}% >= {profit_lock_trigger:.1f}% 달성 후 P&L {pnl_pct:+.2f}% < 동적 본전 지지선 +{break_even_floor:.2f}% 이탈 (보유 {holding_minutes:.0f}m >= {min_holding_required:.0f}m) ➔ 이익 보존 100% 청산"
                     logger.info(f"  {detail}")
@@ -336,11 +386,11 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 99.9% 꼬리 폭락 손절; 비동시 레그 고점 왜곡 방지를 위해 활성 페어 레그 제외) ──
+            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 99.9% 꼬리 폭락 손절; 페어는 동시 스프레드 HWM 기준 평가) ──
             allowed_cat_drop = _opt['catastrophic_drop_pct']
             peak_drawdown = peak_pnl - pnl_pct
 
-            if (not _is_active_pair_leg) and peak_pnl > 0 and peak_drawdown >= allowed_cat_drop:
+            if peak_pnl > 0 and peak_drawdown >= allowed_cat_drop:
                 detail = f"🚨 [2차 고점 폭락 손절 발화] {ticker} ({stream_id}): 고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 동적 안전망 -{allowed_cat_drop:.1f}% 이탈"
                 logger.warning(f"  {detail}")
                 exit_orders.append({
@@ -354,12 +404,15 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절; 마켓뉴트럴 페어 레그는 OU Z-Score 수렴 청산으로 일원화) ──
+            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절; 페어는 동시 스프레드 HWM 및 공분산 변동성 σ_spread 적용) ──
             chandelier_drop = _opt['chandelier_drop_pct']
             trailing_trigger = _opt['trailing_trigger_pct']
-            is_trail_activated = (not _is_active_pair_leg) and (bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger))
+            is_trail_activated = (
+                (_pair_trail_act or (peak_pnl >= trailing_trigger))
+                if _is_active_pair_leg
+                else (bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger))
+            )
             is_trailing_exit = (
-                (not _is_active_pair_leg) and
                 holding_minutes >= min_holding_required and
                 is_trail_activated and
                 pnl_pct < (peak_pnl - chandelier_drop)

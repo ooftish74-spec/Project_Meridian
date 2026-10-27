@@ -1179,6 +1179,7 @@ class DynamicQuantEngine:
         order_value_krw: float = 2_500_000.0,
         price: float = 0.0,
         atr_pct: Optional[float] = None,
+        friction_pct: Optional[float] = None,
     ) -> Dict[str, float]:
         """UniversalExitEngine의 모든 고정 퍼센트 상수(6.0%, 0.50%, 3.0%, 2.5%, 2.0%, 15.0%)를 대체하는
         확률과정 첫 도달 장벽(First-Passage Optimal Stopping) 및 마찰비용 결합 해.
@@ -1193,7 +1194,11 @@ class DynamicQuantEngine:
             _atr_pct_val = float(m.get("vol_daily", 0.018)) * 100.0
         sigma_d_pct = max(_atr_pct_val, _unit_cut)
         ir = float(m.get("ir", 0.0))
-        c_rt_pct = self.compute_roundtrip_friction_pct(tk, order_value_krw=order_value_krw, price=price)
+        c_rt_pct = (
+            float(friction_pct)
+            if (friction_pct is not None and float(friction_pct) > 0)
+            else self.compute_roundtrip_friction_pct(tk, order_value_krw=order_value_krw, price=price)
+        )
 
         vq = self.get_vix_regime_quantiles()
         v_base = max(vq["baseline"], 10.0)
@@ -1245,6 +1250,115 @@ class DynamicQuantEngine:
             "scale_out_ratio": round(scale_out_ratio, 4),
             "sigma_daily_pct": round(sigma_d_pct, 4),
         }
+
+    def compute_pair_spread_stopping_params(
+        self,
+        leg_weights: Dict[str, float],
+        regime: str = "caution",
+        vix_level: Optional[float] = None,
+        total_pair_value_krw: float = 2_500_000.0,
+        leg_prices: Optional[Dict[str, float]] = None,
+        leg_sigmas_pct: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, float]:
+        """마켓뉴트럴 페어(S14_PAIR_ALPHA) 동시 스프레드의 공분산 반영 일간 변동성(σ_spread,d) 및
+        확률과정 첫 도달 장벽(First-Passage Optimal Stopping) + 무상한 ATR 샹들리에 트레일링 해.
+
+        수리 모델:
+          1) 자본 가중치 정규화: w_i = V_i / sum_k V_k  (sum_i w_i = 1)
+          2) 단일요인/경험적 공분산 기반 페어 스프레드 일간 변동성:
+             σ_spread,d = sqrt( sum_i w_i^2 σ_{i,d}^2 + 2 sum_{i<j} w_i w_j ρ_{i,j} σ_{i,d} σ_{j,d} )
+             (여기서 ρ_{i,j} = clip(ρ_{i,m} * ρ_{j,m}, -0.95, 0.95), 롱 섹터와 인버스 헷지 간 음(-)의 상관관계 반영)
+          3) 페어 왕복 마찰비용: C_RT,pair = sum_i w_i * C_RT(i, w_i * V_pair, P_i)
+          4) 첫 도달 손절·본전보존·샹들리에 트레일링 장벽:
+             - hard_sl_limit_pct       = -(C_RT,pair + z_0.975 * σ_spread,d * κ_v * κ_r)
+             - break_even_floor_pct    = C_RT,pair + (σ_spread,d / 4)
+             - profit_lock_trigger_pct = C_RT,pair + z_0.995 * σ_spread,d * κ_v
+             - catastrophic_drop_pct   = C_RT,pair + z_0.999 * σ_spread,d * κ_v
+             - trailing_trigger_pct    = 2 * C_RT,pair + z_0.90 * σ_spread,d * κ_r
+             - chandelier_drop_pct     = max(2 * C_RT,pair + (σ_spread,d / 2), M_chandelier * σ_spread,d)
+        """
+        self._ensure_calibrated()
+        clean_weights = {
+            str(k).strip().upper(): max(float(v or 0.0), 0.0)
+            for k, v in (leg_weights or {}).items()
+            if str(k).strip() and float(v or 0.0) > 0.0
+        }
+        if not clean_weights:
+            return self.compute_optimal_stopping_params(
+                ticker="", regime=regime, vix_level=vix_level, order_value_krw=total_pair_value_krw
+            )
+        if len(clean_weights) == 1:
+            only_tk = next(iter(clean_weights.keys()))
+            only_px = float((leg_prices or {}).get(only_tk, 0.0) or 0.0)
+            only_sig = (leg_sigmas_pct or {}).get(only_tk)
+            return self.compute_optimal_stopping_params(
+                ticker=only_tk,
+                regime=regime,
+                vix_level=vix_level,
+                order_value_krw=total_pair_value_krw,
+                price=only_px,
+                atr_pct=only_sig,
+            )
+
+        w_sum = sum(clean_weights.values())
+        norm_w = {tk: val / w_sum for tk, val in clean_weights.items()}
+        tks = sorted(norm_w.keys())
+        inv_set = set(self._classifications.get("inverse_hedges", set()))
+        _unit_cut = 1.0 / math.e
+
+        sigmas: Dict[str, float] = {}
+        corrs: Dict[str, float] = {}
+        irs: Dict[str, float] = {}
+        frictions: Dict[str, float] = {}
+        min_holds: Dict[str, float] = {}
+
+        for tk in tks:
+            m = self.get_asset_metrics(tk)
+            ext_sig = (leg_sigmas_pct or {}).get(tk)
+            if ext_sig is not None and float(ext_sig) > 0:
+                raw_s = float(ext_sig)
+                sig_pct = raw_s if raw_s >= _unit_cut else (raw_s * 100.0)
+            else:
+                sig_pct = float(m.get("vol_daily", _unit_cut / 20.0)) * 100.0
+            sigmas[tk] = max(sig_pct, _unit_cut)
+
+            beta_val = float(m.get("beta", 0.0) or 0.0)
+            corr_val = float(m.get("corr", 0.0) or 0.0)
+            is_inv = (tk in inv_set) or (beta_val < 0.0)
+            if corr_val == 0.0:
+                corr_val = (-1.0 / math.sqrt(2.0)) if is_inv else (1.0 / math.sqrt(2.0))
+            elif is_inv and corr_val > 0.0:
+                corr_val = -abs(corr_val)
+            corrs[tk] = corr_val
+            px_i = float((leg_prices or {}).get(tk, 0.0) or 0.0)
+            val_i = norm_w[tk] * float(total_pair_value_krw or 0.0)
+            frictions[tk] = self.compute_roundtrip_friction_pct(tk, order_value_krw=val_i, price=px_i)
+
+        var_spread = 0.0
+        for i, tk_i in enumerate(tks):
+            w_i = norm_w[tk_i]
+            s_i = sigmas[tk_i]
+            var_spread += (w_i * s_i) ** 2
+            for j in range(i + 1, len(tks)):
+                tk_j = tks[j]
+                w_j = norm_w[tk_j]
+                s_j = sigmas[tk_j]
+                rho_ij = corrs[tk_i] * corrs[tk_j]
+                var_spread += 2.0 * w_i * w_j * rho_ij * s_i * s_j
+
+        avg_leg_sigma = sum(norm_w[tk] * sigmas[tk] for tk in tks)
+        sigma_spread_pct = max(math.sqrt(max(var_spread, 0.0)), avg_leg_sigma / math.e, _unit_cut)
+        c_rt_pair = sum(norm_w[tk] * frictions[tk] for tk in tks)
+
+        return self.compute_optimal_stopping_params(
+            ticker=tks[0],
+            regime=regime,
+            vix_level=vix_level,
+            order_value_krw=total_pair_value_krw,
+            price=float((leg_prices or {}).get(tks[0], 0.0) or 0.0),
+            atr_pct=sigma_spread_pct,
+            friction_pct=c_rt_pair,
+        )
 
     def compute_no_trade_band_ratio(
         self,

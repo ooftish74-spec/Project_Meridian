@@ -847,6 +847,15 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
     # active S14_PAIR_ALPHA pairs must NOT trigger Chandelier Trailing Exit or Catastrophic Peak Drawdown.
     # Hand-computed capital-weighted spread PnL:
     #   (2339400 * 2.5 + 2179226 * (-2.4)) / (2339400 + 2179226) = +0.136915%
+    ledger_file = tmp_path / "position_entry_ledger.json"
+    def _mock_plm_init(self, ledger_path=None):
+        self.ledger_path = ledger_file
+        self.daily_exit_path = tmp_path / "daily_exited_tickers.json"
+        self._lock = __import__("threading").Lock()
+        self._ensure_ledger_exists()
+
+    monkeypatch.setattr("src.execution.position_ledger.PositionLedgerManager.__init__", _mock_plm_init)
+
     uee = UniversalExitEngine()
     kr_pair_pos = {
         "LIVE_SSOT:305720": {
@@ -882,15 +891,17 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
     uee_res = uee.evaluate_all_positions(kr_pair_pos, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
     assert uee_res["exit_orders"] == []
 
-    # 2) USNightExecutionEngine: XLE (+2.6%) + PSQ (-2.5%) pair spread & MSFT (S3_B Track 2) exemption
-    ledger_file = tmp_path / "position_entry_ledger.json"
-    def _mock_plm_init(self, ledger_path=None):
-        self.ledger_path = ledger_file
-        self.daily_exit_path = tmp_path / "daily_exited_tickers.json"
-        self._lock = __import__("threading").Lock()
-        self._ensure_ledger_exists()
+    # 1b) When the simultaneous pair spread genuinely reaches a high-water mark (+4.50%) and then drops back to +0.1369%,
+    # the mathematical Chandelier Trailing Stop (driven by covariance-adjusted σ_spread) fires on the pair legs.
+    kr_pair_pos_trail = {
+        k: dict(v, pair_spread_peak_pnl_pct=4.50, pair_spread_trail_activated=True)
+        for k, v in kr_pair_pos.items()
+    }
+    uee_trail_res = uee.evaluate_all_positions(kr_pair_pos_trail, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
+    assert len(uee_trail_res["exit_orders"]) == 2
+    assert {o["ticker"] for o in uee_trail_res["exit_orders"]} == {"305720", "114800"}
 
-    monkeypatch.setattr("src.execution.position_ledger.PositionLedgerManager.__init__", _mock_plm_init)
+    # 2) USNightExecutionEngine: XLE (+2.6%) + PSQ (-2.5%) pair spread & MSFT (S3_B Track 2) exemption
     us_eng = USNightExecutionEngine()
     us_eng.holdings = [
         {"ticker": "XLE", "stream_id": "S14_PAIR_ALPHA", "entry_price": 50.0, "current_price": 51.3, "highest_price": 51.3, "peak_price": 51.3, "quantity": 12, "amount": 615.6},
