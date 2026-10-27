@@ -181,31 +181,51 @@ class S14SectorPairStream(BaseStream):
                 _vix_caut_lim = float(_dqe_s14.get_vix_regime_quantiles()['caution'])
                 _ois_bull_lim = float(cfg.get('leverage.ois_bull_threshold') or 55.0)
                 _us_inv_map = {'semi': 'PSQ', 'tech': 'PSQ', 'SOXX': 'PSQ', 'XLK': 'PSQ'}
+                _us_tech_long_set = {
+                    str(US_SECTOR_ETF_MAP.get('semi', '')).strip().upper(),
+                    str(US_SECTOR_ETF_MAP.get('tech', '')).strip().upper(),
+                }
                 _us_inv_blocked = (_vix_us < _vix_caut_lim and _ois_us >= _ois_bull_lim) or _reg_us == 'bull'
-                for order in (us_pair_res.get('pair_orders', []) if not _us_inv_blocked else []):
+                _raw_us_orders = list(us_pair_res.get('pair_orders', []) if not _us_inv_blocked else [])
+                # 단일 배치 내 US 페어는 최상위 Spread-Z 1쌍만 채택하여 SH vs PSQ 교차 인버스 충돌 및 반쪽 헤지 탈락 원천 차단
+                _allowed_us_pids = set()
+                _us_pid_long_tk = {}
+                for _uo in _raw_us_orders:
+                    _u_pid = str(_uo.get('pair_id', '') or '')
+                    _u_dir = str(_uo.get('direction', 'long')).lower()
+                    _u_inv = bool(_uo.get('is_inverse_hedge', False)) or _u_dir == 'short' or str(_uo.get('action', '')).lower() in ('sell', 'buy_inverse')
+                    if not _u_inv and _u_pid:
+                        _us_pid_long_tk[_u_pid] = str(_uo.get('ticker', '') or '').strip().upper()
+                        if not _allowed_us_pids:
+                            _allowed_us_pids.add(_u_pid)
+                for order in _raw_us_orders:
+                    _orig_pid = str(order.get('pair_id', '') or '')
+                    if _allowed_us_pids and _orig_pid not in _allowed_us_pids:
+                        continue
                     t_dir = order.get('direction', 'long').lower()
                     ticker = order['ticker']
                     action = order.get('action', 'buy').lower()
                     is_inv_hedge = bool(order.get('is_inverse_hedge', False)) or t_dir == 'short' or action in ('sell', 'buy_inverse')
-                    
+                    _paired_long_tk = _us_pid_long_tk.get(_orig_pid, str(order.get('pair_partner', '') if is_inv_hedge else ticker).strip().upper())
+                    # 베타 매칭 헤지: 롱 레그가 S&P 500 비기술 섹터(XLE, XLV, XLF 등)이면 S&P 500 1X 인버스(SH)로, 기술/반도체(XLK, SOXX)이면 PSQ로 매칭
+                    _matched_us_hedge = 'PSQ' if _paired_long_tk in _us_tech_long_set else 'SH'  # hardcode-ok
+                    _matched_pid = f"{_paired_long_tk}_{_matched_us_hedge}" if _paired_long_tk else _orig_pid.replace('SOXS', 'PSQ')
+
                     if is_inv_hedge:
-                        sec_key = str(order.get('sector', '')).lower()
-                        if ticker in ('SH', 'PSQ'):
-                            ticker_to_trade = ticker
-                        else:
-                            ticker_to_trade = _us_inv_map.get(sec_key, _us_inv_map.get(ticker, 'SH'))
+                        ticker_to_trade = _matched_us_hedge
                         direction_to_trade = 'long'
                         action_to_trade = 'buy'
                         leg_label = 'INVERSE_HEDGE'
+                        _partner_tk = _paired_long_tk
                     else:
                         ticker_to_trade = ticker
                         direction_to_trade = 'long'
                         action_to_trade = 'buy'
                         leg_label = 'LONG'
+                        _partner_tk = _matched_us_hedge
 
                     # 연속적 노이즈 강도에 따른 동적 포지션 크기 스케일링 (실측 인버스 ETF 변동성 역가중 반영)
                     _, _leg_vol = self._extract_returns_and_volatility(ticker_to_trade, market='US', days=20)
-                    _partner_tk = str(order.get('pair_partner', '') or '')
                     if _partner_tk in ('SOXS', 'SQQQ'):  # hardcode-ok
                         _partner_tk = 'PSQ'  # hardcode-ok
                     _, _partner_vol = self._extract_returns_and_volatility(_partner_tk, market='US', days=20) if _partner_tk else (0.0, 0.0)
@@ -226,7 +246,7 @@ class S14SectorPairStream(BaseStream):
                     signals.append({
                         'stream_id': self.stream_id,
                         'ticker': ticker_to_trade,
-                        'pair_id': str(order.get('pair_id', '')).replace('SOXS', 'PSQ'),
+                        'pair_id': _matched_pid,
                         'pair_partner': _partner_tk,
                         'pair_vol_parity_scale': _parity_scale,
                         'name': f"US Pair {order['sector'].upper()} ({leg_label})",
@@ -434,6 +454,7 @@ class S14SectorPairStream(BaseStream):
 
         deduped: List[Dict] = []
         seen_kr_hedge: set = set()
+        seen_us_hedge: set = set()
         dropped_pids: set = set()
         for sig in signals:
             if not isinstance(sig, dict):
@@ -446,6 +467,12 @@ class S14SectorPairStream(BaseStream):
                         dropped_pids.add(pid)
                     continue
                 seen_kr_hedge.add(tk)
+            elif tk in _us_inv_set:
+                if seen_us_hedge:
+                    if pid:
+                        dropped_pids.add(pid)
+                    continue
+                seen_us_hedge.add(tk)
             deduped.append(sig)
 
         if dropped_pids:

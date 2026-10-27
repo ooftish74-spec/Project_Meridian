@@ -533,6 +533,18 @@ def main():
                                         main._exit_orders_in_flight[_tk] = _now_ts
                                         if _eo.get('exit_type') in ('scale_out_50pct', 'time_decay_exit'):
                                             ledger_mgr.mark_scaled_out(_tk)
+                                if _filled_tks or _submitted_tks or getattr(_exec_res, 'n_filled', 0) > 0:
+                                    try:
+                                        _adapter.fetch_live_balance()
+                                        from src.portfolio.shadow_manager import ShadowPortfolioManager
+                                        _live_map_kr = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
+                                        ShadowPortfolioManager().force_reconcile(
+                                            _live_map_kr,
+                                            float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
+                                            snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
+                                        )
+                                    except Exception as _sr_kr_e:
+                                        logger.debug(f"  [KR Exit Shadow Sync] 동기화 폴백: {_sr_kr_e}")
                     except Exception as _exit_err:
                         logger.error(f"  ❌ [Intraday Exit Scanner] 예외 발생: {_exit_err}", exc_info=True)
 
@@ -712,6 +724,14 @@ def main():
                                                     eo.get('reason', 'US Night Trailing Stop'),
                                                     today_str,
                                                     realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
+                                                )
+                                                _adapter.fetch_live_balance()
+                                                from src.portfolio.shadow_manager import ShadowPortfolioManager
+                                                _live_map_us = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
+                                                ShadowPortfolioManager().force_reconcile(
+                                                    _live_map_us,
+                                                    float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
+                                                    snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
                                                 )
                                             except Exception:
                                                 pass

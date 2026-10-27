@@ -245,3 +245,59 @@ def test_alphanumeric_kr_ticker_and_pair_conflict_exemption():
     assert '114800' in resolved_tickers
 
 
+def test_us_pair_beta_matched_hedge_and_single_pair_dedup(stream):
+    # Case 1: Non-Tech S&P 500 strong sector (energy -> XLE) paired against weak semi (-0.04)
+    # Even though weak sector is 'semi', the long leg is XLE (S&P 500 Energy), so beta-matched hedge must be SH (not PSQ)
+    # and only the Top-1 US pair (2 legs) is emitted to prevent SH vs PSQ mutex collision.
+    market_data_energy = {
+        'qqq_ker': 0.20,
+        'kospi_ker': 0.85,  # suppress KR to isolate US
+        'vix': 22.0,
+        'us_sector_returns': {
+            'energy': 0.05,
+            'healthcare': 0.03,
+            'utilities': -0.02,
+            'semi': -0.04,
+        },
+        'us_volatility_map': {
+            'energy': 0.22,
+            'healthcare': 0.16,
+            'utilities': 0.15,
+            'semi': 0.28,
+        },
+    }
+    sigs_energy = [s for s in stream.generate_signals(regime='caution', market_data=market_data_energy) if s.get('market') == 'US']
+    assert len(sigs_energy) == 2
+    tickers_energy = {s['ticker'] for s in sigs_energy}
+    assert tickers_energy == {'XLE', 'SH'}
+    for s in sigs_energy:
+        assert s['pair_id'] == 'XLE_SH'
+
+    # Case 2: Tech/Semi strong sector (semi -> SOXX) paired against weak utilities (-0.04)
+    # Long leg is SOXX, so beta-matched hedge must be PSQ (Nasdaq-100 1X Inverse).
+    market_data_semi = {
+        'qqq_ker': 0.20,
+        'kospi_ker': 0.85,
+        'vix': 22.0,
+        'us_sector_returns': {
+            'semi': 0.05,
+            'tech': 0.03,
+            'energy': -0.02,
+            'utilities': -0.04,
+        },
+        'us_volatility_map': {
+            'semi': 0.28,
+            'tech': 0.22,
+            'energy': 0.20,
+            'utilities': 0.15,
+        },
+    }
+    sigs_semi = [s for s in stream.generate_signals(regime='caution', market_data=market_data_semi) if s.get('market') == 'US']
+    assert len(sigs_semi) == 2
+    tickers_semi = {s['ticker'] for s in sigs_semi}
+    assert tickers_semi == {'SOXX', 'PSQ'}
+    for s in sigs_semi:
+        assert s['pair_id'] == 'SOXX_PSQ'
+
+
+

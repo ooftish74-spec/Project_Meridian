@@ -950,19 +950,47 @@ class StreamOrchestrator:
                                     f"(생존 {len(all_signals[_match_sid])}건)"
                                 )
                 elif _d_act == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH':
-                    # V-반등/폭등 시나리오 발동 시 보유 인버스 ETF 즉시 청산 시그널 주입 및 레버리지 스위칭
+                    # V-반등/폭등 시나리오 발동 시 보유 방향성 인버스 ETF 즉시 청산 시그널 주입 및 레버리지 스위칭
+                    # (단, S14_PAIR_ALPHA 마켓뉴트럴 페어 소속 헤지 레그는 단독 청산 시 롱 레그가 비헤지 노출되므로 제외)
+                    from src.allocation.sector_pair_alpha_engine import (
+                        DEFAULT_SECTOR_ETF_MAP as _S14_KR_LONG_MAP,
+                        US_SECTOR_ETF_MAP as _S14_US_LONG_MAP,
+                        KR_INVERSE_ETF_MAP as _S14_KR_INV_MAP,
+                        US_INVERSE_ETF_MAP as _S14_US_INV_MAP,
+                    )
+                    _s14_kr_long = set(_S14_KR_LONG_MAP.values())
+                    _s14_us_long = set(_S14_US_LONG_MAP.values())
+                    _s14_kr_inv = set(_S14_KR_INV_MAP.values())
+                    _s14_us_inv = set(_S14_US_INV_MAP.values())
                     _held_for_inv = {}
                     if portfolio and isinstance(portfolio, dict):
                         _held_for_inv.update(portfolio.get('positions') or portfolio.get('holdings') or {})
+                    _held_tks_for_inv = {
+                        str((_v.get('ticker') if isinstance(_v, dict) else _k) or _k).split(':')[-1].upper()
+                        for _k, _v in _held_for_inv.items()
+                        if float((_v.get('qty', _v.get('quantity', 0)) if isinstance(_v, dict) else 0) or 0) > 0
+                    }
+                    _has_s14_long_kr = bool(_held_tks_for_inv & _s14_kr_long)
+                    _has_s14_long_us = bool(_held_tks_for_inv & _s14_us_long)
                     for _hk, _hv in _held_for_inv.items():
                         _htk = str((_hv.get('ticker') if isinstance(_hv, dict) else _hk) or _hk).split(':')[-1].upper()
                         _hq = float((_hv.get('qty', _hv.get('quantity', 0)) if isinstance(_hv, dict) else 0) or 0)
+                        _h_sid = str((_hv.get('stream_id') or _hv.get('stream') or '') if isinstance(_hv, dict) else '').upper()
+                        _is_s14_pair_hedge = (
+                            _h_sid.startswith('S14')
+                            or str(_hk).upper().startswith('S14:')
+                            or (_htk in _s14_kr_inv and _has_s14_long_kr)
+                            or (_htk in _s14_us_inv and _has_s14_long_us)
+                        )
+                        if _is_s14_pair_hedge:
+                            continue
                         if _htk in _inv_set_sc and _hq > 0:
                             all_signals.setdefault('S0', []).append({
                                 'stream_id': 'S0',
                                 'ticker': _htk,
                                 'direction': 'exit',
                                 'action': 'exit',
+                                'quantity': int(_hq),
                                 'confidence': float(sc_result.get('composite_surge_prob', 1.0)),
                                 'strategy': 'scenario_v_rebound_inverse_harvest',
                                 'reason': f"MasterScenario V-Rebound ({sc_result.get('active_scenarios')}) inverse harvest",
