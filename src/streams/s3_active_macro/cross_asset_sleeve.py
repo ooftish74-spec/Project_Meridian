@@ -150,13 +150,31 @@ class S3CrossAssetSleeve:
                     logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 당일/1일 수익률({ret_1d:+.2%}) 음수 전환 — 역방향 추격 매수 차단")
                     continue
 
+            _mf_tc = sc_tc.get('macro_features') if isinstance(sc_tc.get('macro_features'), dict) else {}
+            _z_oil_tc = float(sc_tc.get('geopolitical_oil_supply_z', _mf_tc.get('geopolitical_oil_supply_z', 0.0)) or 0.0)
+            _z_tp_tc = float(sc_tc.get('us_term_premium_z', _mf_tc.get('us_term_premium_z', 0.0)) or 0.0)
+            _z_gm_tc = float(sc_tc.get('global_macro_stress_z', _mf_tc.get('global_macro_stress_z', 0.0)) or 0.0)
+            _cat_tc = str(meta.get('category', '')).lower()
+            _cat_macro_z = 0.0
+            if _cat_tc == 'oil':
+                _cat_macro_z = _z_oil_tc
+            elif _cat_tc == 'gold':
+                _cat_macro_z = max(_z_oil_tc, _z_gm_tc)
+            elif _cat_tc == 'dollar':
+                _cat_macro_z = max(_z_tp_tc, _z_gm_tc)
+            elif _cat_tc == 'treasury':
+                _cat_macro_z = -_z_tp_tc
+            _eff_spread_thresh = spread_threshold / (1.0 + max(0.0, _cat_macro_z))
+
             _caut_min_ret = 0.01
-            _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else _caut_min_ret
+            _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else (_caut_min_ret / (1.0 + max(0.0, _cat_macro_z)))
             is_flight_to_quality = (regime in ['bear', 'crash'] if is_inv_hedge else regime in ['bear', 'crash', 'caution']) and (asset_ret >= _ftq_min_ret and asset_ret > 0.0)
-            is_momentum_outperformance = spread >= spread_threshold and (asset_ret >= _caut_min_ret if not is_inv_hedge else asset_ret > 0.0)
+            is_momentum_outperformance = spread >= _eff_spread_thresh and (asset_ret >= _ftq_min_ret if not is_inv_hedge else asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
-                confidence = min(1.0, min_confidence + abs(spread) * 2.0)
+                import math as _math_tc
+                _base_conf = min(1.0, min_confidence + abs(spread) * 2.0)
+                confidence = min(1.0, _base_conf + (1.0 - _base_conf) * _math_tc.tanh(max(0.0, _cat_macro_z) / 2.0))
                 reason = (
                     f"🛡️ [Alpha 4: Track C Cross-Asset] {meta['name']} ({ticker}) 롱 진입 | "
                     f"Ret5d={asset_ret:+.2%} vs SPY={spy_return:+.2%} (Spread={spread:+.2%}, Regime={regime})"

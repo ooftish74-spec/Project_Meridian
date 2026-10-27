@@ -796,15 +796,28 @@ class S3FactorStream(BaseStream):
         scores = []
         _raw_tilt_w = 2.0 / 25.0  # 0.08
         _vol_floor = 1.0 / 20.0   # 0.05
+        _sc_top = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
+        _mf_top = _sc_top.get('macro_features') if isinstance(_sc_top.get('macro_features'), dict) else {}
+        _z_oil_s3 = float(_sc_top.get('geopolitical_oil_supply_z', _mf_top.get('geopolitical_oil_supply_z', 0.0)) or 0.0)
+        _z_tp_s3 = float(_sc_top.get('us_term_premium_z', _mf_top.get('us_term_premium_z', 0.0)) or 0.0)
+        _z_gs_s3 = float(_sc_top.get('gscpi_stress_z', _mf_top.get('gscpi_stress_z', 0.0)) or 0.0)
+        _stag_int_s3 = math.tanh((max(0.0, _z_oil_s3) + max(0.0, _z_tp_s3) + max(0.0, _z_gs_s3)) / (1.0 + 2.0))
         for i, (ticker, etf_info) in enumerate(zip(tickers, etf_infos)):
             sector = etf_info.get('sector', '')
             _risk_adj_raw = math.tanh(float(raw_momentum[i]) / max(realized_vols[i], _vol_floor))
+            _stag_sec_tilt = 0.0
+            if _stag_int_s3 > 0.0:
+                if sector in ('energy', 'defense'):
+                    _stag_sec_tilt = _raw_tilt_w * _stag_int_s3
+                elif sector == 'bio':
+                    _stag_sec_tilt = -_raw_tilt_w * _stag_int_s3
             composite = (
                 adj_w_mom * norm_momentum[i]
                 + adj_w_val * norm_value[i]
                 + adj_w_carry * norm_carry[i]
                 + adj_w_vol * norm_volatility[i]
                 + _raw_tilt_w * _risk_adj_raw
+                + _stag_sec_tilt
             )
             _signal_cache = market_data.get('signal_cache', {})
             _macro_fallback = cfg.get('s3.fallback_macro_score', None)

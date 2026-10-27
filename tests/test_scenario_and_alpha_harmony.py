@@ -592,6 +592,43 @@ def test_global_5_axis_macro_stress_and_stagflation_synergy(monkeypatch, tmp_pat
     assert "SCENARIO_6" in active_ids
     assert "SCENARIO_8" in active_ids
     assert sc_res["net_scenario_regime"] == "crash"
+    assert sc_res["stream_directives"].get("S3") == "STAGFLATION_COMMODITY_ALPHA_LONG"
+    expected_crash_inflect = round(((1.90 + 1.80) / 2.0) * math.tanh(1.0), 4)
+    assert sc_res["predictive_telemetry"]["crash_inflection_z"] == pytest.approx(expected_crash_inflect, rel=1e-9)
+
+    # Closed-form check 5: Surge Inflection triggers SCENARIO_2_SURGE and emits TECH_GAMMA_SURGE_LONG
+    sc_surge = eng.evaluate_scenarios({
+        "signal_cache": {
+            "ois": 88.2,  # ois_z = (88.2 - 50)/12 = 3.1833...
+            "sox_change_1d": 2.5,
+            "nasdaq_change_1d": 1.25,
+            "night_futures_change_1d": 1.0,
+            "kr_export_domestic_divergence_z": 1.865,
+        }
+    })
+    surge_ids = {s["scenario_id"] for s in sc_surge["active_scenarios"]}
+    assert "SCENARIO_2_SURGE" in surge_ids
+    assert sc_surge["stream_directives"].get("S1") == "TECH_GAMMA_SURGE_LONG"
+    assert sc_surge["stream_directives"].get("S11") == "TECH_GAMMA_SURGE_LONG"
+
+    # Closed-form check 6: S3CrossAssetSleeve boosts conviction dynamically via geopolitical_oil_supply_z
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+    tc_sleeve = S3CrossAssetSleeve()
+    tc_base = tc_sleeve.generate_track_c_signals(
+        "caution",
+        {"spy_return_5d": 0.01, "gld_return_5d": 0.02, "signal_cache": {}},
+    )
+    tc_boosted = tc_sleeve.generate_track_c_signals(
+        "caution",
+        {
+            "spy_return_5d": 0.01,
+            "gld_return_5d": 0.02,
+            "signal_cache": {"geopolitical_oil_supply_z": 1.828, "global_macro_stress_z": 1.685},
+        },
+    )
+    assert len(tc_base) == 1 and len(tc_boosted) == 1
+    assert tc_boosted[0]["confidence"] > tc_base[0]["confidence"]
+
 
 
 

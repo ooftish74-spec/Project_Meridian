@@ -1065,6 +1065,74 @@ class StreamOrchestrator:
                                 logger.warning(
                                     f"    🛡️ [Scenario Inverse] {_s12_canon} {_s12_tk} 즉각 헤지 시그널 생성 (size_pct={_inv_ratio:.1%})"
                                 )
+                elif _d_act in ('TECH_GAMMA_SURGE_LONG', 'VKOSPI_MEAN_REVERSION_LEVERAGE_SWITCH'):
+                    from src.allocation.sector_pair_alpha_engine import DEFAULT_SECTOR_ETF_MAP as _SURGE_KR_ETF_MAP
+                    _target_sid = _SC_CANON_MAP.get(_d_sid, _d_sid)
+                    if _target_sid not in all_signals and _d_sid in all_signals:
+                        _target_sid = _d_sid
+                    _surge_tk = (
+                        str(_SURGE_KR_ETF_MAP.get('semi', '') or '').strip().upper()
+                        if _d_act == 'TECH_GAMMA_SURGE_LONG'
+                        else str(getattr(getattr(self, 's0', None), 'TICKER_LEVERAGE_2X', '') or '').strip().upper()
+                    )
+                    if _surge_tk:
+                        _ok_surge = True
+                        if hasattr(self, 's0') and hasattr(self.s0, '_evaluate_intraday_tape_and_gap_guard'):
+                            _ok_surge, _ = self.s0._evaluate_intraday_tape_and_gap_guard(
+                                _surge_tk, is_inverse=False, market_data=market_data
+                            )
+                        if _ok_surge:
+                            _s_prob = float(sc_result.get('composite_surge_prob') or 1.0)
+                            _s_exp = float(sc_result.get('recommended_max_exposure') or (1.0 / 2.0))
+                            _bar_sg = _qe_sc.compute_dynamic_exit_barriers(_surge_tk)
+                            _tp_sg = float(_bar_sg.get('take_profit_pct') or pget('s12.default_tp_pct', 8.0))
+                            _sl_sg = abs(float(_bar_sg.get('stop_loss_pct') or pget('s12.default_sl_pct', 3.5)))
+                            _ev_sg = (_tp_sg / 100.0) * max(_s_prob, 1.0 / 2.0)
+                            _existing_list = all_signals.setdefault(_target_sid, [])
+                            _matched_existing = [
+                                _x for _x in _existing_list
+                                if isinstance(_x, dict) and str(_x.get('ticker', '')).split(':')[-1].upper() == _surge_tk
+                            ]
+                            if _matched_existing:
+                                for _mx in _matched_existing:
+                                    _mx['confidence'] = round(max(float(_mx.get('confidence') or 0.0), _s_prob), 4)
+                                    _mx['size_pct'] = round(max(float(_mx.get('size_pct') or 0.0), _s_exp), 4)
+                                    _mx['expected_return'] = round(max(float(_mx.get('expected_return') or 0.0), _ev_sg), 4)
+                            else:
+                                _existing_list.append({
+                                    'stream_id': _target_sid,
+                                    'ticker': _surge_tk,
+                                    'direction': 'long',
+                                    'action': 'buy',
+                                    'size_pct': round(_s_exp, 4),
+                                    'confidence': round(_s_prob, 4),
+                                    'tp_pct': round(_tp_sg, 2),
+                                    'sl_pct': round(_sl_sg, 2),
+                                    'expected_return': round(_ev_sg, 4),
+                                    'expected_return_pct': round(_ev_sg * 100.0, 2),
+                                    'strategy': f"scenario_{_d_act.lower()}",
+                                    'reason': f"MasterScenario {_d_act} active alpha harvest",
+                                })
+                            logger.info(f"    🚀 [Scenario Surge Alpha] {_target_sid} {_surge_tk} ({_d_act}) 공격 시그널 활성화 (conf={_s_prob:.2f})")
+                elif _d_act in ('LONG_100', 'STAGFLATION_COMMODITY_ALPHA_LONG'):
+                    _is_stag_cmd = (_d_act == 'STAGFLATION_COMMODITY_ALPHA_LONG')
+                    _prob_ref = float(
+                        sc_result.get('composite_crash_prob' if _is_stag_cmd else 'composite_surge_prob') or (1.0 / 2.0)
+                    )
+                    _boost_mult = 1.0 + (_prob_ref / 2.0)
+                    for _s3_key in ('S3', 'S3_ACTIVE_MACRO', 'S3_A', 'S3_C'):
+                        for _s3_sig in (all_signals.get(_s3_key) or []):
+                            if not isinstance(_s3_sig, dict) or str(_s3_sig.get('direction', '')).lower() != 'long':
+                                continue
+                            _sec_s3 = str(_s3_sig.get('sector') or '').lower()
+                            _typ_s3 = str(_s3_sig.get('_type') or '').upper()
+                            if _is_stag_cmd and (_typ_s3 == 'TRACK_C' or _sec_s3 in ('energy', 'defense', 'gold', 'oil', 'commodity')):
+                                _s3_sig['is_hedge'] = True
+                                _s3_sig['confidence'] = round(min(1.0, float(_s3_sig.get('confidence') or 0.0) * _boost_mult), 4)
+                                _s3_sig['size_pct'] = round(min(1.0, float(_s3_sig.get('size_pct') or 0.0) * _boost_mult), 4)
+                            elif not _is_stag_cmd:
+                                _s3_sig['confidence'] = round(min(1.0, float(_s3_sig.get('confidence') or 0.0) * _boost_mult), 4)
+                                _s3_sig['size_pct'] = round(min(1.0, float(_s3_sig.get('size_pct') or 0.0) * _boost_mult), 4)
         except Exception as _sc_dir_e:
             logger.error(f"    ⚠️ [Step 4.1] 시나리오 디렉티브 적용 예외: {_sc_dir_e}", exc_info=True)
 

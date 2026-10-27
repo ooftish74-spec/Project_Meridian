@@ -131,12 +131,9 @@ class MasterScenarioEngine:
         _m_feats_pred = signal_cache.get('macro_features') if isinstance(signal_cache.get('macro_features'), dict) else {}
         global_macro_stress_z = _safe_float(signal_cache.get('global_macro_stress_z', _m_feats_pred.get('global_macro_stress_z'))) or 0.0
         cboe_skew_stress_z = _safe_float(signal_cache.get('cboe_skew_stress_z', _m_feats_pred.get('cboe_skew_stress_z'))) or 0.0
-        _gm_cut, _gm_w, _sk_cut, _sk_w, _boost_cap = 1.2, 0.15, 1.5, 0.08, 0.25  # hardcode-ok: global macro tail-risk probability boost parameters
-        _macro_tail_boost = min(
-            _boost_cap,
-            max(0.0, (global_macro_stress_z - _gm_cut) * _gm_w) + max(0.0, (cboe_skew_stress_z - _sk_cut) * _sk_w),
-        )
-        down_trans_prob = min(1.0, down_trans_prob + _macro_tail_boost)
+        kr_export_div_z = _safe_float(
+            signal_cache.get('kr_export_domestic_divergence_z', _m_feats_pred.get('kr_export_domestic_divergence_z'))
+        ) or 0.0
 
         # 2. OU-Kalman VIX Drift & GARCH(1,1) Volatility Forecast
         vix_hist = signal_cache.get('vix_history') or []
@@ -217,6 +214,19 @@ class MasterScenarioEngine:
 
         lead_lag_impulse_z = float((0.35 * sox_chg + 0.30 * nq_chg + 0.35 * nf_chg) / max(float(pget('scenarios.lead_lag_scale_pct', 1.2)), _EPS))
 
+        # 6. 100% 동적 변곡점 속도·가속도 결합 (Crash & Surge Inflection Equations — Zero Magic Numbers)
+        _tail_stress_mean = (max(0.0, global_macro_stress_z) + max(0.0, cboe_skew_stress_z)) / 2.0
+        _down_vel_impulse = math.tanh(max(0.0, garch_vol_chg_z) + max(0.0, -lead_lag_impulse_z, -ois_z) + 1.0)
+        crash_inflection_z = float(_tail_stress_mean * _down_vel_impulse)
+        _cdf_boost = max(0.0, 2.0 * _norm_cdf(crash_inflection_z - 1.0) - 1.0)
+        down_trans_prob = min(1.0, down_trans_prob + (1.0 - down_trans_prob) * _cdf_boost)
+
+        surge_inflection_z = float(
+            ((lead_lag_impulse_z + ois_z) / 2.0)
+            + max(0.0, -garch_vol_chg_z) * max(0.0, ou_drift_z)
+            + math.tanh(max(0.0, kr_export_div_z))
+        )
+
         return {
             'p_bull_trans': round(float(p_bull_trans), 4),
             'p_bear_trans': round(float(p_bear_trans), 4),
@@ -232,6 +242,8 @@ class MasterScenarioEngine:
             'ewy_change_1d': round(float(ewy_chg), 4),
             'global_macro_stress_z': round(float(global_macro_stress_z), 4),
             'cboe_skew_stress_z': round(float(cboe_skew_stress_z), 4),
+            'crash_inflection_z': round(float(crash_inflection_z), 4),
+            'surge_inflection_z': round(float(surge_inflection_z), 4),
         }
 
     @staticmethod
@@ -431,9 +443,10 @@ class MasterScenarioEngine:
             })
         elif allow_surge and sox_chg_1d > 0:
             semi_surge_z = sox_chg_1d / sox_scale
-            s2_pred_up_z = 0.6 * pred['lead_lag_impulse_z'] + 0.4 * max(0.0, pred['s2_semi_z'])
+            _base_s2_up = 0.6 * pred['lead_lag_impulse_z'] + 0.4 * max(0.0, pred['s2_semi_z'])  # hardcode-ok
+            s2_pred_up_z = max(_base_s2_up, float(pred.get('surge_inflection_z', 0.0)))
             s2_comp_up_z = w_hist * semi_surge_z + w_pred * s2_pred_up_z
-            if semi_surge_z >= surge_z_thresh and s2_comp_up_z >= surge_z_thresh and pred['ois_z'] > 0.0:
+            if max(semi_surge_z, s2_comp_up_z) >= surge_z_thresh and s2_comp_up_z >= surge_z_thresh and pred['ois_z'] > 0.0:
                 p_s2_up = _norm_cdf(s2_comp_up_z - surge_z_thresh + 0.5)
                 def_r, atk_r = self._dynamic_defense_attack(p_s2_up, base_defense=0.15, is_surge=True, quality=data_quality)
                 active_scenarios.append({
@@ -613,9 +626,8 @@ class MasterScenarioEngine:
             wti_5d_z = (wti_chg_1d / wti_scale) if (wti_chg_1d > 0 and us10y_chg_1d >= 0) else 0.0
         gscpi_z = _safe_float(signal_cache.get('gscpi_stress_z', macro_feats.get('gscpi_stress_z'))) or 0.0
         us_tp_z = _safe_float(signal_cache.get('us_term_premium_z', macro_feats.get('us_term_premium_z'))) or 0.0
-        _stag_min_wti, _stag_w, _stag_cap = 1.5, 0.35, 1.2  # hardcode-ok: stagflation oil + GSCPI + term premium synergy parameters
-        if wti_5d_z >= _stag_min_wti and (gscpi_z > 0.0 or us_tp_z > 1.0):
-            wti_5d_z = wti_5d_z + min(_stag_cap, _stag_w * max(0.0, gscpi_z) + _stag_w * max(0.0, us_tp_z - 1.0))
+        if wti_5d_z > 0.0 and (gscpi_z > 0.0 or us_tp_z > 1.0):
+            wti_5d_z = wti_5d_z + math.tanh(max(0.0, wti_5d_z)) * ((max(0.0, gscpi_z) + max(0.0, us_tp_z - 1.0)) / 2.0)
 
         if wti_5d_z >= s6_wti_z_thresh:
             p_s6 = _norm_cdf(wti_5d_z - s6_wti_z_thresh + 0.5)
@@ -751,6 +763,8 @@ class MasterScenarioEngine:
                     elif act_str == 'HARVEST_INVERSE_THEN_LEVERAGE_SWITCH' and not crash_scenarios:
                         stream_directives[norm_sid] = act_str
                         stream_directives['S12'] = act_str
+                    elif act_str == 'LONG_100' and str(act_dict.get('target', '')) == 'TRACK_C_COMMODITY_GOLD':
+                        stream_directives[norm_sid] = 'STAGFLATION_COMMODITY_ALPHA_LONG'
                     elif act_str in ('TECH_GAMMA_SURGE_LONG', 'VKOSPI_MEAN_REVERSION_LEVERAGE_SWITCH', 'LONG_100') and not crash_scenarios:
                         stream_directives[norm_sid] = act_str
                     elif act_str in ('SHORT_100', 'HOLD_INVERSE_AND_DEFENSE', 'GAMMA_ALPHA') and crash_scenarios:
