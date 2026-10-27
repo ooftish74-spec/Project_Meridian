@@ -444,11 +444,12 @@ class USNightExecutionEngine:
 
             entry_return = (price - entry_p) / entry_p if entry_p > 0 else 0.0
             drop_pct = (price - highest_price) / highest_price if highest_price > 0 else 0.0
-            if ticker.upper() in _us_pair_legs and len(_us_pair_legs) >= 2:
+            _is_active_us_pair = (ticker.upper() in _us_pair_legs and len(_us_pair_legs) >= 2)
+            if _is_active_us_pair:
                 _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
                 if _tot_p_val > 0:
                     entry_return = sum(v[0] * v[1] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
-                    drop_pct = sum(v[0] * v[2] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
+                    drop_pct = 0.0
 
             # Dynamic Volatility ATR Trailing Stop (실측 변동성 연동: atr_map 미전달 시 UniversalExitEngine 실측 ATR / DynamicQuantEngine 조회)
             ticker_atr = 0.0
@@ -497,8 +498,8 @@ class USNightExecutionEngine:
             if entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
-            # 2) Trailing Stop (고점이 진입가 대비 +effective_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화)
-            elif entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+            # 2) Trailing Stop (고점이 진입가 대비 +effective_activation_pct 이상 수익 활성화 후 고점 대비 하락 시 발화; 마켓뉴트럴 페어 레그는 단일 레그 트레일링 제외)
+            elif (not _is_active_us_pair) and entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
                 exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")
 

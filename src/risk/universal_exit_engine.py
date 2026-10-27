@@ -281,7 +281,9 @@ class UniversalExitEngine:
                 _p_val_tot = sum(v[0] for v in _pair_bucket.values() if v[0] > 0)
                 if _p_val_tot > 0:
                     pnl_pct = sum(v[0] * v[1] for v in _pair_bucket.values() if v[0] > 0) / _p_val_tot
-                    peak_pnl = max(pnl_pct, sum(v[0] * v[2] for v in _pair_bucket.values() if v[0] > 0) / _p_val_tot)
+                    # 음(-)의 상관관계를 갖는 롱/인버스 레그의 비동시적 개별 고점 합산(Jensen 부등식 괴리)으로 인한
+                    # 허상 고점(Phantom Peak) 및 샹들리에 오발동을 차단하기 위해 동시 스프레드 기준으로 고정
+                    peak_pnl = pnl_pct
             atr_pct = self.compute_ticker_atr(ticker)
 
             # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
@@ -334,11 +336,11 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 99.9% 꼬리 폭락 손절) ──
+            # ── 2. [2차 손절] Catastrophic Peak Drawdown Guard (고점 대비 99.9% 꼬리 폭락 손절; 비동시 레그 고점 왜곡 방지를 위해 활성 페어 레그 제외) ──
             allowed_cat_drop = _opt['catastrophic_drop_pct']
             peak_drawdown = peak_pnl - pnl_pct
 
-            if peak_pnl > 0 and peak_drawdown >= allowed_cat_drop:
+            if (not _is_active_pair_leg) and peak_pnl > 0 and peak_drawdown >= allowed_cat_drop:
                 detail = f"🚨 [2차 고점 폭락 손절 발화] {ticker} ({stream_id}): 고점 {peak_pnl:+.1f}% 대비 -{peak_drawdown:.1f}% 하락이 동적 안전망 -{allowed_cat_drop:.1f}% 이탈"
                 logger.warning(f"  {detail}")
                 exit_orders.append({
@@ -352,11 +354,12 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절) ──
+            # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절; 마켓뉴트럴 페어 레그는 OU Z-Score 수렴 청산으로 일원화) ──
             chandelier_drop = _opt['chandelier_drop_pct']
             trailing_trigger = _opt['trailing_trigger_pct']
-            is_trail_activated = bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger)
+            is_trail_activated = (not _is_active_pair_leg) and (bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger))
             is_trailing_exit = (
+                (not _is_active_pair_leg) and
                 holding_minutes >= min_holding_required and
                 is_trail_activated and
                 pnl_pct < (peak_pnl - chandelier_drop)

@@ -411,6 +411,12 @@ class PositionLedgerManager:
                 if resolved_track and (not ledger[ticker].get("track") or resolved_track == "TRACK_2_BUFFETT_QVM"):
                     ledger[ticker]["track"] = resolved_track
                     updated = True
+                if float(quantity or 0.0) > 0 and float(ledger[ticker].get("last_quantity", ledger[ticker].get("last_qty", 0.0)) or 0.0) <= 0:
+                    ledger[ticker]["last_qty"] = float(quantity)
+                    ledger[ticker]["last_quantity"] = float(quantity)
+                    if float(entry_price or 0.0) > 0:
+                        ledger[ticker]["last_avg_price"] = float(entry_price)
+                    updated = True
                 if updated:
                     self._save_file_unlocked(ledger)
 
@@ -700,7 +706,15 @@ class PositionLedgerManager:
                 updated = True
             elif curr_avg_px > 0 and prev_avg_px > 0 and abs(curr_avg_px - prev_avg_px) * 100.0 > prev_avg_px / 2.0 and current_price > 0:
                 old_pk_px = max(float(info.get("peak_price", current_price) or current_price), float(current_price))
-                reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), ((old_pk_px - curr_avg_px) / curr_avg_px) * 100.0)
+                if curr_avg_px < prev_avg_px:
+                    # 평단가 하락(물타기/신규 저가 재진입) 시 과거 고단가 구간의 peak_price를 낮아진 신규 평단가로 나누면
+                    # 실제로 달성한 적 없는 허상 수익률(Phantom Peak PnL)이 생성되므로 수익률 상한을 기존 peak_pnl_pct로 제한
+                    old_pk_pnl = max(0.0, float(info.get("peak_pnl_pct", 0.0) or 0.0))
+                    old_rel_pnl = ((old_pk_px - prev_avg_px) / prev_avg_px) * 100.0 if prev_avg_px > 0 else 0.0
+                    reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), min(old_pk_pnl, old_rel_pnl))
+                    info["peak_price"] = round(max(float(current_price), curr_avg_px * (1.0 + reanchored_pnl / 100.0)), 6)
+                else:
+                    reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), ((old_pk_px - curr_avg_px) / curr_avg_px) * 100.0)
                 info["peak_pnl_pct"] = round(reanchored_pnl, 6)
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
                 updated = True

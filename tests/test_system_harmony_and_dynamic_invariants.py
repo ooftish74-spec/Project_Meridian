@@ -842,7 +842,9 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
     from src.execution.realtime_entry_monitor import RealtimeEntryMonitor
     import src.allocation.portfolio_optimizer as po_mod
 
-    # 1) UniversalExitEngine: 305720 (+2.5%, ₩2,339,400, peak=+5.5%) + 114800 (-2.4%, ₩2,179,226)
+    # 1) UniversalExitEngine: 305720 (+2.5%, ₩2,339,400, peak=+12.0%, trail_activated=True) + 114800 (-2.4%, ₩2,179,226, peak=+4.3165%, trail_activated=True)
+    # Even when individual legs carry high historical non-simultaneous peaks and trail_activated=True,
+    # active S14_PAIR_ALPHA pairs must NOT trigger Chandelier Trailing Exit or Catastrophic Peak Drawdown.
     # Hand-computed capital-weighted spread PnL:
     #   (2339400 * 2.5 + 2179226 * (-2.4)) / (2339400 + 2179226) = +0.136915%
     uee = UniversalExitEngine()
@@ -855,7 +857,8 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
             "entry_price": 13585.0,
             "current_price": 13925.0,
             "unrealized_pnl_pct": 2.50,
-            "peak_pnl_pct": 5.50,
+            "peak_pnl_pct": 12.00,
+            "trail_activated": True,
             "eval_krw": 2_339_400.0,
             "holding_days": 5.0,
             "holding_minutes": 7200.0,
@@ -867,7 +870,8 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
             "entry_price": 1231.0,
             "current_price": 1201.5,
             "unrealized_pnl_pct": -2.40,
-            "peak_pnl_pct": 0.0,
+            "peak_pnl_pct": 4.3165,
+            "trail_activated": True,
             "eval_krw": 2_179_226.0,
             "holding_days": 1.0,
             "holding_minutes": 1440.0,
@@ -932,6 +936,17 @@ def test_seven_latent_operational_bug_upgrades_closed_form(tmp_path, monkeypatch
     loaded_m = po._load_stream_metrics()
     assert "S10_MEGA_TREND" in loaded_m.get("_stream_signals", {})
     assert loaded_m.get("_market_data", {}).get("signal_cache", {}).get("qqq_ker") == pytest.approx(0.42, rel=1e-9)
+
+    # 6) PositionLedgerManager.update_hwm: averaging down / re-anchoring at lower avg_price (1257 -> 1205)
+    # must NOT fabricate phantom +4.315% peak PnL from old peak_price=1257 when old peak_pnl_pct was 0.0%
+    plm.record_entry("114800", entry_date="2026-10-27", entry_price=1257.0, quantity=0.0, stream_id="S14_PAIR_ALPHA")
+    hwm_init = plm.update_hwm("114800", current_price=1257.0, current_pnl_pct=0.0, avg_price=1257.0, quantity=0.0, trail_activate_threshold=2.0)
+    assert hwm_init["peak_pnl_pct"] == pytest.approx(0.0, abs=1e-9)
+    hwm_avg_down = plm.update_hwm("114800", current_price=1205.0, current_pnl_pct=0.0, avg_price=1205.0, quantity=1813.0, trail_activate_threshold=2.0)
+    assert hwm_avg_down["peak_pnl_pct"] == pytest.approx(0.0, abs=1e-9)
+    assert hwm_avg_down["peak_price"] == pytest.approx(1205.0, rel=1e-9)
+    assert hwm_avg_down["trail_activated"] is False
+
 
 
 

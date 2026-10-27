@@ -2674,7 +2674,7 @@ class StreamOrchestrator:
             }
             for _mk_copy in (
                 'expected_return', 'expected_return_pct', 'expected_alpha',
-                'tp_pct', 'sl_pct', 'confidence', 'is_hedge', 'is_market_neutral', 'beta',
+                'tp_pct', 'sl_pct', 'confidence', 'is_hedge', 'is_hedge_completion', 'is_market_neutral', 'beta',
             ):
                 if _rep.get(_mk_copy) is not None:
                     _netted_item[_mk_copy] = _rep[_mk_copy]
@@ -2816,10 +2816,12 @@ class StreamOrchestrator:
                     if not _partners and _eo.get('pair_partner'):
                         _partners = [str(_eo.get('pair_partner', '')).strip().upper()]
                     if _partners and str(_eo.get('action', '')).lower() in ('buy', 'add_on'):
-                        # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단)
+                        # 페어 트레이딩은 반드시 양쪽 레그가 동일 배치에서 동시에 신규 매수될 때만 집행 (기보유 종목 편승으로 인한 인버스 단독 매수 원천 차단;
+                        # 단, S14 Market-Neutral Hedge Completion Reserve가 기보유 롱 파트너 대비 과소 헷지 복원을 명시한 경우는 허용)
                         _active_partners = [
                             p for p in _partners
                             if p in _active_buy_tks
+                            or (bool(_eo.get('is_hedge_completion', False)) and _held_qty_by_ticker.get(p, 0) > 0)
                         ]
                         if not _active_partners:
                             logger.warning(
@@ -3438,7 +3440,7 @@ class StreamOrchestrator:
             'tp_pct', 'sl_pct', 'trail_activate_pct', 'trail_distance_pct', 'max_hold_days',
             'expected_return_pct', 'expected_return', 'expected_value', 'pair_id', 'pair_partner',
             'pair_vol_parity_scale',
-            'is_hedge', 'is_market_neutral', 'beta', 'gk_expected_alpha', 'score_z',
+            'is_hedge', 'is_hedge_completion', 'is_market_neutral', 'beta', 'gk_expected_alpha', 'score_z',
             'track', 'noise_stop_loss_exempt', 'margin_of_safety_pct', 'f_score',
             'ohlson_prob', 'roic_wacc_spread_pct',
         ]
@@ -3810,6 +3812,7 @@ class StreamOrchestrator:
                         target_order_krw = float(_hc_item['partner_eval_krw'])
                         current_eval_krw = float(_hc_item['inv_eval_krw'])
                         current_amount = current_eval_krw
+                        sig['is_hedge_completion'] = True
 
                 _dup_hold_ratio = 1.0 / 2.0
                 if current_qty > 0 and target_order_krw > 0:
@@ -4268,6 +4271,7 @@ class StreamOrchestrator:
                     or 'pair' in str(pos.get('strategy', '')).lower()
                 )
                 _is_s14_orphan_tl = False
+                _is_active_s14_pair_leg = False
                 if _is_s14_pos_tl:
                     if _is_kr_tk(str(_pos_ticker_up)) and _active_s14_kr_tickers and _pos_ticker_up not in _active_s14_kr_tickers:
                         _is_s14_orphan_tl = True
@@ -4296,6 +4300,7 @@ class StreamOrchestrator:
                                     _pair_leg_cnt += 1
                         if _pair_leg_cnt >= 2 and _pair_val_sum > 0:
                             pnl_pct = _pair_pnl_weighted / _pair_val_sum
+                            _is_active_s14_pair_leg = True
 
                 if _max_hold_days:
                     logger.info(f"    [DEBUG L4 Dynamic Math] {_pos_ticker}: days_held={days_held}, dynamic_max_hold={_max_hold_days:.2f}d, pos={pos}")
@@ -4344,10 +4349,11 @@ class StreamOrchestrator:
                 # ── Trailing Stop ──
                 # trail_activate_pct에 도달한 뒤 trail_distance_pct 이상 하락 시 청산
                 # 과거 또는 현재에 트레일링 활성화 조건을 1회 이상 달성한 경우, 고점 대비 하락폭 기준 청산
-                peak_pnl = float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else pnl_pct
+                # (단, 마켓뉴트럴 S14 활성 페어는 비동시 단일 레그 peak_pnl과 합산 스프레드 pnl_pct 간 Jensen 부등식 괴리 방지를 위해 제외)
+                peak_pnl = pnl_pct if _is_active_s14_pair_leg else (float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else pnl_pct)
                 drawdown_from_peak = peak_pnl - pnl_pct
-                is_trail_activated = bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate)
-                if (reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
+                is_trail_activated = (not _is_active_s14_pair_leg) and (bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate))
+                if (not _is_active_s14_pair_leg and reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
                     reason = (
                         f"[L4 Exit] Trail: peak={peak_pnl:+.1f}% → "
                         f"now={pnl_pct:+.1f}% (↓{drawdown_from_peak:.1f}% "
