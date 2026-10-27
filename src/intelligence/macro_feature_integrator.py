@@ -67,6 +67,10 @@ class MacroFeatureIntegrator:
         if short_features:
             features.update(short_features)
             sources.append('ShortSelling')
+        global_kr_features = self._integrate_global_regional_and_kr_debt_stress()
+        if global_kr_features:
+            features.update(global_kr_features)
+            sources.append('GlobalRegionalStress')
         result = {'macro_features': features, 'n_features': len(features), 'sources': sources, 'timestamp': datetime.now().isoformat()}
         self._save_to_signal_cache(features)
         logger.info(f"  ✅ MacroFeatureIntegrator: {len(features)}개 피처, sources={sources}")
@@ -172,19 +176,137 @@ class MacroFeatureIntegrator:
                 df = pd.read_csv(cpmi_file)
                 if len(df) >= 1:
                     row = df.iloc[-1]
-                    cpmi = float(row.get('PMI', row.get('Caixin_PMI', 0)))
-                    if cpmi == 0:
-                        proxy = row.get('US_Mfg_Emp_proxy', None)
-                        if proxy is not None and len(df) >= 2:
-                            prev_proxy = df.iloc[-2].get('US_Mfg_Emp_proxy', proxy)
-                            if prev_proxy and prev_proxy > 0:
-                                cpmi = round(50 + (float(proxy) / float(prev_proxy) - 1) * 500, 1)
-                                cpmi = float(np.clip(cpmi, 30, 70))
+                    cpmi = float(row.get('PMI', row.get('Caixin_PMI', 0)) or 0)
+                    cn_z60 = row.get('China_Composite_Z60', None)
+                    if cn_z60 is not None and pd.notna(cn_z60):
+                        features['china_recession_stress_z'] = round(-float(cn_z60), 4)
                     if cpmi > 0:
                         features['cross_caixin_pmi'] = round(cpmi, 1)
-                        features['cross_caixin_signal'] = round(np.clip((cpmi - 50) / 5, -1, 1), 3)
+                        _c_mid, _c_div = 50.0, 5.0  # hardcode-ok: PMI diffusion midpoint & scale
+                        features['cross_caixin_signal'] = round(float(np.clip((cpmi - _c_mid) / _c_div, -1, 1)), 3)
             except Exception as e:
                 logger.error(f'  Caixin PMI 로드 실패: {e}', exc_info=True)
+        return features
+
+    def _integrate_global_regional_and_kr_debt_stress(self) -> Dict:
+        """5대 글로벌 단층선(미국 장기채/SKEW, 유럽 불안, 한국 가계부채/내수, 중·일 침체, 우크라이나·이란 유가/GSCPI) 통합."""
+        features: Dict[str, Any] = {}
+        sc = self._signal_cache if isinstance(self._signal_cache, dict) else {}
+
+        # 1. US High Interest Rate Term Premium & Tail Skew / GSCPI
+        us10y = sc.get('US10Y', sc.get('us10y'))
+        us30y = sc.get('US30Y', sc.get('us30y'))
+        ffr = sc.get('FEDFUNDS', sc.get('federal_funds_rate'))
+        _tp_scale = 0.75  # hardcode-ok: term premium Z normalization scale (%p)
+        if us10y is not None and ffr is not None:
+            tp_10 = float(us10y) - float(ffr)
+            features['us_term_premium_10y_ffr'] = round(tp_10, 4)
+            features['us_term_premium_z'] = round(tp_10 / _tp_scale, 4)
+        if us30y is not None and ffr is not None:
+            tp_30 = float(us30y) - float(ffr)
+            features['us_term_premium_30y_ffr'] = round(tp_30, 4)
+            features['us_term_premium_z'] = round(max(float(features.get('us_term_premium_z') or 0.0), tp_30 / 1.0), 4)
+
+        try:
+            _mp = _DATA / 'macro' / 'macro_data.parquet'
+            if _mp.exists():
+                _df_m = pd.read_parquet(_mp)
+                if 'cboe_skew' in _df_m.columns and not _df_m['cboe_skew'].dropna().empty:
+                    _sk_s = _df_m['cboe_skew'].dropna()
+                    _sk_cur = float(_sk_s.iloc[-1])
+                    _sk_mu, _sk_sd = 130.0, 12.0  # hardcode-ok: CBOE SKEW structural neutral mean & scale
+                    if len(_sk_s) >= 20 and float(_sk_s.tail(60).std(ddof=1)) > 1.0:
+                        _sk_mu = float(_sk_s.tail(60).mean())
+                        _sk_sd = float(_sk_s.tail(60).std(ddof=1))
+                    features['cboe_skew'] = round(_sk_cur, 2)
+                    features['cboe_skew_stress_z'] = round(max((_sk_cur - _sk_mu) / _sk_sd, (_sk_cur - 130.0) / 12.0), 4)  # hardcode-ok
+                if 'gscpi' in _df_m.columns and not _df_m['gscpi'].dropna().empty:
+                    _gs_cur = float(_df_m['gscpi'].dropna().iloc[-1])
+                    features['gscpi'] = round(_gs_cur, 4)
+                    features['gscpi_stress_z'] = round(_gs_cur, 4)
+        except Exception as _me:
+            logger.debug(f'  macro_data.parquet SKEW/GSCPI skip: {_me}')
+
+        # 2. Global Regional & Geopolitical Stress JSON (Europe / China / Japan / Oil)
+        grs_file = _DATA / 'raw' / 'cross_market' / 'global_regional_stress.json'
+        if grs_file.exists():
+            try:
+                grs = json.loads(grs_file.read_text())
+                comps = grs.get('composites') or {}
+                for k, v in comps.items():
+                    if isinstance(v, (int, float)):
+                        features[k] = round(float(v), 4)
+                tks = grs.get('tickers') or {}
+                for _tk_key, _out_key in (  # hardcode-ok: L0 regional ETF keys
+                    ('EWQ', 'ewq_change_20d'),
+                    ('EWG', 'ewg_change_20d'),
+                    ('EWU', 'ewu_change_20d'),
+                    ('EUFN', 'eufn_change_20d'),
+                    ('FXI', 'fxi_change_20d'),
+                    ('CL=F', 'wti_change_20d'),
+                ):
+                    if _tk_key in tks and 'ret_20d_pct' in tks[_tk_key]:
+                        features[_out_key] = round(float(tks[_tk_key]['ret_20d_pct']), 3)
+            except Exception as _ge:
+                logger.debug(f'  global_regional_stress.json load skip: {_ge}')
+
+        # Fallback from signal_cache when global_regional_stress.json is not yet populated
+        if 'wti_5d_z' not in features:
+            wti_cur = sc.get('WTI', sc.get('wti'))
+            wti_prev = sc.get('wti_prev')
+            wti_1m = sc.get('wti_change_1m')
+            wti_1d = sc.get('wti_change_1d')
+            _wti_z_candidates = [0.0]
+            _wti_1m_scale, _wti_1d_scale, _wti_lvl_base, _wti_lvl_sd = 6.0, 2.2, 80.0, 12.0  # hardcode-ok: WTI empirical scales
+            if wti_1m is not None:
+                _wti_z_candidates.append(float(wti_1m) / _wti_1m_scale)
+            if wti_1d is not None:
+                _wti_z_candidates.append(float(wti_1d) / _wti_1d_scale)
+            if wti_cur is not None and wti_prev is not None and float(wti_prev) > 0:
+                _wti_z_candidates.append((max(float(wti_cur), float(wti_prev)) - _wti_lvl_base) / _wti_lvl_sd)
+            wti_est_z = round(float(max(_wti_z_candidates)), 4)
+            features['wti_5d_z'] = wti_est_z
+            features['geopolitical_oil_supply_z'] = wti_est_z
+
+        # 3. Korea Household Debt & Domestic vs Export Bifurcation Stress
+        sec_mom = sc.get('sector_momentum') if isinstance(sc.get('sector_momentum'), dict) else {}
+        dom_debt_tks = ('117700', '091170', '227550', '143860', '244580')  # hardcode-ok: L0 KR construction/bank/domestic ETFs
+        dom_moms = []
+        for _dtk in dom_debt_tks:
+            _m = sec_mom.get(_dtk)
+            if isinstance(_m, dict) and _m.get('momentum_1m') is not None:
+                dom_moms.append(float(_m['momentum_1m']))
+        kosdaq_cur = sc.get('kosdaq', sc.get('KOSDAQ'))
+        kosdaq_ma20 = sc.get('kosdaq_ma20')
+        kosdaq_gap_pct = 0.0
+        if kosdaq_cur is not None and kosdaq_ma20 is not None and float(kosdaq_ma20) > 0:
+            kosdaq_gap_pct = (float(kosdaq_cur) / float(kosdaq_ma20) - 1.0) * 100.0
+        _dom_scale, _kd_scale = 8.0, 4.0  # hardcode-ok: domestic sector 1M return & KOSDAQ MA20 gap % scales
+        dom_stress_z = (-float(np.mean(dom_moms)) / _dom_scale) if dom_moms else 0.0
+        kd_stress_z = -kosdaq_gap_pct / _kd_scale
+        kr_debt_z = round(float(0.6 * dom_stress_z + 0.4 * kd_stress_z), 4)  # hardcode-ok: 60/40 blend
+        features['kr_debt_domestic_stress_z'] = kr_debt_z
+
+        exp_file = _RESULTS / 'export_macro_snapshot.json'
+        if exp_file.exists():
+            try:
+                exp_d = json.loads(exp_file.read_text())
+                exp_yoy = float(exp_d.get('export_10d_yoy', exp_d.get('export_total_yoy', 0.0)) or 0.0)
+                _exp_scale = 20.0  # hardcode-ok: export YoY % normalization scale
+                features['kr_export_domestic_divergence_z'] = round(float(exp_yoy / _exp_scale + kr_debt_z) / 2.0, 4)
+            except Exception:
+                pass
+
+        # 4. Composite 5-Axis Global Macro & Geopolitical Stress Z-Score
+        stress_axes = [
+            float(features.get('us_term_premium_z') or 0.0),
+            float(features.get('eu_instability_stress_z') or 0.0),
+            float(features.get('kr_debt_domestic_stress_z') or 0.0),
+            float(features.get('china_recession_stress_z') or 0.0),
+            float(features.get('geopolitical_oil_supply_z') or 0.0),
+        ]
+        pos_axes = [max(0.0, x) for x in stress_axes]
+        features['global_macro_stress_z'] = round(float(np.mean(pos_axes)), 4)
         return features
 
     def _integrate_news_sentiment(self) -> Dict:
@@ -345,7 +467,23 @@ class MacroFeatureIntegrator:
             def _mutate(existing):
                 existing = existing if isinstance(existing, dict) else {}
                 existing['macro_features'] = _feat
-                for _top_k in ('fred_hy_spread', 'fred_hy_spread_raw', 'credit_stress'):
+                _promote_keys = (
+                    'fred_hy_spread',
+                    'fred_hy_spread_raw',
+                    'credit_stress',
+                    'wti_5d_z',
+                    'geopolitical_oil_supply_z',
+                    'eu_instability_stress_z',
+                    'eu_banking_stress_z',
+                    'china_recession_stress_z',
+                    'japan_stagflation_stress_z',
+                    'kr_debt_domestic_stress_z',
+                    'us_term_premium_z',
+                    'cboe_skew_stress_z',
+                    'gscpi_stress_z',
+                    'global_macro_stress_z',
+                )
+                for _top_k in _promote_keys:
                     if _top_k in _feat:
                         existing[_top_k] = _feat[_top_k]
                 existing['macro_features_ts'] = datetime.now().isoformat()

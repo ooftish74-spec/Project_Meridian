@@ -534,6 +534,67 @@ def test_zero_fragmentation_and_no_fabricated_fallbacks(tmp_path, monkeypatch):
     assert infer_canonical_stream_and_track("XLE", holding_info={"strategy": "us_sector_pair_alpha"}) == ("S14_PAIR_ALPHA", "TRACK_1_TACTICAL")
 
 
+def test_global_5_axis_macro_stress_and_stagflation_synergy(monkeypatch, tmp_path):
+    """Verify 5-axis global macro stress integration (US term premium, Europe, KR debt, China, Geopolitical Oil) and Scenario 6/8 synergy."""
+    from src.intelligence import macro_feature_integrator as mfi_mod
+    from src.risk.master_scenario_engine import MasterScenarioEngine
+
+    monkeypatch.setattr(mfi_mod, "_DATA", tmp_path / "data")
+    monkeypatch.setattr(mfi_mod, "_RESULTS", tmp_path / "results")
+    (tmp_path / "data" / "raw" / "cross_market").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "results").mkdir(parents=True, exist_ok=True)
+
+    integrator = mfi_mod.MacroFeatureIntegrator()
+    integrator._signal_cache = {
+        "US10Y": 4.99,
+        "US30Y": 5.33,
+        "FEDFUNDS": 3.75,
+        "WTI": 101.15,
+        "wti_prev": 107.89,
+        "wti_change_1m": 12.0,
+        "KOSDAQ": 764.1,
+        "kosdaq_ma20": 834.43,
+        "sector_momentum": {
+            "117700": {"momentum_1m": -16.0},
+            "091170": {"momentum_1m": -16.0},
+        },
+    }
+    feats = integrator._integrate_global_regional_and_kr_debt_stress()
+
+    # Closed-form check 1: US Term Premium (10Y - FFR = 1.24, 30Y - FFR = 1.58, Z = max(1.24/0.75, 1.58) = 1.6533)
+    assert feats["us_term_premium_10y_ffr"] == pytest.approx(1.24, rel=1e-9)
+    assert feats["us_term_premium_30y_ffr"] == pytest.approx(1.58, rel=1e-9)
+    assert feats["us_term_premium_z"] == pytest.approx(round(1.24 / 0.75, 4), rel=1e-9)
+
+    # Closed-form check 2: KR Household Debt & Domestic Stress Z
+    # dom_stress_z = -(-16.0)/8.0 = 2.0; kd_gap_pct = (764.1/834.43 - 1)*100 = -8.428508... -> kd_stress_z = 2.107127...
+    expected_kd_z = -((764.1 / 834.43 - 1.0) * 100.0) / 4.0
+    expected_kr_debt_z = round(0.6 * 2.0 + 0.4 * expected_kd_z, 4)
+    assert feats["kr_debt_domestic_stress_z"] == pytest.approx(expected_kr_debt_z, rel=1e-9)
+
+    # Closed-form check 3: Geopolitical Oil Z from WTI 107.89 (> 80 base, scale 12 -> (107.89 - 80)/12 = 2.3242)
+    assert feats["geopolitical_oil_supply_z"] == pytest.approx(round((107.89 - 80.0) / 12.0, 4), rel=1e-9)
+
+    # Closed-form check 4: MasterScenarioEngine Scenario 6 triggers via stagflation synergy (WTI Z + GSCPI + US Term Premium)
+    eng = MasterScenarioEngine()
+    sc_res = eng.evaluate_scenarios({
+        "signal_cache": {
+            "geopolitical_oil_supply_z": 2.3242,
+            "gscpi_stress_z": 1.20,
+            "us_term_premium_z": 1.85,
+            "global_macro_stress_z": 1.90,
+            "cboe_skew_stress_z": 1.80,
+            "eu_banking_stress_z": 2.60,
+            "kr_debt_domestic_stress_z": 2.55,
+        }
+    })
+    active_ids = {s["scenario_id"] for s in sc_res["active_scenarios"]}
+    assert "SCENARIO_6" in active_ids
+    assert "SCENARIO_8" in active_ids
+    assert sc_res["net_scenario_regime"] == "crash"
+
+
+
 
 
 

@@ -145,22 +145,40 @@ class CrossMarketCollector:
             return None
 
     def collect_caixin_pmi(self) -> Optional[pd.DataFrame]:
-        """중국 Caixin 제조업/서비스 PMI 대리 지표 수집."""
-        logger.info('📊 중국 PMI (Caixin proxy) 수집...')
+        """중국 Caixin 제조업/서비스 PMI 및 실물 침체 대리 지표 수집 (FXI / MCHI / ^HSI 60일 경험적 Z-Score 기반)."""
+        logger.info('📊 중국 PMI & 실물 침체 (FXI/MCHI/^HSI) 수집...')
         results = pd.DataFrame()
-        FRED_CHINA_SERIES = [('MANEMP', 'US_Mfg_Emp_proxy')]
-        fred_start_date = (datetime.now() - timedelta(days=365 * 5)).strftime('%Y-%m-%d')
-        for series_id, col_name in FRED_CHINA_SERIES:
-            s = self._safe_fred_get_series(series_id, observation_start=fred_start_date)
-            if s is not None and (not s.empty):
-                results[col_name] = s
-                logger.info(f"  {series_id}: {len(s)}행")
-                break
-        if results.empty:
-            df = self._yf_fetch_with_retry('FXI', period='3y', n_retry=3)
-            if df is not None and (not df.empty):
-                results['China_FXI_Proxy'] = df['Close'].resample('ME').last()
-                logger.info('  FXI ETF 대리 지표 사용')
+        cn_tickers = ['FXI', 'MCHI', '^HSI']  # hardcode-ok: L0 China equity benchmark proxies
+        series_dict = {}
+        for tk in cn_tickers:
+            df = self._yf_fetch_with_retry(tk, period='3y', n_retry=3)
+            if df is not None and not df.empty and 'Close' in df.columns:
+                s = pd.to_numeric(df['Close'].squeeze(), errors='coerce').dropna()
+                if len(s) >= 20:
+                    s.index = pd.to_datetime(s.index).tz_localize(None).normalize()
+                    s = s[~s.index.duplicated(keep='last')].sort_index()
+                    series_dict[tk] = s
+        if series_dict:
+            panel = pd.DataFrame(series_dict).sort_index().ffill(limit=5).dropna(how='all')
+            z_cols = []
+            for tk in panel.columns:
+                s = panel[tk]
+                ma60 = s.rolling(60, min_periods=20).mean()
+                sd60 = s.rolling(60, min_periods=20).std()
+                z_s = (s - ma60) / (sd60 + 1e-10)
+                panel[f'{tk}_Z60'] = z_s
+                z_cols.append(f'{tk}_Z60')
+            comp_z = panel[z_cols].mean(axis=1)
+            panel['China_Composite_Z60'] = comp_z
+            _pmi_mid, _pmi_scale, _pmi_lo, _pmi_hi = 50.0, 2.5, 35.0, 65.0  # hardcode-ok: diffusion index scaling
+            panel['Caixin_PMI'] = (
+                _pmi_mid + _pmi_scale * comp_z
+            ).clip(lower=_pmi_lo, upper=_pmi_hi).round(2)
+            if 'FXI' in panel.columns:  # hardcode-ok: L0 China benchmark key
+                panel['China_FXI_Proxy'] = panel['FXI']  # hardcode-ok: L0 China benchmark key
+            results = panel.resample('ME').last().dropna(how='all')
+            if not panel.empty:
+                results.iloc[-1] = panel.iloc[-1]
         if results.empty:
             old_df = self._load_csv_ffill(DATA_DIR / 'china_pmi.csv')
             if old_df is not None and (not old_df.empty):
@@ -168,10 +186,111 @@ class CrossMarketCollector:
         if not results.empty:
             results = results.dropna(how='all')
             atomic_write_dataframe(results, DATA_DIR / 'china_pmi.csv', file_format='csv')
-            logger.info(f"  ✅ 중국 PMI proxy: {len(results)}개월")
+            logger.info(f"  ✅ 중국 PMI & 실물 지표: {len(results)}개월")
             return results
         logger.warning('  ⚠️ 중국 PMI 모든 소스 실패 → 스킵')
         return None
+
+    def collect_global_regional_and_geopolitical_stress(self) -> Dict:
+        """5대 글로벌 거시·지정학 단층선(미국 금리/SKEW, 유럽 불안, 중/일 침체, 우크라이나·이란 전쟁 유가) 실시간 Z-Score 수집."""
+        logger.info('🌍 글로벌 5대 리스크 단층선 (유럽/중국/일본/지정학/고금리) 수집...')
+        benchmark_groups = {  # hardcode-ok: L0 global regional & geopolitical macro benchmarks
+            'europe': ['EWQ', 'EWG', 'EWU', 'FEZ', 'EUFN', 'EURUSD=X'],
+            'china': ['FXI', 'MCHI', 'KWEB', '^HSI'],
+            'japan': ['^N225', 'EWJ', 'JPY=X'],
+            'geopolitics': ['CL=F', 'GC=F', 'XLE', 'ITA'],
+            'us_stress': ['^TNX', '^TYX', 'IWM', 'HYG', 'LQD', '^SKEW'],
+        }
+        metrics_by_tk: Dict[str, Dict[str, float]] = {}
+        _win60, _win20, _win5, _min_len = 60, 20, 5, 22  # hardcode-ok: rolling windows
+        for grp, tks in benchmark_groups.items():
+            for tk in tks:
+                if tk in metrics_by_tk:
+                    continue
+                try:
+                    df = self._yf_fetch_with_retry(tk, period='1y', n_retry=2)
+                    if df is None or df.empty or 'Close' not in df.columns:
+                        continue
+                    s = pd.to_numeric(df['Close'].squeeze(), errors='coerce').dropna()
+                    if len(s) < _min_len:
+                        continue
+                    cur = float(s.iloc[-1])
+                    r5 = (cur / float(s.iloc[-6]) - 1.0) * 100.0 if len(s) >= 6 else 0.0
+                    r20 = (cur / float(s.iloc[-21]) - 1.0) * 100.0 if len(s) >= 21 else 0.0
+                    r60 = (cur / float(s.iloc[-61]) - 1.0) * 100.0 if len(s) >= 61 else 0.0
+                    ma60 = float(s.tail(_win60).mean())
+                    sd60 = float(s.tail(_win60).std(ddof=1))
+                    z60 = (cur - ma60) / sd60 if sd60 > 1e-9 else 0.0
+                    r5_series = s.pct_change(_win5).dropna().tail(_win60) * 100.0
+                    r5_sd = float(r5_series.std(ddof=1)) if len(r5_series) >= 10 else 0.0
+                    z5 = r5 / r5_sd if r5_sd > 1e-9 else 0.0
+                    metrics_by_tk[tk] = {
+                        'group': grp,
+                        'last': round(cur, 4),
+                        'ret_5d_pct': round(r5, 3),
+                        'ret_20d_pct': round(r20, 3),
+                        'ret_60d_pct': round(r60, 3),
+                        'z_60d': round(z60, 4),
+                        'z_5d': round(z5, 4),
+                    }
+                except Exception as _e:
+                    logger.debug(f'  global stress ticker skip ({tk}): {_e}')
+
+        def _z60(sym: str) -> Optional[float]:
+            m = metrics_by_tk.get(sym)
+            return float(m['z_60d']) if m and 'z_60d' in m else None
+
+        def _z5(sym: str) -> Optional[float]:
+            m = metrics_by_tk.get(sym)
+            return float(m['z_5d']) if m and 'z_5d' in m else None
+
+        eu_eq_tks = ['EWQ', 'EWG', 'EWU', 'FEZ', 'EUFN']  # hardcode-ok: L0 Europe ETFs
+        eu_zs = [-_z60(t) for t in eu_eq_tks if _z60(t) is not None]
+        eu_stress_z = float(np.mean(eu_zs)) if eu_zs else 0.0
+        eu_bank_z = -float(_z60('EUFN')) if _z60('EUFN') is not None else eu_stress_z  # hardcode-ok: L0 Europe banking ETF
+
+        cn_eq_tks = ['FXI', 'MCHI', 'KWEB', '^HSI']  # hardcode-ok: L0 China ETFs
+        cn_zs = [-_z60(t) for t in cn_eq_tks if _z60(t) is not None]
+        cn_stress_z = float(np.mean(cn_zs)) if cn_zs else 0.0
+
+        jp_eq_tks = ['^N225', 'EWJ']  # hardcode-ok: L0 Japan benchmarks
+        jp_zs = [-_z60(t) for t in jp_eq_tks if _z60(t) is not None]
+        jp_stress_z = float(np.mean(jp_zs)) if jp_zs else 0.0
+
+        oil_z60 = _z60('CL=F') or 0.0
+        oil_z5 = _z5('CL=F') or 0.0
+        geopol_oil_z = max(oil_z60, oil_z5)
+
+        us_stress_parts = [
+            v for v in (
+                _z60('^TNX'),
+                -_z60('IWM') if _z60('IWM') is not None else None,  # hardcode-ok: L0 Russell 2000
+                _z60('^SKEW'),
+            )
+            if v is not None
+        ]
+        us_rate_smallcap_z = float(np.mean(us_stress_parts)) if us_stress_parts else 0.0
+
+        out = {
+            'timestamp': datetime.now().isoformat(),
+            'composites': {
+                'eu_instability_stress_z': round(eu_stress_z, 4),
+                'eu_banking_stress_z': round(eu_bank_z, 4),
+                'china_recession_stress_z': round(cn_stress_z, 4),
+                'japan_stagflation_stress_z': round(jp_stress_z, 4),
+                'geopolitical_oil_supply_z': round(geopol_oil_z, 4),
+                'wti_5d_z': round(geopol_oil_z, 4),
+                'us_high_rate_smallcap_stress_z': round(us_rate_smallcap_z, 4),
+            },
+            'tickers': metrics_by_tk,
+        }
+        if metrics_by_tk:
+            atomic_write_json(DATA_DIR / 'global_regional_stress.json', out, indent=2, ensure_ascii=False)
+            logger.info(
+                f"  ✅ 글로벌 단층선 Z-Score: EU={eu_stress_z:+.2f} (Bank={eu_bank_z:+.2f}), "
+                f"CN={cn_stress_z:+.2f}, JP={jp_stress_z:+.2f}, Oil={geopol_oil_z:+.2f}, US_Rate={us_rate_smallcap_z:+.2f}"
+            )
+        return out
 
     def collect_ism_pmi(self) -> Optional[pd.DataFrame]:
         """미국 ISM 제조업/서비스 PMI 대리 지표 수집."""
@@ -339,6 +458,8 @@ class CrossMarketCollector:
         results['us_yield_curve'] = curve is not None
         betas = self.compute_sector_betas()
         results['sector_betas'] = len(betas) > 0
+        global_stress = self.collect_global_regional_and_geopolitical_stress()
+        results['global_regional_stress'] = bool(global_stress.get('tickers'))
         ok = sum((1 for v in results.values() if v))
         logger.info(f"\n✅ Cross-Market 수집 완료: {ok}/{len(results)}")
         for k, v in results.items():

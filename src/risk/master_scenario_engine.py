@@ -128,6 +128,15 @@ class MasterScenarioEngine:
             p_crash_trans = p_crash_trans or 0.0
 
         down_trans_prob = min(1.0, max(0.0, p_bear_trans + p_crash_trans))
+        _m_feats_pred = signal_cache.get('macro_features') if isinstance(signal_cache.get('macro_features'), dict) else {}
+        global_macro_stress_z = _safe_float(signal_cache.get('global_macro_stress_z', _m_feats_pred.get('global_macro_stress_z'))) or 0.0
+        cboe_skew_stress_z = _safe_float(signal_cache.get('cboe_skew_stress_z', _m_feats_pred.get('cboe_skew_stress_z'))) or 0.0
+        _gm_cut, _gm_w, _sk_cut, _sk_w, _boost_cap = 1.2, 0.15, 1.5, 0.08, 0.25  # hardcode-ok: global macro tail-risk probability boost parameters
+        _macro_tail_boost = min(
+            _boost_cap,
+            max(0.0, (global_macro_stress_z - _gm_cut) * _gm_w) + max(0.0, (cboe_skew_stress_z - _sk_cut) * _sk_w),
+        )
+        down_trans_prob = min(1.0, down_trans_prob + _macro_tail_boost)
 
         # 2. OU-Kalman VIX Drift & GARCH(1,1) Volatility Forecast
         vix_hist = signal_cache.get('vix_history') or []
@@ -221,6 +230,8 @@ class MasterScenarioEngine:
             'ois_z': round(float(ois_z), 4),
             'lead_lag_impulse_z': round(float(lead_lag_impulse_z), 4),
             'ewy_change_1d': round(float(ewy_chg), 4),
+            'global_macro_stress_z': round(float(global_macro_stress_z), 4),
+            'cboe_skew_stress_z': round(float(cboe_skew_stress_z), 4),
         }
 
     @staticmethod
@@ -586,12 +597,25 @@ class MasterScenarioEngine:
         # ══════════════════════════════════════════════════════════════════
         # Scenario 6: Stagflationary Supply Shock (Crash) vs Disinflation Melt-Up (Surge)
         # ══════════════════════════════════════════════════════════════════
-        wti_5d_z = _safe_float(signal_cache.get('wti_5d_z'))
+        wti_5d_z = _safe_float(
+            signal_cache.get(
+                'wti_5d_z',
+                macro_feats.get(
+                    'wti_5d_z',
+                    signal_cache.get('geopolitical_oil_supply_z', macro_feats.get('geopolitical_oil_supply_z')),
+                ),
+            )
+        )
         wti_chg_1d = _safe_float(signal_cache.get('wti_change_1d')) or 0.0
         us10y_chg_1d = _safe_float(signal_cache.get('us10y_change_1d')) or 0.0
         wti_scale = max(float(pget('scenarios.s6.wti_1d_scale_pct', 2.2)), _EPS)
         if wti_5d_z is None:
             wti_5d_z = (wti_chg_1d / wti_scale) if (wti_chg_1d > 0 and us10y_chg_1d >= 0) else 0.0
+        gscpi_z = _safe_float(signal_cache.get('gscpi_stress_z', macro_feats.get('gscpi_stress_z'))) or 0.0
+        us_tp_z = _safe_float(signal_cache.get('us_term_premium_z', macro_feats.get('us_term_premium_z'))) or 0.0
+        _stag_min_wti, _stag_w, _stag_cap = 1.5, 0.35, 1.2  # hardcode-ok: stagflation oil + GSCPI + term premium synergy parameters
+        if wti_5d_z >= _stag_min_wti and (gscpi_z > 0.0 or us_tp_z > 1.0):
+            wti_5d_z = wti_5d_z + min(_stag_cap, _stag_w * max(0.0, gscpi_z) + _stag_w * max(0.0, us_tp_z - 1.0))
 
         if wti_5d_z >= s6_wti_z_thresh:
             p_s6 = _norm_cdf(wti_5d_z - s6_wti_z_thresh + 0.5)
@@ -658,7 +682,11 @@ class MasterScenarioEngine:
         ted_spread_z = _safe_float(signal_cache.get('ted_spread_z'))
         if ted_spread_z is None:
             credit_stress = _safe_float(signal_cache.get('credit_stress', macro_feats.get('credit_stress'))) or 0.0
-            ted_spread_z = credit_stress if credit_stress >= s8_ted_z_thresh else 0.0
+            eu_bank_z = _safe_float(signal_cache.get('eu_banking_stress_z', macro_feats.get('eu_banking_stress_z'))) or 0.0
+            kr_debt_z = _safe_float(signal_cache.get('kr_debt_domestic_stress_z', macro_feats.get('kr_debt_domestic_stress_z'))) or 0.0
+            regional_credit_z = min(eu_bank_z, kr_debt_z) if (eu_bank_z > 0.0 and kr_debt_z > 0.0) else 0.0
+            cand_credit_z = max(credit_stress, regional_credit_z)
+            ted_spread_z = cand_credit_z if cand_credit_z >= s8_ted_z_thresh else 0.0
 
         if ted_spread_z >= s8_ted_z_thresh:
             p_s8 = _norm_cdf(ted_spread_z - s8_ted_z_thresh + 0.5)
