@@ -751,6 +751,83 @@ def test_corporate_after_tax_cagr_closed_form_and_allocator_signal_prior_harmony
     assert port_cagr_eval["meets_50pct_cagr_hurdle"] is True
 
 
+def test_krx_intraday_churn_prevention_and_s14_pair_spread_stop_invariants():
+    """Verify:
+    1)IntradayCapitalRouter never sells active buy signals ('012750' in active_signal_ev_map) or profitable swing positions (return_pct > +0.5%).
+    2) LeverageJudge.check_etf_stops exempts S14_PAIR_ALPHA hedge leg ('114800' paired with '305720') from single-leg Hard SL.
+    3) StreamOrchestrator._evaluate_exits evaluates active S14_PAIR_ALPHA pairs via capital-weighted spread PnL.
+    """
+    from scripts.stream_orchestrator import StreamOrchestrator
+    from src.execution.intraday_capital_router import IntradayCapitalRouter
+    from src.risk.leverage_judge import LeverageJudge
+
+    router = IntradayCapitalRouter()
+    portfolio = {
+        "holdings": {
+            "012750": {"ticker": "012750", "name": "에스원", "qty": 7, "current_price": 93900.0, "return_pct": -1.5, "stream_id": "S2"},
+            "278470": {"ticker": "278470", "name": "에이피알", "qty": 1, "current_price": 281000.0, "return_pct": 1.44, "stream_id": "S2"},
+        }
+    }
+    market_data = {
+        "usdkrw": 1380.0,
+        "holdings_ev": {"012750": 1.07, "278470": 0.90},
+        "active_signal_ev_map": {"012750": 1.07},
+        "ticker_atr_pct": {"032640": 1.5, "012750": 1.5, "278470": 1.5},
+    }
+    candidate_sigs = [
+        {"ticker": "032640", "name": "LG유플러스", "price": 14170.0, "win_rate": 0.85, "tp_pct": 5.0, "sl_pct": 1.5, "side": "buy", "stream_id": "S2"},
+    ]
+    swap_orders = router.route_intraday_capital(candidate_sigs, market_data, total_cash_krw=0.0, portfolio=portfolio)
+    assert swap_orders == []
+
+    # 2) LeverageJudge exempts S14_PAIR_ALPHA hedge leg 114800 from single-leg Hard SL when paired with 305720
+    lj = LeverageJudge()
+    pair_positions = {
+        "305720": {
+            "ticker": "305720",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "kr_sector_pair_alpha",
+            "quantity": 168,
+            "entry_price": 13375.0,
+            "current_price": 13855.0,
+            "unrealized_pnl_pct": 3.59,
+            "eval_krw": 2_327_640.0,
+        },
+        "114800": {
+            "ticker": "114800",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "kr_sector_pair_alpha",
+            "quantity": 6,
+            "entry_price": 1251.0,
+            "current_price": 1207.0,
+            "unrealized_pnl_pct": -3.52,
+            "eval_krw": 7_242.0,
+        },
+    }
+    lj_exits = lj.check_etf_stops(
+        pair_positions,
+        market_data={"date": "2026-10-27", "signal_cache": {"vkospi": 17.3, "vix": 17.5}},
+        regime="caution",
+    )
+    assert lj_exits == []
+
+    # 3) StreamOrchestrator._evaluate_exits computes capital-weighted spread PnL (+3.5679% > 0) for active S14 pair
+    orch = StreamOrchestrator(exec_mode="shadow")
+    orch._latest_signals = {
+        "S14_PAIR_ALPHA": [
+            {"ticker": "305720", "direction": "long", "stream_id": "S14_PAIR_ALPHA"},
+            {"ticker": "114800", "direction": "long", "stream_id": "S14_PAIR_ALPHA"},
+        ]
+    }
+    so_exits = orch._evaluate_exits(
+        market_data={"signal_cache": {"vix": 17.5, "vkospi": 17.3}},
+        regime="caution",
+        portfolio={"positions": pair_positions},
+    )
+    assert [o for o in so_exits if o.get("ticker") == "114800"] == []
+
+
+
 
 
 

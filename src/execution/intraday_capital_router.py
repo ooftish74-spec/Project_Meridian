@@ -712,7 +712,18 @@ class IntradayCapitalRouter:
                                 h_tradable, _ = is_ticker_tradable_now(h_ticker)
                                 if not h_tradable:
                                     continue
-                            eff_h_ev = max(float(h_ev), active_sig_ev_map.get(str(h_ticker).strip().upper(), 0.0))
+                            h_tk_up = str(h_ticker).strip().upper()
+                            if h_tk_up in active_sig_ev_map:
+                                # 현재 사이클에 활성 매수 시그널이 존재하는 보유 종목은 자본 스왑 매도 대상에서 원천 제외
+                                continue
+                            h_ret_pct = float(
+                                (h_pos_info.get('return_pct', h_pos_info.get('unrealized_pnl_pct', 0.0)) if isinstance(h_pos_info, dict) else 0.0)
+                                or 0.0
+                            )
+                            if h_ret_pct > (1.0 / 2.0):
+                                # 수익 구간(+0.5% 초과) 진행 중인 우위 보유 종목은 조기 스왑 매도에서 보호 (Cut losers, let winners run)
+                                continue
+                            eff_h_ev = max(float(h_ev), active_sig_ev_map.get(h_tk_up, 0.0))
                             eligible_holdings[h_ticker] = eff_h_ev
 
                     if eligible_holdings:
@@ -797,6 +808,10 @@ class IntradayCapitalRouter:
                                 min_buy_amount = eff_price_krw * 1.02
                                 sell_qty_needed = max(1, math.ceil(min_buy_amount / lowest_price_krw))
                                 sell_qty = min(lowest_qty, sell_qty_needed)
+                                _rem_stub_krw = (lowest_qty - sell_qty) * lowest_price_krw
+                                _stub_floor_krw = (100.0 + 100.0) * 1000.0
+                                if 0 < _rem_stub_krw < _stub_floor_krw:
+                                    sell_qty = lowest_qty
                                 swap_freed_krw = sell_qty * lowest_price_krw
                                 buy_qty = math.floor(swap_freed_krw / eff_price_krw)
 

@@ -1474,11 +1474,36 @@ class StreamOrchestrator:
             _US_INV_SWAP_BLOCK = {'SOXS', 'SQQQ', 'PSQ', 'SH', 'SDOW', 'SPXS', 'SPXU', 'QID'} if _us_eff_reg_swap not in ('bear', 'crash') else set()
             _all_active_long_sigs = []
             _candidate_sigs = []
+            _SWAP_CANON_MAP = {
+                'S0_BETA': 'S0',
+                'S1_EDGE': 'S1',
+                'S2_ML_ALPHA': 'S2',
+                'S3_ACTIVE_MACRO': 'S3',
+                'S10': 'S10_MEGA_TREND',
+                'S11': 'S11_HIGHBETA_SNIPER',
+                'S12': 'S12_DERIVATIVE_SQUEEZE',
+                'S13': 'S13_JAPAN_ALPHA',
+                'S14': 'S14_PAIR_ALPHA',
+            }
+            _last_init_b_map = getattr(self, '_last_initial_stream_budgets', None) or {}
+            _last_held_b_map = getattr(self, '_last_stream_held_krw', None) or {}
             for _sid, _sigs in all_signals.items():
                 if _sid in ('S0', 'S4', 'S5', 'S_YIELD'):
                     continue
                 if float(weights.get(_sid, 0.0) or 0.0) <= 0.0:
                     continue
+                _sid_c_sw = _SWAP_CANON_MAP.get(str(_sid), str(_sid))
+                _init_b_sw = float(_last_init_b_map.get(_sid_c_sw, _last_init_b_map.get(str(_sid), 0.0)) or 0.0)
+                _held_b_sw = float(_last_held_b_map.get(_sid_c_sw, _last_held_b_map.get(str(_sid), 0.0)) or 0.0)
+                _ord_b_sw = sum(
+                    float(_o_sw.get('amount_krw', 0.0) or 0.0)
+                    for _o_sw in orders
+                    if (
+                        (_o_sw.get('direction') in ('buy', 'long') or _o_sw.get('action') == 'buy')
+                        and _SWAP_CANON_MAP.get(str(_o_sw.get('stream_id', '')), str(_o_sw.get('stream_id', ''))) == _sid_c_sw
+                    )
+                )
+                _stream_budget_saturated = (_init_b_sw > 0.0) and ((_held_b_sw + _ord_b_sw) >= _init_b_sw * 0.85)
                 for _s in _sigs:
                     _tk = str(_s.get('ticker', '')).strip()
                     if (
@@ -1489,7 +1514,7 @@ class StreamOrchestrator:
                         and _s.get('direction', _s.get('action', 'long')) in ('long', 'buy', 'BUY')
                     ):
                         _all_active_long_sigs.append(_s)
-                        if _tk not in _ordered_tickers and _tk.upper() not in _held_swap_set:
+                        if (not _stream_budget_saturated) and _tk not in _ordered_tickers and _tk.upper() not in _held_swap_set:
                             _candidate_sigs.append(_s)
 
             # [Co-Domain Unification] 기보유 종목이 현재 사이클에서도 활성 매수 시그널을 보유한 경우 실제 시그널 EV_adj를 market_data에 주입하여 부당 스왑 매도 원천 차단
@@ -3244,6 +3269,8 @@ class StreamOrchestrator:
                     _unattributed_held_krw += _pos_val
         except Exception as _et_e:
             logger.error(f"    [Phase 47] existing_tickers 수집 실패: {_et_e}", exc_info=True)
+        self._last_stream_held_krw = dict(_stream_held_krw)
+        self._last_initial_stream_budgets = dict(_initial_stream_budgets)
 
         # ★ [Dynamic Budget Recycling + Capital Conservation Identity]
         # 시그널이 없는 스트림의 유휴 예산에서 이미 S_RECON 등으로 실계좌에 투입된 자본(_unattributed_held_krw)을 우선 차감하여 이중 계상 원천 차단
@@ -4248,6 +4275,27 @@ class StreamOrchestrator:
                         _is_s14_orphan_tl = True
                 if _is_s14_orphan_tl and _max_hold_days is not None:
                     _max_hold_days = min(float(_max_hold_days), 1.0)
+                elif _is_s14_pos_tl and not _is_s14_orphan_tl:
+                    _s14_pair_set = _active_s14_kr_tickers if _is_kr_tk(str(_pos_ticker_up)) else _active_s14_us_tickers
+                    if _pos_ticker_up in _s14_pair_set and len(_s14_pair_set) >= 2:
+                        _pair_val_sum = 0.0
+                        _pair_pnl_weighted = 0.0
+                        _pair_leg_cnt = 0
+                        for _pk_p, _pv_p in positions.items():
+                            if not isinstance(_pv_p, dict):
+                                continue
+                            _tk_p = str(_pv_p.get('ticker', str(_pk_p).split(':')[-1])).split(':')[-1].strip().upper()
+                            _q_p = float(_pv_p.get('quantity', _pv_p.get('qty', 0)) or 0.0)
+                            if _tk_p in _s14_pair_set and _q_p > 0:
+                                _cp_p = float(_pv_p.get('current_price', _pv_p.get('avg_price', 1.0)) or 1.0)
+                                _val_p = float(_pv_p.get('eval_krw', _pv_p.get('amount', 0.0)) or (_q_p * _cp_p))
+                                _pnl_p = float(_pv_p.get('unrealized_pnl_pct', _pv_p.get('pnl_pct', 0.0)) or 0.0)
+                                if _val_p > 0:
+                                    _pair_val_sum += _val_p
+                                    _pair_pnl_weighted += _val_p * _pnl_p
+                                    _pair_leg_cnt += 1
+                        if _pair_leg_cnt >= 2 and _pair_val_sum > 0:
+                            pnl_pct = _pair_pnl_weighted / _pair_val_sum
 
                 if _max_hold_days:
                     logger.info(f"    [DEBUG L4 Dynamic Math] {_pos_ticker}: days_held={days_held}, dynamic_max_hold={_max_hold_days:.2f}d, pos={pos}")

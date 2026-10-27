@@ -131,6 +131,7 @@ def main():
             from src.analysis.algorithmic_footprint_tracker import AlgorithmicFootprintTracker
             from src.risk.whipsaw_defense_engine import AntiWhipsawDefenseEngine
             from src.execution.connection_health_guard import ConnectionHealthGuard
+            from src.utils.dynamic_quant_engine import get_quant_engine
 
             if not hasattr(main, '_bayesian_filter'):
                 main._bayesian_filter = OnlineBayesianParticleFilter()
@@ -251,7 +252,6 @@ def main():
                 # 장마감 파이프라인(15:10 KST) 이후 동시호가 시간(15:10~15:30)에는 신규 진입 스캔을 차단하고 청산 감시만 유지
                 _is_kr_entry_window = (now.hour == 9 and now.minute >= 5) or (10 <= now.hour <= 14) or (now.hour == 15 and now.minute < 10)
                 try:
-                    from src.utils.dynamic_quant_engine import get_quant_engine
                     _dqe_d = get_quant_engine()
                     _opt_scan_sec = _dqe_d.compute_optimal_min_holding_minutes('069500', vix_level=_telemetry.get('vkospi')) * 60.0
                     if not hasattr(main, '_last_entry_scan_ts'):

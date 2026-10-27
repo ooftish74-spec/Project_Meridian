@@ -209,6 +209,13 @@ class S10MegaTrendStream(BaseStream):
                         continue
 
                 if sig['action'] == 'buy':
+                    _min_s10_conf = (1.0 / 2.0) + (1.0 / 50.0)
+                    if float(sig.get('confidence', 0.0) or 0.0) < _min_s10_conf:
+                        logger.info(
+                            f"    [S10] 최소 확신도 미달 진입 보류: {name}({ticker}) "
+                            f"conf={float(sig.get('confidence', 0.0) or 0.0):.2f} < {_min_s10_conf:.2f}"
+                        )
+                        continue
                     _ff = getattr(self, '_fundamental_filter', None)
                     if _ff is not None and not _ff.passes_hard_filter(ticker, regime=regime):
                         logger.info(f"    [S10] 펀더멘탈 Hard Filter 차단 (Beneish/Ohlson): {name}({ticker})")

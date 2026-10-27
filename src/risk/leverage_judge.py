@@ -264,6 +264,23 @@ class LeverageJudge:
         for pos_key, pos in positions.items():
             ticker = str(pos.get('ticker', pos_key.split(':')[-1]))
             stream_id = pos_key.split(':')[0] if ':' in pos_key else str(pos.get('stream_id', ''))
+            _strat_lj = str(pos.get('strategy', '') or '').lower()
+            _is_s14_pair = (
+                stream_id in ('S14', 'S14_PAIR_ALPHA')
+                or 'pair' in _strat_lj
+                or bool(pos.get('pair_id'))
+                or (
+                    ticker == '114800'
+                    and any(
+                        str(_pv.get('ticker', str(_pk).split(':')[-1])) == '305720'
+                        and float(_pv.get('quantity', _pv.get('qty', 0)) or 0) > 0
+                        for _pk, _pv in positions.items()
+                        if isinstance(_pv, dict)
+                    )
+                )
+            )
+            if _is_s14_pair:
+                continue
             is_inverse_pos = (ticker in inverse_tickers) or (stream_id == 'SYS_HEDGE')
             is_leverage_or_inverse = (ticker in etf_tickers) or is_inverse_pos
             if not is_leverage_or_inverse:
