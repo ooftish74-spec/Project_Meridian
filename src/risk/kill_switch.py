@@ -317,7 +317,12 @@ class KillSwitch:
 
         ★ Gap-Aware: daily_returns에서 시스템 갭 기간 손실 자동 제외
         """
-        initial_capital = portfolio.get('initial_capital', cfg.get('portfolio.initial_capital'))
+        initial_capital = float(
+            portfolio.get('initial_capital')
+            or (portfolio.get('account') or {}).get('initial_capital')
+            or cfg.get('portfolio.initial_capital')
+            or 0.0
+        )
         daily_returns = portfolio.get('daily_returns', [])
         daily_returns = self._detect_and_filter_system_gap(daily_returns, portfolio)
         today_return = daily_returns[-1] if daily_returns else 0
@@ -335,7 +340,11 @@ class KillSwitch:
             or (initial_capital if 'total_nav' not in portfolio and 'nav' not in portfolio else 0.0)
             or 0.0
         )
-        hwm = portfolio.get('hwm', max(total_nav, initial_capital))
+        hwm = float(
+            portfolio.get('hwm')
+            or (portfolio.get('account') or {}).get('hwm')
+            or max(total_nav, initial_capital)
+        )
         # ★ Wave 0 E8: HWM 자동 리셋(hwm > NAV×1.30 → hwm=NAV) 제거.
         #   기존 리셋은 약 -23%보다 깊은 DD에서 킬스위치를 영구 무력화했다.
         #   본래 목적(부분 NAV로 인한 오발동 방지)은 아래 NAV 교차검증으로 명시적으로 처리한다.
