@@ -1171,8 +1171,6 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         # S1 청산 직후 반환된 예산으로 S5를 진입시키기 위해 V3 엔진을 호출합니다.
         try:
             logger.info("  ⚡ [V4] S5 파킹 및 오버레이 진입 (run_virtual_trading 가동)")
-            import sys
-            import os
             # Prevent arg parsing issues in run_virtual_trading
             old_argv = sys.argv
             sys.argv = [sys.argv[0]]
@@ -1230,7 +1228,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 _sp_data = json.loads(_sp_path.read_text())
                 _trades = _sp_data.get('trade_history', [])
                 if _trades:
-                    import tempfile, os
+                    import tempfile
                     _st_path = _PROJECT_ROOT / 'results' / 'shadow_trades.json'
                     fd, tmp = tempfile.mkstemp(
                         dir=str(_st_path.parent), suffix='.tmp')

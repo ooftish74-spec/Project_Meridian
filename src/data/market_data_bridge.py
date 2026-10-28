@@ -577,11 +577,6 @@ class MarketDataBridge:
                 from config.universe import UNIVERSE
                 tickers = UNIVERSE.get('kr_stocks', [])[:30]
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-
-                import logging
-
-                logger = logging.getLogger(__name__)
-
                 logger.error(f'Critical error encountered (fallback to default tickers): {e}', exc_info=True)
                 _dc_mb = DynamicConfig()
                 tickers = _dc_mb.get('market_data.fallback_tickers', ['069500', '005930', '000660', '035420'])

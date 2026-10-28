@@ -504,6 +504,8 @@ class IntradayCapitalRouter:
                         if _ht and _hq > 0:
                             _existing_held.add(str(_ht).upper())
 
+        from datetime import datetime
+        from src.utils.market_calendar import is_ticker_tradable_now
         from src.data_collection.central_data_gateway import CentralDataGateway
         dyn_fx = CentralDataGateway().get_usdkrw_rate()
         for sig in ranked_signals:

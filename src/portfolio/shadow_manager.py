@@ -1929,7 +1929,6 @@ class ShadowPortfolioManager:
                 # Score = 음수일수록 Long에 불리(장세 악화), 양수일수록 Short에 불리(급반등)
                 _s1_reval_score = (kospi_open_change * 0.5) + (flow / 100.0 * 0.3) - (vkospi_change * 0.2)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
@@ -1943,7 +1942,6 @@ class ShadowPortfolioManager:
                     if isinstance(sig, dict) and 'ticker' in sig:
                         _s3_signals_cache[sig['ticker']] = sig.get('qvm_zscore', 0.0)
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 pass
 
@@ -3173,7 +3171,6 @@ class ShadowPortfolioManager:
                     'method': 'spearman_held_positions',
                 }
             except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
                 logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
                 # scipy 없으면 피어슨 fallback
                 import math

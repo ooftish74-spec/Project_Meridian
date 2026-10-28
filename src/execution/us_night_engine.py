@@ -471,6 +471,9 @@ class USNightExecutionEngine:
             if ticker_atr <= 0:
                 logger.warning(f"  ⚠️ [USNightEngine] {ticker}: 실측 ATR/변동성 미확보(ticker_atr<=0) → 임의 상수 폴백 없이 평가 스킵")
                 continue
+            _half_scale_usn = 1.0 / 2.0
+            if ticker_atr > _half_scale_usn:
+                ticker_atr = ticker_atr / 100.0
 
             atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
             dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
@@ -478,7 +481,29 @@ class USNightExecutionEngine:
             dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
             effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
 
+            _raw_leg_ret_usn = entry_return
+            _s14_inv_unwind_reason = None
             if _is_active_us_pair:
+                _us_long_rets = [v[1] for k, v in _us_pair_legs.items() if k not in _us_i_usn]
+                _max_us_long_ret = max(_us_long_rets) if _us_long_rets else 0.0
+                _pair_inv_unwound = False
+                import math as _math_pair_u
+                for _k_iu, _v_iu in _us_pair_legs.items():
+                    if _k_iu in _us_i_usn:
+                        _inv_ret_u = float(_v_iu[1])
+                        _inv_sig_dec = max(ticker_atr / _math_pair_u.sqrt(8.0 / _math_pair_u.pi), 0.01)
+                        if _max_us_long_ret > 0.0 and _inv_ret_u <= -(2.0 * _inv_sig_dec):
+                            _pair_inv_unwound = True
+                            if ticker.upper() == _k_iu:
+                                _s14_inv_unwind_reason = (
+                                    f"US Night S14 Surge Inverse Unwind ({_raw_leg_ret_usn*100:.2f}% <= -{(2.0*_inv_sig_dec)*100:.2f}%, "
+                                    f"long_leg={_max_us_long_ret*100:+.2f}%)"
+                                )
+                                break
+                if _pair_inv_unwound and ticker.upper() not in _us_i_usn:
+                    _is_active_us_pair = False
+
+            if _is_active_us_pair and _s14_inv_unwind_reason is None:
                 _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
                 if _tot_p_val > 0:
                     entry_return = sum(v[0] * v[1] for v in _us_pair_legs.values() if v[0] > 0) / _tot_p_val
@@ -529,9 +554,12 @@ class USNightExecutionEngine:
                 except Exception:
                     pass
 
-            exit_reason = None
+            exit_reason = _s14_inv_unwind_reason
+            if exit_reason is not None:
+                entry_return = _raw_leg_ret_usn
+                logger.info(f"⚡ [USNightEngine] {ticker} 인버스 레그 비대칭 손실 제한 발화! ({exit_reason})")
             # 1) Hard Stop-Loss (수익 활성화 전에도 종목별/페어스프레드 변동성 연동 동적 하드스탑 -dynamic_hard_stop_pct 이탈 시 즉시 손절)
-            if entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
+            elif entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
             # 2) Trailing Stop (단일 종목은 개별 HWM, S14 활성 페어는 동시 스프레드 HWM 및 공분산 샹들리에 밴드 이탈 시 발화)

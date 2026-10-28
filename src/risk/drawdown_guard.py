@@ -56,8 +56,12 @@ class DrawdownGuard:
             측정 결과 (수치만, 판정 없음)
         """
         _is_live = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
+        _pf_acct = portfolio.get('account') if isinstance(portfolio.get('account'), dict) else {}
         _kp_data = {}
-        if _is_live and ('initial_capital' not in portfolio or 'hwm' not in portfolio):
+        if _is_live and (
+            ('initial_capital' not in portfolio and 'initial_capital' not in _pf_acct)
+            or ('hwm' not in portfolio and 'hwm' not in _pf_acct)
+        ):
             try:
                 import json as _json_dd_k
                 _kp_path = _RESULTS_DIR / 'kis_portfolio.json'
@@ -65,10 +69,22 @@ class DrawdownGuard:
                     _kp_data = _json_dd_k.loads(_kp_path.read_text())
             except Exception:
                 _kp_data = {}
-        _kp_nav_val = _kp_data.get('nav') or (_kp_data.get('account', {}) or {}).get('total_equity')
-        total_nav = portfolio.get('total_nav', _kp_nav_val if (_is_live and _kp_nav_val) else cfg.get('portfolio.initial_capital'))
-        initial_capital = portfolio.get('initial_capital', (_kp_data.get('initial_capital') or total_nav) if _is_live else cfg.get('portfolio.initial_capital'))
-        hwm = portfolio.get('hwm', (_kp_data.get('hwm') or total_nav) if _is_live else max(total_nav, initial_capital))
+        _kp_acct = _kp_data.get('account') if isinstance(_kp_data.get('account'), dict) else {}
+        _kp_nav_val = _kp_data.get('nav') or _kp_acct.get('total_equity') or _kp_acct.get('total_asset') or _kp_acct.get('nav')
+        _raw_nav = portfolio.get('total_nav')
+        if _raw_nav is None:
+            _raw_nav = portfolio.get('nav') or _pf_acct.get('total_equity') or _pf_acct.get('total_asset') or _pf_acct.get('nav')
+        total_nav = _raw_nav if _raw_nav is not None else (_kp_nav_val if (_is_live and _kp_nav_val) else cfg.get('portfolio.initial_capital'))
+        _raw_init = portfolio.get('initial_capital')
+        if _raw_init is None:
+            _raw_init = _pf_acct.get('initial_capital')
+        _kp_init_val = _kp_data.get('initial_capital') or _kp_acct.get('initial_capital') or _kp_data.get('hwm') or _kp_acct.get('hwm')
+        initial_capital = _raw_init if _raw_init is not None else ((_kp_init_val or total_nav) if _is_live else cfg.get('portfolio.initial_capital'))
+        _raw_hwm = portfolio.get('hwm')
+        if _raw_hwm is None:
+            _raw_hwm = _pf_acct.get('hwm')
+        _kp_hwm_val = _kp_data.get('hwm') or _kp_acct.get('hwm')
+        hwm = _raw_hwm if _raw_hwm is not None else ((_kp_hwm_val or total_nav) if _is_live else max(total_nav, initial_capital))
         total_dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
         sleeve_a_nav = portfolio.get('sleeve_a_nav')
         sleeve_a_hwm = portfolio.get('sleeve_a_hwm')
@@ -194,8 +210,8 @@ class DrawdownGuard:
                 if _kp_file.exists():
                     _kp = _json.loads(_kp_file.read_text())
                     _kp_nav = _kp.get('nav') or (_kp.get('account', {}) or {}).get('total_equity') or nav
-                    _kp_init = _kp.get('initial_capital') or _kp_nav
                     _kp_hwm = _kp.get('hwm') or (_kp.get('account', {}) or {}).get('hwm') or _kp_nav
+                    _kp_init = _kp.get('initial_capital') or (_kp.get('account', {}) or {}).get('initial_capital') or _kp_hwm or _kp_nav
                     portfolio = {
                         'total_nav': nav or _kp_nav,
                         'initial_capital': _kp_init,

@@ -873,10 +873,35 @@ def test_unsettled_us_sale_nav_identity_and_s14_surge_inverse_unwind_closed_form
     # 5. KillSwitch._crosscheck_nav(0.0) returns consistent=False ('zero_or_invalid_nav') so a zero-NAV read glitch
     #    triggers 'nav_unverified' (halt_new_entry) and NEVER fires a fake -100% hard_floor_mdd (halt_all).
     from src.risk.kill_switch import KillSwitch
+    from src.risk.drawdown_guard import DrawdownGuard
     ks = KillSwitch()
     nc_zero = ks._crosscheck_nav(0.0)
     assert nc_zero["consistent"] is False
     assert nc_zero["reason"] == "zero_or_invalid_nav"
+
+    # 6. Nested account.hwm / account.initial_capital resolution in KillSwitch and DrawdownGuard
+    #    Closed-form oracle: (18019975 / 18602823 - 1) * 100 = -3.13311587... -> round(..., 4) = -3.1331
+    nested_kp = {
+        "nav": 18019975,
+        "account": {
+            "total_equity": 18019975,
+            "hwm": 18602823,
+            "initial_capital": 18602823,
+        },
+        "holdings": {},
+    }
+    expected_dd_2 = round((18019975.0 / 18602823.0 - 1.0) * 100.0, 2)
+    expected_dd_4 = round((18019975.0 / 18602823.0 - 1.0) * 100.0, 4)
+    ks_m = ks.measure_metrics(nested_kp)
+    assert ks_m["total_nav"] == pytest.approx(18019975.0, rel=1e-9)
+    assert ks_m["dd_pct"] == pytest.approx(expected_dd_2, rel=1e-9)
+
+    ddg = DrawdownGuard()
+    ddg_m = ddg.measure(nested_kp)
+    assert ddg_m["hwm"] == pytest.approx(18602823.0, rel=1e-9)
+    assert ddg_m["total_dd_pct"] == pytest.approx(expected_dd_4, rel=1e-9)
+    assert ddg_m["from_initial_dd_pct"] == pytest.approx(expected_dd_4, rel=1e-9)
+
 
 
 

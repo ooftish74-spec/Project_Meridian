@@ -2228,6 +2228,8 @@ class KISTraderAdapter:
                                 _unrealized_pnl_krw = int(_tot_invested_krw - _tot_cost_krw)
                                 _acct_patch = {
                                     'nav': _nav_krw,
+                                    'total_nav': _nav_krw,
+                                    'total_asset': _nav_krw,
                                     'total_equity': _nav_krw,
                                     'cash': round(float(self.account.cash)),
                                     'invested': int(_tot_invested_krw),
@@ -2265,7 +2267,13 @@ class KISTraderAdapter:
                                     _kp_acct = _kp_data.get('account', {})
                                     if not isinstance(_kp_acct, dict):
                                         _kp_acct = {}
+                                    _prev_hwm = float(_kp_data.get('hwm') or _kp_acct.get('hwm') or _nav_krw)
+                                    _eff_hwm = round(max(_prev_hwm, float(_nav_krw)))
+                                    _prev_init = float(_kp_data.get('initial_capital') or _kp_acct.get('initial_capital') or _eff_hwm)
+                                    _eff_init = round(_prev_init if _prev_init > 0 else _eff_hwm)
                                     _kp_acct.update(_acct_patch)
+                                    _kp_acct['hwm'] = _eff_hwm
+                                    _kp_acct['initial_capital'] = _eff_init
                                     _kp_data['account'] = _kp_acct
                                     _kp_sum = _kp_data.get('summary', {})
                                     if not isinstance(_kp_sum, dict):
@@ -2281,6 +2289,10 @@ class KISTraderAdapter:
                                     })
                                     _kp_data['summary'] = _kp_sum
                                     _kp_data['nav'] = _nav_krw
+                                    _kp_data['total_nav'] = _nav_krw
+                                    _kp_data['total_asset'] = _nav_krw
+                                    _kp_data['hwm'] = _eff_hwm
+                                    _kp_data['initial_capital'] = _eff_init
                                     return _kp_data
 
                                 safe_json_update(_kp_path, _kp_mutator, default={}, indent=2)
@@ -2925,6 +2937,7 @@ class KISTraderAdapter:
             # [Transaction Cost / Friction Guard]
             # 평일 단 하루(1박 2일) 파킹은 매매수수료(왕복 ~0.007%~0.028%) 마찰 대비 1일치 이자(~0.0097%)의 실익이 없음.
             # 금요일(주말 3일치 파킹) 또는 연휴/공휴일 직전(휴일 3일 이상) 무위험 이자가 확실히 수수료를 상회할 때만 파킹 집행!
+            total_days = 1
             try:
                 from src.utils.market_calendar import MarketCalendar
                 cal = MarketCalendar()

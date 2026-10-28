@@ -305,6 +305,7 @@ class UniversalExitEngine:
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
             _sigma_from_atr = atr_pct / math.sqrt(8.0 / math.pi)
             _pair_trail_act = False
+            _leg_sigmas_uee: Dict[str, float] = {}
 
             if _is_active_pair_leg:
                 _leg_sigmas_uee = {

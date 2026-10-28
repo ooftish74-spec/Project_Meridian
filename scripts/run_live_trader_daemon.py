@@ -494,8 +494,12 @@ def main():
                                         except Exception:
                                             pass
                             if not _cur_regime:
-                                _cur_regime = 'caution'
-                            _exit_res = UniversalExitEngine().evaluate_all_positions(_exit_positions, regime=_cur_regime)
+                                _cur_regime = str(_bayesian_res.get('dominant_regime', 'caution') or 'caution')
+                            _exit_res = UniversalExitEngine().evaluate_all_positions(
+                                _exit_positions,
+                                market_data={'signal_cache': _sc_data},
+                                regime=_cur_regime,
+                            )
                             _raw_exit_orders = _exit_res.get('exit_orders', [])
                             _exit_orders = []
                             if not hasattr(main, '_exit_orders_in_flight'):
@@ -668,7 +672,33 @@ def main():
                                     _existing_exit_tks = {str(eo.get('ticker')) for eo in exit_orders if eo.get('ticker')}
                                     try:
                                         from src.risk.universal_exit_engine import UniversalExitEngine
-                                        from src.execution.position_ledger import PositionLedgerManager
+                                        from src.execution.position_ledger import (
+                                            PositionLedgerManager,
+                                            count_trading_days_held,
+                                        )
+                                        _sc_us_data: dict = {}
+                                        _sc_us_file = results_dir / 'signal_cache.json'
+                                        if _sc_us_file.exists():
+                                            try:
+                                                _sc_us_data = json.loads(_sc_us_file.read_text(encoding='utf-8'))
+                                            except Exception:
+                                                _sc_us_data = {}
+                                        _us_regime_str = ''
+                                        _bayesian_us_res = getattr(main, '_last_bayesian_res', {}) or {}
+                                        if isinstance(_bayesian_us_res, dict) and _bayesian_us_res.get('dominant_regime'):
+                                            _us_regime_str = str(_bayesian_us_res.get('dominant_regime')).strip().lower()
+                                        if not _us_regime_str:
+                                            for _reg_f_u in (results_dir / 'current_regime.json', results_dir / 'pipeline_state.json'):
+                                                if _reg_f_u.exists():
+                                                    try:
+                                                        _reg_d_u = json.loads(_reg_f_u.read_text(encoding='utf-8'))
+                                                        _us_regime_str = str(_reg_d_u.get('us_regime') or _reg_d_u.get('regime') or '').strip().lower()
+                                                        if _us_regime_str:
+                                                            break
+                                                    except Exception:
+                                                        pass
+                                        if not _us_regime_str:
+                                            _us_regime_str = 'caution'
                                         _uee_us_pos = {}
                                         _plm_us = PositionLedgerManager()
                                         for h in us_engine.holdings:
@@ -681,26 +711,42 @@ def main():
                                                 continue
                                             _ret_u = ((_cp_u - _ep_u) / _ep_u) * 100.0
                                             _meta_u = _plm_us.get_position_meta(_tk_u)
+                                            _hwm_u = _plm_us.get_hwm(_tk_u)
+                                            _ed_u = str(h.get('entry_date') or _meta_u.get('entry_date') or today_str)
+                                            _hold_days_u = count_trading_days_held(_ed_u, is_kr=False)
+                                            if _hold_days_u >= 1:
+                                                _hold_mins_u = float(_hold_days_u) * 1440.0
+                                            else:
+                                                _c_str_u = _hwm_u.get('created_at', '')
+                                                try:
+                                                    _c_dt_u = datetime.fromisoformat(str(_c_str_u)).replace(tzinfo=None)
+                                                    _now_nv_u = now.replace(tzinfo=None)
+                                                    _hold_mins_u = max(0.0, (_now_nv_u - _c_dt_u).total_seconds() / 60.0)
+                                                except Exception:
+                                                    _hold_mins_u = 0.0
                                             _uee_us_pos[f"LIVE_SSOT:{_tk_u}"] = {
                                                 'ticker': _tk_u,
-                                                'stream_id': _meta_u.get('stream_id') or 'LIVE_SSOT',
-                                                'strategy': _meta_u.get('strategy') or '',
-                                                'track': _meta_u.get('track') or '',
+                                                'stream_id': h.get('stream_id') or _meta_u.get('stream_id') or 'LIVE_SSOT',
+                                                'strategy': h.get('strategy') or _meta_u.get('strategy') or '',
+                                                'track': h.get('track') or _meta_u.get('track') or '',
                                                 'quantity': int(h.get('quantity', h.get('qty', 0)) or 0),
                                                 'entry_price': _ep_u,
                                                 'current_price': _cp_u,
                                                 'unrealized_pnl_pct': _ret_u,
                                                 'peak_pnl_pct': float(h.get('peak_pnl_pct', _ret_u) or _ret_u),
                                                 'peak_price': float(h.get('peak_price', h.get('highest_price', _cp_u)) or _cp_u),
-                                                'trail_activated': bool(h.get('trail_activated', False)),
-                                                'entry_date': str(h.get('entry_date') or _meta_u.get('entry_date') or today_str),
+                                                'scaled_out': bool(_hwm_u.get('scaled_out', False)),
+                                                'trail_activated': bool(h.get('trail_activated', False) or _hwm_u.get('trail_activated', False)),
+                                                'holding_days': float(_hold_days_u),
+                                                'holding_minutes': _hold_mins_u,
+                                                'entry_date': _ed_u,
                                                 'market': 'US',
                                             }
                                         if _uee_us_pos:
                                             _uee_res_us = UniversalExitEngine().evaluate_all_positions(
                                                 _uee_us_pos,
-                                                market_data={'signal_cache': _sc_data},
-                                                regime=str(_bayesian_res.get('dominant_regime', 'caution') or 'caution'),
+                                                market_data={'signal_cache': _sc_us_data},
+                                                regime=_us_regime_str,
                                             )
                                             for _uo in _uee_res_us.get('exit_orders', []):
                                                 _utk = str(_uo.get('ticker', '')).strip()
@@ -708,7 +754,7 @@ def main():
                                                     exit_orders.append(_uo)
                                                     _existing_exit_tks.add(_utk)
                                     except Exception as _uee_us_err:
-                                        logger.debug(f"  [US UniversalExitEngine] 평가 폴백: {_uee_us_err}")
+                                        logger.warning(f"  ⚠️ [US UniversalExitEngine] 평가 폴백: {_uee_us_err}", exc_info=True)
                                     for eo in exit_orders:
                                         _tk_us = eo['ticker']
                                         if _tk_us in main._exit_orders_in_flight:
@@ -765,10 +811,10 @@ def main():
                                                         f"  🔄 [US Intraday Capital Redeploy] 청산 후 가용 달러(${_usd_avail_after:,.2f}) 확보 ➔ US 알파 재배치 파이프라인(us_regular) 가동!"
                                                     )
                                                     run_pipeline(phase='us_regular')
-                                            except Exception:
-                                                pass
+                                            except Exception as _us_post_ex_err:
+                                                logger.warning(f"  ⚠️ [US Post-Exit Reconcile/Redeploy] 예외: {_us_post_ex_err}", exc_info=True)
                             except Exception as _ex_err:
-                                logger.debug(f"  US Trailing Stop 평가 예외: {_ex_err}")
+                                logger.warning(f"  ⚠️ US Trailing Stop 평가 예외: {_ex_err}", exc_info=True)
 
                         # 3. [Time-Bounded Re-Peg Loop] 미체결 주문 포착 시 실시간 매도호가 정정 감시 (3.0초 쿨다운 + 최소 10초 거래소 접수 대기)
                         if not hasattr(main, '_last_repeg_time'):
