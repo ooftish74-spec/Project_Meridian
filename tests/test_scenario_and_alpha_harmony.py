@@ -775,7 +775,7 @@ def test_unsettled_us_sale_nav_identity_and_s14_surge_inverse_unwind_closed_form
 
     # 2. UniversalExitEngine S14 Surge Inverse Unwind (114800 unwound at -1.66%, 305720 preserved at +5.27%)
     uee = UniversalExitEngine()
-    monkeypatch.setattr(uee, "compute_ticker_atr", lambda tk: 1.80)  # sigma_d = 1.80 / 1.253314 = 1.4362%
+    monkeypatch.setattr(UniversalExitEngine, "compute_ticker_atr", lambda self, tk: 0.018)  # 1.80% ATR -> sigma_d = 1.4362%
     s14_kr_positions = {
         "305720": {
             "ticker": "305720",
@@ -829,6 +829,55 @@ def test_unsettled_us_sale_nav_identity_and_s14_surge_inverse_unwind_closed_form
     assert "S14 Surge Inverse Unwind" in inv_exits[0]["reason"]
     assert inv_exits[0]["urgency"] == "stop"
     assert long_exits == []
+
+    # 4. When paired long legs (XLE -0.30%, XLV -0.40%) are NOT in profit (<= 0.0%), PSQ (-1.50%) is NOT prematurely unwound
+    s14_us_positions_neg_long = {
+        "XLE": {
+            "ticker": "XLE",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "us_sector_pair_alpha",
+            "quantity": 10,
+            "entry_price": 69.05,
+            "current_price": 68.84,
+            "unrealized_pnl_pct": -0.30,
+            "eval_krw": 907940.0,
+        },
+        "XLV": {
+            "ticker": "XLV",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "us_sector_pair_alpha",
+            "quantity": 3,
+            "entry_price": 180.29,
+            "current_price": 179.57,
+            "unrealized_pnl_pct": -0.40,
+            "eval_krw": 707216.0,
+        },
+        "PSQ": {
+            "ticker": "PSQ",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "us_sector_pair_alpha",
+            "quantity": 43,
+            "entry_price": 25.99,
+            "current_price": 25.60,
+            "unrealized_pnl_pct": -1.50,
+            "eval_krw": 1446970.0,
+        },
+    }
+    res_us_neg = uee.evaluate_all_positions(
+        s14_us_positions_neg_long,
+        market_data={"ois": 82.4, "signal_cache": {"ois": 82.4, "vix": 17.51}},
+        regime="caution",
+    )
+    assert res_us_neg["exit_orders"] == []
+
+    # 5. KillSwitch._crosscheck_nav(0.0) returns consistent=False ('zero_or_invalid_nav') so a zero-NAV read glitch
+    #    triggers 'nav_unverified' (halt_new_entry) and NEVER fires a fake -100% hard_floor_mdd (halt_all).
+    from src.risk.kill_switch import KillSwitch
+    ks = KillSwitch()
+    nc_zero = ks._crosscheck_nav(0.0)
+    assert nc_zero["consistent"] is False
+    assert nc_zero["reason"] == "zero_or_invalid_nav"
+
 
 
 

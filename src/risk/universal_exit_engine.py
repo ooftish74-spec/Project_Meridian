@@ -319,10 +319,14 @@ class UniversalExitEngine:
                 for _k_inv, _v_inv in _pair_bucket.items():
                     if _k_inv in _ALL_INV_CANDS:
                         _inv_pnl_k = float(_v_inv["pnl"])
-                        _inv_sig_k = max(float(_leg_sigmas_uee.get(_k_inv, 1.0) or 1.0), 1.0)
+                        _raw_sig_k = float(_leg_sigmas_uee.get(_k_inv, 0.0) or 0.0)
+                        _half_scale_u = 1.0 / 2.0
+                        _sig_pct_k = (_raw_sig_k * 100.0) if (0.0 < _raw_sig_k < _half_scale_u) else _raw_sig_k
+                        _inv_sig_k = max(_sig_pct_k, 1.0)
                         _eff_inv_thr_k = _inv_sig_k if _is_surge_state_uee else (2.0 * _inv_sig_k)
-                        if (_is_surge_state_uee and _inv_pnl_k <= -_inv_sig_k) or (
-                            _max_long_pnl_uee > 0.0 and _inv_pnl_k <= -(2.0 * _inv_sig_k)
+                        if _max_long_pnl_uee > 0.0 and (
+                            (_is_surge_state_uee and _inv_pnl_k <= -_inv_sig_k)
+                            or (_inv_pnl_k <= -(2.0 * _inv_sig_k))
                         ):
                             _pair_has_surge_unwound_inv = True
                             if _tk_u == _k_inv:

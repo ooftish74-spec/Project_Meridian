@@ -4523,13 +4523,16 @@ class StreamOrchestrator:
                                         import math as _m_so_inv
                                         from src.risk.universal_exit_engine import UniversalExitEngine as _UEE_Inv_SO
                                         _atr_i_so = float(_UEE_Inv_SO().compute_ticker_atr(_k_i_so) or 0.0)
-                                        _vol_i_so = (_atr_i_so / _m_so_inv.sqrt(8.0 / _m_so_inv.pi)) if _atr_i_so > 0.0 else (_compute_asset_daily_volatility(_k_i_so, market_data) * 100.0)  # hardcode-ok: sqrt(8/pi) Gaussian half-normal factor
+                                        _half_so = 1.0 / 2.0
+                                        _atr_pct_i_so = (_atr_i_so * 100.0) if (0.0 < _atr_i_so < _half_so) else _atr_i_so
+                                        _vol_i_so = (_atr_pct_i_so / _m_so_inv.sqrt(8.0 / _m_so_inv.pi)) if _atr_pct_i_so > 0.0 else (_compute_asset_daily_volatility(_k_i_so, market_data) * 100.0)  # hardcode-ok: sqrt(8/pi) Gaussian half-normal factor
                                     except Exception:
                                         _vol_i_so = _compute_asset_daily_volatility(_k_i_so, market_data) * 100.0
                                     _vol_i_so = max(_vol_i_so, 1.0)
                                     _thr_i_so = _vol_i_so if _is_surge_so else (2.0 * _vol_i_so)
-                                    if (_is_surge_so and _pnl_i_so <= -_vol_i_so) or (
-                                        _max_long_pnl_so > 0.0 and _pnl_i_so <= -(2.0 * _vol_i_so)
+                                    if _max_long_pnl_so > 0.0 and (
+                                        (_is_surge_so and _pnl_i_so <= -_vol_i_so)
+                                        or (_pnl_i_so <= -(2.0 * _vol_i_so))
                                     ):
                                         _pair_inv_surge_unwound_so = True
                                         if _pos_ticker_up == _k_i_so:

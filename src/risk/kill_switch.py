@@ -279,7 +279,10 @@ class KillSwitch:
 
         각 트리거 타입별로 독립적으로 쿨다운 관리.
         """
-        triggers = [t for t in judgment.get('triggers', []) if not t.get('overridden')]
+        triggers = [
+            t for t in judgment.get('triggers', [])
+            if not t.get('overridden') and t.get('type') != 'nav_unverified'
+        ]
         if not triggers:
             return
         alerts_to_send = []
@@ -324,7 +327,14 @@ class KillSwitch:
                 consecutive_loss += 1
             else:
                 break
-        total_nav = portfolio.get('total_nav', initial_capital)
+        total_nav = float(
+            portfolio.get('total_nav')
+            or portfolio.get('nav')
+            or (portfolio.get('account') or {}).get('nav')
+            or (portfolio.get('account') or {}).get('total_equity')
+            or (initial_capital if 'total_nav' not in portfolio and 'nav' not in portfolio else 0.0)
+            or 0.0
+        )
         hwm = portfolio.get('hwm', max(total_nav, initial_capital))
         # ★ Wave 0 E8: HWM 자동 리셋(hwm > NAV×1.30 → hwm=NAV) 제거.
         #   기존 리셋은 약 -23%보다 깊은 DD에서 킬스위치를 영구 무력화했다.
@@ -357,7 +367,10 @@ class KillSwitch:
             tol = float(pget('kill_switch.nav_crosscheck_tol', 0.10))
             max_age_min = float(pget('kill_switch.nav_crosscheck_max_age_min', 30))
             kp = _RESULTS / 'kis_portfolio.json'
-            if not kp.exists() or not total_nav or total_nav <= 0:
+            if not total_nav or total_nav <= 0:
+                out.update({'consistent': False, 'rel_gap': 1.0, 'reason': 'zero_or_invalid_nav'})
+                return out
+            if not kp.exists():
                 out['reason'] = 'no_component_data'
                 return out
             import json as _jk
@@ -379,11 +392,12 @@ class KillSwitch:
                 return out
             acct = d.get('account') or {}
             fx = float(acct.get('fx_rate') or 0)
-            usd_cash = float(acct.get('us_cash_usd') or acct.get('cash_usd') or 0)
+            usd_cash = float(acct.get('d0_usd_deposit') or acct.get('us_cash_usd') or acct.get('cash_usd') or 0)
             if usd_cash > 0 and fx <= 0:
                 out['reason'] = 'no_fx_for_usd_cash'
                 return out
-            comp = float(acct.get('cash') or 0) + usd_cash * fx
+            krw_cash = float(acct.get('d2_settlement_cash_krw') or acct.get('cash') or 0)
+            comp = krw_cash + usd_cash * fx
             for p in (acct.get('positions') or {}).values():
                 comp += float(p.get('eval_krw') or 0)
             if comp <= 0:

@@ -938,9 +938,11 @@ class PositionLedgerManager:
                         updated = True
                     result[ticker] = ledger[ticker]["entry_date"]
                 else:
-                    # 완전 신규 매수종목 (실측 0.0 초기화 + canonical stream/track 추론)
+                    # 완전 신규 매수종목 (기존 보유 원장에 entry_date가 있으면 보존, 없으면 current_date_str)
+                    _preserved_ed = str((h_info or {}).get("entry_date") or "").strip()[:10] if isinstance(h_info, dict) else ""
+                    _eff_ed = _preserved_ed if len(_preserved_ed) == 10 else current_date_str
                     ledger[ticker] = {
-                        "entry_date": current_date_str,
+                        "entry_date": _eff_ed,
                         "created_at": datetime.now().isoformat(),
                         "notes": "Auto-registered on sync",
                         "peak_price": 0.0,
@@ -950,7 +952,7 @@ class PositionLedgerManager:
                         "stream_id": inferred_sid,
                         "track": inferred_trk,
                     }
-                    result[ticker] = current_date_str
+                    result[ticker] = _eff_ed
                     updated = True
 
             # 2. 청산된 종목 정리
