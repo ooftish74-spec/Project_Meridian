@@ -1045,7 +1045,15 @@ class DynamicQuantEngine:
     def get_fx_rate(self, portfolio: Optional[Dict[str, Any]] = None) -> float:
         """실시간/캐시 USD/KRW 환율 동적 조회 (고정 1350.0 하드코딩 대체)."""
         if isinstance(portfolio, dict):
-            pf_fx = portfolio.get("fx_rate") or portfolio.get("usdkrw")
+            acct = portfolio.get("account") if isinstance(portfolio.get("account"), dict) else {}
+            pf_fx = (
+                portfolio.get("spot_fx_rate")
+                or portfolio.get("fx_rate")
+                or portfolio.get("usdkrw")
+                or acct.get("spot_fx_rate")
+                or acct.get("fx_rate")
+                or acct.get("usdkrw")
+            )
             if pf_fx and float(pf_fx) > 0:
                 return float(pf_fx)
         sc_path = _RESULTS_DIR / "signal_cache.json"
@@ -1057,22 +1065,364 @@ class DynamicQuantEngine:
                     return float(fx)
             except Exception:
                 pass
-        for pf_name in ("kis_portfolio.json", "shadow_portfolio.json"):
+        for pf_name in ("kis_portfolio.json", "shadow_portfolio.json", "usdkrw_last_good.json"):
             pf_path = _RESULTS_DIR / pf_name
             if pf_path.exists():
                 try:
                     pf = json.loads(pf_path.read_text(encoding="utf-8"))
-                    fx = pf.get("fx_rate") or pf.get("usdkrw")
+                    acct = pf.get("account") if isinstance(pf.get("account"), dict) else {}
+                    fx = (
+                        pf.get("spot_fx_rate")
+                        or pf.get("fx_rate")
+                        or pf.get("usdkrw")
+                        or pf.get("rate")
+                        or acct.get("spot_fx_rate")
+                        or acct.get("fx_rate")
+                        or acct.get("usdkrw")
+                    )
                     if fx and float(fx) > 0:
                         return float(fx)
                 except Exception:
                     pass
+        fx_series = self._load_fx_close_series(tail_n=5)
+        if fx_series is not None and len(fx_series) > 0:
+            last_fx = float(fx_series.iloc[-1])
+            if last_fx > 0:
+                return last_fx
         try:
             from src.params import pget
             return float(pget("fx.default_usdkrw", 1380.0))
         except Exception:
             _fx_num = 1380
             return float(_fx_num)
+
+    def _load_fx_close_series(self, tail_n: int = 252) -> Optional[pd.Series]:
+        """내부 Parquet 시계열 및 signal_cache로부터 USD/KRW 일별 종가 시계열 로드."""
+        candidates = [
+            _DATA_DIR / "kr_markets" / "cross_usdkrw.parquet",
+            _DATA_DIR / "us_stocks" / "prices" / "KRW=X.parquet",
+            _DATA_DIR / "kr_markets" / "us_usdkrw.parquet",
+        ]
+        min_valid_year = 2000
+        min_obs_len = 20
+        best_series: Optional[pd.Series] = None
+        for p in candidates:
+            if not p.exists():
+                continue
+            try:
+                df = pd.read_parquet(p)
+                if df is None or len(df) == 0:
+                    continue
+                col_map = {str(c).lower(): c for c in df.columns}
+                c_col = col_map.get("close") or col_map.get("종가") or col_map.get("adj close") or col_map.get("rate")
+                d_col = col_map.get("date") or col_map.get("일자") or col_map.get("timestamp")
+                if not c_col:
+                    continue
+                if d_col:
+                    idx = pd.to_datetime(df[d_col], format="mixed", errors="coerce").dt.normalize()
+                else:
+                    idx = pd.to_datetime(df.index, format="mixed", errors="coerce").normalize()
+                vals = pd.to_numeric(df[c_col], errors="coerce")
+                s = pd.Series(vals.values, index=idx).dropna()
+                s = s[~s.index.isna()]
+                s = s[s.index.year >= min_valid_year]
+                s = s[s > 100.0]
+                s = s[~s.index.duplicated(keep="last")].sort_index()
+                if len(s) >= min_obs_len:
+                    return s.tail(tail_n)
+                if len(s) > 0 and best_series is None:
+                    best_series = s.tail(tail_n)
+            except Exception:
+                continue
+        return best_series
+
+    def get_fx_distribution_and_dynamics(
+        self,
+        signal_cache: Optional[Dict[str, Any]] = None,
+        spot_fx: Optional[float] = None,
+    ) -> Dict[str, float]:
+        """Ornstein-Uhlenbeck(AR(1)) 로그 환율 평균회귀 + 단기 모멘텀 + 주식-환율 공분산 수리 모델.
+
+        수리 모델:
+          - x_t = ln(S_t), 평형 평균 μ_x = E[x], 평형 표준편차 σ_x = Std(x)
+          - 환율 밸류에이션 Z-Score: z_FX = (x_t - μ_x) / σ_x
+          - 이산 OU(AR(1)) 자기상관: φ_1 = Cov(x_t, x_{t-1}) / Var(x_{t-1}), 평균회귀 속도 θ_OU = -ln(φ_1)
+          - 연간 기대 OU 평균회귀 드리프트: μ_{FX,OU} = -252 * θ_OU * (x_t - μ_x)
+          - 단기 모멘텀 드리프트(신호대잡음비 수축): μ_{FX,mom} = (|t_mom| / (1 + |t_mom|)) * 252 * E[Δx_{20d}]
+          - 베이즈 정밀도 결합 기대 환율 변화율:
+              μ_{FX,exp} = (z_FX^2 / (1 + z_FX^2)) * μ_{FX,OU} + (1 / (1 + z_FX^2)) * μ_{FX,mom}
+        """
+        days_per_yr = 252.0
+        min_obs_required = 20
+        min_corr_obs = 15
+        min_ar_obs = 10
+        min_mom_obs = 5
+        eps = 1e-9
+        cur_fx = float(spot_fx) if (spot_fx is not None and float(spot_fx) > 0) else self.get_fx_rate(signal_cache)
+        fx_series = self._load_fx_close_series(tail_n=int(days_per_yr))
+
+        if fx_series is None or len(fx_series) < min_obs_required:
+            # 시계열 부재 시 관측 불확실성 반영 중립 상태 반환 (인위적 왜곡 0)
+            return {
+                "spot_fx": round(cur_fx, 4),
+                "eq_fx_mean": round(cur_fx, 4),
+                "fx_z_score": 0.0,
+                "ou_theta_daily": 0.0,
+                "ou_half_life_days": 0.0,
+                "expected_fx_ou_drift_ann": 0.0,
+                "expected_fx_mom_drift_ann": 0.0,
+                "expected_fx_drift_ann": 0.0,
+                "fx_vol_ann": 0.0,
+                "rho_us_fx": 0.0,
+                "rho_kr_fx": 0.0,
+                "n_obs": 0.0,
+                "quality": 0.0,
+            }
+
+        # 역사적 일별 시계열로부터 정상분포 모멘트(μ_x, σ_x) 및 OU 자기상관(φ_1, θ_OU) 추정 (다일 갭 왜곡 원천 차단)
+        vals = fx_series.astype(float).values
+        if cur_fx <= 100.0:
+            cur_fx = float(vals[-1])
+
+        log_fx = np.log(np.maximum(vals, 1.0))
+        n_obs = float(len(log_fx))
+        mu_x = float(np.mean(log_fx))
+        sigma_x = float(np.std(log_fx, ddof=1)) if len(log_fx) > 2 else 0.0
+        z_fx = float((math.log(max(cur_fx, 1.0)) - mu_x) / max(sigma_x, eps)) if sigma_x > eps else 0.0
+
+        # 이산 Ornstein-Uhlenbeck AR(1) 추정: y_t = x_t - μ_x
+        y = log_fx - mu_x
+        y_prev = y[:-1]
+        y_curr = y[1:]
+        denom = float(np.dot(y_prev, y_prev))
+        if denom > eps and len(y_prev) >= min_ar_obs:
+            phi_raw = float(np.dot(y_curr, y_prev) / denom)
+        else:
+            phi_raw = 1.0 - (1.0 / n_obs)
+        # 정상성(Stationarity) 보장 구간: φ_1 ∈ [exp(-1), 1 - 1 / n_obs]
+        phi_low = math.exp(-1.0)
+        phi_high = 1.0 - (1.0 / max(n_obs, float(min_ar_obs)))
+        phi_1 = min(phi_high, max(phi_low, phi_raw))
+        theta_ou = -math.log(phi_1)
+        half_life = math.log(2.0) / max(theta_ou, eps)
+
+        # 연간 기대 OU 평균회귀 드리프트: μ_{FX,OU} = -252 * θ_OU * (ln S_t - μ_x)
+        log_gap = math.log(max(cur_fx, 1.0)) - mu_x
+        mu_fx_ou = -days_per_yr * theta_ou * log_gap
+
+        # 일간 로그 수익률 및 변동성
+        fx_rets = np.diff(log_fx)
+        sigma_fx_daily = float(np.std(fx_rets, ddof=1)) if len(fx_rets) > 2 else 0.0
+        sigma_fx_ann = sigma_fx_daily * math.sqrt(days_per_yr)
+
+        # 단기(20거래일) 모멘텀 및 t-통계량 수축(Empirical Bayes Shrinkage)
+        mom_win = min(len(fx_rets), min_obs_required)
+        if mom_win >= min_mom_obs and sigma_fx_daily > eps:
+            recent_rets = fx_rets[-mom_win:]
+            mean_recent = float(np.mean(recent_rets))
+            t_mom = abs(mean_recent) / (sigma_fx_daily / math.sqrt(float(mom_win)))
+            shrink_mom = t_mom / (1.0 + t_mom)
+            mu_fx_mom = shrink_mom * mean_recent * days_per_yr
+        else:
+            mu_fx_mom = 0.0
+
+        # 정밀도 가중 결합: |z_FX|가 클수록 평균회귀 포텐셜 에너지(z^2) 지배
+        w_ou = (z_fx * z_fx) / (1.0 + z_fx * z_fx)
+        mu_fx_exp = w_ou * mu_fx_ou + (1.0 - w_ou) * mu_fx_mom
+
+        # 주식-환율 상관계수 (ρ_{US,FX}, ρ_{KR,FX}) 추정
+        rho_us_fx = 0.0
+        rho_kr_fx = 0.0
+        try:
+            fx_ret_series = fx_series.pct_change().dropna()
+            us_idx_path = _DATA_DIR / "us_stocks" / "prices" / "SPY.parquet"
+            if not us_idx_path.exists():
+                us_idx_path = _DATA_DIR / "kr_markets" / "us_sp500.parquet"
+            if us_idx_path.exists():
+                us_res = self._load_close_and_adt(us_idx_path, tail_n=120)
+                if us_res is not None:
+                    common_us = fx_ret_series.index.intersection(us_res[0].index)
+                    if len(common_us) >= min_corr_obs:
+                        c_mat = np.corrcoef(us_res[0].loc[common_us].values, fx_ret_series.loc[common_us].values)
+                        if np.isfinite(c_mat[0, 1]):
+                            rho_us_fx = float(c_mat[0, 1])
+            kr_idx_path = _DATA_DIR / "kr_markets" / "kospi_index.parquet"
+            if kr_idx_path.exists():
+                kr_res = self._load_close_and_adt(kr_idx_path, tail_n=120)
+                if kr_res is not None:
+                    common_kr = fx_ret_series.index.intersection(kr_res[0].index)
+                    if len(common_kr) >= min_corr_obs:
+                        c_mat_kr = np.corrcoef(kr_res[0].loc[common_kr].values, fx_ret_series.loc[common_kr].values)
+                        if np.isfinite(c_mat_kr[0, 1]):
+                            rho_kr_fx = float(c_mat_kr[0, 1])
+        except Exception:
+            pass
+
+        quality = n_obs / (n_obs + float(min_obs_required))
+        return {
+            "spot_fx": round(cur_fx, 4),
+            "eq_fx_mean": round(math.exp(mu_x), 4),
+            "fx_z_score": round(z_fx, 4),
+            "ou_theta_daily": round(theta_ou, 6),
+            "ou_half_life_days": round(half_life, 2),
+            "expected_fx_ou_drift_ann": round(mu_fx_ou, 6),
+            "expected_fx_mom_drift_ann": round(mu_fx_mom, 6),
+            "expected_fx_drift_ann": round(mu_fx_exp, 6),
+            "fx_vol_ann": round(sigma_fx_ann, 6),
+            "rho_us_fx": round(rho_us_fx, 4),
+            "rho_kr_fx": round(rho_kr_fx, 4),
+            "n_obs": n_obs,
+            "quality": round(quality, 4),
+        }
+
+    def compute_fx_adjusted_global_weights(
+        self,
+        krx_metrics: Optional[Dict[str, float]] = None,
+        us_metrics: Optional[Dict[str, float]] = None,
+        regime: str = "caution",
+        regime_probs: Optional[Dict[str, float]] = None,
+        account_state: Optional[Dict[str, Any]] = None,
+        signal_cache: Optional[Dict[str, Any]] = None,
+        spot_fx: Optional[float] = None,
+    ) -> Dict[str, float]:
+        """이토 보조정리(Itô's Lemma) 2차 다통화 수익률·공분산 및 깁스-볼츠만/역변동성 결합 한·미 자본배분 모델.
+
+        수리 모델:
+          1) 원화(KRW) 기준 미국 시장 기대수익률 및 변동성 (Itô 2차항 포함):
+             μ_{US,KRW} = μ_{US,USD} + μ_{FX,exp} + ρ_{US,FX} * σ_{US,USD} * σ_{FX}
+             σ_{US,KRW} = sqrt(σ_{US,USD}^2 + σ_{FX}^2 + 2 * ρ_{US,FX} * σ_{US,USD} * σ_{FX})
+          2) 환율 충격이 반영된 한국 시장 기대수익률:
+             μ_{KR,adj} = μ_{KR} + ρ_{KR,FX} * (σ_{KR} / max(σ_{FX}, ε)) * μ_{FX,exp}
+          3) 역변동성 리스크 패리티(RP)와 깁스-볼츠만 최대엔트로피 해의 표본신뢰도 결합:
+             w_{US}^* = (1 - λ) * w_{US,RP} + λ * w_{US,Boltzmann}
+          4) 기존 보유 달러 지갑(USD Wallet)과 신규 원화→달러 환전(KRW→USD)의 비대칭 경계:
+             - 이미 환전된 달러 지갑 내 자금(w_{USD,wallet})은 현금 보유 시에도 동일한 환율 변동을 겪으므로
+               레짐 생존계수 κ_regime 범위 내에서 미국 주식 운용 허용 (달러 현금 사장 방지).
+             - 반면 기존 달러 지갑을 초과하는 신규 원화 재원 미국 주식 확대분은
+               고환율(z_FX > 0) 구간에서 exp(-max(0, z_FX))로 엄격 감쇠.
+        """
+        self._ensure_calibrated()
+        fx_dyn = self.get_fx_distribution_and_dynamics(signal_cache=signal_cache, spot_fx=spot_fx)
+        mu_fx = float(fx_dyn.get("expected_fx_drift_ann", 0.0))
+        sig_fx = float(fx_dyn.get("fx_vol_ann", 0.0))
+        rho_us_fx = float(fx_dyn.get("rho_us_fx", 0.0))
+        rho_kr_fx = float(fx_dyn.get("rho_kr_fx", 0.0))
+        z_fx = float(fx_dyn.get("fx_z_score", 0.0))
+        cur_fx = float(fx_dyn.get("spot_fx", 0.0) or self.get_fx_rate())
+
+        # 1) KRX 및 US 시장 경험적 모멘트 추출 (인자 미제공 시 교정된 유니버스 중앙값 사용)
+        eps = 1e-6
+        if isinstance(krx_metrics, dict) and krx_metrics.get("vol") is not None:
+            mu_kr_raw = float(krx_metrics.get("ret", 0.0))
+            sig_kr = max(float(krx_metrics.get("vol", 0.0)), eps)
+        elif self._kr_metrics:
+            kr_vols = [float(m["vol"]) for m in self._kr_metrics.values() if m.get("vol", 0.0) > 0]
+            kr_irs = [float(m.get("ir", 0.0)) for m in self._kr_metrics.values()]
+            sig_kr = max(float(np.median(kr_vols)) if kr_vols else 0.20, eps)
+            mu_kr_raw = float(np.median(kr_irs)) * sig_kr if kr_irs else 0.0
+        else:
+            mu_kr_raw = 0.0
+            sig_kr = 0.20
+
+        if isinstance(us_metrics, dict) and us_metrics.get("vol") is not None:
+            mu_us_usd = float(us_metrics.get("ret", 0.0))
+            sig_us_usd = max(float(us_metrics.get("vol", 0.0)), eps)
+        elif self._us_metrics:
+            us_vols = [float(m["vol"]) for m in self._us_metrics.values() if m.get("vol", 0.0) > 0]
+            us_irs = [float(m.get("ir", 0.0)) for m in self._us_metrics.values()]
+            sig_us_usd = max(float(np.median(us_vols)) if us_vols else 0.20, eps)
+            mu_us_usd = float(np.median(us_irs)) * sig_us_usd if us_irs else 0.0
+        else:
+            mu_us_usd = 0.0
+            sig_us_usd = 0.20
+
+        # 2) Itô's Lemma 2차 다통화 변환 (USD → KRW)
+        cov_us_fx = rho_us_fx * sig_us_usd * sig_fx
+        mu_us_krw = mu_us_usd + mu_fx + cov_us_fx
+        var_us_krw = (sig_us_usd * sig_us_usd) + (sig_fx * sig_fx) + 2.0 * cov_us_fx
+        sig_us_krw = math.sqrt(max(var_us_krw, eps * eps))
+
+        # KRX 외국인 환율 민감도 반영
+        mu_kr_adj = mu_kr_raw + (rho_kr_fx * mu_fx)
+
+        # 3) 역변동성 리스크 패리티(RP) 비중 및 깁스-볼츠만 최대엔트로피 비중
+        inv_vol_kr = 1.0 / sig_kr
+        inv_vol_us = 1.0 / sig_us_krw
+        w_us_rp = inv_vol_us / (inv_vol_kr + inv_vol_us)
+
+        ir_kr = mu_kr_adj / sig_kr
+        ir_us_krw = mu_us_krw / sig_us_krw
+        # 지수 오버플로우 방지를 위한 대칭 삼각쌍곡선(tanh) 정규화: tanh(IR) ∈ (-1, 1)
+        score_kr = inv_vol_kr * math.exp(math.tanh(ir_kr))
+        score_us = inv_vol_us * math.exp(math.tanh(ir_us_krw))
+        w_us_boltz = score_us / max(score_kr + score_us, eps)
+
+        conf = float(fx_dyn.get("quality", 0.0))
+        w_us_target = (1.0 - conf) * w_us_rp + conf * w_us_boltz
+        w_kr_target = 1.0 - w_us_target
+
+        # 4) 레짐 연속 생존계수 κ_regime ∈ (0, 1] 산출 (하드코딩 딕셔너리 제거)
+        # 에너지 패널티 E_r: bull=0, caution=0.5, bear=1.0, crash=2.0, panic=2.5
+        e_bull = 0.0
+        e_caution = 1.0 / 2.0
+        e_bear = 1.0
+        e_crash = 2.0
+        e_panic = 2.0 + e_caution
+        energy_map = {
+            "bull": e_bull,
+            "caution": e_caution,
+            "bear": e_bear,
+            "crash": e_crash,
+            "panic": e_panic,
+        }
+        if isinstance(regime_probs, dict) and regime_probs:
+            p_tot = sum(max(0.0, float(v)) for v in regime_probs.values())
+            if p_tot > eps:
+                expected_energy = sum(
+                    (max(0.0, float(v)) / p_tot) * energy_map.get(str(k).lower(), e_caution)
+                    for k, v in regime_probs.items()
+                )
+            else:
+                expected_energy = energy_map.get(str(regime).lower(), e_caution)
+        else:
+            expected_energy = energy_map.get(str(regime).lower(), e_caution)
+
+        kappa_regime = math.exp(-expected_energy)
+
+        # 5) 계좌 내 기존 USD 지갑 비중(w_{USD,wallet}) 확인
+        w_usd_wallet = 0.0
+        if isinstance(account_state, dict):
+            nav_krw = float(account_state.get("total_equity", 0.0) or 0.0)
+            usd_cash = float(account_state.get("usd_cash", 0.0) or account_state.get("ovrs_ord_psbl_amt", 0.0) or 0.0)
+            us_pos_krw = float(account_state.get("us_positions_value_krw", 0.0) or 0.0)
+            if nav_krw > 0:
+                w_usd_wallet = min(1.0, max(0.0, (usd_cash * cur_fx + us_pos_krw) / nav_krw))
+
+        # 고환율(z_FX > 0) 시 신규 원화→달러 환전 한도 감쇠 계수: exp(-max(0, z_FX))
+        fx_expansion_decay = math.exp(-max(0.0, z_fx))
+        model_cap = kappa_regime * w_us_target * fx_expansion_decay
+        wallet_safe_cap = kappa_regime * w_usd_wallet
+        us_exposure_cap_pct = min(1.0, max(model_cap, wallet_safe_cap))
+
+        return {
+            "w_krx": round(w_kr_target, 4),
+            "w_us": round(w_us_target, 4),
+            "w_us_risk_parity": round(w_us_rp, 4),
+            "w_us_boltzmann": round(w_us_boltz, 4),
+            "us_exposure_cap_pct": round(us_exposure_cap_pct, 4),
+            "kappa_regime": round(kappa_regime, 4),
+            "fx_expansion_decay": round(fx_expansion_decay, 4),
+            "w_usd_wallet": round(w_usd_wallet, 4),
+            "mu_us_usd": round(mu_us_usd, 6),
+            "mu_us_krw": round(mu_us_krw, 6),
+            "sig_us_usd": round(sig_us_usd, 6),
+            "sig_us_krw": round(sig_us_krw, 6),
+            "mu_kr_adj": round(mu_kr_adj, 6),
+            "sig_kr": round(sig_kr, 6),
+            "spot_fx": round(cur_fx, 4),
+            "fx_z_score": round(z_fx, 4),
+            "expected_fx_drift_ann": round(mu_fx, 6),
+        }
 
     @staticmethod
     def _krx_tick_size(price: float, is_etf: bool = False) -> float:

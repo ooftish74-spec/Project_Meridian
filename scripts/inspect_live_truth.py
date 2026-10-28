@@ -203,8 +203,17 @@ def inspect_live_truth(as_json: bool = False):
                 currency = prev_h.get("currency") or led_h.get("currency") or ("KRW" if mkt == "KR" else "USD")
                 qty_int = int(pos.quantity)
                 eval_krw = round(qty_int * c_price * (1.0 if mkt == "KR" else live_fx), 0)
-                prev_hwm = float(prev_h.get("high_water_mark") or led_h.get("high_water_mark") or 0.0)
+                prev_avg = float(prev_h.get("avg_price") or led_h.get("last_avg_price") or led_h.get("avg_price") or 0.0)
+                same_entry_px = (prev_avg <= 0) or (a_price > 0 and abs(a_price - prev_avg) * 100.0 <= a_price / 2.0)
+                prev_hwm = float(prev_h.get("high_water_mark") or led_h.get("peak_price") or led_h.get("high_water_mark") or 0.0) if same_entry_px else 0.0
+                prev_pk_pnl = max(0.0, float(led_h.get("peak_pnl_pct", 0.0) or 0.0)) if same_entry_px else 0.0
+                if prev_hwm > 0 and a_price > 0:
+                    implied_pk_pnl = ((prev_hwm - a_price) / a_price) * 100.0
+                    _pnl_tol_ilt = 1.0 / 20.0
+                    if prev_pk_pnl > 0 and abs(implied_pk_pnl - prev_pk_pnl) > _pnl_tol_ilt:
+                        prev_hwm = a_price * (1.0 + prev_pk_pnl / 100.0)
                 hwm = round(max(prev_hwm, a_price, c_price), 4)
+                peak_pnl_pct = round(max(0.0, ret_pct, (((hwm - a_price) / a_price) * 100.0) if a_price > 0 else 0.0), 6)
 
                 holding_record = {
                     **prev_h,
@@ -218,6 +227,7 @@ def inspect_live_truth(as_json: bool = False):
                     'eval_krw': eval_krw,
                     'entry_date': entry_date,
                     'high_water_mark': hwm,
+                    'peak_price': hwm,
                     'stream_id': meta['stream_id'],
                     'stream': meta['stream'],
                     'track': meta['track'],
@@ -228,10 +238,15 @@ def inspect_live_truth(as_json: bool = False):
                     **led_h,
                     'entry_date': entry_date,
                     'avg_price': round(a_price, 2),
+                    'last_avg_price': round(a_price, 4),
                     'qty': qty_int,
+                    'last_qty': float(qty_int),
+                    'last_quantity': float(qty_int),
                     'market': mkt,
                     'currency': currency,
                     'high_water_mark': hwm,
+                    'peak_price': hwm,
+                    'peak_pnl_pct': peak_pnl_pct,
                     'stream_id': meta['stream_id'],
                     'stream': meta['stream'],
                     'track': meta['track'],
@@ -318,6 +333,16 @@ def inspect_live_truth(as_json: bool = False):
 
             def _mutate_ledger(cur):
                 cur = cur if isinstance(cur, dict) else {}
+                active_keys = set(ledger_sync_updates.keys())
+                reserved_keys = {'entries', 'positions'}
+                for stale_k in [k for k in list(cur.keys()) if k not in active_keys and k not in reserved_keys]:
+                    del cur[stale_k]
+                if isinstance(cur.get('entries'), dict):
+                    for stale_k in [k for k in list(cur['entries'].keys()) if k not in active_keys]:
+                        del cur['entries'][stale_k]
+                if isinstance(cur.get('positions'), dict):
+                    for stale_k in [k for k in list(cur['positions'].keys()) if k not in active_keys]:
+                        del cur['positions'][stale_k]
                 for tk, l_val in ledger_sync_updates.items():
                     existing_t = cur.get(tk) if isinstance(cur.get(tk), dict) else {}
                     cur[tk] = {**existing_t, **l_val}
@@ -329,6 +354,9 @@ def inspect_live_truth(as_json: bool = False):
                         cur['positions'][tk] = {**ex_p, **l_val}
                 return cur
             safe_json_update(ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False, strict=True)
+            legacy_ledger_path = PROJECT_ROOT / "results" / "position_ledger.json"
+            if legacy_ledger_path.exists():
+                safe_json_update(legacy_ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False, strict=False)
 
             def _mutate_nav_hist(cur):
                 hist = cur if isinstance(cur, list) else []

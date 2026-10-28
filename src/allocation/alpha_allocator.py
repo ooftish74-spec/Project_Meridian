@@ -1485,36 +1485,68 @@ class AlphaAllocator:
             modified_signals[sid] = valid_signals
         return modified_signals
 
-    def compute_global_market_weights(self, krx_metrics: Dict, us_metrics: Dict, regime: str = 'caution') -> Dict[str, float]:
-        """[User Directive 2: Global Unified Capital Allocation Engine]
+    def compute_global_market_weights(
+        self,
+        krx_metrics: Optional[Dict[str, Any]] = None,
+        us_metrics: Optional[Dict[str, Any]] = None,
+        regime: str = 'caution',
+        regime_probs: Optional[Dict[str, float]] = None,
+        account_state: Optional[Dict[str, Any]] = None,
+        signal_cache: Optional[Dict[str, Any]] = None,
+        spot_fx: Optional[float] = None,
+    ) -> Dict[str, float]:
+        """[Global Unified Capital Allocation Engine — 100% Mathematical Dynamic FX Model]
 
         국장(KRX)과 미장(US) 자금을 50:50 고정하지 않고,
-        전체 NAV(100%) 관점에서 양 시장의 기대값($EV$) 및 Sharpe 비율에 따라
-        자금을 동적으로 배분(Softmax / Risk Parity Hybrid)합니다.
+        Ornstein-Uhlenbeck(AR(1)) 로그 환율 평균회귀 드리프트 및 Itô 2차 다통화 공분산이 반영된
+        원화(KRW) 기준 위험조정 기대수익률과 역변동성 리스크 패리티 결합 해로 동적 배분합니다.
         """
+        half_w = 1.0 / 2.0
         try:
-            ev_krx = float(krx_metrics.get('expected_return', 0.01)) / max(0.001, float(krx_metrics.get('volatility', 0.015)))
-            ev_us = float(us_metrics.get('expected_return', 0.02)) / max(0.001, float(us_metrics.get('volatility', 0.015)))
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            dqe = get_quant_engine()
 
-            tau = pget('allocator.global_softmax_temperature', 0.5)
-            exp_krx = math.exp(min(10.0, max(-10.0, ev_krx / tau)))
-            exp_us  = math.exp(min(10.0, max(-10.0, ev_us / tau)))
+            norm_kr: Optional[Dict[str, float]] = None
+            if isinstance(krx_metrics, dict) and krx_metrics:
+                kr_vol = krx_metrics.get('vol') if krx_metrics.get('vol') is not None else krx_metrics.get('volatility')
+                kr_ret = krx_metrics.get('ret') if krx_metrics.get('ret') is not None else krx_metrics.get('expected_return')
+                if kr_vol is not None:
+                    norm_kr = {'ret': float(kr_ret or 0.0), 'vol': float(kr_vol)}
 
-            w_krx = exp_krx / (exp_krx + exp_us)
+            norm_us: Optional[Dict[str, float]] = None
+            if isinstance(us_metrics, dict) and us_metrics:
+                us_vol = us_metrics.get('vol') if us_metrics.get('vol') is not None else us_metrics.get('volatility')
+                us_ret = us_metrics.get('ret') if us_metrics.get('ret') is not None else us_metrics.get('expected_return')
+                if us_vol is not None:
+                    norm_us = {'ret': float(us_ret or 0.0), 'vol': float(us_vol)}
+
+            res = dqe.compute_fx_adjusted_global_weights(
+                krx_metrics=norm_kr,
+                us_metrics=norm_us,
+                regime=regime,
+                regime_probs=regime_probs,
+                account_state=account_state,
+                signal_cache=signal_cache,
+                spot_fx=spot_fx,
+            )
+
+            max_single_mkt = float(pget('allocator.global_max_single_market_weight', 0.85))
+            min_single_mkt = float(pget('allocator.global_min_single_market_weight', 0.15))
+
+            w_krx = max(min_single_mkt, min(max_single_mkt, float(res.get('w_krx', half_w))))
             w_us = 1.0 - w_krx
+            res['w_krx'] = round(w_krx, 4)
+            res['w_us'] = round(w_us, 4)
 
-            # 레짐별 캡 제약 (DynamicConfig에서 로드)
-            max_single_mkt = pget('allocator.global_max_single_market_weight', 0.85)
-            min_single_mkt = pget('allocator.global_min_single_market_weight', 0.15)
-
-            w_krx = max(min_single_mkt, min(max_single_mkt, w_krx))
-            w_us = 1.0 - w_krx
-
-            logger.info(f"🌐 [Global Capital Allocator] NAV 배분: KRX {w_krx*100:.1f}% | US {w_us*100:.1f}% (EV_KRX={ev_krx:.2f}, EV_US={ev_us:.2f})")
-            return {'w_krx': round(w_krx, 4), 'w_us': round(w_us, 4)}
+            logger.info(
+                f"🌐 [Global Capital Allocator] NAV 배분: KRX {w_krx*100:.1f}% | US {w_us*100:.1f}% "
+                f"(US_Cap={res.get('us_exposure_cap_pct', 0.0)*100:.1f}%, z_FX={res.get('fx_z_score', 0.0):+.2f}, "
+                f"E[dFX]={res.get('expected_fx_drift_ann', 0.0)*100:+.2f}%)"
+            )
+            return res
         except Exception as e:
             logger.warning(f"⚠️ Global Capital Allocator 계산 예외: {e}")
-            return {'w_krx': 0.5, 'w_us': 0.5}
+            return {'w_krx': half_w, 'w_us': half_w}
 
     def compute_unified_factor_score(self, signal: Dict[str, Any], market_data: Optional[Dict[str, Any]] = None) -> float:
         """[Stage 2: Unified Multi-Factor Scoring Engine]

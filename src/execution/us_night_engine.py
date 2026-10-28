@@ -82,19 +82,56 @@ class USNightExecutionEngine:
         self._load_holdings()
 
     def _compute_dynamic_exposure_cap(self) -> float:
-        """[Mathematical Dynamic Model] 시장 레짐 및 포트폴리오 거시 리스크 기반 동적 노출 캡 산출."""
+        """[100% Mathematical Dynamic Model] OU 로그환율 평균회귀·Itô 공분산·레짐 생존계수·달러지갑 연동 동적 노출 캡 산출."""
+        import math as _math_cap
+        default_cap = _math_cap.exp(-1.0 / 2.0) / 2.0
         try:
+            from src.utils.dynamic_quant_engine import get_quant_engine
+            dqe = get_quant_engine()
             regime = str(cfg.get('market.current_regime', 'caution')).lower()
-            regime_multipliers = {
-                'bull': 0.50,
-                'caution': 0.30,
-                'bear': 0.20,
-                'crash': 0.10,
-                'panic': 0.05
-            }
-            return float(regime_multipliers.get(regime, 0.30))
+            regime_probs = None
+            sc = None
+            sc_path = _RESULTS_DIR / 'signal_cache.json'
+            if sc_path.exists():
+                try:
+                    sc = json.loads(sc_path.read_text(encoding='utf-8'))
+                    if isinstance(sc, dict):
+                        regime = str(sc.get('regime') or regime).lower()
+                        if isinstance(sc.get('regime_probs'), dict):
+                            regime_probs = sc.get('regime_probs')
+                except Exception:
+                    sc = None
+
+            acct_state: Dict[str, Any] = {}
+            kp_path = _RESULTS_DIR / 'kis_portfolio.json'
+            if kp_path.exists():
+                try:
+                    kp = json.loads(kp_path.read_text(encoding='utf-8'))
+                    if isinstance(kp, dict):
+                        acct = kp.get('account') if isinstance(kp.get('account'), dict) else {}
+                        acct_state['total_equity'] = float(acct.get('total_equity', 0.0) or 0.0)
+                        acct_state['usd_cash'] = float(acct.get('usd_cash', acct.get('ovrs_ord_psbl_amt', 0.0)) or 0.0)
+                        fx_ref = float(acct.get('spot_fx_rate') or acct.get('fx_rate') or dqe.get_fx_rate(kp) or 0.0)
+                        from src.utils.market_calendar import is_kr_ticker as _is_kr_cap
+                        us_pos_usd = sum(
+                            float(v.get('qty', 0.0) or 0.0) * float(v.get('current_price', v.get('avg_price', 0.0)) or 0.0)
+                            for k, v in (kp.get('holdings') or {}).items()
+                            if isinstance(v, dict) and not _is_kr_cap(str(k))
+                        )
+                        acct_state['us_positions_value_krw'] = us_pos_usd * fx_ref
+                except Exception:
+                    pass
+
+            weights = dqe.compute_fx_adjusted_global_weights(
+                regime=regime,
+                regime_probs=regime_probs,
+                account_state=acct_state if acct_state else None,
+                signal_cache=sc if isinstance(sc, dict) else None,
+            )
+            cap = float(weights.get('us_exposure_cap_pct', default_cap) or default_cap)
+            return max(0.0, min(1.0, cap))
         except Exception:
-            return 0.30
+            return float(default_cap)
 
     def _compute_dynamic_trailing_stop(self, ticker: str = '', atr: float = 0.0) -> float:
         """[Mathematical Dynamic Model] 종목별 실현 변동성/ATR 기반 동적 트레일링 스탑 비율."""
@@ -131,9 +168,9 @@ class USNightExecutionEngine:
         return 0.0
 
     def _load_holdings(self):
-        """미국 장 야간 보유 포지션 로드 (KIS 실계좌 SSOT 및 HWM 연동)."""
+        """미국 장 야간 보유 포지션 로드 (KIS 실계좌 SSOT 및 HWM 정합성 검증 연동)."""
         self.holdings: List[Dict[str, Any]] = []
-        saved_hwm_map: Dict[str, float] = {}
+        saved_hwm_map: Dict[str, Dict[str, Any]] = {}
         if _US_HOLDINGS_FILE.exists():
             try:
                 _saved_list = json.loads(_US_HOLDINGS_FILE.read_text(encoding='utf-8'))
@@ -146,7 +183,11 @@ class USNightExecutionEngine:
                                 float(_sh.get('peak_price', 0.0) or 0.0)
                             )
                             if _sh_hi > 0:
-                                saved_hwm_map[_sh_tk] = _sh_hi
+                                saved_hwm_map[_sh_tk] = {
+                                    'high': _sh_hi,
+                                    'entry_price': float(_sh.get('entry_price', 0.0) or 0.0),
+                                    'entry_date': str(_sh.get('entry_date', '') or '')[:10],
+                                }
             except Exception:
                 pass
 
@@ -154,7 +195,7 @@ class USNightExecutionEngine:
         if kp_path.exists():
             try:
                 from src.execution.position_ledger import PositionLedgerManager
-                ledger_mgr = PositionLedgerManager()
+                ledger_mgr = PositionLedgerManager(ledger_path=str(_RESULTS_DIR / 'position_entry_ledger.json'))
                 kp = json.loads(kp_path.read_text(encoding='utf-8'))
                 today_str = datetime.now().strftime('%Y-%m-%d')
                 from src.utils.market_calendar import is_kr_ticker
@@ -170,17 +211,42 @@ class USNightExecutionEngine:
                     if not is_kr_ticker(str(t)):  # US 종목 (NVDA, QQQ, SOXX, XLK 등)
                         entry_p = float(h.get('avg_price', 0.0) or 0.0)
                         curr_p = float(h.get('current_price', 0.0) or 0.0)
+                        qty_val = float(h.get('qty', h.get('quantity', 0.0)) or 0.0)
                         curr_ret = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
-                        ledger_hwm = ledger_mgr.get_hwm(t)
-                        saved_high = max(
-                            saved_hwm_map.get(t, 0.0),
-                            float(ledger_hwm.get('peak_price', 0.0) or 0.0),
-                            float(h.get('highest_price', 0.0) or 0.0),
-                            float(h.get('peak_price', 0.0) or 0.0),
+                        ledger_ed = str(ledger_mgr.get_entry_date(t) or today_str)[:10]
+
+                        # 이전 us_night_holdings.json의 HWM은 동일 진입가·동일 진입일 포지션일 때만 계승 (유령 고점 오염 차단)
+                        _sh_meta = saved_hwm_map.get(t) or {}
+                        _sh_ep = float(_sh_meta.get('entry_price', 0.0) or 0.0)
+                        _sh_ed = str(_sh_meta.get('entry_date', '') or '')[:10]
+                        _same_entry_px = (entry_p > 0 and _sh_ep > 0 and abs(entry_p - _sh_ep) * 100.0 <= entry_p / 2.0)
+                        _same_entry_dt = (not _sh_ed) or (_sh_ed >= ledger_ed)
+                        valid_saved_high = float(_sh_meta.get('high', 0.0) or 0.0) if (_same_entry_px and _same_entry_dt) else 0.0
+
+                        # 실제 현재가(curr_p), 진입평단가(entry_p), 보유수량(qty_val)을 원장에 전달하여 항등식 검증 및 갱신
+                        hwm = ledger_mgr.update_hwm(
+                            t,
+                            current_price=curr_p if curr_p > 0 else entry_p,
+                            current_pnl_pct=curr_ret,
+                            avg_price=entry_p,
+                            quantity=qty_val,
                         )
-                        merged_high = max(curr_p, entry_p, saved_high)
-                        hwm = ledger_mgr.update_hwm(t, current_price=merged_high, current_pnl_pct=curr_ret)
-                        final_peak = max(merged_high, float(hwm.get('peak_price', merged_high) or merged_high))
+                        ledger_peak = float(hwm.get('peak_price', 0.0) or 0.0)
+                        final_peak = max(curr_p, entry_p, valid_saved_high, ledger_peak)
+                        if final_peak > ledger_peak and entry_p > 0:
+                            peak_pnl_implied = ((final_peak - entry_p) / entry_p) * 100.0
+                            hwm = ledger_mgr.update_hwm(
+                                t,
+                                current_price=final_peak,
+                                current_pnl_pct=peak_pnl_implied,
+                                avg_price=entry_p,
+                                quantity=qty_val,
+                            )
+                        final_peak_pnl = max(
+                            curr_ret,
+                            float(hwm.get('peak_pnl_pct', 0.0) or 0.0),
+                            (((final_peak - entry_p) / entry_p) * 100.0) if entry_p > 0 else 0.0,
+                        )
                         self.holdings.append({
                             'ticker': t,
                             'name': h.get('name', t),
@@ -189,14 +255,15 @@ class USNightExecutionEngine:
                             'track': str(h.get('track') or hwm.get('track') or ''),
                             'entry_price': entry_p,
                             'current_price': curr_p,
-                            'highest_price': final_peak,
-                            'peak_price': final_peak,
-                            'peak_pnl_pct': float(hwm['peak_pnl_pct']) if hwm.get('peak_pnl_pct') is not None else curr_ret,
+                            'highest_price': round(final_peak, 6),
+                            'peak_price': round(final_peak, 6),
+                            'peak_pnl_pct': round(final_peak_pnl, 6),
                             'trail_activated': bool(hwm.get('trail_activated', False)) or (entry_p > 0 and final_peak >= entry_p * (1.0 + self.trail_activation_pct)),
-                            'quantity': int(h.get('qty', 0)),
-                            'amount': float(h.get('qty', 0)) * curr_p,
-                            'entry_date': ledger_mgr.get_entry_date(t) or today_str
+                            'quantity': int(qty_val),
+                            'amount': qty_val * curr_p,
+                            'entry_date': ledger_ed
                         })
+                self._save_holdings()
                 return
             except Exception as e:
                 logger.warning(f"  [USNightEngine] KIS 실계좌 로드 예외: {e}")
@@ -343,7 +410,7 @@ class USNightExecutionEngine:
             self._save_holdings()
         try:
             from src.execution.position_ledger import PositionLedgerManager
-            PositionLedgerManager().record_daily_exit(
+            PositionLedgerManager(ledger_path=str(_RESULTS_DIR / 'position_entry_ledger.json')).record_daily_exit(
                 tk,
                 reason=reason,
                 realized_pnl_pct=float(realized_pnl_pct),
@@ -378,7 +445,7 @@ class USNightExecutionEngine:
         remaining_list = []
         remaining_dict = {}
         from src.execution.position_ledger import PositionLedgerManager
-        ledger_mgr = PositionLedgerManager()
+        ledger_mgr = PositionLedgerManager(ledger_path=str(_RESULTS_DIR / 'position_entry_ledger.json'))
         _adapter = getattr(self, 'adapter', None)
 
         # ── [US Market-Neutral Pair Spread Pre-Scan (S14_PAIR_ALPHA)] ──
@@ -423,16 +490,25 @@ class USNightExecutionEngine:
                 continue
 
             entry_p = float(h.get('entry_price', price) or price)
+            qty_val = float(h.get('quantity', h.get('qty', 0.0)) or 0.0)
             prev_peak = max(
                 float(h.get('highest_price', 0.0) or 0.0),
                 float(h.get('peak_price', entry_p) or entry_p),
                 entry_p
             )
             curr_pnl_pct = (price - entry_p) / entry_p * 100.0 if entry_p > 0 else 0.0
-            hwm = ledger_mgr.update_hwm(ticker, current_price=max(price, prev_peak), current_pnl_pct=curr_pnl_pct)
+            hwm = ledger_mgr.update_hwm(
+                ticker,
+                current_price=price,
+                current_pnl_pct=curr_pnl_pct,
+                avg_price=entry_p,
+                quantity=qty_val,
+            )
             highest_price = max(prev_peak, float(hwm.get('peak_price', price) or price), price)
+            h['current_price'] = price
             h['peak_price'] = highest_price
             h['highest_price'] = highest_price
+            h['peak_pnl_pct'] = round(((highest_price - entry_p) / entry_p * 100.0) if entry_p > 0 else 0.0, 6)
 
             # Track 2 Buffett QVM (S3_B) 포지션은 단기 US 야간 손절/트레일링 면제 (4대 매도 헌법 관할)
             _sid_h = str(h.get('stream_id') or hwm.get('stream_id') or '').strip().upper()

@@ -3777,6 +3777,25 @@ class StreamOrchestrator:
                 if sig and sig.get('direction', 'long') == 'long' 
                 and sig.get('size_pct', 0) > 0
             ]
+
+            # [Dynamic Cross-Market FX Tilting] 동일 스트림(예: S3) 내 한·미 종목 동시 존재 시
+            # OU 로그환율 평균회귀 및 Itô 공분산 기반 글로벌 최적 비중(w_krx, w_us)으로 상대 비중 연속 보정
+            _non_pair_valid = [s for s in valid_signals if not s.get('pair_id')]
+            _has_kr_sigs = any(_is_kr_ub(str(s.get('ticker', '')).split(':')[-1].strip()) for s in _non_pair_valid)
+            _has_us_sigs = any(not _is_kr_ub(str(s.get('ticker', '')).split(':')[-1].strip()) for s in _non_pair_valid)
+            if _has_kr_sigs and _has_us_sigs:
+                try:
+                    _sc_gm = (market_data or {}).get('signal_cache') if isinstance(market_data, dict) else None
+                    _gm_w = _qe_gen.compute_fx_adjusted_global_weights(regime=regime, signal_cache=_sc_gm if isinstance(_sc_gm, dict) else None)
+                    _half_gm = 1.0 / 2.0
+                    _w_kr_gm = float(_gm_w.get('w_krx', _half_gm) or _half_gm)
+                    _w_us_gm = float(_gm_w.get('w_us', _half_gm) or _half_gm)
+                    for _s_gm in _non_pair_valid:
+                        _tk_gm = str(_s_gm.get('ticker', '')).split(':')[-1].strip()
+                        _mult_gm = (2.0 * _w_kr_gm) if _is_kr_ub(_tk_gm) else (2.0 * _w_us_gm)
+                        _s_gm['size_pct'] = float(_s_gm.get('size_pct', 0.0) or 0.0) * _mult_gm
+                except Exception:
+                    pass
             
             # [Red Team V5] 매직 넘버(30%) 삭제 및 100% 수학적 한도(Kelly/Volatility/Drawdown) 주입
             # PositionSizer의 스트림 내 상대적 Kelly/CF 확신도 비율을 보존하면서 스트림 목표 가동률로 정규화 후 3-Sigma 단일종목 상한 적용
@@ -4126,17 +4145,22 @@ class StreamOrchestrator:
                 _kp = _json_exit.loads(_kis_exit_path.read_text(encoding='utf-8'))
                 for t, h in _kp.get('holdings', {}).items():
                     curr_p = float(h.get('current_price', 0.0))
-                    curr_ret = float(h.get('return_pct', 0.0))
-                    hwm_data = ledger_mgr.update_hwm(
-                        t,
-                        current_price=curr_p,
-                        current_pnl_pct=curr_ret,
-                        avg_price=float(h.get('avg_price', 0.0) or 0.0),
-                        quantity=float(h.get('qty', h.get('quantity', 0)) or 0.0),
-                        stream_id=str(h.get('stream_id', '') or ''),
-                        strategy=str(h.get('strategy', '') or ''),
-                        track=str(h.get('track', '') or ''),
-                    )
+                    curr_ret = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
+                    _sess_open_hwm = self._is_ticker_session_open_for_live_exit(str(t), market_data)
+                    _existing_hwm = ledger_mgr.get_hwm(t)
+                    if _sess_open_hwm or float(_existing_hwm.get('peak_price', 0.0) or 0.0) <= 0:
+                        hwm_data = ledger_mgr.update_hwm(
+                            t,
+                            current_price=curr_p,
+                            current_pnl_pct=curr_ret,
+                            avg_price=float(h.get('avg_price', 0.0) or 0.0),
+                            quantity=float(h.get('qty', h.get('quantity', 0)) or 0.0),
+                            stream_id=str(h.get('stream_id', '') or ''),
+                            strategy=str(h.get('strategy', '') or ''),
+                            track=str(h.get('track', '') or ''),
+                        )
+                    else:
+                        hwm_data = _existing_hwm
                     positions[t] = {
                         'ticker': t,
                         'name': h.get('name', t),

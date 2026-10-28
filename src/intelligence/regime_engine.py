@@ -239,8 +239,10 @@ class RegimeEngine:
         sc = self._load_signal_cache()
         if m['kospi_return'] == 0.0 and sc.get('kospi_change_1d') is not None:
             m['kospi_return'] = round(float(sc.get('kospi_change_1d', 0.0)) / 100.0, 6)
-        m['usdkrw'] = float(sc.get('usdkrw', 1350))
-        m['usdkrw_prev'] = float(sc.get('usdkrw_prev', m['usdkrw']))
+        from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_reg
+        _fx_fallback = _get_qe_reg().get_fx_rate(sc)
+        m['usdkrw'] = float(sc.get('usdkrw') or _fx_fallback)
+        m['usdkrw_prev'] = float(sc.get('usdkrw_prev') or m['usdkrw'])
         m['vkospi'] = float(sc.get('vkospi', 18))
         m['ois'] = float(sc.get('ois', 50))
         m['program_net_buy'] = float(sc.get('program_net_buy', sc.get('macro_features', {}).get('program_net_buy', 0.0)) or 0.0)
@@ -623,31 +625,81 @@ class RegimeEngine:
         return None
 
     def _read_macro_history(self, key: str, default_val: float=0.0) -> List[float]:
-        """overnight_macro에서 특정 피처의 시계열 이력을 추출합니다."""
+        """overnight_macro 및 내부 Parquet/signal_cache SSOT로부터 특정 피처의 시계열 이력을 추출합니다."""
+        values: List[float] = []
+        min_files = 10
+        min_series_len = 20
         macro_dir = _PROJECT_ROOT / 'data' / 'raw' / 'overnight_macro'
-        if not macro_dir.exists():
-            return []
-        files = sorted(macro_dir.glob('*.json'))
-        if len(files) < 10:
-            return []
-        values = []
-        for f in files[-120:]:
-            try:
-                data = json.loads(f.read_text())
-                if key == 'usdkrw':
-                    val = data.get('usdkrw', data.get('fx', {}).get('usdkrw'))
-                elif key in ['fred_hy_spread', 'cross_ism_signal', 'yield_curve_inverted']:
-                    val = data.get('macro_features', {}).get(key)
-                elif key == 'news_llm_sentiment':
-                    val = data.get('macro_features', {}).get('news_llm_sentiment', data.get('macro_features', {}).get('news_naver_sentiment'))
-                else:
-                    val = data.get(key)
-                if val is not None:
-                    values.append(float(val))
-            except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
-                import logging
-                logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
-                logger.warning('[SILENT_BYPASS] Suppressed exception at regime_engine.py:614', exc_info=True)
+        if macro_dir.exists():
+            files = sorted(macro_dir.glob('*.json'))
+            if len(files) >= min_files:
+                for f in files[-120:]:
+                    try:
+                        data = json.loads(f.read_text())
+                        if key == 'usdkrw':
+                            val = data.get('usdkrw', data.get('fx', {}).get('usdkrw'))
+                        elif key in ['fred_hy_spread', 'cross_ism_signal', 'yield_curve_inverted']:
+                            val = data.get('macro_features', {}).get(key)
+                        elif key == 'news_llm_sentiment':
+                            val = data.get('macro_features', {}).get('news_llm_sentiment', data.get('macro_features', {}).get('news_naver_sentiment'))
+                        else:
+                            val = data.get(key)
+                        if val is not None:
+                            values.append(float(val))
+                    except (FileNotFoundError, ValueError, KeyError, TypeError, ImportError, json.JSONDecodeError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+                        logging.getLogger(__name__).debug(f"Targeted fallback: {e}")
+
+        if len(values) >= min_series_len:
+            return values
+
+        # Fallback to internal Parquet / signal_cache SSOT when overnight_macro JSON directory is absent
+        try:
+            if key == 'usdkrw':
+                from src.utils.dynamic_quant_engine import get_quant_engine
+                s_fx = get_quant_engine()._load_fx_close_series(tail_n=120)
+                if s_fx is not None and len(s_fx) >= min_series_len:
+                    return [float(x) for x in s_fx.dropna().tolist()]
+            elif key == 'vix':
+                for p_vix in (
+                    _PROJECT_ROOT / 'data' / 'kr_markets' / 'cross_vix.parquet',
+                    _PROJECT_ROOT / 'data' / 'kr_markets' / 'us_vix.parquet',
+                ):
+                    if p_vix.exists():
+                        df_v = pd.read_parquet(p_vix)
+                        c_map = {str(c).lower(): c for c in df_v.columns}
+                        c_col = c_map.get('close') or c_map.get('vix') or c_map.get('adj close')
+                        if c_col:
+                            s_v = pd.to_numeric(df_v[c_col], errors='coerce').dropna().tail(120)
+                            if len(s_v) >= min_series_len:
+                                return [float(x) for x in s_v.tolist()]
+                sc_vix = self._load_signal_cache().get('vix_history', [])
+                if isinstance(sc_vix, list) and len(sc_vix) >= min_files:
+                    extracted = [
+                        float(item.get('vix', 0.0) if isinstance(item, dict) else item)
+                        for item in sc_vix
+                        if (isinstance(item, dict) and float(item.get('vix', 0.0) or 0.0) > 0)
+                        or (isinstance(item, (int, float)) and float(item) > 0)
+                    ]
+                    if len(extracted) >= min_files:
+                        return extracted
+            elif key == 'vkospi':
+                p_vk = _PROJECT_ROOT / 'data' / 'kr_markets' / 'vkospi.parquet'
+                if p_vk.exists():
+                    df_vk = pd.read_parquet(p_vk)
+                    c_map = {str(c).lower(): c for c in df_vk.columns}
+                    c_col = c_map.get('close') or c_map.get('vkospi')
+                    if c_col:
+                        s_vk = pd.to_numeric(df_vk[c_col], errors='coerce').dropna().tail(120)
+                        if len(s_vk) >= min_series_len:
+                            return [float(x) for x in s_vk.tolist()]
+                kospi_s = self._read_price_series(cfg.get('regime.kospi_benchmark_ticker', '069500'))
+                if kospi_s is not None and len(kospi_s) >= min_series_len * 2:
+                    r_vol = (kospi_s.pct_change().dropna().rolling(min_series_len).std() * np.sqrt(252.0) * 100.0).dropna().tail(120)
+                    if len(r_vol) >= min_series_len:
+                        return [float(x) for x in r_vol.tolist()]
+        except Exception as e:
+            logger.debug(f"  [_read_macro_history] Parquet fallback 예외 ({key}): {e}")
+
         return values
 
     def _compute_macro_composite(self, sc: Dict) -> float:
@@ -660,7 +712,8 @@ class RegimeEngine:
         """
         scores = []
         weights = []
-        usdkrw = float(sc.get('usdkrw', 1350))
+        from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_mc
+        usdkrw = float(sc.get('usdkrw') or _get_qe_mc().get_fx_rate(sc))
         fx_series = self._read_fx_history()
         if fx_series is not None and len(fx_series) >= 60:
             try:

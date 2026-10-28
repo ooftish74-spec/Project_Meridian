@@ -2160,7 +2160,15 @@ class KISTraderAdapter:
                                 for _existing_tk in _ledger_mgr.load_ledger().keys():
                                     if not _is_kr_tk(_existing_tk) and _existing_tk not in _active_tickers:
                                         _active_tickers.append(_existing_tk)
-                            _ledger_map = _ledger_mgr.sync_live_positions(_active_tickers)
+                            _h_map_sync = {
+                                _tk_s: {
+                                    'qty': int(_p_s.quantity),
+                                    'avg_price': float(_p_s.avg_price),
+                                    'current_price': float(_p_s.current_price),
+                                }
+                                for _tk_s, _p_s in self.positions.items()
+                            }
+                            _ledger_map = _ledger_mgr.sync_live_positions(_active_tickers, holdings_map=_h_map_sync)
                             for t, pos in self.positions.items():
                                 pos.entry_date = _ledger_map.get(t, "")
                         except Exception as _ledg_err:

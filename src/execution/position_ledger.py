@@ -270,10 +270,14 @@ class PositionLedgerManager:
         return {}
 
     def _save_file_unlocked(self, data: Dict[str, Dict[str, Any]]):
-        """프로세스 간 엄격 파일 락(safe_json_update strict=True) 기반 원자적 저장."""
+        """프로세스 간 엄격 파일 락(safe_json_update strict=True) 기반 원자적 저장 및 레거시 원장 동기화."""
         try:
             from src.utils.file_ops import safe_json_update
             safe_json_update(self.ledger_path, lambda _cur: dict(data), default={}, strict=True)
+            if self.ledger_path.name == "position_entry_ledger.json":
+                legacy_path = self.ledger_path.parent / "position_ledger.json"
+                if legacy_path.exists():
+                    safe_json_update(legacy_path, lambda _cur: dict(data), default={}, strict=False)
         except Exception as e:
             logger.error(f"  ❌ [PositionLedger] 저장 실패: {e}")
 
@@ -416,11 +420,41 @@ class PositionLedgerManager:
                 if resolved_track and (not ledger[ticker].get("track") or resolved_track == "TRACK_2_BUFFETT_QVM"):
                     ledger[ticker]["track"] = resolved_track
                     updated = True
-                if float(quantity or 0.0) > 0 and float(ledger[ticker].get("last_quantity", ledger[ticker].get("last_qty", 0.0)) or 0.0) <= 0:
-                    ledger[ticker]["last_qty"] = float(quantity)
-                    ledger[ticker]["last_quantity"] = float(quantity)
-                    if float(entry_price or 0.0) > 0:
-                        ledger[ticker]["last_avg_price"] = float(entry_price)
+                prev_qty = float(ledger[ticker].get("last_quantity", ledger[ticker].get("last_qty", 0.0)) or 0.0)
+                prev_avg_px = float(ledger[ticker].get("last_avg_price", 0.0) or 0.0)
+                prev_ed = str(ledger[ticker].get("entry_date", ""))[:10]
+                new_ed = str(entry_date or "")[:10]
+                ent_px = float(entry_price or 0.0)
+                ent_qty = float(quantity or 0.0)
+                # 신규 일자 재진입 또는 청산 후 다른 평단가로 재진입한 경우 HWM/트레일링 상태 완전 초기화
+                is_reentry = (
+                    (bool(new_ed) and bool(prev_ed) and new_ed > prev_ed and (prev_qty <= 0 or (ent_px > 0 and prev_avg_px > 0 and abs(ent_px - prev_avg_px) * 100.0 > prev_avg_px / 2.0)))
+                    or (ent_px > 0 and prev_avg_px > 0 and abs(ent_px - prev_avg_px) * 100.0 > prev_avg_px / 2.0 and (prev_qty <= 0 or ent_qty == prev_qty))
+                )
+                if is_reentry and ent_px > 0:
+                    ledger[ticker]["entry_date"] = entry_date
+                    ledger[ticker]["created_at"] = datetime.now().isoformat()
+                    ledger[ticker]["peak_price"] = ent_px
+                    ledger[ticker]["lowest_price"] = ent_px
+                    ledger[ticker]["peak_pnl_pct"] = 0.0
+                    ledger[ticker]["peak_date"] = entry_date
+                    ledger[ticker]["trail_activated"] = False
+                    ledger[ticker]["scaled_out"] = False
+                    ledger[ticker]["last_avg_price"] = ent_px
+                    if ent_qty > 0:
+                        ledger[ticker]["last_qty"] = ent_qty
+                        ledger[ticker]["last_quantity"] = ent_qty
+                    updated = True
+                elif ent_qty > 0 and prev_qty <= 0:
+                    ledger[ticker]["last_qty"] = ent_qty
+                    ledger[ticker]["last_quantity"] = ent_qty
+                    if ent_px > 0:
+                        ledger[ticker]["last_avg_price"] = ent_px
+                        cur_pk_pnl = max(0.0, float(ledger[ticker].get("peak_pnl_pct", 0.0) or 0.0))
+                        ledger[ticker]["peak_price"] = round(ent_px * (1.0 + cur_pk_pnl / 100.0), 6)
+                        cur_low = float(ledger[ticker].get("lowest_price", 0.0) or 0.0)
+                        if cur_low <= 0 or cur_low > ent_px:
+                            ledger[ticker]["lowest_price"] = ent_px
                     updated = True
                 if updated:
                     self._save_file_unlocked(ledger)
@@ -723,6 +757,19 @@ class PositionLedgerManager:
                 info["peak_pnl_pct"] = round(reanchored_pnl, 6)
                 info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
                 updated = True
+            elif curr_avg_px > 0 and prev_avg_px <= 0 and current_price > 0:
+                # 최초 평단가 주입 시 기존 peak_price와 peak_pnl_pct 간 항등식(P_peak == P_avg * (1 + peak_pnl/100)) 정합성 검증
+                old_pk_px = float(info.get("peak_price", 0.0) or 0.0)
+                old_pk_pnl = max(0.0, float(info.get("peak_pnl_pct", 0.0) or 0.0))
+                _pnl_consistency_tol = 1.0 / 20.0
+                if old_pk_px > 0:
+                    implied_pnl = ((old_pk_px - curr_avg_px) / curr_avg_px) * 100.0
+                    if abs(implied_pnl - old_pk_pnl) > _pnl_consistency_tol:
+                        reanchored_pnl = max(0.0, float(current_pnl_pct or 0.0), old_pk_pnl)
+                        info["peak_pnl_pct"] = round(reanchored_pnl, 6)
+                        info["peak_price"] = round(max(float(current_price), curr_avg_px * (1.0 + reanchored_pnl / 100.0)), 6)
+                        info["trail_activated"] = bool(info["peak_pnl_pct"] >= trail_activate_threshold)
+                        updated = True
 
             if curr_qty > 0 and curr_qty != prev_qty:
                 info["last_qty"] = curr_qty
@@ -936,19 +983,60 @@ class PositionLedgerManager:
                     if not cur_trk or (inferred_trk == "TRACK_2_BUFFETT_QVM" and cur_trk != "TRACK_2_BUFFETT_QVM"):
                         ledger[ticker]["track"] = inferred_trk
                         updated = True
+                    if isinstance(h_info, dict):
+                        h_qty = float(h_info.get("qty", h_info.get("quantity", h_info.get("shares", 0.0))) or 0.0)
+                        h_avg = float(h_info.get("avg_price", h_info.get("entry_price", 0.0)) or 0.0)
+                        h_cur = float(h_info.get("current_price", h_avg) or h_avg)
+                        h_pnl = float(h_info.get("pnl_pct", 0.0) or 0.0)
+                        prev_l_qty = float(ledger[ticker].get("last_quantity", ledger[ticker].get("last_qty", 0.0)) or 0.0)
+                        prev_l_avg = float(ledger[ticker].get("last_avg_price", 0.0) or 0.0)
+                        _pnl_tol = 1.0 / 20.0
+                        if h_qty > 0 and h_qty != prev_l_qty:
+                            ledger[ticker]["last_qty"] = h_qty
+                            ledger[ticker]["last_quantity"] = h_qty
+                            updated = True
+                        if h_avg > 0:
+                            if h_avg != prev_l_avg:
+                                ledger[ticker]["last_avg_price"] = h_avg
+                                updated = True
+                            cur_pk_px = float(ledger[ticker].get("peak_price", 0.0) or 0.0)
+                            cur_pk_pnl = max(0.0, float(ledger[ticker].get("peak_pnl_pct", 0.0) or 0.0), h_pnl)
+                            if cur_pk_px > 0:
+                                implied_pnl = ((cur_pk_px - h_avg) / h_avg) * 100.0
+                                if abs(implied_pnl - cur_pk_pnl) > _pnl_tol:
+                                    ledger[ticker]["peak_pnl_pct"] = round(cur_pk_pnl, 6)
+                                    ledger[ticker]["peak_price"] = round(max(h_cur, h_avg * (1.0 + cur_pk_pnl / 100.0)), 6)
+                                    updated = True
+                            elif h_cur > 0:
+                                ledger[ticker]["peak_pnl_pct"] = round(cur_pk_pnl, 6)
+                                ledger[ticker]["peak_price"] = round(max(h_cur, h_avg * (1.0 + cur_pk_pnl / 100.0)), 6)
+                                updated = True
+                            cur_low_px = float(ledger[ticker].get("lowest_price", 0.0) or 0.0)
+                            if h_cur > 0 and (cur_low_px <= 0 or h_cur < cur_low_px):
+                                ledger[ticker]["lowest_price"] = h_cur
+                                updated = True
                     result[ticker] = ledger[ticker]["entry_date"]
                 else:
                     # 완전 신규 매수종목 (기존 보유 원장에 entry_date가 있으면 보존, 없으면 current_date_str)
                     _preserved_ed = str((h_info or {}).get("entry_date") or "").strip()[:10] if isinstance(h_info, dict) else ""
                     _eff_ed = _preserved_ed if len(_preserved_ed) == 10 else current_date_str
+                    h_qty = float((h_info or {}).get("qty", (h_info or {}).get("quantity", (h_info or {}).get("shares", 0.0))) or 0.0) if isinstance(h_info, dict) else 0.0
+                    h_avg = float((h_info or {}).get("avg_price", (h_info or {}).get("entry_price", 0.0)) or 0.0) if isinstance(h_info, dict) else 0.0
+                    h_cur = float((h_info or {}).get("current_price", h_avg) or h_avg) if isinstance(h_info, dict) else 0.0
+                    h_pnl = max(0.0, float((h_info or {}).get("pnl_pct", 0.0) or 0.0)) if isinstance(h_info, dict) else 0.0
+                    init_pk_px = round(max(h_cur, h_avg * (1.0 + h_pnl / 100.0)), 6) if h_avg > 0 else float(h_cur)
                     ledger[ticker] = {
                         "entry_date": _eff_ed,
                         "created_at": datetime.now().isoformat(),
                         "notes": "Auto-registered on sync",
-                        "peak_price": 0.0,
-                        "peak_pnl_pct": 0.0,
+                        "peak_price": init_pk_px,
+                        "lowest_price": float(h_cur or h_avg),
+                        "peak_pnl_pct": round(h_pnl, 6),
                         "peak_date": current_date_str,
                         "trail_activated": False,
+                        "last_avg_price": h_avg,
+                        "last_qty": h_qty,
+                        "last_quantity": h_qty,
                         "stream_id": inferred_sid,
                         "track": inferred_trk,
                     }
