@@ -1983,6 +1983,8 @@ class KISTraderAdapter:
                             total_usd_deposit = 0.0
                             withdrawable_usd = 0.0
                             pledged_margin_usd = 0.0
+                            unsettled_sell_usd = 0.0
+                            unsettled_buy_usd_ctrp = 0.0
                             try:
                                 headers_ctrp = self._get_headers()
                                 headers_ctrp['tr_id'] = 'CTRP6504R' if self.mode == 'live' else 'VTRP6504R'
@@ -2003,6 +2005,8 @@ class KISTraderAdapter:
                                             total_usd_deposit = float(_crow.get('frcr_dncl_amt_2', 0) or 0.0)
                                             withdrawable_usd = float(_crow.get('frcr_drwg_psbl_amt_1', 0) or 0.0)
                                             pledged_margin_usd = float(_crow.get('frcr_buy_mgn_amt', 0) or 0.0)
+                                            unsettled_sell_usd = float(_crow.get('frcr_sll_amt_smtl', 0) or 0.0)
+                                            unsettled_buy_usd_ctrp = float(_crow.get('frcr_buy_amt_smtl', 0) or 0.0)
                                             _ctrp_fx = float(_crow.get('frst_bltn_exrt', 0) or 0.0)
                                             if _ctrp_fx > 0:
                                                 fx_rate = _ctrp_fx
@@ -2052,12 +2056,29 @@ class KISTraderAdapter:
                             self.us_buying_power_usd = round(max(self.integrated_margin_usd, self.direct_usd_cash), 2)
 
                             # [Conservation of Capital NAV Identity]
-                            # 당일(D+0) 미국 주식 매수 시 CTRP6504R의 frcr_dncl_amt_2(D+2 결제 예수금)는 아직 차감 전이고
-                            # frcr_buy_mgn_amt(pledged_margin_usd)에 잡히므로, 원화 통합증거금 부채(kr_integ_debt_usd)를 제외한
-                            # 순수 당일 미국주식 미결제 매수증거금(us_unsettled_buy_usd)을 차감해야 이중 계상이 0원이 됨.
+                            # 1) 당일(D+0) 미국 주식 매수 시 CTRP6504R의 frcr_dncl_amt_2(결제기준 예수금)는 차감 전이고
+                            #    frcr_buy_mgn_amt(pledged_margin_usd) 및 frcr_buy_amt_smtl(unsettled_buy_usd_ctrp)에 잡히므로
+                            #    원화 통합증거금 부채(kr_integ_debt_usd)를 제외한 순수 미결제 매수액을 차감하여 이중 계상 차단.
+                            # 2) 반대로 당일/전일 야간(T+1 미결제) 미국 주식 매도 시 보유주식(us_stock_usd)에서는 즉시 차감되나
+                            #    frcr_dncl_amt_2에는 결제 전까지 미반영되고 frcr_sll_amt_smtl(unsettled_sell_usd) 및
+                            #    TTTS3007R(direct_usd_cash)에만 반영되므로, 미결제 매도대금을 합산해야 NAV 유령 급락을 원천 차단함.
                             _kr_integ_debt_usd = max(0.0, -net_d2_cash_krw / fx_rate) if fx_rate > 0 else 0.0
-                            _us_unsettled_buy_usd = max(0.0, self.pledged_margin_usd - _kr_integ_debt_usd)
-                            self.net_usd_cash_for_nav = round(max(0.0, self.total_usd_deposit - _us_unsettled_buy_usd), 2)
+                            _us_unsettled_buy_usd = max(
+                                0.0,
+                                self.pledged_margin_usd - _kr_integ_debt_usd,
+                                round(unsettled_buy_usd_ctrp, 2),
+                            )
+                            _ctrp_trade_date_usd = max(
+                                0.0,
+                                self.total_usd_deposit + round(unsettled_sell_usd, 2) - _us_unsettled_buy_usd,
+                            )
+                            if unsettled_sell_usd > 0.0 and self.direct_usd_cash > 0.0 and self.pledged_margin_usd <= 0.0:
+                                self.net_usd_cash_for_nav = round(self.direct_usd_cash, 2)
+                                self.total_usd_deposit = round(max(self.total_usd_deposit, self.direct_usd_cash), 2)
+                            else:
+                                self.net_usd_cash_for_nav = round(_ctrp_trade_date_usd, 2)
+                                if unsettled_sell_usd > 0.0:
+                                    self.total_usd_deposit = round(max(self.total_usd_deposit, _ctrp_trade_date_usd), 2)
 
                             logger.info(
                                 f"  💵 [Live US Cash] 총 달러예수금: ${self.total_usd_deposit:,.2f} USD "

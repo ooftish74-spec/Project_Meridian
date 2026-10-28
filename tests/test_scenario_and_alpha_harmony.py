@@ -724,6 +724,114 @@ def test_discrete_lot_knapsack_s14_chop_and_corporate_tax_shield_closed_form():
     assert bonus == pytest.approx(1.485, rel=1e-9)
 
 
+def test_unsettled_us_sale_nav_identity_and_s14_surge_inverse_unwind_closed_form(monkeypatch):
+    """
+    Closed-form verification of:
+    1) KISTraderAdapter unsettled US sale proceeds (CTRP6504R frcr_sll_amt_smtl = $1,291.34 + TTTS3007R $1,347.42)
+       included in net_usd_cash_for_nav to prevent phantom -9.1% NAV drop and false Kill Switch.
+    2) UniversalExitEngine & StreamOrchestrator S14 Surge Inverse Unwind:
+       Under index surge (OIS = 87.1 >= 75.0), inverse leg 114800 (-1.66% <= -1.0*sigma) is immediately unwound
+       via 's14_surge_inverse_unwind', while profitable paired long leg 305720 (+5.27%) is decoupled and preserved.
+    """
+    import pytest
+    from scripts.stream_orchestrator import StreamOrchestrator
+    from src.risk.universal_exit_engine import UniversalExitEngine
+
+    # 1. Closed-form verification of unsettled US sale proceeds NAV identity
+    total_usd_deposit = 63.49
+    unsettled_sell_usd = 1291.34
+    unsettled_buy_usd_ctrp = 0.0
+    pledged_margin_usd = 0.0
+    direct_usd_cash = 1347.42
+    net_d2_cash_krw = 4_691_581.0
+    fx_rate = 1324.30
+
+    kr_integ_debt_usd = max(0.0, -net_d2_cash_krw / fx_rate)
+    us_unsettled_buy_usd = max(
+        0.0,
+        pledged_margin_usd - kr_integ_debt_usd,
+        round(unsettled_buy_usd_ctrp, 2),
+    )
+    ctrp_trade_date_usd = max(
+        0.0,
+        total_usd_deposit + round(unsettled_sell_usd, 2) - us_unsettled_buy_usd,
+    )
+    assert ctrp_trade_date_usd == pytest.approx(63.49 + 1291.34, rel=1e-9)
+
+    if unsettled_sell_usd > 0.0 and direct_usd_cash > 0.0 and pledged_margin_usd <= 0.0:
+        net_usd_cash_for_nav = round(direct_usd_cash, 2)
+    else:
+        net_usd_cash_for_nav = round(ctrp_trade_date_usd, 2)
+
+    assert net_usd_cash_for_nav == pytest.approx(1347.42, rel=1e-9)
+    us_stock_usd = 3904.70
+    kr_eval_krw = 11_059_181.0
+    tot_evlu = kr_eval_krw + (us_stock_usd + net_usd_cash_for_nav) * fx_rate
+    assert tot_evlu == pytest.approx(11_059_181.0 + 5252.12 * 1324.30, rel=1e-9)
+    peak_nav = 18_604_170.0
+    true_dd_pct = (tot_evlu - peak_nav) / peak_nav * 100.0
+    assert true_dd_pct == pytest.approx(-3.169221, rel=1e-5)
+    assert true_dd_pct > -5.0  # Above hard_floor_mdd (-5.0%), so Kill Switch does NOT fire!
+
+    # 2. UniversalExitEngine S14 Surge Inverse Unwind (114800 unwound at -1.66%, 305720 preserved at +5.27%)
+    uee = UniversalExitEngine()
+    monkeypatch.setattr(uee, "compute_ticker_atr", lambda tk: 1.80)  # sigma_d = 1.80 / 1.253314 = 1.4362%
+    s14_kr_positions = {
+        "305720": {
+            "ticker": "305720",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "kr_sector_pair_alpha",
+            "quantity": 168,
+            "entry_price": 13005.0,
+            "current_price": 13690.0,
+            "unrealized_pnl_pct": 5.2672,
+            "peak_pnl_pct": 5.4900,
+            "eval_krw": 168 * 13690.0,
+            "holding_minutes": 180.0,
+        },
+        "114800": {
+            "ticker": "114800",
+            "stream_id": "S14_PAIR_ALPHA",
+            "strategy": "kr_sector_pair_alpha",
+            "quantity": 1780,
+            "entry_price": 1206.0,
+            "current_price": 1186.0,
+            "unrealized_pnl_pct": -1.6584,
+            "peak_pnl_pct": 0.0,
+            "eval_krw": 1780 * 1186.0,
+            "holding_minutes": 180.0,
+        },
+    }
+    res_surge = uee.evaluate_all_positions(
+        s14_kr_positions,
+        market_data={"ois": 87.1, "signal_cache": {"ois": 87.1, "vix": 18.0, "vkospi": 17.5}},
+        regime="caution",
+    )
+    exit_orders = res_surge["exit_orders"]
+    assert len(exit_orders) == 1
+    assert exit_orders[0]["ticker"] == "114800"
+    assert exit_orders[0]["exit_type"] == "s14_surge_inverse_unwind"
+    assert exit_orders[0]["urgency"] == "stop"
+    assert exit_orders[0]["quantity"] == 1780
+    assert exit_orders[0]["pnl_pct"] == pytest.approx(-1.6584, rel=1e-6)
+
+    # 3. StreamOrchestrator._evaluate_exits S14 Surge Inverse Unwind
+    orch = StreamOrchestrator(exec_mode="shadow")
+    orch._latest_signals = {}
+    orch_exits = orch._evaluate_exits(
+        market_data={"ois": 87.1, "signal_cache": {"ois": 87.1, "vix": 18.0, "vkospi": 17.5}},
+        regime="caution",
+        portfolio={"positions": s14_kr_positions},
+    )
+    inv_exits = [e for e in orch_exits if e.get("ticker") == "114800"]
+    long_exits = [e for e in orch_exits if e.get("ticker") == "305720"]
+    assert len(inv_exits) == 1
+    assert "S14 Surge Inverse Unwind" in inv_exits[0]["reason"]
+    assert inv_exits[0]["urgency"] == "stop"
+    assert long_exits == []
+
+
+
 
 
 

@@ -178,6 +178,19 @@ class UniversalExitEngine:
         _kr_l_uee, _kr_i_uee, _us_l_uee, _us_i_uee = _get_s14_sets_uee()
         _KR_PAIR_CANDS = _kr_l_uee | _kr_i_uee
         _US_PAIR_CANDS = _us_l_uee | _us_i_uee
+        _ALL_INV_CANDS = _kr_i_uee | _us_i_uee
+        _ois_val_uee = float((market_data or {}).get('ois') or _sc_dict.get('ois') or _sc_dict.get('overnight_index_score') or 0.0)
+        _surge_z_uee = float((market_data or {}).get('surge_inflection_z') or _sc_dict.get('surge_inflection_z') or 0.0)
+        _trans_sig_uee = str((market_data or {}).get('transition_signal') or _sc_dict.get('transition_signal') or '').strip().lower()
+        _reg_str_uee = str(regime.get('primary_regime', '') if isinstance(regime, dict) else (regime or '')).strip().lower()
+        _ois_surge_thr_uee = 75.0  # hardcode-ok: OIS upper quartile (75th percentile) bullish surge threshold
+        _z_surge_thr_uee = 1.5  # hardcode-ok: 1.5 sigma bullish inflection threshold
+        _is_surge_state_uee = (
+            (_ois_val_uee >= _ois_surge_thr_uee)
+            or (_surge_z_uee >= _z_surge_thr_uee)
+            or (_reg_str_uee in ('bull', 'momentum_surge'))
+            or (_trans_sig_uee in ('v_recovery', 'momentum_surge', 'bullish_inflection'))
+        )
         for _pk_scan, _pos_scan in positions.items():
             if not isinstance(_pos_scan, dict):
                 continue
@@ -285,7 +298,8 @@ class UniversalExitEngine:
                     exit_orders.append(_t2_order)
                 continue
 
-            pnl_pct = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
+            _raw_leg_pnl_uee = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
+            pnl_pct = _raw_leg_pnl_uee
             peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
             atr_pct = self.compute_ticker_atr(ticker)
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
@@ -293,14 +307,58 @@ class UniversalExitEngine:
             _pair_trail_act = False
 
             if _is_active_pair_leg:
-                _p_val_tot = sum(v["val"] for v in _pair_bucket.values() if v["val"] > 0)
-                if _p_val_tot > 0:
-                    pnl_pct = sum(v["val"] * v["pnl"] for v in _pair_bucket.values() if v["val"] > 0) / _p_val_tot
-                _pair_val_krw = _p_val_tot * (1.0 if is_kr_tk else (_fx_rate or 0.0))
                 _leg_sigmas_uee = {
                     k: (self.compute_ticker_atr(k) / math.sqrt(8.0 / math.pi))
                     for k in _pair_bucket.keys()
                 }
+                _long_leg_pnls_uee = [
+                    float(v["pnl"]) for k, v in _pair_bucket.items() if k not in _ALL_INV_CANDS
+                ]
+                _max_long_pnl_uee = max(_long_leg_pnls_uee) if _long_leg_pnls_uee else 0.0
+                _pair_has_surge_unwound_inv = False
+                for _k_inv, _v_inv in _pair_bucket.items():
+                    if _k_inv in _ALL_INV_CANDS:
+                        _inv_pnl_k = float(_v_inv["pnl"])
+                        _inv_sig_k = max(float(_leg_sigmas_uee.get(_k_inv, 1.0) or 1.0), 1.0)
+                        _eff_inv_thr_k = _inv_sig_k if _is_surge_state_uee else (2.0 * _inv_sig_k)
+                        if (_is_surge_state_uee and _inv_pnl_k <= -_inv_sig_k) or (
+                            _max_long_pnl_uee > 0.0 and _inv_pnl_k <= -(2.0 * _inv_sig_k)
+                        ):
+                            _pair_has_surge_unwound_inv = True
+                            if _tk_u == _k_inv:
+                                detail = (
+                                    f"⚡ [S14 Surge Inverse Unwind] {ticker} ({stream_id}): "
+                                    f"지수 급등 국면(OIS={_ois_val_uee:.1f}, surge_z={_surge_z_uee:+.2f}, long_leg={_max_long_pnl_uee:+.2f}%)에서 "
+                                    f"인버스 레그 단독 손실 {_raw_leg_pnl_uee:+.2f}% <= -{_eff_inv_thr_k:.2f}% 도달 ➔ "
+                                    f"베타 드래그(Beta-Drag) 원천 차단 위해 인버스 레그 조기 언와인딩 (롱 레그 알파 보존)"
+                                )
+                                logger.warning(f"  {detail}")
+                                exit_orders.append({
+                                    'stream_id': stream_id,
+                                    'ticker': ticker,
+                                    'direction': 'short',
+                                    'action': 'sell',
+                                    'quantity': qty,
+                                    'price': price,
+                                    'execution_algo': 'market',
+                                    'exit_type': 's14_surge_inverse_unwind',
+                                    'urgency': 'stop',
+                                    'pnl_pct': round(float(_raw_leg_pnl_uee), 4),
+                                    'unrealized_pnl_pct': round(float(_raw_leg_pnl_uee), 4),
+                                    'reason': detail,
+                                })
+                                break
+                if _pair_has_surge_unwound_inv and _tk_u in _ALL_INV_CANDS:
+                    continue
+                if _pair_has_surge_unwound_inv:
+                    # 인버스 레그가 급등 언와인딩되는 즉시 롱 레그도 페어 스프레드 결합 평가에서 분리하여 단독 알파 추세 보존
+                    _is_active_pair_leg = False
+
+            if _is_active_pair_leg:
+                _p_val_tot = sum(v["val"] for v in _pair_bucket.values() if v["val"] > 0)
+                if _p_val_tot > 0:
+                    pnl_pct = sum(v["val"] * v["pnl"] for v in _pair_bucket.values() if v["val"] > 0) / _p_val_tot
+                _pair_val_krw = _p_val_tot * (1.0 if is_kr_tk else (_fx_rate or 0.0))
                 _opt = _dqe.compute_pair_spread_stopping_params(
                     leg_weights={k: v["val"] for k, v in _pair_bucket.items()},
                     regime=regime,

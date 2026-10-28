@@ -4458,6 +4458,7 @@ class StreamOrchestrator:
                         _is_s14_orphan_tl = True
                     elif (not _is_kr_tk(str(_pos_ticker_up))) and _active_s14_us_tickers and _pos_ticker_up not in _active_s14_us_tickers:
                         _is_s14_orphan_tl = True
+                _s14_surge_inv_unwind_reason = None
                 if _is_s14_orphan_tl and _max_hold_days is not None:
                     _max_hold_days = min(float(_max_hold_days), 1.0)
                 elif _is_s14_pos_tl and not _is_s14_orphan_tl:
@@ -4468,6 +4469,7 @@ class StreamOrchestrator:
                         _pair_leg_cnt = 0
                         _pair_leg_vals_so: Dict[str, float] = {}
                         _pair_leg_pxs_so: Dict[str, float] = {}
+                        _pair_leg_pnls_so: Dict[str, float] = {}
                         _pair_leg_sigs_so: List[str] = []
                         _pair_exp_pks_so: List[float] = []
                         _pair_exp_trs_so: List[bool] = []
@@ -4487,45 +4489,89 @@ class StreamOrchestrator:
                                     _pair_leg_cnt += 1
                                     _pair_leg_vals_so[_tk_p] = _val_p
                                     _pair_leg_pxs_so[_tk_p] = _cp_p
+                                    _pair_leg_pnls_so[_tk_p] = _pnl_p
                                     _pair_leg_sigs_so.append(f"{_tk_p}:{int(round(_q_p))}:{round(_ep_p, 4)}")
                                     if _pv_p.get('pair_spread_peak_pnl_pct') is not None:
                                         _pair_exp_pks_so.append(float(_pv_p['pair_spread_peak_pnl_pct']))
                                     if _pv_p.get('pair_spread_trail_activated') is not None:
                                         _pair_exp_trs_so.append(bool(_pv_p['pair_spread_trail_activated']))
                         if _pair_leg_cnt >= 2 and _pair_val_sum > 0:
-                            pnl_pct = _pair_pnl_weighted / _pair_val_sum
-                            _is_active_s14_pair_leg = True
                             try:
-                                from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_pair_so
-                                _cur_reg_so = str(regime.get('primary_regime', 'caution') if isinstance(regime, dict) else (regime or 'caution')).lower()
-                                _pair_opt_so = _get_qe_pair_so().compute_pair_spread_stopping_params(
-                                    leg_weights=_pair_leg_vals_so,
-                                    regime=_cur_reg_so,
-                                    vix_level=_exit_vix,
-                                    total_pair_value_krw=_pair_val_sum,
-                                    leg_prices=_pair_leg_pxs_so,
-                                )
-                                sl_pct = abs(float(_pair_opt_so['hard_sl_limit_pct']))
-                                trail_activate = float(_pair_opt_so['trailing_trigger_pct'])
-                                trail_dist = float(_pair_opt_so['chandelier_drop_pct'])
-                                tp_pct = None  # 상방 고정 익절 상한 제거 → 무상한 ATR 샹들리에 트레일링 및 OU Z-Score 수렴으로 일원화
+                                from src.allocation.sector_pair_alpha_engine import get_dynamic_s14_pair_sets as _get_s14_sets_so
+                                _kl_so, _ki_so, _ul_so, _ui_so = _get_s14_sets_so()
+                                _inv_cands_so = _ki_so | _ui_so
                             except Exception:
-                                pass
-                            try:
-                                from src.execution.position_ledger import PositionLedgerManager as _PLM_Pair_SO
-                                _sp_hwm_so = _PLM_Pair_SO().update_pair_spread_hwm(
-                                    pair_tickers=list(_pair_leg_vals_so.keys()),
-                                    current_spread_pnl_pct=pnl_pct,
-                                    leg_signature="|".join(sorted(_pair_leg_sigs_so)),
-                                    trail_activate_threshold=float(trail_activate or 0.0),
-                                    explicit_spread_peak=max(_pair_exp_pks_so) if _pair_exp_pks_so else None,
-                                    explicit_trail_activated=any(_pair_exp_trs_so) if _pair_exp_trs_so else None,
-                                )
-                                _pair_spread_peak_so = float(_sp_hwm_so['pair_spread_peak_pnl_pct'])
-                                _pair_spread_trail_so = bool(_sp_hwm_so['pair_spread_trail_activated'])
-                            except Exception:
-                                _pair_spread_peak_so = max([pnl_pct] + _pair_exp_pks_so)
-                                _pair_spread_trail_so = bool(any(_pair_exp_trs_so) or (_pair_spread_peak_so >= float(trail_activate or 0.0)))
+                                _inv_cands_so = {'114800', '252670', 'PSQ', 'SH'}  # hardcode-ok
+                            _ois_so = float((market_data or {}).get('ois') or _sc_exit.get('ois') or _sc_exit.get('overnight_index_score') or 0.0)
+                            _sz_so = float((market_data or {}).get('surge_inflection_z') or _sc_exit.get('surge_inflection_z') or 0.0)
+                            _ts_so = str((market_data or {}).get('transition_signal') or _sc_exit.get('transition_signal') or '').strip().lower()
+                            _reg_so_s = str(regime.get('primary_regime', '') if isinstance(regime, dict) else (regime or '')).strip().lower()
+                            _ois_thr_so = 75.0  # hardcode-ok: OIS upper quartile bullish surge threshold
+                            _sz_thr_so = 1.5  # hardcode-ok: 1.5 sigma bullish inflection threshold
+                            _is_surge_so = (
+                                (_ois_so >= _ois_thr_so)
+                                or (_sz_so >= _sz_thr_so)
+                                or (_reg_so_s in ('bull', 'momentum_surge'))
+                                or (_ts_so in ('v_recovery', 'momentum_surge', 'bullish_inflection'))
+                            )
+                            _long_pnls_so = [v for k, v in _pair_leg_pnls_so.items() if k not in _inv_cands_so]
+                            _max_long_pnl_so = max(_long_pnls_so) if _long_pnls_so else 0.0
+                            _pair_inv_surge_unwound_so = False
+                            for _k_i_so, _pnl_i_so in _pair_leg_pnls_so.items():
+                                if _k_i_so in _inv_cands_so:
+                                    try:
+                                        import math as _m_so_inv
+                                        from src.risk.universal_exit_engine import UniversalExitEngine as _UEE_Inv_SO
+                                        _atr_i_so = float(_UEE_Inv_SO().compute_ticker_atr(_k_i_so) or 0.0)
+                                        _vol_i_so = (_atr_i_so / _m_so_inv.sqrt(8.0 / _m_so_inv.pi)) if _atr_i_so > 0.0 else (_compute_asset_daily_volatility(_k_i_so, market_data) * 100.0)  # hardcode-ok: sqrt(8/pi) Gaussian half-normal factor
+                                    except Exception:
+                                        _vol_i_so = _compute_asset_daily_volatility(_k_i_so, market_data) * 100.0
+                                    _vol_i_so = max(_vol_i_so, 1.0)
+                                    _thr_i_so = _vol_i_so if _is_surge_so else (2.0 * _vol_i_so)
+                                    if (_is_surge_so and _pnl_i_so <= -_vol_i_so) or (
+                                        _max_long_pnl_so > 0.0 and _pnl_i_so <= -(2.0 * _vol_i_so)
+                                    ):
+                                        _pair_inv_surge_unwound_so = True
+                                        if _pos_ticker_up == _k_i_so:
+                                            _s14_surge_inv_unwind_reason = (
+                                                f"[L4 Exit] S14 Surge Inverse Unwind: {_pnl_i_so:+.2f}% <= -{_thr_i_so:.2f}% "
+                                                f"(OIS={_ois_so:.1f}, long_leg={_max_long_pnl_so:+.2f}% 급등 베타 드래그 조기 차단)"
+                                            )
+                                        break
+                            if not _pair_inv_surge_unwound_so:
+                                pnl_pct = _pair_pnl_weighted / _pair_val_sum
+                                _is_active_s14_pair_leg = True
+                                try:
+                                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_pair_so
+                                    _cur_reg_so = str(regime.get('primary_regime', 'caution') if isinstance(regime, dict) else (regime or 'caution')).lower()
+                                    _pair_opt_so = _get_qe_pair_so().compute_pair_spread_stopping_params(
+                                        leg_weights=_pair_leg_vals_so,
+                                        regime=_cur_reg_so,
+                                        vix_level=_exit_vix,
+                                        total_pair_value_krw=_pair_val_sum,
+                                        leg_prices=_pair_leg_pxs_so,
+                                    )
+                                    sl_pct = abs(float(_pair_opt_so['hard_sl_limit_pct']))
+                                    trail_activate = float(_pair_opt_so['trailing_trigger_pct'])
+                                    trail_dist = float(_pair_opt_so['chandelier_drop_pct'])
+                                    tp_pct = None  # 상방 고정 익절 상한 제거 → 무상한 ATR 샹들리에 트레일링 및 OU Z-Score 수렴으로 일원화
+                                except Exception:
+                                    pass
+                                try:
+                                    from src.execution.position_ledger import PositionLedgerManager as _PLM_Pair_SO
+                                    _sp_hwm_so = _PLM_Pair_SO().update_pair_spread_hwm(
+                                        pair_tickers=list(_pair_leg_vals_so.keys()),
+                                        current_spread_pnl_pct=pnl_pct,
+                                        leg_signature="|".join(sorted(_pair_leg_sigs_so)),
+                                        trail_activate_threshold=float(trail_activate or 0.0),
+                                        explicit_spread_peak=max(_pair_exp_pks_so) if _pair_exp_pks_so else None,
+                                        explicit_trail_activated=any(_pair_exp_trs_so) if _pair_exp_trs_so else None,
+                                    )
+                                    _pair_spread_peak_so = float(_sp_hwm_so['pair_spread_peak_pnl_pct'])
+                                    _pair_spread_trail_so = bool(_sp_hwm_so['pair_spread_trail_activated'])
+                                except Exception:
+                                    _pair_spread_peak_so = max([pnl_pct] + _pair_exp_pks_so)
+                                    _pair_spread_trail_so = bool(any(_pair_exp_trs_so) or (_pair_spread_peak_so >= float(trail_activate or 0.0)))
 
                 if _max_hold_days:
                     logger.info(f"    [DEBUG L4 Dynamic Math] {_pos_ticker}: days_held={days_held}, dynamic_max_hold={_max_hold_days:.2f}d, pos={pos}")
@@ -4540,6 +4586,9 @@ class StreamOrchestrator:
                     _ex_sid, _ex_sig = _explicit_exit_info
                     reason = f"[Stream Exit Signal] {_ex_sid}: {_ex_sig.get('reason', 'Explicit exit signal')}"
                     urgency = 'panic'
+                elif _s14_surge_inv_unwind_reason is not None:
+                    reason = _s14_surge_inv_unwind_reason
+                    urgency = 'stop'
 
                 # ── TP 도달 ──
                 elif tp_pct is not None and pnl_pct >= tp_pct:
