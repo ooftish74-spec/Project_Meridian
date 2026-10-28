@@ -2304,6 +2304,11 @@ class KISTraderAdapter:
                                     return _kp_data
 
                                 safe_json_update(_kp_path, _kp_mutator, default={}, indent=2)
+                                try:
+                                    from src.risk.runtime_invariant_gate import RuntimeInvariantGate
+                                    RuntimeInvariantGate(results_dir=_PROJECT_ROOT / 'results').audit_and_heal(auto_heal=True)
+                                except Exception as _rig_err:
+                                    logger.debug(f"  [RuntimeInvariantGate] 감사 경고: {_rig_err}")
                             except Exception as _kp_err:
                                 logger.warning(f"  ⚠️ [Live SSOT] kis_portfolio.json 자동 동기화 실패(기존 파일 유지): {_kp_err}")
                         logger.info(f"  ✅ [Live Patch] KIS OpenAPI 통합 원장 갱신 완료: 주문가능현금={self.account.cash:,.0f}원 / MTS 100% 동일 총자산=₩{self.account.total_equity:,.0f}원")

@@ -72,6 +72,8 @@ echo "[1/6] Local test gate (pytest + static contract & hardcoding audit)..."
 GATE_TESTS=(tests/test_wave0_invariants.py tests/test_redteam_ssot_integrity.py
             tests/test_static_contract_and_phase_replay.py
             tests/test_scenario_and_alpha_harmony.py
+            tests/test_dynamic_fx_and_hwm_invariants.py
+            tests/test_full_24h_multisession_replay.py
             "tests/test_intraday_capital_router.py::TestIntradayCapitalRouter::test_resolve_signal_conflicts_same_ticker"
             "tests/test_live_execution_guards.py::test_holdings_guard_allows_buy_and_blocks_unheld_sell")
 [ "${TEST_SCOPE:-gate}" = "full" ] && GATE_TESTS=(tests/)
@@ -140,10 +142,13 @@ echo "[6/6] Health check..."
 "${SSH[@]}" "cd '$REMOTE_DIR' && sleep 5 && systemctl is-active meridian_live_trader_daemon.service && \
   venv/bin/python3 - <<'PY'
 import json
+from src.risk.runtime_invariant_gate import RuntimeInvariantGate
+rig = RuntimeInvariantGate().audit_and_heal(auto_heal=True)
 k = json.load(open('results/kis_portfolio.json'))
 s = json.load(open('results/shadow_portfolio.json'))
 print(f\"  broker NAV={k.get('nav')}  holdings={len(k.get('holdings') or {})}  updated={k.get('updated_at') or k.get('timestamp')}\")
 print(f\"  shadow positions={len(s.get('positions') or {})}  trades={len(s.get('trade_history') or [])}\")
+print(f\"  invariant_gate clean={rig.get('is_clean')}  healed={rig.get('healed_actions')}  macro_series={rig.get('macro_series_counts')}\")
 sc = json.load(open('results/signal_cache.json'))
 print(f\"  signal_cache usdkrw={sc.get('usdkrw')}  vix={sc.get('vix')}\")
 print('  DEPLOYED_VERSION', open('DEPLOYED_VERSION').read().strip())

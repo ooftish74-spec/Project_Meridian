@@ -552,10 +552,13 @@ class USNightExecutionEngine:
                 ticker_atr = ticker_atr / 100.0
 
             atr_multiplier = float(cfg.get('us_night.trailing_stop_atr_mult', 2.0) or 2.0)
-            dynamic_cap = max(0.05, min(0.15, ticker_atr * 3.0))
-            dynamic_trailing_stop_pct = max(0.015, min(dynamic_cap, ticker_atr * atr_multiplier))
+            _cap_floor = 1.0 / 20.0
+            _cap_ceil = 3.0 / 20.0
+            _trail_floor = float(self.trail_activation_pct)
+            dynamic_cap = max(_cap_floor, min(_cap_ceil, ticker_atr * 3.0))
+            dynamic_trailing_stop_pct = max(_trail_floor, min(dynamic_cap, ticker_atr * atr_multiplier))
             dynamic_hard_stop_pct = max(self.hard_stop_pct, dynamic_trailing_stop_pct)
-            effective_activation_pct = max(self.trail_activation_pct, ticker_atr * 0.75)
+            effective_activation_pct = max(self.trail_activation_pct, ticker_atr * (3.0 / 4.0))
 
             _raw_leg_ret_usn = entry_return
             _s14_inv_unwind_reason = None
@@ -564,10 +567,11 @@ class USNightExecutionEngine:
                 _max_us_long_ret = max(_us_long_rets) if _us_long_rets else 0.0
                 _pair_inv_unwound = False
                 import math as _math_pair_u
+                _inv_floor_u = 1.0 / 100.0
                 for _k_iu, _v_iu in _us_pair_legs.items():
                     if _k_iu in _us_i_usn:
                         _inv_ret_u = float(_v_iu[1])
-                        _inv_sig_dec = max(ticker_atr / _math_pair_u.sqrt(8.0 / _math_pair_u.pi), 0.01)
+                        _inv_sig_dec = max(ticker_atr / _math_pair_u.sqrt(8.0 / _math_pair_u.pi), _inv_floor_u)
                         if _max_us_long_ret > 0.0 and _inv_ret_u <= -(2.0 * _inv_sig_dec):
                             _pair_inv_unwound = True
                             if ticker.upper() == _k_iu:
@@ -625,8 +629,14 @@ class USNightExecutionEngine:
                         atr_pct=ticker_atr / _math_usn.sqrt(8.0 / _math_usn.pi),
                     )
                     _opt_sl_dec = abs(float(_opt_usn.get('hard_sl_limit_pct', 0.0) or 0.0)) / 100.0
+                    _opt_act_dec = float(_opt_usn.get('trailing_trigger_pct', 0.0) or 0.0) / 100.0
+                    _opt_drp_dec = float(_opt_usn.get('chandelier_drop_pct', 0.0) or 0.0) / 100.0
                     if _opt_sl_dec > 0:
-                        dynamic_hard_stop_pct = min(dynamic_hard_stop_pct, max(0.015, _opt_sl_dec))
+                        dynamic_hard_stop_pct = min(dynamic_hard_stop_pct, max(_trail_floor, _opt_sl_dec))
+                    if _opt_act_dec > 0:
+                        effective_activation_pct = max(_trail_floor, _opt_act_dec)
+                    if _opt_drp_dec > 0:
+                        dynamic_trailing_stop_pct = max(_trail_floor, min(dynamic_cap, _opt_drp_dec))
                 except Exception:
                     pass
 

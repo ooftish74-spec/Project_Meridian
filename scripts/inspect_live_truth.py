@@ -357,6 +357,11 @@ def inspect_live_truth(as_json: bool = False):
             legacy_ledger_path = PROJECT_ROOT / "results" / "position_ledger.json"
             if legacy_ledger_path.exists():
                 safe_json_update(legacy_ledger_path, _mutate_ledger, default={}, indent=2, ensure_ascii=False, strict=False)
+            try:
+                from src.risk.runtime_invariant_gate import RuntimeInvariantGate
+                RuntimeInvariantGate(results_dir=PROJECT_ROOT / "results").audit_and_heal(auto_heal=True)
+            except Exception:
+                pass
 
             def _mutate_nav_hist(cur):
                 hist = cur if isinstance(cur, list) else []
