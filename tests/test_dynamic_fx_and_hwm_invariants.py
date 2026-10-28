@@ -273,3 +273,84 @@ def test_regime_engine_macro_history_parquet_ssot_fallback(tmp_path: Path, monke
     assert len(vix_hist) == 70
     assert vix_hist[-1] == pytest.approx(21.0, rel=1e-9)
     assert re_eng._read_fx_history() is not None
+
+
+def test_zero_data_loss_disk_retention_and_compression(tmp_path: Path) -> None:
+    """Verify purge_legacy_artifacts preserves tick/parquet & SSOT ledgers, compresses old shadow_trades, and purges old console logs/PDFs."""
+    import gzip
+    from datetime import datetime
+    from scripts.purge_legacy_artifacts import purge_legacy_artifacts
+
+    # 1. Seed protected tick/orderbook Parquet and SSOT ledgers
+    orderbook_dir = tmp_path / "data" / "orderbook"
+    orderbook_dir.mkdir(parents=True, exist_ok=True)
+    tick_parquet = orderbook_dir / "005930_ticks_20260715.parquet"
+    tick_parquet.write_bytes(b"PAR1_TICK_DATA_IMMUTABLE")
+
+    results_dir = tmp_path / "results"
+    corp_dir = results_dir / "corporate_ledger"
+    corp_dir.mkdir(parents=True, exist_ok=True)
+    fills_master = corp_dir / "broker_fills_master.json"
+    fills_master.write_text('{"fills": [{"ticker": "V", "qty": 1}]}', encoding="utf-8")
+    latest_xlsx = corp_dir / "Meridian_Corporate_Accounting_Ledger_Latest.xlsx"
+    latest_xlsx.write_bytes(b"LATEST_EXCEL_SSOT")
+    old_xlsx = corp_dir / "Meridian_Corporate_Accounting_Ledger_20260801.xlsx"
+    old_xlsx.write_bytes(b"OLD_REDUNDANT_EXCEL")
+
+    kp_file = results_dir / "kis_portfolio.json"
+    kp_file.write_text('{"nav": 18054923}', encoding="utf-8")
+
+    # 2. Seed unstructured console text logs (old vs recent) and PDF reports
+    rlogs_dir = results_dir / "logs"
+    rlogs_dir.mkdir(parents=True, exist_ok=True)
+    old_console_log = rlogs_dir / "daily_pipeline_20260815.log"
+    old_console_log.write_text("ERROR LOOP TRACEBACK\n" * 100, encoding="utf-8")
+    recent_console_log = rlogs_dir / "daily_pipeline_20261028.log"
+    recent_console_log.write_text("INFO normal run\n", encoding="utf-8")
+
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    old_pdf = reports_dir / "Ultimate_Meridian_Quant_Report_KR_2026-08-15.pdf"
+    old_pdf.write_bytes(b"%PDF-1.4 old report")
+    recent_pdf = reports_dir / "Ultimate_Meridian_Quant_Report_KR_2026-10-28.pdf"
+    recent_pdf.write_bytes(b"%PDF-1.4 recent report")
+    font_file = reports_dir / "NanumGothic.ttf"
+    font_file.write_bytes(b"TTF_FONT_DATA")
+
+    # 3. Seed structured daily shadow_trades (old -> should become .json.gz; recent -> stays .json)
+    st_dir = results_dir / "shadow_trades"
+    st_dir.mkdir(parents=True, exist_ok=True)
+    old_trade_json = st_dir / "2026-08-15.json"
+    old_trade_payload = '{"date": "2026-08-15", "trades": [{"ticker": "069500", "pnl": 12500}]}'
+    old_trade_json.write_text(old_trade_payload, encoding="utf-8")
+    recent_trade_json = st_dir / "2026-10-28.json"
+    recent_trade_json.write_text('{"date": "2026-10-28", "trades": []}', encoding="utf-8")
+
+    ref_ts = datetime(2026, 10, 29, 9, 0, 0).timestamp()
+    stats = purge_legacy_artifacts(project_root=tmp_path, now_ts=ref_ts)
+
+    assert stats["purged_count"] >= 3
+    assert stats["compressed_count"] == 1
+
+    # Protected files 100% intact
+    assert tick_parquet.exists() and tick_parquet.read_bytes() == b"PAR1_TICK_DATA_IMMUTABLE"
+    assert fills_master.exists()
+    assert latest_xlsx.exists()
+    assert kp_file.exists()
+    assert font_file.exists()
+
+    # Old console logs, old PDFs, and old redundant dated xlsx removed; recent ones kept
+    assert not old_console_log.exists()
+    assert recent_console_log.exists()
+    assert not old_pdf.exists()
+    assert recent_pdf.exists()
+    assert not old_xlsx.exists()
+
+    # Old structured trade log losslessly compressed to .json.gz; recent stays uncompressed
+    assert not old_trade_json.exists()
+    compressed_gz = st_dir / "2026-08-15.json.gz"
+    assert compressed_gz.exists()
+    with gzip.open(compressed_gz, "rt", encoding="utf-8") as f_in:
+        assert f_in.read() == old_trade_payload
+    assert recent_trade_json.exists()
+

@@ -505,7 +505,7 @@ fi
 # 5. Logrotate & Disk Protection (Caps log size at 1GB over 5 years)
 if [ -d "/etc/logrotate.d" ]; then
 cat << LOGROTATE_EOF | sudo tee /etc/logrotate.d/meridian > /dev/null
-/home/ubuntu/Project_Meridian/logs/*.log {
+/home/ubuntu/Project_Meridian/logs/*.log /home/ubuntu/Project_Meridian/results/logs/*.log {
     daily
     missingok
     rotate 14
