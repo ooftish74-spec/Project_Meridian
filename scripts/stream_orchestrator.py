@@ -2342,6 +2342,8 @@ class StreamOrchestrator:
                                 'unrealized_pnl_pct': curr_ret,
                                 'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
                                 'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
+                                'lowest_price': float(hwm_data['lowest_price']) if (hwm_data.get('lowest_price') or 0.0) > 0 else curr_p,
+                                'scaled_out': bool(hwm_data.get('scaled_out', False)),
                                 'trail_activated': bool(hwm_data.get('trail_activated', False)),
                                 'holding_minutes': _h_mins,
                                 'market': h.get('market', 'KR' if _is_kr_tk(t) else 'US')
@@ -2789,6 +2791,7 @@ class StreamOrchestrator:
             for _mk_copy in (
                 'expected_return', 'expected_return_pct', 'expected_alpha',
                 'tp_pct', 'sl_pct', 'confidence', 'is_hedge', 'is_hedge_completion', 'is_market_neutral', 'beta',
+                'exit_type', 'sell_type',
             ):
                 if _rep.get(_mk_copy) is not None:
                     _netted_item[_mk_copy] = _rep[_mk_copy]

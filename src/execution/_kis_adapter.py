@@ -1895,7 +1895,10 @@ class KISTraderAdapter:
                         self.ord_psbl_cash_raw_krw = float(out_psbl.get('ord_psbl_cash', 0) or 0.0)
                         self.nrcvb_buy_amt_krw = float(out_psbl.get('nrcvb_buy_amt', out_psbl.get('max_buy_amt', 0)) or 0.0)
                         self.ord_psbl_frcr_amt_wcrc = float(out_psbl.get('ord_psbl_frcr_amt_wcrc', 0) or 0.0)
-                        ord_psbl_cash = self.ord_psbl_cash_raw_krw if self.ord_psbl_cash_raw_krw > 0 else self.nrcvb_buy_amt_krw
+                        # [KRX T+2 Unsettled Sale Proceeds Re-Use]
+                        # TTTC8908R (OVRS_ICLD_YN='N')에서 nrcvb_buy_amt는 D+0 예수금(ord_psbl_cash) + 전일/금일 매도재사용가능금액(ruse_psbl_amt)을
+                        # 합산한 '미수없는 100% 현금 매수가능금액'이며, 아래에서 raw_d2_cash(prvs_rcdl_excc_amt)로 상한 캡핑되어 달러 침범 및 미수를 원천 차단함.
+                        ord_psbl_cash = self.nrcvb_buy_amt_krw if self.nrcvb_buy_amt_krw > 0 else self.ord_psbl_cash_raw_krw
                 except Exception as e_psbl:
                     from src.utils.error_logger import log_error_rate_limited
                     log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e_psbl}", exc_info=True)

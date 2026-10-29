@@ -2788,6 +2788,12 @@ def _phase_call_auction_0830():
                         is_risk_exit=True,
                         reason=exit_reason
                     )
+                    if (
+                        str(exit_order.get('exit_type') or '').lower() in ('scale_out_50pct', 'time_decay_exit')
+                        or '50% 자동 청산' in str(exit_reason)
+                        or '50% 분할' in str(exit_reason)
+                    ):
+                        ledger_mgr.mark_scaled_out(exit_tk)
         except Exception as _uee_err:
             logger.error(f"  ❌ [08:30 CallAuction] UniversalExitEngine 평가 실패: {_uee_err}", exc_info=True)
 

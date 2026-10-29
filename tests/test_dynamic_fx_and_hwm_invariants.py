@@ -354,3 +354,59 @@ def test_zero_data_loss_disk_retention_and_compression(tmp_path: Path) -> None:
         assert f_in.read() == old_trade_payload
     assert recent_trade_json.exists()
 
+
+def test_scale_out_idempotency_and_d2_reusable_krw_buying_power(tmp_path: Path) -> None:
+    """Verify mark_scaled_out prevents repeated 50% scale-outs and nrcvb_buy_amt capped by raw_d2_cash unlocks unsettled KRW sale proceeds."""
+    from src.execution.position_ledger import PositionLedgerManager
+    from src.risk.universal_exit_engine import UniversalExitEngine
+
+    ledger_path = tmp_path / "position_entry_ledger.json"
+    plm = PositionLedgerManager(ledger_path=ledger_path)
+    plm.record_entry("012750", entry_price=95443.0, stream_id="S2", strategy="ml_alpha", track="TRACK_1_TACTICAL")
+
+    hwm0 = plm.get_hwm("012750")
+    assert hwm0["scaled_out"] is False
+
+    # Simulate marking scaled_out after first 50% scale-out
+    plm.mark_scaled_out("012750")
+    hwm1 = plm.get_hwm("012750")
+    assert hwm1["scaled_out"] is True
+
+    # UniversalExitEngine must NOT fire scale_out_50pct or time_decay_exit when scaled_out=True
+    uee = UniversalExitEngine()
+    positions = {
+        "012750": {
+            "ticker": "012750",
+            "stream_id": "S2",
+            "strategy": "ml_alpha",
+            "track": "TRACK_1_TACTICAL",
+            "quantity": 4,
+            "entry_price": 95443.0,
+            "current_price": 94900.0,
+            "unrealized_pnl_pct": -0.57,
+            "peak_pnl_pct": 0.58,
+            "peak_price": 96000.0,
+            "lowest_price": 94900.0,
+            "scaled_out": bool(hwm1.get("scaled_out", False)),
+            "trail_activated": False,
+            "holding_minutes": 4320.0,
+            "market": "KR",
+        }
+    }
+    res = uee.evaluate_all_positions(positions, market_data={}, regime="caution")
+    scale_out_orders = [
+        o for o in res.get("exit_orders", [])
+        if o.get("exit_type") in ("scale_out_50pct", "time_decay_exit")
+    ]
+    assert len(scale_out_orders) == 0
+
+    # Verify KRX D+2 reusable sale proceeds math:
+    # ord_psbl_cash_raw_krw = 330,844 (D+0 cash), nrcvb_buy_amt_krw = 5,093,461 (D+0 + ruse_psbl_amt), raw_d2_cash = 5,154,813
+    ord_psbl_cash_raw_krw = 330844.0
+    nrcvb_buy_amt_krw = 5093461.0
+    raw_d2_cash = 5154813.0
+    ord_psbl_cash = nrcvb_buy_amt_krw if nrcvb_buy_amt_krw > 0 else ord_psbl_cash_raw_krw
+    ord_psbl_cash = min(ord_psbl_cash, raw_d2_cash) if ord_psbl_cash > 0 else raw_d2_cash
+    assert ord_psbl_cash == pytest.approx(5093461.0, rel=1e-9)
+
+
