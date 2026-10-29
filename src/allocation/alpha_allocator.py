@@ -358,7 +358,6 @@ class AlphaAllocator:
         )
         for sid in self.STREAMS:
             metrics = (stream_metrics or {}).get(sid, {}) or {}
-            import math
             daily_returns = [float(r) for r in (metrics.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
             pos_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r > 0.0]
             neg_rets = [abs(r) / 100.0 if abs(r) > 1.0 else abs(r) for r in daily_returns if r < 0.0]
@@ -675,7 +674,6 @@ class AlphaAllocator:
             golden_bull_mult = 1.0
 
         if use_softmax:
-            import math
             _min_temp = 1e-4
             _eps_exp = 1e-9
             _base_temp = max(float(pget('allocator.softmax_temperature', 0.005)), _min_temp)
