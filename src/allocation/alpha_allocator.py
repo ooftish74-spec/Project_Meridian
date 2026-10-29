@@ -278,6 +278,56 @@ class AlphaAllocator:
             _canon_mk = _STREAM_CANONICAL_MAP.get(str(_mk), str(_mk))
             if _canon_mk != _mk and not _norm_metrics.get(_canon_mk):
                 _norm_metrics[_canon_mk] = _mv
+        # Aggregate active S3_A (US Quality-Momentum) and S3_B (KR Buffett QVM) sleeves into S3
+        # when S3 top-level entry has 0 active positions / 0 return days.
+        _s3_top = _norm_metrics.get('S3') if isinstance(_norm_metrics.get('S3'), dict) else {}
+        if int(_s3_top.get('active_positions') or 0) == 0 and len(_s3_top.get('daily_returns') or []) == 0:
+            _s3_subs = [
+                _norm_metrics[_sk]
+                for _sk in ('S3_A', 'S3_B')
+                if isinstance(_norm_metrics.get(_sk), dict)
+                and (int(_norm_metrics[_sk].get('active_positions') or 0) > 0 or len(_norm_metrics[_sk].get('daily_returns') or []) > 0)
+            ]
+            if _s3_subs:
+                _mv_tot = sum(max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs)
+                _blend_sr = sum(
+                    float(_sub.get('sharpe') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
+                    for _sub in _s3_subs
+                    if _sub.get('sharpe') is not None
+                ) / _mv_tot
+                _blend_aw = sum(
+                    float(_sub.get('avg_win') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
+                    for _sub in _s3_subs
+                ) / _mv_tot
+                _blend_al = sum(
+                    float(_sub.get('avg_loss') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
+                    for _sub in _s3_subs
+                ) / _mv_tot
+                _max_len = max((len(_sub.get('daily_returns') or []) for _sub in _s3_subs), default=0)
+                _blend_rets = []
+                for _idx_r in range(_max_len):
+                    _r_num = 0.0
+                    _r_den = 0.0
+                    for _sub in _s3_subs:
+                        _sr_list = _sub.get('daily_returns') or []
+                        if _idx_r < len(_sr_list):
+                            _w_sub = max(1.0, float(_sub.get('market_value') or 1.0))
+                            _r_num += float(_sr_list[_idx_r]) * _w_sub
+                            _r_den += _w_sub
+                    if _r_den > 0.0:
+                        _blend_rets.append(round(_r_num / _r_den, 6))
+                _norm_metrics['S3'] = {
+                    **_s3_top,
+                    'active_positions': sum(int(_sub.get('active_positions') or 0) for _sub in _s3_subs),
+                    'market_value': sum(float(_sub.get('market_value') or 0.0) for _sub in _s3_subs),
+                    'total_trades': sum(int(_sub.get('total_trades') or 0) for _sub in _s3_subs),
+                    'n_days': len(_blend_rets),
+                    'daily_returns': _blend_rets,
+                    'avg_win': round(_blend_aw, 6),
+                    'avg_loss': round(_blend_al, 6),
+                    'sharpe': round(_blend_sr, 3),
+                    'win_rate': round(len([r for r in _blend_rets if r > 0.0]) / max(1, len(_blend_rets)), 3) if _blend_rets else 0.5,
+                }
         stream_metrics = _norm_metrics
         self._stream_metrics = stream_metrics
 
@@ -309,8 +359,12 @@ class AlphaAllocator:
             _has_zero_days = ('n_days' in metrics and int(metrics.get('n_days') or 0) == 0)
             _has_zero_trades = ('total_trades' in metrics and int(metrics.get('total_trades') or 0) == 0)
             _has_explicit_payoff = ('avg_win' in metrics or 'avg_win_pct' in metrics)
-            n_obs = len(daily_returns) or int(metrics.get('total_trades') or metrics.get('n_days') or 0)
-            if _has_zero_days or _has_zero_trades:
+            _n_trades_m = int(metrics.get('total_trades') or 0)
+            _n_days_m = int(metrics.get('n_days') or 0)
+            n_obs = max(len(daily_returns), _n_trades_m, _n_days_m)
+            if _has_zero_days and _has_zero_trades:
+                n_obs = len(daily_returns)
+            elif (_has_zero_days or _has_zero_trades) and _n_trades_m <= 0:
                 n_obs = len(daily_returns)
             _is_cold_start = (len(daily_returns) == 0) and (_has_zero_days or _has_zero_trades or (n_obs == 0 and not _has_explicit_payoff))
             if _is_cold_start and sid in _AUX_STREAM_SET:
@@ -323,9 +377,15 @@ class AlphaAllocator:
                 and str(_s.get('direction', 'long')).lower() not in ('exit', 'short', 'sell')
                 and str(_s.get('action', 'buy')).lower() not in ('exit', 'sell')
             ]
+            _is_unreported_aux = (
+                _has_active_empirical
+                and ('S0' in stream_metrics or 'S5' in stream_metrics)
+                and sid in _AUX_STREAM_SET
+                and not metrics
+            )
             if (
                 (_has_active_empirical or bool(_all_sigs_in))
-                and (_has_zero_trades or _has_zero_days)
+                and (_has_zero_trades or _has_zero_days or _is_unreported_aux)
                 and int(metrics.get('active_positions') or 0) == 0
                 and len(_sid_live_sigs) == 0
                 and sid not in ('S0', 'S5')
@@ -334,6 +394,8 @@ class AlphaAllocator:
                 _cold_start_aux_streams.add(sid)
             n_0 = 20
             lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
+            _n_win_obs = _n_trades_m if _n_trades_m > 0 else n_obs
+            lam_win = float(_n_win_obs) / float(_n_win_obs + n_0) if _n_win_obs > 0 else 0.0
 
             # [Signal-Informed Empirical Bayes Prior]
             # When a stream has active live buy signals (or explicit signal_win_rate / signal_risk),
@@ -384,6 +446,10 @@ class AlphaAllocator:
                 except Exception:
                     pass
 
+            _emp_p_win_raw = None
+            _emp_reward_raw = None
+            _emp_risk_raw = None
+
             raw_p_win = metrics.get('win_rate', metrics.get('p_win'))
             if _is_cold_start:
                 p_win = _prior_p_win
@@ -393,58 +459,89 @@ class AlphaAllocator:
                     p_win = _prior_p_win
                 elif p_win > 1.0:
                     p_win = p_win / 100.0
+                else:
+                    _emp_p_win_raw = p_win
+                if _emp_p_win_raw is None and p_win != _prior_p_win:
+                    _emp_p_win_raw = p_win
                 if n_obs > 0:
-                    p_win = lam_n * p_win + (1.0 - lam_n) * _prior_p_win
+                    p_win = lam_win * p_win + (1.0 - lam_win) * _prior_p_win
             elif daily_returns:
                 emp_p_win = float(len(pos_rets)) / float(len(daily_returns))
-                p_win = lam_n * emp_p_win + (1.0 - lam_n) * _prior_p_win
+                _emp_p_win_raw = emp_p_win
+                p_win = lam_win * emp_p_win + (1.0 - lam_win) * _prior_p_win
             else:
                 p_win = _prior_p_win
 
             if metrics.get('avg_win') is not None:
-                reward = abs(float(metrics.get('avg_win') or 0.0)) or _prior_reward
-                if reward > 1.0:
-                    reward = reward / 100.0
-                if n_obs > 0 or _is_cold_start:
-                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
+                _rw_v = abs(float(metrics.get('avg_win') or 0.0))
+                if _rw_v > 1.0:
+                    _rw_v = _rw_v / 100.0
+                if _rw_v > 0.0:
+                    _emp_reward_raw = _rw_v
+                reward = _rw_v or _prior_reward
             elif metrics.get('avg_win_pct') is not None:
-                reward = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0 or _prior_reward
-                if n_obs > 0 or _is_cold_start:
-                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
+                _rw_v = abs(float(metrics.get('avg_win_pct') or 0.0)) / 100.0
+                if _rw_v > 0.0:
+                    _emp_reward_raw = _rw_v
+                reward = _rw_v or _prior_reward
             elif metrics.get('expected_return') is not None:
-                reward = abs(float(metrics.get('expected_return') or 0.0)) or _prior_reward
-                if reward > 1.0:
-                    reward = reward / 100.0
-                if n_obs > 0:
-                    reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
-                elif _is_cold_start:
-                    reward = _prior_reward
+                _rw_v = abs(float(metrics.get('expected_return') or 0.0))
+                if _rw_v > 1.0:
+                    _rw_v = _rw_v / 100.0
+                reward = _rw_v or _prior_reward
             elif daily_returns:
-                emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else _prior_reward
-                reward = lam_n * emp_rew + (1.0 - lam_n) * _prior_reward
+                emp_rew = float(sum(pos_rets) / len(pos_rets)) if pos_rets else 0.0
+                if emp_rew > 0.0:
+                    _emp_reward_raw = emp_rew
+                reward = emp_rew or _prior_reward
             else:
                 reward = _prior_reward
 
             if metrics.get('avg_loss') is not None:
-                risk = abs(float(metrics.get('avg_loss') or 0.0)) or _prior_risk
-                if risk > 1.0:
-                    risk = risk / 100.0
-                if n_obs > 0:
-                    risk = lam_n * risk + (1.0 - lam_n) * _prior_risk
+                _rk_v = abs(float(metrics.get('avg_loss') or 0.0))
+                if _rk_v > 1.0:
+                    _rk_v = _rk_v / 100.0
+                if _rk_v > 0.0:
+                    _emp_risk_raw = _rk_v
+                risk = _rk_v or _prior_risk
             elif metrics.get('avg_loss_pct') is not None:
-                risk = abs(float(metrics.get('avg_loss_pct') or 0.0)) / 100.0 or _prior_risk
-                if n_obs > 0:
-                    risk = lam_n * risk + (1.0 - lam_n) * _prior_risk
+                _rk_v = abs(float(metrics.get('avg_loss_pct') or 0.0)) / 100.0
+                if _rk_v > 0.0:
+                    _emp_risk_raw = _rk_v
+                risk = _rk_v or _prior_risk
             elif daily_returns:
-                emp_risk = float(sum(neg_rets) / len(neg_rets)) if neg_rets else (abs(float(metrics.get('volatility') or 0.0)) or _prior_risk)
+                emp_risk = float(sum(neg_rets) / len(neg_rets)) if neg_rets else 0.0
                 if emp_risk > 1.0:
                     emp_risk = emp_risk / 100.0
-                risk = lam_n * emp_risk + (1.0 - lam_n) * _prior_risk
+                if emp_risk > 0.0:
+                    _emp_risk_raw = emp_risk
+                risk = emp_risk or (abs(float(metrics.get('volatility') or 0.0)) or _prior_risk)
+                if risk > 1.0:
+                    risk = risk / 100.0
             elif metrics.get('volatility') is not None:
                 risk = abs(float(metrics.get('volatility') or 0.0)) or _prior_risk
                 if risk > 1.0:
                     risk = risk / 100.0
             else:
+                risk = _prior_risk
+
+            # Scale-consistent risk normalization on daily return series:
+            # Preserves exact reward/risk ratio b = R/L and Profit Factor while eliminating
+            # low-volatility penalty on high-Sortino stock pods (S2) and 2x-ETF volatility bias (S1).
+            _scaled_emp_rew = _emp_reward_raw
+            _scaled_emp_risk = _emp_risk_raw
+            if daily_returns and _emp_reward_raw is not None and _emp_risk_raw is not None and _emp_risk_raw > 1e-9:
+                _scale_norm = _prior_risk / _emp_risk_raw
+                _scaled_emp_rew = _emp_reward_raw * _scale_norm
+                _scaled_emp_risk = _prior_risk
+                reward = _scaled_emp_rew
+                risk = _scaled_emp_risk
+
+            if not _is_cold_start and n_obs > 0:
+                reward = lam_n * reward + (1.0 - lam_n) * _prior_reward
+                risk = lam_n * risk + (1.0 - lam_n) * _prior_risk
+            elif _is_cold_start:
+                reward = _prior_reward
                 risk = _prior_risk
 
             if math.isnan(p_win): p_win = self._ev_default_p_win
@@ -453,6 +550,39 @@ class AlphaAllocator:
             # Expected Value: EV = p * Reward - (1 - p) * Risk
             ev = p_win * reward - (1.0 - p_win) * risk
             if math.isnan(ev): ev = 0.0
+
+            # 🛡️ [Citadel Continuous Bayesian Pod Meritocracy — Single-Shrinkage on Unshrunk Empirical Stats]
+            _m_mult_sid = 1.0
+            _eff_pod_mult = 1.0
+            if sid not in ('S5', 'S_YIELD') and n_obs > 0 and not _is_cold_start:
+                try:
+                    from src.params.dynamic_quant_models import compute_bayesian_pod_meritocracy_factor
+                    _pod_res = compute_bayesian_pod_meritocracy_factor(
+                        sharpe=metrics.get('sharpe'),
+                        profit_factor=metrics.get('profit_factor'),
+                        win_rate=_emp_p_win_raw if _emp_p_win_raw is not None else p_win,
+                        avg_win_dec=_emp_reward_raw if _emp_reward_raw is not None else reward,
+                        avg_loss_dec=_emp_risk_raw if _emp_risk_raw is not None else risk,
+                        n_obs=n_obs,
+                    )
+                    _m_mult_sid = float(_pod_res.meritocracy_multiplier)
+                    if _m_mult_sid < 1.0:
+                        _eff_pod_mult = max(
+                            0.01,
+                            _m_mult_sid * float(_pod_res.psr_survival) * float(_pod_res.pf_survival),
+                        )
+                    else:
+                        _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
+                        if _sr_val > 0.0 and _n_win_obs >= 2:
+                            _t_sr_pos = (_sr_val / math.sqrt(252.0)) * math.sqrt(max(1.0, float(_n_win_obs) - 1.0))
+                            _psr_pos = math.erf(_t_sr_pos / math.sqrt(2.0))
+                            _sr_cap = min(1.0, _sr_val / 3.0)
+                            _psr_ev_bonus = lam_win * _psr_pos * _sr_cap * _prior_risk
+                            ev += _psr_ev_bonus
+                            _eff_pod_mult = 1.0 + lam_win * _psr_pos * _sr_cap
+                except Exception:
+                    _m_mult_sid = 1.0
+                    _eff_pod_mult = 1.0
 
             # 🚀 [GapDriftAlphaEngine] Renaissance / Citadel Bayesian Continuous Prior Update
             if sid == 'S1':
@@ -484,35 +614,31 @@ class AlphaAllocator:
                     ker_val = float(_raw_ker)
                     noise_intensity = max(0.0, min(1.0, 1.0 - ker_val))
                     prior_boost = round((noise_intensity - (1.0 / 2.0)) * float(reward), 4)
+                    if prior_boost > 0.0 and _m_mult_sid < 1.0:
+                        prior_boost = round(prior_boost * _eff_pod_mult, 5)
                     ev += prior_boost
                     logger.info(f"  🚀 [S14 Continuous Noise Prior] KER={ker_val:.3f}, Noise={noise_intensity:.1%} ➔ EV boost: {prior_boost:+.4f}")
                 else:
                     logger.info(f"  🛡️ [S14 Continuous Noise Prior] KER={_raw_ker} <= min_valid({_min_valid_ker:.3f}) ➔ missing/stale/near-zero KER boost skipped")
 
-            # 🛡️ [Citadel Continuous Bayesian Pod Meritocracy]
-            _m_mult_sid = 1.0
-            if sid not in ('S5', 'S_YIELD') and n_obs > 0 and not _is_cold_start:
-                try:
-                    from src.params.dynamic_quant_models import compute_bayesian_pod_meritocracy_factor
-                    _pod_res = compute_bayesian_pod_meritocracy_factor(
-                        sharpe=metrics.get('sharpe'),
-                        profit_factor=metrics.get('profit_factor'),
-                        win_rate=p_win,
-                        avg_win_dec=reward,
-                        avg_loss_dec=risk,
-                        n_obs=n_obs,
-                    )
-                    _m_mult_sid = float(_pod_res.meritocracy_multiplier)
-                    if _m_mult_sid < 1.0:
-                        if ev > 0.0:
-                            ev = ev * _m_mult_sid
-                        logger.info(
-                            f"  🛡️ [Bayesian Pod Meritocracy] {sid}: M_pod={_m_mult_sid:.4f} "
-                            f"(PSR_surv={_pod_res.psr_survival:.3f}, PF_surv={_pod_res.pf_survival:.3f}, n={n_obs}) ➔ EV={ev:+.5f}"
-                        )
-                except Exception:
-                    _m_mult_sid = 1.0
-            _pod_merit_map[sid] = _m_mult_sid
+            if _m_mult_sid < 1.0:
+                if (
+                    _emp_p_win_raw is not None
+                    and _scaled_emp_rew is not None
+                    and _scaled_emp_risk is not None
+                ):
+                    _raw_emp_ev = _emp_p_win_raw * _scaled_emp_rew - (1.0 - _emp_p_win_raw) * _scaled_emp_risk
+                    if _raw_emp_ev < 0.0:
+                        ev = min(ev * _eff_pod_mult, _raw_emp_ev * (1.0 - _eff_pod_mult))
+                    elif ev > 0.0:
+                        ev = ev * _eff_pod_mult
+                elif ev > 0.0:
+                    ev = ev * _eff_pod_mult
+                logger.info(
+                    f"  🛡️ [Bayesian Pod Meritocracy] {sid}: M_pod={_m_mult_sid:.4f}, W_eff={_eff_pod_mult:.4f} "
+                    f"(n={n_obs}) ➔ EV={ev:+.5f}"
+                )
+            _pod_merit_map[sid] = _eff_pod_mult
 
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
@@ -545,7 +671,7 @@ class AlphaAllocator:
             _ev_std = float(np.std(_ev_vals)) if len(_ev_vals) >= 2 else 0.0
             temp = max(_base_temp, _ev_std, _min_temp)
             _reg_mat = self._default_regime_weights()
-            if any(_mv < 1.0 for _mv in _pod_merit_map.values()):
+            if any(abs(_mv - 1.0) > 1e-6 for _mv in _pod_merit_map.values()):
                 for _rk_m, _rrow_m in list(_reg_mat.items()):
                     if isinstance(_rrow_m, dict):
                         _sc_row = {k: float(v) * float(_pod_merit_map.get(k, 1.0)) for k, v in _rrow_m.items()}
@@ -679,6 +805,8 @@ class AlphaAllocator:
             _stream_sigs_map = {}
             _stream_resids_map = {}
             for _sid in self.STREAMS:
+                if float(_pod_merit_map.get(_sid, 1.0)) < 1.0 or float(final_weights.get(_sid, 0.0)) <= 0.0:
+                    continue
                 _sm = (stream_metrics or {}).get(_sid, {})
                 _hist_rets = _sm.get('daily_returns', _sm.get('returns', []))
                 if _hist_rets and len(_hist_rets) >= 5:
@@ -686,16 +814,21 @@ class AlphaAllocator:
                     _stream_resids_map[_sid] = _stream_sigs_map[_sid] - np.mean(_stream_sigs_map[_sid])
 
             if len(_stream_sigs_map) >= 2:
-                _mkt_ret = np.mean(list(_stream_sigs_map.values()), axis=0)
-                _evo_res = _scde.process_frontier_evolution(
-                    current_allocations=final_weights,
-                    stream_signals=_stream_sigs_map,
-                    stream_residuals=_stream_resids_map,
-                    market_returns=_mkt_ret
-                )
-                if _evo_res.get('zero_bias_verified'):
-                    final_weights = _evo_res['modulated_weights']
-                    logger.info(f"  🧬 [SolitonCausalDiversityEngine] 무편향 솔리톤 인과 변조 완료: {final_weights}")
+                _sub_sum = sum(float(final_weights.get(k, 0.0)) for k in _stream_sigs_map)
+                if _sub_sum > 1e-6:
+                    _sub_allocs = {k: float(final_weights.get(k, 0.0)) / _sub_sum for k in _stream_sigs_map}
+                    _mkt_ret = np.mean(list(_stream_sigs_map.values()), axis=0)
+                    _evo_res = _scde.process_frontier_evolution(
+                        current_allocations=_sub_allocs,
+                        stream_signals=_stream_sigs_map,
+                        stream_residuals=_stream_resids_map,
+                        market_returns=_mkt_ret
+                    )
+                    if _evo_res.get('zero_bias_verified'):
+                        _mod_sub = _evo_res['modulated_weights']
+                        for _k_s, _v_s in _mod_sub.items():
+                            final_weights[_k_s] = round(float(_v_s) * _sub_sum, 6)
+                        logger.info(f"  🧬 [SolitonCausalDiversityEngine] 무편향 솔리톤 인과 변조 완료: {final_weights}")
         except Exception as _evo_err:
             logger.debug(f"  [SolitonCausalDiversityEngine] 연동 예외 (fallback 보존): {_evo_err}")
 

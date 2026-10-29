@@ -724,6 +724,42 @@ def test_krx_call_auction_repeg_guard_and_shadow_cost_healing(tmp_path, monkeypa
     assert healed_kp["streams"]["S4"]["n_signals"] == 1
 
 
+def test_alpha_allocator_single_shrinkage_and_s3_sleeve_aggregation() -> None:
+    """Verify AlphaAllocator eliminates double Bayesian shrinkage on losing pods (S14),
+    scales winning pods by sample-size PSR confidence (S2 > S1), and aggregates S3_A/S3_B sleeves into S3.
+    """
+    from src.allocation.alpha_allocator import AlphaAllocator
+
+    live_me = {
+        "S0": {"win_rate": 0.258, "avg_win": 0.008078, "avg_loss": 0.004505, "n_days": 5, "daily_returns": [0.000557, 0.004623, -0.00791, -0.0011, 0.019053], "total_trades": 31, "realized_pnl": -466690.52, "active_positions": 1, "market_value": 1031520.0, "sharpe": -0.351, "alpha": 1.522},
+        "S1": {"win_rate": 1.0, "avg_win": 0.032089, "avg_loss": 0.020906, "n_days": 5, "daily_returns": [0.011408, 0.049302, -0.020906, 0.052126, 0.035518], "total_trades": 2, "realized_pnl": 158906.0, "active_positions": 2, "market_value": 940005.0, "sharpe": 9.099, "alpha": 12.745},
+        "S10_MEGA_TREND": {"win_rate": 0.364, "avg_win": 0.0, "avg_loss": 0.0, "n_days": 0, "daily_returns": [], "total_trades": 11, "realized_pnl": 14242.63, "active_positions": 0, "market_value": 0.0, "sharpe": None, "alpha": None},
+        "S14_PAIR_ALPHA": {"win_rate": 0.333, "avg_win": 0.002975, "avg_loss": 0.007918, "n_days": 5, "daily_returns": [-0.006743, -0.007311, -0.009162, 0.002975, -0.008454], "total_trades": 9, "realized_pnl": -696959.0, "active_positions": 2, "market_value": 5334915.0, "sharpe": -13.168, "alpha": -2.869},
+        "S2": {"win_rate": 0.591, "avg_win": 0.010687, "avg_loss": 0.006623, "n_days": 5, "daily_returns": [-0.006623, 0.011906, 0.011052, 0.008365, 0.011425], "total_trades": 22, "realized_pnl": -155748.8, "active_positions": 3, "market_value": 1345721.74, "sharpe": 11.104, "alpha": 3.613},
+        "S3": {"win_rate": 0.25, "avg_win": 0.0, "avg_loss": 0.0, "n_days": 0, "daily_returns": [], "total_trades": 4, "realized_pnl": -558325.18, "active_positions": 0, "market_value": 0.0, "sharpe": None, "alpha": None},
+        "S3_A": {"win_rate": 0.0, "avg_win": 0.014933, "avg_loss": 0.005372, "n_days": 2, "daily_returns": [-0.005372, 0.014933], "total_trades": 1, "realized_pnl": -21778.18, "active_positions": 2, "market_value": 1317320.77, "sharpe": 2.662, "alpha": None},
+        "S3_B": {"win_rate": 0.0, "avg_win": 0.032989, "avg_loss": 0.005231, "n_days": 2, "daily_returns": [-0.005231, 0.032989], "total_trades": 2, "realized_pnl": -45274.0, "active_positions": 1, "market_value": 3207600.0, "sharpe": 5.839, "alpha": None},
+        "S4": {"win_rate": 0.0, "avg_win": 0.0, "avg_loss": 0.0, "n_days": 0, "daily_returns": [], "total_trades": 0, "realized_pnl": 0.0, "active_positions": 0, "market_value": 0.0, "sharpe": None, "alpha": None},
+        "S5": {"win_rate": 0.0, "avg_win": 0.0, "avg_loss": 0.0, "n_days": 0, "daily_returns": [], "total_trades": 0, "realized_pnl": 0.0, "active_positions": 0, "market_value": 0.0, "sharpe": None, "alpha": None},
+    }
+    alloc = AlphaAllocator()
+    w = alloc.allocate(live_me, regime="caution", market_data={"vix": 18.0, "signal_cache": {"vix": 18.0, "qqq_ker": 0.25}})
+
+    # 1. S2 (n=22, Sharpe=+11.10, PF=2.33) must be #1 allocated pod (>40%)
+    assert w["S2"] > 0.40
+    # 2. S3 (aggregated from S3_B Sharpe=5.84 + S3_A Sharpe=2.66) must be #2 (>20%)
+    assert w["S3"] > 0.20
+    # 3. S2 (n=22) must strictly exceed S1 (n=2)
+    assert w["S2"] > w["S1"]
+    # 4. S14_PAIR_ALPHA (Sharpe=-13.17, PF=0.19, n=9) must be contracted below 1%
+    assert w["S14_PAIR_ALPHA"] < 0.01
+    # 5. Unreported zero-trade aux streams must be zeroed
+    assert w["S11_HIGHBETA_SNIPER"] == pytest.approx(0.0, abs=1e-6)
+    assert w["S12_DERIVATIVE_SQUEEZE"] == pytest.approx(0.0, abs=1e-6)
+    assert w["S13_JAPAN_ALPHA"] == pytest.approx(0.0, abs=1e-6)
+
+
+
 
 
 

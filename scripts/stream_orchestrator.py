@@ -1325,8 +1325,8 @@ class StreamOrchestrator:
                                 sharpe=_m_me.get('sharpe'),
                                 profit_factor=_m_me.get('profit_factor'),
                                 win_rate=_m_me.get('win_rate'),
-                                avg_win_dec=_m_me.get('avg_win_pct'),
-                                avg_loss_dec=_m_me.get('avg_loss_pct'),
+                                avg_win_dec=_m_me.get('avg_win_pct') if _m_me.get('avg_win_pct') is not None else _m_me.get('avg_win'),
+                                avg_loss_dec=_m_me.get('avg_loss_pct') if _m_me.get('avg_loss_pct') is not None else _m_me.get('avg_loss'),
                                 n_obs=int(_m_me.get('total_trades') or 0),
                             )
                             _has_s3b_live = False
@@ -1345,7 +1345,7 @@ class StreamOrchestrator:
                             _s3b_me = _me_slv.get('S3_B') if isinstance(_me_slv.get('S3_B'), dict) else None
                             if _has_s3b_live and _s3b_me and int(_s3b_me.get('total_trades') or 0) > 0:
                                 _m_me = _s3b_me
-                        for _k_me in ('sharpe', 'win_rate', 'total_trades', 'profit_factor', 'avg_win_pct', 'avg_loss_pct', 'realized_pnl_krw'):
+                        for _k_me in ('sharpe', 'win_rate', 'total_trades', 'profit_factor', 'avg_win', 'avg_loss', 'avg_win_pct', 'avg_loss_pct', 'realized_pnl', 'realized_pnl_krw', 'daily_returns', 'n_days'):
                             if _m_me.get(_k_me) is not None:
                                 _cur_sm[_k_me] = _m_me[_k_me]
             except Exception as _me_err:

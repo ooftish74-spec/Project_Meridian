@@ -195,7 +195,7 @@ class MeasurementEngine:
         s2_rolling = self._compute_s2_rolling_metrics(sp, target_date=target_date)
         quant = self._compute_quant_metrics(sp, risk)
         ic_ensemble = self._compute_ic_ensemble_view(sp)
-        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'jensen_alpha_pct': portfolio.get('jensen_alpha_pct', 0), 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'avg_win': sv.get('avg_win', 0.0), 'avg_loss': sv.get('avg_loss', 0.0), 'n_days': sv.get('n_return_days', 0), 'daily_returns': sv.get('daily_returns', []), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict) and sid != 'S_RECON'}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
+        self.result = {'date': target_date if target_date else date.today().isoformat(), 'timestamp': datetime.now().isoformat(), 'engine_version': 'v2.0', 's2_rolling': s2_rolling, 'official': {'da': portfolio['da'], 'da_n': portfolio['da_total'], 'da_correct': portfolio['da_correct'], 'da_total': portfolio['da_total'], 'da_held': portfolio.get('da_held'), 'da_realized': portfolio.get('da_realized'), 'alpha_pct': portfolio['alpha_pct'], 'alpha_vs_bench': portfolio['alpha_pct'], 'jensen_alpha_pct': portfolio.get('jensen_alpha_pct', 0), 'cumulative_return_pct': portfolio['cumulative_return_pct'], 'benchmark_return_pct': portfolio['benchmark_return_pct'], 'ic': portfolio.get('ic'), 'ic_p_value': portfolio.get('ic_p_value'), 'ic_n': portfolio.get('ic_n', 0), 'ic_method': portfolio.get('ic_method', 'spearman'), 'sharpe': risk['sharpe'], 'max_drawdown_pct': risk['max_drawdown_pct'], 'annualized_vol_pct': risk.get('annualized_vol_pct', 0), 'sortino': risk.get('sortino'), 'calmar': risk.get('calmar'), 'portfolio_beta': portfolio_beta, 'nav': portfolio['nav'], 'total_days': portfolio['total_days'], 'n_days': portfolio['total_days'], 'realized_pnl_krw': portfolio.get('realized_pnl_krw', 0), 'realized_win_rate': portfolio.get('realized_win_rate'), 'realized_trades': portfolio.get('realized_trades', 0), 'avg_pnl_pct': quant.get('expectancy_pct', 0), 'brier_skill': signal_quality.get('brier_skill'), 'grade': self._compute_grade(risk, portfolio), 'verdict': 'DIAGNOSE_CONTINUE', 'legacy_verdict': self._compute_verdict(risk, portfolio, quant), 'blocking': False, 'psr': risk.get('psr'), 'dsr': risk.get('dsr'), 'min_trl_days': risk.get('min_trl_days'), 'icir': quant.get('icir'), 'calmar_ratio': quant.get('calmar_ratio'), 'win_loss_ratio': quant.get('win_loss_ratio'), 'profit_factor': quant.get('profit_factor'), 'realized_kelly': quant.get('realized_kelly'), 'avg_win_pct': quant.get('avg_win_pct'), 'avg_loss_pct': quant.get('avg_loss_pct'), 'expectancy_pct': quant.get('expectancy_pct'), 'market_effect': attribution.get('daily', {}).get('market_effect', 0), 'sector_effect': attribution.get('daily', {}).get('sector_effect', 0), 'stock_selection_alpha': attribution.get('daily', {}).get('stock_selection', 0), 'timing_effect': attribution.get('daily', {}).get('timing_effect', 0), 'selection_alpha': portfolio.get('selection_alpha', 0), 'selection_return': portfolio.get('selection_return', 0), 'allocation_effect': portfolio.get('allocation_effect', 0), 'nav_alpha': portfolio.get('nav_alpha', 0), 'avg_invest_pct': portfolio.get('avg_invest_pct', 0), 'risk_free_rate': portfolio.get('risk_free_rate', 3.5), 'rolling_da': portfolio.get('rolling_da', 0), 'da_min_positions': portfolio.get('da_min_positions', 5), 'da_valid_days': portfolio.get('da_valid_days', 0), 'per_stream': {sid: {'win_rate': sv.get('win_rate', 0), 'avg_win': sv.get('avg_win', 0.0), 'avg_loss': sv.get('avg_loss', 0.0), 'profit_factor': sv.get('profit_factor'), 'n_days': sv.get('n_return_days', 0), 'daily_returns': sv.get('daily_returns', []), 'total_trades': sv.get('total_trades', 0), 'realized_pnl': sv.get('realized_pnl', 0), 'active_positions': sv.get('active_positions', 0), 'market_value': sv.get('market_value', 0), 'sharpe': sv.get('sharpe'), 'alpha': sv.get('alpha')} for sid, sv in sleeves.items() if isinstance(sv, dict) and sid != 'S_RECON'}}, 'views': {'portfolio': portfolio, 'risk': risk, 'sleeves': sleeves, 'attribution': attribution, 'signal_quality': signal_quality, 'model_health': model_health, 'execution': execution, 'regime': regime, 'quant_metrics': quant, 'ic_ensemble': ic_ensemble, 'go_nogo': self._build_gonogo_view(risk, portfolio, quant, sp)}, 'daily_series': self._extract_daily_series(sp)}
         self._save()
         self._log_summary()
         return self.result
@@ -709,6 +709,8 @@ class MeasurementEngine:
         realized_by_stream = {}
         wins_by_stream = {}
         trades_by_stream = {}
+        gross_profit_by_stream = {}
+        gross_loss_by_stream = {}
         for t in trade_history:
             sid = _infer_canonical_stream(t.get('ticker', ''), t.get('stream_id', t.get('stream', '')), ledger_map)
             if not sid or sid in _INVALID_STREAM_IDS:
@@ -717,6 +719,8 @@ class MeasurementEngine:
                 realized_by_stream[sid] = 0.0
                 wins_by_stream[sid] = 0
                 trades_by_stream[sid] = 0
+                gross_profit_by_stream[sid] = 0.0
+                gross_loss_by_stream[sid] = 0.0
             action = t.get('action', '').upper()
             if action == 'SELL':
                 entry = t.get('entry_price', t.get('avg_price', 0))
@@ -727,6 +731,9 @@ class MeasurementEngine:
                 trades_by_stream[sid] += 1
                 if pnl > 0:
                     wins_by_stream[sid] += 1
+                    gross_profit_by_stream[sid] += pnl
+                elif pnl < 0:
+                    gross_loss_by_stream[sid] += abs(pnl)
         result = {}
         core_streams = cfg.get('dashboard.core_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10_MEGA_TREND'])
         all_streams = set(
@@ -757,6 +764,14 @@ class MeasurementEngine:
             avg_win_val = round(sum(wins_r) / len(wins_r), 6) if wins_r else 0.0
             avg_loss_val = round(sum(loss_r) / len(loss_r), 6) if loss_r else 0.0
             win_rate_val = round(n_wins / max(n_trades, 1), 3) if n_trades > 0 else (round(len(wins_r) / n_days, 3) if n_days > 0 else 0.0)
+            _gp_val = gross_profit_by_stream.get(sid, 0.0)
+            _gl_val = gross_loss_by_stream.get(sid, 0.0)
+            if _gl_val > 0.0:
+                pf_val = round(_gp_val / _gl_val, 4)
+            elif wins_r and loss_r and sum(loss_r) > 0.0:
+                pf_val = round(sum(wins_r) / sum(loss_r), 4)
+            else:
+                pf_val = None
             sleeve = {
                 'active_positions': stats.get('count', 0),
                 'market_value': round(float(stats.get('market_value', 0)), 2),
@@ -766,6 +781,7 @@ class MeasurementEngine:
                 'win_rate': win_rate_val,
                 'avg_win': avg_win_val,
                 'avg_loss': avg_loss_val,
+                'profit_factor': pf_val,
                 'daily_returns': rets,
                 'source': 'shadow_portfolio + kis_portfolio + position_entry_ledger',
             }
