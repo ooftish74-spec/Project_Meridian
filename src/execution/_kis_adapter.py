@@ -629,13 +629,61 @@ class KISTraderAdapter:
                 _mem_qty = int(held_pos.quantity) if held_pos else 0
                 _broker_qty = int((getattr(self, '_cached_live_positions', None) or {}).get(order.ticker, 0) or 0)
                 held_qty = max(_mem_qty, _broker_qty)
+                _psbl_map = getattr(self, '_live_ord_psbl_qty', None)
+                if not isinstance(_psbl_map, dict):
+                    _psbl_map = {}
+                if not _pending_sells and self.mode in ('live', 'paper'):
+                    _in_pytest_sell = bool(os.environ.get('PYTEST_CURRENT_TEST') or os.environ.get('MERIDIAN_TEST_MODE') == '1')
+                    _recent_exit_hit = False
+                    if self.mode == 'live' and not _in_pytest_sell:
+                        try:
+                            from src.execution.position_ledger import PositionLedgerManager as _PLM_SellGuard
+                            _ex_det = (_PLM_SellGuard().get_daily_exit_details() or {}).get(str(order.ticker).upper())
+                            if isinstance(_ex_det, dict) and _ex_det.get('exited_at'):
+                                _ex_dt = datetime.fromisoformat(str(_ex_det['exited_at']).replace('Z', '+00:00')).replace(tzinfo=None)
+                                _el_sec = (datetime.now().replace(tzinfo=None) - _ex_dt).total_seconds()
+                                if 0.0 <= _el_sec <= 900.0:  # hardcode-ok
+                                    _recent_exit_hit = True
+                        except Exception:
+                            _recent_exit_hit = False
+                    if _recent_exit_hit:
+                        try:
+                            _prior_sell = self._find_broker_order_since(
+                                order, datetime.now() - timedelta(minutes=15), attempts=1  # hardcode-ok
+                            )
+                            if _prior_sell is not None:
+                                _ccld_q = int(float(_prior_sell.get('ft_ccld_qty', _prior_sell.get('tot_ccld_qty', _prior_sell.get('ccld_qty', 0))) or 0))
+                                _psbl_now = _psbl_map.get(order.ticker)
+                                if _ccld_q >= int(order.quantity) or (_psbl_now is not None and int(_psbl_now) <= 0):
+                                    logger.warning(
+                                        f"  🛡️ [Orderable Sell Guard] {order.ticker}: 선행 매도 주문(ODNO: {_prior_sell.get('odno')}, 체결: {_ccld_q}주) "
+                                        f"기체결 확인 ➔ 중복 매도 전송 원천 차단"
+                                    )
+                                    _psbl_map[order.ticker] = 0
+                                    order.status = 'skipped_insufficient_holdings'
+                                    order.notes = (order.notes + ',' if order.notes else '') + 'skipped_already_sold'
+                                    return order
+                        except Exception as _ps_err:
+                            logger.debug(f"Orderable sell guard broker ledger check bypass: {_ps_err}")
+                    if order.ticker in _psbl_map:
+                        _ord_psbl_q = int(_psbl_map[order.ticker])
+                        if _ord_psbl_q <= 0:
+                            logger.warning(
+                                f"  🛑 [Orderable Sell Guard] {order.ticker} 주문가능수량(ord_psbl_qty=0, 장부={held_qty}주) "
+                                f"➔ 기체결/정산대기 중복 매도 시도 차단"
+                            )
+                            order.status = 'skipped_insufficient_holdings'
+                            order.notes = (order.notes + ',' if order.notes else '') + 'skipped_ord_psbl_qty_zero'
+                            return order
+                        if _ord_psbl_q < held_qty:
+                            held_qty = _ord_psbl_q
                 if held_qty <= 0:
                     logger.warning(f"  🛑 [Holdings Guard] {order.ticker} 미보유(수량 0) 매도 시도 차단")
                     order.status = 'skipped_insufficient_holdings'
                     order.notes = f"No holdings for {order.ticker}"
                     return order
                 if order.quantity > held_qty:
-                    logger.warning(f"  🛡️ [Holdings Clamp] {order.ticker} 매도 요청 수량({order.quantity}) > 보유 수량({held_qty}) ➔ 보유 전량({held_qty}주)으로 자동 클램핑")
+                    logger.warning(f"  🛡️ [Holdings Clamp] {order.ticker} 매도 요청 수량({order.quantity}) > 가능 수량({held_qty}) ➔ 가능 전량({held_qty}주)으로 자동 클램핑")
                     order.quantity = held_qty
 
             # 매수 주문 중복 방어 (Unexecuted Buy Guard - 거래소 미체결 매수 존재 시 중복 매수 원천 차단)
@@ -888,6 +936,13 @@ class KISTraderAdapter:
                             if hasattr(self, 'us_buying_power_usd'):
                                 self.us_buying_power_usd = max(0.0, getattr(self, 'us_buying_power_usd', 0.0) - order_cost_usd)
                         setattr(self, '_last_balance_fetch_ts', 0.0)
+                    elif order.side.lower() in ('sell', 'short'):
+                        if not hasattr(self, '_live_ord_psbl_qty') or not isinstance(self._live_ord_psbl_qty, dict):
+                            self._live_ord_psbl_qty = {}
+                        _prev_psbl = int(self._live_ord_psbl_qty.get(order.ticker, order.quantity))
+                        self._live_ord_psbl_qty[order.ticker] = max(0, _prev_psbl - int(order.quantity))
+                        setattr(self, '_last_balance_fetch_ts', 0.0)
+                        setattr(self, '_last_positions_fetch_ts', 0.0)
                     self.orders.append(order)
                     self._save_state()
                     return order
@@ -960,6 +1015,42 @@ class KISTraderAdapter:
                                         f"즉시체결 지정가(₩{int(_mkt_lim_px):,}, {_new_q}주, ORD_DVSN=00)로 자동 전환 재전송!"
                                     )
                                     continue
+                    if order.side.lower() in ('sell', 'short') and msg_cd == 'APBK0988':
+                        if not hasattr(self, '_live_ord_psbl_qty') or not isinstance(self._live_ord_psbl_qty, dict):
+                            self._live_ord_psbl_qty = {}
+                        self._live_ord_psbl_qty[order.ticker] = 0
+                        setattr(self, '_last_balance_fetch_ts', 0.0)
+                        setattr(self, '_last_positions_fetch_ts', 0.0)
+                        _dup_sell_confirmed = False
+                        _dup_odno = ''
+                        try:
+                            _m_ord = self._find_broker_order_since(
+                                order, datetime.now() - timedelta(minutes=30), attempts=1  # hardcode-ok
+                            )
+                            if _m_ord is not None:
+                                _dup_sell_confirmed = True
+                                _dup_odno = str(_m_ord.get('odno', ''))
+                        except Exception:
+                            pass
+                        if not _dup_sell_confirmed:
+                            try:
+                                for _u_ap in (self.inquire_unexecuted(order.ticker) or []):
+                                    if str(_u_ap.get('sll_buy_dvsn_cd', '')).strip() in ('01', 'sell', 'SELL'):
+                                        _dup_sell_confirmed = True
+                                        _dup_odno = str(_u_ap.get('odno', ''))
+                                        break
+                            except Exception:
+                                pass
+                        if _dup_sell_confirmed:
+                            logger.warning(
+                                f"  🛡️ [APBK0988 Duplicate Sell Guard] {order.ticker}: 선행 매도 주문(ODNO: {_dup_odno}) "
+                                f"기체결/진행으로 가능수량 소진 확인 ➔ 중복 매도 정상 스킵 처리 (DLQ 제외)"
+                            )
+                            order.status = 'skipped_insufficient_holdings'
+                            order.notes = (order.notes + ',' if order.notes else '') + f"apbk0988_duplicate_sell:{_dup_odno}"
+                            self.orders.append(order)
+                            self._save_state()
+                            return order
                     order.status = 'rejected'
                     logger.error(f"  ❌ API 주문 거부: {data}")
                     _msg1_str = str(data.get('msg1', '') or '')
@@ -2099,9 +2190,13 @@ class KISTraderAdapter:
                             kis_us_krw = us_tot_usd * fx_rate if fx_rate > 0 else 0.0
                             tot_evlu += kis_us_krw
 
+                            if not hasattr(self, '_live_ord_psbl_qty') or not isinstance(self._live_ord_psbl_qty, dict):
+                                self._live_ord_psbl_qty = {}
                             for item_us in data_us.get('output1', []):
                                 u_ticker = item_us.get('ovrs_pdno', '').strip()
                                 u_qty = float(item_us.get('ovrs_cblc_qty', item_us.get('ord_psbl_qty', 0)) or 0)
+                                if u_ticker and 'ord_psbl_qty' in item_us and item_us.get('ord_psbl_qty') is not None:
+                                    self._live_ord_psbl_qty[u_ticker] = int(float(item_us.get('ord_psbl_qty') or 0))
                                 if u_ticker and u_qty > 0:
                                     u_avg = float(item_us.get('pchs_avg_pric', 0) or 0)
                                     u_curr = float(item_us.get('now_pric2', 0) or u_avg)
@@ -2136,9 +2231,13 @@ class KISTraderAdapter:
                             return False
 
                         # 🎯 [SSoT Fix] 국내 주식 개별 보유 종목(output1)을 self.positions 원장에 동기화
+                        if not hasattr(self, '_live_ord_psbl_qty') or not isinstance(self._live_ord_psbl_qty, dict):
+                            self._live_ord_psbl_qty = {}
                         for item_kr in data.get('output1', []):
                             pdno = item_kr.get('pdno', '').strip()
                             hldg_qty = float(item_kr.get('hldg_qty', 0) or 0)
+                            if pdno and 'ord_psbl_qty' in item_kr and item_kr.get('ord_psbl_qty') is not None:
+                                self._live_ord_psbl_qty[pdno] = int(float(item_kr.get('ord_psbl_qty') or 0))
                             if pdno and hldg_qty > 0:
                                 pchs_avg = float(item_kr.get('pchs_avg_pric', 0) or 0)
                                 prpr = float(item_kr.get('prpr', 0) or pchs_avg)
@@ -2220,9 +2319,11 @@ class KISTraderAdapter:
                                     _tot_invested_krw += _eval_krw
                                     _tot_cost_krw += _cost_krw
                                     _p_meta = _plm_sync.get_position_meta(_tk)
+                                    _psbl_q_sync = int((getattr(self, '_live_ord_psbl_qty', None) or {}).get(_tk, _p.quantity))
                                     _h_entry = {
                                         'name': getattr(_p, 'name', _tk),
                                         'qty': int(_p.quantity),
+                                        'ord_psbl_qty': _psbl_q_sync,
                                         'avg_price': float(_p.avg_price),
                                         'current_price': float(_p.current_price),
                                         'eval_krw': _eval_krw,
@@ -2397,12 +2498,16 @@ class KISTraderAdapter:
                 
                 live_pos = {}
                 self.live_position_details = {}
+                if not hasattr(self, '_live_ord_psbl_qty') or not isinstance(self._live_ord_psbl_qty, dict):
+                    self._live_ord_psbl_qty = {}
                 _complete = True
                 if data.get('rt_cd') == '0':
                     output1 = data.get('output1', [])
                     for item in output1:
                         ticker = item.get('pdno', '')
                         qty = int(item.get('hldg_qty', 0))
+                        if ticker and 'ord_psbl_qty' in item and item.get('ord_psbl_qty') is not None:
+                            self._live_ord_psbl_qty[ticker] = int(float(item.get('ord_psbl_qty') or 0))
                         if ticker and qty > 0:
                             live_pos[ticker] = qty
                     if not _kr_pages_ok:
@@ -2435,6 +2540,8 @@ class KISTraderAdapter:
                         for u_item in us_data.get('output1', []):
                             u_ticker = u_item.get('ovrs_pdno', '').strip()
                             u_qty = int(float(u_item.get('ovrs_cblc_qty', 0)))
+                            if u_ticker and 'ord_psbl_qty' in u_item and u_item.get('ord_psbl_qty') is not None:
+                                self._live_ord_psbl_qty[u_ticker] = int(float(u_item.get('ord_psbl_qty') or 0))
                             u_avg = float(u_item.get('pchs_avg_pric', 0.0))
                             u_cur = float(u_item.get('now_pric2', 0.0))
                             u_pnl = float(u_item.get('evlu_pfls_rt', 0.0))

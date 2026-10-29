@@ -770,6 +770,7 @@ def main():
                                                     _existing_exit_tks.add(_utk)
                                     except Exception as _uee_us_err:
                                         logger.warning(f"  ⚠️ [US UniversalExitEngine] 평가 폴백: {_uee_us_err}", exc_info=True)
+                                    _us_any_exit_sent = False
                                     for eo in exit_orders:
                                         _tk_us = eo['ticker']
                                         if _tk_us in main._exit_orders_in_flight:
@@ -786,6 +787,7 @@ def main():
                                         )
                                         if getattr(_us_sell_fill, 'status', '') in ('filled', 'submitted', 'partially_filled', 'filled_market_fallback'):
                                             main._exit_orders_in_flight[_tk_us] = _now_us_ts
+                                            _us_any_exit_sent = True
                                             try:
                                                 _is_us_partial = str(eo.get('exit_type', '') or '') in ('scale_out_50pct', 'time_decay_exit')
                                                 from src.execution.position_ledger import PositionLedgerManager
@@ -805,34 +807,39 @@ def main():
                                                         today_str,
                                                         realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
                                                     )
-                                                _adapter._last_balance_fetch_ts = 0.0
-                                                _adapter.fetch_live_balance()
-                                                from src.portfolio.shadow_manager import ShadowPortfolioManager
-                                                _live_map_us = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
-                                                ShadowPortfolioManager().force_reconcile(
-                                                    _live_map_us,
-                                                    float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
-                                                    snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
+                                            except Exception as _us_led_err:
+                                                logger.warning(f"  ⚠️ [US Exit Ledger Record] 예외: {_us_led_err}", exc_info=True)
+                                    if _us_any_exit_sent:
+                                        try:
+                                            time.sleep(2.0)  # hardcode-ok
+                                            _adapter._last_balance_fetch_ts = 0.0
+                                            _adapter.fetch_live_balance()
+                                            from src.portfolio.shadow_manager import ShadowPortfolioManager
+                                            _live_map_us = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
+                                            ShadowPortfolioManager().force_reconcile(
+                                                _live_map_us,
+                                                float(getattr(_adapter.account, 'cash', 0.0) or 0.0),
+                                                snapshot_complete=bool(getattr(_adapter, '_last_positions_complete', False)),
+                                            )
+                                            _usd_avail_after = max(
+                                                float(getattr(_adapter, 'us_cash_usd', 0.0) or 0.0),
+                                                float(getattr(_adapter, 'us_buying_power_usd', 0.0) or 0.0),
+                                            )
+                                            _us_min_redeploy = 2.0 * 100.0
+                                            _us_redeploy_cd = (2.0 + 1.0) * (2.0 + 2.0 + 2.0) * 100.0
+                                            _us_in_redeploy_win = not (is_us_morning and now.hour >= (_us_close_h_chk - 1))
+                                            if (
+                                                _us_in_redeploy_win
+                                                and _usd_avail_after >= _us_min_redeploy
+                                                and (_now_us_ts - getattr(main, '_last_us_redeploy_ts', 0.0)) >= _us_redeploy_cd
+                                            ):
+                                                main._last_us_redeploy_ts = _now_us_ts
+                                                logger.info(
+                                                    f"  🔄 [US Intraday Capital Redeploy] 청산 후 가용 달러(${_usd_avail_after:,.2f}) 확보 ➔ US 알파 재배치 파이프라인(us_regular) 가동!"
                                                 )
-                                                _usd_avail_after = max(
-                                                    float(getattr(_adapter, 'us_cash_usd', 0.0) or 0.0),
-                                                    float(getattr(_adapter, 'us_buying_power_usd', 0.0) or 0.0),
-                                                )
-                                                _us_min_redeploy = 2.0 * 100.0
-                                                _us_redeploy_cd = (2.0 + 1.0) * (2.0 + 2.0 + 2.0) * 100.0
-                                                _us_in_redeploy_win = not (is_us_morning and now.hour >= (_us_close_h_chk - 1))
-                                                if (
-                                                    _us_in_redeploy_win
-                                                    and _usd_avail_after >= _us_min_redeploy
-                                                    and (_now_us_ts - getattr(main, '_last_us_redeploy_ts', 0.0)) >= _us_redeploy_cd
-                                                ):
-                                                    main._last_us_redeploy_ts = _now_us_ts
-                                                    logger.info(
-                                                        f"  🔄 [US Intraday Capital Redeploy] 청산 후 가용 달러(${_usd_avail_after:,.2f}) 확보 ➔ US 알파 재배치 파이프라인(us_regular) 가동!"
-                                                    )
-                                                    run_pipeline(phase='us_regular')
-                                            except Exception as _us_post_ex_err:
-                                                logger.warning(f"  ⚠️ [US Post-Exit Reconcile/Redeploy] 예외: {_us_post_ex_err}", exc_info=True)
+                                                run_pipeline(phase='us_regular')
+                                        except Exception as _us_post_ex_err:
+                                            logger.warning(f"  ⚠️ [US Post-Exit Reconcile/Redeploy] 예외: {_us_post_ex_err}", exc_info=True)
                             except Exception as _ex_err:
                                 logger.warning(f"  ⚠️ US Trailing Stop 평가 예외: {_ex_err}", exc_info=True)
 

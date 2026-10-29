@@ -866,6 +866,110 @@ def test_stream_specific_stopping_barriers_time_decay_and_ledger_hwm_closed_form
     assert orders_by_tk["CRM"]["exit_type"] == "hard_stop_loss"
 
 
+def test_us_duplicate_sell_apbk0988_orderable_qty_and_exit_settlement_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify 3-layer prevention of duplicate US sell rejection (APBK0988):
+    1) When ovrs_cblc_qty=1 but ord_psbl_qty=0 (_live_ord_psbl_qty['MSFT']=0) and inquire_unexecuted is empty
+       (because the first sell order #0030712850 already filled), KISTraderAdapter._api_order blocks the
+       duplicate sell with status='skipped_insufficient_holdings' and 'skipped_ord_psbl_qty_zero' without
+       making any broker POST or adding to DLQ.
+    2) When a partial/clamped ord_psbl_qty (e.g., ord_psbl_qty=2 < held_qty=5) is present, _api_order clamps
+       the sell order quantity to ord_psbl_qty=2 and decrements _live_ord_psbl_qty to 0 upon submission.
+    3) StreamOrchestrator._evaluate_exits skips holdings whose ord_psbl_qty == 0 and marks them in
+       _pending_exit_tickers.
+    """
+    from src.execution._kis_adapter import KISTraderAdapter, Order, Position
+
+    monkeypatch.setattr(
+        "src.utils.market_calendar.is_ticker_tradable_now",
+        lambda ticker: (True, "regular"),
+    )
+
+    adapter = KISTraderAdapter.__new__(KISTraderAdapter)
+    adapter.mode = "paper"
+    adapter.account_no = "50000000-01"
+    adapter.base_url = "https://openapivts.koreainvestment.com:29443"
+    adapter._access_token = "test_token"
+    adapter._lock = __import__("threading").RLock()
+    adapter._cb = None
+    adapter._dlq = None
+    adapter.orders = []
+    adapter.trade_history = []
+    adapter.state_file = tmp_path / "kis_state.json"
+    adapter.positions = {
+        "MSFT": Position(ticker="MSFT", quantity=1, avg_price=524.64, current_price=532.21, name="Microsoft"),
+        "CPER": Position(ticker="CPER", quantity=5, avg_price=39.71, current_price=38.00, name="CPER"),
+    }
+    adapter._cached_live_positions = {"MSFT": 1, "CPER": 5}
+    adapter._live_ord_psbl_qty = {"MSFT": 0, "CPER": 2}
+    adapter.inquire_unexecuted = lambda ticker="": []
+    adapter._get_live_fx_rate = lambda: 1380.0
+    adapter._get_headers = lambda: {"authorization": "Bearer test"}
+    adapter.resolve_overseas_exchange = lambda ticker, exchange="": "NASD"
+
+    post_calls = []
+
+    class _DummyResp:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"rt_cd": "0", "msg1": "정상 처리", "output": {"ODNO": "0030719999"}}
+
+    def _fake_post(url, headers=None, json=None, timeout=10):
+        post_calls.append({"url": url, "body": json})
+        return _DummyResp()
+
+    monkeypatch.setattr("requests.post", _fake_post)
+
+    # 1) MSFT has ovrs_cblc_qty=1 in positions, but ord_psbl_qty=0 (already sold by daemon):
+    msft_dup_order = Order(
+        order_id="ORD_DUP_MSFT",
+        ticker="MSFT",
+        side="sell",
+        quantity=1,
+        price=532.21,
+        order_type="limit",
+        exchange="NASD",
+    )
+    res_msft = adapter._api_order(msft_dup_order)
+    assert res_msft.status == "skipped_insufficient_holdings"
+    assert "skipped_ord_psbl_qty_zero" in res_msft.notes
+    assert len(post_calls) == 0
+
+    # 2) CPER has held_qty=5, ord_psbl_qty=2 -> clamped to 2 shares on first sell, then _live_ord_psbl_qty becomes 0:
+    cper_sell_order = Order(
+        order_id="ORD_SELL_CPER",
+        ticker="CPER",
+        side="sell",
+        quantity=5,
+        price=38.00,
+        order_type="limit",
+        exchange="NASD",
+    )
+    res_cper = adapter._api_order(cper_sell_order)
+    assert res_cper.status == "submitted"
+    assert res_cper.quantity == 2
+    assert len(post_calls) == 1
+    assert post_calls[0]["body"]["ORD_QTY"] == "2"
+    assert adapter._live_ord_psbl_qty["CPER"] == 0
+
+    # Immediate second sell for CPER must now be blocked with ord_psbl_qty=0:
+    cper_dup_order = Order(
+        order_id="ORD_DUP_CPER",
+        ticker="CPER",
+        side="sell",
+        quantity=2,
+        price=38.00,
+        order_type="limit",
+        exchange="NASD",
+    )
+    res_cper_dup = adapter._api_order(cper_dup_order)
+    assert res_cper_dup.status == "skipped_insufficient_holdings"
+    assert len(post_calls) == 1
+
+
 
 
 

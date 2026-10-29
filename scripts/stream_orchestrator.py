@@ -2370,12 +2370,32 @@ class StreamOrchestrator:
                 kp_path = _ROOT / 'results' / 'kis_portfolio.json'
                 if kp_path.exists():
                     try:
+                        import os as _os_s85
                         from src.execution.position_ledger import PositionLedgerManager
                         ledger_mgr = PositionLedgerManager()
+                        _in_pytest_s85 = bool(
+                            _os_s85.environ.get('PYTEST_CURRENT_TEST')
+                            or _os_s85.environ.get('MERIDIAN_TEST_MODE') == '1'
+                            or (market_data or {}).get('_test_mode', False)
+                        )
+                        _daily_ex_s85 = (ledger_mgr.get_daily_exit_details() or {}) if (getattr(self, 'exec_mode', 'live') == 'live' and not _in_pytest_s85) else {}
                         kp = json.loads(kp_path.read_text(encoding='utf-8'))
                         for t, h in kp.get('holdings', {}).items():
                             if not self._is_ticker_session_open_for_live_exit(t, market_data):
                                 continue
+                            if 'ord_psbl_qty' in h and h.get('ord_psbl_qty') is not None and int(h.get('ord_psbl_qty') or 0) <= 0:
+                                logger.info(f"    ⏳ [Step 8.5 Orderable Sell Guard] {t}: 주문가능수량(ord_psbl_qty=0) ➔ 중복 청산 평가 제외")
+                                continue
+                            _ex_info_s85 = _daily_ex_s85.get(str(t).upper())
+                            if isinstance(_ex_info_s85, dict) and _ex_info_s85.get('exited_at'):
+                                try:
+                                    _ex_dt_s85 = datetime.fromisoformat(str(_ex_info_s85['exited_at']).replace('Z', '+00:00')).replace(tzinfo=None)
+                                    _el_s85 = (datetime.now().replace(tzinfo=None) - _ex_dt_s85).total_seconds()
+                                    if 0.0 <= _el_s85 <= 300.0:  # hardcode-ok
+                                        logger.info(f"    ⏳ [Step 8.5 Exit Settlement Guard] {t}: 최근 청산 완료({_el_s85:.0f}s 전) ➔ 중복 매도 평가 제외")
+                                        continue
+                                except Exception:
+                                    pass
                             curr_p = float(h.get('current_price', 0.0))
                             curr_ret = float(h.get('return_pct', 0.0))
                             hwm_data = ledger_mgr.update_hwm(
@@ -4296,6 +4316,7 @@ class StreamOrchestrator:
                         'name': h.get('name', t),
                         'quantity': int(h.get('qty', 0)),
                         'qty': int(h.get('qty', 0)),
+                        'ord_psbl_qty': h.get('ord_psbl_qty'),
                         'avg_price': float(h.get('avg_price', 0.0)),
                         'current_price': curr_p,
                         'amount': float(h.get('qty', 0)) * curr_p,
@@ -4458,8 +4479,36 @@ class StreamOrchestrator:
                 if pos.get('quantity', pos.get('qty', 0)) <= 0:
                     continue
 
+                if 'ord_psbl_qty' in pos and pos.get('ord_psbl_qty') is not None and int(pos.get('ord_psbl_qty') or 0) <= 0:
+                    self._pending_exit_tickers.add(_pos_ticker_up)
+                    logger.info(f"    ⏳ [L4 Orderable Sell Guard] {_pos_ticker_up}: 주문가능수량(ord_psbl_qty=0) ➔ 중복 청산 시그널 생성 스킵")
+                    continue
+
                 if not self._is_ticker_session_open_for_live_exit(_pos_ticker_up, market_data):
                     continue
+
+                if getattr(self, 'exec_mode', 'live') == 'live':
+                    import os as _os_l4_ex
+                    _in_pytest_l4_ex = bool(
+                        _os_l4_ex.environ.get('PYTEST_CURRENT_TEST')
+                        or _os_l4_ex.environ.get('MERIDIAN_TEST_MODE') == '1'
+                        or (market_data or {}).get('_test_mode', False)
+                    )
+                    if not _in_pytest_l4_ex:
+                        try:
+                            from src.execution.position_ledger import PositionLedgerManager as _PLM_L4Ex
+                            _ex_det_l4 = (_PLM_L4Ex().get_daily_exit_details() or {}).get(_pos_ticker_up)
+                            if isinstance(_ex_det_l4, dict) and _ex_det_l4.get('exited_at'):
+                                _ex_dt_l4 = datetime.fromisoformat(str(_ex_det_l4['exited_at']).replace('Z', '+00:00')).replace(tzinfo=None)
+                                _el_l4 = (datetime.now().replace(tzinfo=None) - _ex_dt_l4).total_seconds()
+                                if 0.0 <= _el_l4 <= 300.0:  # hardcode-ok
+                                    self._pending_exit_tickers.add(_pos_ticker_up)
+                                    logger.info(
+                                        f"    ⏳ [L4 Exit Settlement Guard] {_pos_ticker_up}: 최근 실시간 청산 완료({_el_l4:.0f}s 전) ➔ 중복 매도 시그널 생성 스킵"
+                                    )
+                                    continue
+                        except Exception:
+                            pass
 
                 # ── S_BETA, S10, S_YIELD, 그리고 Track 2 버핏 해자 복리 슬리브(S3_B / TRACK_2_BUFFETT_QVM)는 단기 L4 TP/SL/Trail에서 완전 면제 (단, 소유 스트림 일치 명시적 exit 시그널은 즉시 집행) ──
                 _is_track2_pos = (
