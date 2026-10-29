@@ -766,10 +766,12 @@ class MeasurementEngine:
             win_rate_val = round(n_wins / max(n_trades, 1), 3) if n_trades > 0 else (round(len(wins_r) / n_days, 3) if n_days > 0 else 0.0)
             _gp_val = gross_profit_by_stream.get(sid, 0.0)
             _gl_val = gross_loss_by_stream.get(sid, 0.0)
-            if _gl_val > 0.0:
-                pf_val = round(_gp_val / _gl_val, 4)
+            if wins_r and loss_r and avg_loss_val > 0.0 and 0.0 < win_rate_val < 1.0:
+                pf_val = round((win_rate_val * avg_win_val) / ((1.0 - win_rate_val) * avg_loss_val), 4)
             elif wins_r and loss_r and sum(loss_r) > 0.0:
                 pf_val = round(sum(wins_r) / sum(loss_r), 4)
+            elif _gl_val > 0.0 and _gp_val > 0.0:
+                pf_val = round(_gp_val / _gl_val, 4)
             else:
                 pf_val = None
             sleeve = {

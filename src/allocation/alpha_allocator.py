@@ -325,6 +325,7 @@ class AlphaAllocator:
                     'daily_returns': _blend_rets,
                     'avg_win': round(_blend_aw, 6),
                     'avg_loss': round(_blend_al, 6),
+                    'profit_factor': None,
                     'sharpe': round(_blend_sr, 3),
                     'win_rate': round(len([r for r in _blend_rets if r > 0.0]) / max(1, len(_blend_rets)), 3) if _blend_rets else 0.5,
                 }
@@ -571,15 +572,17 @@ class AlphaAllocator:
                             0.01,
                             _m_mult_sid * float(_pod_res.psr_survival) * float(_pod_res.pf_survival),
                         )
-                    else:
-                        _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
-                        if _sr_val > 0.0 and _n_win_obs >= 2:
-                            _t_sr_pos = (_sr_val / math.sqrt(252.0)) * math.sqrt(max(1.0, float(_n_win_obs) - 1.0))
-                            _psr_pos = math.erf(_t_sr_pos / math.sqrt(2.0))
-                            _sr_cap = min(1.0, _sr_val / 3.0)
-                            _psr_ev_bonus = lam_win * _psr_pos * _sr_cap * _prior_risk
-                            ev += _psr_ev_bonus
-                            _eff_pod_mult = 1.0 + lam_win * _psr_pos * _sr_cap
+                    _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
+                    if _sr_val > 0.0 and n_obs >= 2:
+                        _dof_sr = max(1.0, float(max(_n_win_obs, n_obs)) - 1.0)
+                        _t_sr_pos = (_sr_val / math.sqrt(252.0)) * math.sqrt(_dof_sr)
+                        _psr_pos = math.erf(_t_sr_pos / math.sqrt(2.0))
+                        _sr_cap = min(1.0, _sr_val / 3.0)
+                        _lam_sr = max(lam_win, lam_n)
+                        _psr_ev_bonus = _lam_sr * _psr_pos * _sr_cap * _prior_risk * _eff_pod_mult
+                        ev += _psr_ev_bonus
+                        if _m_mult_sid >= 1.0:
+                            _eff_pod_mult = 1.0 + _lam_sr * _psr_pos * _sr_cap
                 except Exception:
                     _m_mult_sid = 1.0
                     _eff_pod_mult = 1.0
@@ -590,6 +593,10 @@ class AlphaAllocator:
                 ois = float(signal_cache.get('ois', 50.0) or 50.0)
                 if ois > 0:
                     prior_boost = round(((ois - 50.0) / 100.0) * float(reward), 4)
+                    if prior_boost > 0.0 and str(regime).lower() in ('bear', 'crash'):
+                        prior_boost = 0.0
+                    elif prior_boost > 0.0 and n_obs > 0:
+                        prior_boost = round(prior_boost * (1.0 - lam_n), 5)
                     ev += prior_boost
                     logger.info(f"  🚀 [GapDriftAlphaEngine] S1 Bayesian Continuous Prior Boost: {prior_boost:+.4f} (OIS={ois:.1f})")
 
