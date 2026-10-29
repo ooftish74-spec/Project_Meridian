@@ -279,56 +279,61 @@ class AlphaAllocator:
             if _canon_mk != _mk and not _norm_metrics.get(_canon_mk):
                 _norm_metrics[_canon_mk] = _mv
         # Aggregate active S3_A (US Quality-Momentum) and S3_B (KR Buffett QVM) sleeves into S3
-        # when S3 top-level entry has 0 active positions / 0 return days.
+        # whenever S3_A or S3_B has active positions / return history.
         _s3_top = _norm_metrics.get('S3') if isinstance(_norm_metrics.get('S3'), dict) else {}
-        if int(_s3_top.get('active_positions') or 0) == 0 and len(_s3_top.get('daily_returns') or []) == 0:
-            _s3_subs = [
-                _norm_metrics[_sk]
-                for _sk in ('S3_A', 'S3_B')
-                if isinstance(_norm_metrics.get(_sk), dict)
-                and (int(_norm_metrics[_sk].get('active_positions') or 0) > 0 or len(_norm_metrics[_sk].get('daily_returns') or []) > 0)
-            ]
-            if _s3_subs:
-                _mv_tot = sum(max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs)
+        _s3_subs = [
+            _norm_metrics[_sk]
+            for _sk in ('S3_A', 'S3_B')
+            if isinstance(_norm_metrics.get(_sk), dict)
+            and (int(_norm_metrics[_sk].get('active_positions') or 0) > 0 or len(_norm_metrics[_sk].get('daily_returns') or []) > 0)
+        ]
+        if _s3_subs:
+            _mv_tot = sum(max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs)
+            _max_len = max((len(_sub.get('daily_returns') or []) for _sub in _s3_subs), default=0)
+            _blend_rets = []
+            for _idx_r in range(_max_len):
+                _r_num = 0.0
+                _r_den = 0.0
+                for _sub in _s3_subs:
+                    _sr_list = _sub.get('daily_returns') or []
+                    if _idx_r < len(_sr_list):
+                        _w_sub = max(1.0, float(_sub.get('market_value') or 1.0))
+                        _r_num += float(_sr_list[_idx_r]) * _w_sub
+                        _r_den += _w_sub
+                if _r_den > 0.0:
+                    _blend_rets.append(round(_r_num / _r_den, 6))
+            _b_wins = [r for r in _blend_rets if r > 0.0]
+            _b_loss = [abs(r) for r in _blend_rets if r < 0.0]
+            _blend_aw = (sum(_b_wins) / len(_b_wins)) if _b_wins else (
+                sum(float(_sub.get('avg_win') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs) / _mv_tot
+            )
+            _blend_al = (sum(_b_loss) / len(_b_loss)) if _b_loss else (
+                sum(float(_sub.get('avg_loss') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs) / _mv_tot
+            )
+            if len(_blend_rets) >= 2:
+                _m_br = sum(_blend_rets) / len(_blend_rets)
+                _v_br = sum((r - _m_br) ** 2 for r in _blend_rets) / max(1, len(_blend_rets) - 1)
+                _sd_br = math.sqrt(_v_br) if _v_br > 1e-12 else 0.0
+                _blend_sr = (_m_br / _sd_br) * math.sqrt(252.0) if _sd_br > 0.0 else 0.0
+            else:
                 _blend_sr = sum(
                     float(_sub.get('sharpe') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
                     for _sub in _s3_subs
                     if _sub.get('sharpe') is not None
                 ) / _mv_tot
-                _blend_aw = sum(
-                    float(_sub.get('avg_win') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
-                    for _sub in _s3_subs
-                ) / _mv_tot
-                _blend_al = sum(
-                    float(_sub.get('avg_loss') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
-                    for _sub in _s3_subs
-                ) / _mv_tot
-                _max_len = max((len(_sub.get('daily_returns') or []) for _sub in _s3_subs), default=0)
-                _blend_rets = []
-                for _idx_r in range(_max_len):
-                    _r_num = 0.0
-                    _r_den = 0.0
-                    for _sub in _s3_subs:
-                        _sr_list = _sub.get('daily_returns') or []
-                        if _idx_r < len(_sr_list):
-                            _w_sub = max(1.0, float(_sub.get('market_value') or 1.0))
-                            _r_num += float(_sr_list[_idx_r]) * _w_sub
-                            _r_den += _w_sub
-                    if _r_den > 0.0:
-                        _blend_rets.append(round(_r_num / _r_den, 6))
-                _norm_metrics['S3'] = {
-                    **_s3_top,
-                    'active_positions': sum(int(_sub.get('active_positions') or 0) for _sub in _s3_subs),
-                    'market_value': sum(float(_sub.get('market_value') or 0.0) for _sub in _s3_subs),
-                    'total_trades': sum(int(_sub.get('total_trades') or 0) for _sub in _s3_subs),
-                    'n_days': len(_blend_rets),
-                    'daily_returns': _blend_rets,
-                    'avg_win': round(_blend_aw, 6),
-                    'avg_loss': round(_blend_al, 6),
-                    'profit_factor': None,
-                    'sharpe': round(_blend_sr, 3),
-                    'win_rate': round(len([r for r in _blend_rets if r > 0.0]) / max(1, len(_blend_rets)), 3) if _blend_rets else 0.5,
-                }
+            _norm_metrics['S3'] = {
+                **_s3_top,
+                'active_positions': sum(int(_sub.get('active_positions') or 0) for _sub in _s3_subs),
+                'market_value': sum(float(_sub.get('market_value') or 0.0) for _sub in _s3_subs),
+                'total_trades': sum(int(_sub.get('total_trades') or 0) for _sub in _s3_subs),
+                'n_days': len(_blend_rets),
+                'daily_returns': _blend_rets,
+                'avg_win': round(_blend_aw, 6),
+                'avg_loss': round(_blend_al, 6),
+                'profit_factor': None,
+                'sharpe': round(_blend_sr, 3),
+                'win_rate': round(len(_b_wins) / max(1, len(_blend_rets)), 3) if _blend_rets else 0.5,
+            }
         stream_metrics = _norm_metrics
         self._stream_metrics = stream_metrics
 

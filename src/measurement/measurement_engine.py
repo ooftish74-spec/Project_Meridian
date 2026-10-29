@@ -753,11 +753,13 @@ class MeasurementEngine:
             if n_trades == 0 and stats.get('count', 0) > 0:
                 n_trades = stats.get('count', 0)
                 n_wins = stats.get('wins', 0)
-            rets = list(raw_data.get(sid, {}).get('daily_returns', []) or [])
+            rets = []
+            if stream_pos_lists.get(sid):
+                rets = _reconstruct_holding_daily_returns(stream_pos_lists[sid], PROJECT_ROOT)
+            if len(rets) < 2:
+                rets = list(raw_data.get(sid, {}).get('daily_returns', []) or [])
             if not rets and ext_daily_rets.get(sid):
                 rets = list(ext_daily_rets[sid])
-            if len(rets) < 2 and stream_pos_lists.get(sid):
-                rets = _reconstruct_holding_daily_returns(stream_pos_lists[sid], PROJECT_ROOT)
             n_days = len(rets)
             wins_r = [r for r in rets if r > 0]
             loss_r = [abs(r) for r in rets if r < 0]

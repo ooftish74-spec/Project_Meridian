@@ -823,13 +823,20 @@ def compute_stream_metrics(results_dir: Path = None):
                 daily_costs.append(0.0)
                 regimes.append('caution')
 
-        # Live holding time-series reconstruction when realized trade daily returns are insufficient
-        if len(daily_returns) < 2 and pos_list:
+        # Live holding mark-to-market time-series reconstruction:
+        # When active open holdings exist, prefer mark-to-market holding daily returns to prevent
+        # realization-bias inversion (where early stop-outs are closed while winners are held open).
+        if pos_list:
             reconstructed = _reconstruct_holding_daily_returns(pos_list, _ROOT)
-            for rec_r in reconstructed:
-                daily_returns.append(rec_r)
-                daily_costs.append(0.0)
-                regimes.append('caution')
+            if len(reconstructed) >= 2:
+                daily_returns = list(reconstructed)
+                daily_costs = [0.0] * len(daily_returns)
+                regimes = ['caution'] * len(daily_returns)
+            elif len(daily_returns) < 2:
+                for rec_r in reconstructed:
+                    daily_returns.append(rec_r)
+                    daily_costs.append(0.0)
+                    regimes.append('caution')
         elif len(daily_returns) < 2 and not pos_list and trades and results_dir is None:
             reconstructed = _reconstruct_stream_factor_returns(sid, _ROOT)
             for rec_r in reconstructed:
