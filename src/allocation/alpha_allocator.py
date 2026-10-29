@@ -278,18 +278,16 @@ class AlphaAllocator:
             _canon_mk = _STREAM_CANONICAL_MAP.get(str(_mk), str(_mk))
             if _canon_mk != _mk and not _norm_metrics.get(_canon_mk):
                 _norm_metrics[_canon_mk] = _mv
-        # Aggregate active S3_A (US Quality-Momentum), S3_B (KR Buffett QVM), S3_C sleeves into S3
-        # when S3 has not already aggregated their market values.
+        # Aggregate active S3_A (US Quality-Momentum) and S3_B (KR Buffett QVM) sleeves into S3
+        # whenever S3_A or S3_B has active positions / return history.
         _s3_top = _norm_metrics.get('S3') if isinstance(_norm_metrics.get('S3'), dict) else {}
         _s3_subs = [
             _norm_metrics[_sk]
-            for _sk in ('S3_A', 'S3_B', 'S3_C')
+            for _sk in ('S3_A', 'S3_B')
             if isinstance(_norm_metrics.get(_sk), dict)
             and (int(_norm_metrics[_sk].get('active_positions') or 0) > 0 or len(_norm_metrics[_sk].get('daily_returns') or []) > 0)
         ]
-        _s3_base_mv = float(_s3_top.get('market_value') or 0.0)
-        _s3_sub_mv = sum(float(_sub.get('market_value') or 0.0) for _sub in _s3_subs)
-        if _s3_subs and (_s3_base_mv < 0.80 * _s3_sub_mv or len(_s3_top.get('daily_returns') or []) == 0):
+        if _s3_subs:
             _mv_tot = sum(max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs)
             _max_len = max((len(_sub.get('daily_returns') or []) for _sub in _s3_subs), default=0)
             _blend_rets = []
@@ -312,20 +310,17 @@ class AlphaAllocator:
             _blend_al = (sum(_b_loss) / len(_b_loss)) if _b_loss else (
                 sum(float(_sub.get('avg_loss') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0)) for _sub in _s3_subs) / _mv_tot
             )
-            _blend_sr = sum(
-                float(_sub.get('sharpe') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
-                for _sub in _s3_subs
-                if _sub.get('sharpe') is not None
-            ) / _mv_tot
-            _sub_wr_num = 0.0
-            for _sub in _s3_subs:
-                _w_s = max(1.0, float(_sub.get('market_value') or 1.0))
-                _sr_r = _sub.get('daily_returns') or []
-                _sw_v = float(_sub.get('win_rate') or 0.0)
-                if _sw_v <= 0.0 and _sr_r:
-                    _sw_v = len([x for x in _sr_r if float(x) > 0.0]) / float(len(_sr_r))
-                _sub_wr_num += _sw_v * _w_s
-            _blend_wr = _sub_wr_num / _mv_tot if _mv_tot > 0.0 else 0.5
+            if len(_blend_rets) >= 2:
+                _m_br = sum(_blend_rets) / len(_blend_rets)
+                _v_br = sum((r - _m_br) ** 2 for r in _blend_rets) / max(1, len(_blend_rets) - 1)
+                _sd_br = math.sqrt(_v_br) if _v_br > 0.0 else 0.0
+                _blend_sr = (_m_br / _sd_br) * math.sqrt(252.0) if _sd_br > 0.0 else 0.0
+            else:
+                _blend_sr = sum(
+                    float(_sub.get('sharpe') or 0.0) * max(1.0, float(_sub.get('market_value') or 1.0))
+                    for _sub in _s3_subs
+                    if _sub.get('sharpe') is not None
+                ) / _mv_tot
             _norm_metrics['S3'] = {
                 **_s3_top,
                 'active_positions': sum(int(_sub.get('active_positions') or 0) for _sub in _s3_subs),
@@ -337,7 +332,7 @@ class AlphaAllocator:
                 'avg_loss': round(_blend_al, 6),
                 'profit_factor': None,
                 'sharpe': round(_blend_sr, 3),
-                'win_rate': round(_blend_wr, 4),
+                'win_rate': round(len(_b_wins) / max(1, len(_blend_rets)), 3) if _blend_rets else 0.5,
             }
         stream_metrics = _norm_metrics
         self._stream_metrics = stream_metrics
@@ -369,12 +364,9 @@ class AlphaAllocator:
             _has_zero_days = ('n_days' in metrics and int(metrics.get('n_days') or 0) == 0)
             _has_zero_trades = ('total_trades' in metrics and int(metrics.get('total_trades') or 0) == 0)
             _has_explicit_payoff = ('avg_win' in metrics or 'avg_win_pct' in metrics)
-            _n_trades_m = int(metrics.get('total_trades') or metrics.get('n_trades') or 0)
+            _n_trades_m = int(metrics.get('total_trades') or 0)
             _n_days_m = int(metrics.get('n_days') or 0)
-            if len(daily_returns) >= 2:
-                n_obs = max(len(daily_returns), _n_days_m)
-            else:
-                n_obs = max(len(daily_returns), _n_trades_m, _n_days_m)
+            n_obs = max(len(daily_returns), _n_trades_m, _n_days_m)
             if _has_zero_days and _has_zero_trades:
                 n_obs = len(daily_returns)
             elif (_has_zero_days or _has_zero_trades) and _n_trades_m <= 0:
@@ -407,7 +399,7 @@ class AlphaAllocator:
                 _cold_start_aux_streams.add(sid)
             n_0 = 20
             lam_n = float(n_obs) / float(n_obs + n_0) if n_obs > 0 else 0.0
-            _n_win_obs = n_obs if len(daily_returns) >= 2 else (_n_trades_m if _n_trades_m > 0 else n_obs)
+            _n_win_obs = _n_trades_m if _n_trades_m > 0 else n_obs
             lam_win = float(_n_win_obs) / float(_n_win_obs + n_0) if _n_win_obs > 0 else 0.0
 
             # [Signal-Informed Empirical Bayes Prior]
@@ -579,23 +571,18 @@ class AlphaAllocator:
                         n_obs=n_obs,
                     )
                     _m_mult_sid = float(_pod_res.meritocracy_multiplier)
-                    _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
-                    _min_conf_obs = int(pget('measurement.sharpe_min_days', 5))
-                    _is_confirmed_loser = (n_obs >= _min_conf_obs - 1 and _sr_val <= -2.0 - 1.0) or n_obs >= 2 * _min_conf_obs
                     if _m_mult_sid < 1.0:
-                        if _is_confirmed_loser:
-                            _eff_pod_mult = max(
-                                0.01,
-                                _m_mult_sid * float(_pod_res.psr_survival) * float(_pod_res.pf_survival),
-                            )
-                        else:
-                            _eff_pod_mult = _m_mult_sid
+                        _eff_pod_mult = max(
+                            0.01,
+                            _m_mult_sid * float(_pod_res.psr_survival) * float(_pod_res.pf_survival),
+                        )
+                    _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
                     if _sr_val > 0.0 and n_obs >= 2:
-                        _dof_sr = max(1.0, float(n_obs) - 1.0)
+                        _dof_sr = max(1.0, float(max(_n_win_obs, n_obs)) - 1.0)
                         _t_sr_pos = (_sr_val / math.sqrt(252.0)) * math.sqrt(_dof_sr)
                         _psr_pos = math.erf(_t_sr_pos / math.sqrt(2.0))
                         _sr_cap = min(1.0, _sr_val / 3.0)
-                        _lam_sr = lam_n
+                        _lam_sr = max(lam_win, lam_n)
                         _psr_ev_bonus = _lam_sr * _psr_pos * _sr_cap * _prior_risk * _eff_pod_mult
                         ev += _psr_ev_bonus
                         if _m_mult_sid >= 1.0:
@@ -603,9 +590,6 @@ class AlphaAllocator:
                 except Exception:
                     _m_mult_sid = 1.0
                     _eff_pod_mult = 1.0
-                    _is_confirmed_loser = False
-            else:
-                _is_confirmed_loser = False
 
             # 🚀 [GapDriftAlphaEngine] Renaissance / Citadel Bayesian Continuous Prior Update
             if sid == 'S1':
@@ -650,8 +634,7 @@ class AlphaAllocator:
 
             if _m_mult_sid < 1.0:
                 if (
-                    _is_confirmed_loser
-                    and _emp_p_win_raw is not None
+                    _emp_p_win_raw is not None
                     and _scaled_emp_rew is not None
                     and _scaled_emp_risk is not None
                 ):
