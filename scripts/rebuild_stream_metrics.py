@@ -450,11 +450,12 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
                     rets = closes.pct_change().dropna()
                     if entry_date:
                         filtered = rets[rets.index.astype(str).str[:10] >= entry_date]
-                        if len(filtered) >= 2:
-                            rets = filtered
+                        if len(filtered) >= 5:
+                            rets = filtered.tail(30)
                         else:
-                            continue
-                    rets = rets.tail(30)
+                            rets = rets.tail(5)
+                    else:
+                        rets = rets.tail(5)
                     for idx_dt, r_val in rets.items():
                         d_key = str(idx_dt)[:10]
                         if math.isfinite(float(r_val)):
