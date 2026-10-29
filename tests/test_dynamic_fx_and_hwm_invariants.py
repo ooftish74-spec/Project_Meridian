@@ -970,6 +970,110 @@ def test_us_duplicate_sell_apbk0988_orderable_qty_and_exit_settlement_guard(
     assert len(post_calls) == 1
 
 
+def test_s3_track_c_multi_horizon_trend_and_anti_averaging_down_invariants(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify:
+    1) S3CrossAssetSleeve blocks CPER when 1d=-1.86% / 60d=-3.11% despite 5d=+2.89%,
+       and blocks UUP when 5d spread (+0.16%) < friction hurdle (0.35%) and SPY 5d (+0.58%) >= 0.
+    2) S3FactorStream emits SIGNAL_INVALIDATION exit signals for held Track C positions (CPER, UUP)
+       whose cross-asset momentum signal has been invalidated.
+    3) StreamOrchestrator._generate_orders strictly blocks averaging down into losing/sub-hurdle
+       positions (CPER -1.19%, UUP -0.05%) while allowing profitable pyramiding (V +3.36%).
+    """
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+    from src.streams.s3_active_macro.active_macro_stream import S3FactorStream
+    from scripts.stream_orchestrator import StreamOrchestrator
+
+    sleeve = S3CrossAssetSleeve()
+    md_live_like = {
+        "spy_return_5d": 0.0058,
+        "cper_return_5d": 0.0289,
+        "cper_return_1d": -0.0186,
+        "cper_return_20d": 0.0018,
+        "cper_return_60d": -0.0311,
+        "uup_return_5d": 0.0075,
+        "uup_return_1d": -0.0009,
+        "uso_return_5d": 0.0109,
+        "uso_return_1d": -0.0137,
+        "gld_return_5d": 0.0250,
+        "gld_return_1d": 0.0080,
+        "gld_return_20d": 0.0420,
+        "gld_return_60d": 0.0850,
+        "signal_cache": {"vix": 18.5},
+    }
+    tc_sigs = sleeve.generate_track_c_signals("caution", md_live_like)
+    tc_tickers = {s["ticker"] for s in tc_sigs}
+    assert "CPER" not in tc_tickers
+    assert "UUP" not in tc_tickers
+    assert "USO" not in tc_tickers
+    assert "GLD" in tc_tickers
+
+    # 2) Held CPER and UUP in holdings emit SIGNAL_INVALIDATION exits when excluded from Track C long signals
+    s3 = S3FactorStream()
+    md_with_holdings = {
+        **md_live_like,
+        "holdings": {
+            "CPER": {"ticker": "CPER", "qty": 15, "ord_psbl_qty": 15, "pnl_pct": -0.27, "stream_id": "S3_C"},
+            "UUP": {"ticker": "UUP", "qty": 30, "ord_psbl_qty": 30, "pnl_pct": -0.33, "stream_id": "S3"},
+        },
+    }
+    all_s3_sigs = s3.generate_signals("caution", md_with_holdings)
+    exit_tks = {
+        s["ticker"]
+        for s in all_s3_sigs
+        if s.get("direction") == "exit" and s.get("strategy") == "s3_track_c_signal_invalidation"
+    }
+    assert "CPER" in exit_tks
+    assert "UUP" in exit_tks
+
+    # 3) StreamOrchestrator._generate_orders blocks averaging down into CPER (-1.19%) and UUP (-0.05%)
+    orch = StreamOrchestrator(exec_mode="shadow")
+    orch._ignore_market_hours = True
+    pf = {
+        "total_nav": 21_960_000.0,
+        "positions": {
+            "CPER": {
+                "ticker": "CPER",
+                "quantity": 5,
+                "avg_price": 40.0382,
+                "current_price": 39.56,
+                "eval_krw": 264_320.0,
+                "unrealized_pnl_pct": -1.19,
+                "stream_id": "S3_C",
+            },
+            "UUP": {
+                "ticker": "UUP",
+                "quantity": 8,
+                "avg_price": 29.13,
+                "current_price": 29.115,
+                "eval_krw": 311_251.0,
+                "unrealized_pnl_pct": -0.05,
+                "stream_id": "S3",
+            },
+        },
+    }
+    sigs_gen = {
+        "S3": [
+            {"stream_id": "S3_C", "ticker": "CPER", "direction": "long", "size_pct": 0.15, "price": 39.56, "confidence": 0.80, "tp_pct": 4.0, "sl_pct": 2.0},
+            {"stream_id": "S3_C", "ticker": "UUP", "direction": "long", "size_pct": 0.15, "price": 29.115, "confidence": 0.85, "tp_pct": 4.0, "sl_pct": 2.0},
+            {"stream_id": "S3_A", "ticker": "XLV", "direction": "long", "size_pct": 0.20, "price": 183.68, "confidence": 0.92, "tp_pct": 6.0, "sl_pct": 2.5},
+        ]
+    }
+    orders = orch._generate_orders(
+        signals=sigs_gen,
+        weights={"S3": 0.50},
+        max_exposure=0.85,
+        leverage_result={"judgment": {"leverage_level": 1.0}},
+        portfolio=pf,
+        regime="caution",
+        market_data={"vix": 18.5, "signal_cache": {"vix": 18.5, "usdkrw": 1380.0}},
+    )
+    ordered_tks = {o["ticker"] for o in orders}
+    assert "CPER" not in ordered_tks
+    assert "UUP" not in ordered_tks
+    assert "XLV" in ordered_tks
+
+
+
 
 
 

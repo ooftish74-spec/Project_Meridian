@@ -543,60 +543,94 @@ class S3FactorStream(BaseStream):
         except Exception as _tc_e:
             logger.warning(f"  ⚠️ [Alpha 4 Track C] 대체자산 슬리 발화 예외 (무시): {_tc_e}")
 
-        # ── [US Inverse Regime-Invalidation & Underlying Rebound Exit] ──
-        # 보유 중인 미국 인버스 ETF(SOXS, PSQ, SQQQ, SH)가 US 레짐 완화(caution/bull) 또는 기초지수 양전으로 인해
-        # 신규 롱 시그널에서 제외된 경우, 즉시 청산(exit) 시그널을 방출하여 역방향 손실 고착을 원천 차단
+        # ── [US Inverse & Track C Cross-Asset Signal Invalidation Exit] ──
+        # 1) 보유 중인 미국 인버스 ETF(SOXS, PSQ, SQQQ, SH)가 US 레짐 완화(caution/bull) 또는 기초지수 양전으로 제외된 경우 즉시 청산
+        # 2) 보유 중인 Track C 대체자산 ETF(CPER, UUP, USO, GLD, TLT)가 다중 호라이즌 추세 붕괴/스프레드 미달로
+        #    신규 Track C 롱 시그널에서 탈락한 경우, 자본 잠식 및 물타기 고착 방지를 위해 즉시 리밸런싱 청산(exit) 방출
         try:
             import os as _os_inv_ex
-            if not _os_inv_ex.environ.get('PYTEST_CURRENT_TEST') and not _os_inv_ex.environ.get('MERIDIAN_TEST_MODE'):
+            _kp_inv_holdings = {}
+            if isinstance(market_data, dict) and isinstance(market_data.get('holdings'), dict):
+                _kp_inv_holdings = dict(market_data['holdings'])
+            elif not _os_inv_ex.environ.get('PYTEST_CURRENT_TEST') and not _os_inv_ex.environ.get('MERIDIAN_TEST_MODE'):
                 _kp_inv_file = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
                 if _kp_inv_file.exists():
                     _kp_inv_holdings = (_json.loads(_kp_inv_file.read_text(encoding='utf-8')).get('holdings') or {})
-                    _selected_long_tks = {str(s.get('ticker', '')).upper() for s in signals if s.get('direction') == 'long'}
-                    _sc_inv = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
-                    _us_inv_map = {
-                        'SOXS': float(_sc_inv.get('sox_change_1d', _sc_inv.get('soxx_change_1d', 0.0)) or 0.0),
-                        'SQQQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
-                        'PSQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
-                        'SH': float(_sc_inv.get('sp500_change_1d', _sc_inv.get('spx_change_1d', 0.0)) or 0.0),
-                    }
-                    for _inv_tk, _idx_chg_1d in _us_inv_map.items():
-                        _h_inv = _kp_inv_holdings.get(_inv_tk)
-                        if isinstance(_h_inv, dict) and float(_h_inv.get('qty', _h_inv.get('quantity', 0)) or 0) > 0:
-                            _inv_sid = str(_h_inv.get('stream_id') or '').strip().upper()
-                            _inv_strat = str(_h_inv.get('strategy') or '').strip().lower()
-                            _is_s14_pair_hedge = (
-                                _inv_sid in ('S14', 'S14_PAIR_ALPHA')
-                                or 'pair' in _inv_strat
-                                or (_inv_tk == 'PSQ' and any(
-                                    isinstance(_kp_inv_holdings.get(_ptk), dict)
-                                    and float(_kp_inv_holdings[_ptk].get('qty', _kp_inv_holdings[_ptk].get('quantity', 0)) or 0) > 0
-                                    for _ptk in ('XLE', 'XLV')
-                                ))
-                            )
-                            if _is_s14_pair_hedge:
-                                continue
-                            if _inv_tk not in _selected_long_tks and (us_regime not in ('bear', 'crash') or _idx_chg_1d > 0.0):
-                                _inv_reason = f"US Inverse Invalidation Exit ({_inv_tk}: us_regime={us_regime}, index_1d={_idx_chg_1d:+.2f}%)"
-                                logger.info(f"  🔔 [S3 Inverse Exit] {_inv_reason}")
-                                signals.append({
-                                    'stream_id': str(_h_inv.get('stream_id') or 'S3_C'),
-                                    'ticker': _inv_tk,
-                                    'name': str(_h_inv.get('name') or _inv_tk),
-                                    'direction': 'exit',
-                                    'action': 'sell',
-                                    'confidence': 1.0,
-                                    'size_pct': 0.0,
-                                    'strategy': 's3_inverse_regime_invalidation',
-                                    'exit_type': 'REGIME_INVALIDATION',
-                                    'reason': _inv_reason,
-                                    'regime': us_regime,
-                                    'market': 'US',
-                                    'timestamp': datetime.now().isoformat(),
-                                    '_type': 'TRACK_C',
-                                })
+            if _kp_inv_holdings:
+                _selected_long_tks = {str(s.get('ticker', '')).upper() for s in signals if s.get('direction') == 'long'}
+                _sc_inv = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
+                _us_inv_map = {
+                    'SOXS': float(_sc_inv.get('sox_change_1d', _sc_inv.get('soxx_change_1d', 0.0)) or 0.0),
+                    'SQQQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
+                    'PSQ': float(_sc_inv.get('nasdaq_change_1d', _sc_inv.get('ixic_change_1d', 0.0)) or 0.0),
+                    'SH': float(_sc_inv.get('sp500_change_1d', _sc_inv.get('spx_change_1d', 0.0)) or 0.0),
+                }
+                for _inv_tk, _idx_chg_1d in _us_inv_map.items():
+                    _h_inv = _kp_inv_holdings.get(_inv_tk)
+                    if isinstance(_h_inv, dict) and float(_h_inv.get('qty', _h_inv.get('quantity', 0)) or 0) > 0:
+                        _inv_sid = str(_h_inv.get('stream_id') or '').strip().upper()
+                        _inv_strat = str(_h_inv.get('strategy') or '').strip().lower()
+                        _is_s14_pair_hedge = (
+                            _inv_sid in ('S14', 'S14_PAIR_ALPHA')
+                            or 'pair' in _inv_strat
+                            or (_inv_tk == 'PSQ' and any(
+                                isinstance(_kp_inv_holdings.get(_ptk), dict)
+                                and float(_kp_inv_holdings[_ptk].get('qty', _kp_inv_holdings[_ptk].get('quantity', 0)) or 0) > 0
+                                for _ptk in ('XLE', 'XLV')
+                            ))
+                        )
+                        if _is_s14_pair_hedge:
+                            continue
+                        if _inv_tk not in _selected_long_tks and (us_regime not in ('bear', 'crash') or _idx_chg_1d > 0.0):
+                            _inv_reason = f"US Inverse Invalidation Exit ({_inv_tk}: us_regime={us_regime}, index_1d={_idx_chg_1d:+.2f}%)"
+                            logger.info(f"  🔔 [S3 Inverse Exit] {_inv_reason}")
+                            signals.append({
+                                'stream_id': str(_h_inv.get('stream_id') or 'S3_C'),
+                                'ticker': _inv_tk,
+                                'name': str(_h_inv.get('name') or _inv_tk),
+                                'direction': 'exit',
+                                'action': 'sell',
+                                'confidence': 1.0,
+                                'size_pct': 0.0,
+                                'strategy': 's3_inverse_regime_invalidation',
+                                'exit_type': 'REGIME_INVALIDATION',
+                                'reason': _inv_reason,
+                                'regime': us_regime,
+                                'market': 'US',
+                                'timestamp': datetime.now().isoformat(),
+                                '_type': 'TRACK_C',
+                            })
+                _track_c_tks = {'GLD', 'IAU', 'USO', 'CPER', 'TLT', 'IEF', 'UUP'}
+                for _tc_tk in sorted(_track_c_tks):
+                    _h_tc = _kp_inv_holdings.get(_tc_tk)
+                    if not isinstance(_h_tc, dict):
+                        continue
+                    _tc_qty = float(_h_tc.get('qty', _h_tc.get('quantity', 0)) or 0)
+                    if _tc_qty <= 0 or _tc_tk in _selected_long_tks:
+                        continue
+                    if 'ord_psbl_qty' in _h_tc and _h_tc.get('ord_psbl_qty') is not None and int(_h_tc.get('ord_psbl_qty') or 0) <= 0:
+                        continue
+                    _tc_pnl = float(_h_tc.get('pnl_pct', _h_tc.get('unrealized_pnl_pct', _h_tc.get('return_pct', 0.0))) or 0.0)
+                    _tc_reason = f"S3 Track C Signal Invalidation Rebalance Exit ({_tc_tk}: cross-asset momentum broken, PnL={_tc_pnl:+.2f}%)"
+                    logger.info(f"  🔔 [S3 Track C Invalidation Exit] {_tc_reason}")
+                    signals.append({
+                        'stream_id': str(_h_tc.get('stream_id') or 'S3_C'),
+                        'ticker': _tc_tk,
+                        'name': str(_h_tc.get('name') or _tc_tk),
+                        'direction': 'exit',
+                        'action': 'sell',
+                        'confidence': 1.0,
+                        'size_pct': 0.0,
+                        'strategy': 's3_track_c_signal_invalidation',
+                        'exit_type': 'SIGNAL_INVALIDATION',
+                        'reason': _tc_reason,
+                        'regime': us_regime,
+                        'market': 'US',
+                        'timestamp': datetime.now().isoformat(),
+                        '_type': 'TRACK_C',
+                    })
         except Exception as _inv_ex_e:
-            logger.debug(f"  [S3 Inverse Exit] 체크 스킵: {_inv_ex_e}")
+            logger.debug(f"  [S3 Inverse/Track C Exit] 체크 스킵: {_inv_ex_e}")
 
         if self._regime_detector and signals:
             intraday = self._regime_detector.detect(market_data)

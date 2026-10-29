@@ -1825,21 +1825,31 @@ class StreamOrchestrator:
                     )
                     continue
 
-            # [Task 2] S3 Pyramiding (불타기) — 기보유 수익 구간(unrealized_pnl_pct > 0) 종목에 한해 허용
-            if _stream in ('S3', 'S3_A') and _action in ('BUY', 'LONG'):
-                _held_profit_pct = 0.0
+            # [Task 2] S3 Pyramiding (불타기) & Anti-Averaging-Down (물타기 차단)
+            if _stream in ('S3', 'S3_A', 'S3_C') and _action in ('BUY', 'LONG'):
+                _held_profit_pct = None
+                _is_already_held_pyr = False
                 for _pk_pyr, _pv_pyr in ((portfolio or {}).get('positions') or (portfolio or {}).get('holdings') or {}).items():
                     if isinstance(_pv_pyr, dict):
                         _ptk_pyr = str(_pv_pyr.get('ticker') or str(_pk_pyr).split(':')[-1]).strip().upper()
                         if _ptk_pyr == _tk_u and float(_pv_pyr.get('quantity', _pv_pyr.get('qty', 0)) or 0) > 0:
-                            _held_profit_pct = float(
-                                _pv_pyr.get('unrealized_pnl_pct', _pv_pyr.get('return_pct', _pv_pyr.get('pnl_pct', 0.0))) or 0.0
-                            )
+                            _is_already_held_pyr = True
+                            for _k_p_pyr in ('unrealized_pnl_pct', 'return_pct', 'pnl_pct'):
+                                if _pv_pyr.get(_k_p_pyr) is not None:
+                                    _held_profit_pct = float(_pv_pyr.get(_k_p_pyr) or 0.0)
+                                    break
                             break
+                _min_pyr_pnl_s3 = float(pget('s3.pyramiding_min_pnl_pct', 1.5))  # hardcode-ok
+                if _is_already_held_pyr and _held_profit_pct is not None and _held_profit_pct < _min_pyr_pnl_s3:
+                    logger.info(
+                        f"  🛑 [Anti-Averaging-Down Veto] {_stream}({_tk_u}) 기보유 손익률({_held_profit_pct:+.2f}%) "
+                        f"< 피라미딩 최소 허들(+{_min_pyr_pnl_s3:.2f}%) ➔ 추가 매수(물타기) 기각"
+                    )
+                    continue
                 _conf = float(_ord.get('confidence', 0.0))
                 _pyramid_conf_th  = float(cfg.get('s3.pyramiding_conf_threshold', max(0.65, _dyn_caution_cut + 0.10)))
                 _pyramid_scale    = float(cfg.get('s3.pyramiding_scale_factor',   2.00))  # (conf-th)*scale = max boost
-                if _held_profit_pct > 0.0 and _conf >= _pyramid_conf_th:
+                if _is_already_held_pyr and (_held_profit_pct or 0.0) >= _min_pyr_pnl_s3 and _conf >= _pyramid_conf_th:
                     _pyramid_mult = 1.0 + (_conf - _pyramid_conf_th) * _pyramid_scale
                     if 'amount_krw' in _ord:
                         _ord['amount_krw'] = _ord['amount_krw'] * _pyramid_mult
@@ -3485,12 +3495,23 @@ class StreamOrchestrator:
 
                 if _clean_tk_ub:
                     _tk_u_key = _clean_tk_ub.upper()
-                    _prev_ch = current_holdings.get(_tk_u_key, {'qty': 0.0, 'eval_krw': 0.0, 'stream_id': _raw_sid_str, 'track': _resolved_trk_ub})
+                    _pos_pnl_ub = None
+                    for _pk_pnl in ('unrealized_pnl_pct', 'return_pct', 'pnl_pct'):
+                        if _pv.get(_pk_pnl) is not None:
+                            _pos_pnl_ub = float(_pv.get(_pk_pnl) or 0.0)
+                            break
+                    if _pos_pnl_ub is None:
+                        _ap_ub = float(_pv.get('avg_price', 0.0) or _pv.get('entry_price', 0.0) or 0.0)
+                        _cp_ub_p = float(_pv.get('current_price', 0.0) or 0.0)
+                        if _ap_ub > 0 and _cp_ub_p > 0:
+                            _pos_pnl_ub = (_cp_ub_p / _ap_ub - 1.0) * 100.0
+                    _prev_ch = current_holdings.get(_tk_u_key, {'qty': 0.0, 'eval_krw': 0.0, 'stream_id': _raw_sid_str, 'track': _resolved_trk_ub, 'pnl_pct': _pos_pnl_ub})
                     current_holdings[_tk_u_key] = {
                         'qty': float(_prev_ch.get('qty', 0.0) or 0.0) + max(0.0, _qty_ub if _qty_ub > 0 else (1.0 if _pos_val > 0 else 0.0)),
                         'eval_krw': float(_prev_ch.get('eval_krw', 0.0) or 0.0) + max(0.0, _pos_val),
                         'stream_id': _raw_sid_str,
                         'track': _resolved_trk_ub,
+                        'pnl_pct': _pos_pnl_ub if _pos_pnl_ub is not None else _prev_ch.get('pnl_pct'),
                     }
 
                 if _clean_tk_ub.upper() in _PARKING_EXEMPT_BUDGET:
@@ -3959,22 +3980,24 @@ class StreamOrchestrator:
             max_daily_loss = abs(float(pget('risk.global_max_daily_loss_pct', 3.0))) / 100.0
             
             _max_leverage_limit = float(pget('allocator.golden_bull_multiplier', 1.50)) if regime == 'bull' else 1.00
-            _target_util = min(_max_leverage_limit, max(_orig_total_pct, 1.0 if len(valid_signals) >= 2 else _orig_total_pct))
+            _target_util = min(_max_leverage_limit, _orig_total_pct)
             _scale_factor = 1.0
             if _total_size_pct > _max_leverage_limit:
                 _scale_factor = _max_leverage_limit / _total_size_pct
                 logger.info(f"    [Red Team V5] {stream_id}: 총 비중 {_total_size_pct*100:.1f}% > 최대 레버리지 한도 {_max_leverage_limit*100:.0f}% 초과 → 스케일 다운 (×{_scale_factor:.2f})")
             elif 0.0 < _total_size_pct < _target_util:
                 _scale_factor = _target_util / _total_size_pct
-                logger.info(f"    [Red Team V5] {stream_id}: 스트림 내 상대 Kelly 비중 합계({_total_size_pct*100:.1f}%) → 목표 가동률({_target_util*100:.1f}%)로 정규화 (×{_scale_factor:.2f}, 3-Sigma 상한 적용)")
+                logger.info(f"    [Red Team V5] {stream_id}: 스트림 내 상대 Kelly 비중 합계({_total_size_pct*100:.1f}%) → 목표 가동률({_target_util*100:.1f}%)로 정규화 (×{_scale_factor:.2f}, 기보유 종목 뻥튀기 면제)")
             
             _canon_sid_ord = _CANONICAL_MAP.get(stream_id, stream_id)
             _held_in_stream = float(_stream_held_krw.get(_canon_sid_ord, _stream_held_krw.get(stream_id, 0.0)) or 0.0)
             total_stream_budget = max(float(budget), float(budget) + _held_in_stream)
             _stream_share = float(total_stream_budget) / _safe_nav_gen
             for _sig_n in valid_signals:
-                # 1. 스트림 내 상대 Kelly 비중 정규화
-                _sig_n['size_pct'] = _sig_n['size_pct'] * _scale_factor
+                # 1. 스트림 내 상대 Kelly 비중 정규화 (단, 기보유 종목은 Fractional Kelly 원비중 보존하여 강제 뻥튀기 물타기 방지)
+                _tk_n_clean = str(_sig_n.get('ticker', '')).split(':')[-1].strip().upper()
+                _eff_scale_n = min(1.0, _scale_factor) if (_tk_n_clean in current_holdings and not _sig_n.get('pair_id')) else _scale_factor
+                _sig_n['size_pct'] = _sig_n['size_pct'] * _eff_scale_n
                 
                 # 2. 개별 종목 수학적 한도 (차원 일관성 3-Sigma 파산 방어선: (w_s * s_i) * 3 * sigma_i <= L_max)
                 vol = float(_sig_n.get('daily_vol_pct') or 0.0)
@@ -4122,6 +4145,15 @@ class StreamOrchestrator:
 
                 _dup_hold_ratio = 1.0 / 2.0
                 if current_qty > 0 and target_order_krw > 0:
+                    if not sig.get('is_hedge_completion') and not _is_pair_shared_inv and stream_id not in ('S0', 'S_BETA', 'S_YIELD', 'S5'):
+                        _held_pnl_val = (_ch_entry or {}).get('pnl_pct') if isinstance(_ch_entry, dict) else None
+                        _min_pyr_pnl = float(pget('s3.pyramiding_min_pnl_pct', 1.5))  # hardcode-ok: minimum net profit % hurdle for pyramiding
+                        if _held_pnl_val is not None and float(_held_pnl_val) < _min_pyr_pnl:
+                            logger.info(
+                                f"    🛑 [Anti-Averaging-Down Guard] {_t}: 기보유({current_qty}주, ₩{current_eval_krw:,.0f}) "
+                                f"현재 손익률({float(_held_pnl_val):+.2f}%) < 피라미딩 최소 수익 허들(+{_min_pyr_pnl:.2f}%) ➔ 손실/보합 물타기 추가매수 원천 차단"
+                            )
+                            continue
                     if current_eval_krw >= target_order_krw * _dup_hold_ratio:
                         logger.info(
                             f"    🛡️ [Duplicate-Buy Guard] {_t}: 기보유 평가액 ₩{current_eval_krw:,.0f} "
@@ -4373,6 +4405,9 @@ class StreamOrchestrator:
             _EXIT_CANON_MAP = {
                 'S_BETA': 'S0',
                 'S_YIELD': 'S5',
+                'S3_A': 'S3',
+                'S3_C': 'S3',
+                'S3_ACTIVE_MACRO': 'S3',
                 'S10': 'S10_MEGA_TREND',
                 'S11': 'S11_HIGHBETA_SNIPER',
                 'S12': 'S12_DERIVATIVE_SQUEEZE',

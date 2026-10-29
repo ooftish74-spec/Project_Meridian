@@ -68,7 +68,24 @@ class S3CrossAssetSleeve:
             cross_universe.setdefault('SQQQ', {'name': 'ProShares UltraPro Short QQQ', 'category': 'inverse_hedge'})
             cross_universe.setdefault('SOXS', {'name': 'Direxion Daily Semiconductor Bear 3X', 'category': 'inverse_hedge'})
 
-        def _get_live_5d_return(tk: str) -> float:
+        def _get_live_nd_return(tk: str, n_days: int):
+            key_nd = f"{tk.lower()}_return_{n_days}d"
+            if key_nd in market_data and market_data.get(key_nd) is not None:
+                return float(market_data.get(key_nd, 0.0) or 0.0)
+            if has_explicit_returns and n_days != 5:  # hardcode-ok: 5-day horizon check
+                return None
+            live_1d_val = None
+            if n_days == 1:
+                import os as _os_tc
+                if not _os_tc.environ.get('PYTEST_CURRENT_TEST') and not _os_tc.environ.get('MERIDIAN_TEST_MODE'):
+                    try:
+                        from src.utils.google_finance_collector import GoogleFinanceCollector
+                        gf_q = GoogleFinanceCollector.get_quote_details(tk)
+                        if isinstance(gf_q, dict) and gf_q.get('change_pct') is not None and float(gf_q.get('price', 0) or 0) > 0:
+                            live_1d_val = float(gf_q['change_pct']) / 100.0
+                    except Exception:
+                        pass
+            pq_nd_val = None
             try:
                 from pathlib import Path
                 import pandas as pd
@@ -76,41 +93,26 @@ class S3CrossAssetSleeve:
                 if pq_path.exists():
                     df = pd.read_parquet(pq_path)
                     close_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
-                    if close_col and len(df) >= 6:
+                    req_len = n_days + 1
+                    if close_col and len(df) >= req_len:
                         s = df[close_col].dropna()
-                        if len(s) >= 6 and float(s.iloc[-6]) > 0:
-                            return float(s.iloc[-1]) / float(s.iloc[-6]) - 1.0
+                        if len(s) >= req_len and float(s.iloc[-req_len]) > 0:
+                            pq_nd_val = float(s.iloc[-1]) / float(s.iloc[-req_len]) - 1.0
             except Exception:
                 pass
-            return 0.0
+            if n_days == 1:
+                if live_1d_val is not None and pq_nd_val is not None:
+                    return min(live_1d_val, pq_nd_val) if (live_1d_val < 0.0 or pq_nd_val < 0.0) else live_1d_val
+                return live_1d_val if live_1d_val is not None else (pq_nd_val if pq_nd_val is not None else 0.0)
+            return pq_nd_val if pq_nd_val is not None else (0.0 if n_days == 5 else None)  # hardcode-ok: 5-day fallback
+
+        def _get_live_5d_return(tk: str) -> float:
+            val = _get_live_nd_return(tk, 5)  # hardcode-ok
+            return float(val or 0.0)
 
         def _get_live_1d_return(tk: str) -> float:
-            key_1d = f"{tk.lower()}_return_1d"
-            if key_1d in market_data:
-                return float(market_data.get(key_1d, 0.0) or 0.0)
-            import os as _os_tc
-            if not _os_tc.environ.get('PYTEST_CURRENT_TEST') and not _os_tc.environ.get('MERIDIAN_TEST_MODE'):
-                try:
-                    from src.utils.google_finance_collector import GoogleFinanceCollector
-                    gf_q = GoogleFinanceCollector.get_quote_details(tk)
-                    if isinstance(gf_q, dict) and gf_q.get('change_pct') is not None and float(gf_q.get('price', 0) or 0) > 0:
-                        return float(gf_q['change_pct']) / 100.0
-                except Exception:
-                    pass
-            try:
-                from pathlib import Path
-                import pandas as pd
-                pq_path = Path(__file__).resolve().parent.parent.parent.parent / 'data' / 'us_stocks' / 'prices' / f'{tk}.parquet'
-                if pq_path.exists():
-                    df = pd.read_parquet(pq_path)
-                    close_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
-                    if close_col and len(df) >= 2:
-                        s = df[close_col].dropna()
-                        if len(s) >= 2 and float(s.iloc[-2]) > 0:
-                            return float(s.iloc[-1]) / float(s.iloc[-2]) - 1.0
-            except Exception:
-                pass
-            return 0.0
+            val = _get_live_nd_return(tk, 1)
+            return float(val or 0.0)
 
         sc_tc = market_data.get('signal_cache') if isinstance(market_data.get('signal_cache'), dict) else {}
         has_explicit_returns = ('spy_return_5d' in market_data) or ('sp500_return_5d' in market_data) or ('asset_returns' in market_data)
@@ -149,6 +151,24 @@ class S3CrossAssetSleeve:
                 if ret_1d < 0.0:
                     logger.info(f"  🛑 [S3 Track C Inverse Guard] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 당일/1일 수익률({ret_1d:+.2%}) 음수 전환 — 역방향 추격 매수 차단")
                     continue
+            else:
+                # ★ [Multi-Horizon Trend Alignment Guard]
+                # 5일 기저효과 착시(예: CPER 5d=+2.89%이나 1d=-1.86%, 60d=-3.11%)로 인한 하락 전환 자산 매수 원천 차단
+                ret_1d_opt = _get_live_nd_return(ticker, 1)
+                if ret_1d_opt is not None and ret_1d_opt < 0.0:
+                    logger.info(
+                        f"  🛑 [S3 Track C 1D Reversal Veto] {ticker}: 5일 수익률({asset_ret:+.2%}) 양수이나 "
+                        f"단기 1일/장중 수익률({ret_1d_opt:+.2%}) 음수 전환 — 하락 중 추격 매수 차단"
+                    )
+                    continue
+                ret_20d_opt = _get_live_nd_return(ticker, 20)  # hardcode-ok
+                ret_60d_opt = _get_live_nd_return(ticker, 60)  # hardcode-ok
+                if ret_60d_opt is not None and ret_60d_opt < 0.0 and (ret_20d_opt is None or ret_20d_opt < spread_threshold):
+                    logger.info(
+                        f"  🛑 [S3 Track C Multi-Horizon Downtrend Veto] {ticker}: 중기 60일 수익률({ret_60d_opt:+.2%}) 음수 역배열 "
+                        f"(20d={0.0 if ret_20d_opt is None else ret_20d_opt:+.2%}) — 5일 기저효과 착시 진입 차단"
+                    )
+                    continue
 
             _mf_tc = sc_tc.get('macro_features') if isinstance(sc_tc.get('macro_features'), dict) else {}
             _z_oil_tc = float(sc_tc.get('geopolitical_oil_supply_z', _mf_tc.get('geopolitical_oil_supply_z', 0.0)) or 0.0)
@@ -164,11 +184,17 @@ class S3CrossAssetSleeve:
                 _cat_macro_z = max(_z_tp_tc, _z_gm_tc)
             elif _cat_tc == 'treasury':
                 _cat_macro_z = -_z_tp_tc
-            _eff_spread_thresh = spread_threshold / (1.0 + max(0.0, _cat_macro_z))
+            _min_friction_spread = spread_threshold * 0.70  # hardcode-ok: minimum round-trip friction hurdle (35 bps)
+            _eff_spread_thresh = max(_min_friction_spread, spread_threshold / (1.0 + max(0.0, _cat_macro_z)))
 
             _caut_min_ret = 0.01
             _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else (_caut_min_ret / (1.0 + max(0.0, _cat_macro_z)))
-            is_flight_to_quality = (regime in ['bear', 'crash'] if is_inv_hedge else regime in ['bear', 'crash', 'caution']) and (asset_ret >= _ftq_min_ret and asset_ret > 0.0)
+            _ftq_regime_ok = (
+                (regime in ['bear', 'crash'])
+                if is_inv_hedge
+                else (regime in ['bear', 'crash'] or (regime == 'caution' and spy_return < 0.0))
+            )
+            is_flight_to_quality = _ftq_regime_ok and (asset_ret >= _ftq_min_ret and asset_ret > 0.0 and spread >= _eff_spread_thresh)
             is_momentum_outperformance = spread >= _eff_spread_thresh and (asset_ret >= _ftq_min_ret if not is_inv_hedge else asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
