@@ -1073,6 +1073,110 @@ def test_s3_track_c_multi_horizon_trend_and_anti_averaging_down_invariants(monke
     assert "XLV" in ordered_tks
 
 
+def test_kis_midnight_batch_ghost_hwm_and_kill_switch_invariants(tmp_path: Path) -> None:
+    """Verify:
+    1) RuntimeInvariantGate detects and heals KIS midnight batch unsettled-buy double-counted
+       Ghost Portfolio HWM (21,965,937 -> 18,602,823) in kis_portfolio.json and shadow_portfolio.json,
+       and auto-clears the false hard_floor_mdd KillSwitch state.
+    2) KillSwitch.measure_metrics sanitizes unsettled-buy double-counted HWM (d0=4,691,581 vs d2=766,737)
+       to closed-form DD = (18,024,704 / 18,602,823 - 1) * 100 = -3.11%, while preserving genuine
+       -25.00% drawdowns when d0 == d2.
+    """
+    from src.risk.runtime_invariant_gate import RuntimeInvariantGate
+    from src.risk.kill_switch import KillSwitch
+
+    res_dir = tmp_path / "results"
+    res_dir.mkdir(parents=True, exist_ok=True)
+
+    kp_payload = {
+        "kis_mode": "live",
+        "nav": 18_024_704,
+        "total_nav": 18_024_704,
+        "total_asset": 18_024_704,
+        "hwm": 21_965_937,
+        "initial_capital": 18_602_823,
+        "holdings": {
+            "086280": {
+                "name": "현대글로비스",
+                "qty": 17,
+                "avg_price": 175088.24,
+                "current_price": 188800.0,
+                "eval_krw": 3_209_600,
+                "cost_krw": 2_976_500,
+                "stream_id": "S3_B",
+            }
+        },
+        "account": {
+            "nav": 18_024_704,
+            "total_equity": 18_024_704,
+            "cash": 729_022,
+            "d0_deposit_krw": 4_691_581.0,
+            "d2_settlement_cash_krw": 766_737.0,
+            "us_cash_usd": 2110.06,
+            "d0_usd_deposit": 2110.06,
+            "fx_rate": 1336.3,
+            "hwm": 21_965_937,
+            "initial_capital": 18_602_823,
+        },
+    }
+    (res_dir / "kis_portfolio.json").write_text(json.dumps(kp_payload), encoding="utf-8")
+
+    sp_payload = {
+        "virtual_nav": 21_929_349.34,
+        "hwm": 21_965_937.0,
+        "cash": 4_691_534.23,
+        "track_record_rebase": {"at": "2026-10-19T03:27:11"},
+        "daily_snapshots": [
+            {"date": "2026-10-28", "nav": 16_337_285.0, "hwm": 18_602_823.0, "nav_source": "broker"},
+            {"date": "2026-10-29", "nav": 18_058_611.0, "hwm": 18_602_823.0, "nav_source": "broker"},
+        ],
+        "positions": {},
+    }
+    (res_dir / "shadow_portfolio.json").write_text(json.dumps(sp_payload), encoding="utf-8")
+
+    ks_payload = {
+        "triggered": True,
+        "trigger_types": ["hard_floor_mdd"],
+    }
+    (res_dir / "kill_switch_state.json").write_text(json.dumps(ks_payload), encoding="utf-8")
+    (res_dir / "signal_cache.json").write_text(json.dumps({"usdkrw": 1336.3}), encoding="utf-8")
+
+    gate = RuntimeInvariantGate(results_dir=res_dir)
+    rep = gate.audit_and_heal(auto_heal=True)
+    assert any("I1_ghost_portfolio_hwm" in v for v in rep["violations_found"])
+    assert "healed_kill_switch_ghost_hwm" in rep["healed_actions"]
+
+    healed_kp = json.loads((res_dir / "kis_portfolio.json").read_text(encoding="utf-8"))
+    healed_sp = json.loads((res_dir / "shadow_portfolio.json").read_text(encoding="utf-8"))
+    healed_ks = json.loads((res_dir / "kill_switch_state.json").read_text(encoding="utf-8"))
+
+    assert healed_kp["hwm"] == 18_602_823
+    assert healed_kp["account"]["hwm"] == 18_602_823
+    assert healed_sp["hwm"] == pytest.approx(18_602_823.0, rel=1e-9)
+    assert healed_sp["virtual_nav"] == pytest.approx(18_024_704.0, rel=1e-9)
+    assert healed_sp["cash"] == pytest.approx(766_737.0, rel=1e-9)
+    assert healed_ks["triggered"] is False
+    assert healed_ks["trigger_types"] == []
+
+    # 2) Verify KillSwitch.measure_metrics directly against closed-form oracle
+    ks = KillSwitch()
+    m_ghost = ks.measure_metrics(kp_payload)
+    expected_dd = (18_024_704.0 / 18_602_823.0 - 1.0) * 100.0
+    assert m_ghost["dd_pct"] == pytest.approx(round(expected_dd, 2), rel=1e-9)
+
+    # Genuine drawdown without unsettled D0-D2 gap must NOT be suppressed
+    m_real_dd = ks.measure_metrics(
+        {
+            "nav": 15_000_000.0,
+            "hwm": 20_000_000.0,
+            "initial_capital": 20_000_000.0,
+            "account": {"d0_deposit_krw": 1_000_000.0, "d2_settlement_cash_krw": 1_000_000.0},
+        }
+    )
+    assert m_real_dd["dd_pct"] == pytest.approx(-25.0, rel=1e-9)
+
+
+
 
 
 

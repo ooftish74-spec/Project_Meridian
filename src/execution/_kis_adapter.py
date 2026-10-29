@@ -2011,7 +2011,72 @@ class KISTraderAdapter:
                         self.d0_cash_krw = float(summary.get('dnca_tot_amt', 0) or 0.0)
                         self.d1_cash_krw = float(summary.get('nxdy_excc_amt', self.d0_cash_krw) or 0.0)
                         # D+2 가수도정산금(prvs_rcdl_excc_amt): 통합증거금 사용 시 음수(-) 부채가 반영된 실제 원화 순예수금
-                        net_d2_cash_krw = float(summary.get('prvs_rcdl_excc_amt', summary.get('nxdy_excc_amt', summary.get('dnca_tot_amt', 0))) or 0.0)
+                        _raw_d2_cash_krw = float(summary.get('prvs_rcdl_excc_amt', summary.get('nxdy_excc_amt', summary.get('dnca_tot_amt', 0))) or 0.0)
+                        net_d2_cash_krw = _raw_d2_cash_krw
+
+                        # ★ [KIS Midnight Date-Roll Batch Settlement Guard (00:00~01:05 KST)]
+                        # KIS 국내원장(TTTC8434R)은 매일 자정(00:04~00:59 KST) 일자 전환 배치 중
+                        # thdt/bfdy 매수·매도 정산금액을 0으로 초기화한 상태에서 prvs_rcdl_excc_amt를 dnca_tot_amt(D+0 예수금)로
+                        # 일시 리셋함. 이로 인해:
+                        #   (1) 전일 KRX 순매수 계좌는 미결제 매수대금이 차감되지 않아 NAV/HWM이 수백만 원 유령 급등하고,
+                        #   (2) 전일 KRX 순매도 계좌는 미결제 매도대금이 누락되어 NAV가 수백만 원 유령 급락함.
+                        # 이를 TTTC8908R(순수 원화 매수가능현금) 및 직전 정산 완료 D+2 예수금 원장과 교차검증하여 원천 차단함.
+                        _thdt_b = float(summary.get('thdt_buy_amt', 0) or 0.0)
+                        _thdt_s = float(summary.get('thdt_sll_amt', 0) or 0.0)
+                        _bfdy_b = float(summary.get('bfdy_buy_amt', 0) or 0.0)
+                        _bfdy_s = float(summary.get('bfdy_sll_amt', 0) or 0.0)
+                        _scts_evlu = float(summary.get('scts_evlu_amt', summary.get('evlu_amt_smtl_amt', 0)) or 0.0)
+                        _trade_fields_zeroed = (_thdt_b == 0.0 and _thdt_s == 0.0 and _bfdy_b == 0.0 and _bfdy_s == 0.0)
+                        _d2_equals_d0 = abs(net_d2_cash_krw - self.d0_cash_krw) <= 10.0
+                        _psbl_krw_ref = max(
+                            float(getattr(self, 'ord_psbl_cash_raw_krw', 0.0) or 0.0),
+                            float(getattr(self, 'nrcvb_buy_amt_krw', 0.0) or 0.0),
+                        )
+                        _prev_valid_d2 = getattr(self, '_last_valid_d2_cash_krw', None)
+                        if _prev_valid_d2 is None and self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST'):
+                            try:
+                                _kp_p = _PROJECT_ROOT / 'results' / 'kis_portfolio.json'
+                                if _kp_p.exists():
+                                    import json as _j_kp
+                                    _kp_prev = _j_kp.loads(_kp_p.read_text(encoding='utf-8'))
+                                    _kp_ac = _kp_prev.get('account') if isinstance(_kp_prev.get('account'), dict) else {}
+                                    _cand_d2 = _kp_ac.get('d2_settlement_cash_krw')
+                                    if _cand_d2 is not None and float(_cand_d2) > 0.0 and abs(float(_cand_d2) - self.d0_cash_krw) > 10.0:
+                                        _prev_valid_d2 = float(_cand_d2)
+                            except Exception:
+                                pass
+
+                        _rel_tol = 1.0 / 20.0  # 5%
+                        _min_gap_krw = float(10000 * 5)  # 50,000 KRW
+                        _batch_corrected = False
+                        if _trade_fields_zeroed and _d2_equals_d0:
+                            # Case 1: 전일 KRX 미결제 매수분 미차감(Double-Counting) 방어
+                            if _psbl_krw_ref > 0.0 and (net_d2_cash_krw - _psbl_krw_ref) > max(_min_gap_krw, _psbl_krw_ref * _rel_tol):
+                                if _prev_valid_d2 is not None and _prev_valid_d2 > 0.0 and abs(_prev_valid_d2 - _psbl_krw_ref) <= max(_min_gap_krw * 2.0, _psbl_krw_ref * (_rel_tol * 2.0)):
+                                    net_d2_cash_krw = float(_prev_valid_d2)
+                                else:
+                                    net_d2_cash_krw = float(_psbl_krw_ref)
+                                _batch_corrected = True
+                                logger.warning(
+                                    f"  🛡️ [KIS Midnight Batch Guard] 미결제 매수 이중계상 차단: "
+                                    f"D+0(₩{self.d0_cash_krw:,.0f}) ➔ 정산 D+2(₩{net_d2_cash_krw:,.0f}) 복원"
+                                )
+                            # Case 2: 자정 배치(00:00~01:05 KST) 중 전일 KRX 미결제 매도대금 누락 방어
+                            elif _prev_valid_d2 is not None and _prev_valid_d2 > 0.0 and (_prev_valid_d2 - net_d2_cash_krw) > max(_min_gap_krw, _prev_valid_d2 * _rel_tol):
+                                _now_h = datetime.now().hour
+                                _now_m = datetime.now().minute
+                                if _now_h == 0 or (_now_h == 1 and _now_m <= 5):
+                                    net_d2_cash_krw = float(_prev_valid_d2)
+                                    _batch_corrected = True
+                                    logger.warning(
+                                        f"  🛡️ [KIS Midnight Batch Guard] 자정 배치 미결제 매도대금 누락 차단: "
+                                        f"일시 D+0(₩{self.d0_cash_krw:,.0f}) ➔ 직전 정산 D+2(₩{net_d2_cash_krw:,.0f}) 보존"
+                                    )
+                        if not _batch_corrected:
+                            self._last_valid_d2_cash_krw = float(net_d2_cash_krw)
+                        else:
+                            self.d1_cash_krw = float(net_d2_cash_krw)
+
                         self.net_d2_cash_krw = net_d2_cash_krw
                         self.raw_d2_cash = max(0.0, net_d2_cash_krw)
                         if ord_psbl_cash <= 0 and self.raw_d2_cash > 0:
@@ -2021,6 +2086,8 @@ class KISTraderAdapter:
 
                         # 🎯 [SSoT Fix] 실시간 당일 NAV (국내 순자산 tot_evlu_amt + 해외 순자산 원화환산액) 보존 항등식 계산
                         kr_tot_evlu = float(summary.get('tot_evlu_amt', summary.get('nass_amt', 0)) or 0.0)
+                        if _batch_corrected:
+                            kr_tot_evlu = (_scts_evlu + net_d2_cash_krw) if _scts_evlu > 0.0 else max(0.0, kr_tot_evlu + (net_d2_cash_krw - _raw_d2_cash_krw))
                         tot_evlu = kr_tot_evlu
 
                         # 🎯 [SSoT Root Fix] 기존 인메모리 포지션 전면 초기화 (유령/레거시 포지션 잔존 100% 원천 차단)

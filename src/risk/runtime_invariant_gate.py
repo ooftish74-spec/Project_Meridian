@@ -119,6 +119,7 @@ class RuntimeInvariantGate:
         canonical_holdings: Dict[str, Dict[str, Any]] = {}
         canonical_us_night: List[Dict[str, Any]] = []
         total_invested_krw = 0.0
+        total_peak_invested_krw = 0.0
 
         pnl_tol = 1.0 / 20.0  # 0.05%p
         px_rel_tol = 1.0 / 200.0  # 0.5%
@@ -229,6 +230,7 @@ class RuntimeInvariantGate:
 
             expected_cost_krw = round(qty * avg_px * pos_fx)
             expected_upnl_krw = expected_eval_krw - expected_cost_krw
+            total_peak_invested_krw += round(qty * valid_peak_px * pos_fx)
             canonical_holdings[tk] = {
                 **h_info,
                 "qty": int(qty),
@@ -293,25 +295,70 @@ class RuntimeInvariantGate:
             except Exception as e:
                 violations.append(f"us_night_holdings_read_error:{e}")
 
-        # shadow_portfolio.json 원가(amount=0.0) 및 평가손익 왜곡 탐지
+        # [I1] 다통화 포트폴리오 NAV 및 유령 HWM(Ghost Portfolio HWM) 항등식 검증
+        nav_cur_v = float(acct.get("total_equity") or acct.get("nav") or kp_data.get("nav") or 0.0)
+        init_cap_v = float(kp_data.get("initial_capital") or acct.get("initial_capital") or 0.0)
+        krw_d2_cash = float(
+            acct.get("d2_settlement_cash_krw")
+            if acct.get("d2_settlement_cash_krw") is not None
+            else (acct.get("cash") or 0.0)
+        )
+        usd_nav_cash = float(acct.get("d0_usd_deposit") or acct.get("us_cash_usd") or acct.get("cash_usd") or 0.0)
+        comp_nav_krw = round(krw_d2_cash + (usd_nav_cash * acct_fx) + total_invested_krw)
+        peak_comp_nav_krw = round(krw_d2_cash + (usd_nav_cash * acct_fx) + total_peak_invested_krw)
+        recorded_kp_hwm = float(kp_data.get("hwm") or acct.get("hwm") or 0.0)
+
+        # shadow_portfolio.json 원가(amount=0.0), 평가손익 왜곡, 그리고 유령 HWM/NAV 이격 탐지
         shadow_path = self.results_dir / "shadow_portfolio.json"
-        if shadow_path.exists() and canonical_holdings:
+        hist_hwm_max = 0.0
+        sp_raw: Dict[str, Any] = {}
+        if shadow_path.exists():
             try:
-                sp_raw = json.loads(shadow_path.read_text(encoding="utf-8"))
-                if isinstance(sp_raw, dict):
-                    sp_pos = sp_raw.get("positions") if isinstance(sp_raw.get("positions"), dict) else {}
-                    for sp_k, sp_v in sp_pos.items():
-                        if not isinstance(sp_v, dict):
+                sp_loaded = json.loads(shadow_path.read_text(encoding="utf-8"))
+                if isinstance(sp_loaded, dict):
+                    sp_raw = sp_loaded
+                    rebase_iso = str((sp_raw.get("track_record_rebase") or {}).get("at") or "")[:iso_date_len]
+                    for snap in (sp_raw.get("daily_snapshots") or []):
+                        if not isinstance(snap, dict):
                             continue
-                        sp_tk = str(sp_v.get("ticker") or str(sp_k).split(":")[-1]).strip()
-                        ch = canonical_holdings.get(sp_tk)
-                        if not ch:
-                            violations.append(f"I2_shadow_ghost_ticker:{sp_tk}")
+                        s_dt = str(snap.get("date") or "")[:iso_date_len]
+                        if rebase_iso and len(s_dt) == iso_date_len and s_dt <= rebase_iso:
                             continue
-                        if float(sp_v.get("amount", 0.0) or 0.0) <= 0.0 and float(ch.get("cost_krw", 0.0) or 0.0) > 0.0:
-                            violations.append(f"I1_shadow_zero_cost_amount:{sp_tk}")
+                        if str(snap.get("nav_source") or "") == "shadow" and rebase_iso:
+                            continue
+                        s_hwm = float(snap.get("hwm") or 0.0)
+                        if s_hwm > hist_hwm_max:
+                            hist_hwm_max = s_hwm
+                    if canonical_holdings:
+                        sp_pos = sp_raw.get("positions") if isinstance(sp_raw.get("positions"), dict) else {}
+                        for sp_k, sp_v in sp_pos.items():
+                            if not isinstance(sp_v, dict):
+                                continue
+                            sp_tk = str(sp_v.get("ticker") or str(sp_k).split(":")[-1]).strip()
+                            ch = canonical_holdings.get(sp_tk)
+                            if not ch:
+                                violations.append(f"I2_shadow_ghost_ticker:{sp_tk}")
+                                continue
+                            if float(sp_v.get("amount", 0.0) or 0.0) <= 0.0 and float(ch.get("cost_krw", 0.0) or 0.0) > 0.0:
+                                violations.append(f"I1_shadow_zero_cost_amount:{sp_tk}")
             except Exception as e:
                 violations.append(f"shadow_portfolio_read_error:{e}")
+
+        valid_hwm_anchor = round(max(init_cap_v, nav_cur_v, comp_nav_krw, peak_comp_nav_krw, hist_hwm_max))
+        hwm_ghost_tol = 3.0 / 200.0  # 1.5%
+        ghost_hwm_detected = False
+        if valid_hwm_anchor > 0.0 and recorded_kp_hwm > valid_hwm_anchor * (1.0 + hwm_ghost_tol):
+            violations.append(f"I1_ghost_portfolio_hwm:{recorded_kp_hwm}>{valid_hwm_anchor}")
+            ghost_hwm_detected = True
+
+        if sp_raw and nav_cur_v > 0.0:
+            sp_vnav = float(sp_raw.get("virtual_nav") or 0.0)
+            sp_hwm = float(sp_raw.get("hwm") or 0.0)
+            if sp_vnav > 0.0 and abs(sp_vnav - nav_cur_v) / nav_cur_v > px_rel_tol:
+                violations.append(f"I1_shadow_nav_desync:{sp_vnav}!={nav_cur_v}")
+            if valid_hwm_anchor > 0.0 and sp_hwm > valid_hwm_anchor * (1.0 + hwm_ghost_tol):
+                violations.append(f"I1_shadow_ghost_hwm:{sp_hwm}>{valid_hwm_anchor}")
+                ghost_hwm_detected = True
 
         # [I4] 매크로 시계열 표본수 검증
         macro_counts: Dict[str, int] = {}
@@ -346,7 +393,13 @@ class RuntimeInvariantGate:
                     nav_v = float(ac.get("total_equity") or ac.get("nav") or cur.get("nav") or 0.0)
                     if nav_v > 0.0:
                         ac["invest_pct"] = round((total_invested_krw / nav_v) * pct_scale, 2)
-                        ac["hwm"] = round(max(float(ac.get("hwm") or 0.0), nav_v), 2)
+                        cur_hwm = float(ac.get("hwm") or cur.get("hwm") or 0.0)
+                        if ghost_hwm_detected and valid_hwm_anchor > 0.0:
+                            healed_hwm = round(max(valid_hwm_anchor, nav_v))
+                        else:
+                            healed_hwm = round(max(cur_hwm, nav_v))
+                        ac["hwm"] = healed_hwm
+                        cur["hwm"] = healed_hwm
                     cur["account"] = ac
                     streams_obj = cur.get("streams")
                     if isinstance(streams_obj, dict):
@@ -417,10 +470,37 @@ class RuntimeInvariantGate:
                         cur_sp["cash_usd"] = usd_c
                         cur_sp["cash_usd_fx"] = round(acct_fx, 2)
                         cur_sp["cash_usd_krw"] = round(usd_c * acct_fx, 0)
+                        if nav_cur_v > 0.0:
+                            cur_sp["virtual_nav"] = round(nav_cur_v, 2)
+                        if krw_d2_cash >= 0.0:
+                            cur_sp["cash"] = round(krw_d2_cash, 2)
+                        if ghost_hwm_detected and valid_hwm_anchor > 0.0:
+                            cur_sp["hwm"] = float(round(max(valid_hwm_anchor, nav_cur_v)))
                         return cur_sp
 
                     safe_json_update(shadow_path, _heal_shadow, default={}, strict=True)
                     healed_actions.append("healed_shadow_portfolio")
+
+                # 유령 HWM 오염 복구 시, 실제 낙폭이 하드 플로어(-5.0%)보다 양호하면 오발동된 hard_floor_mdd 킬스위치 자동 해제
+                ks_path = self.results_dir / "kill_switch_state.json"
+                if ghost_hwm_detected and ks_path.exists() and valid_hwm_anchor > 0.0 and nav_cur_v > 0.0:
+                    true_dd_pct = ((nav_cur_v / float(max(valid_hwm_anchor, nav_cur_v))) - 1.0) * pct_scale
+                    hard_floor_pct = -5.0  # hardcode-ok: L0 statutory hard floor MDD barrier (-5.0%)
+                    if true_dd_pct > hard_floor_pct:
+                        def _heal_ks(cur_ks: Any) -> Dict[str, Any]:
+                            cur_ks = cur_ks if isinstance(cur_ks, dict) else {}
+                            trig_types = [t for t in (cur_ks.get("trigger_types") or []) if t != "hard_floor_mdd"]
+                            cur_ks["trigger_types"] = trig_types
+                            cur_ks["triggered"] = len(trig_types) > 0
+                            if not cur_ks["triggered"]:
+                                cur_ks["cleared_reason"] = (
+                                    f"Auto-healed ghost portfolio HWM ({recorded_kp_hwm:,.0f} -> {valid_hwm_anchor:,.0f}); "
+                                    f"true DD={true_dd_pct:.2f}% > {hard_floor_pct:.1f}%"
+                                )
+                            return cur_ks
+
+                        safe_json_update(ks_path, _heal_ks, default={}, strict=False)
+                        healed_actions.append("healed_kill_switch_ghost_hwm")
                 logger.info(
                     f"🛡️ [RuntimeInvariantGate] 불변량 위배 {len(violations)}건 감지 및 자가 치유 완료: {healed_actions}"
                 )

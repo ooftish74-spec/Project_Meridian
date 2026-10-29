@@ -348,6 +348,32 @@ class KillSwitch:
         # ★ Wave 0 E8: HWM 자동 리셋(hwm > NAV×1.30 → hwm=NAV) 제거.
         #   기존 리셋은 약 -23%보다 깊은 DD에서 킬스위치를 영구 무력화했다.
         #   본래 목적(부분 NAV로 인한 오발동 방지)은 아래 NAV 교차검증으로 명시적으로 처리한다.
+        # ★ [KIS Midnight Unsettled Buy Double-Count HWM Sanitizer]
+        #   자정(00:04~00:59 KST) KIS 일자전환 배치 중 D+0 예수금(d0_deposit_krw)이 D+2 정산금(d2_settlement_cash_krw)에
+        #   일시 복제되어 미결제 매수분(d0 - d2)만큼 HWM이 유령 상승한 경우, 해당 이중계상분을 HWM에서 제거한다.
+        _acct_ks = portfolio.get('account') if isinstance(portfolio.get('account'), dict) else {}
+        if not _acct_ks:
+            try:
+                _kp_ks = _RESULTS / 'kis_portfolio.json'
+                if _kp_ks.exists():
+                    _kp_d_ks = _json.loads(_kp_ks.read_text(encoding='utf-8'))
+                    if isinstance(_kp_d_ks, dict) and isinstance(_kp_d_ks.get('account'), dict):
+                        _acct_ks = _kp_d_ks['account']
+            except Exception:
+                _acct_ks = {}
+        _d0_krw = float(_acct_ks.get('d0_deposit_krw') or 0.0)
+        _d2_krw = float(_acct_ks.get('d2_settlement_cash_krw') or 0.0)
+        _unsettled_buy_gap = max(0.0, _d0_krw - _d2_krw) if (_d0_krw > 0.0 and _d2_krw > 0.0) else 0.0
+        _min_gap_ks = float(10000 * 5)  # 50,000 KRW
+        _tol_ks = 1.0 / 50.0  # 2.0%
+        if _unsettled_buy_gap > _min_gap_ks and hwm > max(total_nav, initial_capital) * (1.0 + _tol_ks):
+            if abs((hwm - total_nav) - _unsettled_buy_gap) <= max(_min_gap_ks * 2.0, total_nav * _tol_ks):
+                _clean_hwm = max(total_nav, initial_capital, hwm - _unsettled_buy_gap)
+                logger.warning(
+                    f"  🛡️ [KillSwitch HWM-Check] KIS 자정 미결제 매수 이중계상(₩{_unsettled_buy_gap:,.0f})으로 인한 "
+                    f"유령 HWM 감지: ₩{hwm:,.0f} ➔ 정산 HWM ₩{_clean_hwm:,.0f} 보정"
+                )
+                hwm = _clean_hwm
         dd_pct = (total_nav / hwm - 1) * 100 if hwm and hwm > 0 else 0
         nav_check = self._crosscheck_nav(total_nav)
         week_returns = daily_returns[-5:] if len(daily_returns) >= 5 else daily_returns
