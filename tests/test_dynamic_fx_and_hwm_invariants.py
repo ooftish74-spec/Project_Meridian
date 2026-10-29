@@ -410,3 +410,93 @@ def test_scale_out_idempotency_and_d2_reusable_krw_buying_power(tmp_path: Path) 
     assert ord_psbl_cash == pytest.approx(5093461.0, rel=1e-9)
 
 
+def test_sub_zero_chandelier_cliff_prevention_and_ledger_scaled_out_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify:
+    1) Chandelier Trailing Exit in UniversalExitEngine and USNightExecutionEngine never fires when
+       (peak_pnl - chandelier_drop) < break_even_floor (eliminating the Sub-Zero Stop Cliff).
+    2) Chandelier Trailing Exit DOES fire when (peak_pnl - chandelier_drop) >= break_even_floor and pnl_pct < (peak_pnl - chandelier_drop).
+    3) UniversalExitEngine reads scaled_out directly from PositionLedgerManager metadata even if omitted from pos dict.
+    """
+    from src.execution.position_ledger import PositionLedgerManager
+    from src.risk.universal_exit_engine import UniversalExitEngine
+
+    ledger_file = tmp_path / "position_entry_ledger.json"
+
+    def _mock_plm_init(self, ledger_path=None):
+        self.ledger_path = ledger_file
+        self.daily_exit_path = tmp_path / "daily_exited_tickers.json"
+        self._lock = __import__("threading").Lock()
+        self._ensure_ledger_exists()
+
+    monkeypatch.setattr("src.execution.position_ledger.PositionLedgerManager.__init__", _mock_plm_init)
+
+    plm = PositionLedgerManager()
+    plm.record_entry("081660", entry_date="2026-10-24", entry_price=50100.0, quantity=14, stream_id="S2")
+    plm.mark_scaled_out("081660")
+
+    uee = UniversalExitEngine()
+
+    # Case 1: CRM with peak_pnl = +2.80% (above trailing_trigger ~2.75%, but below chandelier_drop ~3.75% + break_even ~0.39%)
+    # and current pnl = -1.23% (above hard_sl_limit ~-4.20%). Must NOT fire Chandelier Trailing Exit at a loss!
+    crm_sub_zero = {
+        "LIVE_SSOT:CRM": {
+            "ticker": "CRM",
+            "stream_id": "S3",
+            "track": "TRACK_1_TACTICAL",
+            "quantity": 1,
+            "entry_price": 238.80,
+            "current_price": 235.86,
+            "unrealized_pnl_pct": -1.23,
+            "peak_pnl_pct": 2.80,
+            "peak_price": 245.49,
+            "trail_activated": True,
+            "holding_days": 1.0,
+            "holding_minutes": 1440.0,
+            "entry_date": "2026-10-27",
+            "market": "US",
+        }
+    }
+    res_sub_zero = uee.evaluate_all_positions(crm_sub_zero, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
+    assert res_sub_zero["exit_orders"] == []
+
+    # Case 2: CRM with peak_pnl = +6.50% (trailing_floor > break_even_floor) and current pnl = +1.50% (< peak - chandelier_drop).
+    # Must fire Chandelier Trailing Exit to lock in positive profit!
+    crm_profit_harvest = {
+        "LIVE_SSOT:CRM": dict(
+            crm_sub_zero["LIVE_SSOT:CRM"],
+            current_price=242.38,
+            unrealized_pnl_pct=1.50,
+            peak_pnl_pct=6.50,
+            peak_price=254.32,
+        )
+    }
+    res_harvest = uee.evaluate_all_positions(crm_profit_harvest, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
+    assert len(res_harvest["exit_orders"]) == 1
+    assert res_harvest["exit_orders"][0]["exit_type"] == "chandelier_trailing"
+
+    # Case 3: 081660 with holding_days = 4.0 and small PnL (+0.20%), omitting 'scaled_out' from pos dict,
+    # must still see scaled_out=True from PositionLedgerManager and skip duplicate time_decay_exit.
+    fila_pos = {
+        "LIVE_SSOT:081660": {
+            "ticker": "081660",
+            "stream_id": "S2",
+            "track": "TRACK_1_TACTICAL",
+            "quantity": 7,
+            "entry_price": 50100.0,
+            "current_price": 50200.0,
+            "unrealized_pnl_pct": 0.20,
+            "peak_pnl_pct": 0.60,
+            "peak_price": 50400.0,
+            "holding_days": 4.0,
+            "holding_minutes": 5760.0,
+            "entry_date": "2026-10-24",
+            "market": "KR",
+        }
+    }
+    res_fila = uee.evaluate_all_positions(fila_pos, market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 17.5}}, regime="caution")
+    assert [o for o in res_fila["exit_orders"] if o.get("exit_type") in ("scale_out_50pct", "time_decay_exit")] == []
+
+
+

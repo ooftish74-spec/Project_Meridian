@@ -213,7 +213,12 @@ class USNightExecutionEngine:
                         curr_p = float(h.get('current_price', 0.0) or 0.0)
                         qty_val = float(h.get('qty', h.get('quantity', 0.0)) or 0.0)
                         curr_ret = float(h.get('return_pct', h.get('pnl_pct', 0.0)) or 0.0)
-                        ledger_ed = str(ledger_mgr.get_entry_date(t) or today_str)[:10]
+                        _cand_eds = [
+                            str(d)[:10]
+                            for d in (ledger_mgr.get_entry_date(t), h.get('entry_date'))
+                            if d and len(str(d)[:10]) == 10
+                        ]
+                        ledger_ed = min(_cand_eds) if _cand_eds else today_str
 
                         # 이전 us_night_holdings.json의 HWM은 동일 진입가·동일 진입일 포지션일 때만 계승 (유령 고점 오염 차단)
                         _sh_meta = saved_hwm_map.get(t) or {}
@@ -258,7 +263,8 @@ class USNightExecutionEngine:
                             'highest_price': round(final_peak, 6),
                             'peak_price': round(final_peak, 6),
                             'peak_pnl_pct': round(final_peak_pnl, 6),
-                            'trail_activated': bool(hwm.get('trail_activated', False)) or (entry_p > 0 and final_peak >= entry_p * (1.0 + self.trail_activation_pct)),
+                            'trail_activated': bool(hwm.get('trail_activated', False)),
+                            'scaled_out': bool(hwm.get('scaled_out', h.get('scaled_out', False))),
                             'quantity': int(qty_val),
                             'amount': qty_val * curr_p,
                             'entry_date': ledger_ed
@@ -572,7 +578,7 @@ class USNightExecutionEngine:
                     if _k_iu in _us_i_usn:
                         _inv_ret_u = float(_v_iu[1])
                         _inv_sig_dec = max(ticker_atr / _math_pair_u.sqrt(8.0 / _math_pair_u.pi), _inv_floor_u)
-                        if _max_us_long_ret > 0.0 and _inv_ret_u <= -(2.0 * _inv_sig_dec):
+                        if _max_us_long_ret >= (3.0 * _inv_sig_dec) and _inv_ret_u <= -(2.0 * _inv_sig_dec):
                             _pair_inv_unwound = True
                             if ticker.upper() == _k_iu:
                                 _s14_inv_unwind_reason = (
@@ -583,6 +589,7 @@ class USNightExecutionEngine:
                 if _pair_inv_unwound and ticker.upper() not in _us_i_usn:
                     _is_active_us_pair = False
 
+            _be_floor_dec = 0.0
             if _is_active_us_pair and _s14_inv_unwind_reason is None:
                 _tot_p_val = sum(v[0] for v in _us_pair_legs.values() if v[0] > 0)
                 if _tot_p_val > 0:
@@ -599,6 +606,7 @@ class USNightExecutionEngine:
                     dynamic_hard_stop_pct = abs(float(_pair_opt_up['hard_sl_limit_pct'])) / 100.0
                     effective_activation_pct = float(_pair_opt_up['trailing_trigger_pct']) / 100.0
                     dynamic_trailing_stop_pct = float(_pair_opt_up['chandelier_drop_pct']) / 100.0
+                    _be_floor_dec = max(0.0, float(_pair_opt_up.get('break_even_floor_pct', 0.0) or 0.0) / 100.0)
                 except Exception:
                     pass
                 _exp_up_pk = h.get('pair_spread_peak_pnl_pct')
@@ -631,6 +639,7 @@ class USNightExecutionEngine:
                     _opt_sl_dec = abs(float(_opt_usn.get('hard_sl_limit_pct', 0.0) or 0.0)) / 100.0
                     _opt_act_dec = float(_opt_usn.get('trailing_trigger_pct', 0.0) or 0.0) / 100.0
                     _opt_drp_dec = float(_opt_usn.get('chandelier_drop_pct', 0.0) or 0.0) / 100.0
+                    _be_floor_dec = max(0.0, float(_opt_usn.get('break_even_floor_pct', 0.0) or 0.0) / 100.0)
                     if _opt_sl_dec > 0:
                         dynamic_hard_stop_pct = min(dynamic_hard_stop_pct, max(_trail_floor, _opt_sl_dec))
                     if _opt_act_dec > 0:
@@ -640,6 +649,7 @@ class USNightExecutionEngine:
                 except Exception:
                     pass
 
+            _single_peak_ret = ((highest_price - entry_p) / entry_p) if entry_p > 0 else 0.0
             exit_reason = _s14_inv_unwind_reason
             if exit_reason is not None:
                 entry_return = _raw_leg_ret_usn
@@ -648,11 +658,11 @@ class USNightExecutionEngine:
             elif entry_p > 0 and entry_return <= -dynamic_hard_stop_pct:
                 exit_reason = f"US Night Hard Stop-Loss ({entry_return*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 하드 손절 발화! (진입가 대비 {entry_return*100:.2f}%, 동적한도=-{dynamic_hard_stop_pct*100:.2f}%)")
-            # 2) Trailing Stop (단일 종목은 개별 HWM, S14 활성 페어는 동시 스프레드 HWM 및 공분산 샹들리에 밴드 이탈 시 발화)
-            elif _is_active_us_pair and (_us_pair_trail_act or _us_pair_peak_ret >= effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+            # 2) Trailing Stop (단일 종목은 개별 HWM, S14 활성 페어는 동시 스프레드 HWM 및 공분산 샹들리에 밴드 이탈 시 발화; Sub-Zero Stop Cliff 차단)
+            elif _is_active_us_pair and (_us_pair_trail_act or _us_pair_peak_ret >= effective_activation_pct) and (_us_pair_peak_ret - dynamic_trailing_stop_pct) >= _be_floor_dec and drop_pct <= -dynamic_trailing_stop_pct:
                 exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 페어 스프레드 샹들리에 트레일링 스탑 발화! (스프레드 고점 대비 {drop_pct*100:.2f}%, 한도=-{dynamic_trailing_stop_pct*100:.2f}%)")
-            elif (not _is_active_us_pair) and entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and drop_pct <= -dynamic_trailing_stop_pct:
+            elif (not _is_active_us_pair) and entry_p > 0 and highest_price >= entry_p * (1.0 + effective_activation_pct) and (_single_peak_ret - dynamic_trailing_stop_pct) >= _be_floor_dec and drop_pct <= -dynamic_trailing_stop_pct:
                 exit_reason = f"US Night Dynamic Trailing Stop ({drop_pct*100:.2f}%)"
                 logger.info(f"🚨 [USNightEngine] {ticker} 동적 트레일링 스탑 발화! (고점 대비 {drop_pct*100:.2f}%, 한도={dynamic_trailing_stop_pct*100:.2f}%)")
 

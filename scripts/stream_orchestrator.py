@@ -466,9 +466,11 @@ class StreamOrchestrator:
                                 'return_pct': _ret_h,
                                 'peak_pnl_pct': float(_hwm_orch.get('peak_pnl_pct', h.get('peak_pnl_pct', _ret_h)) or _ret_h),
                                 'peak_price': float(_hwm_orch.get('peak_price', h.get('peak_price', _cp_h)) or _cp_h),
+                                'scaled_out': bool(_hwm_orch.get('scaled_out', h.get('scaled_out', False))),
                                 'trail_activated': bool(_hwm_orch.get('trail_activated', h.get('trail_activated', False))),
                                 'entry_date': _ed_orch or h.get('entry_date'),
                                 'stream_id': str(h.get('stream_id') or _hwm_orch.get('stream_id') or ''),
+                                'strategy': str(h.get('strategy') or _hwm_orch.get('strategy') or ''),
                                 'track': str(h.get('track') or _hwm_orch.get('track') or ''),
                                 'market': h.get('market', 'US' if _is_us_h else 'KR')
                             }
@@ -2343,9 +2345,10 @@ class StreamOrchestrator:
                                 'peak_pnl_pct': float(hwm_data['peak_pnl_pct']) if hwm_data.get('peak_pnl_pct') is not None else curr_ret,
                                 'peak_price': float(hwm_data['peak_price']) if (hwm_data.get('peak_price') or 0.0) > 0 else curr_p,
                                 'lowest_price': float(hwm_data['lowest_price']) if (hwm_data.get('lowest_price') or 0.0) > 0 else curr_p,
-                                'scaled_out': bool(hwm_data.get('scaled_out', False)),
+                                'scaled_out': bool(hwm_data.get('scaled_out', h.get('scaled_out', False))),
                                 'trail_activated': bool(hwm_data.get('trail_activated', False)),
                                 'holding_minutes': _h_mins,
+                                'entry_date': _ed_str,
                                 'market': h.get('market', 'KR' if _is_kr_tk(t) else 'US')
                             }
                     except Exception as _kpe:
@@ -4662,7 +4665,7 @@ class StreamOrchestrator:
                     if _is_active_s14_pair_leg
                     else (bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate))
                 )
-                if (reason is None and trail_dist is not None and is_trail_activated and drawdown_from_peak >= trail_dist):
+                if (reason is None and trail_dist is not None and is_trail_activated and (peak_pnl - float(trail_dist)) >= 0.0 and drawdown_from_peak >= trail_dist):
                     reason = (
                         f"[L4 Exit] Trail: peak={peak_pnl:+.1f}% → "
                         f"now={pnl_pct:+.1f}% (↓{drawdown_from_peak:.1f}% "

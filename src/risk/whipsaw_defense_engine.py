@@ -185,7 +185,17 @@ class AntiWhipsawDefenseEngine:
             reason = f"Low Kaufman Efficiency Ratio (KER={ker_val:.3f} < {ker_floor:.2f})"
 
         if is_whipsaw_active:
-            logger.info(f"  🛡️ [Anti-Whipsaw Active] {reason} ➔ 방향성 신호 진입 수비 차단 & S0 KOFR 이관")
+            _log_sig = (bool(cooldown_active), round(float(ker_val), 2))
+            _prev_sig = getattr(AntiWhipsawDefenseEngine, '_last_log_sig', None)
+            _prev_ts = float(getattr(AntiWhipsawDefenseEngine, '_last_log_ts', 0.0) or 0.0)
+            if _log_sig != _prev_sig or (now - _prev_ts) >= 300.0:
+                AntiWhipsawDefenseEngine._last_log_sig = _log_sig
+                AntiWhipsawDefenseEngine._last_log_ts = now
+                logger.info(f"  🛡️ [Anti-Whipsaw Active] {reason} ➔ 방향성 신호 진입 수비 차단 & S0 KOFR 이관")
+            else:
+                logger.debug(f"  🛡️ [Anti-Whipsaw Active] {reason} ➔ 방향성 신호 진입 수비 차단 & S0 KOFR 이관")
+        else:
+            AntiWhipsawDefenseEngine._last_log_sig = None
 
         return {
             'is_whipsaw_active': is_whipsaw_active,

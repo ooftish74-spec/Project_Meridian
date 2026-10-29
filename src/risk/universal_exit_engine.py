@@ -470,8 +470,14 @@ class UniversalExitEngine:
                 continue
 
             # ── 3. Uncapped ATR Chandelier Trailing Exit (상방 무제한 동적 샹들리에 익절; 페어는 동시 스프레드 HWM 및 공분산 변동성 σ_spread 적용) ──
+            # [Monotonic Optimal Stopping Barrier Invariant]
+            # Chandelier Trailing은 본전 지지선(break_even_floor) 이상의 순이익을 추적·수확하는 장벽이므로,
+            # (peak_pnl - chandelier_drop) >= break_even_floor 조건을 강제하여 소폭 반등(+1.5%~+2.7%) 직후
+            # 손절선이 음수 영역(-0.2%~-1.8%)으로 급격히 끌어올려지는 'Sub-Zero Stop Cliff'를 원천 차단함.
+            # (본전 미달 구간의 하방 보호는 Rule 0 Profit-Lock, Rule 1 Hard Stop-Loss, Rule 2 Catastrophic Drawdown이 전담)
             chandelier_drop = _opt['chandelier_drop_pct']
             trailing_trigger = _opt['trailing_trigger_pct']
+            trailing_floor_pnl = peak_pnl - chandelier_drop
             is_trail_activated = (
                 (_pair_trail_act or (peak_pnl >= trailing_trigger))
                 if _is_active_pair_leg
@@ -480,7 +486,8 @@ class UniversalExitEngine:
             is_trailing_exit = (
                 holding_minutes >= min_holding_required and
                 is_trail_activated and
-                pnl_pct < (peak_pnl - chandelier_drop)
+                trailing_floor_pnl >= break_even_floor and
+                pnl_pct < trailing_floor_pnl
             )
 
             if is_trailing_exit:
@@ -498,7 +505,7 @@ class UniversalExitEngine:
                 continue
 
             # ── 4. Dynamic Scale-Out Runner (정보비율 IR 기반 동적 분할 차익실현; 페어 레그 단일 반익절 금지) ──
-            scaled_out = bool(pos.get('scaled_out', False))
+            scaled_out = bool(pos.get('scaled_out', False) or _l_meta.get('scaled_out', False))
             scale_out_target = _opt['scale_out_target_pct']
             scale_out_ratio = _opt['scale_out_ratio']
             

@@ -1865,7 +1865,9 @@ class KISTraderAdapter:
                 params = {'CANO': acnt[0], 'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01', 'AFHR_FLPR_YN': 'N', 'OFL_YN': 'N', 'INQR_DVSN': '02', 'UNPR_DVSN': '01', 'FUND_STTL_ICLD_YN': 'N', 'FNCG_AMT_AUTO_RDPT_YN': 'N', 'PRCS_DVSN': '01', 'CTX_AREA_FK100': '', 'CTX_AREA_NK100': ''}
                 url = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
                 # ★ Wave 1 Track C (W1_3): 연속조회 페이징 (tr_cont M/F + CTX_AREA_FK100/NK100)
+                _pace_tr = (lambda: time.sleep(0.10)) if not os.environ.get('PYTEST_CURRENT_TEST') else (lambda: None)
                 data, _kr_pages_complete = self._kis_paged_get(url, headers, params, '100')
+                _pace_tr()
 
                 # [Red Team Patch] 미수 및 달러 통합증거금 침범 없는 100% 순수 원화 매수가능금액 정밀 조회 (TTTC8908R, OVRS_ICLD_YN='N')
                 ord_psbl_cash = 0.0
@@ -1939,6 +1941,7 @@ class KISTraderAdapter:
                         _us_pages_complete = True
                         _us_exposure_usd = 0.0
                         try:
+                            _pace_tr()
                             headers_us = self._get_headers()
                             headers_us['tr_id'] = 'TTTS3012R' if self.mode == 'live' else 'VTTS3012R'
                             url_us = f"{self.base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
@@ -1989,6 +1992,7 @@ class KISTraderAdapter:
                             unsettled_sell_usd = 0.0
                             unsettled_buy_usd_ctrp = 0.0
                             try:
+                                _pace_tr()
                                 headers_ctrp = self._get_headers()
                                 headers_ctrp['tr_id'] = 'CTRP6504R' if self.mode == 'live' else 'VTRP6504R'
                                 params_ctrp = {
@@ -2027,6 +2031,7 @@ class KISTraderAdapter:
                             direct_usd = 0.0
                             integ_usd = 0.0
                             try:
+                                _pace_tr()
                                 headers_ps = self._get_headers()
                                 headers_ps['tr_id'] = 'TTTS3007R' if self.mode == 'live' else 'VTTS3007R'
                                 params_ps = {
@@ -2225,6 +2230,8 @@ class KISTraderAdapter:
                                         'return_pct': _pnl_pct,
                                         'currency': 'USD' if _is_us else 'KRW',
                                         'entry_date': getattr(_p, 'entry_date', '') or _p_meta.get('entry_date', ''),
+                                        'scaled_out': bool(_p_meta.get('scaled_out', False)),
+                                        'trail_activated': bool(_p_meta.get('trail_activated', False)),
                                     }
                                     if _p_meta.get('stream_id'):
                                         _h_entry['stream_id'] = _p_meta['stream_id']

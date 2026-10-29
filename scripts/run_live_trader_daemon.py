@@ -388,11 +388,12 @@ def main():
 
                 # 1. 주기적(60초) 잔고 갱신으로 실제 주문 가능 현금 및 보유 현황 최신화
                 _now_ts = time.time()
+                _kr_bal_refreshed_now = False
                 if not hasattr(main, '_last_kr_bal_ts'):
                     main._last_kr_bal_ts = 0.0
                 if _now_ts - main._last_kr_bal_ts >= 60.0:
                     try:
-                        _adapter.fetch_live_balance()
+                        _kr_bal_refreshed_now = bool(_adapter.fetch_live_balance())
                         main._last_kr_bal_ts = _now_ts
                     except Exception as _bal_err:
                         logger.debug(f"  [KRX Balance Refresh] 예외: {_bal_err}")
@@ -423,15 +424,18 @@ def main():
                                 _ret = float(_h.get('return_pct', _h.get('pnl_pct', 0.0)) or 0.0)
 
                                 # ★ [CRITICAL FIX] 디스크 캐시의 정적 가격이 아닌 KIS 브로커 실시간 현재가 직송 조회
-                                try:
-                                    _live_p = _adapter._get_current_price(_t)
-                                    if _live_p and float(_live_p) > 0:
-                                        _cp = float(_live_p)
-                                        if _avg > 0:
-                                            # UniversalExitEngine 및 PositionLedgerManager는 퍼센트 단위(예: -5.2 = -5.2%) 사용!
-                                            _ret = ((_cp - _avg) / _avg) * 100.0
-                                except Exception as _p_err:
-                                    logger.debug(f"  {_t} 실시간 시세 조회 폴백: {_p_err}")
+                                # (단, 직전 밀리초에 fetch_live_balance()가 성공하여 이미 최신 현재가가 반영된 틱에서는 중복 호출 생략하여 EGW00201 속도 제한 방지)
+                                if not (_kr_bal_refreshed_now and _cp > 0):
+                                    try:
+                                        time.sleep(0.08)
+                                        _live_p = _adapter._get_current_price(_t)
+                                        if _live_p and float(_live_p) > 0:
+                                            _cp = float(_live_p)
+                                            if _avg > 0:
+                                                # UniversalExitEngine 및 PositionLedgerManager는 퍼센트 단위(예: -5.2 = -5.2%) 사용!
+                                                _ret = ((_cp - _avg) / _avg) * 100.0
+                                    except Exception as _p_err:
+                                        logger.debug(f"  {_t} 실시간 시세 조회 폴백: {_p_err}")
 
                                 _hwm = ledger_mgr.update_hwm(
                                     _t,
@@ -440,7 +444,12 @@ def main():
                                     avg_price=_avg,
                                     quantity=float(_h.get('qty', _h.get('quantity', 0)) or 0),
                                 )
-                                _entry_date = _h.get('entry_date') or ledger_mgr.get_entry_date(_t) or today_str
+                                _cand_kr_eds = [
+                                    str(_d)[:10]
+                                    for _d in (_h.get('entry_date'), ledger_mgr.get_entry_date(_t))
+                                    if _d and len(str(_d)[:10]) == 10
+                                ]
+                                _entry_date = min(_cand_kr_eds) if _cand_kr_eds else today_str
                                 try:
                                     from datetime import timedelta as _td
                                     _d_start = datetime.strptime(str(_entry_date)[:10], '%Y-%m-%d').date()
@@ -453,8 +462,8 @@ def main():
                                         _d_cur += _td(days=1)
                                 except Exception:
                                     _hold_days = 0
-                                if _hold_days >= 1:
-                                    _hold_mins = float(_hold_days) * 1440.0
+                                if _hold_days >= 1 or str(_entry_date)[:10] < today_str:
+                                    _hold_mins = float(max(_hold_days, 1)) * 1440.0
                                 else:
                                     _created_str = _hwm.get('created_at', '')
                                     try:
@@ -651,6 +660,7 @@ def main():
                                     for h in us_engine.holdings:
                                         tk = h['ticker']
                                         _held_us_tickers.add(tk)
+                                        time.sleep(0.08)
                                         _exch = _adapter.resolve_overseas_exchange(tk)
                                         p = (
                                             _adapter.get_live_overseas_price(tk, _exch)
@@ -712,10 +722,15 @@ def main():
                                             _ret_u = ((_cp_u - _ep_u) / _ep_u) * 100.0
                                             _meta_u = _plm_us.get_position_meta(_tk_u)
                                             _hwm_u = _plm_us.get_hwm(_tk_u)
-                                            _ed_u = str(h.get('entry_date') or _meta_u.get('entry_date') or today_str)
+                                            _cand_us_eds = [
+                                                str(_du)[:10]
+                                                for _du in (h.get('entry_date'), _meta_u.get('entry_date'))
+                                                if _du and len(str(_du)[:10]) == 10
+                                            ]
+                                            _ed_u = min(_cand_us_eds) if _cand_us_eds else today_str
                                             _hold_days_u = count_trading_days_held(_ed_u, is_kr=False)
-                                            if _hold_days_u >= 1:
-                                                _hold_mins_u = float(_hold_days_u) * 1440.0
+                                            if _hold_days_u >= 1 or str(_ed_u)[:10] < today_str:
+                                                _hold_mins_u = float(max(_hold_days_u, 1)) * 1440.0
                                             else:
                                                 _c_str_u = _hwm_u.get('created_at', '')
                                                 try:
@@ -735,8 +750,8 @@ def main():
                                                 'unrealized_pnl_pct': _ret_u,
                                                 'peak_pnl_pct': float(h.get('peak_pnl_pct', _ret_u) or _ret_u),
                                                 'peak_price': float(h.get('peak_price', h.get('highest_price', _cp_u)) or _cp_u),
-                                                'scaled_out': bool(_hwm_u.get('scaled_out', False)),
-                                                'trail_activated': bool(h.get('trail_activated', False) or _hwm_u.get('trail_activated', False)),
+                                                'scaled_out': bool(h.get('scaled_out', False) or _hwm_u.get('scaled_out', False) or _meta_u.get('scaled_out', False)),
+                                                'trail_activated': bool(_hwm_u.get('trail_activated', False)),
                                                 'holding_days': float(_hold_days_u),
                                                 'holding_minutes': _hold_mins_u,
                                                 'entry_date': _ed_u,
@@ -772,19 +787,24 @@ def main():
                                         if getattr(_us_sell_fill, 'status', '') in ('filled', 'submitted', 'partially_filled', 'filled_market_fallback'):
                                             main._exit_orders_in_flight[_tk_us] = _now_us_ts
                                             try:
-                                                if hasattr(us_engine, 'confirm_exit'):
-                                                    us_engine.confirm_exit(
+                                                _is_us_partial = str(eo.get('exit_type', '') or '') in ('scale_out_50pct', 'time_decay_exit')
+                                                from src.execution.position_ledger import PositionLedgerManager
+                                                _plm_exit_us = PositionLedgerManager()
+                                                if _is_us_partial:
+                                                    _plm_exit_us.mark_scaled_out(str(_tk_us))
+                                                else:
+                                                    if hasattr(us_engine, 'confirm_exit'):
+                                                        us_engine.confirm_exit(
+                                                            str(_tk_us),
+                                                            reason=eo.get('reason', 'US Night Trailing Stop'),
+                                                            realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
+                                                        )
+                                                    _plm_exit_us.record_daily_exit(
                                                         str(_tk_us),
-                                                        reason=eo.get('reason', 'US Night Trailing Stop'),
+                                                        eo.get('reason', 'US Night Trailing Stop'),
+                                                        today_str,
                                                         realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
                                                     )
-                                                from src.execution.position_ledger import PositionLedgerManager
-                                                PositionLedgerManager().record_daily_exit(
-                                                    str(_tk_us),
-                                                    eo.get('reason', 'US Night Trailing Stop'),
-                                                    today_str,
-                                                    realized_pnl_pct=float(eo.get('pnl_pct', 0.0) or 0.0),
-                                                )
                                                 _adapter._last_balance_fetch_ts = 0.0
                                                 _adapter.fetch_live_balance()
                                                 from src.portfolio.shadow_manager import ShadowPortfolioManager
