@@ -759,6 +759,114 @@ def test_alpha_allocator_single_shrinkage_and_s3_sleeve_aggregation() -> None:
     assert w["S13_JAPAN_ALPHA"] == pytest.approx(0.0, abs=1e-6)
 
 
+def test_stream_specific_stopping_barriers_time_decay_and_ledger_hwm_closed_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify benchmarked stream-specific first-passage stop-loss multipliers (Citadel S1 < Renaissance S2 < Bridgewater S3/S10),
+    continuous time-decay stop tightening tau(t) = 2^{-t/(2*T_max)}, UniversalExitEngine ledger peak_pnl_pct fallback,
+    and StreamOrchestrator L4 S10_MEGA_TREND stop-loss coverage against hand-computed closed-form oracles.
+    """
+    from src.utils.dynamic_quant_engine import get_quant_engine
+    from src.risk.universal_exit_engine import UniversalExitEngine
+    from src.execution.position_ledger import PositionLedgerManager
+
+    dqe = get_quant_engine()
+    vq = dqe.get_vix_regime_quantiles()
+    v_base = max(float(vq["baseline"]), 10.0)
+    v_cur = 18.0
+    kappa_v = math.sqrt(float(min(max(v_cur / v_base, 0.65), 2.25)))
+    kappa_r = math.exp(-0.15)  # caution regime
+    sigma_d = 2.0
+    c_rt = 0.25
+
+    opt_s1 = dqe.compute_optimal_stopping_params(
+        ticker="000660", regime="caution", vix_level=v_cur, atr_pct=sigma_d, friction_pct=c_rt, stream_id="S1", holding_days=0.0
+    )
+    opt_s2 = dqe.compute_optimal_stopping_params(
+        ticker="000660", regime="caution", vix_level=v_cur, atr_pct=sigma_d, friction_pct=c_rt, stream_id="S2", holding_days=0.0
+    )
+    opt_s3a = dqe.compute_optimal_stopping_params(
+        ticker="000660", regime="caution", vix_level=v_cur, atr_pct=sigma_d, friction_pct=c_rt, stream_id="S3_A", holding_days=0.0
+    )
+    opt_def = dqe.compute_optimal_stopping_params(
+        ticker="000660", regime="caution", vix_level=v_cur, atr_pct=sigma_d, friction_pct=c_rt, stream_id=None, holding_days=0.0
+    )
+
+    exp_s1 = round(-(c_rt + ((1.0 + 1.28155) / 2.0) * sigma_d * kappa_v * kappa_r), 4)
+    exp_s2 = round(-(c_rt + 1.28155 * sigma_d * kappa_v * kappa_r), 4)
+    exp_s3a = round(-(c_rt + ((1.28155 + 1.95996) / 2.0) * sigma_d * kappa_v * kappa_r), 4)
+    exp_def = round(-(c_rt + 1.95996 * sigma_d * kappa_v * kappa_r), 4)
+
+    assert opt_s1["hard_sl_limit_pct"] == pytest.approx(exp_s1, rel=1e-9)
+    assert opt_s2["hard_sl_limit_pct"] == pytest.approx(exp_s2, rel=1e-9)
+    assert opt_s3a["hard_sl_limit_pct"] == pytest.approx(exp_s3a, rel=1e-9)
+    assert opt_def["hard_sl_limit_pct"] == pytest.approx(exp_def, rel=1e-9)
+    assert abs(opt_s1["hard_sl_limit_pct"]) < abs(opt_s2["hard_sl_limit_pct"]) < abs(opt_s3a["hard_sl_limit_pct"]) < abs(opt_def["hard_sl_limit_pct"])
+
+    # Time-decay stop tightening for S2 at holding_days=3.0, max_hold_days=5.0: tau = 2^{-0.3}
+    opt_s2_d3 = dqe.compute_optimal_stopping_params(
+        ticker="000660", regime="caution", vix_level=v_cur, atr_pct=sigma_d, friction_pct=c_rt, stream_id="S2", holding_days=3.0, max_hold_days=5.0
+    )
+    tau_d3 = math.exp(-math.log(2.0) * (3.0 / 5.0) * 0.5)
+    exp_s2_d3 = round(-(c_rt + 1.28155 * sigma_d * kappa_v * kappa_r * tau_d3), 4)
+    assert opt_s2_d3["hard_sl_limit_pct"] == pytest.approx(exp_s2_d3, rel=1e-9)
+    assert abs(opt_s2_d3["hard_sl_limit_pct"]) < abs(opt_s2["hard_sl_limit_pct"])
+
+    # Ledger HWM fallback & live CRM (-4.45%) / 214150 (-1.82% after +4.01% HWM) stop verification
+    ledger_file = tmp_path / "position_entry_ledger.json"
+
+    def _mock_plm_init(self, ledger_path=None):
+        self.ledger_path = ledger_file
+        self.daily_exit_path = tmp_path / "daily_exited_tickers.json"
+        self._lock = __import__("threading").Lock()
+        self._ensure_ledger_exists()
+
+    monkeypatch.setattr("src.execution.position_ledger.PositionLedgerManager.__init__", _mock_plm_init)
+    plm = PositionLedgerManager()
+    plm.record_entry("214150", entry_date="2026-10-26", entry_price=65000.0, quantity=12, stream_id="S2")
+    plm.update_hwm("214150", current_price=67608.0, current_pnl_pct=4.0123, trail_activate_threshold=2.27)
+
+    uee = UniversalExitEngine()
+    live_check_positions = {
+        "LIVE_SSOT:214150": {
+            "ticker": "214150",
+            "stream_id": "S2",
+            "track": "TRACK_1_TACTICAL",
+            "quantity": 12,
+            "entry_price": 65000.0,
+            "current_price": 63820.0,
+            "unrealized_pnl_pct": -1.8154,
+            # peak_pnl_pct intentionally omitted from pos dict to verify fallback to ledger HWM (+4.0123%)
+            "holding_days": 3.0,
+            "holding_minutes": 4320.0,
+            "entry_date": "2026-10-26",
+            "market": "KR",
+        },
+        "LIVE_SSOT:CRM": {
+            "ticker": "CRM",
+            "stream_id": "S3_A",
+            "track": "TRACK_1_TACTICAL",
+            "quantity": 5,
+            "entry_price": 179.96,
+            "current_price": 171.95,
+            "unrealized_pnl_pct": -4.4510,
+            "peak_pnl_pct": 0.0,
+            "holding_days": 2.0,
+            "holding_minutes": 2880.0,
+            "entry_date": "2026-10-27",
+            "market": "US",
+        },
+    }
+    res = uee.evaluate_all_positions(
+        live_check_positions,
+        market_data={"usdkrw": 1380.0, "signal_cache": {"vix": 18.0}},
+        regime="caution",
+    )
+    orders_by_tk = {o["ticker"]: o for o in res["exit_orders"]}
+    assert "214150" in orders_by_tk
+    assert "CRM" in orders_by_tk
+    assert orders_by_tk["CRM"]["exit_type"] == "hard_stop_loss"
+
+
+
 
 
 

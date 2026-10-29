@@ -4500,7 +4500,7 @@ class StreamOrchestrator:
                         _explicit_exit_info = (_cand_esid, _cand_es)
                         break
 
-                if (stream_id in ('S_BETA', 'S10_MEGA_TREND', 'S10', 'S_YIELD') or _is_track2_pos) and not _explicit_exit_info:
+                if (stream_id in ('S_BETA', 'S_YIELD') or _is_track2_pos) and not _explicit_exit_info:
                     continue  # Track 2 및 코어 슬리브는 단기 TP/SL 대상에서 제외
 
                 pnl_pct = pos.get('unrealized_pnl_pct', pos.get('pnl_pct', 0))
@@ -4533,15 +4533,21 @@ class StreamOrchestrator:
                 _l4_be_floor        = 0.0
                 try:
                     from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_l4
+                    _vix_l4_fallback = 18.0
                     _opt_l4 = _get_qe_l4().compute_optimal_stopping_params(
                         ticker=_pos_ticker,
                         regime=regime,
-                        vix=float(((market_data or {}).get('signal_cache') or {}).get('vix', 18.0) or 18.0),
+                        vix=float(((market_data or {}).get('signal_cache') or {}).get('vix', _vix_l4_fallback) or _vix_l4_fallback),
+                        atr_pct=_asset_vol_daily,
+                        stream_id=str(stream_id or ""),
                         holding_days=float(pos.get('days_held') or 1.0),
                         is_kr=_is_kr_tk(_pos_ticker),
                     )
                     if isinstance(_opt_l4, dict):
                         _l4_be_floor = max(0.0, float(_opt_l4.get('break_even_floor_pct') or 0.0))
+                        _opt_sl_abs = abs(float(_opt_l4.get('hard_sl_limit_pct') or 0.0))
+                        if _opt_sl_abs > 0.0:
+                            _dyn_sl_pct = round(max(_trail_dst_lo, min(_opt_sl_abs, _trail_dst_hi)), 2)
                         _opt_ch_drop = float(_opt_l4.get('chandelier_drop_pct') or 0.0)
                         if _opt_ch_drop > 0.0:
                             from src.params.dynamic_quant_models import compute_convex_chandelier_drop_pct

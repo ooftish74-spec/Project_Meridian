@@ -300,7 +300,10 @@ class UniversalExitEngine:
 
             _raw_leg_pnl_uee = float(pos.get('unrealized_pnl_pct', pos.get('pnl_pct', pos.get('return_pct', ((price - entry_px) / entry_px * 100.0) if entry_px > 0 and price > 0 else 0.0))))
             pnl_pct = _raw_leg_pnl_uee
-            peak_pnl = float(pos.get('peak_pnl_pct', pnl_pct))
+            _raw_pk_uee = pos.get('peak_pnl_pct')
+            if _raw_pk_uee is None:
+                _raw_pk_uee = _l_meta.get('peak_pnl_pct', pnl_pct)
+            peak_pnl = max(float(pnl_pct), float(_raw_pk_uee if _raw_pk_uee is not None else pnl_pct))
             atr_pct = self.compute_ticker_atr(ticker)
             order_val_krw = qty * price * (1.0 if is_kr_tk else (_fx_rate or 0.0))
             _sigma_from_atr = atr_pct / math.sqrt(8.0 / math.pi)
@@ -405,13 +408,17 @@ class UniversalExitEngine:
                 # [100% Mathematical Model] Almgren-Chriss 왕복 마찰비용 + 브라운 확산 최소 정보축적 시간 + 첫 도달 최적 정지 장벽 산출
                 # compute_ticker_atr는 True Range(ATR = sqrt(8/π) * σ_d ≈ 1.2533 * σ_d)를 반환하므로,
                 # 가우시안 일간 표준편차(σ_d)를 입력받는 compute_optimal_stopping_params 호출 시 sqrt(8/π)로 정규화하여 중복 팽창 방지
+                _hd_for_opt = float(pos.get('holding_days', pos.get('days_held', 0.0)) or 0.0)
+                _min_order_floor = 500_000.0
                 _opt = _dqe.compute_optimal_stopping_params(
                     ticker=str(ticker),
                     regime=regime,
                     vix_level=_vix,
-                    order_value_krw=max(order_val_krw, 500_000.0),
+                    order_value_krw=max(order_val_krw, _min_order_floor),
                     price=price,
                     atr_pct=_sigma_from_atr,
+                    stream_id=str(stream_id or ""),
+                    holding_days=_hd_for_opt,
                 )
 
             min_holding_required = _opt['min_holding_minutes']
@@ -490,7 +497,10 @@ class UniversalExitEngine:
             is_trail_activated = (
                 (_pair_trail_act or (peak_pnl >= trailing_trigger))
                 if _is_active_pair_leg
-                else (bool(pos.get('trail_activated', False)) or (peak_pnl >= trailing_trigger))
+                else (
+                    bool(pos.get('trail_activated', _l_meta.get('trail_activated', False)))
+                    or (peak_pnl >= trailing_trigger)
+                )
             )
             is_trailing_exit = (
                 holding_minutes >= min_holding_required and

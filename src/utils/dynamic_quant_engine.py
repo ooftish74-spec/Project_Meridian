@@ -1530,6 +1530,11 @@ class DynamicQuantEngine:
         price: float = 0.0,
         atr_pct: Optional[float] = None,
         friction_pct: Optional[float] = None,
+        stream_id: Optional[str] = None,
+        holding_days: float = 0.0,
+        max_hold_days: float = 0.0,
+        vix: Optional[float] = None,
+        is_kr: Optional[bool] = None,
     ) -> Dict[str, float]:
         """UniversalExitEngine의 모든 고정 퍼센트 상수(6.0%, 0.50%, 3.0%, 2.5%, 2.0%, 15.0%)를 대체하는
         확률과정 첫 도달 장벽(First-Passage Optimal Stopping) 및 마찰비용 결합 해.
@@ -1552,10 +1557,11 @@ class DynamicQuantEngine:
 
         vq = self.get_vix_regime_quantiles()
         v_base = max(vq["baseline"], 10.0)
-        v_cur = float(vix_level) if (vix_level and vix_level > 0) else v_base
+        _eff_vix = vix_level if (vix_level is not None and float(vix_level) > 0) else vix
+        v_cur = float(_eff_vix) if (_eff_vix and float(_eff_vix) > 0) else v_base
         kappa_v = math.sqrt(float(np.clip(v_cur / v_base, 0.65, 2.25)))
 
-        reg = str(regime or "caution").lower()
+        reg = str(regime.get("primary_regime", "caution") if isinstance(regime, dict) else (regime or "caution")).lower()
         reg_decay = {"bull": 0.0, "caution": 0.15, "bear": 0.35, "crash": 0.60}.get(reg, 0.15)
         kappa_r = math.exp(-reg_decay)
 
@@ -1565,12 +1571,40 @@ class DynamicQuantEngine:
         z_995 = 2.57583  # 99.5% 단측 분위수
         z_999 = 3.09023  # 99.9% 단측 분위수
 
+        # 스트림 아키타입별 첫 도달 손절 배수(ζ_SL) 및 본전 보존 배수(ζ_PL) 차등화
+        # - S1 / S11 (Citadel False-Breakout): (1.0 + z_90) / 2 = 1.1408 σ_d
+        # - S2 / S12 (Renaissance OU Regime-Break): z_90 = 1.2816 σ_d
+        # - S3 / S3_A / S3_C / S6 / S10 (Bridgewater Drawdown-Gated Trend): (z_90 + z_975) / 2 = 1.6208 σ_d
+        # - S0 / S14 (Citadel Stat-Arb Spread): 1.00 σ_d
+        _sid_clean = str(stream_id or "").strip().upper()
+        if _sid_clean in ("S0", "S1", "S11", "S11_HIGHBETA_SNIPER"):
+            _zeta_sl = (1.0 + z_90) / 2.0
+            _zeta_pl = z_975
+        elif _sid_clean in ("S2", "S12", "S12_DERIVATIVE_SQUEEZE"):
+            _zeta_sl = z_90
+            _zeta_pl = z_975
+        elif _sid_clean in ("S3", "S3_A", "S3_C", "S6", "S10", "S10_MEGA_TREND", "S14", "S14_PAIR_ALPHA"):
+            _zeta_sl = (z_90 + z_975) / 2.0
+            _zeta_pl = z_975
+        else:
+            _zeta_sl = z_975
+            _zeta_pl = z_995
+
+        # 손실 보유일 경과에 따른 연속 시간감쇠 손절 수축 (Time-Decay Stop Tightening: τ(t) = 2^{-t / (2 T_max)})
+        _tau_decay = 1.0
+        _hd_val = float(holding_days or 0.0)
+        if _sid_clean and _sid_clean not in ("LIVE_SSOT", "S4", "S3_B") and _hd_val > 0.0:
+            _default_tmax = 2.0 + 2.0 + 1.0
+            _t_max_eff = float(max_hold_days) if (max_hold_days and float(max_hold_days) > 2.0) else _default_tmax
+            _t_ratio = min(_hd_val / _t_max_eff, 1.0)
+            _tau_decay = math.exp(-math.log(2.0) * _t_ratio * (1.0 / 2.0))
+
         # 1) 본전 보존 지지선: 왕복 마찰비용 100% 회수 + 0.25 σ_{i,d} 순수익 보장
         break_even_floor_pct = c_rt_pct + 0.25 * sigma_d_pct
-        # 2) 본전 보존 점화 장벽: C_RT + z_{0.995} * σ_{i,d} * κ_v
-        profit_lock_trigger_pct = c_rt_pct + z_995 * sigma_d_pct * kappa_v
-        # 3) 1차 진입 손절 장벽: -(C_RT + z_{0.975} * σ_{i,d} * κ_v * κ_r)
-        hard_sl_limit_pct = -(c_rt_pct + z_975 * sigma_d_pct * kappa_v * kappa_r)
+        # 2) 본전 보존 점화 장벽: C_RT + ζ_PL * σ_{i,d} * κ_v
+        profit_lock_trigger_pct = c_rt_pct + _zeta_pl * sigma_d_pct * kappa_v
+        # 3) 1차 진입 손절 장벽: -(C_RT + ζ_SL * σ_{i,d} * κ_v * κ_r * τ_decay)
+        hard_sl_limit_pct = -(c_rt_pct + _zeta_sl * sigma_d_pct * kappa_v * kappa_r * _tau_decay)
         # 4) 2차 고점 폭락 손절폭: C_RT + z_{0.999} * σ_{i,d} * κ_v
         catastrophic_drop_pct = c_rt_pct + z_999 * sigma_d_pct * kappa_v
         # 5) 샹들리에 트레일링 점화 장벽: 2 * C_RT + z_{0.90} * σ_{i,d} * κ_r
