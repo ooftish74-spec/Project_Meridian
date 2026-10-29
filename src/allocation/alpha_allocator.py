@@ -313,7 +313,7 @@ class AlphaAllocator:
             if len(_blend_rets) >= 2:
                 _m_br = sum(_blend_rets) / len(_blend_rets)
                 _v_br = sum((r - _m_br) ** 2 for r in _blend_rets) / max(1, len(_blend_rets) - 1)
-                _sd_br = math.sqrt(_v_br) if _v_br > 1e-12 else 0.0
+                _sd_br = math.sqrt(_v_br) if _v_br > 0.0 else 0.0
                 _blend_sr = (_m_br / _sd_br) * math.sqrt(252.0) if _sd_br > 0.0 else 0.0
             else:
                 _blend_sr = sum(
@@ -536,7 +536,7 @@ class AlphaAllocator:
             # low-volatility penalty on high-Sortino stock pods (S2) and 2x-ETF volatility bias (S1).
             _scaled_emp_rew = _emp_reward_raw
             _scaled_emp_risk = _emp_risk_raw
-            if daily_returns and _emp_reward_raw is not None and _emp_risk_raw is not None and _emp_risk_raw > 1e-9:
+            if daily_returns and _emp_reward_raw is not None and _emp_risk_raw is not None and _emp_risk_raw > 0.0:
                 _scale_norm = _prior_risk / _emp_risk_raw
                 _scaled_emp_rew = _emp_reward_raw * _scale_norm
                 _scaled_emp_risk = _prior_risk
