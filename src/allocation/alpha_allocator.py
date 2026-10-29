@@ -580,7 +580,8 @@ class AlphaAllocator:
                     )
                     _m_mult_sid = float(_pod_res.meritocracy_multiplier)
                     _sr_val = float(metrics.get('sharpe') or 0.0) if metrics.get('sharpe') is not None else 0.0
-                    _is_confirmed_loser = (n_obs >= 4 and int(_sr_val) <= -3) or n_obs >= 8
+                    _min_conf_obs = int(pget('measurement.sharpe_min_days', 5))
+                    _is_confirmed_loser = (n_obs >= _min_conf_obs - 1 and _sr_val <= -2.0 - 1.0) or n_obs >= 2 * _min_conf_obs
                     if _m_mult_sid < 1.0:
                         if _is_confirmed_loser:
                             _eff_pod_mult = max(
