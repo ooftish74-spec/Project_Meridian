@@ -282,6 +282,7 @@ class AlphaAllocator:
         self._stream_metrics = stream_metrics
 
         ev_scores = {}
+        _pod_merit_map = {}
         _cold_start_aux_streams = set()
         _explicit_zero_streams = set()
         _AUX_STREAM_SET = {
@@ -488,6 +489,31 @@ class AlphaAllocator:
                 else:
                     logger.info(f"  🛡️ [S14 Continuous Noise Prior] KER={_raw_ker} <= min_valid({_min_valid_ker:.3f}) ➔ missing/stale/near-zero KER boost skipped")
 
+            # 🛡️ [Citadel Continuous Bayesian Pod Meritocracy]
+            _m_mult_sid = 1.0
+            if sid not in ('S5', 'S_YIELD') and n_obs > 0 and not _is_cold_start:
+                try:
+                    from src.params.dynamic_quant_models import compute_bayesian_pod_meritocracy_factor
+                    _pod_res = compute_bayesian_pod_meritocracy_factor(
+                        sharpe=metrics.get('sharpe'),
+                        profit_factor=metrics.get('profit_factor'),
+                        win_rate=p_win,
+                        avg_win_dec=reward,
+                        avg_loss_dec=risk,
+                        n_obs=n_obs,
+                    )
+                    _m_mult_sid = float(_pod_res.meritocracy_multiplier)
+                    if _m_mult_sid < 1.0:
+                        if ev > 0.0:
+                            ev = ev * _m_mult_sid
+                        logger.info(
+                            f"  🛡️ [Bayesian Pod Meritocracy] {sid}: M_pod={_m_mult_sid:.4f} "
+                            f"(PSR_surv={_pod_res.psr_survival:.3f}, PF_surv={_pod_res.pf_survival:.3f}, n={n_obs}) ➔ EV={ev:+.5f}"
+                        )
+                except Exception:
+                    _m_mult_sid = 1.0
+            _pod_merit_map[sid] = _m_mult_sid
+
             ev_scores[sid] = ev
             logger.info(f"  [Competitive EV Engine] {sid}: EV = {ev:+.5f} (p_win={p_win:.2f}, reward={reward:.4f}, risk={risk:.4f})")
 
@@ -519,6 +545,13 @@ class AlphaAllocator:
             _ev_std = float(np.std(_ev_vals)) if len(_ev_vals) >= 2 else 0.0
             temp = max(_base_temp, _ev_std, _min_temp)
             _reg_mat = self._default_regime_weights()
+            if any(_mv < 1.0 for _mv in _pod_merit_map.values()):
+                for _rk_m, _rrow_m in list(_reg_mat.items()):
+                    if isinstance(_rrow_m, dict):
+                        _sc_row = {k: float(v) * float(_pod_merit_map.get(k, 1.0)) for k, v in _rrow_m.items()}
+                        _sc_sum = sum(_sc_row.values())
+                        if _sc_sum > _eps_exp:
+                            _reg_mat[_rk_m] = {k: v / _sc_sum for k, v in _sc_row.items()}
             _reg_probs = (market_data or {}).get('regime_probs') or ((market_data or {}).get('signal_cache') or {}).get('regime_probs')
             if isinstance(_reg_probs, dict) and _reg_probs:
                 from src.params.dynamic_quant_models import continuous_regime_kl_softmax_kelly_allocation

@@ -1687,3 +1687,297 @@ def apply_probe_ev_tilt(approved_signals: Sequence[Dict[str, Any]]) -> List[Dict
     return out
 
 
+_ANN_DAYS_POD = 252.0
+_FOUR_POD = 4.0
+_DEFAULT_N0_POD = 10.0
+_MIN_LOT_SURVIVAL_FLOOR = 1e-3
+_DEFAULT_FX_KRW_CAGR = 1380.0
+_DEFAULT_KR_ROUND_TRIP_COST = 0.0021
+
+
+@dataclass(frozen=True)
+class BayesianPodMeritocracyResult:
+    """Citadel / Medallion Empirical-Bayes Pod Meritocracy Contraction result."""
+    meritocracy_multiplier: float
+    psr_zero: float
+    psr_survival: float
+    pf_survival: float
+    shrinkage_lambda: float
+    effective_pf: float
+    n_obs: int
+
+
+def compute_bayesian_pod_meritocracy_factor(
+    sharpe: Optional[float] = None,
+    profit_factor: Optional[float] = None,
+    win_rate: Optional[float] = None,
+    avg_win_dec: Optional[float] = None,
+    avg_loss_dec: Optional[float] = None,
+    n_obs: int = 0,
+    prior_strength_n0: float = _DEFAULT_N0_POD,
+    skewness: float = 0.0,
+    excess_kurtosis: float = 0.0,
+) -> BayesianPodMeritocracyResult:
+    """Compute one-sided Empirical-Bayes pod meritocracy contraction M_pod in (0, 1].
+
+    Preserves M_pod = 1.0 for cold-start pods (n_obs <= 0) or positive-expectancy pods
+    (sharpe >= 0 and profit_factor >= 1.0), while smoothly contracting negative-expectancy
+    pods proportionally to sample confidence lambda_n = n_obs / (n_obs + n_0), Bailey &
+    Lopez de Prado Probabilistic Sharpe Ratio survival psi_PSR = min(1, 2 * Phi(t_SR)),
+    and Profit-Factor harmonic survival psi_PF = min(1, 2 * PF / (PF + 1)).
+    """
+    n_clean = max(0, int(n_obs or 0))
+    n0_clean = max(_EPS, float(prior_strength_n0 if prior_strength_n0 is not None else _DEFAULT_N0_POD))
+    if n_clean <= 0:
+        return BayesianPodMeritocracyResult(
+            meritocracy_multiplier=1.0,
+            psr_zero=_HALF,
+            psr_survival=1.0,
+            pf_survival=1.0,
+            shrinkage_lambda=0.0,
+            effective_pf=1.0,
+            n_obs=0,
+        )
+
+    lam_n = float(n_clean) / (float(n_clean) + n0_clean)
+
+    # 1. Probabilistic Sharpe Ratio (PSR) survival on realized Sharpe
+    sr_ann = float(sharpe) if (sharpe is not None and math.isfinite(float(sharpe))) else 0.0
+    sr_daily = sr_ann / math.sqrt(_ANN_DAYS_POD)
+    dof = max(1.0, float(n_clean) - 1.0)
+    skew_v = float(skewness) if math.isfinite(float(skewness)) else 0.0
+    kurt_v = float(excess_kurtosis) if math.isfinite(float(excess_kurtosis)) else 0.0
+    var_adj = max(_EPS, 1.0 - skew_v * sr_daily + (kurt_v / _FOUR_POD) * (sr_daily * sr_daily))
+    t_sr = (sr_daily * math.sqrt(dof)) / math.sqrt(var_adj)
+    psr_zero = _HALF * (1.0 + math.erf(t_sr / math.sqrt(2.0)))
+    if sr_ann >= 0.0:
+        psr_survival = 1.0
+    else:
+        psr_survival = _clamp(2.0 * psr_zero, 0.0, 1.0)
+
+    # 2. Profit Factor harmonic survival psi_PF = min(1, 2*PF / (PF + 1))
+    eff_pf = 1.0
+    if profit_factor is not None and math.isfinite(float(profit_factor)) and float(profit_factor) >= 0.0:
+        eff_pf = float(profit_factor)
+    elif (
+        win_rate is not None
+        and avg_win_dec is not None
+        and avg_loss_dec is not None
+        and math.isfinite(float(win_rate))
+        and math.isfinite(float(avg_win_dec))
+        and math.isfinite(float(avg_loss_dec))
+    ):
+        p_w = float(win_rate)
+        if p_w > 1.0:
+            p_w = p_w / 100.0
+        p_w = _clamp(p_w, 0.0, 1.0)
+        r_w = abs(float(avg_win_dec))
+        if r_w > 1.0:
+            r_w = r_w / 100.0
+        l_w = abs(float(avg_loss_dec))
+        if l_w > 1.0:
+            l_w = l_w / 100.0
+        denom_pf = (1.0 - p_w) * l_w
+        if denom_pf > _EPS and r_w > 0.0:
+            eff_pf = (p_w * r_w) / denom_pf
+        elif p_w <= _EPS:
+            eff_pf = 0.0
+
+    if eff_pf >= 1.0:
+        pf_survival = 1.0
+    else:
+        pf_survival = _clamp((2.0 * max(0.0, eff_pf)) / (max(0.0, eff_pf) + 1.0), 0.0, 1.0)
+
+    merit_mult = _clamp(
+        (1.0 - lam_n) + lam_n * psr_survival * pf_survival,
+        _MIN_LOT_SURVIVAL_FLOOR,
+        1.0,
+    )
+    return BayesianPodMeritocracyResult(
+        meritocracy_multiplier=merit_mult,
+        psr_zero=psr_zero,
+        psr_survival=psr_survival,
+        pf_survival=pf_survival,
+        shrinkage_lambda=lam_n,
+        effective_pf=eff_pf,
+        n_obs=n_clean,
+    )
+
+
+def select_lot_viable_stream_signals(
+    signals: Sequence[Dict[str, Any]],
+    stream_budget_krw: float,
+    fx_rate: float = _DEFAULT_FX_KRW_CAGR,
+    min_scale_out_shares: int = 1,
+) -> List[Dict[str, Any]]:
+    """D.E. Shaw / Medallion Lot-Quantization & Full-Runner Viable Breadth Concentration.
+
+    When a stream's KRW budget cannot afford at least `min_scale_out_shares` (default 1 share
+    under 100% Full-Position Convex Chandelier Trail, or >=2 when explicitly requested) across all
+    candidate tactical signals, ranks tactical candidates by risk-adjusted net edge
+    J_i = ev_margin_i / max(sl_pct_i, eps) and concentrates capital into the top K* viable
+    candidates while preserving total tactical size_pct.
+    Core moat (S3_B / TRACK_2_BUFFETT_QVM), paired market-neutral legs (pair_id), and unpriced
+    signals are unconditionally preserved.
+    """
+    out = [dict(s) for s in signals if isinstance(s, dict)]
+    if len(out) <= 1 or float(stream_budget_krw or 0.0) <= 0.0:
+        return out
+
+    fx_clean = float(fx_rate) if (fx_rate is not None and float(fx_rate) > 0.0) else _DEFAULT_FX_KRW_CAGR
+    q_min = max(1, int(min_scale_out_shares or 1))
+    budget_clean = float(stream_budget_krw)
+
+    tactical_indices: List[int] = []
+    reserved_budget_krw = 0.0
+    for idx, sig in enumerate(out):
+        if str(sig.get('direction', 'long')).lower() != 'long':
+            continue
+        sz = float(sig.get('size_pct') or 0.0)
+        if sz <= 0.0:
+            continue
+        is_exempt = (
+            bool(sig.get('pair_id'))
+            or bool(sig.get('is_market_neutral'))
+            or bool(sig.get('is_hedge'))
+            or str(sig.get('stream_id', '')).upper() == 'S3_B'
+            or str(sig.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM'
+            or str(sig.get('strategy', '')).lower() in ('buffett_qvm', 'qvm_value', '_sys_meta')
+        )
+        px = float(sig.get('price') or sig.get('current_price') or 0.0)
+        if is_exempt or px <= 0.0:
+            reserved_budget_krw += budget_clean * min(1.0, sz)
+            continue
+        tactical_indices.append(idx)
+
+    if len(tactical_indices) <= 1:
+        return out
+
+    avail_tactical_budget = max(0.0, budget_clean - reserved_budget_krw)
+    if avail_tactical_budget <= 0.0:
+        return out
+
+    scored_candidates = []
+    total_min_lot_cost = 0.0
+    for idx in tactical_indices:
+        sig = out[idx]
+        tk = str(sig.get('ticker', '')).split(':')[-1].strip()
+        is_kr = len(tk) == 6 and tk[:5].isdigit()
+        px = float(sig.get('price') or sig.get('current_price') or 0.0)
+        px_krw = px if is_kr else (px * fx_clean)
+        lot_cost_krw = float(q_min) * px_krw
+        total_min_lot_cost += lot_cost_krw
+
+        ev_m = sig.get('ev_margin')
+        sl_p = sig.get('sl_pct')
+        if ev_m is None or sl_p is None:
+            norm_s = normalize_signal_horizon_expectation(sig, stream_id=str(sig.get('stream_id', 'S2')))
+            ev_val = float(norm_s['p_win'] * norm_s['reward_dec'] - (1.0 - norm_s['p_win']) * norm_s['risk_dec'])
+            sl_val = max(_EPS, float(norm_s['risk_dec']))
+        else:
+            ev_val = float(ev_m)
+            sl_val = abs(float(sl_p))
+            if sl_val > 1.0:
+                sl_val = sl_val / 100.0
+            sl_val = max(_EPS, sl_val)
+        j_score = ev_val / sl_val
+        scored_candidates.append((j_score, idx, lot_cost_krw))
+
+    # If the tactical budget can already afford >= q_min shares of every candidate, keep all
+    if total_min_lot_cost <= avail_tactical_budget:
+        return out
+
+    # Sort descending by risk-adjusted edge J_i (tie-break by original index)
+    scored_candidates.sort(key=lambda x: (-x[0], x[1]))
+    selected_idx_set = set()
+    cum_cost = 0.0
+    for rank_i, (_, idx, lot_cost_krw) in enumerate(scored_candidates):
+        if rank_i == 0 or (cum_cost + lot_cost_krw) <= avail_tactical_budget:
+            selected_idx_set.add(idx)
+            cum_cost += lot_cost_krw
+
+    if len(selected_idx_set) == len(tactical_indices):
+        return out
+
+    orig_tactical_size_sum = sum(float(out[idx].get('size_pct') or 0.0) for idx in tactical_indices)
+    surviving_size_sum = sum(float(out[idx].get('size_pct') or 0.0) for idx in selected_idx_set)
+    rescale = (orig_tactical_size_sum / surviving_size_sum) if surviving_size_sum > _EPS else 1.0
+
+    filtered_out: List[Dict[str, Any]] = []
+    for idx, sig in enumerate(out):
+        if idx in tactical_indices:
+            if idx not in selected_idx_set:
+                continue
+            sig_copy = dict(sig)
+            sig_copy['size_pct'] = round(float(sig_copy.get('size_pct') or 0.0) * rescale, 4)
+            sig_copy['_lot_concentrated'] = True
+            filtered_out.append(sig_copy)
+        else:
+            filtered_out.append(sig)
+    return filtered_out
+
+
+def evaluate_friction_velocity_turnover_gate(
+    expected_alpha_dec: float,
+    round_trip_cost_dec: float,
+    daily_turnover_ratio: float = 0.0,
+    trade_sigma_dec: float = 0.0,
+) -> Dict[str, Any]:
+    """Medallion / Citadel Dynamic Friction-Velocity Turnover Gate.
+
+    Evaluates whether a tactical signal's expected gross alpha exceeds the turnover-penalized
+    friction hurdle plus Ito variance drag:
+        H_fric = (1 + max(0, tau_daily)) * c_RT + 0.5 * sigma_trade^2
+    """
+    alpha_v = float(expected_alpha_dec or 0.0)
+    cost_v = max(0.0, float(round_trip_cost_dec or 0.0))
+    tau_v = max(0.0, float(daily_turnover_ratio or 0.0))
+    sig_v = max(0.0, float(trade_sigma_dec or 0.0))
+
+    kappa_turn = 1.0 + tau_v
+    variance_drag = _HALF * (sig_v * sig_v)
+    hurdle_dec = kappa_turn * cost_v + variance_drag
+    net_edge = alpha_v - hurdle_dec
+    return {
+        'passes': bool(alpha_v > hurdle_dec),
+        'hurdle_dec': hurdle_dec,
+        'net_growth_edge_dec': net_edge,
+        'turnover_multiplier': kappa_turn,
+    }
+
+
+def compute_convex_chandelier_drop_pct(
+    base_chandelier_drop_pct: float,
+    peak_pnl_pct: float,
+    target_pnl_pct: float,
+    sigma_daily_pct: float,
+    roundtrip_friction_pct: float = 0.0,
+) -> float:
+    """Medallion Full-Position Profit-Ratcheting Convex Chandelier Drop (Tighten-Only).
+
+    Replaces discrete 50% scale-out (`scale_out_50pct`) with 100% full-position trend riding:
+    - For peak_pnl_pct <= target_pnl_pct: retains `base_chandelier_drop_pct` to avoid premature
+      whipsaws during initial trend formation.
+    - For peak_pnl_pct > target_pnl_pct: keeps 100% position size while exponentially tightening
+      the Chandelier drawdown allowance:
+          D_eff(M_t) = max(D_min, D_base * exp(-0.25 * (M_t - B_target) / sigma_d))
+      where D_min = 2 * C_RT + 0.5 * sigma_d.
+    """
+    d_base = max(0.0, float(base_chandelier_drop_pct or 0.0))
+    m_peak = float(peak_pnl_pct or 0.0)
+    b_targ = float(target_pnl_pct or 0.0)
+    sig_d = max(_EPS, float(sigma_daily_pct or 0.0))
+    c_rt = max(0.0, float(roundtrip_friction_pct or 0.0))
+
+    if b_targ <= 0.0 or m_peak <= b_targ:
+        return d_base
+
+    d_min = min(d_base, 2.0 * c_rt + _HALF * sig_d)
+    gamma_ratchet = 1.0 / _FOUR_POD
+    excess_sigma = (m_peak - b_targ) / sig_d
+    d_tightened = d_base * math.exp(-gamma_ratchet * excess_sigma)
+    return _clamp(d_tightened, d_min, d_base)
+
+
+
+

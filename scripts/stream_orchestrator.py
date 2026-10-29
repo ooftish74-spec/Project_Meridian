@@ -1299,9 +1299,57 @@ class StreamOrchestrator:
 
         # ★ [SSOT Wiring Fix] all_signals를 _stream_signals로 주입하여 섹터 한도(_enforce_sector_limits) 및 직교화 활성화
         from src.params.dynamic_quant_models import (
+            compute_bayesian_pod_meritocracy_factor,
             compute_corporate_after_tax_cagr_metrics,
             normalize_signal_horizon_expectation,
         )
+        import os as _os_s5
+        _in_pytest_s5 = bool(_os_s5.environ.get('PYTEST_CURRENT_TEST')) or ('pytest' in sys.modules)
+        if not injected_stream_metrics and not _in_pytest_s5:
+            try:
+                _me_path = _ROOT / 'results' / 'measurement_engine.json'
+                if _me_path.exists():
+                    with open(_me_path, 'r', encoding='utf-8') as _f_me:
+                        _me_doc = json.load(_f_me)
+                    _me_ps = ((_me_doc.get('official') or {}).get('per_stream') or _me_doc.get('streams') or {}) if isinstance(_me_doc, dict) else {}
+                    _me_slv = ((_me_doc.get('views') or {}).get('sleeves') or {}) if isinstance(_me_doc, dict) else {}
+                    for _sid_me, _m_me in _me_ps.items():
+                        if not isinstance(_m_me, dict) or int(_m_me.get('total_trades') or 0) <= 0:
+                            continue
+                        _cur_sm = stream_metrics.setdefault(_sid_me, {})
+                        if not isinstance(_cur_sm, dict) or int(_cur_sm.get('total_trades') or 0) > 0 or _cur_sm.get('daily_returns'):
+                            continue
+                        if _sid_me == 'S3':
+                            _s3_list = all_signals.get('S3') or []
+                            _t1_pod = compute_bayesian_pod_meritocracy_factor(
+                                sharpe=_m_me.get('sharpe'),
+                                profit_factor=_m_me.get('profit_factor'),
+                                win_rate=_m_me.get('win_rate'),
+                                avg_win_dec=_m_me.get('avg_win_pct'),
+                                avg_loss_dec=_m_me.get('avg_loss_pct'),
+                                n_obs=int(_m_me.get('total_trades') or 0),
+                            )
+                            _has_s3b_live = False
+                            for _s_s3 in _s3_list:
+                                if not isinstance(_s_s3, dict):
+                                    continue
+                                _is_t2_s3 = (
+                                    str(_s_s3.get('stream_id', '')).upper() == 'S3_B'
+                                    or str(_s_s3.get('track', '')).upper() == 'TRACK_2_BUFFETT_QVM'
+                                    or str(_s_s3.get('strategy', '')).lower() in ('buffett_qvm', 'qvm_value')
+                                )
+                                if _is_t2_s3:
+                                    _has_s3b_live = True
+                                elif _t1_pod.meritocracy_multiplier < 1.0 and float(_s_s3.get('size_pct') or 0.0) > 0.0:
+                                    _s_s3['size_pct'] = round(float(_s_s3['size_pct']) * _t1_pod.meritocracy_multiplier, 4)
+                            _s3b_me = _me_slv.get('S3_B') if isinstance(_me_slv.get('S3_B'), dict) else None
+                            if _has_s3b_live and _s3b_me and int(_s3b_me.get('total_trades') or 0) > 0:
+                                _m_me = _s3b_me
+                        for _k_me in ('sharpe', 'win_rate', 'total_trades', 'profit_factor', 'avg_win_pct', 'avg_loss_pct', 'realized_pnl_krw'):
+                            if _m_me.get(_k_me) is not None:
+                                _cur_sm[_k_me] = _m_me[_k_me]
+            except Exception as _me_err:
+                logger.debug(f"    measurement_engine.json 로드 생략: {_me_err}")
         stream_metrics['_stream_signals'] = all_signals
         for _sid_er, _sigs_er in all_signals.items():
             if not isinstance(_sigs_er, list):
@@ -2097,14 +2145,20 @@ class StreamOrchestrator:
                 # Min-Lot Sweep: 기보유 수량이 0주이고 당일(연속 세션) 청산 이력이 없는 순수 신규 진입 종목에 한해 최소 1주 배정
                 _tk_check = str(o.get('ticker', '')).split(':')[-1].upper()
                 _already_held_s84 = False
+                _active_held_cnt_s84 = 0
+                _parking_set_s84 = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'}
                 if portfolio and isinstance(portfolio, dict):
+                    _seen_tks_s84 = set()
                     for _ps_k in ('positions', 'holdings'):
                         for _pk_s, _pv_s in (portfolio.get(_ps_k) or {}).items():
                             if isinstance(_pv_s, dict):
                                 _pt_s = str(_pv_s.get('ticker') or str(_pk_s).split(':')[-1]).upper()
-                                if _pt_s == _tk_check and float(_pv_s.get('quantity', _pv_s.get('qty', 0)) or 0) > 0:
-                                    _already_held_s84 = True
-                                    break
+                                if float(_pv_s.get('quantity', _pv_s.get('qty', 0)) or 0) > 0:
+                                    if _pt_s not in _parking_set_s84:
+                                        _seen_tks_s84.add(_pt_s)
+                                    if _pt_s == _tk_check:
+                                        _already_held_s84 = True
+                    _active_held_cnt_s84 = len(_seen_tks_s84)
                 _recently_exited_s84 = False
                 if getattr(self, 'exec_mode', 'live') == 'live':
                     try:
@@ -2113,8 +2167,18 @@ class StreamOrchestrator:
                     except Exception:
                         _recently_exited_s84 = False
                 _amt_budget = float(o.get('amount_krw', 0.0) or 0.0)
-                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상이고 당일 청산 종목이 아닐 때만 1주 배정
-                if qty <= 0 and not _already_held_s84 and not _recently_exited_s84 and _cost_per_share_krw > 0 and _amt_budget >= 0.5 * _cost_per_share_krw:
+                _min_pos_floor_s84 = 0.01
+                _max_single_s84 = max(float(pget('sizer.max_single_position_pct', 0.15)), _min_pos_floor_s84)
+                _max_min_lot_s84 = int(1.0 / _max_single_s84)
+                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상이고 당일 청산 종목이 아니며 기보유 종목 수가 상한 미만일 때만 1주 배정
+                if (
+                    qty <= 0
+                    and not _already_held_s84
+                    and not _recently_exited_s84
+                    and _active_held_cnt_s84 < _max_min_lot_s84
+                    and _cost_per_share_krw > 0
+                    and _amt_budget >= 0.5 * _cost_per_share_krw
+                ):
                     qty = 1
                     o['_min_lot_sweep'] = True
                     o['amount_krw'] = max(_amt_budget, float(_cost_per_share_krw / max(margin_rate, 1.0)))
@@ -2618,9 +2682,23 @@ class StreamOrchestrator:
                     qty = int(amount_krw / price)
 
                 # 💡 [Min-Lot Liquidity Sweep] 미보유(0주) 신규 진입 시그널 0주 절삭 시 1주 보장
-                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상일 때만 (amount=0/entry_score만으로 강제 매수 금지)
-                if (qty == 0 and action == 'buy' and _held_qty_by_ticker.get(str(ticker), 0) == 0
-                        and eff_price_krw > 0 and amount_krw >= 0.5 * eff_price_krw):
+                # ★ Wave 0 S4: 예산이 1주 비용의 50% 이상이고 기보유 종목 수가 상한 미만일 때만 (무분별한 1주 파편화 방지)
+                _parking_set_exec = {'459580', '423160', '449170', '430740', '357870', '357330', 'SHV', 'SGOV'}
+                _active_held_cnt_exec = sum(
+                    1 for _ht_e, _hq_e in _held_qty_by_ticker.items()
+                    if _hq_e > 0 and str(_ht_e).upper() not in _parking_set_exec
+                )
+                _min_pos_floor_exec = 0.01
+                _max_single_exec = max(float(pget('sizer.max_single_position_pct', 0.15)), _min_pos_floor_exec)
+                _max_min_lot_exec = int(1.0 / _max_single_exec)
+                if (
+                    qty == 0
+                    and action == 'buy'
+                    and _held_qty_by_ticker.get(str(ticker), 0) == 0
+                    and _active_held_cnt_exec < _max_min_lot_exec
+                    and eff_price_krw > 0
+                    and amount_krw >= 0.5 * eff_price_krw
+                ):
                     qty = 1
                     o['_min_lot_sweep'] = True
                     logger.info(f"💡 [Min-Lot Sweep] {ticker} (단가: {price:.2f}) 배정 예산({amount_krw:,.0f} KRW) < 1주 단가 → 단기 파킹 자산(SHV/KOFR) 부족분 스윕 후 최소 1주 매수 집행 보장")
@@ -3777,6 +3855,52 @@ class StreamOrchestrator:
                         )
                     ]
 
+            if stream_id not in ('S0', 'S_BETA', 'S4', 'S5', 'S_YIELD', 'S14', 'S14_PAIR_ALPHA', 'S7'):
+                try:
+                    from src.params.dynamic_quant_models import (
+                        _DEFAULT_FX_KRW_CAGR,
+                        _DEFAULT_KR_ROUND_TRIP_COST,
+                        evaluate_friction_velocity_turnover_gate,
+                        select_lot_viable_stream_signals,
+                    )
+                    _canon_sid_pre = _CANONICAL_MAP.get(stream_id, stream_id)
+                    _held_pre = float(_stream_held_krw.get(_canon_sid_pre, _stream_held_krw.get(stream_id, 0.0)) or 0.0)
+                    _tot_b_pre = max(float(budget), float(budget) + _held_pre)
+                    _fx_pre = float(
+                        (market_data or {}).get('usdkrw')
+                        or ((market_data or {}).get('signal_cache') or {}).get('usdkrw')
+                        or _DEFAULT_FX_KRW_CAGR
+                    )
+                    if _tot_b_pre > 0.0 and len(stream_signals) > 1:
+                        stream_signals = select_lot_viable_stream_signals(
+                            stream_signals,
+                            stream_budget_krw=_tot_b_pre,
+                            fx_rate=_fx_pre,
+                        )
+                    _tau_daily_md = float((market_data or {}).get('daily_turnover_ratio') or 0.0) if isinstance(market_data, dict) else 0.0
+                    if _tau_daily_md > 0.0:
+                        _surv_turn = []
+                        for _s_t in stream_signals:
+                            if not isinstance(_s_t, dict) or _s_t.get('pair_id') or str(_s_t.get('stream_id', '')).upper() == 'S3_B':
+                                _surv_turn.append(_s_t)
+                                continue
+                            _tp_t = float(_s_t.get('tp_pct') or 0.0)
+                            if _tp_t > 1.0:
+                                _tp_t = _tp_t / 100.0
+                            _rt_t = float(_s_t.get('round_trip_cost') or _DEFAULT_KR_ROUND_TRIP_COST)
+                            if _tp_t > 0.0:
+                                _fg_res = evaluate_friction_velocity_turnover_gate(
+                                    expected_alpha_dec=_tp_t,
+                                    round_trip_cost_dec=_rt_t,
+                                    daily_turnover_ratio=_tau_daily_md,
+                                )
+                                if not _fg_res['passes']:
+                                    continue
+                            _surv_turn.append(_s_t)
+                        stream_signals = _surv_turn
+                except Exception:
+                    pass
+
             # [Symmetric Normalization & 3-Sigma Cap] 기보유 종목(existing_tickers)과 신규 종목 구분 없이 동일한 리스크 상한 적용
             valid_signals = [
                 sig for sig in stream_signals
@@ -4406,6 +4530,32 @@ class StreamOrchestrator:
                 _dyn_trail_activate = round(max(_trail_act_lo, min(_dyn_trail_activate_raw * _trail_z_act, _trail_act_hi)), 2)
                 _dyn_trail_dist     = round(max(_trail_dst_lo, min(_dyn_trail_dist_raw     * _trail_z_dst, _trail_dst_hi)), 2)
                 _dyn_sl_pct         = _dyn_trail_dist  # [SSoT Unification] 동적 VIX/ATR 밴드로 100% 통일
+                _l4_be_floor        = 0.0
+                try:
+                    from src.utils.dynamic_quant_engine import get_quant_engine as _get_qe_l4
+                    _opt_l4 = _get_qe_l4().compute_optimal_stopping_params(
+                        ticker=_pos_ticker,
+                        regime=regime,
+                        vix=float(((market_data or {}).get('signal_cache') or {}).get('vix', 18.0) or 18.0),
+                        holding_days=float(pos.get('days_held') or 1.0),
+                        is_kr=_is_kr_tk(_pos_ticker),
+                    )
+                    if isinstance(_opt_l4, dict):
+                        _l4_be_floor = max(0.0, float(_opt_l4.get('break_even_floor_pct') or 0.0))
+                        _opt_ch_drop = float(_opt_l4.get('chandelier_drop_pct') or 0.0)
+                        if _opt_ch_drop > 0.0:
+                            from src.params.dynamic_quant_models import compute_convex_chandelier_drop_pct
+                            _pk_l4 = float(pos['peak_pnl_pct']) if pos.get('peak_pnl_pct') is not None else float(pnl_pct or 0.0)
+                            _opt_ch_drop = compute_convex_chandelier_drop_pct(
+                                base_chandelier_drop_pct=_opt_ch_drop,
+                                peak_pnl_pct=_pk_l4,
+                                target_pnl_pct=float(_opt_l4.get('scale_out_target_pct') or 0.0),
+                                sigma_daily_pct=float(_opt_l4.get('sigma_daily_pct') or (_asset_vol_daily * 100.0)),
+                                roundtrip_friction_pct=float(_opt_l4.get('roundtrip_friction_pct') or 0.0),
+                            )
+                            _dyn_trail_dist = round(max(_trail_dst_lo, min(_opt_ch_drop, _trail_dst_hi)), 2)
+                except Exception:
+                    _l4_be_floor = 0.0
                 logger.debug(
                     f"[Phase 51] {_pos_ticker} vol={_asset_vol_daily*100:.2f}% "
                     f"→ activate={_dyn_trail_activate:.2f}%, dist={_dyn_trail_dist:.2f}%, sl={_dyn_sl_pct:.2f}%")
@@ -4665,7 +4815,7 @@ class StreamOrchestrator:
                     if _is_active_s14_pair_leg
                     else (bool(pos.get('trail_activated', False)) or (trail_activate is not None and peak_pnl >= trail_activate))
                 )
-                if (reason is None and trail_dist is not None and is_trail_activated and (peak_pnl - float(trail_dist)) >= 0.0 and drawdown_from_peak >= trail_dist):
+                if (reason is None and trail_dist is not None and is_trail_activated and (peak_pnl - float(trail_dist)) >= _l4_be_floor and drawdown_from_peak >= trail_dist):
                     reason = (
                         f"[L4 Exit] Trail: peak={peak_pnl:+.1f}% → "
                         f"now={pnl_pct:+.1f}% (↓{drawdown_from_peak:.1f}% "

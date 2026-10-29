@@ -475,7 +475,16 @@ class UniversalExitEngine:
             # (peak_pnl - chandelier_drop) >= break_even_floor 조건을 강제하여 소폭 반등(+1.5%~+2.7%) 직후
             # 손절선이 음수 영역(-0.2%~-1.8%)으로 급격히 끌어올려지는 'Sub-Zero Stop Cliff'를 원천 차단함.
             # (본전 미달 구간의 하방 보호는 Rule 0 Profit-Lock, Rule 1 Hard Stop-Loss, Rule 2 Catastrophic Drawdown이 전담)
-            chandelier_drop = _opt['chandelier_drop_pct']
+            chandelier_drop_base = _opt['chandelier_drop_pct']
+            scale_out_target = _opt['scale_out_target_pct']
+            from src.params.dynamic_quant_models import compute_convex_chandelier_drop_pct
+            chandelier_drop = compute_convex_chandelier_drop_pct(
+                base_chandelier_drop_pct=chandelier_drop_base,
+                peak_pnl_pct=peak_pnl,
+                target_pnl_pct=scale_out_target,
+                sigma_daily_pct=float(_opt.get('sigma_daily_pct') or (atr_pct * 100.0)),
+                roundtrip_friction_pct=float(_opt.get('roundtrip_friction_pct') or 0.0),
+            )
             trailing_trigger = _opt['trailing_trigger_pct']
             trailing_floor_pnl = peak_pnl - chandelier_drop
             is_trail_activated = (
@@ -504,30 +513,10 @@ class UniversalExitEngine:
                 })
                 continue
 
-            # ── 4. Dynamic Scale-Out Runner (정보비율 IR 기반 동적 분할 차익실현; 페어 레그 단일 반익절 금지) ──
-            scaled_out = bool(pos.get('scaled_out', False) or _l_meta.get('scaled_out', False))
-            scale_out_target = _opt['scale_out_target_pct']
-            scale_out_ratio = _opt['scale_out_ratio']
-            
-            if (not _is_active_pair_leg) and (not scaled_out) and pnl_pct >= scale_out_target:
-                if qty <= 1:
-                    logger.info(f"  🎯 [Scale-Out Skip] {ticker} ({stream_id}): 잔고 1주 이하 ({qty}주)로 분할 매도 스킵 ➔ 100% 러너 포지션으로 유지")
-                    continue
-                so_qty = max(1.0, math.floor(qty * scale_out_ratio))
-                detail = f"🎯 [Scale-Out {scale_out_ratio*100:.0f}%] {ticker} ({stream_id}): P&L {pnl_pct:+.1f}% >= 동적 목표 {scale_out_target:.1f}% ({scale_out_ratio*100:.0f}% 차익실현)"
-                logger.info(f"  {detail}")
-                exit_orders.append({
-                    'stream_id': stream_id, 'ticker': ticker, 'direction': 'short',
-                    'action': 'sell', 'quantity': so_qty, 'price': price, 'execution_algo': 'market',
-                    'exit_type': 'scale_out_50pct',
-                    'urgency': 'high',
-                    'pnl_pct': round(float(pnl_pct), 4),
-                    'unrealized_pnl_pct': round(float(pnl_pct), 4),
-                    'reason': detail
-                })
-                continue
+            # ── 4. Full-Position Convex Chandelier Runner (50% 강제 반익절 폐기 ➔ 100% 물량 유지 및 동적 샹들리에 수축) ──
+            scaled_out = bool(pos.get('scaled_out', False) or _l_meta.get('scaled_out', False) or (peak_pnl >= scale_out_target))
 
-            # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산; 페어 레그 제외) ──
+            # ── 5. Time-Decay Auto Exit (3~5일 0.5x ATR 횡보 알파소멸 자동 청산; 페어 레그 및 추세 돌파 러너 제외) ──
             if (not _is_active_pair_leg) and (not scaled_out):
                 try:
                     from src.execution.position_ledger import (

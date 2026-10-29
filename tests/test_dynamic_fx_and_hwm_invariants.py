@@ -499,4 +499,126 @@ def test_sub_zero_chandelier_cliff_prevention_and_ledger_scaled_out_fallback(
     assert [o for o in res_fila["exit_orders"] if o.get("exit_type") in ("scale_out_50pct", "time_decay_exit")] == []
 
 
+def test_meridian_v5_pod_meritocracy_lot_concentration_and_turnover_gate_closed_form():
+    """Hand-computed closed-form verification of Meridian v5.0 upgrades:
+    1) Citadel Continuous Bayesian Pod Meritocracy (PSR + Profit Factor contraction).
+    2) D.E. Shaw Dynamic Lot-Quantization & Scale-Out Viable Breadth Concentration.
+    3) Medallion Dynamic Friction-Velocity Turnover Gate.
+    """
+    from src.params.dynamic_quant_models import (
+        compute_bayesian_pod_meritocracy_factor,
+        compute_convex_chandelier_drop_pct,
+        evaluate_friction_velocity_turnover_gate,
+        select_lot_viable_stream_signals,
+    )
+    from src.allocation.alpha_allocator import AlphaAllocator
+
+    # 1. Cold-start pod (n_obs=0) and positive-edge pod (S2: Sharpe=+3.03, PF=2.66, n=56) retain M_pod == 1.0
+    cold_res = compute_bayesian_pod_meritocracy_factor(sharpe=-5.0, profit_factor=0.2, n_obs=0)
+    assert cold_res.meritocracy_multiplier == pytest.approx(1.0, rel=1e-9)
+    assert cold_res.shrinkage_lambda == pytest.approx(0.0, rel=1e-9)
+
+    win_res = compute_bayesian_pod_meritocracy_factor(sharpe=3.03, profit_factor=2.66, n_obs=56, prior_strength_n0=10.0)
+    assert win_res.meritocracy_multiplier == pytest.approx(1.0, rel=1e-9)
+    assert win_res.psr_survival == pytest.approx(1.0, rel=1e-9)
+    assert win_res.pf_survival == pytest.approx(1.0, rel=1e-9)
+    assert win_res.shrinkage_lambda == pytest.approx(56.0 / 66.0, rel=1e-9)
+
+    # Losing pod (S3 Track 1: Sharpe=-6.17, PF=0.33, n=15, n0=10.0)
+    loss_res = compute_bayesian_pod_meritocracy_factor(sharpe=-6.17, profit_factor=0.33, n_obs=15, prior_strength_n0=10.0)
+    expected_lam = 15.0 / 25.0  # 0.60
+    sr_daily = -6.17 / math.sqrt(252.0)
+    t_sr = sr_daily * math.sqrt(14.0)
+    expected_psr0 = 0.5 * (1.0 + math.erf(t_sr / math.sqrt(2.0)))
+    expected_psr_surv = min(1.0, 2.0 * expected_psr0)
+    expected_pf_surv = (2.0 * 0.33) / (0.33 + 1.0)
+    expected_m_pod = (1.0 - expected_lam) + expected_lam * expected_psr_surv * expected_pf_surv
+
+    assert loss_res.shrinkage_lambda == pytest.approx(expected_lam, rel=1e-9)
+    assert loss_res.psr_zero == pytest.approx(expected_psr0, rel=1e-9)
+    assert loss_res.psr_survival == pytest.approx(expected_psr_surv, rel=1e-9)
+    assert loss_res.pf_survival == pytest.approx(expected_pf_surv, rel=1e-9)
+    assert loss_res.meritocracy_multiplier == pytest.approx(expected_m_pod, rel=1e-9)
+
+    # Verify AlphaAllocator contracts losing pod S3 and expands winning pod S2
+    alloc = AlphaAllocator()
+    w_neutral = alloc.allocate(
+        {"S2": {"n_days": 0}, "S3": {"n_days": 0}},
+        regime="caution",
+        market_data={"vix": 18.0, "signal_cache": {"vix": 18.0}},
+    )
+    w_merit = alloc.allocate(
+        {
+            "S2": {"sharpe": 3.03, "profit_factor": 2.66, "win_rate": 41.1, "avg_win_pct": 4.96, "avg_loss_pct": -1.30, "total_trades": 56},
+            "S3": {"sharpe": -6.17, "profit_factor": 0.33, "win_rate": 26.7, "avg_win_pct": 1.67, "avg_loss_pct": -1.86, "total_trades": 15},
+        },
+        regime="caution",
+        market_data={"vix": 18.0, "signal_cache": {"vix": 18.0}},
+    )
+    assert w_merit["S2"] > w_neutral["S2"]
+    assert w_merit["S3"] < w_neutral["S3"]
+
+    # 2. Lot-Quantization & Scale-Out Viable Breadth Concentration
+    raw_sigs = [
+        {"ticker": "005930", "direction": "long", "price": 100_000.0, "ev_margin": 0.06, "sl_pct": 0.02, "size_pct": 0.20},
+        {"ticker": "000660", "direction": "long", "price": 120_000.0, "ev_margin": 0.04, "sl_pct": 0.02, "size_pct": 0.20},
+        {"ticker": "035420", "direction": "long", "price": 150_000.0, "ev_margin": 0.02, "sl_pct": 0.02, "size_pct": 0.20},
+        {"ticker": "086280", "direction": "long", "price": 110_000.0, "stream_id": "S3_B", "track": "TRACK_2_BUFFETT_QVM", "size_pct": 0.10},
+    ]
+    # Total budget = 550,000; S3_B reserves 550,000 * 0.10 = 55,000 -> available tactical budget = 495,000.
+    # 2-share lot costs: 005930 (200k, J=3.0) + 000660 (240k, J=2.0) = 440k <= 495k; 035420 (300k, J=1.0) -> 740k > 495k pruned!
+    conc_sigs = select_lot_viable_stream_signals(raw_sigs, stream_budget_krw=550_000.0, fx_rate=1380.0, min_scale_out_shares=2)
+    surv_tks = [s["ticker"] for s in conc_sigs]
+    assert surv_tks == ["005930", "000660", "086280"]
+    assert conc_sigs[0]["size_pct"] == pytest.approx(0.30, rel=1e-9)
+    assert conc_sigs[1]["size_pct"] == pytest.approx(0.30, rel=1e-9)
+    assert conc_sigs[2]["size_pct"] == pytest.approx(0.10, rel=1e-9)
+
+    # 3. Dynamic Friction-Velocity Turnover Gate
+    fg_pass = evaluate_friction_velocity_turnover_gate(
+        expected_alpha_dec=0.0040,
+        round_trip_cost_dec=0.0021,
+        daily_turnover_ratio=0.80,
+        trade_sigma_dec=0.02,
+    )
+    expected_hurdle_1 = 1.80 * 0.0021 + 0.5 * (0.02 ** 2)  # 0.00398
+    assert fg_pass["turnover_multiplier"] == pytest.approx(1.80, rel=1e-9)
+    assert fg_pass["hurdle_dec"] == pytest.approx(expected_hurdle_1, rel=1e-9)
+    assert fg_pass["net_growth_edge_dec"] == pytest.approx(0.0040 - expected_hurdle_1, rel=1e-9)
+    assert fg_pass["passes"] is True
+
+    fg_block = evaluate_friction_velocity_turnover_gate(
+        expected_alpha_dec=0.0040,
+        round_trip_cost_dec=0.0021,
+        daily_turnover_ratio=1.00,
+        trade_sigma_dec=0.02,
+    )
+    expected_hurdle_2 = 2.00 * 0.0021 + 0.5 * (0.02 ** 2)  # 0.00440
+    assert fg_block["hurdle_dec"] == pytest.approx(expected_hurdle_2, rel=1e-9)
+    assert fg_block["passes"] is False
+
+    # 4. Full-Position Convex Chandelier Drop (no 50% scale-out; exponential tightening above target)
+    d_unchanged = compute_convex_chandelier_drop_pct(
+        base_chandelier_drop_pct=4.0,
+        peak_pnl_pct=6.0,
+        target_pnl_pct=8.0,
+        sigma_daily_pct=2.0,
+        roundtrip_friction_pct=0.25,
+    )
+    assert d_unchanged == pytest.approx(4.0, rel=1e-9)
+
+    d_tight = compute_convex_chandelier_drop_pct(
+        base_chandelier_drop_pct=4.0,
+        peak_pnl_pct=12.0,
+        target_pnl_pct=8.0,
+        sigma_daily_pct=2.0,
+        roundtrip_friction_pct=0.25,
+    )
+    # excess_sigma = (12.0 - 8.0) / 2.0 = 2.0 -> 4.0 * exp(-0.25 * 2.0) = 4.0 * exp(-0.5)
+    expected_d_tight = 4.0 * math.exp(-0.5)
+    assert d_tight == pytest.approx(expected_d_tight, rel=1e-9)
+
+
+
+
 
