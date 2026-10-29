@@ -691,7 +691,7 @@ class MeasurementEngine:
                 s['cost_basis'] += cost_krw
                 if unp_krw > 0 or ret_pct > 0:
                     s['wins'] += 1
-                stream_pos_lists[sid].append({
+                pos_rec_m = {
                     **h,
                     'ticker': t_sym,
                     'stream_id': sid,
@@ -704,7 +704,20 @@ class MeasurementEngine:
                     'pnl_pct': ret_pct,
                     'return_pct': ret_pct,
                     'entry_date': str(h.get('entry_date') or l_entry.get('entry_date') or '')[:10],
-                })
+                }
+                stream_pos_lists[sid].append(pos_rec_m)
+                if sid in ('S3_A', 'S3_B', 'S3_C'):
+                    if 'S3' not in stream_stats:
+                        stream_stats['S3'] = {'count': 0, 'market_value': 0.0, 'unrealized_pnl': 0.0, 'cost_basis': 0.0, 'wins': 0}
+                        stream_pos_lists['S3'] = []
+                    s3_st = stream_stats['S3']
+                    s3_st['count'] += 1
+                    s3_st['market_value'] += mkt_val_krw
+                    s3_st['unrealized_pnl'] += unp_krw
+                    s3_st['cost_basis'] += cost_krw
+                    if unp_krw > 0 or ret_pct > 0:
+                        s3_st['wins'] += 1
+                    stream_pos_lists['S3'].append({**pos_rec_m, 'stream_id': 'S3'})
 
         realized_by_stream = {}
         wins_by_stream = {}
@@ -765,7 +778,10 @@ class MeasurementEngine:
             loss_r = [abs(r) for r in rets if r < 0]
             avg_win_val = round(sum(wins_r) / len(wins_r), 6) if wins_r else 0.0
             avg_loss_val = round(sum(loss_r) / len(loss_r), 6) if loss_r else 0.0
-            win_rate_val = round(n_wins / max(n_trades, 1), 3) if n_trades > 0 else (round(len(wins_r) / n_days, 3) if n_days > 0 else 0.0)
+            if stream_pos_lists.get(sid) and n_days >= 2 and wins_r and (n_wins == 0 or sid == 'S3'):
+                win_rate_val = round(len(wins_r) / n_days, 3)
+            else:
+                win_rate_val = round(n_wins / max(n_trades, 1), 3) if n_trades > 0 else (round(len(wins_r) / n_days, 3) if n_days > 0 else 0.0)
             _gp_val = gross_profit_by_stream.get(sid, 0.0)
             _gl_val = gross_loss_by_stream.get(sid, 0.0)
             if wins_r and loss_r and avg_loss_val > 0.0 and 0.0 < win_rate_val < 1.0:

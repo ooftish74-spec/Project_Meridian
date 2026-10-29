@@ -447,20 +447,43 @@ def _reconstruct_holding_daily_returns(pos_list: list, root_dir: Path) -> list:
                     if 'date' in df.columns:
                         df = df.set_index('date')
                     closes = df['close'].dropna().astype(float)
+                    closes.index = closes.index.astype(str).str[:10]
+                    closes = closes[~closes.index.duplicated(keep='last')].sort_index()
                     rets = closes.pct_change().dropna()
+                    avg_p = float(pos.get('avg_price', 0) or 0)
+                    cur_p = float(pos.get('current_price', 0) or 0)
                     if entry_date:
-                        filtered = rets[rets.index.astype(str).str[:10] >= entry_date]
-                        if len(filtered) >= 5:
-                            rets = filtered.tail(30)
-                        else:
-                            rets = rets.tail(5)
+                        filtered_dates = [d for d in closes.index if d >= entry_date][-30:]
+                        for i_d, d_key in enumerate(filtered_dates):
+                            if i_d == 0 and avg_p > 0.0:
+                                r_val = (float(closes.loc[d_key]) - avg_p) / avg_p
+                            elif d_key in rets.index:
+                                r_val = float(rets.loc[d_key])
+                            else:
+                                continue
+                            if math.isfinite(r_val):
+                                weighted_by_date[d_key][0] += r_val * weight
+                                weighted_by_date[d_key][1] += weight
+                        last_pq_date = str(closes.index[-1])[:10] if len(closes) > 0 else ''
+                        today_key = datetime.now().strftime('%Y-%m-%d')
+                        if cur_p > 0.0:
+                            if not filtered_dates and avg_p > 0.0:
+                                r_today = (cur_p - avg_p) / avg_p
+                                d_t = max(entry_date, today_key)
+                                if math.isfinite(r_today):
+                                    weighted_by_date[d_t][0] += r_today * weight
+                                    weighted_by_date[d_t][1] += weight
+                            elif last_pq_date and last_pq_date < today_key and float(closes.iloc[-1]) > 0.0:
+                                r_today = (cur_p - float(closes.iloc[-1])) / float(closes.iloc[-1])
+                                if math.isfinite(r_today) and abs(r_today) > 0.0:
+                                    weighted_by_date[today_key][0] += r_today * weight
+                                    weighted_by_date[today_key][1] += weight
                     else:
-                        rets = rets.tail(5)
-                    for idx_dt, r_val in rets.items():
-                        d_key = str(idx_dt)[:10]
-                        if math.isfinite(float(r_val)):
-                            weighted_by_date[d_key][0] += float(r_val) * weight
-                            weighted_by_date[d_key][1] += weight
+                        for idx_dt, r_val in rets.tail(5).items():
+                            d_key = str(idx_dt)[:10]
+                            if math.isfinite(float(r_val)):
+                                weighted_by_date[d_key][0] += float(r_val) * weight
+                                weighted_by_date[d_key][1] += weight
             except Exception:
                 pass
 
