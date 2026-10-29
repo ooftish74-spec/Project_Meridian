@@ -44,20 +44,18 @@ class TimeDecayExitEvaluator:
 
         # Check if price range has been trapped within 0.5 * ATR range over 3~5 days
         if price_range <= allowed_range:
-            scale_pct = 0.50 if holding_days < self.max_days else 1.00
-            qty = int(position.get('quantity', position.get('qty', 1)))
-            if qty <= 1:
-                scale_pct = 1.00
+            scale_pct = 1.00
 
             reason = (
                 f"⏱️ [Time-Decay Exit] {position.get('ticker', '')}: "
                 f"{holding_days:.1f}일간 주가보폭(₩{price_range:,.0f}) <= 0.5×ATR(₩{allowed_range:,.0f}) 횡보 "
-                f"-> 알파 소멸 판정으로 포지션 {scale_pct:.0%} 자동 청산/자금 회수"
+                f"-> 알파 소멸 판정으로 포지션 {scale_pct:.0%} 전량 청산/자금 회수"
             )
             logger.info(f"  {reason}")
             return {
                 'trigger': True,
                 'scale_out_pct': scale_pct,
+                'exit_type': 'time_decay_exit',
                 'reason': reason
             }
 

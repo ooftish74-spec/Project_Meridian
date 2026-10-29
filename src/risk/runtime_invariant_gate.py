@@ -227,12 +227,16 @@ class RuntimeInvariantGate:
                 "currency": "KRW" if is_kr else "USD",
             }
 
+            expected_cost_krw = round(qty * avg_px * pos_fx)
+            expected_upnl_krw = expected_eval_krw - expected_cost_krw
             canonical_holdings[tk] = {
                 **h_info,
                 "qty": int(qty),
                 "avg_price": round(avg_px, 4) if not is_kr else round(avg_px, 2),
                 "current_price": round(cur_px, 4) if not is_kr else round(cur_px, 2),
                 "eval_krw": expected_eval_krw,
+                "cost_krw": expected_cost_krw,
+                "unrealized_pnl_krw": expected_upnl_krw,
                 "pnl_pct": round(cur_pnl_pct, 2),
                 "return_pct": round(cur_pnl_pct, 2),
                 "high_water_mark": valid_peak_px,
@@ -289,6 +293,26 @@ class RuntimeInvariantGate:
             except Exception as e:
                 violations.append(f"us_night_holdings_read_error:{e}")
 
+        # shadow_portfolio.json 원가(amount=0.0) 및 평가손익 왜곡 탐지
+        shadow_path = self.results_dir / "shadow_portfolio.json"
+        if shadow_path.exists() and canonical_holdings:
+            try:
+                sp_raw = json.loads(shadow_path.read_text(encoding="utf-8"))
+                if isinstance(sp_raw, dict):
+                    sp_pos = sp_raw.get("positions") if isinstance(sp_raw.get("positions"), dict) else {}
+                    for sp_k, sp_v in sp_pos.items():
+                        if not isinstance(sp_v, dict):
+                            continue
+                        sp_tk = str(sp_v.get("ticker") or str(sp_k).split(":")[-1]).strip()
+                        ch = canonical_holdings.get(sp_tk)
+                        if not ch:
+                            violations.append(f"I2_shadow_ghost_ticker:{sp_tk}")
+                            continue
+                        if float(sp_v.get("amount", 0.0) or 0.0) <= 0.0 and float(ch.get("cost_krw", 0.0) or 0.0) > 0.0:
+                            violations.append(f"I1_shadow_zero_cost_amount:{sp_tk}")
+            except Exception as e:
+                violations.append(f"shadow_portfolio_read_error:{e}")
+
         # [I4] 매크로 시계열 표본수 검증
         macro_counts: Dict[str, int] = {}
         try:
@@ -324,6 +348,32 @@ class RuntimeInvariantGate:
                         ac["invest_pct"] = round((total_invested_krw / nav_v) * pct_scale, 2)
                         ac["hwm"] = round(max(float(ac.get("hwm") or 0.0), nav_v), 2)
                     cur["account"] = ac
+                    streams_obj = cur.get("streams")
+                    if isinstance(streams_obj, dict):
+                        for s_key, s_val in streams_obj.items():
+                            if not isinstance(s_val, dict):
+                                continue
+                            raw_sigs = s_val.get("signals")
+                            if isinstance(raw_sigs, list):
+                                seen_tks = set()
+                                dedup_sigs = []
+                                for sig in raw_sigs:
+                                    if isinstance(sig, dict):
+                                        stk = str(sig.get("ticker", "")).strip()
+                                        if stk and stk in seen_tks:
+                                            continue
+                                        if stk:
+                                            seen_tks.add(stk)
+                                    dedup_sigs.append(sig)
+                                s_val["signals"] = dedup_sigs
+                                s_val["n_signals"] = len(dedup_sigs)
+                            s_pos = [
+                                {"ticker": tk_c, **h_c}
+                                for tk_c, h_c in canonical_holdings.items()
+                                if str(h_c.get("stream_id", "")) == str(s_key)
+                            ]
+                            s_val["positions"] = s_pos
+                            s_val["n_positions"] = len(s_pos)
                     return cur
 
                 safe_json_update(kp_path, _heal_kp, default={}, strict=True)
@@ -331,6 +381,46 @@ class RuntimeInvariantGate:
 
                 safe_json_update(us_holdings_path, lambda _c: list(canonical_us_night), default=[], strict=True)
                 healed_actions.append("healed_us_night_holdings")
+
+                if shadow_path.exists():
+                    def _heal_shadow(cur_sp: Any) -> Dict[str, Any]:
+                        cur_sp = cur_sp if isinstance(cur_sp, dict) else {}
+                        healed_sp_pos: Dict[str, Dict[str, Any]] = {}
+                        tot_upnl_krw = 0.0
+                        for tk_s, ch_s in canonical_holdings.items():
+                            sid_s = str(ch_s.get("stream_id") or "S2")
+                            cost_s = float(ch_s.get("cost_krw", 0.0) or 0.0)
+                            eval_s = float(ch_s.get("eval_krw", 0.0) or 0.0)
+                            upnl_s = round(eval_s - cost_s, 2)
+                            tot_upnl_krw += upnl_s
+                            healed_sp_pos[f"{sid_s}:{tk_s}"] = {
+                                "stream_id": sid_s,
+                                "streams": [sid_s],
+                                "ticker": tk_s,
+                                "name": ch_s.get("name", tk_s),
+                                "market": ch_s.get("market", "KR"),
+                                "quantity": float(ch_s.get("qty", 0)),
+                                "entry_price": float(ch_s.get("avg_price", 0.0)),
+                                "avg_price": float(ch_s.get("avg_price", 0.0)),
+                                "current_price": float(ch_s.get("current_price", 0.0)),
+                                "amount": cost_s,
+                                "market_value": eval_s,
+                                "unrealized_pnl": upnl_s,
+                                "pnl_pct": float(ch_s.get("pnl_pct", 0.0)),
+                                "entry_date": ch_s.get("entry_date", today_str),
+                                "strategy": ch_s.get("strategy", ""),
+                                "track": ch_s.get("track", ""),
+                            }
+                        cur_sp["positions"] = healed_sp_pos
+                        cur_sp["unrealized_pnl"] = round(tot_upnl_krw, 2)
+                        usd_c = float(acct.get("us_cash_usd", cur_sp.get("cash_usd", 0.0)) or 0.0)
+                        cur_sp["cash_usd"] = usd_c
+                        cur_sp["cash_usd_fx"] = round(acct_fx, 2)
+                        cur_sp["cash_usd_krw"] = round(usd_c * acct_fx, 0)
+                        return cur_sp
+
+                    safe_json_update(shadow_path, _heal_shadow, default={}, strict=True)
+                    healed_actions.append("healed_shadow_portfolio")
                 logger.info(
                     f"🛡️ [RuntimeInvariantGate] 불변량 위배 {len(violations)}건 감지 및 자가 치유 완료: {healed_actions}"
                 )

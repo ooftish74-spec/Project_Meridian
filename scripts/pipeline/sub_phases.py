@@ -913,11 +913,16 @@ def _phase_aftermarket():
 
     # 5. ★ 법인 세무·회계 일별 자산 스냅샷 및 체결원장 누적 기록 (Daily Corporate Ledger Snapshot)
     try:
-        from scripts.export_corporate_ledger import record_daily_nav_snapshot, sync_and_load_broker_fills
+        from scripts.export_corporate_ledger import (
+            export_ledgers,
+            record_daily_nav_snapshot,
+            sync_and_load_broker_fills,
+        )
         _snap = record_daily_nav_snapshot()
         _fills = sync_and_load_broker_fills(fetch_live=True, lookback_days=14)
+        export_ledgers(fetch_live=False)
         logger.info(
-            f"  📒 [Daily Corporate Ledger] 일별 자산 스냅샷 기록 완료 "
+            f"  📒 [Daily Corporate Ledger] 일별 자산 스냅샷 및 법인 원장(CSV/XLSX) 기록 완료 "
             f"(date={_snap.get('date')}, NAV=₩{_snap.get('nav_krw', 0):,.0f}, 누적체결={len(_fills)}건)"
         )
     except Exception as _cl_e:

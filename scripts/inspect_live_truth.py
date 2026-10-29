@@ -385,6 +385,12 @@ def inspect_live_truth(as_json: bool = False):
                 cur = cur if isinstance(cur, dict) else {}
                 raw_th = cur.get("trade_history") if isinstance(cur.get("trade_history"), list) else []
                 try:
+                    if (PROJECT_ROOT / "results" / "corporate_ledger" / "broker_fills_master.json").exists():
+                        from scripts.export_corporate_ledger import export_ledgers
+                        export_ledgers(fetch_live=False)
+                except Exception:
+                    pass
+                try:
                     from scripts.rebuild_stream_metrics import _load_corporate_ledger_trades
                     corp_th = _load_corporate_ledger_trades(PROJECT_ROOT / "results", ledger_entries_map, live_fx)
                 except Exception:
@@ -404,14 +410,20 @@ def inspect_live_truth(as_json: bool = False):
                     qty_v = float(h_val.get("qty", 0) or 0)
                     avg_v = float(h_val.get("avg_price", 0) or 0)
                     cur_v = float(h_val.get("current_price", avg_v) or avg_v)
-                    eval_v = float(h_val.get("eval_krw", 0) or 0)
-                    cost_v = float(h_val.get("cost_krw", 0) or 0)
+                    is_kr_h = (
+                        str(h_val.get("market", "")).upper() == "KR"
+                        or str(h_val.get("currency", "")).upper() == "KRW"
+                        or (len(str(tk)) == 6 and str(tk)[0].isdigit())
+                    )
+                    pos_fx = 1.0 if is_kr_h else live_fx
+                    eval_v = float(h_val.get("eval_krw", 0) or round(qty_v * cur_v * pos_fx))
+                    cost_v = float(h_val.get("cost_krw", 0) or round(qty_v * avg_v * pos_fx))
                     synced_pos[f"{sid}:{tk}"] = {
                         "stream_id": sid,
                         "streams": [sid],
                         "ticker": tk,
                         "name": h_val.get("name", tk),
-                        "market": h_val.get("market", "KR"),
+                        "market": h_val.get("market", "KR" if is_kr_h else "US"),
                         "quantity": qty_v,
                         "entry_price": avg_v,
                         "avg_price": avg_v,
@@ -428,6 +440,8 @@ def inspect_live_truth(as_json: bool = False):
                 cur["cash"] = d2_settlement_cash_krw
                 cur["cash_usd"] = float(account_info.get("cash_usd", 0.0))
                 cur["cash_usd_fx"] = live_fx
+                cur["cash_usd_krw"] = round(float(account_info.get("cash_usd", 0.0)) * live_fx, 0)
+                cur["unrealized_pnl"] = round(sum(p["unrealized_pnl"] for p in synced_pos.values()), 2)
                 cur["nav"] = nav_val
                 cur["virtual_nav"] = nav_val
                 cur["total_nav"] = nav_val

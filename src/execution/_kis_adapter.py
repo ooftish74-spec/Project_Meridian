@@ -2226,6 +2226,8 @@ class KISTraderAdapter:
                                         'avg_price': float(_p.avg_price),
                                         'current_price': float(_p.current_price),
                                         'eval_krw': _eval_krw,
+                                        'cost_krw': _cost_krw,
+                                        'unrealized_pnl_krw': _eval_krw - _cost_krw,
                                         'pnl_pct': _pnl_pct,
                                         'return_pct': _pnl_pct,
                                         'currency': 'USD' if _is_us else 'KRW',
@@ -2637,6 +2639,7 @@ class KISTraderAdapter:
         max_wait_sec: float = 0.0,
         market: str = 'ALL',
         max_wait_seconds: Optional[float] = None,
+        now_kst: Optional[datetime] = None,
     ) -> List[Dict]:
         """[Time-Bounded Pegging Monitoring Loop]
         미체결 주문(inquire-nccs)을 조회하여 제출 후 지연 시 실시간 호가로 자동 정정 체결!
@@ -2718,7 +2721,19 @@ class KISTraderAdapter:
                                     repeg_results.append({'order_no': order_no, 'ticker': ticker, 'side': 'buy', 'repeg_order': repeg_res})
 
             # ── 2. KRX 국내 미체결 주문 실시간 자동 재페깅/시장가 전환 ──
-            if _mkt in ('ALL', 'KR', 'KRX'):
+            # [KRX Call Auction Time-Priority Invariant]
+            # 장전 동시호가(08:30~09:00) 및 장마감 동시호가(15:20~15:30)는 단일가 일괄 체결 세션이므로,
+            # 동시호가 시간 중 미체결 주문을 취소·재접수하면 시간우선(Time Priority) 대기열 순위가 상실됨.
+            _kr_dt = now_kst if now_kst is not None else (datetime.now() if not os.environ.get('PYTEST_CURRENT_TEST') else None)
+            _in_krx_call_auction = False
+            if _kr_dt is not None:
+                _kr_mins = int(_kr_dt.hour) * 60 + int(_kr_dt.minute)  # hardcode-ok: L0 minutes-per-hour
+                _pre_open_start = 8 * 60 + 30  # hardcode-ok: L0 KRX pre-market call auction 08:30 KST
+                _reg_open_start = 9 * 60  # hardcode-ok: L0 KRX continuous session open 09:00 KST
+                _close_auc_start = 15 * 60 + 20  # hardcode-ok: L0 KRX closing call auction 15:20 KST
+                _close_auc_end = 15 * 60 + 30  # hardcode-ok: L0 KRX closing call auction end 15:30 KST
+                _in_krx_call_auction = (_pre_open_start <= _kr_mins < _reg_open_start) or (_close_auc_start <= _kr_mins <= _close_auc_end)
+            if _mkt in ('ALL', 'KR', 'KRX') and not _in_krx_call_auction:
                 try:
                     krx_headers = self._get_headers()
                     krx_headers['tr_id'] = 'VTTC8036R' if self.mode == 'paper' else 'TTTC8036R'

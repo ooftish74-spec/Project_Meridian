@@ -325,7 +325,7 @@ class TestTimeDecayExitEvaluator:
         res = self.evaluator.evaluate_time_decay(pos, current_price=100100.0, atr_val=2000.0, holding_days=3.5)
 
         assert res['trigger'] is True
-        assert res['scale_out_pct'] == 0.50
+        assert res['scale_out_pct'] == 1.00
 
     def test_range_bound_trigger_at_5_days(self):
         pos = {'ticker': '069500', 'avg_price': 100000.0, 'highest_price': 100400.0, 'lowest_price': 99800.0, 'quantity': 10}

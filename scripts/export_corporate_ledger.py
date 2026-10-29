@@ -189,8 +189,22 @@ def record_daily_nav_snapshot(target_date: Optional[str] = None) -> Dict[str, An
     fx_rate = _get_live_fx_rate()
     dt_str = target_date or str(kp.get("date") or datetime.now().strftime("%Y-%m-%d"))[:10]
 
-    cash_krw = float(acct.get("cash_balance", acct.get("available_cash", summary.get("cash_krw", 0.0))) or 0.0)
-    cash_usd = float(acct.get("usd_cash", summary.get("cash_usd", 0.0)) or 0.0)
+    cash_krw = float(
+        acct.get(
+            "d2_settlement_cash_krw",
+            acct.get(
+                "cash",
+                acct.get(
+                    "ord_psbl_cash_krw",
+                    acct.get("cash_balance", acct.get("available_cash", summary.get("cash_krw", 0.0))),
+                ),
+            ),
+        )
+        or 0.0
+    )
+    cash_usd = float(
+        acct.get("us_cash_usd", acct.get("usd_cash", acct.get("cash_usd", summary.get("cash_usd", 0.0)))) or 0.0
+    )
 
     kr_eq_krw = 0.0
     us_eq_usd = 0.0

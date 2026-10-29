@@ -575,12 +575,12 @@ def main():
                     except Exception as _exit_err:
                         logger.error(f"  ❌ [Intraday Exit Scanner] 예외 발생: {_exit_err}", exc_info=True)
 
-                # 2. [KRX Auto Re-Peg] 국내 미체결 주문 포착 시 즉시 최유리 시장가 매도 정정 감시 (5초 쿨다운)
+                # 2. [KRX Auto Re-Peg] 국내 정규 접속매매(09:00~15:20) 미체결 주문 포착 시 최유리 정정 감시 (동시호가 제외, 5초 쿨다운)
                 if not hasattr(main, '_last_kr_repeg_time'):
                     main._last_kr_repeg_time = 0.0
-                if time.time() - main._last_kr_repeg_time >= 5.0:
+                if (540 <= t_mins < 920) and time.time() - main._last_kr_repeg_time >= 5.0:
                     try:
-                        _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0, market='KR')
+                        _adapter.check_and_repeg_unexecuted_orders(max_wait_sec=10.0, market='KR', now_kst=now)
                         main._last_kr_repeg_time = time.time()
                     except Exception as _kr_rp_err:
                         logger.debug(f"  [KRX RePeg] 미체결 스캔 예외: {_kr_rp_err}")

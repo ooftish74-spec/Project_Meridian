@@ -614,9 +614,115 @@ def test_meridian_v5_pod_meritocracy_lot_concentration_and_turnover_gate_closed_
         sigma_daily_pct=2.0,
         roundtrip_friction_pct=0.25,
     )
-    # excess_sigma = (12.0 - 8.0) / 2.0 = 2.0 -> 4.0 * exp(-0.25 * 2.0) = 4.0 * exp(-0.5)
+    # excess_sigma = (12.0 - 8.0) / 2.0 = 2.0 -> 4.0 * exp(-0.5) = 4.0 * exp(-0.5)
     expected_d_tight = 4.0 * math.exp(-0.5)
     assert d_tight == pytest.approx(expected_d_tight, rel=1e-9)
+
+
+def test_krx_call_auction_repeg_guard_and_shadow_cost_healing(tmp_path, monkeypatch) -> None:
+    """Verify KRX Auto Re-Peg skips 08:30~09:00 / 15:20~15:30 call auctions and RuntimeInvariantGate heals shadow cost basis."""
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from src.execution._kis_adapter import KISTraderAdapter, Order
+    from src.risk.runtime_invariant_gate import RuntimeInvariantGate
+
+    adapter = KISTraderAdapter(mode="paper", fetch_balance_on_init=False)
+    adapter.account_no = "50012345-01"
+    adapter._get_headers = MagicMock(return_value={"authorization": "Bearer test"})
+    adapter.cancel_order = MagicMock(return_value={"success": True})
+    adapter.check_order_status = MagicMock(return_value={"status": "cancelled", "filled_qty": 0})
+    adapter.sell = MagicMock(
+        return_value=Order(order_id="R1", ticker="012750", side="sell", quantity=3, price=0, order_type="01", status="submitted")
+    )
+
+    import requests
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "rt_cd": "0",
+        "output": [{"odno": "0001863400", "pdno": "012750", "psbl_qty": "3", "sll_buy_dvsn_cd": "01"}],
+    }
+    monkeypatch.setattr(requests, "get", MagicMock(return_value=mock_resp))
+
+    # 1. Pre-market call auction (08:45 KST) and closing call auction (15:25 KST) must NOT cancel or re-peg
+    res_pre = adapter.check_and_repeg_unexecuted_orders(market="KR", now_kst=datetime(2026, 10, 29, 8, 45, 0))
+    res_close = adapter.check_and_repeg_unexecuted_orders(market="KR", now_kst=datetime(2026, 10, 29, 15, 25, 0))
+    assert res_pre == []
+    assert res_close == []
+    adapter.cancel_order.assert_not_called()
+
+    # 2. Continuous session (09:15 KST) executes re-peg normally
+    res_cont = adapter.check_and_repeg_unexecuted_orders(market="KR", now_kst=datetime(2026, 10, 29, 9, 15, 0))
+    assert len(res_cont) == 1
+    adapter.cancel_order.assert_called_once()
+
+    # 3. RuntimeInvariantGate heals shadow_portfolio.json amount=0.0 & deduplicates kis_portfolio.json stream signals
+    kp_data = {
+        "nav": 18_000_000,
+        "fx_rate": 1336.30,
+        "account": {"total_equity": 18_000_000, "us_cash_usd": 3283.68, "fx_rate": 1336.30, "hwm": 18_600_000},
+        "holdings": {
+            "AAPL": {
+                "name": "애플",
+                "qty": 1,
+                "avg_price": 345.93,
+                "current_price": 347.42,
+                "eval_krw": round(347.42 * 1336.30),
+                "stream_id": "S3_A",
+                "market": "US",
+                "currency": "USD",
+                "entry_date": "2026-10-28",
+            }
+        },
+        "streams": {
+            "S4": {
+                "signals": [
+                    {"ticker": "423160", "direction": "long"},
+                    {"ticker": "423160", "direction": "long"},
+                ],
+                "n_signals": 2,
+                "positions": [],
+                "n_positions": 0,
+            }
+        },
+    }
+    sp_data = {
+        "positions": {
+            "S3_A:AAPL": {
+                "stream_id": "S3_A",
+                "ticker": "AAPL",
+                "quantity": 1.0,
+                "avg_price": 345.93,
+                "current_price": 347.42,
+                "amount": 0.0,
+                "market_value": 464257.0,
+                "unrealized_pnl": 464257.0,
+            }
+        },
+        "cash_usd": 3283.68,
+        "cash_usd_fx": 1336.30,
+        "cash_usd_krw": 6075608.0,
+        "unrealized_pnl": 464257.0,
+    }
+    (tmp_path / "kis_portfolio.json").write_text(json.dumps(kp_data), encoding="utf-8")
+    (tmp_path / "shadow_portfolio.json").write_text(json.dumps(sp_data), encoding="utf-8")
+    (tmp_path / "position_entry_ledger.json").write_text(json.dumps({}), encoding="utf-8")
+    (tmp_path / "us_night_holdings.json").write_text(json.dumps([]), encoding="utf-8")
+
+    rig = RuntimeInvariantGate(results_dir=tmp_path)
+    audit = rig.audit_and_heal(auto_heal=True)
+    assert "I1_shadow_zero_cost_amount:AAPL" in audit["violations_found"]
+    assert "healed_shadow_portfolio" in audit["healed_actions"]
+
+    healed_sp = json.loads((tmp_path / "shadow_portfolio.json").read_text(encoding="utf-8"))
+    expected_cost = round(345.93 * 1336.30)
+    expected_eval = round(347.42 * 1336.30)
+    assert healed_sp["positions"]["S3_A:AAPL"]["amount"] == pytest.approx(expected_cost, rel=1e-9)
+    assert healed_sp["positions"]["S3_A:AAPL"]["unrealized_pnl"] == pytest.approx(expected_eval - expected_cost, rel=1e-9)
+    assert healed_sp["cash_usd_krw"] == pytest.approx(round(3283.68 * 1336.30), rel=1e-9)
+
+    healed_kp = json.loads((tmp_path / "kis_portfolio.json").read_text(encoding="utf-8"))
+    assert healed_kp["streams"]["S4"]["n_signals"] == 1
+
 
 
 
