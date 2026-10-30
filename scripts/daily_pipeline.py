@@ -1436,6 +1436,20 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as e:
             logger.error(f"  Walk-Forward 검증 실패: {e}", exc_info=True)
 
+        # ── 5. 삼권분립(반증관 · 묘지기 · 검시관) 일일 헌법 감사 ──
+        try:
+            from src.governance.separation_of_powers import run_daily_constitutional_audit
+            gov_audit = run_daily_constitutional_audit(_PROJECT_ROOT / 'results')
+            gk_info = gov_audit.get('gravekeeper', {})
+            cor_info = gov_audit.get('coroner', {})
+            logger.info(
+                f"  ⚖️ [ConstitutionalAudit] N_eff={gk_info.get('n_effective_trials', 1.0):.2f}, "
+                f"Retired={gk_info.get('retired_streams_count', 0)}, "
+                f"Coroner={cor_info.get('verdict', 'EXPLAINED_NORMAL')}"
+            )
+        except Exception as e:
+            logger.error(f"  ConstitutionalAudit 실행 실패: {e}", exc_info=True)
+
     def _phase_alt_data():
         """대체 데이터 수집 + FeatureStore V2 적재."""
         logger.info("  🔄 Alternative Data Pipeline")

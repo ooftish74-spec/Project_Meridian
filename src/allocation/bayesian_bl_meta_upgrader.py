@@ -232,40 +232,40 @@ class BayesianBlackLittermanMetaUpgrader:
         sharpes_or_unc = dict(uncertainty_diag or {})
         retired_streams: Dict[str, Dict[str, Any]] = {}
 
-        # If called with empty dicts, auto-load live weights & realized sharpes from stream_metrics.json
-        if not weights_or_post and not sharpes_or_unc:
-            sm_path = target_path.parent / 'stream_metrics.json'
-            if sm_path.exists():
-                try:
-                    sm_data = json.loads(sm_path.read_text(encoding='utf-8'))
-                    raw_d = sm_data.get('raw_data', {}) if isinstance(sm_data, dict) else {}
-                    retired_streams = self.evaluate_stream_retirement_gate(raw_d)
-                    has_s3_subs = any(
-                        str(k).startswith('S3_') and isinstance(v, dict) and float(v.get('market_value', 0) or 0) > 0
-                        for k, v in raw_d.items()
-                    )
-                    tot_mv = sum(
-                        float(v.get('market_value', 0) or 0)
-                        for k, v in raw_d.items()
-                        if isinstance(v, dict) and k != 'S_RECON' and not (has_s3_subs and k == 'S3')
-                    )
-                    for sid, s_info in raw_d.items():
-                        if not isinstance(s_info, dict) or sid == 'S_RECON':
-                            continue
-                        mv = float(s_info.get('market_value', 0) or 0)
-                        sh = s_info.get('sharpe')
-                        n_d_raw = s_info.get('n_days', s_info.get('days'))
-                        if tot_mv > 0 and mv > 0:
-                            weights_or_post[sid] = round(min(1.0, mv / tot_mv), 4)
-                        if sh is not None:
-                            sh_eff = float(sh)
-                            if n_d_raw is not None:
-                                n_d = max(0, int(n_d_raw))
-                                if n_d < _MIN_SHARPE_SAMPLE_DAYS:
-                                    sh_eff = sh_eff * (float(n_d) / float(n_d + _MIN_SHARPE_SAMPLE_DAYS))
-                            sharpes_or_unc[sid] = sh_eff
-                except Exception as e:
-                    logger.debug(f"Auto-load stream_metrics in BL upgrader skipped: {e}")
+        # Always inspect stream_metrics.json for mortality gate & small-sample shrinkage,
+        # and auto-populate weights/sharpes when called with empty dicts.
+        sm_path = target_path.parent / 'stream_metrics.json'
+        if sm_path.exists():
+            try:
+                sm_data = json.loads(sm_path.read_text(encoding='utf-8'))
+                raw_d = sm_data.get('raw_data', {}) if isinstance(sm_data, dict) else {}
+                retired_streams = self.evaluate_stream_retirement_gate(raw_d)
+                need_auto_load = not weights_or_post and not sharpes_or_unc
+                has_s3_subs = any(
+                    str(k).startswith('S3_') and isinstance(v, dict) and float(v.get('market_value', 0) or 0) > 0
+                    for k, v in raw_d.items()
+                )
+                tot_mv = sum(
+                    float(v.get('market_value', 0) or 0)
+                    for k, v in raw_d.items()
+                    if isinstance(v, dict) and k != 'S_RECON' and not (has_s3_subs and k == 'S3')
+                )
+                for sid, s_info in raw_d.items():
+                    if not isinstance(s_info, dict) or sid == 'S_RECON':
+                        continue
+                    mv = float(s_info.get('market_value', 0) or 0)
+                    sh = s_info.get('sharpe')
+                    n_d_raw = s_info.get('n_days', s_info.get('days'))
+                    if need_auto_load and tot_mv > 0 and mv > 0:
+                        weights_or_post[sid] = round(min(1.0, mv / tot_mv), 4)
+                    if need_auto_load and sh is not None:
+                        sharpes_or_unc[sid] = float(sh)
+                    if str(sid).startswith('S') and sid in sharpes_or_unc and n_d_raw is not None:
+                        n_d = max(0, int(n_d_raw))
+                        if n_d < _MIN_SHARPE_SAMPLE_DAYS:
+                            sharpes_or_unc[sid] = float(sharpes_or_unc[sid]) * (float(n_d) / float(n_d + _MIN_SHARPE_SAMPLE_DAYS))
+            except Exception as e:
+                logger.debug(f"Auto-load stream_metrics in BL upgrader skipped: {e}")
 
         upgraded_alphas: Dict[str, float] = {}
         all_keys = sorted(set(list(weights_or_post.keys()) + list(sharpes_or_unc.keys())))
