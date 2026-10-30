@@ -353,17 +353,17 @@ class SelfLearning:
         for ic_key, ic_data in ic_values.items():
             raw_val = ic_data.get('value', 0.0)
             is_sharpe = ic_key.endswith('_sharpe')
+            max_abs = max_abs_sharpe if is_sharpe else max_abs_ic
             hist = ic_history.get(ic_key, [])
             if len(hist) >= winsor_min_hist:
                 lo_pct = 100.0 - winsor_pct
                 hi_pct = winsor_pct
-                lo = float(np.percentile(hist, lo_pct))
-                hi = float(np.percentile(hist, hi_pct))
+                lo = min(-max_abs, float(np.percentile(hist, lo_pct)))
+                hi = max(max_abs, float(np.percentile(hist, hi_pct)))
                 clipped_val = float(np.clip(raw_val, lo, hi))
                 if clipped_val != raw_val:
                     logger.debug(f"  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (범위 [{lo:.4f}, {hi:.4f}], N={len(hist)})")
             else:
-                max_abs = max_abs_sharpe if is_sharpe else max_abs_ic
                 clipped_val = float(np.clip(raw_val, -max_abs, max_abs))
                 if clipped_val != raw_val:
                     logger.debug(f"  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (절대 상한 ±{max_abs}, 히스토리 부족 {len(hist)}/{winsor_min_hist})")
