@@ -39,6 +39,9 @@ _MIN_SERIES_LEN = 5
 _MIN_COINT_LEN = 60
 _CORR_GATE = 0.70
 _DF_CRIT_T = -1.95
+_KALMAN_INIT_WINDOW = 20
+_MIN_INIT_LEN = 2
+_INIT_DIVISOR = 3
 
 
 class StatArbEngine:
@@ -71,11 +74,15 @@ class StatArbEngine:
         y_arr = y_arr[-n:]
         x_arr = x_arr[-n:]
 
-        var_x0 = float(np.var(x_arr, ddof=1)) if n > 1 else 0.0
+        # [데이터 사서: Causal Prefix Warm-Up] Initialize state strictly on causal warm-up prefix
+        w_init = min(_KALMAN_INIT_WINDOW, max(_MIN_INIT_LEN, n // _INIT_DIVISOR))
+        x_init = x_arr[:w_init]
+        y_init = y_arr[:w_init]
+        var_x0 = float(np.var(x_init, ddof=1)) if len(x_init) > 1 else 0.0
         if var_x0 > _EPS_VAR:
-            cov_xy0 = float(np.cov(x_arr, y_arr, ddof=1)[0, 1])
+            cov_xy0 = float(np.cov(x_init, y_init, ddof=1)[0, 1])
             beta0 = cov_xy0 / var_x0
-            alpha0 = float(np.mean(y_arr) - beta0 * np.mean(x_arr))
+            alpha0 = float(np.mean(y_init) - beta0 * np.mean(x_init))
         else:
             beta0 = 1.0
             alpha0 = 0.0

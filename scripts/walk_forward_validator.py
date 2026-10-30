@@ -133,22 +133,50 @@ class WalkForwardValidator:
             acc = correct / total
             ic = self._compute_ic(ic_pairs)
 
+            # [반증관 & 금고지기: 시장 베타(기저율 이동) 제거 직교 잔차 적중률 및 상하위 분위 스프레드 검증]
+            probs_arr = np.array([p[0] for p in ic_pairs], dtype=float)
+            rets_arr = np.array([p[1] for p in ic_pairs], dtype=float)
+            med_prob = float(np.median(probs_arr))
+            med_ret = float(np.median(rets_arr))
+            excess_correct = int(np.sum((probs_arr >= med_prob) == (rets_arr > med_ret)))
+            excess_acc = excess_correct / total
+            base_rate_up = float(np.mean(rets_arr > 0.0))
+            prob_cal_bias = float(np.mean(probs_arr)) - base_rate_up
+            q_step = 4
+            q_n = max(1, total // q_step)
+            sorted_by_p = sorted(ic_pairs, key=lambda x: x[0])
+            bot_q_mean = float(np.mean([x[1] for x in sorted_by_p[:q_n]]))
+            top_q_mean = float(np.mean([x[1] for x in sorted_by_p[-q_n:]]))
+            top_bot_spread = top_q_mean - bot_q_mean
+
             result.update({
                 'status': 'completed',
                 'n_validated': total,
                 'n_predictions': len(predictions),
                 'oos_acc': round(acc, 4),
+                'oos_excess_acc': round(excess_acc, 4),
                 'oos_ic': round(ic, 4),
                 'n_correct': correct,
+                'n_excess_correct': excess_correct,
+                'base_rate_up': round(base_rate_up, 4),
+                'prob_calibration_bias': round(prob_cal_bias, 4),
+                'top_bottom_spread_pct': round(top_bot_spread, 4),
                 'source': 'live_signals_and_prices',
             })
 
-            # 경고 체크
+            # 경고 체크 (직교 잔차 적중률 및 IC 교차 반증)
             acc_warn = cfg.get('ml.wf_acc_warning_threshold', 0.55)
             ic_warn = cfg.get('ml.wf_ic_warning_threshold', 0.02)
             warnings = []
             if acc < acc_warn:
-                warnings.append(f"ACC {acc:.1%} < {acc_warn:.1%} 경고")
+                if excess_acc >= acc_warn and ic >= ic_warn:
+                    result['calibration_shift_detected'] = True
+                    result['calibration_note'] = (
+                        f"시장 기저율 이동(BaseRate={base_rate_up:.1%})에 따른 절대 ACC({acc:.1%}) 왜곡 — "
+                        f"직교 잔차 적중률(ExcessACC={excess_acc:.1%}) 및 IC({ic:.4f}) 정상"
+                    )
+                else:
+                    warnings.append(f"ACC {acc:.1%} (ExcessACC {excess_acc:.1%}) < {acc_warn:.1%} 경고")
             if ic < ic_warn:
                 warnings.append(f"IC {ic:.4f} < {ic_warn} 경고")
             result['warnings'] = warnings
@@ -157,8 +185,8 @@ class WalkForwardValidator:
                 logger.warning(f"  ⚠️ Walk-Forward: {'; '.join(warnings)}")
             else:
                 logger.info(
-                    f"  ✅ Walk-Forward: ACC={acc:.1%}, IC={ic:.4f} "
-                    f"({total}건)")
+                    f"  ✅ Walk-Forward: ACC={acc:.1%} (ExcessACC={excess_acc:.1%}), "
+                    f"IC={ic:.4f}, Spread={top_bot_spread:+.2f}% ({total}건)")
 
         except Exception as e:
             result['reason'] = f"검증 실패: {e}"

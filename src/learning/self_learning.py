@@ -45,7 +45,13 @@ class SelfLearning:
     """
     IC_PARAM_MAP = {'rsi_ic': 'a3.fb.rsi_oversold_bonus', 'bb_ic': 'a3.fb.bb_low_bonus', 'macd_ic': 'a3.fb.macd_scale', 'volume_ic': 'a3.fb.volume_spike_bonus', 'momentum_ic': 'a3.fb.momentum_scale', 'sector_ic': 'a2.sector_momentum_weight', 'quality_ic': 'a3.fb.quality_bonus', 's1_sharpe': 'allocator.s1_base_weight', 's2_sharpe': 'allocator.s2_base_weight', 's3_sharpe': 'allocator.s3_base_weight', 's4_sharpe': 'allocator.s4_base_weight'}
     SAFETY_BOUNDS = {'a3.fb.rsi_oversold_bonus': (0.01, 0.25), 'a3.fb.bb_low_bonus': (0.01, 0.2), 'a3.fb.macd_scale': (0.5, 5.0), 'a3.fb.volume_spike_bonus': (0.01, 0.15), 'a3.fb.momentum_scale': (0.001, 0.02), 'a2.sector_momentum_weight': (0.1, 0.5), 'a3.fb.quality_bonus': (0.01, 0.15), 'allocator.s1_base_weight': (0.1, 0.4), 'allocator.s2_base_weight': (0.1, 0.5), 'allocator.s3_base_weight': (0.05, 0.3), 'allocator.s4_base_weight': (0.1, 0.4)}
+    CONSTITUTIONAL_PROTECTED_PREFIXES = ('risk.', 'exit.', 'circuit_breaker.', 'kill_switch.', 'medallion.stop_loss')
     _BASE_LEARNING_RATE = 0.1
+
+    @classmethod
+    def is_constitutionally_protected(cls, param_key: str) -> bool:
+        """독립기관 차단기(Circuit Breaker) 및 리스크/손절 파라미터 침범 방지 방화벽."""
+        return any(str(param_key).startswith(p) for p in cls.CONSTITUTIONAL_PROTECTED_PREFIXES)
 
     def __init__(self):
         self._update_history: List[Dict] = []
@@ -241,6 +247,7 @@ class SelfLearning:
             if short_sid not in canonical_bases:
                 canonical_bases.append(short_sid)
 
+        sharpe_min_days = int(pget('measurement.sharpe_min_days', 5))
         for short_sid in canonical_bases:
             sharpe_key = f'{short_sid.lower()}_sharpe'
             sub_keys = [
@@ -258,6 +265,11 @@ class SelfLearning:
                 for k in sub_keys:
                     sv = merged_streams[k]
                     sr_k = float(sv['sharpe'])
+                    n_d_raw = sv.get('n_days')
+                    if n_d_raw is not None and sharpe_min_days > 0:
+                        n_d = max(0, int(n_d_raw))
+                        if n_d < sharpe_min_days:
+                            sr_k = sr_k * (float(n_d) / float(n_d + sharpe_min_days))
                     mv_k = max(0.0, float(sv.get('market_value') or 0.0))
                     psr_raw = sv.get('psr')
                     psr_k = float(psr_raw) if psr_raw is not None else (0.5 * (1.0 + _math_sl.tanh(sr_k / 2.0)))
@@ -271,6 +283,11 @@ class SelfLearning:
                 s_info = merged_streams.get(short_sid) or {}
                 if s_info.get('sharpe') is not None:
                     sh_val = float(s_info['sharpe'])
+                    n_d_single = s_info.get('n_days')
+                    if n_d_single is not None and sharpe_min_days > 0:
+                        n_d = max(0, int(n_d_single))
+                        if n_d < sharpe_min_days:
+                            sh_val = sh_val * (float(n_d) / float(n_d + sharpe_min_days))
             if sh_val is not None:
                 ic_values[sharpe_key] = {
                     'value': sh_val,
@@ -294,7 +311,7 @@ class SelfLearning:
         ic_values = self._winsorize_ic_values(ic_values)
         for ic_key, ic_data in ic_values.items():
             param_key = self.IC_PARAM_MAP.get(ic_key)
-            if not param_key:
+            if not param_key or self.is_constitutionally_protected(param_key):
                 continue
             current_val = cfg.get(param_key)
             if current_val is None:
@@ -358,8 +375,10 @@ class SelfLearning:
             if len(hist) >= winsor_min_hist:
                 lo_pct = 100.0 - winsor_pct
                 hi_pct = winsor_pct
-                lo = min(-max_abs, float(np.percentile(hist, lo_pct)))
-                hi = max(max_abs, float(np.percentile(hist, hi_pct)))
+                pct_lo = float(np.percentile(hist, lo_pct))
+                pct_hi = float(np.percentile(hist, hi_pct))
+                lo = max(-max_abs, pct_lo) if pct_lo < 0.0 else -max_abs
+                hi = min(max_abs, pct_hi) if pct_hi > 0.0 else max_abs
                 clipped_val = float(np.clip(raw_val, lo, hi))
                 if clipped_val != raw_val:
                     logger.debug(f"  [Winsorize] {ic_key}: {raw_val:.4f} → {clipped_val:.4f} (범위 [{lo:.4f}, {hi:.4f}], N={len(hist)})")
@@ -470,13 +489,23 @@ class SelfLearning:
 
             def _mutate_overrides(cur):
                 base = cur if isinstance(cur, dict) else {}
+                # [독립기관 차단기 방화벽] 자가학습 영역에서 리스크/손절(exit.*/risk.*) 오버라이드 키 제거
+                for k_existing in list(base.keys()):
+                    if self.is_constitutionally_protected(k_existing):
+                        base.pop(k_existing, None)
+                gk_trials = base.get('_gravekeeper_trial_counts')
+                gk_map = dict(gk_trials) if isinstance(gk_trials, dict) else {}
                 for change in changes:
                     p_name = change['param']
+                    if self.is_constitutionally_protected(p_name):
+                        continue
                     base[p_name] = change['new_value']
+                    gk_map[p_name] = int(gk_map.get(p_name, 0) or 0) + 1
                     if p_name == 'allocator.s3_base_weight' and float(change.get('ic_value', 0.0)) > 1.0:
                         old_sc = float(base.get('sizer.stream_scale.S3', 1.0) or 1.0)
                         if old_sc < 1.0:
                             base['sizer.stream_scale.S3'] = round(min(1.0, old_sc + float(pget('self_learning.stream_scale_recovery_step', 0.2))), 4)
+                base['_gravekeeper_trial_counts'] = gk_map
                 base['_last_updated'] = datetime.now().isoformat()
                 base['_updated_by'] = 'self_learning'
                 return base

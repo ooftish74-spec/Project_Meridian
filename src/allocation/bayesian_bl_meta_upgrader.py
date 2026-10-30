@@ -21,6 +21,11 @@ from typing import Dict, List, Any, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_MIN_RETIREMENT_DAYS = 5
+_RETIREMENT_MDD_FLOOR = -12.0
+_RETIREMENT_SHARPE_FLOOR = -3.0
+_RETIRED_MULTIPLIER_CAP = 0.50
+_MIN_SHARPE_SAMPLE_DAYS = 5
 
 
 class BayesianBlackLittermanMetaUpgrader:
@@ -170,6 +175,42 @@ class BayesianBlackLittermanMetaUpgrader:
 
         return mu_bl, sigma_bl, bl_telemetry
 
+    @staticmethod
+    def evaluate_stream_retirement_gate(
+        stream_metrics: Dict[str, Dict[str, Any]],
+        min_days: int = _MIN_RETIREMENT_DAYS,
+        mdd_floor_pct: float = _RETIREMENT_MDD_FLOOR,
+        sharpe_floor: float = _RETIREMENT_SHARPE_FLOOR,
+    ) -> Dict[str, Dict[str, Any]]:
+        """[사전 사망 조건(Pre-Declared Mortality Gate)] 스트림 은퇴/격리 판정."""
+        retired: Dict[str, Dict[str, Any]] = {}
+        for sid, info in (stream_metrics or {}).items():
+            if not isinstance(info, dict) or sid == 'S_RECON':
+                continue
+            n_d_raw = info.get('n_days', info.get('days'))
+            if n_d_raw is None:
+                continue
+            n_d = int(n_d_raw or 0)
+            if n_d < min_days:
+                continue
+            sh = info.get('sharpe')
+            mdd = info.get('mdd')
+            reasons: List[str] = []
+            if mdd is not None and float(mdd) <= mdd_floor_pct:
+                reasons.append(f"MDD({float(mdd):.2f}%) <= {mdd_floor_pct:.2f}%")
+            if sh is not None and float(sh) <= sharpe_floor:
+                reasons.append(f"Sharpe({float(sh):.3f}) <= {sharpe_floor:.2f} (D{n_d})")
+            if reasons:
+                retired[str(sid)] = {
+                    'status': 'RETIRED_TO_SHADOW',
+                    'n_days': n_d,
+                    'sharpe': float(sh) if sh is not None else None,
+                    'mdd': float(mdd) if mdd is not None else None,
+                    'reason': '; '.join(reasons),
+                    'multiplier_cap': _RETIRED_MULTIPLIER_CAP,
+                }
+        return retired
+
     def auto_upgrade_strategy_parameters(
         self,
         posterior_returns: Optional[Dict[str, float]] = None,
@@ -189,6 +230,7 @@ class BayesianBlackLittermanMetaUpgrader:
 
         weights_or_post = dict(posterior_returns or {})
         sharpes_or_unc = dict(uncertainty_diag or {})
+        retired_streams: Dict[str, Dict[str, Any]] = {}
 
         # If called with empty dicts, auto-load live weights & realized sharpes from stream_metrics.json
         if not weights_or_post and not sharpes_or_unc:
@@ -197,6 +239,7 @@ class BayesianBlackLittermanMetaUpgrader:
                 try:
                     sm_data = json.loads(sm_path.read_text(encoding='utf-8'))
                     raw_d = sm_data.get('raw_data', {}) if isinstance(sm_data, dict) else {}
+                    retired_streams = self.evaluate_stream_retirement_gate(raw_d)
                     has_s3_subs = any(
                         str(k).startswith('S3_') and isinstance(v, dict) and float(v.get('market_value', 0) or 0) > 0
                         for k, v in raw_d.items()
@@ -211,10 +254,16 @@ class BayesianBlackLittermanMetaUpgrader:
                             continue
                         mv = float(s_info.get('market_value', 0) or 0)
                         sh = s_info.get('sharpe')
+                        n_d_raw = s_info.get('n_days', s_info.get('days'))
                         if tot_mv > 0 and mv > 0:
                             weights_or_post[sid] = round(min(1.0, mv / tot_mv), 4)
                         if sh is not None:
-                            sharpes_or_unc[sid] = float(sh)
+                            sh_eff = float(sh)
+                            if n_d_raw is not None:
+                                n_d = max(0, int(n_d_raw))
+                                if n_d < _MIN_SHARPE_SAMPLE_DAYS:
+                                    sh_eff = sh_eff * (float(n_d) / float(n_d + _MIN_SHARPE_SAMPLE_DAYS))
+                            sharpes_or_unc[sid] = sh_eff
                 except Exception as e:
                     logger.debug(f"Auto-load stream_metrics in BL upgrader skipped: {e}")
 
@@ -231,7 +280,10 @@ class BayesianBlackLittermanMetaUpgrader:
                 prior_mult = 1.0 + 0.5 * (w_val - 0.20)
                 view_mult = 1.0 + 0.25 * np.tanh(sh_f / 2.0)
                 post_mult = 0.5 * prior_mult + 0.5 * view_mult
-                upgraded_alphas[key] = round(float(max(0.2, min(2.0, post_mult))), 4)
+                mult_val = float(max(0.2, min(2.0, post_mult)))
+                if str(key) in retired_streams:
+                    mult_val = min(mult_val, _RETIRED_MULTIPLIER_CAP)
+                upgraded_alphas[key] = round(mult_val, 4)
             elif key in weights_or_post:
                 unc = float(sharpes_or_unc.get(key, 1.0) or 1.0)
                 conviction_multiplier = round(max(0.2, min(2.0, float(w_val / (abs(unc) + 1e-4)))), 4)
@@ -247,6 +299,8 @@ class BayesianBlackLittermanMetaUpgrader:
             merged_mults = dict(existing_mults) if isinstance(existing_mults, dict) else {}
             merged_mults.update(upgraded_alphas)
             d['bayesian_bl_alpha_multipliers'] = merged_mults
+            if retired_streams:
+                d['gravekeeper_retired_streams'] = retired_streams
             d['last_bl_upgrade_timestamp'] = ts_str
             return d
 
