@@ -1116,14 +1116,29 @@ class CIODocketBuilder:
         if not items:
             return f"⚖️ [CIO 헌법 결재함 ({as_of})] 대기 중인 코드 이식 결재 안건 없음 (Track 1 자율 방어 정상 가동 중)"
 
+        n_pending = sum(
+            1 for it in items
+            if str(it.get('cio_decision_status', 'PENDING_CIO_DECISION') or 'PENDING_CIO_DECISION') == 'PENDING_CIO_DECISION'
+        )
+        n_decided = len(items) - n_pending
+        if n_pending > 0:
+            header_line = f"⚖️ [CIO 헌법 결재 상정안 ({as_of})] 총 {n_pending}건 대기" + (f" (결재 완료 {n_decided}건)" if n_decided > 0 else "")
+        else:
+            header_line = f"⚖️ [CIO 헌법 결재함 ({as_of})] 대기 0건 (결재 완료 {n_decided}건 — 시스템 반영 및 실전 가동 중)"
+
         lines = [
-            f"⚖️ [CIO 헌법 결재 상정안 ({as_of})] 총 {len(items)}건 대기",
+            header_line,
             "─" * 46,
         ]
+        _status_labels = {
+            'APPROVE_PILOT': '✅ 승인 완료 — PILOT(0.5x) 소액 실전 이식 가동 중',
+            'DEFER_SHADOW': '⏸️ 보류 완료 — SHADOW(0.0x) 가상 관찰 유지 중',
+            'REJECT_TO_GRAVEYARD': '🛑 기각 완료 — 묘지기(Gravekeeper) 영구 봉인 완료',
+        }
         for idx, it in enumerate(items, 1):
             sc = it.get('verification_scorecard') or {}
             organs = ', '.join(it.get('proposing_organs') or [])
-            decision_status = it.get('cio_decision_status', 'PENDING_CIO_DECISION')
+            decision_status = str(it.get('cio_decision_status', 'PENDING_CIO_DECISION') or 'PENDING_CIO_DECISION')
             rec = (it.get('committee_recommendation') or {}).get('recommended_label_kr', '')
             lines.append(f"📋 안건 #{idx} [{it.get('cadence_type', 'REGULAR')}]: {it.get('docket_id', '')} (상태: {decision_status})")
             lines.append(f"  • 상정 기관 : {organs}")
@@ -1134,7 +1149,12 @@ class CIODocketBuilder:
             lines.append(f"  • 검증 성적 : {json.dumps(sc, ensure_ascii=False)}")
             if rec:
                 lines.append(f"  • 위원회 권고: {rec}")
-            lines.append("  • CIO 결재 선택지: [1] 승인(PILOT 0.5x 이식) | [2] 보류(SHADOW 유지) | [3] 기각(묘지기 영구 봉인)")
+            if decision_status == 'PENDING_CIO_DECISION':
+                lines.append("  • CIO 결재 선택지: [1] 승인(PILOT 0.5x 이식) | [2] 보류(SHADOW 유지) | [3] 기각(묘지기 영구 봉인)")
+            else:
+                decided_at = str(it.get('cio_decided_at', '') or '')[:19]
+                dec_desc = _status_labels.get(decision_status, decision_status)
+                lines.append(f"  • CIO 결재 상태: {dec_desc}" + (f" (결재시각: {decided_at})" if decided_at else ""))
             lines.append("─" * 46)
         return '\n'.join(lines)
 
@@ -1475,6 +1495,10 @@ class CIODocketEmailService:
                     if isinstance(it, dict) and (it.get('docket_id') == docket_id or not docket_id):
                         it['cio_decision_status'] = decision
                         it['cio_decided_at'] = now_iso
+                base['n_pending_dockets'] = sum(
+                    1 for it in items
+                    if isinstance(it, dict) and str(it.get('cio_decision_status', 'PENDING_CIO_DECISION') or 'PENDING_CIO_DECISION') == 'PENDING_CIO_DECISION'
+                )
                 base['formatted_text'] = CIODocketBuilder.format_docket_markdown(base)
                 return base
             safe_json_update(docket_file, _upd_docket_file, default={}, strict=True)

@@ -318,6 +318,10 @@ def test_cio_docket_email_markdown_and_reply_execution(tmp_path):
         send_confirmation_email=False,
     )
     assert applied["applied"] is True
+    updated_docket = json.loads((tmp_path / "cio_approval_docket.json").read_text(encoding="utf-8"))
+    assert updated_docket["n_pending_dockets"] == 0
+    assert "대기 0건" in updated_docket["formatted_text"]
+    assert "승인 완료" in updated_docket["formatted_text"]
     ov = json.loads((tmp_path / "dynamic_overrides.json").read_text(encoding="utf-8"))
     assert ov["cio_approved_dockets"]["DOCKET-2026-10-30-CAL01"]["stage"] == "PILOT"
     assert ov["parameters"]["ml.enable_prior_shift_calibration"] is True
