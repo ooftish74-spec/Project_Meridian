@@ -195,6 +195,19 @@ class BayesianBlackLittermanMetaUpgrader:
                 continue
             sh = info.get('sharpe')
             mdd = info.get('mdd')
+            d_rets = info.get('daily_returns')
+            if mdd is None and isinstance(d_rets, list) and d_rets:
+                w = 1.0
+                pk = 1.0
+                min_dd = 0.0
+                for r_val in d_rets:
+                    w *= 1.0 + float(r_val or 0.0)
+                    if w > pk:
+                        pk = w
+                    dd_cur = ((w - pk) / pk) * 100.0 if pk > 0.0 else 0.0
+                    if dd_cur < min_dd:
+                        min_dd = dd_cur
+                mdd = round(min_dd, 2)
             reasons: List[str] = []
             if mdd is not None and float(mdd) <= mdd_floor_pct:
                 reasons.append(f"MDD({float(mdd):.2f}%) <= {mdd_floor_pct:.2f}%")

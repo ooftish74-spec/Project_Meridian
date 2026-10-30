@@ -257,8 +257,8 @@ class AdversarialFalsifier:
                 'corr_with_active': 0.0,
                 'residuals': [],
             }
-        cand = cand[:n]
-        act = act[:n]
+        cand = cand[-n:]
+        act = act[-n:]
 
         var_act = float(np.var(act, ddof=1))
         if var_act > _EPS:
@@ -814,7 +814,7 @@ class PnLCoroner:
         vol = max(float(residual_volatility), _EPS)
         z_score = luck_residual / vol
 
-        total_abs = max(abs(float(realized_return)), _EPS)
+        total_abs = abs(luck_residual) + abs(explained_return) + _EPS
         luck_share = abs(luck_residual) / total_abs
 
         verdict = 'EXPLAINED_NORMAL'
@@ -841,16 +841,30 @@ class PnLCoroner:
     @classmethod
     def autopsy_positions(
         cls,
-        positions: Sequence[Dict[str, Any]],
+        positions: Any,
         market_return: float = 0.0,
     ) -> Dict[str, Any]:
-        """보유 종목(국내/해외) 개별 포지션 전수 부검."""
+        """보유 종목(국내/해외) 개별 포지션 전수 부검 (dict/list 및 return_pct/pnl_pct 통합 지원)."""
+        if isinstance(positions, dict):
+            norm_positions: List[Dict[str, Any]] = [
+                ({'ticker': str(k), **v} if 'ticker' not in v else dict(v))
+                for k, v in positions.items()
+                if isinstance(v, dict)
+            ]
+        elif isinstance(positions, (list, tuple)):
+            norm_positions = [p for p in positions if isinstance(p, dict)]
+        else:
+            norm_positions = []
+
         anomalies: List[Dict[str, Any]] = []
-        for pos in positions:
-            if not isinstance(pos, dict):
-                continue
-            tk = str(pos.get('ticker', 'unknown'))
-            pnl_pct = float(pos.get('pnl_pct', pos.get('unrealized_pnl_pct', 0.0)) or 0.0) / _PCT_SCALE
+        for pos in norm_positions:
+            tk = str(pos.get('ticker') or pos.get('code') or pos.get('symbol') or 'unknown')
+            raw_pnl_pct = pos.get('pnl_pct')
+            if raw_pnl_pct is None:
+                raw_pnl_pct = pos.get('unrealized_pnl_pct')
+            if raw_pnl_pct is None:
+                raw_pnl_pct = pos.get('return_pct', 0.0)
+            pnl_pct = float(raw_pnl_pct or 0.0) / _PCT_SCALE
             exp_ret = float(pos.get('expected_return_pct', 0.0) or 0.0) / _PCT_SCALE
             beta = float(pos.get('beta', 1.0) or 1.0)
             vol = float(pos.get('daily_vol', _POS_VOL_FALLBACK) or _POS_VOL_FALLBACK)
@@ -864,12 +878,13 @@ class PnLCoroner:
             if res['quarantine_recommended']:
                 anomalies.append({
                     'ticker': tk,
+                    'name': str(pos.get('name', '') or ''),
                     'verdict': res['verdict'],
                     'realized_return_pct': round(pnl_pct * _PCT_SCALE, 2),
                     'residual_z_score': round(float(res['residual_z_score']), 2),
                 })
         return {
-            'n_positions_autopsied': len(positions),
+            'n_positions_autopsied': len(norm_positions),
             'n_anomalies': len(anomalies),
             'position_anomalies': anomalies,
         }
@@ -1749,15 +1764,24 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
 
     official = me_data.get('official') if isinstance(me_data.get('official'), dict) else {}
     per_stream = official.get('per_stream') if isinstance(official.get('per_stream'), dict) else {}
-    daily_series = me_data.get('daily_series') if isinstance(me_data.get('daily_series'), dict) else {}
-    port_rets = daily_series.get('portfolio_returns') or []
+    raw_daily_series = me_data.get('daily_series')
+    if isinstance(raw_daily_series, dict):
+        port_rets = raw_daily_series.get('portfolio_returns') or []
+    elif isinstance(raw_daily_series, list):
+        port_rets = [
+            float(r.get('daily_return_pct', 0.0) or 0.0) / _PCT_SCALE
+            for r in raw_daily_series
+            if isinstance(r, dict) and r.get('daily_return_pct') is not None
+        ]
+    else:
+        port_rets = []
 
     # 1. 반증관 & 금고지기/묘지기 (디스크 영구 원장 연동)
     vg = VaultAndGravekeeper(ledger_path=ledger_file)
     ortho_audits: Dict[str, Dict[str, Any]] = {}
     stage_transitions: Dict[str, Dict[str, Any]] = {}
     decay_audits: Dict[str, Dict[str, Any]] = {}
-    retired_map = ov_data.get('gravekeeper_retired_streams') if isinstance(ov_data.get('gravekeeper_retired_streams'), dict) else {}
+    retired_map = dict(ov_data.get('gravekeeper_retired_streams')) if isinstance(ov_data.get('gravekeeper_retired_streams'), dict) else {}
 
     for sid, s_info in sorted(per_stream.items()):
         if not isinstance(s_info, dict):
@@ -1767,7 +1791,7 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
         sh = s_info.get('sharpe')
         mdd = s_info.get('mdd')
         cur_stage = 'RETIRED_TO_SHADOW' if sid in retired_map else 'FULL_ACTIVE'
-        stage_transitions[str(sid)] = StagedPromotionEngine.evaluate_stage_transition(
+        st_eval = StagedPromotionEngine.evaluate_stage_transition(
             stream_id=str(sid),
             current_stage=cur_stage,
             n_days=n_d,
@@ -1775,6 +1799,16 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
             mdd_pct=mdd,
             is_incumbent=True,
         )
+        stage_transitions[str(sid)] = st_eval
+        if st_eval.get('next_stage') == 'RETIRED_TO_SHADOW' and str(sid) not in retired_map:
+            retired_map[str(sid)] = {
+                'status': 'RETIRED_TO_SHADOW',
+                'n_days': n_d,
+                'sharpe': sh,
+                'mdd': mdd,
+                'reason': st_eval.get('reason', ''),
+                'multiplier_cap': st_eval.get('recommended_multiplier_cap', _PILOT_MULT),
+            }
         if len(s_rets) >= _MIN_OBS:
             vg._graveyard_returns[str(sid)] = np.asarray(s_rets, dtype=float).ravel()
             decay_audits[str(sid)] = RegimeAndDecaySentinel.detect_alpha_decay_and_crowding(s_rets)
@@ -1820,9 +1854,13 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
         asset_beta=p_beta,
         residual_volatility=daily_vol,
     )
-    raw_positions = kp_data.get('positions')
-    pos_list = list(raw_positions.values()) if isinstance(raw_positions, dict) else (raw_positions if isinstance(raw_positions, list) else [])
-    pos_autopsy = PnLCoroner.autopsy_positions(pos_list, market_return=b_ret)
+    raw_positions = (
+        kp_data.get('holdings')
+        or (kp_data.get('account') if isinstance(kp_data.get('account'), dict) else {}).get('positions')
+        or kp_data.get('positions')
+        or {}
+    )
+    pos_autopsy = PnLCoroner.autopsy_positions(raw_positions, market_return=b_ret)
     coroner_report['positions_autopsy'] = pos_autopsy
 
     # 5. 대표(CIO) 헌법 결재 상정안 (CIODocketBuilder)

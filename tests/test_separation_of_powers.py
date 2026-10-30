@@ -187,6 +187,17 @@ def test_pnl_coroner_and_cio_docket_builder_end_to_end(tmp_path):
     wf_file = tmp_path / "walk_forward_daily.json"
     kp_file = tmp_path / "kis_portfolio.json"
 
+    # Verify bounded luck_share_of_return in [0, 1] even when realized_return == 0.0
+    zero_ret_autopsy = PnLCoroner.autopsy_realized_return(
+        realized_return=0.0,
+        expected_model_return=0.0,
+        market_return=-0.01,
+        asset_beta=0.7627685,
+        residual_volatility=0.01,
+    )
+    assert zero_ret_autopsy["luck_share_of_return"] == pytest.approx(0.50, rel=1e-9)
+    assert 0.0 <= zero_ret_autopsy["luck_share_of_return"] <= 1.0
+
     me_file.write_text(json.dumps({
         "date": "2026-10-30",  # Friday!
         "official": {
@@ -204,9 +215,14 @@ def test_pnl_coroner_and_cio_docket_builder_end_to_end(tmp_path):
                 "benchmark_return_pct": 1.00,
             }
         },
-        "daily_series": {
-            "portfolio_returns": [0.005, 0.002, 0.004, 0.003, 0.006, 0.001],
-        },
+        "daily_series": [
+            {"date": "2026-10-23", "daily_return_pct": 0.5},
+            {"date": "2026-10-26", "daily_return_pct": 0.2},
+            {"date": "2026-10-27", "daily_return_pct": 0.4},
+            {"date": "2026-10-28", "daily_return_pct": 0.3},
+            {"date": "2026-10-29", "daily_return_pct": 0.6},
+            {"date": "2026-10-30", "daily_return_pct": 0.1},
+        ],
     }), encoding="utf-8")
     ov_file.write_text(json.dumps({
         "gravekeeper_retired_streams": {
@@ -223,17 +239,22 @@ def test_pnl_coroner_and_cio_docket_builder_end_to_end(tmp_path):
         }
     ]), encoding="utf-8")
     kp_file.write_text(json.dumps({
-        "positions": [
-            {"ticker": "000270", "pnl_pct": -9.47, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
-            {"ticker": "086280", "pnl_pct": 12.50, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
-        ]
+        "holdings": {
+            "000270": {"name": "기아", "return_pct": -9.47, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
+            "086280": {"name": "현대글로비스", "return_pct": 12.50, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
+            "034230": {"name": "파라다이스", "return_pct": -0.71, "expected_return_pct": 0.0, "beta": 1.0, "daily_vol": 0.02},
+        }
     }), encoding="utf-8")
 
     res = run_daily_constitutional_audit(tmp_path)
     assert (tmp_path / "constitutional_governance_audit.json").exists()
     assert (tmp_path / "vault_graveyard_ledger.json").exists()
     assert res["coroner"]["verdict"] == "UNEXPLAINED_WINDFALL_GAIN"
+    assert res["coroner"]["positions_autopsy"]["n_positions_autopsied"] == 3
     assert res["coroner"]["positions_autopsy"]["n_anomalies"] == 2
+    assert res["coroner"]["positions_autopsy"]["position_anomalies"][0]["ticker"] == "000270"
+    assert "S2" in res["falsifier"]["orthogonal_stream_audits"]
+    assert "S3" in res["falsifier"]["orthogonal_stream_audits"]
     assert res["cio_approval_docket"]["is_weekly_docket_day"] is True
     assert res["cio_approval_docket"]["is_emergency_escalation"] is True
     assert res["cio_approval_docket"]["n_pending_dockets"] == 2
