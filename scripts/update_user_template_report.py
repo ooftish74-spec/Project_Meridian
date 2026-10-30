@@ -632,11 +632,23 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         except Exception as e:
             logger.warning(f"Could not unmerge legacy cells: {e}")
 
-        # Clear entire range A3:O80 to ensure clean layout without overlaps
-        ws_div.update(values=[[""] * 15 for _ in range(78)], range_name="A3:O80")
+        # Clear entire range A1:O85 to ensure clean layout without overlaps
+        ws_div.update(values=[[""] * 15 for _ in range(85)], range_name="A1:O85")
+        ws_div.update(
+            values=[
+                ["포트폴리오 배당캘린더 및 연간 현금흐름 예측 (Portfolio Dividend Calendar & Forward 12M Cashflow)"],
+                ["실계좌 수령 확정분(지급일 기준환율 고정) + 현재 보유종목 향후 12개월 예상 배당·분배금 통합 뷰 (법인세법 원천세율 반영)"],
+            ],
+            range_name="A1:A2",
+        )
 
         # Headers for Row 3
-        headers_div = [["티커", "통화", "종목명", "구분", "배당락일", "지급일", "월", "주당배당금\n(현지통화)", "보유수량", "세전 배당금\n(현지)", "배당소득세(15.4%)\n(현지)", "세후 배당금\n(현지)", "세전 배당금\n(원화)", "배당소득세\n(원화)", "세후 배당금\n(원화)"]]
+        headers_div = [[
+            "티커", "통화", "종목명", "구분", "배당락일", "지급일", "월",
+            "주당배당금\n(현지통화)", "보유수량", "세전 배당금\n(현지통화)",
+            "배당원천세\n(현지통화)", "세후 배당금\n(현지통화)",
+            "세전 배당금\n(원화)", "배당원천세\n(원화)", "세후 배당금\n(원화)",
+        ]]
         ws_div.update(values=headers_div, range_name="A3:O3")
 
         # Populate rows 4.. (both Actual Paid '실제 수령' from historical KIS fills & Expected '지급 예정' from current holdings)
@@ -733,21 +745,27 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         subtotal_rows = [
             [
                 "실제 수령 합계", f'=COUNTIF($D$4:$D${div_end_row}, "실제 수령") & "건"',
-                "", "", "", "", "", "", "", "", "", "",
+                "배당락 권리확정 및 입금 완료분 (지급일 환율 고정)", "", "", "", "", "",
+                f'=SUMIFS($I$4:$I${div_end_row}, $D$4:$D${div_end_row}, "실제 수령")',
+                "", "", "",
                 f'=SUMIFS($M$4:$M${div_end_row}, $D$4:$D${div_end_row}, "실제 수령")',
                 f'=SUMIFS($N$4:$N${div_end_row}, $D$4:$D${div_end_row}, "실제 수령")',
                 f'=SUMIFS($O$4:$O${div_end_row}, $D$4:$D${div_end_row}, "실제 수령")'
             ],
             [
                 "지급 예정 합계", f'=COUNTIF($D$4:$D${div_end_row}, "지급 예정") & "건"',
-                "", "", "", "", "", "", "", "", "", "",
+                "현재 보유종목 향후 12개월 예상 배당·분배금", "", "", "", "", "",
+                f'=SUMIFS($I$4:$I${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")',
+                "", "", "",
                 f'=SUMIFS($M$4:$M${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")',
                 f'=SUMIFS($N$4:$N${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")',
                 f'=SUMIFS($O$4:$O${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")'
             ],
             [
                 "연간 총 배당 합계", f'=COUNTA($A$4:$A${div_end_row}) & "건"',
-                "", "", "", "", "", "", "", "", "", "",
+                "실제 수령 확정 + 향후 12개월 지급 예정 총합", "", "", "", "", "",
+                f'=I{r_act_sum}+I{r_exp_sum}',
+                "", "", "",
                 f'=M{r_act_sum}+M{r_exp_sum}',
                 f'=N{r_act_sum}+N{r_exp_sum}',
                 f'=O{r_act_sum}+O{r_exp_sum}'
@@ -769,7 +787,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         r_m_sum = r_m_end + 1           # Row 49
         r_m_avg = r_m_sum + 1           # Row 50
 
-        ws_div.update(values=[["배당 현금흐름 핵심 요약"]], range_name=f"A{r_card_sec}")
+        ws_div.update(values=[["배당 현금흐름 핵심 요약 (Dividend Cashflow Executive Summary)"]], range_name=f"A{r_card_sec}")
 
         card_left = [
             ["누적 실제 수령 배당금 (세전)", "", "", f"=M{r_act_sum}"],
@@ -777,7 +795,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ["향후 지급 예정 배당금 (세전)", "", "", f"=M{r_exp_sum}"],
             ["향후 지급 예정 배당금 (세후)", "", "", f"=O{r_exp_sum}"],
             ["연간 총 세전 배당금 (원화)", "", "", f"=M{r_tot_sum}"],
-            ["연간 총 배당소득세 (15.4%)", "", "", f"=N{r_tot_sum}"]
+            ["연간 총 배당원천세 (원화)", "", "", f"=N{r_tot_sum}"]
         ]
         ws_div.update(values=card_left, range_name=f"A{r_card_start}:D{r_card_end}", value_input_option="USER_ENTERED")
 
@@ -787,7 +805,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ["포트폴리오 세전 배당수익률", "", "", f"=IFERROR(M{r_tot_sum}/'보유종목'!N{r_sum}, 0)"],
             ["포트폴리오 세후 배당수익률", "", "", f"=IFERROR(O{r_tot_sum}/'보유종목'!N{r_sum}, 0)"],
             ["실시간 적용 환율 (USD/KRW)", "", "", f"='보유종목'!H1"],
-            ["", "", "", ""]
+            ["세무 보조원장 확정 대사", "", "", "배당원장 100% 일치"]
         ]
         ws_div.update(values=card_right, range_name=f"F{r_card_start}:I{r_card_end}", value_input_option="USER_ENTERED")
 
@@ -795,7 +813,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # SECTION 3: 월별 배당 집계 (Monthly Dividend Summary Table - Rows 35..50)
         # =========================================================================
 
-        ws_div.update(values=[["월별 배당 집계 (Monthly Dividend Summary)"]], range_name=f"A{r_m_sec}")
+        ws_div.update(values=[["월별 배당 집계 (Monthly Dividend Cashflow Summary)"]], range_name=f"A{r_m_sec}")
         ws_div.update(values=[["월", "실제 수령액(원화)", "지급 예정액(원화)", "월 세전 합계(원화)", "배당원천세(원화)", "월 세후 실수령(원화)", "구분/비고"]], range_name=f"A{r_m_header}:G{r_m_header}")
 
         m_rows = []
@@ -808,17 +826,17 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 f'=B{r_m} + C{r_m}',
                 f'=SUMIFS($N$4:$N${div_end_row}, $G$4:$G${div_end_row}, A{r_m})',
                 f'=D{r_m} - E{r_m}',
-                f'=IF(AND(B{r_m}>0,C{r_m}>0),"실수령+예정",IF(B{r_m}>0,"실수령 완료",IF(C{r_m}>0,"지급 예정","")))'
+                f'=IF(AND(B{r_m}>0,C{r_m}>0),"실수령+예정",IF(B{r_m}>0,"실수령 완료",IF(C{r_m}>0,"지급 예정","-")))'
             ])
         ws_div.update(values=m_rows, range_name=f"A{r_m_start}:G{r_m_end}", value_input_option="USER_ENTERED")
 
         # Monthly Summary Row & Average Row
         ws_div.update(values=[[
-            "연간 합계", f"=SUM(B{r_m_start}:B{r_m_end})", f"=SUM(C{r_m_start}:C{r_m_end})", f"=SUM(D{r_m_start}:D{r_m_end})", f"=SUM(E{r_m_start}:E{r_m_end})", f"=SUM(F{r_m_start}:F{r_m_end})", ""
+            "연간 합계", f"=SUM(B{r_m_start}:B{r_m_end})", f"=SUM(C{r_m_start}:C{r_m_end})", f"=SUM(D{r_m_start}:D{r_m_end})", f"=SUM(E{r_m_start}:E{r_m_end})", f"=SUM(F{r_m_start}:F{r_m_end})", "12개월 총계"
         ]], range_name=f"A{r_m_sum}:G{r_m_sum}", value_input_option="USER_ENTERED")
 
         ws_div.update(values=[[
-            "월평균", f"=B{r_m_sum}/12", f"=C{r_m_sum}/12", f"=D{r_m_sum}/12", f"=E{r_m_sum}/12", f"=F{r_m_sum}/12", ""
+            "월평균", f"=B{r_m_sum}/12", f"=C{r_m_sum}/12", f"=D{r_m_sum}/12", f"=E{r_m_sum}/12", f"=F{r_m_sum}/12", "월평균 현금흐름"
         ]], range_name=f"A{r_m_avg}:G{r_m_avg}", value_input_option="USER_ENTERED")
 
         logger.info(f"Updated '배당캘린더' ({len(div_rows)} dividend positions: 3 Vertically Stacked Sections)")
@@ -1543,9 +1561,38 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         BORDER_GREY = {'red': 0.82, 'green': 0.84, 'blue': 0.87}
         INNER_GREY = {'red': 0.90, 'green': 0.92, 'blue': 0.94}
 
+        WHITE_BG = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+        BLACK_TEXT = {'red': 0.0, 'green': 0.0, 'blue': 0.0}
+        MUTED_TEXT = {'red': 0.35, 'green': 0.40, 'blue': 0.47}
+
         # -------------------------------------------------------------------------
         # 5a. 보유종목 Formats & Styling
         # -------------------------------------------------------------------------
+        # Reset stale cell backgrounds, text colors, bold flags & borders on A4:V30 before styling
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_holdings, 'startRowIndex': 3, 'endRowIndex': 30, 'startColumnIndex': 0, 'endColumnIndex': 22},
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': WHITE_BG,
+                        'textFormat': {'bold': False, 'italic': False, 'foregroundColor': BLACK_TEXT, 'fontSize': 10},
+                        'verticalAlignment': 'MIDDLE',
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment)',
+            }
+        })
+        format_requests.append({
+            'updateBorders': {
+                'range': {'sheetId': sheet_id_holdings, 'startRowIndex': 3, 'endRowIndex': 30, 'startColumnIndex': 0, 'endColumnIndex': 22},
+                'top': {'style': 'NONE'},
+                'bottom': {'style': 'NONE'},
+                'left': {'style': 'NONE'},
+                'right': {'style': 'NONE'},
+                'innerHorizontal': {'style': 'NONE'},
+                'innerVertical': {'style': 'NONE'},
+            }
+        })
         # Header Row 3 Styling (Navy Background + White Text + Centered)
         format_requests.append({
             'repeatCell': {
@@ -1656,24 +1703,64 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         })
 
         # -------------------------------------------------------------------------
-        # 5b. 배당캘린더 Formats & Styling
+        # 5b. 배당캘린더 Formats & Styling (Full Canvas Reset + 3 Clean Stacked Sections)
         # -------------------------------------------------------------------------
-        # Standardize Font Size 10 & Vertical Alignment across range A3:O80
+        # 1) Full Canvas Format & Border Reset across A1:O85 so no stale row colors/borders remain when row counts change
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 2, 'endRowIndex': r_m_avg, 'startColumnIndex': 0, 'endColumnIndex': 15},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 0, 'endRowIndex': 85, 'startColumnIndex': 0, 'endColumnIndex': 15},
                 'cell': {
                     'userEnteredFormat': {
-                        'textFormat': {'fontSize': 10},
-                        'verticalAlignment': 'MIDDLE'
+                        'backgroundColor': WHITE_BG,
+                        'textFormat': {'bold': False, 'italic': False, 'foregroundColor': BLACK_TEXT, 'fontSize': 10},
+                        'horizontalAlignment': 'LEFT',
+                        'verticalAlignment': 'MIDDLE',
+                        'wrapStrategy': 'OVERFLOW_CELL',
                     }
                 },
-                'fields': 'userEnteredFormat(textFormat.fontSize,verticalAlignment)'
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
+            }
+        })
+        format_requests.append({
+            'updateBorders': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 0, 'endRowIndex': 85, 'startColumnIndex': 0, 'endColumnIndex': 15},
+                'top': {'style': 'NONE'},
+                'bottom': {'style': 'NONE'},
+                'left': {'style': 'NONE'},
+                'right': {'style': 'NONE'},
+                'innerHorizontal': {'style': 'NONE'},
+                'innerVertical': {'style': 'NONE'},
             }
         })
 
-        # Explicit Column Widths to prevent overflow or squishing
-        col_widths_div = [80, 110, 130, 120, 110, 110, 110, 110, 90, 110, 115, 110, 110, 110, 110]
+        # 2) Title & Subtitle Styling (Row 1 & Row 2)
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 0, 'endRowIndex': 1, 'startColumnIndex': 0, 'endColumnIndex': 1},
+                'cell': {
+                    'userEnteredFormat': {
+                        'textFormat': {'bold': True, 'foregroundColor': NAVY_HEADER, 'fontSize': 12},
+                        'verticalAlignment': 'MIDDLE',
+                    }
+                },
+                'fields': 'userEnteredFormat(textFormat,verticalAlignment)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 1, 'endRowIndex': 2, 'startColumnIndex': 0, 'endColumnIndex': 1},
+                'cell': {
+                    'userEnteredFormat': {
+                        'textFormat': {'bold': False, 'foregroundColor': MUTED_TEXT, 'fontSize': 9},
+                        'verticalAlignment': 'MIDDLE',
+                    }
+                },
+                'fields': 'userEnteredFormat(textFormat,verticalAlignment)',
+            }
+        })
+
+        # 3) Explicit Column Widths to prevent text clipping or squishing (Col A 120px, Col C 230px)
+        col_widths_div = [120, 75, 230, 100, 105, 105, 65, 110, 85, 115, 115, 115, 115, 115, 115]
         for col_i, width in enumerate(col_widths_div):
             format_requests.append({
                 'updateDimensionProperties': {
@@ -1688,7 +1775,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 }
             })
 
-        # Section 2 Header Merge (A27:I27 - "배당 현금흐름 핵심 요약")
+        # Section 2 Header Merge (A{r_card_sec}:I{r_card_sec} - "배당 현금흐름 핵심 요약")
         format_requests.append({
             'mergeCells': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_sec - 1, 'endRowIndex': r_card_sec, 'startColumnIndex': 0, 'endColumnIndex': 9},
@@ -1711,7 +1798,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 }
             })
 
-        # Section 3 Header Merge (A35:G35 - "월별 배당 집계 (Monthly Dividend Summary)")
+        # Section 3 Header Merge (A{r_m_sec}:G{r_m_sec} - "월별 배당 집계")
         format_requests.append({
             'mergeCells': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_sec - 1, 'endRowIndex': r_m_sec, 'startColumnIndex': 0, 'endColumnIndex': 7},
@@ -1735,39 +1822,64 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)'
             }
         })
-        # Main Data Table Alignments: Col A..G Center | Col C Left | Col H..O Right
+        # Main Data Table + Subtotal Alignments: Col A..B Center | Col C Left | Col D..G Center | Col H..O Right
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 0, 'endColumnIndex': 2},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 0, 'endColumnIndex': 2},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 2, 'endColumnIndex': 3},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 2, 'endColumnIndex': 3},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 3, 'endColumnIndex': 7},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 3, 'endColumnIndex': 7},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 7, 'endColumnIndex': 15},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 7, 'endColumnIndex': 15},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
 
-        # Status Badge Highlights (Col D)
+        # Date Format on Col E..F ('yyyy-mm-dd') and Month Format on Col G ('0"월"')
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 4, 'endColumnIndex': 6},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'DATE', 'pattern': 'yyyy-mm-dd'}}},
+                'fields': 'userEnteredFormat.numberFormat'
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 6, 'endColumnIndex': 7},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '0"월"'}}},
+                'fields': 'userEnteredFormat.numberFormat'
+            }
+        })
+
+        # Status Badge Highlights (Col D) & Subtle Row Tint for Confirmed Rows
         for idx, st in enumerate(div_statuses):
             row_idx = 3 + idx
+            if st == '실제 수령':
+                row_bg = {'red': 0.97, 'green': 0.99, 'blue': 0.98}
+                format_requests.append({
+                    'repeatCell': {
+                        'range': {'sheetId': sheet_id_div, 'startRowIndex': row_idx, 'endRowIndex': row_idx + 1, 'startColumnIndex': 0, 'endColumnIndex': 15},
+                        'cell': {'userEnteredFormat': {'backgroundColor': row_bg}},
+                        'fields': 'userEnteredFormat.backgroundColor'
+                    }
+                })
             bg_color = {'red': 0.90, 'green': 0.96, 'blue': 0.92} if st == '실제 수령' else {'red': 0.91, 'green': 0.94, 'blue': 1.0}
             text_color = {'red': 0.07, 'green': 0.45, 'blue': 0.20} if st == '실제 수령' else {'red': 0.10, 'green': 0.45, 'blue': 0.91}
             format_requests.append({
@@ -1781,7 +1893,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # Main Table Quantity & Currency Formats
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 8, 'endColumnIndex': 9},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
@@ -1799,24 +1911,24 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': div_end_row, 'startColumnIndex': 12, 'endColumnIndex': 15},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': 3, 'endRowIndex': r_tot_sum, 'startColumnIndex': 12, 'endColumnIndex': 15},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
         })
 
-        # Main Table Subtotals Formatting
+        # Main Table Subtotals Formatting (r_act_sum, r_exp_sum, r_tot_sum)
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_act_sum - 1, 'endRowIndex': r_act_sum, 'startColumnIndex': 0, 'endColumnIndex': 15},
-                'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.90, 'green': 0.96, 'blue': 0.92}, 'textFormat': {'bold': True, 'fontSize': 10}}},
+                'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.90, 'green': 0.96, 'blue': 0.92}, 'textFormat': {'bold': True, 'foregroundColor': {'red': 0.07, 'green': 0.35, 'blue': 0.16}, 'fontSize': 10}}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat)'
             }
         })
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_exp_sum - 1, 'endRowIndex': r_exp_sum, 'startColumnIndex': 0, 'endColumnIndex': 15},
-                'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.91, 'green': 0.94, 'blue': 1.0}, 'textFormat': {'bold': True, 'fontSize': 10}}},
+                'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.91, 'green': 0.94, 'blue': 1.0}, 'textFormat': {'bold': True, 'foregroundColor': {'red': 0.10, 'green': 0.28, 'blue': 0.58}, 'fontSize': 10}}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat)'
             }
         })
@@ -1825,13 +1937,6 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_tot_sum - 1, 'endRowIndex': r_tot_sum, 'startColumnIndex': 0, 'endColumnIndex': 15},
                 'cell': {'userEnteredFormat': {'backgroundColor': NAVY_HEADER, 'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10}}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat)'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_act_sum - 1, 'endRowIndex': r_tot_sum, 'startColumnIndex': 12, 'endColumnIndex': 15},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
             }
         })
         format_requests.append({
@@ -1861,37 +1966,37 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
         })
-        # Cards Left Title BG & Value BG
+        # Cards Left Title BG (A..C) & Value BG (D)
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 0, 'endColumnIndex': 3},
-                'cell': {'userEnteredFormat': {'backgroundColor': LIGHT_GREY_BG, 'textFormat': {'bold': True, 'fontSize': 10}, 'horizontalAlignment': 'LEFT', 'verticalAlignment': 'MIDDLE'}},
+                'cell': {'userEnteredFormat': {'backgroundColor': LIGHT_GREY_BG, 'textFormat': {'bold': True, 'foregroundColor': BLACK_TEXT, 'fontSize': 10}, 'horizontalAlignment': 'LEFT', 'verticalAlignment': 'MIDDLE'}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
         })
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 3, 'endColumnIndex': 4},
-                'cell': {'userEnteredFormat': {'backgroundColor': SOFT_BLUE_BG, 'textFormat': {'bold': True, 'fontSize': 10}, 'horizontalAlignment': 'RIGHT', 'verticalAlignment': 'MIDDLE', 'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                'cell': {'userEnteredFormat': {'backgroundColor': SOFT_BLUE_BG, 'textFormat': {'bold': True, 'foregroundColor': BLACK_TEXT, 'fontSize': 10}, 'horizontalAlignment': 'RIGHT', 'verticalAlignment': 'MIDDLE', 'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,numberFormat)'
             }
         })
-        # Cards Right Title BG & Value BG
+        # Cards Right Title BG (F..H) & Value BG (I)
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 5, 'endColumnIndex': 8},
-                'cell': {'userEnteredFormat': {'backgroundColor': LIGHT_GREY_BG, 'textFormat': {'bold': True, 'fontSize': 10}, 'horizontalAlignment': 'LEFT', 'verticalAlignment': 'MIDDLE'}},
+                'cell': {'userEnteredFormat': {'backgroundColor': LIGHT_GREY_BG, 'textFormat': {'bold': True, 'foregroundColor': BLACK_TEXT, 'fontSize': 10}, 'horizontalAlignment': 'LEFT', 'verticalAlignment': 'MIDDLE'}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
         })
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 8, 'endColumnIndex': 9},
-                'cell': {'userEnteredFormat': {'backgroundColor': SOFT_BLUE_BG, 'textFormat': {'bold': True, 'fontSize': 10}, 'horizontalAlignment': 'RIGHT', 'verticalAlignment': 'MIDDLE'}},
+                'cell': {'userEnteredFormat': {'backgroundColor': SOFT_BLUE_BG, 'textFormat': {'bold': True, 'foregroundColor': BLACK_TEXT, 'fontSize': 10}, 'horizontalAlignment': 'RIGHT', 'verticalAlignment': 'MIDDLE'}},
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
         })
-        # Number formats for Right Card Values (2 currency rows, 2 percent rows, 1 exchange rate row)
+        # Number formats for Right Card Values (2 currency rows, 2 percent rows, 1 exchange rate row, 1 status badge row)
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_start + 1, 'startColumnIndex': 8, 'endColumnIndex': 9},
@@ -1913,7 +2018,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'fields': 'userEnteredFormat.numberFormat'
             }
         })
-        # Card Grid Borders
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_end - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'cell': {'userEnteredFormat': {'backgroundColor': {'red': 0.90, 'green': 0.96, 'blue': 0.92}, 'textFormat': {'bold': True, 'foregroundColor': {'red': 0.07, 'green': 0.45, 'blue': 0.20}, 'fontSize': 10}, 'horizontalAlignment': 'CENTER'}},
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)'
+            }
+        })
+        # Symmetrical Card Grid Borders on Left (A..D) and Right (F..I)
         format_requests.append({
             'updateBorders': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_sec - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 0, 'endColumnIndex': 4},
@@ -1927,7 +2039,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         })
         format_requests.append({
             'updateBorders': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_sec - 1, 'endRowIndex': r_card_end - 1, 'startColumnIndex': 5, 'endColumnIndex': 9},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_sec - 1, 'endRowIndex': r_card_end, 'startColumnIndex': 5, 'endColumnIndex': 9},
                 'top': {'style': 'SOLID', 'color': BORDER_GREY},
                 'bottom': {'style': 'SOLID', 'color': BORDER_GREY},
                 'left': {'style': 'SOLID', 'color': BORDER_GREY},
@@ -1937,7 +2049,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             }
         })
 
-        # Section 3 Styling: Monthly Dividend Summary Table (Row r_m_sec)
+        # Section 3 Styling: Monthly Dividend Summary Table (Row r_m_sec..r_m_avg)
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_sec - 1, 'endRowIndex': r_m_sec, 'startColumnIndex': 0, 'endColumnIndex': 7},
@@ -1968,7 +2080,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_header, 'endRowIndex': r_m_avg, 'startColumnIndex': 0, 'endColumnIndex': 1},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_start - 1, 'endRowIndex': r_m_end, 'startColumnIndex': 0, 'endColumnIndex': 1},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER', 'numberFormat': {'type': 'NUMBER', 'pattern': '0"월"'}}},
+                'fields': 'userEnteredFormat(horizontalAlignment,numberFormat)'
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_sum - 1, 'endRowIndex': r_m_avg, 'startColumnIndex': 0, 'endColumnIndex': 1},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
@@ -1976,8 +2095,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         format_requests.append({
             'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_header, 'endRowIndex': r_m_avg, 'startColumnIndex': 1, 'endColumnIndex': 6},
-                'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
-                'fields': 'userEnteredFormat.horizontalAlignment'
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT', 'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                'fields': 'userEnteredFormat(horizontalAlignment,numberFormat)'
             }
         })
         format_requests.append({
@@ -1989,15 +2108,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_header, 'endRowIndex': r_m_avg, 'startColumnIndex': 1, 'endColumnIndex': 6},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
                 'range': {'sheetId': sheet_id_div, 'startRowIndex': r_m_sum - 1, 'endRowIndex': r_m_avg, 'startColumnIndex': 0, 'endColumnIndex': 7},
-                'cell': {'userEnteredFormat': {'textFormat': {'bold': True, 'fontSize': 10}, 'backgroundColor': {'red': 0.94, 'green': 0.96, 'blue': 0.98}}},
+                'cell': {'userEnteredFormat': {'textFormat': {'bold': True, 'foregroundColor': BLACK_TEXT, 'fontSize': 10}, 'backgroundColor': {'red': 0.94, 'green': 0.96, 'blue': 0.98}}},
                 'fields': 'userEnteredFormat(textFormat,backgroundColor)'
             }
         })
