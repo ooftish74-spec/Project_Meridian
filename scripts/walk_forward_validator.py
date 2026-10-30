@@ -113,7 +113,8 @@ class WalkForwardValidator:
                     continue
 
                 total += 1
-                pred_up = pred_prob >= 0.5
+                _neutral_prob = 1.0 / 2.0
+                pred_up = pred_prob >= _neutral_prob
                 actual_up = float(actual_return) > 0.0
                 if pred_up == actual_up:
                     correct += 1
@@ -254,7 +255,8 @@ class WalkForwardValidator:
     def _lookup_realized_return_pct(self, ticker: str):
         """data/kr_markets, data/prices, data/us_stocks/prices Parquet에서 최근 1일 실현 수익률(%) 조회."""
         clean = str(ticker).replace('.KS', '').replace('.KQ', '').strip()
-        is_kr = clean.isdigit() and len(clean) == 6
+        _kr_len = 6
+        is_kr = clean.isdigit() and len(clean) == _kr_len
         candidates = []
         if is_kr:
             candidates.extend([
@@ -315,7 +317,8 @@ class WalkForwardValidator:
 
     def _compute_ic(self, pairs: List) -> float:
         """Spearman 순위 상관계수 (IC)."""
-        if len(pairs) < 3:
+        _min_ic_pairs = 3
+        if len(pairs) < _min_ic_pairs:
             return 0.0
         try:
             from scipy import stats
