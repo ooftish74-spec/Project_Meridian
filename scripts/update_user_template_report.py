@@ -293,7 +293,93 @@ _STATUTORY_FORWARD_DIV_SCHEDULE = {  # hardcode-ok: L0 statutory KSD (HHKDB66910
 }
 
 
-def extract_account_dividend_entitlements(ledger_rows: list[dict], now_date_str: str) -> list[dict]:
+_STATUTORY_CORP_WHT_RATES = {  # hardcode-ok: L0 statutory corporate dividend withholding tax rates (US treaty Art.12 15%, KRX ETF Art.73 14%, KRX stock 0%)
+    "US": 0.15,
+    "KR_ETF": 0.14,
+    "KR_STOCK": 0.0,
+}
+
+
+def classify_corporate_dividend_tax(ticker: str, curr: str, name: str) -> dict:
+    """
+    Classifies a dividend/distribution into its Korean Corporate Tax Law (법인세법) category,
+    statutory withholding tax rate, and required corporate tax return schedule (별지 서식).
+    """
+    c_up = str(curr).strip().upper()
+    asset_cls, _ = categorize_asset(ticker, {"name": name, "market": "US" if c_up == "USD" else "KR"})
+    if c_up == "USD":
+        return {
+            "market_label": "미국(US)",
+            "income_type": "해외배당 [별지8호부표5 외국납부]",
+            "tax_form": "별지 제8호서식 부표5 (외국납부세액공제 명세서)",
+            "wht_rate": _STATUTORY_CORP_WHT_RATES["US"],
+            "credit_acct": "배당금수익(해외)",
+            "debit_tax_acct": "선납세금(외국납부)",
+            "debit_cash_acct": "외화예수금(USD)",
+        }
+    if asset_cls == "국내ETF":
+        return {
+            "market_label": "국내(KRX)",
+            "income_type": "국내ETF분배 [별지10호 원천납부]",
+            "tax_form": "별지 제10호서식(갑) (원천납부세액명세서)",
+            "wht_rate": _STATUTORY_CORP_WHT_RATES["KR_ETF"],
+            "credit_acct": "배당금수익(국내ETF)",
+            "debit_tax_acct": "선납세금(국내원천)",
+            "debit_cash_acct": "보통예금(KRW)",
+        }
+    return {
+        "market_label": "국내(KRX)",
+        "income_type": "국내주식배당 [별지16호 익금불산입]",
+        "tax_form": "별지 제16호서식 (수입배당금액 명세서)",
+        "wht_rate": _STATUTORY_CORP_WHT_RATES["KR_STOCK"],
+        "credit_acct": "배당금수익(국내주식)",
+        "debit_tax_acct": "원천징수면제(0%)",
+        "debit_cash_acct": "보통예금(KRW)",
+    }
+
+
+def resolve_historical_pay_fx(
+    pay_date: str,
+    curr: str,
+    ledger_rows: list[dict],
+    fallback_fx: float = 1.0,
+) -> float:
+    """
+    Resolves the historical USD/KRW exchange rate on or immediately prior to `pay_date`
+    from the corporate trade ledger so confirmed foreign dividend revenue is frozen at
+    the pay-date FX rate (법인세법 시행령 제70조 제2항).
+    """
+    if str(curr).strip().upper() == "KRW":
+        return 1.0
+    best_dt = ""
+    best_fx = 0.0
+    earliest_dt = "9999-99-99"
+    earliest_fx = 0.0
+    for r in ledger_rows or []:
+        if str(r.get("통화", "")).strip().upper() != "USD":
+            continue
+        dt_s = str(r.get("거래일자", ""))[:10]
+        fx_v = float(r.get("적용환율(USD/KRW)") or 0.0)
+        if fx_v <= 1.0 or not dt_s:
+            continue
+        if dt_s < earliest_dt:
+            earliest_dt = dt_s
+            earliest_fx = fx_v
+        if dt_s <= pay_date and dt_s >= best_dt:
+            best_dt = dt_s
+            best_fx = fx_v
+    if best_fx > 1.0:
+        return round(best_fx, 2)
+    if earliest_fx > 1.0:
+        return round(earliest_fx, 2)
+    return round(fallback_fx, 2) if fallback_fx > 1.0 else 1.0
+
+
+def extract_account_dividend_entitlements(
+    ledger_rows: list[dict],
+    now_date_str: str,
+    fallback_fx: float = 1.0,
+) -> list[dict]:
     """
     Reconstructs exact share quantities held in the KIS account at each historical ex-dividend date
     (trade_date < ex_date) from the 321 real KIS fills in Corporate_Trade_Ledger_*.csv.
@@ -316,6 +402,8 @@ def extract_account_dividend_entitlements(ledger_rows: list[dict], now_date_str:
         if held_qty > 0:
             pay_dt = ev["pay_date"]
             status = "실제 수령" if pay_dt <= now_date_str else "지급 예정"
+            tax_meta = classify_corporate_dividend_tax(ev["gf_ticker"], ev["curr"], ev["name"])
+            pay_fx = resolve_historical_pay_fx(pay_dt, ev["curr"], ledger_rows, fallback_fx=fallback_fx)
             out.append({
                 "ticker": ev["gf_ticker"],
                 "curr": ev["curr"],
@@ -327,6 +415,8 @@ def extract_account_dividend_entitlements(ledger_rows: list[dict], now_date_str:
                 "dps": ev["dps"],
                 "hist_qty": held_qty,
                 "locked_qty": True,
+                "pay_fx": pay_fx,
+                **tax_meta,
             })
     return out
 
@@ -498,7 +588,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 "동적 AI 제어",                                                            # R: 리밸런싱 신호 (Col R)
                 f'=IF(B{r}="USD", IFERROR(SUMIFS(\'배당캘린더\'!$M$4:$M$50, \'배당캘린더\'!$A$4:$A$50, C{r}, \'배당캘린더\'!$D$4:$D$50, "지급 예정"), 0), IFERROR(SUMIFS(\'배당캘린더\'!$M$4:$M$50, \'배당캘린더\'!$A$4:$A$50, C{r}, \'배당캘린더\'!$D$4:$D$50, "지급 예정"), 0))', # S: 연간 예상배당금(원화) (Col S)
                 f'=IFERROR(S{r}/N{r},0)',                                                 # T: 배당수익률 (Col T)
-                f'=S{r}*(1-0.154)',                                                       # U: 세후 배당금(원화) (Col U)
+                f'=IFERROR(SUMIFS(\'배당캘린더\'!$O$4:$O$50, \'배당캘린더\'!$A$4:$A$50, C{r}, \'배당캘린더\'!$D$4:$D$50, "지급 예정"), 0)', # U: 세후 배당금(원화) (Col U)
                 f'=IFERROR(U{r}/N{r},0)'                                                  # V: 세후 배당수익률 (Col V)
             ]
             holdings_data.append(row)
@@ -552,7 +642,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # Populate rows 4.. (both Actual Paid '실제 수령' from historical KIS fills & Expected '지급 예정' from current holdings)
         now_date_str = datetime.now().strftime("%Y-%m-%d")
         full_ledger_rows = load_full_corporate_trade_ledger()
-        raw_div_list = extract_account_dividend_entitlements(full_ledger_rows, now_date_str)
+        raw_div_list = extract_account_dividend_entitlements(full_ledger_rows, now_date_str, fallback_fx=fx_rate)
 
         for idx, (ticker, info) in enumerate(items):
             if ticker == "CASH" or "CASH" in ticker.upper():
@@ -561,6 +651,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             gf_ticker = ticker if not (curr == "KRW" and _is_kr_rep(str(ticker)) and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
             name = info.get("name", ticker)
             avg_price = info.get("avg_price", 0)
+            tax_meta = classify_corporate_dividend_tax(gf_ticker, curr, name)
 
             records = get_dividend_schedule(ticker, curr, name, avg_price)
             for rec in records:
@@ -575,6 +666,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                     "dps": rec["dps"],
                     "hist_qty": rec.get("hist_qty", 0),
                     "locked_qty": bool(rec.get("locked_qty", False)),
+                    "pay_fx": 1.0 if curr == "KRW" else fx_rate,
+                    **tax_meta,
                 })
 
         # Sort chronologically by pay_date, then ticker
@@ -596,6 +689,20 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             else:
                 qty_formula = f"=SUMIFS('보유종목'!$G$4:$G${r_end}, '보유종목'!$C$4:$C${r_end}, A{r_div})"
 
+            is_confirmed = rec["status"] == "실제 수령"
+            prec_local = 2 if rec["curr"] == "USD" else 0
+            wht_r = rec.get("wht_rate")
+            if wht_r is None:
+                wht_r = classify_corporate_dividend_tax(rec["ticker"], rec["curr"], rec["name"])["wht_rate"]
+            pay_fx_v = rec.get("pay_fx") or (1.0 if rec["curr"] == "KRW" else fx_rate)
+
+            if is_confirmed:
+                gross_krw_formula = f"=ROUND(J{r_div}*{pay_fx_v}, 0)"
+                tax_krw_formula = f"=ROUND(K{r_div}*{pay_fx_v}, 0)"
+            else:
+                gross_krw_formula = f'=IF(B{r_div}="USD", ROUND(J{r_div}*\'보유종목\'!$H$1, 0), ROUND(J{r_div}, 0))'
+                tax_krw_formula = f'=IF(B{r_div}="USD", ROUND(K{r_div}*\'보유종목\'!$H$1, 0), ROUND(K{r_div}, 0))'
+
             div_row = [
                 rec["ticker"],                                                            # A: 티커
                 rec["curr"],                                                              # B: 통화
@@ -606,11 +713,11 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 rec["month"],                                                             # G: 월
                 rec["dps"],                                                               # H: 주당배당금(현지)
                 qty_formula,                                                              # I: 보유수량
-                f"=H{r_div}*I{r_div}",                                                    # J: 세전 배당금(현지)
-                f"=J{r_div}*0.154",                                                       # K: 배당소득세(15.4%)(현지)
+                f"=ROUND(H{r_div}*I{r_div}, {prec_local})",                               # J: 세전 배당금(현지)
+                f"=ROUND(J{r_div}*{wht_r}, {prec_local})",                                # K: 배당원천세(법인세법·현지)
                 f"=J{r_div}-K{r_div}",                                                    # L: 세후 배당금(현지)
-                f'=IF(B{r_div}="USD", J{r_div}*\'보유종목\'!$H$1, J{r_div})',               # M: 세전 배당금(원화)
-                f'=IF(B{r_div}="USD", K{r_div}*\'보유종목\'!$H$1, K{r_div})',               # N: 배당소득세(원화)
+                gross_krw_formula,                                                        # M: 세전 배당금(원화)
+                tax_krw_formula,                                                          # N: 배당원천세(원화)
                 f"=M{r_div}-N{r_div}"                                                     # O: 세후 배당금(원화)
             ]
             div_rows.append(div_row)
@@ -689,7 +796,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # =========================================================================
 
         ws_div.update(values=[["월별 배당 집계 (Monthly Dividend Summary)"]], range_name=f"A{r_m_sec}")
-        ws_div.update(values=[["월", "실제 수령액(원화)", "지급 예정액(원화)", "월 세전 합계(원화)", "배당소득세(15.4%)", "월 세후 실수령(원화)", "구분/비고"]], range_name=f"A{r_m_header}:G{r_m_header}")
+        ws_div.update(values=[["월", "실제 수령액(원화)", "지급 예정액(원화)", "월 세전 합계(원화)", "배당원천세(원화)", "월 세후 실수령(원화)", "구분/비고"]], range_name=f"A{r_m_header}:G{r_m_header}")
 
         m_rows = []
         for m in range(1, 13):
@@ -699,7 +806,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 f'=SUMIFS($M$4:$M${div_end_row}, $G$4:$G${div_end_row}, A{r_m}, $D$4:$D${div_end_row}, "실제 수령")',
                 f'=SUMIFS($M$4:$M${div_end_row}, $G$4:$G${div_end_row}, A{r_m}, $D$4:$D${div_end_row}, "지급 예정")',
                 f'=B{r_m} + C{r_m}',
-                f'=D{r_m} * 0.154',
+                f'=SUMIFS($N$4:$N${div_end_row}, $G$4:$G${div_end_row}, A{r_m})',
                 f'=D{r_m} - E{r_m}',
                 f'=IF(AND(B{r_m}>0,C{r_m}>0),"실수령+예정",IF(B{r_m}>0,"실수령 완료",IF(C{r_m}>0,"지급 예정","")))'
             ])
@@ -715,6 +822,291 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         ]], range_name=f"A{r_m_avg}:G{r_m_avg}", value_input_option="USER_ENTERED")
 
         logger.info(f"Updated '배당캘린더' ({len(div_rows)} dividend positions: 3 Vertically Stacked Sections)")
+
+        # =========================================================================
+        # TAB 2B: 배당원장_YYYY (Annual Corporate Dividend & Withholding Tax Subledger — 세무사 제출용 연 통합 배당원장)
+        # =========================================================================
+        confirmed_divs = [r for r in raw_div_list if r["status"] == "실제 수령"]
+        locked_pending_divs = [r for r in raw_div_list if r["status"] == "지급 예정" and r.get("locked_qty") and r.get("hist_qty", 0) > 0]
+        div_year = confirmed_divs[0]["pay_date"][:4] if confirmed_divs else now_date_str[:4]
+        div_ledger_tab_title = f"배당원장_{div_year}"
+        try:
+            ws_dl = sh.worksheet(div_ledger_tab_title)
+        except Exception:
+            ws_dl = sh.add_worksheet(title=div_ledger_tab_title, rows=max(100, len(confirmed_divs) + 60), cols=18)
+
+        try:
+            ws_dl.resize(rows=max(100, len(confirmed_divs) + 60), cols=18)
+        except Exception:
+            pass
+
+        try:
+            sheet_meta = sh.fetch_sheet_metadata()
+            unmerge_dl = []
+            for s in sheet_meta.get("sheets", []):
+                if s["properties"]["sheetId"] == ws_dl.id:
+                    for m in s.get("merges", []):
+                        if m.get("startRowIndex", 0) >= 1:
+                            unmerge_dl.append({"unmergeCells": {"range": m}})
+            if unmerge_dl:
+                sh.batch_update({"requests": unmerge_dl})
+        except Exception as e:
+            logger.warning(f"Could not unmerge legacy cells in '{div_ledger_tab_title}': {e}")
+
+        ws_dl.update(values=[[""] * 18 for _ in range(90)], range_name="A1:R90")
+        ws_dl.update(
+            values=[
+                [f"법인 유가증권 연간 배당수익 보조원장 [{div_year}년 귀속] (Corporate Annual Dividend & Withholding Tax Subledger — 법인세법 제18조의2·제57조·제73조 기준)"],
+                [f"한국투자증권(KIS) 실계좌 {div_year}년 확정 배당·분배금 전수 연동 · 지급일 기준환율(Historical FX) 고정 · 외국납부세액(15.0%)/국내원천세(14.0%)/익금불산입 구분 기장"],
+            ],
+            range_name="A1:A2",
+        )
+
+        dl_rows = []
+        dl_currencies = []
+        for idx, rec in enumerate(confirmed_divs):
+            r_dl = 7 + idx
+            dl_currencies.append(rec["curr"])
+            prec_dl = 2 if rec["curr"] == "USD" else 0
+            tax_meta = classify_corporate_dividend_tax(rec["ticker"], rec["curr"], rec["name"])
+            wht_r = rec.get("wht_rate") if rec.get("wht_rate") is not None else tax_meta["wht_rate"]
+            pay_fx_v = rec.get("pay_fx") or (1.0 if rec["curr"] == "KRW" else fx_rate)
+            dl_rows.append([
+                f"DIV-{div_year}-{idx+1:04d}",                      # A (0): 전표번호
+                str(rec["pay_date"])[:7],                           # B (1): 귀속연월
+                rec["ex_date"],                                     # C (2): 배당락일(권리확정일)
+                rec["pay_date"],                                    # D (3): 실제지급일(입금일)
+                rec.get("market_label", tax_meta["market_label"]),  # E (4): 시장/국가
+                rec.get("income_type", tax_meta["income_type"]),    # F (5): 소득구분 및 법인세법 서식
+                rec["ticker"],                                      # G (6): 종목코드
+                rec["name"],                                        # H (7): 종목명
+                rec["curr"],                                        # I (8): 통화
+                rec.get("hist_qty", 0),                             # J (9): 권리확정 보유수량
+                rec["dps"],                                         # K (10): 주당배당금(현지통화)
+                f"=ROUND(J{r_dl}*K{r_dl}, {prec_dl})",              # L (11): 세전 배당총액(현지통화)
+                wht_r,                                              # M (12): 원천징수세율(조세조약·세법)
+                f"=ROUND(L{r_dl}*M{r_dl}, {prec_dl})",              # N (13): 원천징수세액(현지통화)
+                pay_fx_v,                                           # O (14): 지급일 기준환율(고정·USD/KRW)
+                f"=ROUND(L{r_dl}*O{r_dl}, 0)",                      # P (15): [대변] 배당금수익(세전익금·KRW)
+                f"=ROUND(N{r_dl}*O{r_dl}, 0)",                      # Q (16): [차변] 선납세금(원천세액·KRW)
+                f"=P{r_dl}-Q{r_dl}",                                # R (17): [차변] 예금실입금액(세후정산·KRW)
+            ])
+
+        last_dl_r = 6 + max(1, len(dl_rows))
+        r_dl_sum = last_dl_r + 1
+
+        locked_pending_krw = sum(
+            int(round(float(r.get("dps", 0)) * float(r.get("hist_qty", 0)) * (1.0 if r.get("curr") == "KRW" else fx_rate)))
+            for r in locked_pending_divs
+        )
+        locked_pending_note = (
+            f"분배락 권리확정 {len(locked_pending_divs)}건: "
+            + ", ".join(f"{r['ticker']} {r['hist_qty']}주 ({r['pay_date']} 지급)" for r in locked_pending_divs)
+            if locked_pending_divs
+            else "배당락 권리확정 후 미입금 대기 내역 없음"
+        )
+
+        # 4 Executive Tax Summary Cards in Rows 3..5 (A3:D5, E3:H5, I3:L5, M3:P5)
+        ws_dl.update(
+            values=[
+                [
+                    f"{div_year}년 확정 배당금수익 총액 [대변·익금]", "", "", "",
+                    f"{div_year}년 기납부 원천징수세액 [차변·선납세금]", "", "", "",
+                    f"{div_year}년 세후 예금 실입금 총액 [차변·예수금]", "", "", "",
+                    "권리확정 미입금 배당 (지급일 도래시 편입)", "", "", "",
+                ],
+                [
+                    f"=P{r_dl_sum}", "", "", "",
+                    f"=Q{r_dl_sum}", "", "", "",
+                    f"=R{r_dl_sum}", "", "", "",
+                    locked_pending_krw, "", "", "",
+                ],
+                [
+                    f'="해외배당(별지8호): " & TEXT(SUMIF(E7:E{last_dl_r},"미국(US)",P7:P{last_dl_r}), "₩#,##0") & " | 국내배당(별지10·16호): " & TEXT(SUMIF(E7:E{last_dl_r},"국내(KRX)",P7:P{last_dl_r}), "₩#,##0")', "", "", "",
+                    f'="외국납부세액(미국15%): " & TEXT(SUMIF(E7:E{last_dl_r},"미국(US)",Q7:Q{last_dl_r}), "₩#,##0") & " | 국내원천세(14%): " & TEXT(SUMIF(E7:E{last_dl_r},"국내(KRX)",Q7:Q{last_dl_r}), "₩#,##0")', "", "", "",
+                    f'="총 " & COUNTA(A7:A{last_dl_r}) & "건 수령 확정 | 복식부기 차대변 대사오차: " & TEXT(P{r_dl_sum}-(Q{r_dl_sum}+R{r_dl_sum}), "₩#,##0")', "", "", "",
+                    locked_pending_note, "", "", "",
+                ],
+            ],
+            range_name="A3:P5",
+            value_input_option="USER_ENTERED",
+        )
+
+        headers_dl = [[
+            "전표번호", "귀속연월", "배당락일\n(권리확정일)", "실제지급일\n(입금일)",
+            "시장/국가", "소득구분 및 법인세법 서식", "종목코드", "종목명", "통화",
+            "권리확정\n보유수량", "주당배당금\n(현지통화)", "세전 배당총액\n(현지통화)",
+            "원천징수세율\n(조세조약·세법)", "원천징수세액\n(현지통화)",
+            "지급일 기준환율\n(고정·USD/KRW)", "[대변] 배당금수익\n(세전익금·KRW)",
+            "[차변] 선납세금\n(원천세액·KRW)", "[차변] 예금실입금액\n(세후정산·KRW)",
+        ]]
+        ws_dl.update(values=headers_dl, range_name="A6:R6")
+
+        summary_row_dl = [
+            f"{div_year}년 확정 합계",
+            f'=COUNTA(A7:A{last_dl_r}) & "건"',
+            "",
+            "",
+            "",
+            "법인세법 시행령 제70조 제2항 확정 배당원장 합계 (차변 Q+R ≡ 대변 P)",
+            "",
+            "",
+            "",
+            f"=SUM(J7:J{last_dl_r})",
+            "",
+            "",
+            "",
+            "",
+            "",
+            f"=SUM(P7:P{last_dl_r})",
+            f"=SUM(Q7:Q{last_dl_r})",
+            f"=SUM(R7:R{last_dl_r})",
+        ]
+        if dl_rows:
+            ws_dl.update(
+                values=dl_rows + [summary_row_dl],
+                range_name=f"A7:R{r_dl_sum}",
+                value_input_option="USER_ENTERED",
+            )
+        else:
+            empty_dl_row = ["", "", "", "", "", "", "", "", "", 0, 0, 0, 0, 0, 1.0, 0, 0, 0]
+            ws_dl.update(
+                values=[empty_dl_row, summary_row_dl],
+                range_name=f"A7:R{r_dl_sum}",
+                value_input_option="USER_ENTERED",
+            )
+
+        # SECTION 2 of 배당원장_YYYY: 법인세법 신고 서식별 · 세목별 집계표
+        r_tax_sec = r_dl_sum + 2
+        r_tax_hdr = r_tax_sec + 1
+        r_tax_start = r_tax_hdr + 1
+        r_tax_end = r_tax_start + 2
+        r_tax_sum = r_tax_end + 1
+
+        ws_dl.update(
+            values=[[f"1. 법인세법 신고 서식별 · 세목별 배당수익 및 원천세 집계표 [{div_year}년 귀속]"]],
+            range_name=f"A{r_tax_sec}",
+        )
+        ws_dl.update(
+            values=[[
+                "법인세법 신고 서식 구분", "소득구분 (원장 매핑키)", "수령건수", "적용 원천세율",
+                "[대변] 배당금수익(KRW)", "[차변] 선납세금 공제액(KRW)", "[차변] 예금실입금액(KRW)",
+                "계정과목 및 세무조정 요령",
+            ]],
+            range_name=f"A{r_tax_hdr}:H{r_tax_hdr}",
+        )
+        tax_form_Specs = [
+            (
+                "별지 제8호서식 부표5 (외국납부세액공제 명세서)",
+                "해외배당 [별지8호부표5 외국납부]",
+                _STATUTORY_CORP_WHT_RATES["US"],
+                "법인세법 제57조 (국가코드: US, 외국납부세액공제 또는 손금산입 선택)",
+            ),
+            (
+                "별지 제10호서식(갑) (원천납부세액명세서)",
+                "국내ETF분배 [별지10호 원천납부]",
+                _STATUTORY_CORP_WHT_RATES["KR_ETF"],
+                "법인세법 제73조 (집합투자기구 분배금 기납부 법인세 전액 세액공제)",
+            ),
+            (
+                "별지 제16호서식 (수입배당금액 명세서)",
+                "국내주식배당 [별지16호 익금불산입]",
+                _STATUTORY_CORP_WHT_RATES["KR_STOCK"],
+                "법인세법 제18조의2 (내국법인 수입배당금 지분율별 익금불산입 검토)",
+            ),
+        ]
+        tax_rows = []
+        for t_idx, (f_title, inc_key, w_rate, t_note) in enumerate(tax_form_Specs):
+            r_tf = r_tax_start + t_idx
+            tax_rows.append([
+                f_title,
+                inc_key,
+                f"=COUNTIF($F$7:$F${last_dl_r}, B{r_tf})",
+                w_rate,
+                f"=SUMIF($F$7:$F${last_dl_r}, B{r_tf}, $P$7:$P${last_dl_r})",
+                f"=SUMIF($F$7:$F${last_dl_r}, B{r_tf}, $Q$7:$Q${last_dl_r})",
+                f"=SUMIF($F$7:$F${last_dl_r}, B{r_tf}, $R$7:$R${last_dl_r})",
+                t_note,
+            ])
+        tax_rows.append([
+            "서식별 합계",
+            "",
+            f"=SUM(C{r_tax_start}:C{r_tax_end})",
+            "",
+            f"=SUM(E{r_tax_start}:E{r_tax_end})",
+            f"=SUM(F{r_tax_start}:F{r_tax_end})",
+            f"=SUM(G{r_tax_start}:G{r_tax_end})",
+            "원장 확정 합계(P·Q·R열)와 100% 대사 일치",
+        ])
+        ws_dl.update(
+            values=tax_rows,
+            range_name=f"A{r_tax_start}:H{r_tax_sum}",
+            value_input_option="USER_ENTERED",
+        )
+
+        # SECTION 3 of 배당원장_YYYY: 기간별(월별 · 분기별) 확정 배당수익 마감 집계표
+        r_prd_sec = r_tax_sum + 2
+        r_prd_hdr = r_prd_sec + 1
+        r_prd_start = r_prd_hdr + 1
+        r_prd_end = r_prd_start + 11
+        r_q_start = r_prd_end + 1
+        r_q_end = r_q_start + 3
+        r_prd_sum = r_q_end + 1
+
+        ws_dl.update(
+            values=[[f"2. 기간별 (월별 · 분기별) 확정 배당수익 및 원천세 마감 집계표 [{div_year}년 귀속]"]],
+            range_name=f"A{r_prd_sec}",
+        )
+        ws_dl.update(
+            values=[[
+                "귀속연월", "분기구분", "수령건수", "해외배당 세전(KRW)", "국내배당·분배 세전(KRW)",
+                "[대변] 배당금수익 합계(KRW)", "[차변] 선납세금 합계(KRW)", "[차변] 예금실입금 합계(KRW)",
+            ]],
+            range_name=f"A{r_prd_hdr}:H{r_prd_hdr}",
+        )
+        prd_rows = []
+        for m in range(1, 13):
+            r_pm = r_prd_start + m - 1
+            q_num = (m - 1) // 3 + 1
+            prd_rows.append([
+                f"{div_year}-{m:02d}",
+                f"{q_num}분기 (Q{q_num})",
+                f"=COUNTIF($B$7:$B${last_dl_r}, A{r_pm})",
+                f'=SUMIFS($P$7:$P${last_dl_r}, $B$7:$B${last_dl_r}, A{r_pm}, $E$7:$E${last_dl_r}, "미국(US)")',
+                f'=SUMIFS($P$7:$P${last_dl_r}, $B$7:$B${last_dl_r}, A{r_pm}, $E$7:$E${last_dl_r}, "국내(KRX)")',
+                f"=SUMIF($B$7:$B${last_dl_r}, A{r_pm}, $P$7:$P${last_dl_r})",
+                f"=SUMIF($B$7:$B${last_dl_r}, A{r_pm}, $Q$7:$Q${last_dl_r})",
+                f"=SUMIF($B$7:$B${last_dl_r}, A{r_pm}, $R$7:$R${last_dl_r})",
+            ])
+        for q_idx in range(1, 5):
+            r_qr = r_q_start + q_idx - 1
+            q_label = f"{q_idx}분기 (Q{q_idx})"
+            prd_rows.append([
+                f"{div_year}년 {q_idx}분기 소계",
+                q_label,
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, C${r_prd_start}:C${r_prd_end})",
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, D${r_prd_start}:D${r_prd_end})",
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, E${r_prd_start}:E${r_prd_end})",
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, F${r_prd_start}:F${r_prd_end})",
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, G${r_prd_start}:G${r_prd_end})",
+                f"=SUMIF($B${r_prd_start}:$B${r_prd_end}, B{r_qr}, H${r_prd_start}:H${r_prd_end})",
+            ])
+        prd_rows.append([
+            f"{div_year}년 연간 확정 합계",
+            "연간 총계",
+            f"=SUM(C{r_prd_start}:C{r_prd_end})",
+            f"=SUM(D{r_prd_start}:D{r_prd_end})",
+            f"=SUM(E{r_prd_start}:E{r_prd_end})",
+            f"=SUM(F{r_prd_start}:F{r_prd_end})",
+            f"=SUM(G{r_prd_start}:G{r_prd_end})",
+            f"=SUM(H{r_prd_start}:H{r_prd_end})",
+        ])
+        ws_dl.update(
+            values=prd_rows,
+            range_name=f"A{r_prd_start}:H{r_prd_sum}",
+            value_input_option="USER_ENTERED",
+        )
+        logger.info(f"Updated '{div_ledger_tab_title}' ({len(dl_rows)} confirmed corporate dividend records synced)")
 
         # =========================================================================
         # TAB 3: 매매일지_YYYY-MM (Monthly Trading Subledgers — 법인 유가증권 월별 매매원장)
@@ -1117,14 +1509,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 f"='배당캘린더'!M{r_act_sum}",
                 "=IFERROR(B21/$B$23, 0)",
                 f"=\"실수령 확정 세전: \" & TEXT('배당캘린더'!M{r_act_sum}, \"₩#,##0\") & \" (향후 12개월 지급예정 세전 \" & TEXT('배당캘린더'!M{r_exp_sum}, \"₩#,##0\") & \" 별도)\"",
-                "배당캘린더 탭",
+                f"{div_ledger_tab_title}·배당캘린더 탭",
             ],
             [
                 "거래비용 및 세금 (차감)",
                 f"=-(({cost_terms}) + '배당캘린더'!N{r_act_sum})",
                 "=IFERROR(B22/$B$23, 0)",
-                f"=\"매매비용(수수료+거래세) \" & TEXT({cost_terms}, \"₩#,##0\") & \" + 실수령 배당소득세 \" & TEXT('배당캘린더'!N{r_act_sum}, \"₩#,##0\")",
-                "매매일지(월별탭)·배당캘린더 합산",
+                f"=\"매매비용(수수료+거래세) \" & TEXT({cost_terms}, \"₩#,##0\") & \" + 실수령 배당원천세 \" & TEXT('배당캘린더'!N{r_act_sum}, \"₩#,##0\")",
+                f"매매일지(월별탭)·{div_ledger_tab_title} 합산",
             ],
             ["총 순손익 (Net Profit)", "=SUM(B19:B22)", 1, "모든 확정 비용·세금 차감 후 최종 순손익 (확정순실현+미실현+실수령세후배당)", "종합 집계"],
             ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "현재 총 매입원금 대비 비용 차감 후 종합 순수익률", "종합 성과 지표"],
@@ -1618,6 +2010,285 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'right': {'style': 'SOLID', 'color': BORDER_GREY},
                 'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
                 'innerVertical': {'style': 'SOLID', 'color': INNER_GREY}
+            }
+        })
+
+        # -------------------------------------------------------------------------
+        # 5b-2. 배당원장_YYYY Formats & Styling (18 Statutory Columns A..R + 2 Summary Tables)
+        # -------------------------------------------------------------------------
+        sheet_id_dl = ws_dl.id
+        col_widths_dl = [
+            115, 85, 95, 95, 90, 215, 95, 175, 65,
+            85, 105, 110, 95, 105, 105, 125, 120, 125,
+        ]
+        for col_i, width in enumerate(col_widths_dl):
+            format_requests.append({
+                'updateDimensionProperties': {
+                    'range': {
+                        'sheetId': sheet_id_dl,
+                        'dimension': 'COLUMNS',
+                        'startIndex': col_i,
+                        'endIndex': col_i + 1,
+                    },
+                    'properties': {'pixelSize': width},
+                    'fields': 'pixelSize',
+                }
+            })
+
+        # Merge 4 Executive Tax Summary Cards across Rows 3..5 (A..D, E..H, I..L, M..P)
+        for card_col_start in [0, 4, 8, 12]:
+            for card_row_idx in [2, 3, 4]:
+                format_requests.append({
+                    'mergeCells': {
+                        'range': {
+                            'sheetId': sheet_id_dl,
+                            'startRowIndex': card_row_idx,
+                            'endRowIndex': card_row_idx + 1,
+                            'startColumnIndex': card_col_start,
+                            'endColumnIndex': card_col_start + 4,
+                        },
+                        'mergeType': 'MERGE_ALL',
+                    }
+                })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 2, 'endRowIndex': 3, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': NAVY_HEADER,
+                        'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                        'horizontalAlignment': 'CENTER',
+                        'verticalAlignment': 'MIDDLE',
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': SOFT_BLUE_BG,
+                        'textFormat': {'bold': True, 'fontSize': 11},
+                        'horizontalAlignment': 'CENTER',
+                        'verticalAlignment': 'MIDDLE',
+                        'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'},
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,numberFormat)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 4, 'endRowIndex': 5, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': LIGHT_GREY_BG,
+                        'textFormat': {'fontSize': 9},
+                        'horizontalAlignment': 'CENTER',
+                        'verticalAlignment': 'MIDDLE',
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+            }
+        })
+
+        # Header Row 6 Styling (A6:R6)
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 5, 'endRowIndex': 6, 'startColumnIndex': 0, 'endColumnIndex': 18},
+                'cell': {
+                    'userEnteredFormat': {
+                        'backgroundColor': NAVY_HEADER,
+                        'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                        'horizontalAlignment': 'CENTER',
+                        'verticalAlignment': 'MIDDLE',
+                        'wrapStrategy': 'WRAP',
+                    }
+                },
+                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
+            }
+        })
+        # Alignments & Formats for Main Subledger Rows (7..r_dl_sum)
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 0, 'endColumnIndex': 5},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
+                'fields': 'userEnteredFormat.horizontalAlignment',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 5, 'endColumnIndex': 8},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
+                'fields': 'userEnteredFormat.horizontalAlignment',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
+                'fields': 'userEnteredFormat.horizontalAlignment',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 9, 'endColumnIndex': 18},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
+                'fields': 'userEnteredFormat.horizontalAlignment',
+            }
+        })
+        # Qty Col J (9), Rate Col M (12), FX Col O (14), KRW Cols P..R (15..18)
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 9, 'endColumnIndex': 10},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}}},
+                'fields': 'userEnteredFormat.numberFormat',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum - 1, 'startColumnIndex': 12, 'endColumnIndex': 13},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.0%'}}},
+                'fields': 'userEnteredFormat.numberFormat',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum - 1, 'startColumnIndex': 14, 'endColumnIndex': 15},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0.00'}}},
+                'fields': 'userEnteredFormat.numberFormat',
+            }
+        })
+        for idx, curr in enumerate(dl_currencies):
+            row_idx = 6 + idx
+            pattern = '\"$\"#,##0.00' if curr == 'USD' else '\"₩\"#,##0'
+            for col_idx in [10, 11, 13]:
+                format_requests.append({
+                    'repeatCell': {
+                        'range': {'sheetId': sheet_id_dl, 'startRowIndex': row_idx, 'endRowIndex': row_idx + 1, 'startColumnIndex': col_idx, 'endColumnIndex': col_idx + 1},
+                        'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': pattern}}},
+                        'fields': 'userEnteredFormat.numberFormat',
+                    }
+                })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 6, 'endRowIndex': r_dl_sum, 'startColumnIndex': 15, 'endColumnIndex': 18},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                'fields': 'userEnteredFormat.numberFormat',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_dl_sum - 1, 'endRowIndex': r_dl_sum, 'startColumnIndex': 0, 'endColumnIndex': 18},
+                'cell': {'userEnteredFormat': {'textFormat': {'bold': True}, 'backgroundColor': {'red': 0.94, 'green': 0.96, 'blue': 0.98}}},
+                'fields': 'userEnteredFormat(textFormat,backgroundColor)',
+            }
+        })
+        format_requests.append({
+            'updateBorders': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': 5, 'endRowIndex': r_dl_sum, 'startColumnIndex': 0, 'endColumnIndex': 18},
+                'top': {'style': 'SOLID', 'color': BORDER_GREY},
+                'bottom': {'style': 'DOUBLE', 'color': BORDER_GREY},
+                'left': {'style': 'SOLID', 'color': BORDER_GREY},
+                'right': {'style': 'SOLID', 'color': BORDER_GREY},
+                'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
+                'innerVertical': {'style': 'SOLID', 'color': INNER_GREY},
+            }
+        })
+
+        # Section 2 (Tax Form Table) & Section 3 (Monthly/Quarterly Table) Formatting on 배당원장_YYYY
+        for sec_title_r, sec_hdr_r, sec_end_r in [
+            (r_tax_sec, r_tax_hdr, r_tax_sum),
+            (r_prd_sec, r_prd_hdr, r_prd_sum),
+        ]:
+            format_requests.append({
+                'mergeCells': {
+                    'range': {'sheetId': sheet_id_dl, 'startRowIndex': sec_title_r - 1, 'endRowIndex': sec_title_r, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                    'mergeType': 'MERGE_ALL',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_dl, 'startRowIndex': sec_title_r - 1, 'endRowIndex': sec_title_r, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': NAVY_HEADER,
+                            'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                            'horizontalAlignment': 'LEFT',
+                            'verticalAlignment': 'MIDDLE',
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_dl, 'startRowIndex': sec_hdr_r - 1, 'endRowIndex': sec_hdr_r, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': BLUE_HEADER,
+                            'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_dl, 'startRowIndex': sec_end_r - 1, 'endRowIndex': sec_end_r, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                    'cell': {'userEnteredFormat': {'textFormat': {'bold': True}, 'backgroundColor': {'red': 0.94, 'green': 0.96, 'blue': 0.98}}},
+                    'fields': 'userEnteredFormat(textFormat,backgroundColor)',
+                }
+            })
+            format_requests.append({
+                'updateBorders': {
+                    'range': {'sheetId': sheet_id_dl, 'startRowIndex': sec_title_r - 1, 'endRowIndex': sec_end_r, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                    'top': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'bottom': {'style': 'DOUBLE', 'color': BORDER_GREY},
+                    'left': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'right': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
+                    'innerVertical': {'style': 'SOLID', 'color': INNER_GREY},
+                }
+            })
+        # Specific number formats for Section 2 (Tax Form Table) & Section 3 (Monthly/Quarterly Table)
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_tax_start - 1, 'endRowIndex': r_tax_end, 'startColumnIndex': 3, 'endColumnIndex': 4},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.0%'}, 'horizontalAlignment': 'RIGHT'}},
+                'fields': 'userEnteredFormat(numberFormat,horizontalAlignment)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_tax_start - 1, 'endRowIndex': r_tax_sum, 'startColumnIndex': 4, 'endColumnIndex': 7},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}, 'horizontalAlignment': 'RIGHT'}},
+                'fields': 'userEnteredFormat(numberFormat,horizontalAlignment)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_prd_start - 1, 'endRowIndex': r_prd_sum, 'startColumnIndex': 0, 'endColumnIndex': 3},
+                'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
+                'fields': 'userEnteredFormat.horizontalAlignment',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_prd_start - 1, 'endRowIndex': r_prd_sum, 'startColumnIndex': 3, 'endColumnIndex': 8},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}, 'horizontalAlignment': 'RIGHT'}},
+                'fields': 'userEnteredFormat(numberFormat,horizontalAlignment)',
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dl, 'startRowIndex': r_q_start - 1, 'endRowIndex': r_q_end, 'startColumnIndex': 0, 'endColumnIndex': 8},
+                'cell': {'userEnteredFormat': {'backgroundColor': SOFT_BLUE_BG, 'textFormat': {'bold': True}}},
+                'fields': 'userEnteredFormat(backgroundColor,textFormat)',
             }
         })
 

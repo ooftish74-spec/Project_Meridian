@@ -41,15 +41,24 @@ def test_get_dividend_schedule():
 
     # Historical account entitlement extraction from KIS ledger rows
     ledger_rows = [
-        {"거래일자": "2026-08-25", "거래구분": "매수(BUY)", "종목코드": "NVDA", "체결수량": "8"},
-        {"거래일자": "2026-10-15", "거래구분": "매도(SELL)", "종목코드": "NVDA", "체결수량": "8"},
-        {"거래일자": "2026-10-27", "거래구분": "매수(BUY)", "종목코드": "069500", "체결수량": "2"},
-        {"거래일자": "2026-10-29", "거래구분": "매도(SELL)", "종목코드": "069500", "체결수량": "2"},
+        {"거래일자": "2026-08-25", "거래구분": "매수(BUY)", "종목코드": "NVDA", "통화": "USD", "체결수량": "8", "적용환율(USD/KRW)": "1334.0"},
+        {"거래일자": "2026-10-15", "거래구분": "매도(SELL)", "종목코드": "NVDA", "통화": "USD", "체결수량": "8", "적용환율(USD/KRW)": "1334.0"},
+        {"거래일자": "2026-10-27", "거래구분": "매수(BUY)", "종목코드": "069500", "통화": "KRW", "체결수량": "2", "적용환율(USD/KRW)": "1.0"},
+        {"거래일자": "2026-10-29", "거래구분": "매도(SELL)", "종목코드": "069500", "통화": "KRW", "체결수량": "2", "적용환율(USD/KRW)": "1.0"},
     ]
     ent = report_mod.extract_account_dividend_entitlements(ledger_rows, "2026-10-30")
     assert len(ent) == 2
     assert ent[0]["ticker"] == "NVDA" and ent[0]["status"] == "실제 수령" and ent[0]["hist_qty"] == 8
+    assert ent[0]["wht_rate"] == pytest.approx(0.15, rel=1e-9)
+    assert ent[0]["pay_fx"] == pytest.approx(1334.0, rel=1e-9)
     assert ent[1]["ticker"] == "KRX:069500" and ent[1]["status"] == "지급 예정" and ent[1]["hist_qty"] == 2 and ent[1]["locked_qty"] is True
+    assert ent[1]["wht_rate"] == pytest.approx(0.14, rel=1e-9)
+    assert ent[1]["pay_fx"] == pytest.approx(1.0, rel=1e-9)
+
+    # Statutory corporate tax classification check
+    kr_stock_tax = report_mod.classify_corporate_dividend_tax("KRX:000270", "KRW", "기아")
+    assert kr_stock_tax["wht_rate"] == pytest.approx(0.0, rel=1e-9)
+    assert "별지16호" in kr_stock_tax["income_type"]
 
 
 def test_load_recent_closed_trades(tmp_path, monkeypatch):
@@ -229,6 +238,15 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert sell_rows[0][16] == pytest.approx(2076.0, rel=1e-9)
     assert sell_rows[0][19] == "=R7+S7"
 
+    # 3b. Verify annual consolidated corporate dividend subledger '배당원장_2026' created with 18 columns
+    assert "배당원장_2026" in fake_sh.ws_map
+    ws_dl = fake_sh.ws_map["배당원장_2026"]
+    assert len(ws_dl.updates["A6:R6"][0]) == 18
+    assert ws_dl.updates["A6:R6"][0][0] == "전표번호"
+    assert ws_dl.updates["A6:R6"][0][15] == "[대변] 배당금수익\n(세전익금·KRW)"
+    assert ws_dl.updates["A6:R6"][0][16] == "[차변] 선납세금\n(원천세액·KRW)"
+    assert ws_dl.updates["A6:R6"][0][17] == "[차변] 예금실입금액\n(세후정산·KRW)"
+
     # 4. Verify '대시보드' C4 and Rows 19..24 PnL Attribution aggregate across all monthly tabs
     ws_d = fake_sh.ws_map["대시보드"]
     assert ws_d.updates["A4:I4"][0][2] == "='보유종목'!O8 + ('매매일지_2026-07'!I4 + '매매일지_2026-10'!I4)"
@@ -236,6 +254,7 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert pnl_rows[0][1] == "='매매일지_2026-07'!A4 + '매매일지_2026-10'!A4"
     assert pnl_rows[0][4] == "매매일지_2026-07~2026-10 (2개 월별탭)"
     assert pnl_rows[1][1] == "='보유종목'!O8"
+    assert pnl_rows[2][4] == "배당원장_2026·배당캘린더 탭"
     assert pnl_rows[4][1] == "=SUM(B19:B22)"
     assert pnl_rows[5][1] == "=IFERROR(B23/'보유종목'!M8, 0)"
 
