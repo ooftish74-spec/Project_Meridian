@@ -260,6 +260,10 @@ def test_cio_docket_email_markdown_and_reply_execution(tmp_path):
     email_md = CIODocketBuilder.format_docket_email_markdown(docket)
     assert "한눈에 이해하는 핵심 요약" in email_md
     assert "시험이 아주 어렵게 출제되어" in email_md
+    assert "Renaissance Technologies (Medallion) & Two Sigma" in email_md
+    assert "Citadel GQS & D.E. Shaw" in email_md
+    assert "AQR Capital & Millennium Management" in email_md
+    assert "위원회 공식 제안" in email_md
 
     # 1. Outbound email body must NEVER be parsed as a reply
     assert CIODocketEmailService.parse_cio_reply_text(email_md, default_docket_id="DOCKET-2026-10-30-CAL01") is None

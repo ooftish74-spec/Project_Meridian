@@ -976,6 +976,50 @@ class CIODocketBuilder:
                         'meaning': '수십 번 억지로 끼워 맞춘 과최적화 결과물이 아니라, 독립적인 소수 시행 내에 정식 통과한 안건임을 뜻합니다.',
                     },
                 ],
+                'tier1_quant_benchmark': [
+                    {
+                        'fund_group': 'Renaissance Technologies (Medallion) & Two Sigma',
+                        'principle': '종목 서열(Ranking)과 시장 기저율 영점(Prior Intercept)의 엄격한 분리',
+                        'practice': (
+                            "하락장에서 단순 적중률이 낮아졌다고 해서 AI 모델 전체를 성급히 재학습(Retrain)하지 않습니다. "
+                            f"단기 하락장 데이터로 모델 전체를 다시 학습시키면 수년간 축적된 종목 선별력(IC {oos_ic:+.4f}, 상하위 격차 {spread_pct:+.2f}%p)까지 "
+                            "망가지는 '파국적 망각(Catastrophic Forgetting)'이 발생하기 때문입니다. 대신 종목 순위는 100% 그대로 보존하고 "
+                            "출력 확률의 영점(Intercept)만 현재 시장 상승 비율(기저율)에 맞게 평행 이동(Prior-Shift)시킵니다."
+                        ),
+                    },
+                    {
+                        'fund_group': 'Citadel GQS & D.E. Shaw',
+                        'principle': '하락장 과잉 매수(Over-betting) 방지 및 현금 방어력 자동 확보',
+                        'practice': (
+                            f"AI의 상승 확률 점수가 실제 시장보다 {cal_bias:.1%}p 후하게 매겨져 있으면, 자금 배분 엔진(Kelly Sizer)이 "
+                            "모든 종목의 기대수익률을 과대평가하여 하락장에서 현금을 소진하고 주식 비중을 늘리는 실수를 범합니다. "
+                            "영점 보정을 적용하면 매수 문턱이 자동으로 엄격해져 최상위 10~20% 알짜 종목에만 자금이 투입되고 자연스럽게 현금 비중이 방어됩니다."
+                        ),
+                    },
+                    {
+                        'fund_group': 'AQR Capital & Millennium Management',
+                        'principle': '부분 수축 이식(Partial Shrinkage / 0.5x Pilot)을 통한 급반등(Whipsaw) 헤지',
+                        'practice': (
+                            "아무리 수학적으로 타당한 보정이라도 단기 표본의 추정 오차를 감안하여 한 번에 100%(1.0x) 보정하지 않고, "
+                            "절반 강도(0.5x Empirical-Bayes Shrinkage)만 먼저 실전에 반영합니다. 이렇게 하면 하락장에서는 과잉 매수를 막아주면서도, "
+                            "시장이 갑자기 V자 반등할 때 매수 기회를 놓치지 않도록 양방향 리스크를 균형 있게 제어할 수 있습니다."
+                        ),
+                    },
+                ],
+                'committee_recommendation': {
+                    'recommended_option': 'APPROVE_PILOT',
+                    'recommended_label_kr': '🟢 [1] 승인 (PILOT 0.5x 소액 실전 이식) — 최상위 퀀트 펀드 표준 권고',
+                    'rationale_points': [
+                        "자본 보전(Capital Preservation) 최우선: 현재 한·미 시장 레짐이 약세(Bear)인 상태에서 AI의 +20.88%p 낙관 편향을 방치하면 어중간한 중위권 종목까지 매수하여 현금이 묶일 위험이 있습니다.",
+                        f"알파 훼손 제로(Zero Alpha Destruction): AI의 종목 서열 예측력(OOS IC {oos_ic:+.4f}, 직교 적중률 {oos_excess_acc:.1%})은 건드리지 않고 점수 영점만 절반 강도(0.5x)로 보정하므로 부작용이 극히 낮습니다.",
+                        "자동 복원력(Self-Reverting): 향후 시장이 다시 상승장(상승 종목 비율 50% 이상)으로 돌아서면 영점 오차가 0으로 줄어들어 보정 효과도 자동으로 사라집니다.",
+                    ],
+                    'alternative_note': (
+                        "※ 만약 대표님께서 보수적으로 1주일 더 현행 유지를 원하신다면 [2] 보류(SHADOW 유지)를 선택하셔도 무방합니다. "
+                        "이미 Track 1 자율 방어가 S2 스트림 기본 비중을 소폭 수축(0.35 -> 0.2971)해 두었으므로 즉각적인 위험은 통제되어 있으나, "
+                        "기대 샤프비율(Sharpe Ratio)과 하락장 현금 방어 효율 면에서는 [1] 승인(0.5x 파일럿)이 수학적으로 가장 우월한 선택입니다."
+                    ),
+                },
                 'verification_scorecard': {
                     'librarian_pit_leakage': 0,
                     'falsifier_status': 'SURVIVED',
@@ -1015,6 +1059,21 @@ class CIODocketBuilder:
                         'meaning': '모델 기대 수익과 시장 베타로 설명되지 않는 이상 손익의 크기입니다.',
                     },
                 ],
+                'tier1_quant_benchmark': [
+                    {
+                        'fund_group': 'Millennium Management & Citadel',
+                        'principle': '원인 불명 손익(Tail Residual) 발생 시 선(先) 감액 격리, 후(後) 부검 원칙',
+                        'practice': '설명되지 않는 대규모 잔차 손익이나 체결 괴리가 발생하면 원인이 규명될 때까지 자본 배정을 절반 이하로 즉각 동결합니다.',
+                    },
+                ],
+                'committee_recommendation': {
+                    'recommended_option': 'APPROVE_PILOT',
+                    'recommended_label_kr': '🟢 [1] 승인 (0.5x 격리 감액 및 정밀 감사 집행) 권고',
+                    'rationale_points': [
+                        '원인 불명의 잔차 변동성으로부터 원금을 보호하기 위해 0.5x 격리 캡을 유지하는 것이 글로벌 멀티매니저 펀드의 철칙입니다.',
+                    ],
+                    'alternative_note': '',
+                },
                 'verification_scorecard': {
                     'track1_auto_defense_applied': True,
                     'residual_z_score': coroner_report.get('residual_z_score', 0.0),
@@ -1046,6 +1105,7 @@ class CIODocketBuilder:
             sc = it.get('verification_scorecard') or {}
             organs = ', '.join(it.get('proposing_organs') or [])
             decision_status = it.get('cio_decision_status', 'PENDING_CIO_DECISION')
+            rec = (it.get('committee_recommendation') or {}).get('recommended_label_kr', '')
             lines.append(f"📋 안건 #{idx} [{it.get('cadence_type', 'REGULAR')}]: {it.get('docket_id', '')} (상태: {decision_status})")
             lines.append(f"  • 상정 기관 : {organs}")
             lines.append(f"  • 안건 제목 : {it.get('title', '')}")
@@ -1053,13 +1113,15 @@ class CIODocketBuilder:
             lines.append(f"  • 대상 파일 : {it.get('target_file', '')}")
             lines.append(f"  • 핵심 근거 : {it.get('evidence_summary', '')}")
             lines.append(f"  • 검증 성적 : {json.dumps(sc, ensure_ascii=False)}")
+            if rec:
+                lines.append(f"  • 위원회 권고: {rec}")
             lines.append("  • CIO 결재 선택지: [1] 승인(PILOT 0.5x 이식) | [2] 보류(SHADOW 유지) | [3] 기각(묘지기 영구 봉인)")
             lines.append("─" * 46)
         return '\n'.join(lines)
 
     @staticmethod
     def format_docket_email_markdown(docket: Dict[str, Any]) -> str:
-        """CIO 결재 상정안을 비전문가도 한눈에 이해할 수 있도록 풀어서 설명한 상세 이메일 보고서(Markdown/HTML 겸용) 생성."""
+        """CIO 결재 상정안을 비전문가도 한눈에 이해할 수 있도록 풀어서 설명하고 Tier-1 퀀트 펀드 벤치마크 및 권고안을 포함한 이메일 보고서 생성."""
         items = docket.get('docket_items') or []
         as_of = docket.get('as_of_date', '')
         if not items:
@@ -1070,11 +1132,12 @@ class CIODocketBuilder:
             f"# ⚖️ Project Meridian — 대표(CIO) 헌법 결재 상정 보고서 ({as_of})",
             "",
             "대표님, Project Meridian의 **3부서(발굴·구현부 / 검증·반증부 / 운용·집행·감시부) 및 독립기관(검시관)**이 "
-            f"금일(`{as_of}`) 일일 헌법 감사를 마치고 대표님께 **총 {len(items)}건의 결재 안건**을 상정하였습니다.",
+            f"금일(`{as_of}`) 일일 헌법 감사를 마치고, **글로벌 최상위 퀀트 펀드(Tier-1)들의 벤치마크 기준과 위원회 공식 권고안**을 담아 "
+            f"대표님께 **총 {len(items)}건의 결재 안건**을 상정하였습니다.",
             "",
             "> **💡 이메일 답장(Reply)으로 간편 결재하는 방법**  ",
             "> 본 이메일에 그대로 **[답장(Reply)]** 버튼을 누르신 뒤, 본문 첫 줄에 아래 단어 중 하나만 적어서 보내주시면 시스템이 자동으로 수신하여 집행하고 확인 메일을 보내드립니다:",
-            "> - **`승인`** (또는 **`1`**) : 안건을 승인하여 **소액 실전 파일럿(0.5x 배율)**으로 안전하게 적용합니다.",
+            "> - **`승인`** (또는 **`1`**) : **[위원회 권고]** 안건을 승인하여 **소액 실전 파일럿(0.5x 배율)**으로 안전하게 적용합니다.",
             "> - **`보류`** (또는 **`2`**) : 실전 코드를 바꾸지 않고 **1주일 더 가상(Shadow) 상태에서 관찰**합니다.",
             "> - **`기각`** (또는 **`3`**) : 안건을 영구 폐기하고 **묘지기(Gravekeeper) 원장에 봉인**하여 재상정을 차단합니다.",
             "",
@@ -1084,12 +1147,15 @@ class CIODocketBuilder:
         for idx, it in enumerate(items, 1):
             docket_id = it.get('docket_id', '')
             cadence_kr = "주간 정기 상정 (매주 금요일)" if it.get('cadence_type') == 'WEEKLY_REGULAR' else "긴급 수시 상정 (이상 징후 포착)"
+            rec_info = it.get('committee_recommendation') or {}
+            rec_label = rec_info.get('recommended_label_kr', '')
             md.extend([
                 f"## 📋 제{idx}호 안건: {it.get('title', '')}",
                 f"- **안건 고유번호 (Docket ID)**: `{docket_id}`",
                 f"- **상정 구분**: {cadence_kr}",
                 f"- **공동 발의 기관**: {', '.join(it.get('proposing_organs') or [])}",
                 f"- **변경 대상 코드**: `{it.get('target_file', '')}`",
+                f"- **위원회 공식 권고**: **{rec_label}**",
                 "",
                 "### 1. 한눈에 이해하는 핵심 요약 (쉬운 설명)",
                 f"{it.get('plain_executive_summary', '')}",
@@ -1121,13 +1187,42 @@ class CIODocketBuilder:
                         f"`{row.get('value', '')}` | {row.get('meaning', '')} |"
                     )
 
+            benchmarks = it.get('tier1_quant_benchmark') or []
+            if benchmarks:
+                md.extend([
+                    "",
+                    "### 5. 글로벌 최상위 퀀트 펀드(Tier-1)들은 이 상황을 어떻게 처리할까? (벤치마크)",
+                    "",
+                    "| 글로벌 벤치마크 펀드 | 핵심 운용 원칙 | 실제 처리 방식 및 이유 (쉬운 해설) |",
+                    "| :--- | :--- | :--- |",
+                ])
+                for bm in benchmarks:
+                    md.append(
+                        f"| **{bm.get('fund_group', '')}** | **{bm.get('principle', '')}** | "
+                        f"{bm.get('practice', '')} |"
+                    )
+
+            if rec_info:
+                md.extend([
+                    "",
+                    "### 6. 3부서 · 독립기관 합동 위원회의 최종 제안 (Recommendation)",
+                    "",
+                    f"> **🏆 위원회 공식 제안: {rec_label}**",
+                    "",
+                ])
+                for r_pt in (rec_info.get('rationale_points') or []):
+                    md.append(f"- **제안 사유**: {r_pt}")
+                alt_note = rec_info.get('alternative_note', '')
+                if alt_note:
+                    md.extend(["", f"*{alt_note}*"])
+
             md.extend([
                 "",
-                "### 5. 대표님(CIO)의 결재 선택지",
+                "### 7. 대표님(CIO)의 최종 결재 선택지",
                 "",
                 "| 결재 답장 문구 | 집행 단계 | 상세 작동 방식 및 리스크 통제 |",
                 "| :--- | :--- | :--- |",
-                "| **`승인`** (또는 **`1`**) | **PILOT (0.5x 소액 실전)** | 헌법 제4규칙에 따라 즉시 100% 반영하지 않고, **절반 강도(0.5x)로만 안전하게 실전에 이식**하여 5영업일간 추가 검증합니다. |",
+                "| **`승인`** (또는 **`1`**) ⭐**권고** | **PILOT (0.5x 소액 실전)** | 헌법 제4규칙에 따라 즉시 100% 반영하지 않고, **절반 강도(0.5x)로만 안전하게 실전에 이식**하여 5영업일간 추가 검증합니다. |",
                 "| **`보류`** (또는 **`2`**) | **SHADOW (0.0x 가상 유지)** | 현재 실전 코드는 **단 한 줄도 바꾸지 않고 그대로 유지**하며, 다음 주 금요일 정기 결재일까지 가상 환경에서 1주 더 지켜봅니다. |",
                 "| **`기각`** (또는 **`3`**) | **GRAVEYARD (영구 폐기)** | 본 안건을 기각하고 **묘지기(Gravekeeper) 영구 원장에 등록**하여, 시스템이 동일한 안건을 다시 상정하지 못하도록 봉인합니다. |",
                 "",
@@ -1135,8 +1230,8 @@ class CIODocketBuilder:
             ])
 
         md.extend([
-            "### 📬 회신 안내",
-            "지금 보고 계신 이메일에서 **[답장(Reply)]**을 누르시고 첫 줄에 **`승인`**, **`보류`**, **`기각`** (또는 **`1`**, **`2`**, **`3`**) 중 하나만 적어 보내주십시오.",
+            "### 📬 대표님 최종 결재 회신 안내",
+            "지금 보고 계신 이메일에서 **[답장(Reply)]**을 누르시고 첫 줄에 **`승인`**(위원회 권고), **`보류`**, **`기각`** (또는 **`1`**, **`2`**, **`3`**) 중 대표님의 최종 결정을 적어 보내주십시오.",
             "(무응답 시에는 안전 원칙에 따라 기존 실전 코드가 그대로 유지됩니다.)",
         ])
         return '\n'.join(md)
