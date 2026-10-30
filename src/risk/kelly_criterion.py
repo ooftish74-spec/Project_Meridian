@@ -43,6 +43,9 @@ _KELLY_MIN_PENALTY = 0.10
 _KELLY_STATUTORY_CEIL = 0.25
 _KELLY_VIX_REF = 15.0
 _KELLY_VIX_TAU = 20.0
+_KELLY_DD_FLOOR_DEFAULT = -5.0
+_KELLY_DD_MAX_CUT = 0.85
+_KELLY_DD_EPS = 1e-6
 try:
     from config.dynamic_config import DynamicConfig
     _cfg = DynamicConfig()
@@ -59,7 +62,7 @@ class KellyCriterion:
     """최적 포지션 사이징 엔진.
 
     스트림별 독립적으로 Kelly 비율을 계산하고,
-    레짐/변동성 조건에 따라 동적 조정합니다.
+    레짐/변동성/드로다운 볼록성(Drawdown Convexity) 조건에 따라 동적 조정합니다.
     """
     STREAMS: list
 
@@ -69,6 +72,20 @@ class KellyCriterion:
         self._measurement_data = None
         self._stream_metrics = None
         self._signal_cache = None
+
+    @staticmethod
+    def compute_drawdown_convexity_factor(
+        current_dd_pct: float,
+        floor_dd_pct: float = _KELLY_DD_FLOOR_DEFAULT,
+    ) -> float:
+        """Citadel / Millennium 드로다운 볼록성 감쇠 계수(Drawdown Convexity Dampener, ψ(d_t)) 산출.
+
+        ψ(d_t, d_floor) = 1.0 - min(ψ_max_cut, (max(0, -DD_t) / max(|d_floor|, ε))^2)
+        """
+        dd_mag = max(0.0, -float(current_dd_pct))
+        floor_mag = max(_KELLY_DD_EPS, abs(float(floor_dd_pct)))
+        ratio_sq = (dd_mag / floor_mag) ** 2
+        return round(1.0 - min(_KELLY_DD_MAX_CUT, ratio_sq), 6)
 
     @staticmethod
     def kelly_fraction(win_rate: float, profit_loss_ratio: float) -> float:
@@ -97,12 +114,18 @@ class KellyCriterion:
         f_star = (p * b - q) / b
         return f_star
 
-    def calculate_stream_kelly(self, stream_id: str, regime: str='caution') -> Dict:
+    def calculate_stream_kelly(
+        self,
+        stream_id: str,
+        regime: str = 'caution',
+        current_dd_pct: Optional[float] = None,
+    ) -> Dict:
         """개별 스트림의 Kelly 비율 계산.
 
         Args:
             stream_id: 스트림 ID (S1~S4)
             regime: 현재 레짐
+            current_dd_pct: 현재 포트폴리오 드로다운 (%, 선택사항 — 전달 시 볼록성 감쇠 ψ(d_t) 적용)
 
         Returns:
             {
@@ -147,9 +170,16 @@ class KellyCriterion:
         _regime_defaults = {'bull': 1.0, 'caution': 0.8, 'bear': 0.5, 'crash': 0.3}
         _regime_safe = regime if regime in _regime_defaults else 'caution'
         regime_adj = _get(f'risk.kelly_regime_adj.{_regime_safe}', _regime_defaults[_regime_safe])
-        
-        # 최종 조정된 켈리 = fractional_kelly * regime_adj * bayesian_penalty
-        adjusted_kelly = fractional_kelly * regime_adj * bayesian_penalty
+
+        dd_floor = float(pget('kill_switch.absolute_mdd_kill_pct', _KELLY_DD_FLOOR_DEFAULT))
+        dd_convexity = (
+            self.compute_drawdown_convexity_factor(float(current_dd_pct), dd_floor)
+            if current_dd_pct is not None
+            else 1.0
+        )
+
+        # 최종 조정된 켈리 = fractional_kelly * regime_adj * bayesian_penalty * dd_convexity
+        adjusted_kelly = fractional_kelly * regime_adj * bayesian_penalty * dd_convexity
         
         if full_kelly <= 0:
             return {
@@ -157,13 +187,14 @@ class KellyCriterion:
                 'adjusted_kelly': 0.0, 'max_position_pct': 0.0, 'win_rate': round(win_rate, 4),
                 'profit_loss_ratio': round(pl_ratio, 4), 'avg_win_pct': round(avg_win * 100, 2),
                 'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades,
-                'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction
+                'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj,
+                'dd_convexity_factor': round(dd_convexity, 6), 'fraction': fraction
             }
         base_max_pos = float(pget('risk.kelly_max_position_pct', 0.15))
         min_pos = float(pget('risk.kelly_min_position_pct', 0.01))
         sample_conf = math.sqrt(float(n_trades) / float(n_trades + max(1, int(min_trades))))
         edge_boost = 1.0 + _KELLY_EDGE_BOOST_COEF * sample_conf * math.tanh(max(0.0, float(full_kelly)))
-        raw_dyn_max = base_max_pos * float(regime_adj) * math.sqrt(max(_KELLY_MIN_PENALTY, float(bayesian_penalty))) * edge_boost
+        raw_dyn_max = base_max_pos * float(regime_adj) * math.sqrt(max(_KELLY_MIN_PENALTY, float(bayesian_penalty))) * edge_boost * dd_convexity
         max_pos = max(min_pos, min(_KELLY_STATUTORY_CEIL, raw_dyn_max))
         final_kelly = max(min_pos, min(max_pos, adjusted_kelly))
         return {
@@ -181,6 +212,7 @@ class KellyCriterion:
             'sufficient_data': sufficient_data,
             'regime': regime,
             'regime_adj': regime_adj,
+            'dd_convexity_factor': round(dd_convexity, 6),
             'fraction': fraction,
         }
 

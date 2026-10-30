@@ -360,6 +360,69 @@ class TestLiveDiagnosticsNonBlocking:
         assert issue_map.get('DATA_NOGO_TICKER_ISOLATED') == 'info'
         assert 'DATA_NOGO_ACTIVE' not in issue_map
 
+    def test_beyond_tier1_quant_upgrades_closed_form(self, tmp_path):
+        from src.allocation.portfolio_optimizer import TransactionCostFilter
+        from src.risk.kelly_criterion import KellyCriterion
+
+        # 1. Gârleanu-Pedersen (2013) Optimal Partial Aiming Rate (ω_s^*):
+        # S2 (is_bps = -4.62 <= 0): lambda = 0.0015, phi*lambda = 0.000225,
+        # disc = 0.000225^2 + 4*2.5*(0.015^2)*0.0015 = 3.425625e-6
+        # omega = (sqrt(3.425625e-6) - 0.000225) / 0.003 = 0.541948
+        omega_s2 = TransactionCostFilter.compute_garleanu_pedersen_aiming_rate(is_bps=-4.62)
+        expected_omega_s2 = round((math.sqrt((0.15 * 0.0015) ** 2 + 10.0 * (0.015 ** 2) * 0.0015) - 0.15 * 0.0015) / 0.003, 6)
+        assert omega_s2 == pytest.approx(expected_omega_s2, rel=1e-9)
+
+        # S14_PAIR_ALPHA (is_bps = +49.39): lambda = 0.0015 + 0.004939 = 0.006439 -> omega = 0.229932
+        omega_s14 = TransactionCostFilter.compute_garleanu_pedersen_aiming_rate(is_bps=49.39)
+        lam_14 = 0.006439
+        expected_omega_s14 = round((math.sqrt((0.15 * lam_14) ** 2 + 10.0 * (0.015 ** 2) * lam_14) - 0.15 * lam_14) / (2.0 * lam_14), 6)
+        assert omega_s14 == pytest.approx(expected_omega_s14, rel=1e-9)
+        assert omega_s14 < omega_s2  # High-IS stream aims significantly slower
+
+        # 2. Citadel / Millennium Drawdown Convexity Dampener ψ(d_t):
+        # At DD = -2.87% vs floor = -5.0%: 1 - (2.87 / 5.0)^2 = 1 - 0.329476 = 0.670524
+        psi_live = KellyCriterion.compute_drawdown_convexity_factor(-2.87, -5.0)
+        assert psi_live == pytest.approx(0.670524, rel=1e-9)
+        assert KellyCriterion.compute_drawdown_convexity_factor(0.0, -5.0) == pytest.approx(1.0, rel=1e-9)
+        assert KellyCriterion.compute_drawdown_convexity_factor(-5.0, -5.0) == pytest.approx(0.15, rel=1e-9)
+
+        # 3. TGS / Medallion Cross-Timezone Orthogonal Lead-Lag Impulse:
+        # US asset = +0.03, SPY = +0.01, beta = 1.2 -> ortho = 0.03 - 0.012 = +0.018
+        # decay = exp(-3 / 12) = exp(-0.25), impulse = 0.5 * 0.018 * exp(-0.25)
+        ctz = TransactionCostFilter.compute_cross_timezone_orthogonal_impulse(
+            us_asset_return=0.03, us_bench_return=0.01, asset_beta_to_bench=1.2,
+            kr_lead_beta=0.5, elapsed_hours=3.0, tau_hours=12.0,
+        )
+        assert ctz['orthogonal_shock'] == pytest.approx(0.018, rel=1e-9)
+        assert ctz['decay_factor'] == pytest.approx(round(math.exp(-0.25), 6), rel=1e-9)
+        assert ctz['projected_impulse'] == pytest.approx(round(0.009 * math.exp(-0.25), 6), rel=1e-9)
+
+        # 4. True Reject Rate Separation (excluding canceled & submitted_market_fallback):
+        _write(tmp_path / 'shadow_trades' / '2026-10-16.json', [
+            {
+                'timestamp': '2026-10-16T09:05:00',
+                'mode': 'live',
+                'n_orders': 10,
+                'n_filled': 5,
+                'n_rejected': 5,
+                'fills': [],
+                'errors': [
+                    '005930: canceled',
+                    '122630: submitted_market_fallback',
+                    "122630: UNRESOLVED order status 'submitted_market_fallback' — manual reconciliation required",
+                    '000660: skipped_market_closed',
+                    '035420: rejected',
+                ],
+            }
+        ])
+        out_rej = _diag(tmp_path, record_nav=False).run(write=False)
+        of = out_rej['execution']['order_flow_live']
+        # submitted = 10 - 1 (skipped_market_closed) = 9; true rejected = 1 ('rejected') -> 1/9
+        assert of['n_true_rejected'] == 1
+        assert of['submit_reject_rate'] == pytest.approx(1.0 / 9.0, rel=1e-9)
+        assert of['recent_3d_reject_rate'] == pytest.approx(1.0 / 9.0, rel=1e-9)
+        assert 'EXEC_REJECT_RATE_HIGH' not in {i['id'] for i in out_rej['issues']}
+
 
 # ═════════════════════════════════════════════════════════════
 # 4) GapFeedback — 경계/일일한도/tighten-only + 실제 적용

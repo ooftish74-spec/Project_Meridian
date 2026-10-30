@@ -44,9 +44,20 @@ _NTZ_MAX_CEIL = 0.050
 _NTZ_CUBE_EXP = 1.0 / 3.0
 _NTZ_EPS_COST = 1e-6
 _NTZ_EPS_VOL = 1e-4
+_GP_DEFAULT_DECAY = 0.15
+_GP_DEFAULT_GAMMA = 2.5
+_GP_MIN_AIM_RATE = 0.15
+_GP_BPS_TO_DECIMAL = 1e-4
+_GP_QUAD_COEF = 4.0
+_GP_DENOM_COEF = 2.0
+_CTZ_DEFAULT_BETA = 1.0
+_CTZ_DEFAULT_LEAD_BETA = 0.5
+_CTZ_DEFAULT_ELAPSED_H = 3.0
+_CTZ_DEFAULT_TAU_H = 12.0
+_CTZ_MAX_IMPULSE = 0.05
 
 class TransactionCostFilter:
-    """리밸런싱 거래비용 vs 기대 이익 비교 (Constantinides / AQR 동적 무거래 영역 지원)."""
+    """리밸런싱 거래비용 vs 기대 이익 비교 (Constantinides 동적 무거래 영역 및 Gârleanu-Pedersen 최적 감속 조준 지원)."""
 
     @staticmethod
     def compute_dynamic_no_trade_zone(
@@ -62,6 +73,52 @@ class TransactionCostFilter:
         raw_ntz = float(base_ntz) * ((cost_ratio / vol_ratio) ** _NTZ_CUBE_EXP)
         return round(max(_NTZ_MIN_FLOOR, min(_NTZ_MAX_CEIL, raw_ntz)), 6)
 
+    @staticmethod
+    def compute_garleanu_pedersen_aiming_rate(
+        is_bps: float = 0.0,
+        daily_vol: float = _NTZ_REF_VOL,
+        alpha_decay: float = _GP_DEFAULT_DECAY,
+        risk_aversion: float = _GP_DEFAULT_GAMMA,
+        base_cost_rate: float = _NTZ_REF_COST,
+    ) -> float:
+        """Gârleanu-Pedersen (2013) 동적 부분 조준 계수(Optimal Partial Aiming Rate, ω_s^*) 산출.
+
+        슬리피지(IS_bps)가 높은 스트림은 목표 비중을 향해 천천히 감속 진입(ω_s^* 축소)하고,
+        슬리피지가 낮거나 음수인 스트림은 빠르게 조준한다.
+        """
+        eff_lambda = max(
+            _NTZ_EPS_COST,
+            float(base_cost_rate) + max(0.0, float(is_bps)) * _GP_BPS_TO_DECIMAL,
+        )
+        vol = max(_NTZ_EPS_VOL, float(daily_vol))
+        phi = max(_NTZ_EPS_COST, float(alpha_decay))
+        gamma = max(_NTZ_EPS_COST, float(risk_aversion))
+        phi_lam = phi * eff_lambda
+        disc = (phi_lam * phi_lam) + (_GP_QUAD_COEF * gamma * (vol * vol) * eff_lambda)
+        omega = (math.sqrt(disc) - phi_lam) / (_GP_DENOM_COEF * eff_lambda)
+        return round(max(_GP_MIN_AIM_RATE, min(1.0, omega)), 6)
+
+    @staticmethod
+    def compute_cross_timezone_orthogonal_impulse(
+        us_asset_return: float,
+        us_bench_return: float,
+        asset_beta_to_bench: float = _CTZ_DEFAULT_BETA,
+        kr_lead_beta: float = _CTZ_DEFAULT_LEAD_BETA,
+        elapsed_hours: float = _CTZ_DEFAULT_ELAPSED_H,
+        tau_hours: float = _CTZ_DEFAULT_TAU_H,
+    ) -> Dict[str, float]:
+        """TGS / Medallion 교차 시간대 직교 리드-래그(Cross-Timezone Orthogonal Lead-Lag) 임펄스 산출."""
+        ortho_shock = float(us_asset_return) - float(asset_beta_to_bench) * float(us_bench_return)
+        eff_tau = max(_NTZ_EPS_VOL, float(tau_hours))
+        decay = math.exp(-max(0.0, float(elapsed_hours)) / eff_tau)
+        raw_imp = float(kr_lead_beta) * ortho_shock * decay
+        impulse = max(-_CTZ_MAX_IMPULSE, min(_CTZ_MAX_IMPULSE, raw_imp))
+        return {
+            'orthogonal_shock': round(ortho_shock, 6),
+            'decay_factor': round(decay, 6),
+            'projected_impulse': round(impulse, 6),
+        }
+
     def should_rebalance(
         self,
         current_weights: Dict[str, float],
@@ -69,6 +126,7 @@ class TransactionCostFilter:
         portfolio_value: float,
         expected_alphas: Dict[str, float] = None,
         stream_vols: Optional[Dict[str, float]] = None,
+        stream_is_bps: Optional[Dict[str, float]] = None,
     ) -> Dict:
         """거래비용 감안 리밸런싱 판단.
 
@@ -101,24 +159,35 @@ class TransactionCostFilter:
 
         for sid in sids:
             curr = current_weights.get(sid, 0)
-            tgt = target_weights.get(sid, 0)
+            raw_tgt = target_weights.get(sid, 0)
+            s_vol = (stream_vols or {}).get(sid) if isinstance(stream_vols, dict) else None
+            s_is = (stream_is_bps or {}).get(sid) if isinstance(stream_is_bps, dict) else None
+            aim_rate = (
+                self.compute_garleanu_pedersen_aiming_rate(
+                    is_bps=float(s_is),
+                    daily_vol=float(s_vol or _NTZ_REF_VOL),
+                    base_cost_rate=float(tx_cost_rate),
+                )
+                if s_is is not None
+                else 1.0
+            )
+            tgt = round(curr + aim_rate * (raw_tgt - curr), 6) if s_is is not None else raw_tgt
             delta = tgt - curr
             if expected_alphas and sid in expected_alphas:
                 expected_profit += delta * expected_alphas[sid] * portfolio_value
-            s_vol = (stream_vols or {}).get(sid) if isinstance(stream_vols, dict) else None
             eff_ntz = self.compute_dynamic_no_trade_zone(no_trade_zone, tx_cost_rate, s_vol)
             if abs(delta) < eff_ntz:
                 adjusted[sid] = curr
-                trades[sid] = {'delta': 0, 'reason': 'no_trade_zone', 'effective_ntz': eff_ntz}
+                trades[sid] = {'delta': 0, 'reason': 'no_trade_zone', 'effective_ntz': eff_ntz, 'aim_rate': aim_rate}
             else:
                 trade_value = abs(delta) * portfolio_value
                 if trade_value < min_trade_value:
                     adjusted[sid] = curr
-                    trades[sid] = {'delta': 0, 'reason': 'below_min_value'}
+                    trades[sid] = {'delta': 0, 'reason': 'below_min_value', 'aim_rate': aim_rate}
                 else:
                     adjusted[sid] = tgt
                     total_turnover += abs(delta)
-                    trades[sid] = {'delta': round(delta, 4), 'trade_value': round(trade_value, 0), 'reason': 'execute'}
+                    trades[sid] = {'delta': round(delta, 4), 'trade_value': round(trade_value, 0), 'reason': 'execute', 'aim_rate': aim_rate}
         total = sum(adjusted.values())
         if total > 1.0:
             adjusted = {k: round(v / total, 4) for k, v in adjusted.items()}

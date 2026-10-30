@@ -49,6 +49,8 @@ _HEDGE_MAX_CAP = 0.35
 _CASH_EQUIV_MAX_CAP = 1.00
 _DEFAULT_MIN_CASH_RATIO = 0.12
 _DATE_STR_LEN = 10
+_RECENT_REJECT_WINDOW_DAYS = 3
+_NON_REJECT_TOKENS = ('canceled', 'submitted_market_fallback')
 
 
 def compute_dynamic_position_limit(
@@ -517,6 +519,7 @@ class LiveDiagnostics:
         max_dev = float(self.cfg.get('diagnostics.is_outlier_abs', 0.20))
         recs = self._shadow_trade_records(lookback)
         cutoff = (self.now - timedelta(days=lookback)).date().isoformat()
+        recent_3d_cutoff = (self.now - timedelta(days=_RECENT_REJECT_WINDOW_DAYS)).date().isoformat()
         # 결정(신호) 가격: (date, ticker, side) → [(ts, price, stream)]
         decisions: Dict[Tuple[str, str, int], List[Tuple[datetime, float, str]]] = defaultdict(list)
         exec_summary = Counter()
@@ -533,12 +536,30 @@ class LiveDiagnostics:
                     decisions[(ts.date().isoformat(), str(o.get('ticker')), side)].append(
                         (ts, px, str(o.get('stream_id') or o.get('stream') or 'unknown')))
             if 'fills' in r and str(r.get('mode')) == 'live':
-                exec_summary['n_orders'] += int(r.get('n_orders') or 0)
-                exec_summary['n_filled_sync'] += int(r.get('n_filled') or 0)
-                exec_summary['n_rejected'] += int(r.get('n_rejected') or 0)
-                for e in r.get('errors') or []:
+                r_orders = int(r.get('n_orders') or 0)
+                r_filled = int(r.get('n_filled') or 0)
+                r_rej_raw = int(r.get('n_rejected') or 0)
+                exec_summary['n_orders'] += r_orders
+                exec_summary['n_filled_sync'] += r_filled
+                exec_summary['n_rejected'] += r_rej_raw
+                r_skipped = 0
+                r_true_rej = 0
+                r_errs = r.get('errors') or []
+                for e in r_errs:
                     cat = str(e).split(':', 1)[-1].strip() if ':' in str(e) else str(e)
-                    err_cats[cat or 'unknown'] += 1
+                    cat_key = cat or 'unknown'
+                    err_cats[cat_key] += 1
+                    if cat_key == 'skipped_market_closed':
+                        r_skipped += 1
+                    elif any(tok in cat_key for tok in _NON_REJECT_TOKENS):
+                        pass
+                    else:
+                        r_true_rej += 1
+                eff_true_rej = min(r_rej_raw, r_true_rej) if r_errs else r_rej_raw
+                exec_summary['n_true_rejected'] += eff_true_rej
+                if ts is not None and ts.date().isoformat() >= recent_3d_cutoff:
+                    exec_summary['recent_3d_submitted'] += max(0, r_orders - r_skipped)
+                    exec_summary['recent_3d_true_rejected'] += eff_true_rej
                 for fl in r.get('fills') or []:
                     if fl.get('signal_price') and fl.get('fill_price') and not fl.get('fill_simulated'):
                         sim_fills.append(fl)
@@ -621,6 +642,7 @@ class LiveDiagnostics:
         fo_recent = [x for x in fo if isinstance(x, dict) and str(x.get('timestamp', ''))[:10] >= cutoff]
         fo_cats = Counter(self._reject_category(str(x.get('reason', ''))) for x in fo_recent)
         submitted = exec_summary['n_orders'] - err_cats.get('skipped_market_closed', 0)
+        r3_sub = exec_summary['recent_3d_submitted']
         tca = self._load('tca_summary.json', {}) or {}
         return {
             'lookback_days': lookback,
@@ -639,9 +661,10 @@ class LiveDiagnostics:
                              f'|편차|>{max_dev:.0%} 는 기준가 오류로 제외.',
             'order_flow_live': {
                 'n_orders': exec_summary['n_orders'], 'n_rejected_or_error': exec_summary['n_rejected'],
+                'n_true_rejected': exec_summary['n_true_rejected'],
                 'n_filled_sync': exec_summary['n_filled_sync'], 'error_categories': dict(err_cats),
-                'submit_reject_rate': (exec_summary['n_rejected'] - err_cats.get('skipped_market_closed', 0))
-                / submitted if submitted > 0 else None,
+                'submit_reject_rate': exec_summary['n_true_rejected'] / submitted if submitted > 0 else None,
+                'recent_3d_reject_rate': exec_summary['recent_3d_true_rejected'] / r3_sub if r3_sub > 0 else None,
                 'note': 'live 모드 n_filled 는 비동기 체결로 0 으로 기록되는 경우가 많음 — 실체결은 브로커 원장(n_broker_fills) 기준.',
             },
             'failed_orders': {'n_recent': len(fo_recent), 'by_category': dict(fo_cats),
