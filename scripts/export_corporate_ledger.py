@@ -861,6 +861,9 @@ def export_ledgers(fetch_live: bool = True, extra_output_dirs: Optional[List[Pat
     return written_paths
 
 
+export_corporate_accounting_ledgers = export_ledgers
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export Project Meridian Corporate Accounting & Tax Ledgers")
     parser.add_argument("--no-live-fetch", action="store_true", help="Use cached broker fills without calling KIS API")
