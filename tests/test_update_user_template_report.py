@@ -92,8 +92,11 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
             "fx_rate": 1335.30,
             "d2_settlement_cash_krw": 999031,
             "orderable_cash_krw": 943983,
+            "d0_deposit_krw": 4691581,
             "cash_usd": 203.72,
-            "d0_cash_usd": 259.65,
+            "d0_usd_deposit": 259.65,
+            "pledged_margin_usd": 55.93,
+            "settlement_total_asset_krw": 2205000,
         },
         "holdings": {
             "271560": {
@@ -258,9 +261,14 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert pnl_rows[4][1] == "=SUM(B19:B22)"
     assert pnl_rows[5][1] == "=IFERROR(B23/'보유종목'!M8, 0)"
 
-    # 5. Verify on-open autoRecalc='MINUTE' property and live sync timestamp banners
+    # 5. Verify on-open autoRecalc='MINUTE' property, settlement_total_asset_krw dual display, and live sync timestamp banners
     assert "최종 동기화:" in ws_h.updates["A2:F2"][0][0]
+    assert "KIS 결제기준 총자산(MTS 자산현황): ₩2,205,000" in ws_h.updates["A2:F2"][0][0]
     assert "최종 동기화:" in ws_d.updates["A2:I2"][0][0]
+    assert "KIS 결제기준 총자산(MTS 자산현황): ₩2,205,000" in ws_d.updates["A2:I2"][0][0]
+    assert "KIS결제기준: ₩2,205,000" in ws_d.updates["A5:I5"][0][0]
+    assert "D+0 결제전 ₩4,691,581" in rows_h[2][5]
+    assert "미결제매수증거금 $55.93" in rows_h[3][5]
     final_batch_reqs = fake_sh.batch_calls[-1]["requests"]
     assert any(
         r.get("updateSpreadsheetProperties", {}).get("properties", {}).get("autoRecalc") == "MINUTE"

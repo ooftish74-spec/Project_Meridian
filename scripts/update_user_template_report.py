@@ -467,8 +467,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
     if not force and last_sync_file.exists():
         try:
             last_ts = float(last_sync_file.read_text().strip())
-            if now_ts - last_ts < 50:
-                logger.info("  ⏳ [GSheet Cooldown] 최근 50초 내 동기화 완료 → Google Sheets Quota 방어를 위해 이번 호출 스킵")
+            if now_ts - last_ts < 25:
+                logger.info("  ⏳ [GSheet Cooldown] 최근 25초 내 동기화 완료 → Google Sheets Quota 방어를 위해 이번 호출 스킵")
                 return True
         except Exception:
             pass
@@ -507,10 +507,12 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         fx_rate = float(account.get("fx_rate") or portfolio.get("fx_rate") or 0.0)
         cash_val = float(account.get("d2_settlement_cash_krw") or account.get("cash", 0) or 0)
         ord_cash = float(account.get("orderable_cash_krw") or account.get("cash", 0) or cash_val)
+        d0_krw = float(account.get("d0_deposit_krw") or 0.0)
         unsettled_krw = round(cash_val - ord_cash, 0)
+        _d0_krw_suffix = f" | D+0 결제전 ₩{d0_krw:,.0f}" if d0_krw > 0 else ""
         krw_cash_desc = (
-            f"D+2 정산예수금 ₩{cash_val:,.0f} (주문가능 ₩{ord_cash:,.0f} + 당일정산대기 ₩{unsettled_krw:,.0f}) — KIS 총자산 기준"
-            if abs(unsettled_krw) >= 1
+            f"D+2 정산예수금 ₩{cash_val:,.0f} (주문가능 ₩{ord_cash:,.0f} + 당일정산대기 ₩{unsettled_krw:,.0f}{_d0_krw_suffix}) — KIS 체결기준"
+            if abs(unsettled_krw) >= 1 or d0_krw > 0
             else "대기성 현금 리저브 (위험 회피 및 신규 기회 포착용 안전판)"
         )
         cash_usd = float(account.get("cash_usd", account.get("us_cash_usd", 0)) or 0)
@@ -518,12 +520,17 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             float(h.get("eval_krw", 0) or (float(h.get("qty", 0) or 0) * float(h.get("current_price", 0) or 0) * (fx_rate if h.get("market") == "US" else 1.0)))
             for h in raw_holdings.values() if isinstance(h, dict)
         )
-        logger.info(f"Computed total current_assets (including cash_usd * fx_rate): ₩{current_assets:,.0f}")
+        settlement_total_asset_krw = int(round(float(account.get("settlement_total_asset_krw") or portfolio.get("settlement_total_asset_krw") or 0)))
+        logger.info(f"Computed total current_assets (including cash_usd * fx_rate): ₩{current_assets:,.0f} (settlement_total_asset_krw=₩{settlement_total_asset_krw:,.0f})")
         items.append(("CASH", {"name": "원화 현금성자산 (KRW 예수금)", "qty": 1, "avg_price": cash_val, "current_price": cash_val, "market": "KR", "strategy": krw_cash_desc}))
         us_cash_val = cash_usd
         if us_cash_val > 0:
-            d0_usd = float(account.get("d0_cash_usd", us_cash_val) or us_cash_val)
-            usd_cash_desc = f"외화 가용예수금 ${us_cash_val:,.2f} (D+0 총예수금 ${d0_usd:,.2f}) — US 매수 대기 리저브"
+            d0_usd = float(account.get("d0_usd_deposit", account.get("d0_cash_usd", us_cash_val)) or us_cash_val)
+            pledged_usd = float(account.get("pledged_margin_usd", 0.0) or 0.0)
+            if pledged_usd > 0.0:
+                usd_cash_desc = f"외화 가용예수금 ${us_cash_val:,.2f} (D+0 총예수금 ${d0_usd:,.2f} - 미결제매수증거금 ${pledged_usd:,.2f}) — US 매수 대기 리저브"
+            else:
+                usd_cash_desc = f"외화 가용예수금 ${us_cash_val:,.2f} (D+0 총예수금 ${d0_usd:,.2f}) — US 매수 대기 리저브"
             items.append(("USD_CASH", {"name": "외화 현금성자산 (USD 예수금)", "qty": 1, "avg_price": us_cash_val, "current_price": us_cash_val, "eval_krw": round(us_cash_val * fx_rate, 0), "market": "US", "strategy": usd_cash_desc}))
 
         num_items = len(items)
@@ -621,9 +628,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         ]
 
         sync_ts_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _sttl_banner_str = (
+            f"체결기준 실시간 순자산: ₩{current_assets:,.0f} · KIS 결제기준 총자산(MTS 자산현황): ₩{settlement_total_asset_krw:,.0f} | "
+            if settlement_total_asset_krw > 0
+            else ""
+        )
         holdings_batch = [
             {"range": "G1:H1", "values": [["기준환율(USD/KRW)", f'=IF({fx_rate}>0, {fx_rate}, GOOGLEFINANCE("CURRENCY:USDKRW"))']]},
-            {"range": "A2:F2", "values": [[f"한국투자증권(KIS) 실계좌 실시간 연동 (열람 시 자동재계산 · 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)", "", "", "", "", ""]]},
+            {"range": "A2:F2", "values": [[f"한국투자증권(KIS) 실계좌 실시간 연동 ({_sttl_banner_str}열람 시 자동재계산 · 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)", "", "", "", "", ""]]},
             {"range": "G2:H2", "values": [["", ""]]},
             {"range": "A3:V3", "values": headers_holdings},
             {"range": f"A4:V{r_sum}", "values": holdings_data + [summary_row_holdings]},
@@ -1489,9 +1501,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ]
         ]
 
+        _card1_sub_formula = (
+            f"=\"매입: \" & TEXT('보유종목'!M{r_sum}, \"₩#,##0\") & \" | KIS결제기준: ₩{settlement_total_asset_krw:,.0f} (미결제손익 \" & TEXT('보유종목'!N{r_sum}-{settlement_total_asset_krw}, \"+₩#,##0;-₩#,##0;₩0\") & \")\""
+            if settlement_total_asset_krw > 0
+            else f"=\"매입: \" & TEXT('보유종목'!M{r_sum}, \"₩#,##0\")"
+        )
         top_row_5 = [
             [
-                f"=\"매입: \" & TEXT('보유종목'!M{r_sum}, \"₩#,##0\")", "",
+                _card1_sub_formula, "",
                 f"=\"확정순실현: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 미실현: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
                 f"=\"평가손익: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
                 f"=\"실수령: \" & TEXT('배당캘린더'!O{r_act_sum}, \"₩#,##0\") & \" | 향후예정: \" & TEXT('배당캘린더'!O{r_exp_sum}, \"₩#,##0\")", "",
@@ -1534,7 +1551,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "현재 총 매입원금 대비 비용 차감 후 종합 순수익률", "종합 성과 지표"],
         ]
         dash_batch = [
-            {"range": "A2:I2", "values": [[f"실시간 시세·환율·원장 자동 연동 (열람 시 자동재계산 · KIS 실계좌 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)"] + [""] * 8]},
+            {"range": "A2:I2", "values": [[f"실시간 시세·환율·원장 자동 연동 ({_sttl_banner_str}열람 시 자동재계산 · KIS 실계좌 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)"] + [""] * 8]},
             {"range": "A4:I4", "values": top_row_4},
             {"range": "A5:I5", "values": top_row_5},
             {"range": "A8:E8", "values": [["자산군", "평가금액(원화)", "현재비중", "", ""]]},

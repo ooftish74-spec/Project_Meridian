@@ -2185,6 +2185,30 @@ class KISTraderAdapter:
                             except Exception as _ctrp_e:
                                 logger.debug(f"CTRP6504R inquiry bypass: {_ctrp_e}")
 
+                            # 1b) CTRP6548R (투자계좌자산현황조회 — KIS MTS [자산현황] 결제기준 총자산) 조회
+                            self.settlement_total_asset_krw = 0.0
+                            if self.mode == 'live' and not os.environ.get('PYTEST_CURRENT_TEST'):
+                                try:
+                                    _pace_tr()
+                                    headers_6548 = self._get_headers()
+                                    headers_6548['tr_id'] = 'CTRP6548R'
+                                    params_6548 = {
+                                        'CANO': acnt[0],
+                                        'ACNT_PRDT_CD': acnt[1] if len(acnt) > 1 else '01',
+                                        'INQR_DVSN_1': '',
+                                        'BSPR_BF_DT_APLY_YN': '',
+                                    }
+                                    url_6548 = f"{self.base_url}/uapi/domestic-stock/v1/trading/inquire-account-balance"
+                                    resp_6548 = requests.get(url_6548, headers=headers_6548, params=params_6548, timeout=5)
+                                    d_6548 = resp_6548.json()
+                                    if d_6548.get('rt_cd') == '0':
+                                        out2_6548 = d_6548.get('output2') if isinstance(d_6548.get('output2'), dict) else {}
+                                        _sttl_tot = float(out2_6548.get('tot_asst_amt', 0) or 0.0)
+                                        if _sttl_tot > 0:
+                                            self.settlement_total_asset_krw = round(_sttl_tot)
+                                except Exception as _e_6548:
+                                    logger.debug(f"CTRP6548R inquiry bypass: {_e_6548}")
+
                             # 2) TTTS3007R (해외주식 매수가능금액조회)에서 즉시 주문가능 외화 및 통합증거금 달러 조회
                             direct_usd = 0.0
                             integ_usd = 0.0
@@ -2432,6 +2456,7 @@ class KISTraderAdapter:
                                     'd0_usd_deposit': float(getattr(self, 'total_usd_deposit', 0.0)),
                                     'pledged_margin_usd': float(getattr(self, 'pledged_margin_usd', 0.0)),
                                     'integrated_margin_usd': float(getattr(self, 'integrated_margin_usd', 0.0)),
+                                    'settlement_total_asset_krw': round(float(getattr(self, 'settlement_total_asset_krw', 0.0) or 0.0)),
                                     'fx_rate': round(float(fx_rate), 2),
                                     'positions': _live_holdings,
                                     'n_positions': len(_live_holdings),
@@ -2491,7 +2516,9 @@ class KISTraderAdapter:
                                     logger.debug(f"  [RuntimeInvariantGate] 감사 경고: {_rig_err}")
                             except Exception as _kp_err:
                                 logger.warning(f"  ⚠️ [Live SSOT] kis_portfolio.json 자동 동기화 실패(기존 파일 유지): {_kp_err}")
-                        logger.info(f"  ✅ [Live Patch] KIS OpenAPI 통합 원장 갱신 완료: 주문가능현금={self.account.cash:,.0f}원 / MTS 100% 동일 총자산=₩{self.account.total_equity:,.0f}원")
+                        _sttl_log = float(getattr(self, 'settlement_total_asset_krw', 0.0) or 0.0)
+                        _sttl_str = f" / KIS 결제기준 총자산=₩{_sttl_log:,.0f}원" if _sttl_log > 0 else ""
+                        logger.info(f"  ✅ [Live Patch] KIS OpenAPI 통합 원장 갱신 완료: 주문가능현금={self.account.cash:,.0f}원 / 체결기준 실시간 총자산=₩{self.account.total_equity:,.0f}원{_sttl_str}")
                         return True
                     else:
                         logger.warning('  ⚠️ fetch_live_balance: output2 비어있음')
