@@ -67,6 +67,53 @@ def load_position_entry_dates() -> dict:
     }
 
 
+def load_recent_closed_trades(target_date: str = None) -> list[dict]:
+    """Load recent SELL executions from Corporate_Trade_Ledger CSV (or shadow_portfolio fallback)."""
+    import csv
+    import glob
+    out = []
+    ledger_dir = PROJECT_ROOT / "results" / "corporate_ledger"
+    csv_files = sorted(glob.glob(str(ledger_dir / "Corporate_Trade_Ledger_*.csv")))
+    if csv_files:
+        try:
+            with open(csv_files[-1], "r", encoding="utf-8-sig") as f:
+                rows = list(csv.DictReader(f))
+            sells = [r for r in rows if "SELL" in str(r.get("거래구분", "")).upper()]
+            if sells:
+                latest_dt = target_date or max(str(r.get("거래일자", ""))[:10] for r in sells)
+                for r in sells:
+                    dt = str(r.get("거래일자", ""))[:10]
+                    if dt != latest_dt:
+                        continue
+                    curr = str(r.get("통화", "KRW")).strip().upper()
+                    fx = float(r.get("적용환율(USD/KRW)") or 1335.3)
+                    qty = float(r.get("체결수량") or 0)
+                    price = float(r.get("체결단가") or 0)
+                    avg_p = float(r.get("이동평균취득단가") or price)
+                    fee_krw = float(r.get("위탁수수료(KRW)") or 0)
+                    tax_krw = float(r.get("제세공과금(KRW)") or 0)
+                    fee_local = round(fee_krw / fx, 2) if (curr == "USD" and fx > 0) else round(fee_krw)
+                    tax_local = round(tax_krw / fx, 2) if (curr == "USD" and fx > 0) else round(tax_krw)
+                    stream_str = str(r.get("스트림") or r.get("운용트랙") or "리밸런싱")
+                    out.append({
+                        "date": dt,
+                        "action": "SELL",
+                        "ticker": str(r.get("종목코드", "")).strip(),
+                        "name": str(r.get("종목명", "")).strip(),
+                        "quantity": int(qty) if qty.is_integer() else qty,
+                        "price": price,
+                        "avg_price": avg_p,
+                        "commission": fee_local,
+                        "tax": tax_local,
+                        "currency": curr,
+                        "reason": f"Project Meridian [{stream_str}] 리밸런싱 매도",
+                    })
+                return out
+        except Exception as e:
+            logger.warning(f"Could not parse Corporate_Trade_Ledger CSV: {e}")
+    return out
+
+
 def load_live_portfolio() -> dict:
     try:
         scripts_dir = str(PROJECT_ROOT / "scripts")
@@ -83,22 +130,31 @@ def load_live_portfolio() -> dict:
         logger.error(f"Portfolio file not found: {KIS_PORTFOLIO_PATH}")
         return {}
     with open(KIS_PORTFOLIO_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    if isinstance(data, dict) and not (data.get("closed_trades") or data.get("trade_history")):
+        recent_sells = load_recent_closed_trades()
+        if recent_sells:
+            data["closed_trades"] = recent_sells
+    return data
 
 
 def categorize_asset(ticker: str, info: dict) -> tuple[str, str]:
     """Returns (asset_class, currency)"""
     from src.utils.market_calendar import is_kr_ticker
     name = info.get("name", ticker).upper()
+    t_up = str(ticker).upper()
     _is_kr = is_kr_ticker(str(ticker))
     market = info.get("market", "US" if not _is_kr else "KR")
 
-    if ticker == "CASH" or "CASH" in ticker.upper():
-        return "현금", ("USD" if "USD" in ticker.upper() else "KRW")
+    if ticker == "CASH" or "CASH" in t_up:
+        return "현금", ("USD" if "USD" in t_up else "KRW")
 
-    is_etf = any(kw in name or kw in ticker for kw in [
+    is_etf = any(kw in name or kw in t_up for kw in [
         "ETF", "KODEX", "TIGER", "ACE", "SOL", "ARIRANG", "HANARO", "RISE",
-        "SOXX", "QQQ", "XLK", "SHV", "SPY", "TLT", "TQQQ", "SQQQ", "IVV", "VOO", "IWM"
+        "SPDR", "SHARES", "ISHARES", "PROSHARES", "INVESCO", "VANGUARD", "DIREXION",
+        "SOXX", "QQQ", "XLK", "XLE", "XLF", "XLV", "XLI", "XLP", "XLY", "XLU", "XLB", "XLRE", "XLC",
+        "SHV", "SHY", "IEF", "TLT", "HYG", "LQD", "SPY", "TQQQ", "SQQQ", "IVV", "VOO", "IWM",
+        "GLD", "SLV", "USO", "CPER", "UUP", "EWY", "EWJ"
     ])
 
     if market == "KR" or _is_kr or ticker.startswith("KRX:"):
@@ -116,9 +172,9 @@ def get_stream_strategy_info(ticker: str, info: dict = None) -> tuple[str, str]:
     if t_upper.startswith("KRX:"):
         t_upper = t_upper.split(":", 1)[1]
     if t_upper == "USD_CASH":
-        return "S0 Cash Anchor (USD)", "외화(USD) 예수금 및 글로벌 통합증거금 안전 파킹"
+        return "S0 Cash Anchor (USD)", (info.get("strategy") or "외화(USD) 예수금 및 글로벌 통합증거금 안전 파킹")
     if ticker == "CASH" or "CASH" in t_upper:
-        return "S0 Cash Anchor (KRW)", "원화(KRW) 현금성 자산 및 리밸런싱 안전 파킹"
+        return "S0 Cash Anchor (KRW)", (info.get("strategy") or "원화(KRW) 현금성 자산 및 리밸런싱 안전 파킹")
 
     ledger_map = load_position_ledger_map()
     l_entry = ledger_map.get(t_upper, {})
@@ -255,16 +311,25 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # Always include KRW CASH and USD CASH (if > 0) so Total NAV matches KIS MTS 100%
         fx_rate = float(account.get("fx_rate") or portfolio.get("fx_rate") or 0.0)
         cash_val = float(account.get("d2_settlement_cash_krw") or account.get("cash", 0) or 0)
+        ord_cash = float(account.get("orderable_cash_krw") or account.get("cash", 0) or cash_val)
+        unsettled_krw = round(cash_val - ord_cash, 0)
+        krw_cash_desc = (
+            f"D+2 정산예수금 ₩{cash_val:,.0f} (주문가능 ₩{ord_cash:,.0f} + 당일정산대기 ₩{unsettled_krw:,.0f}) — KIS 총자산 기준"
+            if abs(unsettled_krw) >= 1
+            else "대기성 현금 리저브 (위험 회피 및 신규 기회 포착용 안전판)"
+        )
         cash_usd = float(account.get("cash_usd", account.get("us_cash_usd", 0)) or 0)
         current_assets = cash_val + (cash_usd * fx_rate) + sum(
             float(h.get("eval_krw", 0) or (float(h.get("qty", 0) or 0) * float(h.get("current_price", 0) or 0) * (fx_rate if h.get("market") == "US" else 1.0)))
             for h in raw_holdings.values() if isinstance(h, dict)
         )
         logger.info(f"Computed total current_assets (including cash_usd * fx_rate): ₩{current_assets:,.0f}")
-        items.append(("CASH", {"name": "원화 현금성자산 (KRW 예수금)", "qty": 1, "avg_price": cash_val, "current_price": cash_val, "market": "KR"}))
+        items.append(("CASH", {"name": "원화 현금성자산 (KRW 예수금)", "qty": 1, "avg_price": cash_val, "current_price": cash_val, "market": "KR", "strategy": krw_cash_desc}))
         us_cash_val = cash_usd
         if us_cash_val > 0:
-            items.append(("USD_CASH", {"name": "외화 현금성자산 (USD 예수금)", "qty": 1, "avg_price": us_cash_val, "current_price": us_cash_val, "eval_krw": round(us_cash_val * fx_rate, 0), "market": "US"}))
+            d0_usd = float(account.get("d0_cash_usd", us_cash_val) or us_cash_val)
+            usd_cash_desc = f"외화 가용예수금 ${us_cash_val:,.2f} (D+0 총예수금 ${d0_usd:,.2f}) — US 매수 대기 리저브"
+            items.append(("USD_CASH", {"name": "외화 현금성자산 (USD 예수금)", "qty": 1, "avg_price": us_cash_val, "current_price": us_cash_val, "eval_krw": round(us_cash_val * fx_rate, 0), "market": "US", "strategy": usd_cash_desc}))
 
         num_items = len(items)
         r_start = 4
@@ -275,10 +340,28 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # TAB 1: 보유종목 (Holdings)
         # =========================================================================
         ws_holdings = sh.worksheet("보유종목")
-        
-        # Set exchange rate in G1:H1
-        fx_rate = account.get("fx_rate", 1346.90)
-        ws_holdings.update(values=[["기준환율(USD/KRW)", f'=IFERROR(GOOGLEFINANCE("CURRENCY:USDKRW"), {fx_rate})']], range_name="G1:H1", value_input_option="USER_ENTERED")
+
+        # Unmerge any legacy merged ranges on '보유종목' data rows (startRowIndex >= 1)
+        try:
+            sheet_meta = sh.fetch_sheet_metadata()
+            unmerge_holdings = []
+            for s in sheet_meta.get("sheets", []):
+                if s["properties"]["sheetId"] == ws_holdings.id:
+                    for m in s.get("merges", []):
+                        if m.get("startRowIndex", 0) >= 1:
+                            unmerge_holdings.append({"unmergeCells": {"range": m}})
+            if unmerge_holdings:
+                sh.batch_update({"requests": unmerge_holdings})
+                logger.info(f"Unmerged {len(unmerge_holdings)} legacy merged ranges in '보유종목'")
+        except Exception as e:
+            logger.warning(f"Could not unmerge legacy cells in '보유종목': {e}")
+
+        # Set exchange rate in G1:H1 (prioritize KIS live applied fx_rate for 100% account parity)
+        ws_holdings.update(
+            values=[["기준환율(USD/KRW)", f'=IF({fx_rate}>0, {fx_rate}, GOOGLEFINANCE("CURRENCY:USDKRW"))']],
+            range_name="G1:H1",
+            value_input_option="USER_ENTERED",
+        )
         
         # Clear static G2:H2
         ws_holdings.update(values=[["", ""]], range_name="G2:H2")
@@ -322,7 +405,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 qty,                                                                      # G: 수량 (Col G)
                 avg_price,                                                                # H: 매입단가(현지) (Col H)
                 curr_price,                                                               # I: 현재가(현지) (Col I)
-                f'=IF(OR(C{r}="CASH",C{r}="USD_CASH",C{r}=""),I{r},IFERROR(GOOGLEFINANCE(C{r},"price"),I{r}))', # J: 실시간가(현지) (Col J)
+                f'=IF(OR(C{r}="CASH",C{r}="USD_CASH",C{r}=""),I{r},IF(I{r}>0,I{r},IFERROR(GOOGLEFINANCE(C{r},"price"),H{r})))', # J: 실시간가(현지) (Col J)
                 f'=G{r}*H{r}',                                                            # K: 매입금액(현지) (Col K)
                 f'=G{r}*J{r}',                                                            # L: 평가금액(현지) (Col L)
                 f'=IF(B{r}="USD",K{r}*$H$1,K{r})',                                        # M: 매입금액(원화) (Col M)
@@ -549,9 +632,10 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         now_date_str = datetime.now().strftime("%Y-%m-%d")
 
         # Explicit Summary Headers and Formulas in Trading Log Row 3 and Row 4
+        # Note: Card 3 is merged across I3:L3 and I4:L4 (startColumnIndex 8 -> Col I)
         ws_trades.update(values=[
-            ["누적 실현손익(원화)", "", "", "", "누적 거래비용(원화)", "", "", "", "", "", "누적 순실현손익(원화)", "", ""],
-            ["=SUM(K7:K50)+E4", "", "", "", "=SUM(L7:L50)", "", "", "", "", "", "=SUM(K7:K50)", "", ""]
+            ["누적 매도 실현손익(세전·원화)", "", "", "", "누적 거래비용(원화)", "", "", "", "누적 순실현손익(원화)", "", "", "", ""],
+            ['=SUM(K7:K50)+SUMIF(B7:B50,"매도",L7:L50)', "", "", "", "=SUM(L7:L50)", "", "", "", "=SUM(K7:K50)", "", "", "", ""]
         ], range_name="A3:M4", value_input_option="USER_ENTERED")
 
         raw_trade_list = []
@@ -610,6 +694,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             if c_qty <= 0 or c_price <= 0:
                 continue
             c_fee = float(closed_t.get("commission", 0) or 0)
+            c_tax = float(closed_t.get("tax", 0) or 0)
             raw_trade_list.append({
                 "date": str(closed_t.get("date", closed_t.get("timestamp", now_date_str)))[:10],
                 "type": "매도",
@@ -618,7 +703,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 "price": c_price,
                 "qty": c_qty,
                 "fee": c_fee,
-                "tax": 0,
+                "tax": c_tax,
                 "curr": c_curr,
                 "buy_avg_price": c_avg,
                 "note": str(closed_t.get("reason", "Project Meridian 리밸런싱 매도")),
@@ -659,8 +744,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ]
             trade_logs.append(trade_row)
 
-        # Clear rows 7..30
-        ws_trades.update(values=[[""] * 13 for _ in range(24)], range_name="A7:M30")
+        # Clear rows 7..50
+        ws_trades.update(values=[[""] * 13 for _ in range(44)], range_name="A7:M50")
         ws_trades.update(values=trade_logs, range_name=f"A7:M{6+len(trade_logs)}", value_input_option="USER_ENTERED")
         logger.info(f"Updated '매매일지' ({len(trade_logs)} trading records synced chronologically past to present)")
 
@@ -673,7 +758,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         top_row_4 = [
             [
                 f"='보유종목'!N{r_sum}", "",
-                f"='보유종목'!O{r_sum} + '매매일지'!K4", "",
+                f"='보유종목'!O{r_sum} + '매매일지'!I4", "",
                 f"='보유종목'!P{r_sum}", "",
                 f"='배당캘린더'!O{r_tot_sum}", "",
                 f"='매매일지'!E4 + '배당캘린더'!N{r_tot_sum}"
@@ -704,7 +789,19 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         ]
         ws_dash.update(values=dash_updates, range_name="A9:E13", value_input_option="USER_ENTERED")
         ws_dash.update(values=[["합계", "=SUM(B9:B13)", "=SUM(C9:C13)", "", ""]], range_name="A14:E14", value_input_option="USER_ENTERED")
-        logger.info("Updated '대시보드' (Top Summary Cards & Asset Allocation synced)")
+
+        # Bottom PnL Attribution Table (Rows 18..24: 포트폴리오 손익 원천별 종합 분석)
+        ws_dash.update(values=[["구분 (손익 원천)", "금액 (원화)", "손익 기여도", "세부 산출 내역", "연동 시트"]], range_name="A18:E18")
+        dash_pnl_rows = [
+            ["확정 실현손익", "='매매일지'!A4", "=IFERROR(B19/$B$23, 0)", "완료된 매도 거래의 매매 차익 (비용 차감 전)", "매매일지 탭"],
+            ["미실현 보유 평가손익", f"='보유종목'!O{r_sum}", "=IFERROR(B20/$B$23, 0)", "현재 보유 자산의 평가 차익", "보유종목 탭"],
+            ["배당 인컴 수익 (세전)", f"='배당캘린더'!M{r_tot_sum}", "=IFERROR(B21/$B$23, 0)", "국내외 보유종목 연간 총 배당금 (수령+예정)", "배당캘린더 탭"],
+            ["거래비용 및 세금 (차감)", f"=-('매매일지'!E4 + '배당캘린더'!N{r_tot_sum})", "=IFERROR(B22/$B$23, 0)", "매매 수수료 + 증권거래세 + 배당소득세", "매매일지·배당캘린더 합산"],
+            ["총 순손익 (Net Profit)", "=SUM(B19:B22)", 1, "모든 비용 및 세금 차감 후 최종 순이익", "종합 집계"],
+            ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "총 매입금액 대비 비용 차감 후 순수익률", "종합 성과 지표"],
+        ]
+        ws_dash.update(values=dash_pnl_rows, range_name="A19:E24", value_input_option="USER_ENTERED")
+        logger.info("Updated '대시보드' (Top Summary Cards, Asset Allocation & PnL Attribution synced)")
 
         # =========================================================================
         # 5. Apply Precision Batch Number, Currency, Alignment & Table Styling Across Worksheets
@@ -1074,24 +1171,24 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
         })
-        # Number formats for Right Card Values (I28..I29 currency, I30..I31 percent, I32 exchange rate)
+        # Number formats for Right Card Values (2 currency rows, 2 percent rows, 1 exchange rate row)
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_start + 2, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start - 1, 'endRowIndex': r_card_start + 1, 'startColumnIndex': 8, 'endColumnIndex': 9},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start + 2, 'endRowIndex': r_card_start + 4, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start + 1, 'endRowIndex': r_card_start + 3, 'startColumnIndex': 8, 'endColumnIndex': 9},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.0%'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start + 4, 'endRowIndex': r_card_start + 5, 'startColumnIndex': 8, 'endColumnIndex': 9},
+                'range': {'sheetId': sheet_id_div, 'startRowIndex': r_card_start + 3, 'endRowIndex': r_card_start + 4, 'startColumnIndex': 8, 'endColumnIndex': 9},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0.00'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
@@ -1215,30 +1312,31 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             }
         })
         # Column Alignments: Col A,B,C Center | Col D,M Left | Col E..L Right
+        end_trade_row = max(20, 6 + len(trade_logs))
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 0, 'endColumnIndex': 3},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 0, 'endColumnIndex': 3},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 3, 'endColumnIndex': 4},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 3, 'endColumnIndex': 4},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 4, 'endColumnIndex': 12},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 4, 'endColumnIndex': 12},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
         })
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 12, 'endColumnIndex': 13},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 12, 'endColumnIndex': 13},
                 'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
                 'fields': 'userEnteredFormat.horizontalAlignment'
             }
@@ -1260,7 +1358,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # Quantity Col F (index 5): '#,##0'
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 5, 'endColumnIndex': 6},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 5, 'endColumnIndex': 6},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
@@ -1277,25 +1375,19 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                         'fields': 'userEnteredFormat.numberFormat'
                     }
                 })
-        # Summary Card A4, E4 as '₩#,##0'
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': 0, 'endColumnIndex': 1},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': 4, 'endColumnIndex': 5},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
-            }
-        })
+        # Summary Card A4, E4, I4 as '₩#,##0'
+        for card_col in [0, 4, 8]:
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': card_col, 'endColumnIndex': card_col + 1},
+                    'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                    'fields': 'userEnteredFormat.numberFormat'
+                }
+            })
         # Converted KRW Cols K, L (index 10, 11) in trading log as '₩#,##0'
         format_requests.append({
             'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': 20, 'startColumnIndex': 10, 'endColumnIndex': 12},
+                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 10, 'endColumnIndex': 12},
                 'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
                 'fields': 'userEnteredFormat.numberFormat'
             }
@@ -1416,6 +1508,28 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 'right': {'style': 'SOLID', 'color': BORDER_GREY},
                 'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
                 'innerVertical': {'style': 'SOLID', 'color': INNER_GREY}
+            }
+        })
+        # Bottom PnL Attribution Table (Rows 19..24) Number Formats: B19:B23 currency, C19:C23 percent, B24 percent
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dash, 'startRowIndex': 18, 'endRowIndex': 23, 'startColumnIndex': 1, 'endColumnIndex': 2},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                'fields': 'userEnteredFormat.numberFormat'
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dash, 'startRowIndex': 18, 'endRowIndex': 23, 'startColumnIndex': 2, 'endColumnIndex': 3},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.0%'}}},
+                'fields': 'userEnteredFormat.numberFormat'
+            }
+        })
+        format_requests.append({
+            'repeatCell': {
+                'range': {'sheetId': sheet_id_dash, 'startRowIndex': 23, 'endRowIndex': 24, 'startColumnIndex': 1, 'endColumnIndex': 2},
+                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.0%'}}},
+                'fields': 'userEnteredFormat.numberFormat'
             }
         })
 
