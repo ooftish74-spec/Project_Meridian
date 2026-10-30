@@ -1834,9 +1834,13 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
     ]
     falsifier_acct = AdversarialFalsifier.evaluate_falsifier_accountability(shadow_outcomes)
 
-    # 3. 실행 감식관 (ExecutionForensics)
+    # 3. 실행 감식관 (ExecutionForensics) — measurement_engine 또는 live_diagnostics matched_records 연동
     exec_view = (me_data.get('views') or {}).get('execution') if isinstance(me_data.get('views'), dict) else {}
     exec_records = (exec_view.get('records') if isinstance(exec_view, dict) else None) or []
+    if not exec_records:
+        ld_data = _safe_load(res_path / 'live_diagnostics.json')
+        ld_exec = (ld_data.get('execution') if isinstance(ld_data, dict) else None) or {}
+        exec_records = (ld_exec.get('matched_records') if isinstance(ld_exec, dict) else None) or []
     exec_report = ExecutionForensics.audit_stream_execution(exec_records)
 
     # 4. 검시관 (포트폴리오 + 개별 보유 종목 전수 부검)

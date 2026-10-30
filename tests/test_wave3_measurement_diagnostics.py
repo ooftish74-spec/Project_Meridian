@@ -324,6 +324,42 @@ class TestLiveDiagnosticsNonBlocking:
         assert dir_eq['role'] == 'directional_risk'
         assert dir_eq['limit'] == pytest.approx(round(0.15 / math.sqrt(1.7509), 4), rel=1e-9)
 
+        # 4. Dynamic No-Trade Zone (Constantinides cube-root scaling):
+        # vol = 8 * ref_vol (0.120 vs 0.015) -> (1 / 8)^(1/3) = 0.5 -> 0.01 * 0.5 = 0.005
+        from src.allocation.portfolio_optimizer import TransactionCostFilter
+        ntz = TransactionCostFilter.compute_dynamic_no_trade_zone(0.01, 0.0015, stream_daily_vol=0.120)
+        assert ntz == pytest.approx(0.005, rel=1e-9)
+
+        # 5. Date-only broker fill matching + ticker-only DATA_NOGO isolation
+        _write(tmp_path / 'shadow_trades' / '2026-10-16.json', [
+            {'timestamp': '2026-10-16T09:15:00', 'orders': [
+                {'stream_id': 'S3_B', 'ticker': '000270', 'action': 'buy', 'signal_price': 105000.0, 'price': 105000.0},
+            ]},
+        ])
+        _write(tmp_path / 'shadow_portfolio.json', {'trade_history': [
+            {'date': '2026-10-16', 'action': 'BUY', 'ticker': '000270', 'quantity': 2.0, 'price': 105525.0, 'stream': 'S_RECON'},
+        ]})
+        _write(tmp_path / 'data_nogo.json', {
+            'entries': {
+                'ticker:012510': {
+                    'asset': '012510',
+                    'kind': 'ticker',
+                    'reason': 'KIS 거래정지',
+                    'date': '2026-10-16',
+                    'recorded_at': '2026-10-16T09:00:00',
+                    'expires_at': '2026-11-16T09:00:00',
+                }
+            }
+        })
+        out_date_only = _diag(tmp_path, record_nav=False).run(write=False)
+        assert out_date_only['execution']['n_matched_fills'] == 1
+        # (105525 / 105000 - 1) * 1e4 = +50.0 bps
+        assert out_date_only['execution']['implementation_shortfall']['total']['mean_is_bps'] == pytest.approx(50.0, rel=1e-9)
+        assert out_date_only['execution']['implementation_shortfall']['by_stream']['S3_B']['n'] == 1
+        issue_map = {i['id']: i['severity'] for i in out_date_only['issues']}
+        assert issue_map.get('DATA_NOGO_TICKER_ISOLATED') == 'info'
+        assert 'DATA_NOGO_ACTIVE' not in issue_map
+
 
 # ═════════════════════════════════════════════════════════════
 # 4) GapFeedback — 경계/일일한도/tighten-only + 실제 적용

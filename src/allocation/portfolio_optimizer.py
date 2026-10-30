@@ -37,11 +37,39 @@ cfg = DynamicConfig()
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
 _STATE_FILE = _RESULTS / 'portfolio_optimizer_state.json'
+_NTZ_REF_COST = 0.0015
+_NTZ_REF_VOL = 0.015
+_NTZ_MIN_FLOOR = 0.002
+_NTZ_MAX_CEIL = 0.050
+_NTZ_CUBE_EXP = 1.0 / 3.0
+_NTZ_EPS_COST = 1e-6
+_NTZ_EPS_VOL = 1e-4
 
 class TransactionCostFilter:
-    """리밸런싱 거래비용 vs 기대 이익 비교."""
+    """리밸런싱 거래비용 vs 기대 이익 비교 (Constantinides / AQR 동적 무거래 영역 지원)."""
 
-    def should_rebalance(self, current_weights: Dict[str, float], target_weights: Dict[str, float], portfolio_value: float, expected_alphas: Dict[str, float]=None) -> Dict:
+    @staticmethod
+    def compute_dynamic_no_trade_zone(
+        base_ntz: float,
+        tx_cost_rate: float,
+        stream_daily_vol: Optional[float] = None,
+    ) -> float:
+        """변동성(σ_s) 및 마찰비용(c_s)의 1/3승에 비례하는 동적 무거래 불감대(NTZ_s) 산출."""
+        if stream_daily_vol is None or float(stream_daily_vol) <= 0.0:
+            return float(base_ntz)
+        cost_ratio = max(_NTZ_EPS_COST, float(tx_cost_rate)) / _NTZ_REF_COST
+        vol_ratio = max(_NTZ_EPS_VOL, float(stream_daily_vol)) / _NTZ_REF_VOL
+        raw_ntz = float(base_ntz) * ((cost_ratio / vol_ratio) ** _NTZ_CUBE_EXP)
+        return round(max(_NTZ_MIN_FLOOR, min(_NTZ_MAX_CEIL, raw_ntz)), 6)
+
+    def should_rebalance(
+        self,
+        current_weights: Dict[str, float],
+        target_weights: Dict[str, float],
+        portfolio_value: float,
+        expected_alphas: Dict[str, float] = None,
+        stream_vols: Optional[Dict[str, float]] = None,
+    ) -> Dict:
         """거래비용 감안 리밸런싱 판단.
 
         Args:
@@ -77,9 +105,11 @@ class TransactionCostFilter:
             delta = tgt - curr
             if expected_alphas and sid in expected_alphas:
                 expected_profit += delta * expected_alphas[sid] * portfolio_value
-            if abs(delta) < no_trade_zone:
+            s_vol = (stream_vols or {}).get(sid) if isinstance(stream_vols, dict) else None
+            eff_ntz = self.compute_dynamic_no_trade_zone(no_trade_zone, tx_cost_rate, s_vol)
+            if abs(delta) < eff_ntz:
                 adjusted[sid] = curr
-                trades[sid] = {'delta': 0, 'reason': 'no_trade_zone'}
+                trades[sid] = {'delta': 0, 'reason': 'no_trade_zone', 'effective_ntz': eff_ntz}
             else:
                 trade_value = abs(delta) * portfolio_value
                 if trade_value < min_trade_value:

@@ -48,6 +48,7 @@ _DYN_POS_MAX_CAP = 0.25
 _HEDGE_MAX_CAP = 0.35
 _CASH_EQUIV_MAX_CAP = 1.00
 _DEFAULT_MIN_CASH_RATIO = 0.12
+_DATE_STR_LEN = 10
 
 
 def compute_dynamic_position_limit(
@@ -526,7 +527,7 @@ class LiveDiagnostics:
             if r.get('orders'):
                 for o in r['orders']:
                     side = self._order_side(o)
-                    px = _f(o.get('price'))
+                    px = _f(o.get('signal_price')) or _f(o.get('price'))
                     if side is None or not px or px <= 0 or ts is None:
                         continue
                     decisions[(ts.date().isoformat(), str(o.get('ticker')), side)].append(
@@ -541,7 +542,7 @@ class LiveDiagnostics:
                 for fl in r.get('fills') or []:
                     if fl.get('signal_price') and fl.get('fill_price') and not fl.get('fill_simulated'):
                         sim_fills.append(fl)
-        # 실체결 (브로커 원장) ↔ 결정가격 매칭
+        # 실체결 (브로커 원장) ↔ 결정가격 매칭 (정밀 시각 보유 시 c[0] <= fts, 일자만 보유 시 당일/전일 야간 주문 매칭)
         fills = [t for t in (shadow.get('trade_history') or [])
                  if str(t.get('date', ''))[:10] >= cutoff and str(t.get('action', '')).upper() in ('BUY', 'SELL')]
         matched, unmatched, outliers = [], [], []
@@ -549,24 +550,36 @@ class LiveDiagnostics:
             side = 1 if str(t['action']).upper() == 'BUY' else -1
             tk = str(t.get('ticker'))
             fpx = _f(t.get('price'))
-            fts = _parse_ts(t.get('timestamp')) or _parse_ts(t.get('date'))
+            raw_ts = t.get('timestamp')
+            has_exact_ts = bool(raw_ts and len(str(raw_ts).strip()) > _DATE_STR_LEN)
+            fts = _parse_ts(raw_ts) if has_exact_ts else _parse_ts(t.get('date'))
             if not fpx or fts is None:
                 unmatched.append(t)
                 continue
-            cands = [c for c in decisions.get((fts.date().isoformat(), tk, side), []) if c[0] <= fts]
+            f_date = fts.date().isoformat()
+            if has_exact_ts:
+                cands = [c for c in decisions.get((f_date, tk, side), []) if c[0] <= fts]
+            else:
+                cands = list(decisions.get((f_date, tk, side), []))
+                if not cands:
+                    prev_date = (fts.date() - timedelta(days=1)).isoformat()
+                    cands = list(decisions.get((prev_date, tk, side), []))
             if not cands:
                 unmatched.append(t)
                 continue
-            dts, dpx, stream = max(cands, key=lambda c: c[0])
+            dts, dpx, d_stream = max(cands, key=lambda c: c[0])
+            t_stream = str(t.get('stream_id') or t.get('stream') or '')
+            stream = d_stream if (not t_stream or t_stream in ('S_RECON', 'unknown')) else t_stream
             dev = fpx / dpx - 1.0
             if abs(dev) > max_dev:
                 outliers.append({'ticker': tk, 'fill': fpx, 'decision': dpx, 'dev': dev})
                 continue
             is_bps = side * dev * 1e4
+            delay_val = (fts - dts).total_seconds() if has_exact_ts else None
             matched.append({'ticker': tk, 'market': _market_of(tk, t.get('market')), 'stream': stream,
                             'side': 'buy' if side > 0 else 'sell', 'decision_price': dpx, 'fill_price': fpx,
                             'decision_ts': dts.isoformat(), 'fill_ts': fts.isoformat(),
-                            'delay_sec': (fts - dts).total_seconds(), 'is_bps': is_bps,
+                            'delay_sec': delay_val, 'is_bps': is_bps,
                             'notional': fpx * (_f(t.get('quantity')) or 0.0), 'odno': t.get('odno')})
         for fl in sim_fills:  # 동기 체결 레코드(실시간 신호가 포함) — 직접 측정
             side = 1 if str(fl.get('action', '')).lower() == 'buy' else -1
@@ -615,6 +628,7 @@ class LiveDiagnostics:
             'n_matched_fills': len(matched),
             'n_unmatched_fills': len(unmatched),
             'n_outlier_excluded': len(outliers),
+            'matched_records': matched,
             'unmatched_examples': [{'ticker': u.get('ticker'), 'date': u.get('date'), 'stream': u.get('stream'),
                                     'odno': u.get('odno')} for u in unmatched[:5]],
             'implementation_shortfall': {'total': _agg(matched),
@@ -1011,9 +1025,13 @@ class LiveDiagnostics:
             add('DATA_QUALITY_SCORE_LOW', 'medium', 'data_quality', f'signal_cache 품질 점수 {qs:.2f}',
                 {'score': qs, 'field_quality': dq.get('field_quality')}, '저품질 필드 소스 교체/재수집.')
         dn = dq.get('data_nogo') or {}
-        if dn.get('macro') or dn.get('ticker') or dn.get('corrupt'):
+        if dn.get('macro') or dn.get('corrupt'):
             add('DATA_NOGO_ACTIVE', 'high', 'data_quality', 'DATA_NOGO 활성 — 신규 진입 제한 중', dn,
                 'R² 미달 지표의 원천 데이터 복구 후 TTL 만료 또는 수동 해제(clear_data_nogo).')
+        elif dn.get('ticker'):
+            add('DATA_NOGO_TICKER_ISOLATED', 'info', 'data_quality',
+                f"개별 종목 거래정지/데이터 격리 {len(dn['ticker'])}건 ({dn['ticker']}) — 포트폴리오 정상 매매 중", dn,
+                '거래정지/이상 종목만 개별 진입 차단 중(정상 작동). TTL 만료 시 자동 해제.')
 
         rk = R['risk']
         if rk.get('status') == 'ok':
