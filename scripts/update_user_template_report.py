@@ -517,8 +517,10 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         )
         cash_usd = float(account.get("cash_usd", account.get("us_cash_usd", 0)) or 0)
         current_assets = cash_val + (cash_usd * fx_rate) + sum(
-            float(h.get("eval_krw", 0) or (float(h.get("qty", 0) or 0) * float(h.get("current_price", 0) or 0) * (fx_rate if h.get("market") == "US" else 1.0)))
-            for h in raw_holdings.values() if isinstance(h, dict)
+            float(h.get("qty", 0) or 0)
+            * float(h.get("current_price", h.get("avg_price", 0)) or 0)
+            * (fx_rate if categorize_asset(t, h)[1] == "USD" else 1.0)
+            for t, h in raw_holdings.items() if isinstance(h, dict)
         )
         settlement_total_asset_krw = int(round(float(account.get("settlement_total_asset_krw") or portfolio.get("settlement_total_asset_krw") or 0)))
         logger.info(f"Computed total current_assets (including cash_usd * fx_rate): ₩{current_assets:,.0f} (settlement_total_asset_krw=₩{settlement_total_asset_krw:,.0f})")
@@ -763,6 +765,15 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         r_exp_sum = div_end_row + 2  # Row 24
         r_tot_sum = div_end_row + 3  # Row 25
 
+        _locked_exp_divs = [
+            r for r in raw_div_list
+            if r["status"] == "지급 예정" and r.get("locked_qty") and r.get("hist_qty", 0) > 0
+        ]
+        _exp_sum_desc = (
+            f"현재 보유종목 향후 12개월 예상 + 배당락 권리확정 미입금분({len(_locked_exp_divs)}건·매도종목 포함)"
+            if _locked_exp_divs
+            else "현재 보유종목 향후 12개월 예상 배당·분배금"
+        )
         subtotal_rows = [
             [
                 "실제 수령 합계", f'=COUNTIF($D$4:$D${div_end_row}, "실제 수령") & "건"',
@@ -775,7 +786,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ],
             [
                 "지급 예정 합계", f'=COUNTIF($D$4:$D${div_end_row}, "지급 예정") & "건"',
-                "현재 보유종목 향후 12개월 예상 배당·분배금", "", "", "", "", "",
+                _exp_sum_desc, "", "", "", "", "",
                 f'=SUMIFS($I$4:$I${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")',
                 "", "", "",
                 f'=SUMIFS($M$4:$M${div_end_row}, $D$4:$D${div_end_row}, "지급 예정")',
@@ -1491,10 +1502,19 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         )
 
         # Top Summary Cards
+        top_row_3 = [
+            [
+                "총 평가자산", "",
+                "총 순손익 (비용·세금차감후)", "",
+                "보유종목 평가수익률 (미실현)", "",
+                "연간 예상 순배당 (세후·실수령포함)", "",
+                "총 비용 (세금+수수료)"
+            ]
+        ]
         top_row_4 = [
             [
                 f"='보유종목'!N{r_sum}", "",
-                f"='보유종목'!O{r_sum} + ({net_pnl_terms})", "",
+                f"='보유종목'!O{r_sum} + ({net_pnl_terms}) + '배당캘린더'!O{r_act_sum}", "",
                 f"='보유종목'!P{r_sum}", "",
                 f"='배당캘린더'!O{r_tot_sum}", "",
                 f"=({cost_terms}) + '배당캘린더'!N{r_act_sum}"
@@ -1509,8 +1529,8 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         top_row_5 = [
             [
                 _card1_sub_formula, "",
-                f"=\"확정순실현: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 미실현: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
-                f"=\"평가손익: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
+                f"=\"확정순실현: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 미실현: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 실수령배당: \" & TEXT('배당캘린더'!O{r_act_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
+                f"=\"미실현손익: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 누적 총수익률(Net ROI): \" & TEXT(B24, \"+0.0%;-0.0%;0.0%\")", "",
                 f"=\"실수령: \" & TEXT('배당캘린더'!O{r_act_sum}, \"₩#,##0\") & \" | 향후예정: \" & TEXT('배당캘린더'!O{r_exp_sum}, \"₩#,##0\")", "",
                 f"=\"거래비용: \" & TEXT({cost_terms}, \"₩#,##0\") & \" | 실수령배당세: \" & TEXT('배당캘린더'!N{r_act_sum}, \"₩#,##0\")"
             ]
@@ -1532,7 +1552,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
                 f"=\"비용차감후 확정순손익: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" (처분 \" & TEXT({disp_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" + 외환 \" & TEXT({fx_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \")\"",
                 linked_tabs_label,
             ],
-            ["미실현 보유 평가손익", f"='보유종목'!O{r_sum}", "=IFERROR(B20/$B$23, 0)", "현재 보유 11종목 평가 차익 (법인세법 제42조 과세이연)", "보유종목 탭"],
+            ["미실현 보유 평가손익", f"='보유종목'!O{r_sum}", "=IFERROR(B20/$B$23, 0)", f"현재 보유 {len(raw_holdings)}종목 평가 손익 (법인세법 제42조 과세이연)", "보유종목 탭"],
             [
                 "배당 인컴 수익 (실수령 확정)",
                 f"='배당캘린더'!M{r_act_sum}",
@@ -1552,11 +1572,13 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         ]
         dash_batch = [
             {"range": "A2:I2", "values": [[f"실시간 시세·환율·원장 자동 연동 ({_sttl_banner_str}열람 시 자동재계산 · KIS 실계좌 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)"] + [""] * 8]},
+            {"range": "A3:I3", "values": top_row_3},
             {"range": "A4:I4", "values": top_row_4},
             {"range": "A5:I5", "values": top_row_5},
             {"range": "A8:E8", "values": [["자산군", "평가금액(원화)", "현재비중", "", ""]]},
             {"range": "A9:E13", "values": dash_updates},
             {"range": "A14:E14", "values": [["합계", "=SUM(B9:B13)", "=SUM(C9:C13)", "", ""]]},
+            {"range": "A16:E16", "values": [[""] * 5]},
             {"range": "A18:E18", "values": [["구분 (손익 원천)", "금액 (원화)", "손익 기여도", "세부 산출 내역", "연동 시트"]]},
             {"range": "A19:E24", "values": dash_pnl_rows},
         ]

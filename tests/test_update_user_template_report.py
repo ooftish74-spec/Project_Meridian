@@ -250,13 +250,20 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert ws_dl.updates["A6:R6"][0][16] == "[차변] 선납세금\n(원천세액·KRW)"
     assert ws_dl.updates["A6:R6"][0][17] == "[차변] 예금실입금액\n(세후정산·KRW)"
 
-    # 4. Verify '대시보드' C4 and Rows 19..24 PnL Attribution aggregate across all monthly tabs
+    # 4. Verify '대시보드' C4 and Rows 19..24 PnL Attribution aggregate across all monthly tabs & confirmed after-tax dividends
     ws_d = fake_sh.ws_map["대시보드"]
-    assert ws_d.updates["A4:I4"][0][2] == "='보유종목'!O8 + ('매매일지_2026-07'!I4 + '매매일지_2026-10'!I4)"
+    assert ws_d.updates["A3:I3"][0][2] == "총 순손익 (비용·세금차감후)"
+    assert ws_d.updates["A3:I3"][0][4] == "보유종목 평가수익률 (미실현)"
+    assert ws_d.updates["A3:I3"][0][6] == "연간 예상 순배당 (세후·실수령포함)"
+    assert ws_d.updates["A4:I4"][0][2] == "='보유종목'!O8 + ('매매일지_2026-07'!I4 + '매매일지_2026-10'!I4) + '배당캘린더'!O10"
+    assert "실수령배당:" in ws_d.updates["A5:I5"][0][2]
+    assert "누적 총수익률(Net ROI):" in ws_d.updates["A5:I5"][0][4]
+    assert ws_d.updates["A16:E16"] == [[""] * 5]
     pnl_rows = ws_d.updates["A19:E24"]
     assert pnl_rows[0][1] == "='매매일지_2026-07'!A4 + '매매일지_2026-10'!A4"
     assert pnl_rows[0][4] == "매매일지_2026-07~2026-10 (2개 월별탭)"
     assert pnl_rows[1][1] == "='보유종목'!O8"
+    assert pnl_rows[1][3] == "현재 보유 2종목 평가 손익 (법인세법 제42조 과세이연)"
     assert pnl_rows[2][4] == "배당원장_2026·배당캘린더 탭"
     assert pnl_rows[4][1] == "=SUM(B19:B22)"
     assert pnl_rows[5][1] == "=IFERROR(B23/'보유종목'!M8, 0)"
