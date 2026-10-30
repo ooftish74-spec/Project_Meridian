@@ -1438,7 +1438,10 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
 
         # ── 5. 삼권분립(전 부서 + 독립기관 + CIO 결재 상정안) 일일 헌법 감사 ──
         try:
-            from src.governance.separation_of_powers import run_daily_constitutional_audit
+            from src.governance.separation_of_powers import (
+                run_daily_constitutional_audit,
+                CIODocketEmailService,
+            )
             gov_audit = run_daily_constitutional_audit(_PROJECT_ROOT / 'results')
             gk_info = gov_audit.get('gravekeeper', {})
             cor_info = gov_audit.get('coroner', {})
@@ -1450,16 +1453,15 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                 f"Coroner={cor_info.get('verdict', 'EXPLAINED_NORMAL')}, "
                 f"CIODockets={n_dockets}"
             )
-            if n_dockets > 0 and cfg.get('telegram.enabled', True):
-                try:
-                    from src.interface.telegram_notifier import MeridianTelegram
-                    _tg_docket = MeridianTelegram()
-                    _docket_msg = docket_info.get('formatted_text', '')
-                    if _docket_msg:
-                        _tg_docket.send(_docket_msg)
-                        logger.info(f"  📱 [CIODocket] Telegram 결재 상정안 발송 ({n_dockets}건)")
-                except Exception as _tg_e:
-                    logger.warning(f"  CIODocket Telegram 발송 스킵: {_tg_e}")
+            if n_dockets > 0:
+                _mail_res = CIODocketEmailService.send_docket_via_gmail(
+                    docket_info, results_dir=_PROJECT_ROOT / 'results'
+                )
+                if _mail_res.get('sent'):
+                    logger.info(f"  📧 [CIODocket] Gmail 결재 상정안 발송 완료 ({_mail_res.get('recipient')})")
+            _poll_res = CIODocketEmailService.poll_gmail_for_cio_replies(_PROJECT_ROOT / 'results')
+            if _poll_res.get('decisions_applied'):
+                logger.info(f"  ✅ [CIODocket] Gmail 답장 결재 집행: {_poll_res.get('decisions_applied')}")
         except Exception as e:
             logger.error(f"  ConstitutionalAudit 실행 실패: {e}", exc_info=True)
 

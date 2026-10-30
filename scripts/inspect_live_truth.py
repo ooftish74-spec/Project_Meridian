@@ -609,6 +609,11 @@ def inspect_live_truth(as_json: bool = False):
         print("     • (보유 종목 없음)")
     print("----------------------------------------------------------")
     print(f"🛡️  Leveraged ETP Check (TQQQ, SQQQ, etc.): {'⚠️  HELD' if held_leveraged else '✅ NONE HELD (0% Leverage In Account)'}")
+    try:
+        from src.governance.separation_of_powers import CIODocketEmailService
+        CIODocketEmailService.poll_gmail_for_cio_replies(PROJECT_ROOT / "results")
+    except Exception:
+        pass
     docket_data = load_json(PROJECT_ROOT / "results" / "cio_approval_docket.json")
     if isinstance(docket_data, dict) and docket_data.get("formatted_text"):
         print("----------------------------------------------------------")

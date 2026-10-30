@@ -91,7 +91,7 @@ class MeridianEmail:
             logger.error(f'이메일 전송 실패: {e}')
             return False
 
-    def send_html_report(self, markdown_content: str, subject: str='Project Meridian Daily Report'):
+    def send_html_report(self, markdown_content: str, subject: str='Project Meridian Daily Report', extra_headers: dict | None=None):
         """Markdown을 HTML로 변환하여 이메일 본문으로 전송합니다."""
         if not self.enabled:
             logger.warning('이메일 설정이 누락되어 전송할 수 없습니다 (.env의 SENDER_EMAIL 등 확인).')
@@ -102,12 +102,18 @@ class MeridianEmail:
         except ImportError as e:
             logger.error('markdown 패키지가 설치되지 않았습니다. pip install Markdown', exc_info=True)
             return False
-        html_content = f'\n        <html>\n        <head>\n        <style>\n            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; }}\n            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 14px; }}\n            th, td {{ padding: 8px 12px; border: 1px solid #ddd; text-align: left; }}\n            th {{ background-color: #f8f9fa; font-weight: bold; }}\n            h1, h2, h3 {{ color: #2c3e50; }}\n            hr {{ border: 0; border-top: 1px solid #eee; margin: 20px 0; }}\n        </style>\n        </head>\n        <body>\n        {html_body}\n        </body>\n        </html>\n        '
+        html_content = f'\n        <html>\n        <head>\n        <style>\n            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; color: #1f2937; padding: 24px; max-width: 860px; margin: 0 auto; }}\n            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 14px; }}\n            th, td {{ padding: 10px 14px; border: 1px solid #d1d5db; text-align: left; vertical-align: top; }}\n            th {{ background-color: #f3f4f6; font-weight: bold; color: #111827; }}\n            h1 {{ color: #111827; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }}\n            h2 {{ color: #1e3a8a; margin-top: 28px; }}\n            h3 {{ color: #1f2937; margin-top: 20px; }}\n            blockquote {{ background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 16px; margin: 16px 0; color: #1e40af; }}\n            code {{ background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}\n            hr {{ border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0; }}\n        </style>\n        </head>\n        <body>\n        {html_body}\n        </body>\n        </html>\n        '
         msg = MIMEMultipart('alternative')
         msg['From'] = self.sender_email
         msg['To'] = self.receiver_email
+        msg['Reply-To'] = self.sender_email
         msg['Subject'] = subject
-        msg.attach(MIMEText(html_content, 'html'))
+        if isinstance(extra_headers, dict):
+            for hk, hv in extra_headers.items():
+                if hk and hv:
+                    msg[str(hk)] = str(hv)
+        msg.attach(MIMEText(markdown_content, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
         try:
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
             server.starttls()

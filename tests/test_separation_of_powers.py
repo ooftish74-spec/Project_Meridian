@@ -18,6 +18,7 @@ from src.governance.separation_of_powers import (
     StagedPromotionEngine,
     PnLCoroner,
     CIODocketBuilder,
+    CIODocketEmailService,
     run_daily_constitutional_audit,
 )
 
@@ -236,3 +237,64 @@ def test_pnl_coroner_and_cio_docket_builder_end_to_end(tmp_path):
     assert res["cio_approval_docket"]["is_weekly_docket_day"] is True
     assert res["cio_approval_docket"]["is_emergency_escalation"] is True
     assert res["cio_approval_docket"]["n_pending_dockets"] == 2
+    assert "<!-- MERIDIAN_OUTBOUND_DOCKET -->" in res["cio_approval_docket"]["email_markdown"]
+
+
+def test_cio_docket_email_markdown_and_reply_execution(tmp_path):
+    """Verify outbound email text is never self-triggered as a reply, and genuine replies ('승인'/'보류'/'기각') execute cleanly."""
+    docket = CIODocketBuilder.build_docket(
+        as_of_date="2026-10-30",
+        wf_report={
+            "oos_acc": 0.3169,
+            "oos_excess_acc": 0.5902,
+            "oos_ic": 0.2621,
+            "base_rate_up": 0.3169,
+            "prob_calibration_bias": 0.2088,
+            "top_bottom_spread_pct": 1.379,
+            "n_validated": 183,
+        },
+        coroner_report={"quarantine_recommended": False, "verdict": "EXPLAINED_NORMAL"},
+        execution_report={"retire_by_divergence": False, "verdict": "EXECUTION_WITHIN_BOUNDS"},
+        gravekeeper_report={"n_effective_trials": 3.0},
+    )
+    email_md = CIODocketBuilder.format_docket_email_markdown(docket)
+    assert "한눈에 이해하는 핵심 요약" in email_md
+    assert "시험이 아주 어렵게 출제되어" in email_md
+
+    # 1. Outbound email body must NEVER be parsed as a reply
+    assert CIODocketEmailService.parse_cio_reply_text(email_md, default_docket_id="DOCKET-2026-10-30-CAL01") is None
+
+    # 2. Genuine reply with quoted original email
+    reply_approve = (
+        "승인\n\n"
+        "On Fri, Oct 30, 2026 at 9:40 PM <ooftish74@gmail.com> wrote:\n"
+        "> ⚖️ [Meridian CIO 결재 상정안] (2026-10-30)\n"
+        "> 기각 또는 보류\n"
+    )
+    parsed_app = CIODocketEmailService.parse_cio_reply_text(reply_approve, default_docket_id="DOCKET-2026-10-30-CAL01")
+    assert parsed_app is not None
+    assert parsed_app["decision"] == "APPROVE_PILOT"
+    assert parsed_app["docket_id"] == "DOCKET-2026-10-30-CAL01"
+
+    parsed_def = CIODocketEmailService.parse_cio_reply_text("2번 보류합니다\n> 원본", default_docket_id="DOCKET-2026-10-30-CAL01")
+    assert parsed_def is not None and parsed_def["decision"] == "DEFER_SHADOW"
+
+    parsed_rej = CIODocketEmailService.parse_cio_reply_text("기각 (DOCKET-2026-10-30-CAL01)", default_docket_id="")
+    assert parsed_rej is not None and parsed_rej["decision"] == "REJECT_TO_GRAVEYARD"
+    assert parsed_rej["docket_id"] == "DOCKET-2026-10-30-CAL01"
+
+    # 3. Apply decision and verify SSOT files
+    (tmp_path / "cio_approval_docket.json").write_text(json.dumps(docket), encoding="utf-8")
+    applied = CIODocketEmailService.apply_cio_decision(
+        docket_id="DOCKET-2026-10-30-CAL01",
+        decision="APPROVE_PILOT",
+        raw_reply="승인",
+        results_dir=tmp_path,
+        send_confirmation_email=False,
+    )
+    assert applied["applied"] is True
+    ov = json.loads((tmp_path / "dynamic_overrides.json").read_text(encoding="utf-8"))
+    assert ov["cio_approved_dockets"]["DOCKET-2026-10-30-CAL01"]["stage"] == "PILOT"
+    assert ov["parameters"]["ml.enable_prior_shift_calibration"] is True
+    assert ov["parameters"]["ml.prior_shift_pilot_scale"] == pytest.approx(0.50, rel=1e-9)
+
