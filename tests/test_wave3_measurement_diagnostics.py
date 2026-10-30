@@ -293,6 +293,37 @@ class TestLiveDiagnosticsNonBlocking:
         # 10-16(금)←10-17 06:05, 10-17(토) 평가일은 제외
         assert got == {'2026-10-13': 100.0, '2026-10-14': 102.0, '2026-10-16': 103.0}
 
+    def test_dynamic_mctr_risk_budget_position_limit_closed_form(self, tmp_path):
+        from src.measurement.live_diagnostics import compute_dynamic_position_limit
+        # 1. Cash-equivalent ETF (S5 / CD금리액티브): limit = 1.00
+        ce = compute_dynamic_position_limit(
+            '459580', {'name': 'KODEX CD금리액티브(합성)', 'stream_id': 'S5'}, base_anchor=0.15
+        )
+        assert ce['role'] == 'cash_equivalent'
+        assert ce['limit'] == pytest.approx(1.00, rel=1e-9)
+
+        # 2. Inverse hedge leg (114800 KODEX 인버스): limit = min(0.35, max(0.15, total_long_weight))
+        inv = compute_dynamic_position_limit(
+            '114800',
+            {'name': 'KODEX 인버스', 'stream_id': 'S14_PAIR_ALPHA', 'strategy': 'kr_sector_pair_alpha'},
+            base_anchor=0.15,
+            total_long_weight=0.70,
+        )
+        assert inv['role'] == 'inverse_hedge'
+        assert inv['limit'] == pytest.approx(0.35, rel=1e-9)
+
+        # 3. Correlated directional equity (086280 paired at rho=0.7509, VIX=18.0 -> vix_factor=1.0)
+        # corr_factor = 1 / sqrt(1 + 0.7509) = 0.755779573..., limit = round(0.15 * 0.755779573, 4) = 0.1134
+        dir_eq = compute_dynamic_position_limit(
+            '086280',
+            {'name': '현대글로비스', 'stream_id': 'S3_B', 'daily_vol': 0.020},
+            base_anchor=0.15,
+            pair_max_corr=0.7509,
+            vix_level=18.0,
+        )
+        assert dir_eq['role'] == 'directional_risk'
+        assert dir_eq['limit'] == pytest.approx(round(0.15 / math.sqrt(1.7509), 4), rel=1e-9)
+
 
 # ═════════════════════════════════════════════════════════════
 # 4) GapFeedback — 경계/일일한도/tighten-only + 실제 적용

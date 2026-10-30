@@ -36,6 +36,93 @@ DEFAULT_RESULTS = _PROJECT_ROOT / 'results'
 DECISION = 'DIAGNOSE_CONTINUE'
 SCHEMA_VERSION = 'live_diagnostics.v1'
 _SEV_RANK = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4}
+_DEFAULT_BASE_SINGLE_ANCHOR = 0.15
+_REF_DAILY_VOL = 0.020
+_VOL_FLOOR = 0.005
+_CASH_VOL_CEIL = 0.002
+_REF_VIX = 18.0
+_VIX_SCALE_MIN = 0.60
+_VIX_SCALE_MAX = 1.25
+_DYN_POS_MIN_CAP = 0.05
+_DYN_POS_MAX_CAP = 0.25
+_HEDGE_MAX_CAP = 0.35
+_CASH_EQUIV_MAX_CAP = 1.00
+_DEFAULT_MIN_CASH_RATIO = 0.12
+
+
+def compute_dynamic_position_limit(
+    ticker: str,
+    pos_info: Dict[str, Any],
+    base_anchor: float = _DEFAULT_BASE_SINGLE_ANCHOR,
+    pair_max_corr: float = 0.0,
+    vix_level: Optional[float] = None,
+    total_long_weight: float = 1.0,
+) -> Dict[str, Any]:
+    """L0/L1/L2 동적 위험예산(MCTR/CVaR) 기반 종목별 허용 비중 상한 산출기.
+
+    - 현금성 파킹 자산(S5 / CD금리·KOFR·단기채, σ_daily <= 0.2%): MCTR ≈ 0 이므로 집중도 캡 면제(1.00).
+    - 음(-)의 베타 인버스 헤지 자산(인버스 / -1X / β < 0): 포트폴리오 총분산을 감소시키는 방어 레그이므로
+      롱 익스포저 헤지 한도(최대 0.35)까지 허용.
+    - 일반 방향성 위험 자산: L1 앵커(base_anchor) × 변동성 역스케일(σ_ref / σ_i)
+      × 동조화 클러스터 페널티(1 / sqrt(1 + ρ_cluster)) × VIX 레짐 수축(sqrt(VIX_ref / VIX_t)).
+    """
+    info = pos_info if isinstance(pos_info, dict) else {}
+    nm_upper = str(info.get('name') or '').upper()
+    stream_id = str(info.get('stream_id') or info.get('stream') or '')
+    strat_lower = str(info.get('strategy') or '').lower()
+    raw_vol = _f(info.get('daily_vol'))
+    raw_beta = _f(info.get('beta'))
+
+    is_cash_equiv = (
+        stream_id == 'S5'
+        or any(kw in nm_upper for kw in ('CD금리', 'KOFR', '단기채', '머니마켓', 'TREASURY BILL'))
+        or (raw_vol is not None and 0.0 < raw_vol <= _CASH_VOL_CEIL)
+    )
+    if is_cash_equiv:
+        return {
+            'ticker': ticker,
+            'role': 'cash_equivalent',
+            'limit': _CASH_EQUIV_MAX_CAP,
+            'vol_factor': 1.0,
+            'corr_factor': 1.0,
+            'vix_factor': 1.0,
+        }
+
+    is_inverse_hedge = (
+        (raw_beta is not None and raw_beta < 0.0)
+        or any(kw in nm_upper for kw in ('인버스', '-1X', 'INVERSE', 'SHORT'))
+        or ('pair_alpha' in strat_lower and ('인버스' in nm_upper or '-1X' in nm_upper))
+    )
+    if is_inverse_hedge:
+        hedge_lim = min(_HEDGE_MAX_CAP, max(float(base_anchor), float(total_long_weight)))
+        return {
+            'ticker': ticker,
+            'role': 'inverse_hedge',
+            'limit': round(hedge_lim, 4),
+            'vol_factor': 1.0,
+            'corr_factor': 1.0,
+            'vix_factor': 1.0,
+        }
+
+    eff_vol = raw_vol if (raw_vol is not None and raw_vol > 0.0) else _REF_DAILY_VOL
+    vol_factor = _REF_DAILY_VOL / max(eff_vol, _VOL_FLOOR)
+    eff_corr = max(0.0, float(pair_max_corr or 0.0))
+    corr_factor = 1.0 / math.sqrt(1.0 + eff_corr)
+    if vix_level is not None and vix_level > 0.0:
+        vix_factor = max(_VIX_SCALE_MIN, min(_VIX_SCALE_MAX, math.sqrt(_REF_VIX / max(float(vix_level), 1.0))))
+    else:
+        vix_factor = 1.0
+
+    raw_dyn = float(base_anchor) * vol_factor * corr_factor * vix_factor
+    dyn_limit = max(_DYN_POS_MIN_CAP, min(_DYN_POS_MAX_CAP, raw_dyn))
+    return {
+        'ticker': ticker,
+        'role': 'directional_risk',
+        'limit': round(dyn_limit, 4),
+        'vol_factor': round(vol_factor, 4),
+        'corr_factor': round(corr_factor, 4),
+        'vix_factor': round(vix_factor, 4),
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -725,15 +812,65 @@ class LiveDiagnostics:
             ev = _f((p or {}).get('eval_krw'))
             if ev and ev > 0:
                 weights[tk] = ev / nav
-        lim = float(self.cfg.get('sizer.max_single_position_pct', 0.15))
-        top = sorted(weights.items(), key=lambda kv: -kv[1])
-        out['concentration'] = {
-            'n_positions': len(weights), 'max_single_limit': lim,
-            'top': [{'ticker': k, 'name': (positions.get(k) or {}).get('name'), 'weight': v} for k, v in top[:5]],
-            'hhi': sum(v * v for v in weights.values()) if weights else None,
-            'breaches': [k for k, v in top if v > lim],
-        }
+        lim = float(self.cfg.get('sizer.max_single_position_pct', _DEFAULT_BASE_SINGLE_ANCHOR))
         cr = self._load('concentration_risk.json', {}) or {}
+        avg_abs_corr = _f(cr.get('avg_abs_correlation')) or 0.0
+        pair_max_by_tk: Dict[str, float] = {}
+        for pr in (cr.get('high_corr_pairs') or []):
+            if isinstance(pr, dict):
+                pair_str = str(pr.get('pair') or '')
+                rho = _f(pr.get('correlation')) or 0.0
+                for part_tk in pair_str.split('-'):
+                    t_clean = part_tk.strip()
+                    if t_clean:
+                        pair_max_by_tk[t_clean] = max(pair_max_by_tk.get(t_clean, 0.0), rho)
+        sc_raw = self._load('signal_cache.json', {}) or {}
+        vix_raw = sc_raw.get('VIX') if isinstance(sc_raw, dict) else None
+        vix_val = _f(vix_raw.get('close') if isinstance(vix_raw, dict) else vix_raw)
+        if vix_val is None:
+            vix_val = _f(sc_raw.get('vix') if isinstance(sc_raw, dict) else None)
+
+        total_long_w = sum(
+            w_v for t_k, w_v in weights.items()
+            if not any(kw in str((positions.get(t_k) or {}).get('name') or '').upper() for kw in ('인버스', '-1X', 'INVERSE', 'CD금리', 'KOFR'))
+        )
+        dyn_meta_by_tk: Dict[str, Dict[str, Any]] = {}
+        cash_equiv_krw = 0.0
+        for tk, w_val in weights.items():
+            p_info = positions.get(tk) or {}
+            tk_corr = max(avg_abs_corr, pair_max_by_tk.get(tk, 0.0))
+            d_meta = compute_dynamic_position_limit(
+                ticker=tk,
+                pos_info=p_info,
+                base_anchor=lim,
+                pair_max_corr=tk_corr,
+                vix_level=vix_val,
+                total_long_weight=total_long_w,
+            )
+            dyn_meta_by_tk[tk] = d_meta
+            if d_meta['role'] == 'cash_equivalent':
+                cash_equiv_krw += (_f(p_info.get('eval_krw')) or 0.0)
+
+        top = sorted(weights.items(), key=lambda kv: -kv[1])
+        breaches = [k for k, v in top if v > dyn_meta_by_tk[k]['limit']]
+        out['concentration'] = {
+            'model': 'dynamic_mctr_risk_budget_v1',
+            'n_positions': len(weights),
+            'max_single_limit': lim,
+            'dynamic_limits': {k: dyn_meta_by_tk[k] for k, _ in top},
+            'top': [
+                {
+                    'ticker': k,
+                    'name': (positions.get(k) or {}).get('name'),
+                    'weight': v,
+                    'dynamic_limit': dyn_meta_by_tk[k]['limit'],
+                    'role': dyn_meta_by_tk[k]['role'],
+                }
+                for k, v in top[:5]
+            ],
+            'hhi': sum(v * v for v in weights.values()) if weights else None,
+            'breaches': breaches,
+        }
         if cr:
             out['concentration']['high_corr_pairs'] = cr.get('high_corr_pairs')
             out['concentration']['avg_abs_correlation'] = cr.get('avg_abs_correlation')
@@ -741,9 +878,17 @@ class LiveDiagnostics:
         krw = _f(acct.get('cash')) or 0.0
         usd = _f(acct.get('us_cash_usd')) or 0.0
         cash_total = krw + (usd * fx if fx else 0.0)
-        out['cash'] = {'krw_cash': krw, 'usd_cash': usd, 'fx_rate': fx, 'cash_ratio': cash_total / nav,
-                       'min_cash_ratio': float(self.cfg.get('portfolio.min_cash_ratio', 0.12)),
-                       'usd_converted': bool(fx)}
+        eff_cash_total = cash_total + cash_equiv_krw
+        out['cash'] = {
+            'krw_cash': krw,
+            'usd_cash': usd,
+            'fx_rate': fx,
+            'cash_equiv_krw': cash_equiv_krw,
+            'cash_ratio': cash_total / nav,
+            'effective_cash_ratio': eff_cash_total / nav,
+            'min_cash_ratio': float(self.cfg.get('portfolio.min_cash_ratio', _DEFAULT_MIN_CASH_RATIO)),
+            'usd_converted': bool(fx),
+        }
         out['status'] = 'ok'
         return out
 
@@ -884,18 +1029,25 @@ class LiveDiagnostics:
                     '손실 기여 상위 포지션 점검, 상관 높은 포지션 중복 노출 축소 검토.')
             conc = rk['concentration']
             if conc.get('breaches'):
+                dyn_lims = conc.get('dynamic_limits') or {}
+                breach_desc = [
+                    f"{tk}(동적상한 {(dyn_lims.get(tk) or {}).get('limit', conc['max_single_limit']):.1%})"
+                    for tk in conc['breaches']
+                ]
                 add('RISK_CONCENTRATION_BREACH', 'medium', 'risk',
-                    f"단일종목 비중 한도({conc['max_single_limit']:.0%}) 초과: {conc['breaches']}",
-                    {'top': conc['top']}, '초과분 리밸런싱(다음 정기 리밸런스 시 목표비중 cap 적용).')
+                    f"동적 위험예산 비중 한도 초과: {', '.join(breach_desc)}",
+                    {'top': conc['top'], 'dynamic_limits': dyn_lims},
+                    '변동성·클러스터 상관계수 반영 동적 목표비중(dynamic_limit) 이내로 차기 리밸런싱 시 축소.')
             for pr in conc.get('high_corr_pairs') or []:
                 if (_f(pr.get('correlation')) or 0) >= 0.9:
                     add(f"RISK_CORR_PAIR_{pr.get('pair')}", 'low', 'risk',
                         f"고상관 페어 {pr.get('pair')} ρ={pr.get('correlation')}", pr,
                         '사실상 동일 베팅 — 합산 비중 기준으로 한도 관리.')
             cash = rk['cash']
-            if cash['cash_ratio'] < cash['min_cash_ratio']:
+            eff_cr = cash.get('effective_cash_ratio', cash['cash_ratio'])
+            if eff_cr < cash['min_cash_ratio']:
                 add('RISK_CASH_BELOW_MIN', 'medium', 'risk',
-                    f"현금비중 {cash['cash_ratio']:.1%} < 최소 {cash['min_cash_ratio']:.0%}", cash,
+                    f"유효현금비중 {eff_cr:.1%} < 최소 {cash['min_cash_ratio']:.0%}", cash,
                     '신규 매수 수량 산정 시 현금 하한 반영(주문가능금액 거부 감소 효과).')
             ss = rk['safety_state']
             if ss.get('kill_switch_triggered') or ss.get('exit_only_flag'):

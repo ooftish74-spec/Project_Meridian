@@ -38,6 +38,9 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _RESULTS = _PROJECT_ROOT / 'results'
+_KELLY_EDGE_BOOST_COEF = 0.50
+_KELLY_MIN_PENALTY = 0.10
+_KELLY_STATUTORY_CEIL = 0.25
 try:
     from config.dynamic_config import DynamicConfig
     _cfg = DynamicConfig()
@@ -155,10 +158,30 @@ class KellyCriterion:
                 'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades,
                 'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction
             }
-        max_pos = pget('risk.kelly_max_position_pct', 0.15)
-        min_pos = pget('risk.kelly_min_position_pct', 0.01)
+        base_max_pos = float(pget('risk.kelly_max_position_pct', 0.15))
+        min_pos = float(pget('risk.kelly_min_position_pct', 0.01))
+        sample_conf = math.sqrt(float(n_trades) / float(n_trades + max(1, int(min_trades))))
+        edge_boost = 1.0 + _KELLY_EDGE_BOOST_COEF * sample_conf * math.tanh(max(0.0, float(full_kelly)))
+        raw_dyn_max = base_max_pos * float(regime_adj) * math.sqrt(max(_KELLY_MIN_PENALTY, float(bayesian_penalty))) * edge_boost
+        max_pos = max(min_pos, min(_KELLY_STATUTORY_CEIL, raw_dyn_max))
         final_kelly = max(min_pos, min(max_pos, adjusted_kelly))
-        return {'stream_id': stream_id, 'full_kelly': round(full_kelly, 6), 'fractional_kelly': round(fractional_kelly, 6), 'adjusted_kelly': round(adjusted_kelly, 6), 'max_position_pct': round(final_kelly, 6), 'win_rate': round(win_rate, 4), 'profit_loss_ratio': round(pl_ratio, 4), 'avg_win_pct': round(avg_win * 100, 2), 'avg_loss_pct': round(avg_loss * 100, 2), 'n_trades': n_trades, 'sufficient_data': sufficient_data, 'regime': regime, 'regime_adj': regime_adj, 'fraction': fraction}
+        return {
+            'stream_id': stream_id,
+            'full_kelly': round(full_kelly, 6),
+            'fractional_kelly': round(fractional_kelly, 6),
+            'adjusted_kelly': round(adjusted_kelly, 6),
+            'dynamic_max_position_pct': round(max_pos, 6),
+            'max_position_pct': round(final_kelly, 6),
+            'win_rate': round(win_rate, 4),
+            'profit_loss_ratio': round(pl_ratio, 4),
+            'avg_win_pct': round(avg_win * 100, 2),
+            'avg_loss_pct': round(avg_loss * 100, 2),
+            'n_trades': n_trades,
+            'sufficient_data': sufficient_data,
+            'regime': regime,
+            'regime_adj': regime_adj,
+            'fraction': fraction,
+        }
 
     def calculate_all(self, regime: str='caution') -> Dict:
         """모든 스트림의 Kelly 비율 일괄 계산.
