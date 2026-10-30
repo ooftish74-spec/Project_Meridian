@@ -1436,17 +1436,30 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as e:
             logger.error(f"  Walk-Forward 검증 실패: {e}", exc_info=True)
 
-        # ── 5. 삼권분립(반증관 · 묘지기 · 검시관) 일일 헌법 감사 ──
+        # ── 5. 삼권분립(전 부서 + 독립기관 + CIO 결재 상정안) 일일 헌법 감사 ──
         try:
             from src.governance.separation_of_powers import run_daily_constitutional_audit
             gov_audit = run_daily_constitutional_audit(_PROJECT_ROOT / 'results')
             gk_info = gov_audit.get('gravekeeper', {})
             cor_info = gov_audit.get('coroner', {})
+            docket_info = gov_audit.get('cio_approval_docket', {})
+            n_dockets = int(docket_info.get('n_pending_dockets', 0) or 0)
             logger.info(
                 f"  ⚖️ [ConstitutionalAudit] N_eff={gk_info.get('n_effective_trials', 1.0):.2f}, "
                 f"Retired={gk_info.get('retired_streams_count', 0)}, "
-                f"Coroner={cor_info.get('verdict', 'EXPLAINED_NORMAL')}"
+                f"Coroner={cor_info.get('verdict', 'EXPLAINED_NORMAL')}, "
+                f"CIODockets={n_dockets}"
             )
+            if n_dockets > 0 and cfg.get('telegram.enabled', True):
+                try:
+                    from src.interface.telegram_notifier import MeridianTelegram
+                    _tg_docket = MeridianTelegram()
+                    _docket_msg = docket_info.get('formatted_text', '')
+                    if _docket_msg:
+                        _tg_docket.send(_docket_msg)
+                        logger.info(f"  📱 [CIODocket] Telegram 결재 상정안 발송 ({n_dockets}건)")
+                except Exception as _tg_e:
+                    logger.warning(f"  CIODocket Telegram 발송 스킵: {_tg_e}")
         except Exception as e:
             logger.error(f"  ConstitutionalAudit 실행 실패: {e}", exc_info=True)
 

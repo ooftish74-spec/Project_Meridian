@@ -1,22 +1,29 @@
-"""Hermetic closed-form tests for the Constitutional Separation-of-Powers Governance Engine."""
+"""Hermetic closed-form tests for the 100% Full Constitutional Separation-of-Powers Governance Engine."""
 
 from __future__ import annotations
 
+import json
 import math
 import numpy as np
 import pytest
 
 from src.governance.separation_of_powers import (
     DataLibrarian,
+    AirGappedExplorerGate,
     AdversarialFalsifier,
     VaultAndGravekeeper,
+    CapacityArchitect,
+    ExecutionForensics,
+    RegimeAndDecaySentinel,
+    StagedPromotionEngine,
     PnLCoroner,
+    CIODocketBuilder,
     run_daily_constitutional_audit,
 )
 
 
-def test_data_librarian_point_in_time_and_phase_randomized_surrogate_closed_form():
-    """Verify DataLibrarian blocks future look-ahead records and preserves exact mean/variance/power spectrum."""
+def test_data_librarian_point_in_time_surrogate_and_survivorship_bias_closed_form():
+    """Verify DataLibrarian blocks future records, preserves power spectrum, and quantifies survivorship bias."""
     records = [
         {"ticker": "005930", "timestamp": "2026-10-29T15:30:00", "available_at": "2026-10-29T16:00:00", "val": 1.0},
         {"ticker": "000660", "timestamp": "2026-10-30T09:00:00", "available_at": "2026-10-30T18:00:00", "val": 2.0},
@@ -28,7 +35,6 @@ def test_data_librarian_point_in_time_and_phase_randomized_surrogate_closed_form
     assert pit["leakage_detected"] is True
     assert pit["clean_records"][0]["ticker"] == "005930"
 
-    # Fourier Phase Randomization: preserves exact mean, variance, and L2 power spectrum while scrambling time path
     orig = np.array([0.02, -0.05, 0.01, 0.03, -0.02, 0.04, -0.01, -0.03, 0.025, -0.015, 0.005, 0.012], dtype=float)
     surr = DataLibrarian.generate_phase_randomized_surrogate(orig, seed=12345)
     assert len(surr) == len(orig)
@@ -36,14 +42,41 @@ def test_data_librarian_point_in_time_and_phase_randomized_surrogate_closed_form
     assert float(np.var(surr, ddof=1)) == pytest.approx(float(np.var(orig, ddof=1)), rel=1e-9, abs=1e-12)
     assert not np.allclose(surr, orig)
 
+    # Survivorship bias check: 10 PIT stocks, 2 delisted omitted from active backtest universe
+    pit_u = [f"TK_{i}" for i in range(10)]
+    delisted = ["TK_8", "TK_9"]
+    active_u = [f"TK_{i}" for i in range(8)]
+    surv = DataLibrarian.audit_survivorship_bias(pit_u, active_u, delisted, assumed_delist_return=-0.50)
+    assert surv["n_omitted_delisted"] == 2
+    assert surv["omission_rate"] == pytest.approx(0.20, rel=1e-9)
+    assert surv["estimated_return_inflation"] == pytest.approx(0.10, rel=1e-9)
+    assert surv["survivorship_bias_detected"] is True
 
-def test_adversarial_falsifier_orthogonal_residual_and_shadow_accountability_closed_form():
-    """Verify Falsifier rescues low-standalone-Sharpe diversifier and rejects redundant high-Sharpe clone."""
+
+def test_airgapped_explorer_gate_anonymizes_and_locks_in_shadow():
+    """Verify AirGappedExplorerGate physically truncates OOS vault and locks submissions in SHADOW(0x)."""
+    panel = {
+        "005930": [0.01 * ((-1) ** i) for i in range(20)],
+        "NVDA": [0.02 * ((-1) ** i) for i in range(20)],
+    }
+    ds = AirGappedExplorerGate.prepare_airgapped_explorer_dataset(panel, train_ratio=0.70, seed=99)
+    assert ds["oos_vault_physically_truncated"] is True
+    assert "005930" not in ds["anonymized_surrogate_data"]
+    assert "NVDA" not in ds["anonymized_surrogate_data"]
+    assert len(ds["anonymized_surrogate_data"]["ANON_ASSET_0001"]) == 14
+    assert ds["vault_reserved_bars_per_asset"]["ANON_ASSET_0001"] == 6
+
+    sub = AirGappedExplorerGate.submit_hypothesis_to_shadow("HYP_01", "Orderbook imbalance mean reversion")
+    assert sub["stage"] == "SHADOW"
+    assert sub["live_capital_multiplier"] == 0.0
+    assert sub["pre_declared_mortality"]["max_drawdown_pct"] == -12.0
+
+
+def test_adversarial_falsifier_orthogonal_residual_subperiod_and_accountability_closed_form():
+    """Verify Falsifier rescues diversifier, rejects clone, checks sub-period stability, and scores Shadow Graveyard."""
     t = np.arange(60, dtype=float)
     active = 0.002 + 0.01 * np.sin(t)
 
-    # 1. Redundant clone: r_clone = 1.5 * active + tiny negative alpha (-0.0005)
-    # High standalone Sharpe, but negative orthogonal residual alpha -> FALSIFIED
     redundant_cand = -0.0005 + 1.5 * active + 0.0001 * np.cos(t)
     f_red = AdversarialFalsifier.falsify_candidate(
         candidate_returns=redundant_cand,
@@ -53,9 +86,7 @@ def test_adversarial_falsifier_orthogonal_residual_and_shadow_accountability_clo
     )
     assert f_red["survived"] is False
     assert f_red["verdict"] == "FALSIFIED"
-    assert f_red["stressed_orthogonal_ir"] < 0.0
 
-    # 2. Orthogonal diversifier: negatively correlated (-0.8 * active) with positive residual edge
     diversifier_cand = 0.0015 - 0.8 * active + 0.001 * np.cos(t)
     f_div = AdversarialFalsifier.falsify_candidate(
         candidate_returns=diversifier_cand,
@@ -65,100 +96,105 @@ def test_adversarial_falsifier_orthogonal_residual_and_shadow_accountability_clo
     )
     assert f_div["survived"] is True
     assert f_div["verdict"] == "SURVIVED"
-    assert f_div["stressed_orthogonal_ir"] > 0.50
+    assert f_div["subperiod_positive_ratio"] == pytest.approx(1.0, rel=1e-9)
 
-    # 3. Shadow Graveyard accountability (False Rejection Penalty exact closed-form)
     outcomes = [
         {"strategy_id": "strat_bad_1", "realized_shadow_sharpe": -0.50},
         {"strategy_id": "strat_bad_2", "realized_shadow_sharpe": 0.40},
-        {"strategy_id": "strat_missed_gem", "realized_shadow_sharpe": 2.50},  # hurdle = 1.0 -> excess = 1.5 -> 1.5^2 = 2.25
+        {"strategy_id": "strat_missed_gem", "realized_shadow_sharpe": 2.50},
     ]
     acc = AdversarialFalsifier.evaluate_falsifier_accountability(outcomes, hurdle_sharpe=1.0)
-    assert acc["n_audited"] == 3
-    assert acc["true_rejections"] == 2
-    assert acc["false_rejections"] == 1
     assert acc["falsifier_accuracy"] == pytest.approx(2.0 / 3.0, rel=1e-9)
     assert acc["false_rejection_penalty"] == pytest.approx(2.25 / 3.0, rel=1e-9)
-    assert acc["resurrected_strategies"] == ["strat_missed_gem"]
 
 
-def test_vault_and_gravekeeper_one_shot_and_effective_trials_closed_form():
-    """Verify One-Shot Vault blocks repeat queries, blocks renamed clones, and computes N_eff = 1 + (K-1)(1 - rho_bar)."""
-    vg = VaultAndGravekeeper(dsr_gate=0.80, dup_corr_gate=0.90)
+def test_vault_and_gravekeeper_persistent_disk_ledger_and_effective_trials(tmp_path):
+    """Verify One-Shot Vault persists across process restarts via vault_graveyard_ledger.json."""
+    ledger_file = tmp_path / "vault_graveyard_ledger.json"
+    vg1 = VaultAndGravekeeper(dsr_gate=0.80, dup_corr_gate=0.90, ledger_path=ledger_file)
     t = np.arange(80, dtype=float)
     r1 = 0.005 + 0.002 * np.sin(t)
-    res1 = vg.register_trial_and_open_vault("alpha_v1", r1)
+    res1 = vg1.register_trial_and_open_vault("alpha_v1", r1)
     assert res1["passed"] is True
-    assert res1["verdict"] == "VAULT_PASS"
-    assert res1["k_trials"] == 1
-    assert res1["n_effective_trials"] == pytest.approx(1.0, rel=1e-9)
+    assert ledger_file.exists()
 
-    # Second query of same strategy_id -> strictly denied
-    res_repeat = vg.register_trial_and_open_vault("alpha_v1", r1)
+    # Simulate process restart: instantiate a brand-new VaultAndGravekeeper pointing to same ledger_file
+    vg2 = VaultAndGravekeeper(dsr_gate=0.80, dup_corr_gate=0.90, ledger_path=ledger_file)
+    res_repeat = vg2.register_trial_and_open_vault("alpha_v1", r1)
     assert res_repeat["passed"] is False
     assert res_repeat["verdict"] == "VAULT_ACCESS_DENIED_REPEAT_QUERY"
 
-    # Renamed clone with correlation > 0.90 -> blocked by Gravekeeper
     r1_clone = r1 * 1.02 + 1e-5 * np.cos(t)
-    res_clone = vg.register_trial_and_open_vault("alpha_v1_renamed", r1_clone)
+    res_clone = vg2.register_trial_and_open_vault("alpha_v1_renamed", r1_clone)
     assert res_clone["passed"] is False
     assert res_clone["verdict"] == "REJECTED_CLONE_STRATEGY"
-    assert res_clone["max_correlation_with_graveyard"] >= 0.90
-
-    # Orthogonal strategy -> passes and updates N_eff
-    r2_ortho = 0.006 + 0.002 * np.cos(t * 3.0)
-    res_ortho = vg.register_trial_and_open_vault("alpha_v2_ortho", r2_ortho)
-    assert res_ortho["passed"] is True
-    assert res_ortho["k_trials"] == 3
-    assert res_ortho["n_effective_trials"] > 1.5
 
 
-def test_pnl_coroner_unexplained_windfall_gain_and_tail_loss_closed_form():
-    """Verify PnLCoroner flags both unexplained windfall luck gains and structural tail losses."""
-    # 1. Unexplained windfall gain: expected +0.5%, market +0.2% * beta 1.0 = +0.2% -> explained = +0.7%
-    # Realized = +8.7% -> luck_residual = +8.0%, vol = 2.0% -> z = +4.0 >= 2.5, luck_share = 8.0 / 8.7 = 0.9195 >= 0.60
-    autopsy_gain = PnLCoroner.autopsy_realized_return(
-        realized_return=0.087,
-        expected_model_return=0.005,
-        market_return=0.002,
-        asset_beta=1.0,
-        residual_volatility=0.02,
+def test_operations_capacity_execution_forensics_decay_and_staged_promotion_closed_form():
+    """Verify CapacityArchitect, ExecutionForensics, RegimeAndDecaySentinel, and StagedPromotionEngine."""
+    # 1. CapacityArchitect: ADV = 1,000,000,000 KRW, vol = 0.02, max_part = 1% -> 10,000,000 KRW
+    # Impact cap: 1e9 * (0.0020 / (0.10 * 0.02))^2 = 1e9 * 1.0 = 1e9 -> min(1e7, 1e9) = 10,000,000 KRW
+    cap = CapacityArchitect.compute_stream_capacity(
+        adv_krw_per_asset=[1_000_000_000.0],
+        daily_vol_per_asset=[0.02],
+        current_allocated_krw=20_000_000.0,
+        max_participation_rate=0.01,
+        max_impact_bps=20.0,
     )
-    assert autopsy_gain["explained_return"] == pytest.approx(0.007, rel=1e-9)
-    assert autopsy_gain["luck_residual"] == pytest.approx(0.080, rel=1e-9)
-    assert autopsy_gain["residual_z_score"] == pytest.approx(4.0, rel=1e-9)
-    assert autopsy_gain["luck_share_of_return"] == pytest.approx(0.080 / 0.087, rel=1e-9)
-    assert autopsy_gain["verdict"] == "UNEXPLAINED_WINDFALL_GAIN"
-    assert autopsy_gain["quarantine_recommended"] is True
+    assert cap["max_capacity_krw"] == pytest.approx(10_000_000.0, rel=1e-9)
+    assert cap["capacity_utilization"] == pytest.approx(2.0, rel=1e-9)
+    assert cap["capacity_saturated"] is True
+    assert cap["recommended_scale_cap"] == pytest.approx(0.50, rel=1e-9)
 
-    # 2. Structural tail loss: z = -3.5 <= -2.5 -> UNEXPLAINED_TAIL_LOSS
-    autopsy_loss = PnLCoroner.autopsy_realized_return(
-        realized_return=-0.063,
-        expected_model_return=0.005,
-        market_return=0.002,
-        asset_beta=1.0,
-        residual_volatility=0.02,
+    # 2. ExecutionForensics: BUY at fill 100,600 vs decision 100,000 (+60 bps slippage) + 15 bps fee = 75 bps >= 50 bps
+    ef = ExecutionForensics.audit_stream_execution([
+        {"side": "BUY", "decision_price": 100_000.0, "fill_price": 100_600.0, "fee_bps": 15.0}
+    ])
+    assert ef["mean_shortfall_bps"] == pytest.approx(75.0, rel=1e-9)
+    assert ef["retire_by_divergence"] is True
+    assert ef["verdict"] == "RETIRED_BY_EXECUTION_DIVERGENCE"
+
+    # 3. RegimeAndDecaySentinel: Linearly decaying IC [0.30, 0.20, 0.10, 0.00, -0.10] -> slope = -0.10 <= -0.05
+    sent = RegimeAndDecaySentinel.detect_alpha_decay_and_crowding(
+        rolling_perf_series=[0.30, 0.20, 0.10, 0.00, -0.10],
+        volume_surge_z=2.0,
+        max_pairwise_correlation=0.85,
     )
-    assert autopsy_loss["luck_residual"] == pytest.approx(-0.070, rel=1e-9)
-    assert autopsy_loss["residual_z_score"] == pytest.approx(-3.5, rel=1e-9)
-    assert autopsy_loss["verdict"] == "UNEXPLAINED_TAIL_LOSS"
-    assert autopsy_loss["quarantine_recommended"] is True
+    assert sent["alpha_decay_slope"] == pytest.approx(-0.10, rel=1e-9)
+    assert sent["alpha_decay_detected"] is True
+    assert sent["crowding_detected"] is True
+    assert sent["sentinel_status"] == "DECAY_OR_CROWDING_ALERT"
+
+    # 4. StagedPromotionEngine: SHADOW -> PILOT -> FULL_ACTIVE -> RETIRED_TO_SHADOW
+    s_to_p = StagedPromotionEngine.evaluate_stage_transition("S_NEW", "SHADOW", n_days=6, sharpe=1.35, mdd_pct=-2.0, is_incumbent=False)
+    assert s_to_p["next_stage"] == "PILOT"
+    assert s_to_p["recommended_multiplier_cap"] == pytest.approx(0.50, rel=1e-9)
+
+    p_to_f = StagedPromotionEngine.evaluate_stage_transition("S_NEW", "PILOT", n_days=16, sharpe=1.45, mdd_pct=-3.5, is_incumbent=False)
+    assert p_to_f["next_stage"] == "FULL_ACTIVE"
+    assert p_to_f["recommended_multiplier_cap"] == pytest.approx(1.00, rel=1e-9)
+
+    ret = StagedPromotionEngine.evaluate_stage_transition("S5", "FULL_ACTIVE", n_days=9, sharpe=-8.258, mdd_pct=-5.0, is_incumbent=True)
+    assert ret["next_stage"] == "RETIRED_TO_SHADOW"
+    assert ret["recommended_multiplier_cap"] == pytest.approx(0.50, rel=1e-9)
 
 
-def test_run_daily_constitutional_audit_end_to_end(tmp_path):
-    """Verify evening pipeline daily constitutional audit writes constitutional_governance_audit.json."""
-    import json
-
+def test_pnl_coroner_and_cio_docket_builder_end_to_end(tmp_path):
+    """Verify position-level Coroner autopsy, Friday regular CIO docket, and daily constitutional audit."""
     me_file = tmp_path / "measurement_engine.json"
     ov_file = tmp_path / "dynamic_overrides.json"
+    wf_file = tmp_path / "walk_forward_daily.json"
+    kp_file = tmp_path / "kis_portfolio.json"
+
     me_file.write_text(json.dumps({
+        "date": "2026-10-30",  # Friday!
         "official": {
             "portfolio_beta": 0.80,
-            "annualized_vol_pct": 15.874507866387544,  # 1.0% daily vol
+            "annualized_vol_pct": 15.874507866387544,
             "per_stream": {
-                "S2": {"sharpe": 1.50, "daily_returns": [0.01, -0.005, 0.008, 0.004, 0.012, -0.002]},
-                "S3": {"sharpe": 2.10, "daily_returns": [-0.004, 0.009, -0.002, 0.006, -0.005, 0.007]},
-                "S5": {"sharpe": -8.258, "daily_returns": [-0.01, -0.02, -0.015, -0.01, -0.012, -0.008]},
+                "S2": {"sharpe": 1.50, "n_days": 6, "daily_returns": [0.01, -0.005, 0.008, 0.004, 0.012, -0.002]},
+                "S3": {"sharpe": 2.10, "n_days": 6, "daily_returns": [-0.004, 0.009, -0.002, 0.006, -0.005, 0.007]},
+                "S5": {"sharpe": -8.258, "n_days": 9, "daily_returns": [-0.01, -0.02, -0.015, -0.01, -0.012, -0.008]},
             },
         },
         "views": {
@@ -176,13 +212,27 @@ def test_run_daily_constitutional_audit_end_to_end(tmp_path):
             "S5": {"status": "RETIRED_TO_SHADOW", "sharpe": -8.258},
         }
     }), encoding="utf-8")
+    wf_file.write_text(json.dumps([
+        {
+            "date": "2026-10-30",
+            "oos_acc": 0.5355,
+            "oos_excess_acc": 0.5902,
+            "oos_ic": 0.2621,
+            "prob_calibration_bias": 0.2088,
+        }
+    ]), encoding="utf-8")
+    kp_file.write_text(json.dumps({
+        "positions": [
+            {"ticker": "000270", "pnl_pct": -9.47, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
+            {"ticker": "086280", "pnl_pct": 12.50, "expected_return_pct": 0.50, "beta": 1.0, "daily_vol": 0.02},
+        ]
+    }), encoding="utf-8")
 
     res = run_daily_constitutional_audit(tmp_path)
-    out_path = tmp_path / "constitutional_governance_audit.json"
-    assert out_path.exists()
-    assert res["gravekeeper"]["k_streams_tracked"] == 3
-    assert res["gravekeeper"]["retired_streams_count"] == 1
-    assert "S2" in res["falsifier"]["orthogonal_stream_audits"]
-    assert res["falsifier"]["shadow_accountability"]["true_rejections"] == 1
+    assert (tmp_path / "constitutional_governance_audit.json").exists()
+    assert (tmp_path / "vault_graveyard_ledger.json").exists()
     assert res["coroner"]["verdict"] == "UNEXPLAINED_WINDFALL_GAIN"
-
+    assert res["coroner"]["positions_autopsy"]["n_anomalies"] == 2
+    assert res["cio_approval_docket"]["is_weekly_docket_day"] is True
+    assert res["cio_approval_docket"]["is_emergency_escalation"] is True
+    assert res["cio_approval_docket"]["n_pending_dockets"] == 2

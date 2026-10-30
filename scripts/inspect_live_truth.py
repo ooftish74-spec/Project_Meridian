@@ -609,6 +609,10 @@ def inspect_live_truth(as_json: bool = False):
         print("     • (보유 종목 없음)")
     print("----------------------------------------------------------")
     print(f"🛡️  Leveraged ETP Check (TQQQ, SQQQ, etc.): {'⚠️  HELD' if held_leveraged else '✅ NONE HELD (0% Leverage In Account)'}")
+    docket_data = load_json(PROJECT_ROOT / "results" / "cio_approval_docket.json")
+    if isinstance(docket_data, dict) and docket_data.get("formatted_text"):
+        print("----------------------------------------------------------")
+        print(docket_data["formatted_text"])
     print("==========================================================")
 
 def main():
