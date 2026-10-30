@@ -68,6 +68,32 @@ def _latch_try_acquire(results_dir: Path, today_str: str, key: str) -> bool:
     return True
 
 
+import threading
+
+_GSHEET_SYNC_LOCK = threading.Lock()
+
+
+def _trigger_gsheet_sync_async(force: bool = False, refresh_ledger: bool = False) -> None:
+    """실계좌 잔고·체결 변동 시 메인 트레이딩 루프를 블로킹하지 않고 백그라운드 스레드에서 Google Sheets 실시간 동기화."""
+    if not _GSHEET_SYNC_LOCK.acquire(blocking=False):
+        return
+
+    def _worker():
+        try:
+            os.environ["MERIDIAN_SKIP_LIVE_INSPECT"] = "1"
+            os.environ["MERIDIAN_REFRESH_LEDGER"] = "1" if refresh_ledger else "0"
+            from scripts.update_user_template_report import sync_to_google_sheets
+            sync_to_google_sheets(force=force)
+        except Exception as _gs_err:
+            logger.debug(f"  [GSheet Async Sync] 백그라운드 동기화 예외: {_gs_err}")
+        finally:
+            os.environ.pop("MERIDIAN_SKIP_LIVE_INSPECT", None)
+            os.environ.pop("MERIDIAN_REFRESH_LEDGER", None)
+            _GSHEET_SYNC_LOCK.release()
+
+    threading.Thread(target=_worker, name="GSheetRealtimeSync", daemon=True).start()
+
+
 def main():
     logger.info("🚀 [LiveTraderDaemon] 프로젝트 메리디안 실계좌 자동매매 데몬 가동 시작...")
     
@@ -395,6 +421,8 @@ def main():
                     try:
                         _kr_bal_refreshed_now = bool(_adapter.fetch_live_balance())
                         main._last_kr_bal_ts = _now_ts
+                        if _kr_bal_refreshed_now:
+                            _trigger_gsheet_sync_async(force=False, refresh_ledger=False)
                     except Exception as _bal_err:
                         logger.debug(f"  [KRX Balance Refresh] 예외: {_bal_err}")
 
@@ -550,6 +578,7 @@ def main():
                                     try:
                                         _adapter._last_balance_fetch_ts = 0.0
                                         _adapter.fetch_live_balance()
+                                        _trigger_gsheet_sync_async(force=True, refresh_ledger=True)
                                         from src.portfolio.shadow_manager import ShadowPortfolioManager
                                         _live_map_kr = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
                                         ShadowPortfolioManager().force_reconcile(
@@ -615,6 +644,20 @@ def main():
 
                 is_us_premarket = (18 <= now.hour < us_open_h) or (now.hour == us_open_h and now.minute < us_open_m)
                 if is_us_premarket:
+                    try:
+                        if not hasattr(main, '_kis_adapter'):
+                            from src.execution._kis_adapter import KISTraderAdapter
+                            main._kis_adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+                        _now_pm_ts = time.time()
+                        _pm_sync_cd = (2.0 + 1.0) * (2.0 + 2.0) * (2.0 + 2.0 + 1.0)
+                        if not hasattr(main, '_last_bal_ts'):
+                            main._last_bal_ts = 0.0
+                        if _now_pm_ts - main._last_bal_ts >= _pm_sync_cd:
+                            if main._kis_adapter.fetch_live_balance():
+                                _trigger_gsheet_sync_async(force=False, refresh_ledger=False)
+                            main._last_bal_ts = _now_pm_ts
+                    except Exception as _pm_e:
+                        logger.debug(f"  [US Premarket Sync] 예외: {_pm_e}")
                     logger.debug(f"  🇪🇺 [{time_str}] US 프리마켓 텔레메트리 관제 대기 중...")
                     time.sleep(15)
                 else:
@@ -639,6 +682,8 @@ def main():
                         if _now_ts - main._last_bal_ts >= 60.0:
                             _bal_ok = _adapter.fetch_live_balance()
                             main._last_bal_ts = _now_ts
+                            if _bal_ok:
+                                _trigger_gsheet_sync_async(force=False, refresh_ledger=False)
                             if _bal_ok and hasattr(_adapter, 'positions'):
                                 try:
                                     from src.execution.position_ledger import PositionLedgerManager
@@ -814,6 +859,7 @@ def main():
                                             time.sleep(2.0)  # hardcode-ok
                                             _adapter._last_balance_fetch_ts = 0.0
                                             _adapter.fetch_live_balance()
+                                            _trigger_gsheet_sync_async(force=True, refresh_ledger=True)
                                             from src.portfolio.shadow_manager import ShadowPortfolioManager
                                             _live_map_us = {k: int(p.quantity) for k, p in (_adapter.positions or {}).items() if int(getattr(p, 'quantity', 0) or 0) > 0}
                                             ShadowPortfolioManager().force_reconcile(
@@ -854,6 +900,20 @@ def main():
 
                     time.sleep(sleep_interval)
             else:
+                try:
+                    if not hasattr(main, '_kis_adapter'):
+                        from src.execution._kis_adapter import KISTraderAdapter
+                        main._kis_adapter = KISTraderAdapter(mode='live', fetch_balance_on_init=False)
+                    _now_off_ts = time.time()
+                    _off_sync_cd = (2.0 + 1.0) * (2.0 + 2.0 + 2.0) * 100.0 / (2.0 + 1.0)
+                    if not hasattr(main, '_last_off_sync_ts'):
+                        main._last_off_sync_ts = 0.0
+                    if _now_off_ts - main._last_off_sync_ts >= _off_sync_cd:
+                        if main._kis_adapter.fetch_live_balance():
+                            _trigger_gsheet_sync_async(force=False, refresh_ledger=False)
+                        main._last_off_sync_ts = _now_off_ts
+                except Exception as _off_e:
+                    logger.debug(f"  [Off-Hours Sync] 예외: {_off_e}")
                 logger.debug(f"  💤 [{time_str}] 현재 장외/주말 휴장 시간 (관망 대기 중...)")
                 time.sleep(30)
 

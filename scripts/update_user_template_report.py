@@ -133,16 +133,26 @@ def load_recent_closed_trades(target_date: str = None) -> list[dict]:
 
 
 def load_live_portfolio() -> dict:
-    try:
-        scripts_dir = str(PROJECT_ROOT / "scripts")
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
-        from inspect_live_truth import inspect_live_truth
-        inspect_live_truth(as_json=True)
-    except SystemExit:
-        pass
-    except Exception as e:
-        logger.warning(f"Failed live inspection auto-trigger: {e}")
+    import os
+    skip_inspect = os.environ.get("MERIDIAN_SKIP_LIVE_INSPECT") == "1"
+    refresh_ledger = os.environ.get("MERIDIAN_REFRESH_LEDGER") == "1"
+    if not skip_inspect:
+        try:
+            scripts_dir = str(PROJECT_ROOT / "scripts")
+            if scripts_dir not in sys.path:
+                sys.path.insert(0, scripts_dir)
+            from inspect_live_truth import inspect_live_truth
+            inspect_live_truth(as_json=True)
+        except SystemExit:
+            pass
+        except Exception as e:
+            logger.warning(f"Failed live inspection auto-trigger: {e}")
+    elif refresh_ledger:
+        try:
+            from scripts.export_corporate_ledger import export_corporate_accounting_ledgers
+            export_corporate_accounting_ledgers()
+        except Exception as e:
+            logger.warning(f"Failed corporate ledger refresh: {e}")
 
     if not KIS_PORTFOLIO_PATH.exists():
         logger.error(f"Portfolio file not found: {KIS_PORTFOLIO_PATH}")
@@ -445,28 +455,28 @@ def _batch_ws_updates(ws, items: list[dict], value_input_option: str = "USER_ENT
             )
 
 
-def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J-L1Ee7FzpBcprXqOfwYg"):
+def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J-L1Ee7FzpBcprXqOfwYg", force: bool = False):
     if not SERVICE_ACCOUNT_PATH.exists():
         logger.error(f"Service account file not found: {SERVICE_ACCOUNT_PATH}")
         return False
+
+    # [Quota 429 Cooldown Guard] 구글 시트 분당 60회 쓰기 한도 보호 (50초 쿨다운, 체결 시 force=True 즉시 통과)
+    import time
+    last_sync_file = PROJECT_ROOT / "results" / ".last_gsheet_sync_time"
+    now_ts = time.time()
+    if not force and last_sync_file.exists():
+        try:
+            last_ts = float(last_sync_file.read_text().strip())
+            if now_ts - last_ts < 50:
+                logger.info("  ⏳ [GSheet Cooldown] 최근 50초 내 동기화 완료 → Google Sheets Quota 방어를 위해 이번 호출 스킵")
+                return True
+        except Exception:
+            pass
 
     portfolio = load_live_portfolio()
     if not portfolio:
         logger.error("Empty portfolio data.")
         return False
-
-    # [Quota 429 Cooldown Guard] 구글 시트 분당 60회 쓰기 한도 보호 (3분 쿨다운)
-    import time
-    last_sync_file = PROJECT_ROOT / "results" / ".last_gsheet_sync_time"
-    now_ts = time.time()
-    if last_sync_file.exists():
-        try:
-            last_ts = float(last_sync_file.read_text().strip())
-            if now_ts - last_ts < 180:
-                logger.info("  ⏳ [GSheet Cooldown] 최근 3분 내 동기화 완료 → Google Sheets Quota 429 방어를 위해 이번 호출 스킵")
-                return True
-        except Exception:
-            pass
 
     try:
         gc = gspread.service_account(filename=str(SERVICE_ACCOUNT_PATH))
@@ -610,8 +620,10 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             f'=IFERROR(U{r_sum}/N{r_sum},0)'                                              # V: 평균 세후 배당수익률
         ]
 
+        sync_ts_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         holdings_batch = [
             {"range": "G1:H1", "values": [["기준환율(USD/KRW)", f'=IF({fx_rate}>0, {fx_rate}, GOOGLEFINANCE("CURRENCY:USDKRW"))']]},
+            {"range": "A2:F2", "values": [[f"한국투자증권(KIS) 실계좌 실시간 연동 (열람 시 자동재계산 · 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)", "", "", "", "", ""]]},
             {"range": "G2:H2", "values": [["", ""]]},
             {"range": "A3:V3", "values": headers_holdings},
             {"range": f"A4:V{r_sum}", "values": holdings_data + [summary_row_holdings]},
@@ -1522,6 +1534,7 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
             ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "현재 총 매입원금 대비 비용 차감 후 종합 순수익률", "종합 성과 지표"],
         ]
         dash_batch = [
+            {"range": "A2:I2", "values": [[f"실시간 시세·환율·원장 자동 연동 (열람 시 자동재계산 · KIS 실계좌 장중 1분 · 체결 즉시 · 장외 10분 자동갱신 | 최종 동기화: {sync_ts_str} KST)"] + [""] * 8]},
             {"range": "A4:I4", "values": top_row_4},
             {"range": "A5:I5", "values": top_row_5},
             {"range": "A8:E8", "values": [["자산군", "평가금액(원화)", "현재비중", "", ""]]},
@@ -1541,7 +1554,14 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         sheet_id_dash = ws_dash.id
 
         sum_idx = r_sum - 1  # 0-indexed
-        format_requests = []
+        format_requests = [
+            {
+                'updateSpreadsheetProperties': {
+                    'properties': {'autoRecalc': 'MINUTE'},
+                    'fields': 'autoRecalc',
+                }
+            }
+        ]
 
         # Dark Navy Palette Constants
         NAVY_HEADER = {'red': 0.10, 'green': 0.21, 'blue': 0.36}  # #1A365D

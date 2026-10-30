@@ -258,6 +258,15 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert pnl_rows[4][1] == "=SUM(B19:B22)"
     assert pnl_rows[5][1] == "=IFERROR(B23/'보유종목'!M8, 0)"
 
+    # 5. Verify on-open autoRecalc='MINUTE' property and live sync timestamp banners
+    assert "최종 동기화:" in ws_h.updates["A2:F2"][0][0]
+    assert "최종 동기화:" in ws_d.updates["A2:I2"][0][0]
+    final_batch_reqs = fake_sh.batch_calls[-1]["requests"]
+    assert any(
+        r.get("updateSpreadsheetProperties", {}).get("properties", {}).get("autoRecalc") == "MINUTE"
+        for r in final_batch_reqs
+    )
+
 
 def test_load_full_corporate_trade_ledger(tmp_path, monkeypatch):
     monkeypatch.setattr(report_mod, "PROJECT_ROOT", tmp_path)
