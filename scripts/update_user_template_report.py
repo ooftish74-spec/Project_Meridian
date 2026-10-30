@@ -67,6 +67,24 @@ def load_position_entry_dates() -> dict:
     }
 
 
+def load_full_corporate_trade_ledger() -> list[dict]:
+    """Load ALL historical KIS broker executions (BUY & SELL) from Corporate_Trade_Ledger CSV."""
+    import csv
+    import glob
+    ledger_dir = PROJECT_ROOT / "results" / "corporate_ledger"
+    csv_files = sorted(glob.glob(str(ledger_dir / "Corporate_Trade_Ledger_*.csv")))
+    if not csv_files:
+        return []
+    try:
+        with open(csv_files[-1], "r", encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+        if rows and "주문번호(ODNO)" in rows[0]:
+            return rows
+    except Exception as e:
+        logger.warning(f"Could not read full Corporate_Trade_Ledger CSV: {e}")
+    return []
+
+
 def load_recent_closed_trades(target_date: str = None) -> list[dict]:
     """Load recent SELL executions from Corporate_Trade_Ledger CSV (or shadow_portfolio fallback)."""
     import csv
@@ -625,143 +643,362 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         logger.info(f"Updated '배당캘린더' ({len(div_rows)} dividend positions: 3 Vertically Stacked Sections)")
 
         # =========================================================================
-        # TAB 3: 매매일지 (Trading Log)
+        # TAB 3: 매매일지_YYYY-MM (Monthly Trading Subledgers — 법인 유가증권 월별 매매원장)
         # =========================================================================
-        ws_trades = sh.worksheet("매매일지")
         entry_dates = load_position_entry_dates()
         now_date_str = datetime.now().strftime("%Y-%m-%d")
 
-        # Explicit Summary Headers and Formulas in Trading Log Row 3 and Row 4
-        # Note: Card 3 is merged across I3:L3 and I4:L4 (startColumnIndex 8 -> Col I)
-        ws_trades.update(values=[
-            ["누적 매도 실현손익(세전·원화)", "", "", "", "누적 거래비용(원화)", "", "", "", "누적 순실현손익(원화)", "", "", "", ""],
-            ['=SUM(K7:K50)+SUMIF(B7:B50,"매도",L7:L50)', "", "", "", "=SUM(L7:L50)", "", "", "", "=SUM(K7:K50)", "", "", "", ""]
-        ], range_name="A3:M4", value_input_option="USER_ENTERED")
-
+        full_ledger_rows = load_full_corporate_trade_ledger()
         raw_trade_list = []
 
-        # 1. Active Holdings Buy Transactions ("매수")
-        ledger_map = load_position_ledger_map()
-        for idx, (ticker, info) in enumerate(items):
-            if ticker == "CASH" or "CASH" in ticker.upper():
-                continue
-            asset_class, curr = categorize_asset(ticker, info)
-            gf_ticker = ticker if not (_is_kr_rep(str(ticker)) and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
-            name = info.get("name", ticker)
-            qty = info.get("qty", 1)
-            avg_price = info.get("avg_price", 0)
-            t_key = str(ticker).strip().upper()
-            l_entry = ledger_map.get(t_key, {})
-            actual_trade_date = (
-                info.get("entry_date")
-                or entry_dates.get(t_key)
-                or entry_dates.get(str(ticker))
-                or l_entry.get("entry_date")
-                or l_entry.get("first_seen")
-                or now_date_str
-            )
-            stream_label, _ = get_stream_strategy_info(ticker, info)
-            fee = round(qty * avg_price * 0.0001, 2) if curr == "USD" else round(qty * avg_price * 0.00015)
+        if full_ledger_rows:
+            for r_csv in full_ledger_rows:
+                dt_s = str(r_csv.get("거래일자", now_date_str))[:10]
+                tm_s = str(r_csv.get("체결시각", "00:00:00")).strip()
+                odno_s = str(r_csv.get("주문번호(ODNO)", "")).strip()
+                mkt_s = str(r_csv.get("시장구분", "국내(KRX)")).strip()
+                side_raw = str(r_csv.get("거래구분", "매수(BUY)")).upper()
+                t_type = "매수" if "BUY" in side_raw or "매수" in side_raw else "매도"
+                tk_raw = str(r_csv.get("종목코드", "")).strip()
+                curr_s = str(r_csv.get("통화", "KRW")).strip().upper()
+                gf_tk = f"KRX:{tk_raw}" if (curr_s == "KRW" and _is_kr_rep(tk_raw) and not tk_raw.startswith("KRX:")) else tk_raw
+                nm_s = str(r_csv.get("종목명", tk_raw)).strip()
+                qty_v = float(r_csv.get("체결수량") or 0)
+                qty_num = int(qty_v) if qty_v.is_integer() else qty_v
+                px_v = float(r_csv.get("체결단가") or 0)
+                fx_v = float(r_csv.get("적용환율(USD/KRW)") or (1.0 if curr_s == "KRW" else fx_rate))
+                gross_krw = int(round(float(r_csv.get("원화약정금액(KRW)") or (qty_v * px_v * fx_v))))
+                avg_cost_v = float(r_csv.get("이동평균취득단가") or px_v)
+                cogs_krw = int(round(float(r_csv.get("매도취득원가(KRW)") or 0)))
+                fee_krw = int(round(float(r_csv.get("위탁수수료(KRW)") or 0)))
+                tax_krw = int(round(float(r_csv.get("제세공과금(KRW)") or 0)))
+                disp_pnl_krw = int(round(float(r_csv.get("매매처분손익(KRW)") or 0)))
+                fx_pnl_krw = int(round(float(r_csv.get("외환차손익(KRW)") or 0)))
+                rem_qty = int(round(float(r_csv.get("장부잔여수량") or 0)))
+                trk_s = str(r_csv.get("운용트랙", "")).strip()
+                strm_s = str(r_csv.get("스트림", "")).strip()
+                note_s = f"{trk_s} | {strm_s}" if (trk_s and strm_s) else (trk_s or strm_s or "Project Meridian")
+                raw_trade_list.append({
+                    "date": dt_s,
+                    "time": tm_s,
+                    "odno": odno_s,
+                    "market": mkt_s,
+                    "type": t_type,
+                    "ticker": gf_tk,
+                    "name": nm_s,
+                    "curr": curr_s,
+                    "qty": qty_num,
+                    "price": px_v,
+                    "fx": fx_v,
+                    "gross_krw": gross_krw,
+                    "avg_cost": avg_cost_v,
+                    "cogs_krw": cogs_krw,
+                    "fee_krw": fee_krw,
+                    "tax_krw": tax_krw,
+                    "disp_pnl_krw": disp_pnl_krw,
+                    "fx_pnl_krw": fx_pnl_krw,
+                    "rem_qty": rem_qty,
+                    "note": note_s,
+                })
+        else:
+            # Fallback when Corporate_Trade_Ledger CSV is not present (e.g. isolated unit tests)
+            ledger_map = load_position_ledger_map()
+            for idx, (ticker, info) in enumerate(items):
+                if ticker == "CASH" or "CASH" in ticker.upper():
+                    continue
+                asset_class, curr = categorize_asset(ticker, info)
+                gf_ticker = ticker if not (_is_kr_rep(str(ticker)) and not ticker.startswith("KRX:")) else f"KRX:{ticker}"
+                name = info.get("name", ticker)
+                qty = info.get("qty", 1)
+                avg_price = float(info.get("avg_price", 0) or 0)
+                t_key = str(ticker).strip().upper()
+                l_entry = ledger_map.get(t_key, {})
+                actual_trade_date = (
+                    info.get("entry_date")
+                    or entry_dates.get(t_key)
+                    or entry_dates.get(str(ticker))
+                    or l_entry.get("entry_date")
+                    or l_entry.get("first_seen")
+                    or now_date_str
+                )
+                stream_label, _ = get_stream_strategy_info(ticker, info)
+                fx_v = 1.0 if curr == "KRW" else fx_rate
+                gross_krw = int(round(qty * avg_price * fx_v))
+                fee_krw = int(round(float(info.get("commission", 0) or 0) * fx_v))
+                raw_trade_list.append({
+                    "date": str(actual_trade_date)[:10],
+                    "time": "09:00:00" if curr == "KRW" else "22:30:00",
+                    "odno": f"BUY-{idx+1:04d}",
+                    "market": "국내(KRX)" if curr == "KRW" else "미국(US)",
+                    "type": "매수",
+                    "ticker": gf_ticker,
+                    "name": name,
+                    "curr": curr,
+                    "qty": qty,
+                    "price": avg_price,
+                    "fx": fx_v,
+                    "gross_krw": gross_krw,
+                    "avg_cost": avg_price,
+                    "cogs_krw": 0,
+                    "fee_krw": fee_krw,
+                    "tax_krw": 0,
+                    "disp_pnl_krw": 0,
+                    "fx_pnl_krw": 0,
+                    "rem_qty": qty,
+                    "note": f"Project Meridian [{stream_label}] 자율 매수",
+                })
 
-            raw_trade_list.append({
-                "date": str(actual_trade_date)[:10],
-                "type": "매수",
-                "ticker": gf_ticker,
-                "name": name,
-                "price": avg_price,
-                "qty": qty,
-                "fee": fee,
-                "tax": 0,
-                "curr": curr,
-                "note": f"Project Meridian [{stream_label}] 자율 매수"
-            })
+            for s_idx, closed_t in enumerate(portfolio.get("closed_trades") or portfolio.get("trade_history") or []):
+                if not isinstance(closed_t, dict):
+                    continue
+                if str(closed_t.get("action", closed_t.get("side", ""))).upper() != "SELL":
+                    continue
+                c_tk = str(closed_t.get("ticker", "")).strip()
+                if not c_tk:
+                    continue
+                c_is_kr = _is_kr_rep(c_tk)
+                c_curr = "KRW" if c_is_kr else "USD"
+                c_gf_tk = f"KRX:{c_tk}" if (c_is_kr and not c_tk.startswith("KRX:")) else c_tk
+                c_qty = float(closed_t.get("quantity", closed_t.get("qty", 0)) or 0)
+                c_price = float(closed_t.get("price", closed_t.get("exit_price", 0)) or 0)
+                c_avg = float(closed_t.get("avg_price", closed_t.get("entry_price", c_price)) or c_price)
+                if c_qty <= 0 or c_price <= 0:
+                    continue
+                fx_v = 1.0 if c_curr == "KRW" else fx_rate
+                c_fee_local = float(closed_t.get("commission", 0) or 0)
+                c_tax_local = float(closed_t.get("tax", 0) or 0)
+                fee_krw = int(round(c_fee_local * fx_v))
+                tax_krw = int(round(c_tax_local * fx_v))
+                gross_krw = int(round(c_qty * c_price * fx_v))
+                cogs_krw = int(round(c_qty * c_avg * fx_v))
+                disp_pnl_krw = (gross_krw - fee_krw - tax_krw) - cogs_krw
+                raw_trade_list.append({
+                    "date": str(closed_t.get("date", closed_t.get("timestamp", now_date_str)))[:10],
+                    "time": "09:01:00" if c_curr == "KRW" else "22:31:00",
+                    "odno": str(closed_t.get("odno") or f"SELL-{s_idx+1:04d}"),
+                    "market": "국내(KRX)" if c_curr == "KRW" else "미국(US)",
+                    "type": "매도",
+                    "ticker": c_gf_tk,
+                    "name": closed_t.get("name", c_tk),
+                    "curr": c_curr,
+                    "qty": int(c_qty) if c_qty.is_integer() else c_qty,
+                    "price": c_price,
+                    "fx": fx_v,
+                    "gross_krw": gross_krw,
+                    "avg_cost": c_avg,
+                    "cogs_krw": cogs_krw,
+                    "fee_krw": fee_krw,
+                    "tax_krw": tax_krw,
+                    "disp_pnl_krw": disp_pnl_krw,
+                    "fx_pnl_krw": 0,
+                    "rem_qty": 0,
+                    "note": str(closed_t.get("reason", "Project Meridian 리밸런싱 매도")),
+                })
+            raw_trade_list.sort(key=lambda x: (x["date"], x["time"], 0 if x["type"] == "매수" else 1, x["ticker"]))
 
-        # 2. Historical Liquidations / Rebalancing Sell Transactions ("매도") from live SSOT trade history
-        for closed_t in (portfolio.get("closed_trades") or portfolio.get("trade_history") or []):
-            if not isinstance(closed_t, dict):
-                continue
-            if str(closed_t.get("action", closed_t.get("side", ""))).upper() != "SELL":
-                continue
-            c_tk = str(closed_t.get("ticker", "")).strip()
-            if not c_tk:
-                continue
-            c_is_kr = _is_kr_rep(c_tk)
-            c_curr = "KRW" if c_is_kr else "USD"
-            c_gf_tk = f"KRX:{c_tk}" if (c_is_kr and not c_tk.startswith("KRX:")) else c_tk
-            c_qty = float(closed_t.get("quantity", closed_t.get("qty", 0)) or 0)
-            c_price = float(closed_t.get("price", closed_t.get("exit_price", 0)) or 0)
-            c_avg = float(closed_t.get("avg_price", closed_t.get("entry_price", c_price)) or c_price)
-            if c_qty <= 0 or c_price <= 0:
-                continue
-            c_fee = float(closed_t.get("commission", 0) or 0)
-            c_tax = float(closed_t.get("tax", 0) or 0)
-            raw_trade_list.append({
-                "date": str(closed_t.get("date", closed_t.get("timestamp", now_date_str)))[:10],
-                "type": "매도",
-                "ticker": c_gf_tk,
-                "name": closed_t.get("name", c_tk),
-                "price": c_price,
-                "qty": c_qty,
-                "fee": c_fee,
-                "tax": c_tax,
-                "curr": c_curr,
-                "buy_avg_price": c_avg,
-                "note": str(closed_t.get("reason", "Project Meridian 리밸런싱 매도")),
-            })
+        # Group trades by month (YYYY-MM) so each month gets its own dedicated worksheet tab (매매일지_YYYY-MM)
+        trades_by_ym: dict[str, list[dict]] = {}
+        for rec in raw_trade_list:
+            ym_key = str(rec["date"])[:7] if len(str(rec["date"])) >= 7 else now_date_str[:7]
+            trades_by_ym.setdefault(ym_key, []).append(rec)
+        if not trades_by_ym:
+            trades_by_ym[now_date_str[:7]] = []
 
-        # 3. Sort chronologically from past to present (과거 -> 현재 순)
-        raw_trade_list.sort(key=lambda x: (x["date"], 0 if x["type"] == "매수" else 1, x["ticker"]))
+        sorted_months = sorted(trades_by_ym.keys())
+        headers_trades = [[
+            "거래일자", "체결시각", "주문번호(ODNO)", "시장구분", "거래구분",
+            "종목코드", "종목명", "통화", "체결수량", "체결단가\n(현지)",
+            "약정금액\n(현지)", "적용환율\n(USD/KRW)", "원화약정금액\n(KRW)",
+            "이동평균취득단가\n(수수료포함·현지)", "매도취득원가\n(KRW)",
+            "위탁수수료\n(KRW)", "제세공과금\n(KRW)", "매매처분손익\n(주가변동·KRW)",
+            "외환차손익\n(환율변동·KRW)", "실현순손익\n(확정·KRW)", "실현수익률",
+            "정산현금증감\n(예수금대사·KRW)", "장부잔여수량", "운용트랙 및 스트림 적요",
+        ]]
 
-        trade_logs = []
-        trade_currencies = []
-        trade_types = []
+        monthly_tab_specs = []
+        for ym in sorted_months:
+            tab_title = f"매매일지_{ym}"
+            m_recs = trades_by_ym[ym]
+            try:
+                ws_m = sh.worksheet(tab_title)
+            except Exception:
+                ws_m = sh.add_worksheet(title=tab_title, rows=len(m_recs) + 100, cols=24)
 
-        for idx, rec in enumerate(raw_trade_list):
-            r_t = 7 + idx
-            trade_currencies.append(rec["curr"])
-            trade_types.append(rec["type"])
+            trade_logs = []
+            trade_currencies = []
+            trade_types = []
 
-            if rec["type"] == "매도":
-                buy_p = rec.get("buy_avg_price", rec["price"])
-                pnl_formula = f'=IF(B{r_t}="매도",(E{r_t}-{buy_p})*F{r_t}-H{r_t}-I{r_t},0)'
-            else:
-                pnl_formula = f'=IF(B{r_t}="매도",(E{r_t}-IFERROR(VLOOKUP(C{r_t},\'보유종목\'!$C$4:$H$50,6,FALSE),E{r_t}))*F{r_t}-H{r_t}-I{r_t},0)'
+            for idx, rec in enumerate(m_recs):
+                r_t = 7 + idx
+                trade_currencies.append(rec["curr"])
+                trade_types.append(rec["type"])
+                odno_cell = f"'{rec['odno']}" if rec["odno"] and not str(rec["odno"]).startswith("'") else rec["odno"]
 
-            trade_row = [
-                rec["date"],
-                rec["type"],
-                rec["ticker"],
-                rec["name"],
-                rec["price"],
-                rec["qty"],
-                f'=IF(OR(E{r_t}="",F{r_t}=""),"",E{r_t}*F{r_t})',
-                rec["fee"],
-                rec["tax"],
-                pnl_formula,
-                f'=IF(ISNUMBER(SEARCH("KRX",C{r_t})),J{r_t},J{r_t}*\'보유종목\'!$H$1)',
-                f'=IF(ISNUMBER(SEARCH("KRX",C{r_t})),H{r_t}+I{r_t},(H{r_t}+I{r_t})*\'보유종목\'!$H$1)',
-                rec["note"]
+                trade_row = [
+                    rec["date"],                                                              # A (0): 거래일자
+                    rec["time"],                                                              # B (1): 체결시각
+                    odno_cell,                                                                # C (2): 주문번호(ODNO)
+                    rec["market"],                                                            # D (3): 시장구분
+                    rec["type"],                                                              # E (4): 거래구분
+                    rec["ticker"],                                                            # F (5): 종목코드
+                    rec["name"],                                                              # G (6): 종목명
+                    rec["curr"],                                                              # H (7): 통화
+                    rec["qty"],                                                               # I (8): 체결수량
+                    rec["price"],                                                             # J (9): 체결단가(현지)
+                    f"=I{r_t}*J{r_t}",                                                        # K (10): 약정금액(현지)
+                    rec["fx"],                                                                # L (11): 적용환율(USD/KRW)
+                    rec["gross_krw"],                                                         # M (12): 원화약정금액(KRW)
+                    rec["avg_cost"],                                                          # N (13): 이동평균취득단가(수수료포함·현지)
+                    rec["cogs_krw"],                                                          # O (14): 매도취득원가(KRW)
+                    rec["fee_krw"],                                                           # P (15): 위탁수수료(KRW)
+                    rec["tax_krw"],                                                           # Q (16): 제세공과금(KRW)
+                    rec["disp_pnl_krw"],                                                      # R (17): 매매처분손익(주가변동·KRW)
+                    rec["fx_pnl_krw"],                                                        # S (18): 외환차손익(환율변동·KRW)
+                    f"=R{r_t}+S{r_t}",                                                        # T (19): 실현순손익(확정·KRW)
+                    f"=IF(O{r_t}>0, T{r_t}/O{r_t}, 0)",                                       # U (20): 실현수익률
+                    f'=IF(E{r_t}="매수", -(M{r_t}+P{r_t}), M{r_t}-P{r_t}-Q{r_t})',             # V (21): 정산현금증감(예수금대사·KRW)
+                    rec["rem_qty"],                                                           # W (22): 장부잔여수량
+                    rec["note"],                                                              # X (23): 운용트랙 및 스트림 적요
+                ]
+                trade_logs.append(trade_row)
+
+            last_trade_r = 6 + max(1, len(trade_logs))
+            r_trade_sum = last_trade_r + 1
+
+            summary_row_trades = [
+                f"{ym} 합계",
+                f'=COUNTA(A7:A{last_trade_r}) & "건"',
+                "",
+                "",
+                f'="매수 " & COUNTIF(E7:E{last_trade_r},"매수") & " / 매도 " & COUNTIF(E7:E{last_trade_r},"매도")',
+                "",
+                "",
+                "",
+                f"=SUM(I7:I{last_trade_r})",
+                "",
+                "",
+                "",
+                f"=SUM(M7:M{last_trade_r})",
+                "",
+                f"=SUM(O7:O{last_trade_r})",
+                f"=SUM(P7:P{last_trade_r})",
+                f"=SUM(Q7:Q{last_trade_r})",
+                f"=SUM(R7:R{last_trade_r})",
+                f"=SUM(S7:S{last_trade_r})",
+                f"=SUM(T7:T{last_trade_r})",
+                f"=IFERROR(T{r_trade_sum}/O{r_trade_sum}, 0)",
+                f"=SUM(V7:V{last_trade_r})",
+                "",
+                f"법인세법 시행령 제74조(이동평균법) {ym} 월간 원장 합계",
             ]
-            trade_logs.append(trade_row)
 
-        # Clear rows 7..50
-        ws_trades.update(values=[[""] * 13 for _ in range(44)], range_name="A7:M50")
-        ws_trades.update(values=trade_logs, range_name=f"A7:M{6+len(trade_logs)}", value_input_option="USER_ENTERED")
-        logger.info(f"Updated '매매일지' ({len(trade_logs)} trading records synced chronologically past to present)")
+            try:
+                ws_m.resize(rows=r_trade_sum + 100, cols=24)
+            except Exception:
+                pass
+
+            try:
+                sheet_meta = sh.fetch_sheet_metadata()
+                unmerge_trades = []
+                for s in sheet_meta.get("sheets", []):
+                    if s["properties"]["sheetId"] == ws_m.id:
+                        for m in s.get("merges", []):
+                            if m.get("startRowIndex", 0) >= 1:
+                                unmerge_trades.append({"unmergeCells": {"range": m}})
+                if unmerge_trades:
+                    sh.batch_update({"requests": unmerge_trades})
+            except Exception as e:
+                logger.warning(f"Could not unmerge legacy cells in '{tab_title}': {e}")
+
+            ws_m.update(
+                values=[
+                    [f"법인 유가증권 월별 매매원장 [{ym}] (Corporate Monthly Trade Subledger — 법인세법 시행령 제74조 이동평균법 기준)"],
+                    [f"한국투자증권(KIS) 실계좌 {ym} 체결번호(ODNO) 전수 연동 · 전월 이월 이동평균단가 연속 적용 · 매매처분손익/외환차손익 분리 기장"],
+                ],
+                range_name="A1:A2",
+            )
+
+            # 4 Executive Summary Cards in Monthly Trading Log Rows 3..5 (A3:D5, E3:H5, I3:L5, M3:P5)
+            ws_m.update(
+                values=[
+                    [
+                        f"{ym} 확정 실현손익(세전·비용전)", "", "", "",
+                        f"{ym} 거래비용(수수료+제세금)", "", "", "",
+                        f"{ym} 확정 순실현손익(법인장부)", "", "", "",
+                        f"{ym} 외환차손익(환율변동분)", "", "", "",
+                    ],
+                    [
+                        "=I4+E4", "", "", "",
+                        f"=P{r_trade_sum}+Q{r_trade_sum}", "", "", "",
+                        f"=T{r_trade_sum}", "", "", "",
+                        f"=S{r_trade_sum}", "", "", "",
+                    ],
+                    [
+                        f'="처분손익: " & TEXT(R{r_trade_sum}, "+₩#,##0;-₩#,##0;₩0") & " | 외환차익: " & TEXT(S{r_trade_sum}, "+₩#,##0;-₩#,##0;₩0")', "", "", "",
+                        f'="위탁수수료: " & TEXT(P{r_trade_sum}, "₩#,##0") & " | 거래세·SEC: " & TEXT(Q{r_trade_sum}, "₩#,##0")', "", "", "",
+                        f'="{ym} 총 " & COUNTA(A7:A{last_trade_r}) & "건 (매수 " & COUNTIF(E7:E{last_trade_r},"매수") & "건 · 매도 " & COUNTIF(E7:E{last_trade_r},"매도") & "건)"', "", "", "",
+                        f'="당월매수: " & TEXT(SUMIF(E7:E{last_trade_r},"매수",M7:M{last_trade_r}), "₩#,##0") & " | 당월매도: " & TEXT(SUMIF(E7:E{last_trade_r},"매도",M7:M{last_trade_r}), "₩#,##0")', "", "", "",
+                    ],
+                ],
+                range_name="A3:P5",
+                value_input_option="USER_ENTERED",
+            )
+
+            ws_m.update(values=headers_trades, range_name="A6:X6")
+
+            clear_rows_count = max(100, len(trade_logs) + 10)
+            ws_m.update(values=[[""] * 24 for _ in range(clear_rows_count)], range_name=f"A7:X{6 + clear_rows_count}")
+            ws_m.update(
+                values=trade_logs + [summary_row_trades],
+                range_name=f"A7:X{r_trade_sum}",
+                value_input_option="USER_ENTERED",
+            )
+
+            monthly_tab_specs.append({
+                "ym": ym,
+                "title": tab_title,
+                "ws": ws_m,
+                "sheet_id": ws_m.id,
+                "last_trade_r": last_trade_r,
+                "r_trade_sum": r_trade_sum,
+                "trade_types": trade_types,
+                "trade_currencies": trade_currencies,
+            })
+            logger.info(f"Updated '{tab_title}' ({len(trade_logs)} statutory corporate ledger records synced)")
+
+        # Remove legacy single '매매일지' worksheet if monthly tabs are active
+        try:
+            ws_legacy_trades = sh.worksheet("매매일지")
+            if ws_legacy_trades and monthly_tab_specs:
+                sh.del_worksheet(ws_legacy_trades)
+                logger.info("Removed legacy single '매매일지' tab in favor of monthly '매매일지_YYYY-MM' tabs")
+        except Exception:
+            pass
 
         # =========================================================================
-        # TAB 4: 대시보드 (Dashboard)
+        # TAB 4: 대시보드 (Dashboard — 월별 매매일지 전수 합산 연동)
         # =========================================================================
         ws_dash = sh.worksheet("대시보드")
+
+        net_pnl_terms = " + ".join(f"'{m['title']}'!I4" for m in monthly_tab_specs)
+        gross_pnl_terms = " + ".join(f"'{m['title']}'!A4" for m in monthly_tab_specs)
+        cost_terms = " + ".join(f"'{m['title']}'!E4" for m in monthly_tab_specs)
+        disp_pnl_terms = " + ".join(f"'{m['title']}'!R{m['r_trade_sum']}" for m in monthly_tab_specs)
+        fx_pnl_terms = " + ".join(f"'{m['title']}'!S{m['r_trade_sum']}" for m in monthly_tab_specs)
+        linked_tabs_label = (
+            f"매매일지_{monthly_tab_specs[0]['ym']}~{monthly_tab_specs[-1]['ym']} ({len(monthly_tab_specs)}개 월별탭)"
+            if len(monthly_tab_specs) > 1
+            else f"{monthly_tab_specs[0]['title']} 탭"
+        )
 
         # Top Summary Cards
         top_row_4 = [
             [
                 f"='보유종목'!N{r_sum}", "",
-                f"='보유종목'!O{r_sum} + '매매일지'!I4", "",
+                f"='보유종목'!O{r_sum} + ({net_pnl_terms})", "",
                 f"='보유종목'!P{r_sum}", "",
                 f"='배당캘린더'!O{r_tot_sum}", "",
-                f"='매매일지'!E4 + '배당캘린더'!N{r_tot_sum}"
+                f"=({cost_terms}) + '배당캘린더'!N{r_tot_sum}"
             ]
         ]
         ws_dash.update(values=top_row_4, range_name="A4:I4", value_input_option="USER_ENTERED")
@@ -769,10 +1006,10 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         top_row_5 = [
             [
                 f"=\"매입: \" & TEXT('보유종목'!M{r_sum}, \"₩#,##0\")", "",
-                f"=\"순수익률: \" & TEXT(IFERROR(C4/'보유종목'!M{r_sum}, 0), \"+0.0%;-0.0%;0.0%\")", "",
+                f"=\"확정순실현: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" | 미실현: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
                 f"=\"평가손익: \" & TEXT('보유종목'!O{r_sum}, \"+₩#,##0;-₩#,##0;₩0\")", "",
                 f"=\"월평균: \" & TEXT('배당캘린더'!F{r_m_avg}, \"₩#,##0\") & \" (세후 \" & TEXT('배당캘린더'!I{r_card_start + 3}, \"0.0%\") & \")\"", "",
-                f"=\"거래비용: \" & TEXT('매매일지'!E4, \"₩#,##0\") & \" | 세금: \" & TEXT('배당캘린더'!N{r_tot_sum}, \"₩#,##0\")"
+                f"=\"거래비용: \" & TEXT({cost_terms}, \"₩#,##0\") & \" | 세금: \" & TEXT('배당캘린더'!N{r_tot_sum}, \"₩#,##0\")"
             ]
         ]
         ws_dash.update(values=top_row_5, range_name="A5:I5", value_input_option="USER_ENTERED")
@@ -793,22 +1030,33 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         # Bottom PnL Attribution Table (Rows 18..24: 포트폴리오 손익 원천별 종합 분석)
         ws_dash.update(values=[["구분 (손익 원천)", "금액 (원화)", "손익 기여도", "세부 산출 내역", "연동 시트"]], range_name="A18:E18")
         dash_pnl_rows = [
-            ["확정 실현손익", "='매매일지'!A4", "=IFERROR(B19/$B$23, 0)", "완료된 매도 거래의 매매 차익 (비용 차감 전)", "매매일지 탭"],
-            ["미실현 보유 평가손익", f"='보유종목'!O{r_sum}", "=IFERROR(B20/$B$23, 0)", "현재 보유 자산의 평가 차익", "보유종목 탭"],
+            [
+                "확정 실현손익 (세전·비용전)",
+                f"={gross_pnl_terms}",
+                "=IFERROR(B19/$B$23, 0)",
+                f"=\"비용차감후 확정순손익: \" & TEXT({net_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" (처분 \" & TEXT({disp_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \" + 외환 \" & TEXT({fx_pnl_terms}, \"+₩#,##0;-₩#,##0;₩0\") & \")\"",
+                linked_tabs_label,
+            ],
+            ["미실현 보유 평가손익", f"='보유종목'!O{r_sum}", "=IFERROR(B20/$B$23, 0)", "현재 보유 11종목 평가 차익 (법인세법 제42조 과세이연)", "보유종목 탭"],
             ["배당 인컴 수익 (세전)", f"='배당캘린더'!M{r_tot_sum}", "=IFERROR(B21/$B$23, 0)", "국내외 보유종목 연간 총 배당금 (수령+예정)", "배당캘린더 탭"],
-            ["거래비용 및 세금 (차감)", f"=-('매매일지'!E4 + '배당캘린더'!N{r_tot_sum})", "=IFERROR(B22/$B$23, 0)", "매매 수수료 + 증권거래세 + 배당소득세", "매매일지·배당캘린더 합산"],
-            ["총 순손익 (Net Profit)", "=SUM(B19:B22)", 1, "모든 비용 및 세금 차감 후 최종 순이익", "종합 집계"],
-            ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "총 매입금액 대비 비용 차감 후 순수익률", "종합 성과 지표"],
+            [
+                "거래비용 및 세금 (차감)",
+                f"=-(({cost_terms}) + '배당캘린더'!N{r_tot_sum})",
+                "=IFERROR(B22/$B$23, 0)",
+                f"=\"매매비용(수수료+거래세) \" & TEXT({cost_terms}, \"₩#,##0\") & \" + 배당소득세 \" & TEXT('배당캘린더'!N{r_tot_sum}, \"₩#,##0\")",
+                "매매일지(월별탭)·배당캘린더 합산",
+            ],
+            ["총 순손익 (Net Profit)", "=SUM(B19:B22)", 1, "모든 비용·세금 차감 후 최종 순손익 (확정순실현+미실현+세후배당)", "종합 집계"],
+            ["순 투자수익률 (Net ROI)", f"=IFERROR(B23/'보유종목'!M{r_sum}, 0)", "", "현재 총 매입원금 대비 비용 차감 후 종합 순수익률", "종합 성과 지표"],
         ]
         ws_dash.update(values=dash_pnl_rows, range_name="A19:E24", value_input_option="USER_ENTERED")
-        logger.info("Updated '대시보드' (Top Summary Cards, Asset Allocation & PnL Attribution synced)")
+        logger.info("Updated '대시보드' (Top Summary Cards, Asset Allocation & PnL Attribution synced across monthly tabs)")
 
         # =========================================================================
         # 5. Apply Precision Batch Number, Currency, Alignment & Table Styling Across Worksheets
         # =========================================================================
         sheet_id_holdings = ws_holdings.id
         sheet_id_div = ws_div.id
-        sheet_id_trades = ws_trades.id
         sheet_id_dash = ws_dash.id
 
         sum_idx = r_sum - 1  # 0-indexed
@@ -1294,116 +1542,243 @@ def sync_template_sheets(spreadsheet_id_or_name: str = "11iFYFay6E7xgVLoQvuAG66J
         })
 
         # -------------------------------------------------------------------------
-        # 5c. 매매일지 Formats & Styling
+        # 5c. 매매일지_YYYY-MM Formats & Styling (24 Statutory Columns A..X per Month Tab)
         # -------------------------------------------------------------------------
-        # Header Row 6 Styling (Navy Background + White Text + Centered)
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 5, 'endRowIndex': 6, 'startColumnIndex': 0, 'endColumnIndex': 13},
-                'cell': {
-                    'userEnteredFormat': {
-                        'backgroundColor': NAVY_HEADER,
-                        'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
-                        'horizontalAlignment': 'CENTER',
-                        'verticalAlignment': 'MIDDLE'
-                    }
-                },
-                'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
-            }
-        })
-        # Column Alignments: Col A,B,C Center | Col D,M Left | Col E..L Right
-        end_trade_row = max(20, 6 + len(trade_logs))
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 0, 'endColumnIndex': 3},
-                'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
-                'fields': 'userEnteredFormat.horizontalAlignment'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 3, 'endColumnIndex': 4},
-                'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
-                'fields': 'userEnteredFormat.horizontalAlignment'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 4, 'endColumnIndex': 12},
-                'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
-                'fields': 'userEnteredFormat.horizontalAlignment'
-            }
-        })
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 12, 'endColumnIndex': 13},
-                'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
-                'fields': 'userEnteredFormat.horizontalAlignment'
-            }
-        })
+        def _iter_runs(seq):
+            if not seq:
+                return
+            start = 0
+            cur = seq[0]
+            for i in range(1, len(seq)):
+                if seq[i] != cur:
+                    yield start, i, cur
+                    start = i
+                    cur = seq[i]
+            yield start, len(seq), cur
 
-        # Status Badge Background Highlights (Col B: index 1)
-        for idx, st in enumerate(trade_types):
-            row_idx = 6 + idx
-            bg_color = {'red': 0.99, 'green': 0.91, 'blue': 0.90} if st == '매수' else {'red': 0.91, 'green': 0.94, 'blue': 1.0}
-            text_color = {'red': 0.77, 'green': 0.13, 'blue': 0.12} if st == '매수' else {'red': 0.10, 'green': 0.45, 'blue': 0.91}
-            format_requests.append({
-                'repeatCell': {
-                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': row_idx, 'endRowIndex': row_idx + 1, 'startColumnIndex': 1, 'endColumnIndex': 2},
-                    'cell': {'userEnteredFormat': {'backgroundColor': bg_color, 'textFormat': {'bold': True, 'foregroundColor': text_color}}},
-                    'fields': 'userEnteredFormat(backgroundColor,textFormat)'
-                }
-            })
+        col_widths_trades = [
+            95, 80, 105, 85, 75, 95, 145, 65, 80, 105,
+            110, 95, 115, 120, 115, 95, 95, 120, 115, 120,
+            85, 125, 85, 190,
+        ]
 
-        # Quantity Col F (index 5): '#,##0'
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 5, 'endColumnIndex': 6},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
-            }
-        })
-        # Per-row local currency formatting for Trading Log Cols E, G, H, I, J (indices 4, 6, 7, 8, 9)
-        for idx, curr in enumerate(trade_currencies):
-            row_idx = 6 + idx  # 0-indexed (Row 7 is index 6)
-            pattern = '\"$\"#,##0.00' if curr == 'USD' else '\"₩\"#,##0'
-            for col_idx in [4, 6, 7, 8, 9]:
+        for m_spec in monthly_tab_specs:
+            sheet_id_trades = m_spec["sheet_id"]
+            r_trade_sum = m_spec["r_trade_sum"]
+            end_trade_row = r_trade_sum
+            trade_types = m_spec["trade_types"]
+            trade_currencies = m_spec["trade_currencies"]
+
+            for col_i, width in enumerate(col_widths_trades):
                 format_requests.append({
-                    'repeatCell': {
-                        'range': {'sheetId': sheet_id_trades, 'startRowIndex': row_idx, 'endRowIndex': row_idx + 1, 'startColumnIndex': col_idx, 'endColumnIndex': col_idx + 1},
-                        'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': pattern}}},
-                        'fields': 'userEnteredFormat.numberFormat'
+                    'updateDimensionProperties': {
+                        'range': {
+                            'sheetId': sheet_id_trades,
+                            'dimension': 'COLUMNS',
+                            'startIndex': col_i,
+                            'endIndex': col_i + 1,
+                        },
+                        'properties': {'pixelSize': width},
+                        'fields': 'pixelSize',
                     }
                 })
-        # Summary Card A4, E4, I4 as '₩#,##0'
-        for card_col in [0, 4, 8]:
+
+            # Merge 4 Executive Summary Cards across Rows 3..5 (A..D, E..H, I..L, M..P)
+            for card_col_start in [0, 4, 8, 12]:
+                for card_row_idx in [2, 3, 4]:
+                    format_requests.append({
+                        'mergeCells': {
+                            'range': {
+                                'sheetId': sheet_id_trades,
+                                'startRowIndex': card_row_idx,
+                                'endRowIndex': card_row_idx + 1,
+                                'startColumnIndex': card_col_start,
+                                'endColumnIndex': card_col_start + 4,
+                            },
+                            'mergeType': 'MERGE_ALL',
+                        }
+                    })
             format_requests.append({
                 'repeatCell': {
-                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': card_col, 'endColumnIndex': card_col + 1},
-                    'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                    'fields': 'userEnteredFormat.numberFormat'
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 2, 'endRowIndex': 3, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': NAVY_HEADER,
+                            'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
                 }
             })
-        # Converted KRW Cols K, L (index 10, 11) in trading log as '₩#,##0'
-        format_requests.append({
-            'repeatCell': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 10, 'endColumnIndex': 12},
-                'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
-                'fields': 'userEnteredFormat.numberFormat'
-            }
-        })
-        # Grid Borders for 매매일지
-        format_requests.append({
-            'updateBorders': {
-                'range': {'sheetId': sheet_id_trades, 'startRowIndex': 5, 'endRowIndex': 6 + len(trade_logs), 'startColumnIndex': 0, 'endColumnIndex': 13},
-                'top': {'style': 'SOLID', 'color': BORDER_GREY},
-                'bottom': {'style': 'SOLID', 'color': BORDER_GREY},
-                'left': {'style': 'SOLID', 'color': BORDER_GREY},
-                'right': {'style': 'SOLID', 'color': BORDER_GREY},
-                'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
-                'innerVertical': {'style': 'SOLID', 'color': INNER_GREY}
-            }
-        })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 3, 'endRowIndex': 4, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': SOFT_BLUE_BG,
+                            'textFormat': {'bold': True, 'fontSize': 11},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'},
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,numberFormat)',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 4, 'endRowIndex': 5, 'startColumnIndex': 0, 'endColumnIndex': 16},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': LIGHT_GREY_BG,
+                            'textFormat': {'fontSize': 9},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)',
+                }
+            })
+
+            # Header Row 6 Styling (Navy Background + White Text + Centered + Wrap across Cols A..X)
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 5, 'endRowIndex': 6, 'startColumnIndex': 0, 'endColumnIndex': 24},
+                    'cell': {
+                        'userEnteredFormat': {
+                            'backgroundColor': NAVY_HEADER,
+                            'textFormat': {'bold': True, 'foregroundColor': WHITE_TEXT, 'fontSize': 10},
+                            'horizontalAlignment': 'CENTER',
+                            'verticalAlignment': 'MIDDLE',
+                            'wrapStrategy': 'WRAP',
+                        }
+                    },
+                    'fields': 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)',
+                }
+            })
+
+            # Alignments: Cols A..F (0..6) & Col H (7..8) Center | Col G (6..7) & Col X (23..24) Left | Cols I..W (8..23) Right
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 0, 'endColumnIndex': 6},
+                    'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
+                    'fields': 'userEnteredFormat.horizontalAlignment',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 6, 'endColumnIndex': 7},
+                    'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
+                    'fields': 'userEnteredFormat.horizontalAlignment',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 7, 'endColumnIndex': 8},
+                    'cell': {'userEnteredFormat': {'horizontalAlignment': 'CENTER'}},
+                    'fields': 'userEnteredFormat.horizontalAlignment',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 8, 'endColumnIndex': 23},
+                    'cell': {'userEnteredFormat': {'horizontalAlignment': 'RIGHT'}},
+                    'fields': 'userEnteredFormat.horizontalAlignment',
+                }
+            })
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 23, 'endColumnIndex': 24},
+                    'cell': {'userEnteredFormat': {'horizontalAlignment': 'LEFT'}},
+                    'fields': 'userEnteredFormat.horizontalAlignment',
+                }
+            })
+
+            # Status Badge Background Highlights (Col E: index 4)
+            for run_start, run_end, st in _iter_runs(trade_types):
+                bg_color = {'red': 0.99, 'green': 0.91, 'blue': 0.90} if st == '매수' else {'red': 0.91, 'green': 0.94, 'blue': 1.0}
+                text_color = {'red': 0.77, 'green': 0.13, 'blue': 0.12} if st == '매수' else {'red': 0.10, 'green': 0.45, 'blue': 0.91}
+                format_requests.append({
+                    'repeatCell': {
+                        'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6 + run_start, 'endRowIndex': 6 + run_end, 'startColumnIndex': 4, 'endColumnIndex': 5},
+                        'cell': {'userEnteredFormat': {'backgroundColor': bg_color, 'textFormat': {'bold': True, 'foregroundColor': text_color}}},
+                        'fields': 'userEnteredFormat(backgroundColor,textFormat)',
+                    }
+                })
+
+            # Per-run local currency formatting for Cols J, K, N (indices 9, 10, 13)
+            for run_start, run_end, curr in _iter_runs(trade_currencies):
+                pattern = '\"$\"#,##0.00' if curr == 'USD' else '\"₩\"#,##0'
+                for col_idx in [9, 10, 13]:
+                    format_requests.append({
+                        'repeatCell': {
+                            'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6 + run_start, 'endRowIndex': 6 + run_end, 'startColumnIndex': col_idx, 'endColumnIndex': col_idx + 1},
+                            'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': pattern}}},
+                            'fields': 'userEnteredFormat.numberFormat',
+                        }
+                    })
+
+            # Quantity Col I (index 8) & Remaining Qty Col W (index 22): '#,##0'
+            for q_col in [8, 22]:
+                format_requests.append({
+                    'repeatCell': {
+                        'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': q_col, 'endColumnIndex': q_col + 1},
+                        'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0'}}},
+                        'fields': 'userEnteredFormat.numberFormat',
+                    }
+                })
+
+            # FX Rate Col L (index 11): '#,##0.00'
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 11, 'endColumnIndex': 12},
+                    'cell': {'userEnteredFormat': {'numberFormat': {'type': 'NUMBER', 'pattern': '#,##0.00'}}},
+                    'fields': 'userEnteredFormat.numberFormat',
+                }
+            })
+
+            # KRW Currency Cols M, O, P, Q, R, S, T, V (indices 12, 14, 15, 16, 17, 18, 19, 21) as '₩#,##0'
+            for krw_col in [12, 14, 15, 16, 17, 18, 19, 21]:
+                format_requests.append({
+                    'repeatCell': {
+                        'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': krw_col, 'endColumnIndex': krw_col + 1},
+                        'cell': {'userEnteredFormat': {'numberFormat': {'type': 'CURRENCY', 'pattern': '\"₩\"#,##0'}}},
+                        'fields': 'userEnteredFormat.numberFormat',
+                    }
+                })
+
+            # Return % Col U (index 20): '0.00%'
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 6, 'endRowIndex': end_trade_row, 'startColumnIndex': 20, 'endColumnIndex': 21},
+                    'cell': {'userEnteredFormat': {'numberFormat': {'type': 'PERCENT', 'pattern': '0.00%'}}},
+                    'fields': 'userEnteredFormat.numberFormat',
+                }
+            })
+
+            # Summary Row Style at bottom of 매매일지_YYYY-MM (r_trade_sum)
+            format_requests.append({
+                'repeatCell': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': r_trade_sum - 1, 'endRowIndex': r_trade_sum, 'startColumnIndex': 0, 'endColumnIndex': 24},
+                    'cell': {'userEnteredFormat': {'textFormat': {'bold': True}, 'backgroundColor': {'red': 0.94, 'green': 0.96, 'blue': 0.98}}},
+                    'fields': 'userEnteredFormat(textFormat,backgroundColor)',
+                }
+            })
+
+            # Grid Borders for 매매일지_YYYY-MM (A6:X{r_trade_sum})
+            format_requests.append({
+                'updateBorders': {
+                    'range': {'sheetId': sheet_id_trades, 'startRowIndex': 5, 'endRowIndex': r_trade_sum, 'startColumnIndex': 0, 'endColumnIndex': 24},
+                    'top': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'bottom': {'style': 'DOUBLE', 'color': BORDER_GREY},
+                    'left': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'right': {'style': 'SOLID', 'color': BORDER_GREY},
+                    'innerHorizontal': {'style': 'SOLID', 'color': INNER_GREY},
+                    'innerVertical': {'style': 'SOLID', 'color': INNER_GREY},
+                }
+            })
 
         # -------------------------------------------------------------------------
         # 5d. 대시보드 Formats & Styling

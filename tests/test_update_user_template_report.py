@@ -79,6 +79,7 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
                 "eval_krw": 229600,
                 "market": "KR",
                 "stream": "S2_EARNINGS",
+                "entry_date": "2026-07-29",
             },
             "XLE": {
                 "name": "SS ENERGY SELECT SECTOR SPDR",
@@ -88,6 +89,7 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
                 "eval_krw": 679112,
                 "market": "US",
                 "stream": "S9_CROSS_ASSET",
+                "entry_date": "2026-10-30",
             },
         },
         "closed_trades": [
@@ -109,6 +111,7 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     monkeypatch.setattr(report_mod, "load_live_portfolio", lambda: fake_portfolio)
     monkeypatch.setattr(report_mod, "load_position_entry_dates", lambda: {})
     monkeypatch.setattr(report_mod, "load_position_ledger_map", lambda: {})
+    monkeypatch.setattr(report_mod, "load_full_corporate_trade_ledger", lambda: [])
 
     class FakeWorksheet:
         def __init__(self, title, sheet_id):
@@ -118,6 +121,9 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
 
         def update(self, values=None, range_name=None, value_input_option=None):
             self.updates[range_name] = values
+
+        def resize(self, rows=None, cols=None):
+            pass
 
     class FakeSpreadsheet:
         def __init__(self):
@@ -130,12 +136,22 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
                 "대시보드": FakeWorksheet("대시보드", 104),
             }
             self.batch_calls = []
+            self._next_id = 200
 
         def worksheet(self, name):
             if name not in self.ws_map:
                 import gspread
                 raise gspread.WorksheetNotFound(name)
             return self.ws_map[name]
+
+        def add_worksheet(self, title, rows=100, cols=24):
+            self._next_id += 1
+            ws = FakeWorksheet(title, self._next_id)
+            self.ws_map[title] = ws
+            return ws
+
+        def del_worksheet(self, ws):
+            self.ws_map.pop(ws.title, None)
 
         def fetch_sheet_metadata(self):
             return {
@@ -183,22 +199,46 @@ def test_sync_template_sheets_unmerges_and_syncs_all_tabs(tmp_path, monkeypatch)
     assert rows_h[1][0] == "해외ETF" and rows_h[1][2] == "XLE"
     assert rows_h[0][9].startswith('=IF(OR(C4="CASH",C4="USD_CASH",C4=""),I4,IF(I4>0,I4,')
 
-    # 3. Verify '매매일지' Card 3 is at Col I (index 8) and sell tax is recorded
-    ws_t = fake_sh.ws_map["매매일지"]
-    assert ws_t.updates["A3:M4"][0][8] == "누적 순실현손익(원화)"
-    assert ws_t.updates["A3:M4"][1][8] == "=SUM(K7:K50)"
-    sell_rows = [r for r in ws_t.updates["A7:M9"] if r[1] == "매도"]
+    # 3. Verify monthly tabs '매매일지_2026-07' & '매매일지_2026-10' created and legacy '매매일지' removed
+    assert "매매일지" not in fake_sh.ws_map
+    assert "매매일지_2026-07" in fake_sh.ws_map
+    assert "매매일지_2026-10" in fake_sh.ws_map
+    ws_t10 = fake_sh.ws_map["매매일지_2026-10"]
+    assert ws_t10.updates["A3:P5"][0][8] == "2026-10 확정 순실현손익(법인장부)"
+    assert ws_t10.updates["A3:P5"][1][8] == "=T9"
+    assert len(ws_t10.updates["A6:X6"][0]) == 24
+    assert ws_t10.updates["A6:X6"][0][2] == "주문번호(ODNO)"
+    sell_rows = [r for r in ws_t10.updates["A7:X9"] if r[4] == "매도"]
     assert len(sell_rows) == 1
-    assert sell_rows[0][8] == pytest.approx(2076.0, rel=1e-9)
+    assert sell_rows[0][16] == pytest.approx(2076.0, rel=1e-9)
+    assert sell_rows[0][19] == "=R7+S7"
 
-    # 4. Verify '대시보드' C4 and Rows 19..24 PnL Attribution formulas
+    # 4. Verify '대시보드' C4 and Rows 19..24 PnL Attribution aggregate across all monthly tabs
     ws_d = fake_sh.ws_map["대시보드"]
-    assert ws_d.updates["A4:I4"][0][2] == "='보유종목'!O8 + '매매일지'!I4"
+    assert ws_d.updates["A4:I4"][0][2] == "='보유종목'!O8 + ('매매일지_2026-07'!I4 + '매매일지_2026-10'!I4)"
     pnl_rows = ws_d.updates["A19:E24"]
-    assert pnl_rows[0][1] == "='매매일지'!A4"
+    assert pnl_rows[0][1] == "='매매일지_2026-07'!A4 + '매매일지_2026-10'!A4"
+    assert pnl_rows[0][4] == "매매일지_2026-07~2026-10 (2개 월별탭)"
     assert pnl_rows[1][1] == "='보유종목'!O8"
     assert pnl_rows[4][1] == "=SUM(B19:B22)"
     assert pnl_rows[5][1] == "=IFERROR(B23/'보유종목'!M8, 0)"
+
+
+def test_load_full_corporate_trade_ledger(tmp_path, monkeypatch):
+    monkeypatch.setattr(report_mod, "PROJECT_ROOT", tmp_path)
+    ledger_dir = tmp_path / "results" / "corporate_ledger"
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = ledger_dir / "Corporate_Trade_Ledger_20261030.csv"
+    csv_file.write_text(
+        "거래일자,체결시각,주문번호(ODNO),시장구분,종목코드,종목명,거래구분,운용트랙,스트림,통화,체결수량,체결단가,외화약정금액,적용환율(USD/KRW),원화약정금액(KRW),이동평균취득단가,매도취득원가(KRW),위탁수수료(KRW),제세공과금(KRW),매매처분손익(KRW),외환차손익(KRW),실현순손익(KRW),실현수익률(%),정산현금증감(KRW),장부잔여수량\n"
+        "2026-07-29,15:02:21,0026038900,국내(KRX),122630,KODEX 레버리지,매수(BUY),Track 1,S1,KRW,40,75000.0,0.0,1.0,3000000,75011.25,0,450,0,0,0,0,0.0,-3000450,40\n"
+        "2026-07-30,09:00:09,0002614600,국내(KRX),122630,KODEX 레버리지,매도(SELL),Track 1,S1,KRW,40,78850.0,0.0,1.0,3154000,75011.25,3000450,473,0,153077,0,153077,5.10,3153527,0\n",
+        encoding="utf-8-sig",
+    )
+    rows = report_mod.load_full_corporate_trade_ledger()
+    assert len(rows) == 2
+    assert rows[0]["주문번호(ODNO)"] == "0026038900"
+    assert int(rows[1]["실현순손익(KRW)"]) == 153077
 
 
 def test_load_live_portfolio():
