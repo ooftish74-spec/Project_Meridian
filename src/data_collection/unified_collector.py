@@ -378,7 +378,7 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
     """
     from src.data_collection.alpha_vantage_collector import collect_global_macro
     _CROSS_SYNC_MAP = {'vix': ['cross_vix.parquet', 'us_vix.parquet'], 'sp500': ['cross_sp500.parquet'], 'usdkrw': ['cross_usdkrw.parquet', 'us_usdkrw.parquet'], 'us10y': ['cross_us10y.parquet'], 'wti': ['cross_oil_futures.parquet'], 'gold_us': ['cross_gold_futures.parquet']}
-    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet'], 'usdkrw': ['KRW=X.parquet']}
+    _US_STOCKS_SYNC_MAP = {'vix': ['^VIX.parquet'], 'usdkrw': ['KRW=X.parquet'], 'us10y': ['^TNX.parquet'], 'wti': ['CL=F.parquet']}
     signals = {}
     today_dt = pd.Timestamp(datetime.now().date())
     from src.data_collection.bok_ecos_collector import BOKEcosCollector
@@ -451,13 +451,29 @@ def collect_global_signals(backfill: bool=False) -> Dict[str, float]:
                             if 'date' in existing.columns:
                                 existing['date'] = pd.to_datetime(existing['date']).dt.normalize()
                                 existing = existing.set_index('date')
-                            else:
+                            elif isinstance(existing.index, pd.DatetimeIndex):
                                 existing.index = pd.to_datetime(existing.index).normalize()
-                            combined = pd.concat([existing, df_us])
-                            combined = combined[~combined.index.duplicated(keep='last')]
-                            safe_parquet_write(combined, us_path)
+                                existing.index.name = 'date'
+                            else:
+                                existing = pd.DataFrame()
+                            _min_seed_rows = int(pget('collector.min_seed_rows', 10))
+                            if len(existing) < _min_seed_rows:
+                                _seed_list = _CROSS_SYNC_MAP.get(name_lower, [])
+                                if _seed_list:
+                                    _seed_p = _DATA_DIR / _seed_list[0]
+                                    if _seed_p.exists():
+                                        _sdf = pd.read_parquet(_seed_p)
+                                        _sdf.columns = [c.lower() for c in _sdf.columns]
+                                        if 'date' in _sdf.columns:
+                                            _sdf['date'] = pd.to_datetime(_sdf['date']).dt.normalize()
+                                            existing = _sdf.set_index('date')
+                            combined = pd.concat([existing, df_us]) if not existing.empty else df_us
+                            combined = combined[~combined.index.duplicated(keep='last')].sort_index()
+                            combined.index.name = 'date'
+                            safe_parquet_write(combined, us_path, index=True)
                         else:
-                            safe_parquet_write(df_us, us_path)
+                            df_us.index.name = 'date'
+                            safe_parquet_write(df_us, us_path, index=True)
                     except Exception as e:
                         logger.error(f'  us_stocks sync {us_file} 실패: {e}', exc_info=True)
             signals[name] = price

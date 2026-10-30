@@ -43,7 +43,7 @@ try:
     _PNL_AVAILABLE = True
 except ImportError as e:
     _PNL_AVAILABLE = False
-ETF_TICKERS = {'122630', '091160', '396500', '471230', '305080', '132030', '279530', '458730', '458760', '133690', '441640', '289480', '411060', '211900', '211560', '091180', '379800'}
+ETF_TICKERS = {'122630', '091160', '396500', '471230', '305080', '132030', '279530', '458730', '458760', '133690', '441640', '289480', '411060', '211900', '211560', '091180', '379800', '069500', '114800', '252670', '233740', '357870', '153130', '459580', '499660', 'SPY', 'QQQ', 'SH', 'PSQ'}
 
 class MedallionOrchestrator:
     """Sleeve A/B 전체 포트폴리오 Medallion 검증."""
@@ -184,16 +184,48 @@ class MedallionOrchestrator:
         stream_sector_counts = {}
         all_tickers = set()
         stream_sector_limits = {'S1': self.max_sector_per_stream, 'S2': self.max_sector_per_stream, 'S3': self.max_sector_per_stream, 'S4': self.max_sector_per_stream + 1}
+        ledger_map = {}
+        try:
+            _pel_f = _RESULTS / 'position_entry_ledger.json'
+            if _pel_f.exists():
+                _pel_d = json.loads(_pel_f.read_text(encoding='utf-8'))
+                if isinstance(_pel_d, dict):
+                    ledger_map = _pel_d.get('entries', _pel_d) if isinstance(_pel_d.get('entries', _pel_d), dict) else {}
+        except Exception:
+            ledger_map = {}
+        mkt_ctx = None
+        try:
+            from src.data.market_context import MarketContextManager
+            mkt_ctx = MarketContextManager()
+        except Exception:
+            mkt_ctx = None
+        disk_sector_map = {}
+        try:
+            _sm_f = _PROJECT_ROOT / 'data' / 'sector_map.json'
+            if _sm_f.exists():
+                disk_sector_map = json.loads(_sm_f.read_text(encoding='utf-8'))
+        except Exception:
+            disk_sector_map = {}
+
         for layer, pos_dict in positions.items():
             for ticker, pos in pos_dict.items():
                 parts = ticker.split(':')
-                clean = parts[-1]
-                stream_id = parts[0] if len(parts) > 1 else 'unknown'
+                clean = parts[-1].strip()
+                l_info = ledger_map.get(clean, {}) if isinstance(ledger_map.get(clean), dict) else {}
+                stream_id = (
+                    parts[0] if len(parts) > 1
+                    else str(pos.get('stream_id') or pos.get('stream') or l_info.get('stream_id') or l_info.get('stream') or 'unknown')
+                )
                 all_tickers.add(clean)
                 if clean in ETF_TICKERS:
                     continue
                 sector = pos.get('sector', 'Unknown')
-                if sector == 'Unknown':
+                if not sector or sector == 'Unknown':
+                    if mkt_ctx is not None:
+                        sector = mkt_ctx.get_sector(clean)
+                if (not sector or sector == 'Unknown') and isinstance(disk_sector_map, dict):
+                    sector = disk_sector_map.get(clean, 'Unknown')
+                if not sector or sector == 'Unknown':
                     try:
                         from src.data_collection.ticker_master import get_ticker_master
                         _tm_info = get_ticker_master().get(clean)
@@ -201,6 +233,8 @@ class MedallionOrchestrator:
                             sector = str(_tm_info.underlying)
                     except Exception:
                         pass
+                if not sector:
+                    sector = 'Unknown'
                 global_sector_counts[sector] = global_sector_counts.get(sector, 0) + 1
                 if stream_id not in stream_sector_counts:
                     stream_sector_counts[stream_id] = {}

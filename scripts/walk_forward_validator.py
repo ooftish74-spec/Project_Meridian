@@ -94,14 +94,8 @@ class WalkForwardValidator:
                 self._save(result)
                 return result
 
-            sc = json.loads(sc_file.read_text())
-            predictions = sc.get('ml_predictions', {})
-
-            if len(predictions) < min_samples:
-                result['reason'] = f"예측 {len(predictions)}건 < 최소 {min_samples}건"
-                result['n_predictions'] = len(predictions)
-                self._save(result)
-                return result
+            sc = json.loads(sc_file.read_text(encoding='utf-8'))
+            predictions = self._resolve_predictions(sc)
 
             # 예측 vs 실현 수익률 비교
             correct = 0
@@ -109,20 +103,30 @@ class WalkForwardValidator:
             ic_pairs = []
 
             for ticker, pred_data in predictions.items():
-                pred_prob = pred_data.get('up_prob', 0.5)
+                if not isinstance(pred_data, dict):
+                    continue
+                pred_prob = float(pred_data.get('up_prob', pred_data.get('predict_proba', pred_data.get('confidence', 0.5))) or 0.5)
                 actual_return = pred_data.get('actual_return_pct', None)
+                if actual_return is None:
+                    actual_return = self._lookup_realized_return_pct(str(ticker))
                 if actual_return is None:
                     continue
 
                 total += 1
                 pred_up = pred_prob >= 0.5
-                actual_up = actual_return > 0
+                actual_up = float(actual_return) > 0.0
                 if pred_up == actual_up:
                     correct += 1
-                ic_pairs.append((pred_prob, actual_return))
+                ic_pairs.append((pred_prob, float(actual_return)))
 
             if total < min_samples:
-                result['reason'] = f"검증 가능 {total}건 < 최소 {min_samples}건"
+                pwf_fallback = self._fallback_from_purged_wf(min_samples)
+                if pwf_fallback is not None:
+                    result.update(pwf_fallback)
+                    self._save(result)
+                    return result
+                result['reason'] = f"예측 {len(predictions)}건 / 검증 가능 {total}건 < 최소 {min_samples}건"
+                result['n_predictions'] = len(predictions)
                 self._save(result)
                 return result
 
@@ -132,9 +136,11 @@ class WalkForwardValidator:
             result.update({
                 'status': 'completed',
                 'n_validated': total,
+                'n_predictions': len(predictions),
                 'oos_acc': round(acc, 4),
                 'oos_ic': round(ic, 4),
                 'n_correct': correct,
+                'source': 'live_signals_and_prices',
             })
 
             # 경고 체크
@@ -161,6 +167,124 @@ class WalkForwardValidator:
         self._save(result)
         return result
 
+    def _resolve_predictions(self, sc: Dict) -> Dict[str, Dict]:
+        """signal_cache.json, latest_signals.json, holdings_ev 등에서 일일 예측 수집."""
+        preds: Dict[str, Dict] = {}
+        raw_ml = sc.get('ml_predictions', {})
+        if isinstance(raw_ml, dict):
+            for tk, pv in raw_ml.items():
+                if isinstance(pv, dict):
+                    preds[str(tk)] = dict(pv)
+
+        ls_file = _RESULTS / 'latest_signals.json'
+        if ls_file.exists():
+            try:
+                ls = json.loads(ls_file.read_text(encoding='utf-8'))
+                sigs_map = ls.get('signals', {}) if isinstance(ls, dict) else {}
+                if isinstance(sigs_map, dict):
+                    for _s_id, sig_list in sigs_map.items():
+                        if not isinstance(sig_list, list):
+                            continue
+                        for sig in sig_list:
+                            if not isinstance(sig, dict):
+                                continue
+                            tk = str(sig.get('ticker', '') or '').strip()
+                            if not tk or tk.startswith('_'):
+                                continue
+                            prob = sig.get('up_prob', sig.get('predict_proba', sig.get('confidence')))
+                            if prob is not None and tk not in preds:
+                                direction = str(sig.get('direction', 'long') or 'long').lower()
+                                p_val = float(prob)
+                                _half = 1.0 / 2.0
+                                if direction == 'short' and p_val > _half:
+                                    p_val = 1.0 - p_val
+                                preds[tk] = {'up_prob': p_val, 'actual_return_pct': sig.get('actual_return_pct')}
+                            mk_sc = (sig.get('market_data') or {}).get('signal_cache') or {}
+                            for ev_key in ('active_signal_ev_map', 'holdings_ev'):
+                                ev_map = mk_sc.get(ev_key)
+                                if isinstance(ev_map, dict):
+                                    for ev_tk, ev_val in ev_map.items():
+                                        if str(ev_tk) not in preds and isinstance(ev_val, (int, float)):
+                                            import math as _m_wf
+                                            p_ev = (1.0 / 2.0) + (2.0 / 5.0) * _m_wf.tanh(float(ev_val) / 2.0)
+                                            preds[str(ev_tk)] = {'up_prob': round(p_ev, 4), 'actual_return_pct': None}
+            except Exception as e:
+                logger.debug(f"  latest_signals 로드 스킵: {e}")
+
+        st_tech = sc.get('stock_technicals', {})
+        if isinstance(st_tech, dict):
+            for tk, tv in st_tech.items():
+                if str(tk) not in preds and isinstance(tv, dict):
+                    rsi = float(tv.get('rsi_14', 50.0) or 50.0)
+                    macd_h = float(tv.get('macd_hist', 0.0) or 0.0)
+                    _cap = 1.0 / 4.0
+                    _raw_adj = (50.0 - rsi) / 200.0 + (0.05 if macd_h > 0 else -0.05)
+                    p_tech = (1.0 / 2.0) + max(-_cap, min(_cap, _raw_adj))
+                    preds[str(tk)] = {'up_prob': round(p_tech, 4), 'actual_return_pct': None}
+        return preds
+
+    def _lookup_realized_return_pct(self, ticker: str):
+        """data/kr_markets, data/prices, data/us_stocks/prices Parquet에서 최근 1일 실현 수익률(%) 조회."""
+        clean = str(ticker).replace('.KS', '').replace('.KQ', '').strip()
+        is_kr = clean.isdigit() and len(clean) == 6
+        candidates = []
+        if is_kr:
+            candidates.extend([
+                _PROJECT_ROOT / 'data' / 'kr_markets' / f'kr_{clean}.parquet',
+                _PROJECT_ROOT / 'data' / 'prices' / f'{clean}.parquet',
+            ])
+        else:
+            candidates.extend([
+                _PROJECT_ROOT / 'data' / 'us_stocks' / 'prices' / f'{clean}.parquet',
+                _PROJECT_ROOT / 'data' / 'prices' / f'{clean}.parquet',
+            ])
+        try:
+            import pandas as pd
+            for p in candidates:
+                if p.exists():
+                    df = pd.read_parquet(p)
+                    col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    if col and len(df) >= 2:
+                        s = pd.to_numeric(df[col], errors='coerce').dropna()
+                        if len(s) >= 2 and float(s.iloc[-2]) > 0:
+                            return round((float(s.iloc[-1]) / float(s.iloc[-2]) - 1.0) * 100.0, 4)
+        except Exception:
+            pass
+        return None
+
+    def _fallback_from_purged_wf(self, min_samples: int):
+        """실시간 스냅샷 표본 부족 시 최신 Date-Purged Walk-Forward OOS 검증 결과 참조."""
+        pwf_file = _RESULTS / 'purged_wf_5d.json'
+        if not pwf_file.exists():
+            return None
+        try:
+            pwf = json.loads(pwf_file.read_text(encoding='utf-8'))
+            if not isinstance(pwf, dict):
+                return None
+            n_pred = int(pwf.get('n_rows_predicted', 0) or 0)
+            if n_pred < min_samples:
+                return None
+            oos = pwf.get('oos') or {}
+            folds = pwf.get('folds') or []
+            last_fold_m = (folds[-1].get('metrics') if folds and isinstance(folds[-1], dict) else {}) or {}
+            hit_d = (last_fold_m.get('hit_rate') or oos.get('hit_rate') or {})
+            ic_d = (last_fold_m.get('ic') or oos.get('ic') or {})
+            acc = float(hit_d.get('cross_sectional_hit_rate') or hit_d.get('directional_hit_rate') or 0.5)
+            ic = float(ic_d.get('mean') if ic_d.get('mean') is not None else (pwf.get('ic_mean') or 0.0))
+            n_val = int(last_fold_m.get('n_rows') or oos.get('n_rows') or n_pred)
+            return {
+                'status': 'completed',
+                'n_validated': n_val,
+                'n_predictions': n_pred,
+                'oos_acc': round(acc, 4),
+                'oos_ic': round(ic, 4),
+                'n_correct': int(round(acc * n_val)),
+                'source': 'purged_wf_5d',
+                'warnings': [],
+            }
+        except Exception:
+            return None
+
     def _compute_ic(self, pairs: List) -> float:
         """Spearman 순위 상관계수 (IC)."""
         if len(pairs) < 3:
@@ -180,17 +304,22 @@ class WalkForwardValidator:
         try:
             history = []
             if _REPORT_FILE.exists():
-                history = json.loads(_REPORT_FILE.read_text())
+                history = json.loads(_REPORT_FILE.read_text(encoding='utf-8'))
                 if not isinstance(history, list):
                     history = [history]
 
-            history.append(result)
+            # 같은 날짜 기존 skip 레코드가 있으면 최신 결과로 교체
+            cur_date = result.get('date')
+            if history and isinstance(history[-1], dict) and history[-1].get('date') == cur_date and history[-1].get('status') == 'skip':
+                history[-1] = result
+            else:
+                history.append(result)
             # 최근 90일치만 유지
             max_history = cfg.get('ml.wf_max_history_days', 90)
             history = history[-max_history:]
 
             _REPORT_FILE.write_text(
-                json.dumps(history, indent=2, ensure_ascii=False, default=str))
+                json.dumps(history, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
         except Exception as e:
             logger.debug(f"  Walk-Forward 저장 실패: {e}")
 

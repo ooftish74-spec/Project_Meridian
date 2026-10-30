@@ -22,6 +22,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
     def pget(name, fallback, ctx=None):
         return fallback
 import json
+import os
 import re
 import sys
 import pandas as pd
@@ -387,9 +388,37 @@ class S2MLAlphaStream(BaseStream):
                 load_latest_purged_wf_oos,
             )
             if scored:
+                _min_winsor_n = int(pget('s2.top_tail_winsor_min_n', 20))
+                if len(scored) >= _min_winsor_n:
+                    _p95_val = float(np.percentile([float(s.get('up_prob', 0.5)) for s in scored], float(pget('s2.top_tail_winsor_pct', 95.0))))
+                    _damp_f = float(pget('s2.top_tail_winsor_damp', 0.5))
+                    for _s_w in scored:
+                        _raw_p = float(_s_w.get('up_prob', 0.5))
+                        if _raw_p > _p95_val:
+                            _s_w['up_prob'] = round(_p95_val + _damp_f * (_raw_p - _p95_val), 4)
                 _z_list = cross_sectional_rank_gaussian_transform([float(s.get('up_prob', 0.0)) for s in scored])
                 for _s_item, _z_val in zip(scored, _z_list):
                     _score_z_map[str(_s_item.get('ticker', ''))] = float(_z_val)
+                if not market_data.get('_test_mode') and not os.environ.get('PYTEST_CURRENT_TEST'):
+                    try:
+                        from src.utils.file_ops import safe_json_update
+                        _sc_pred_path = _PROJECT_ROOT / 'results' / 'signal_cache.json'
+                        if _sc_pred_path.exists():
+                            _ml_pred_payload = {
+                                str(_sp.get('ticker', '')): {
+                                    'up_prob': float(_sp.get('up_prob', 0.5)),
+                                    'close': _sp.get('close', _sp.get('price')),
+                                    'actual_return_pct': _sp.get('return_1d_pct'),
+                                }
+                                for _sp in scored if _sp.get('ticker')
+                            }
+                            def _upd_ml_preds(cur_sc):
+                                d_sc = cur_sc if isinstance(cur_sc, dict) else {}
+                                d_sc['ml_predictions'] = _ml_pred_payload
+                                return d_sc
+                            safe_json_update(_sc_pred_path, _upd_ml_preds, default={}, strict=False)
+                    except Exception:
+                        pass
             _pwf_oos = load_latest_purged_wf_oos(_PROJECT_ROOT / 'results' / 'ml_validation')
             if _pwf_oos:
                 _eb_res = empirical_bayes_stream_shrinkage(

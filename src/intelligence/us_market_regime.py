@@ -276,7 +276,7 @@ class USMarketRegimeEngine:
         return (score, {'daily_rets': [round(r, 4) for r in daily_rets], 'streak': streak, 'score': round(score, 3)})
 
     def _f6_move_index(self) -> Tuple[float, Dict]:
-        """MOVE Index — ICE BofA 채권 변동성.
+        """MOVE Index — ICE BofA 채권 변동성 (실측 MOVE 또는 US10Y/TLT 실현변동성 프록시).
 
         MOVE < 80:  안정 (bull)
         MOVE 80-100: 보통 (neutral)
@@ -286,21 +286,94 @@ class USMarketRegimeEngine:
         move_val = None
         source = 'none'
         us = self.oi.get('us_market', {})
-        if 'move' in us:
+        if isinstance(us, dict) and 'move' in us and isinstance(us['move'], dict):
             move_val = float(us['move'].get('close', 0) or 0)
             source = 'overnight'
+        elif self.oi.get('move_index') is not None:
+            try:
+                move_val = float(self.oi['move_index'])
+                source = 'signal_cache'
+            except (TypeError, ValueError):
+                move_val = None
         if move_val is None or move_val <= 0:
-            # yfinance 폐기 — FRED API 및 Alpha Vantage 우선 참조
-            pass
+            try:
+                import pandas as pd
+                import numpy as np
+                for rel_p, mode in (
+                    ('data/us_stocks/prices/TLT.parquet', 'tlt'),
+                    ('data/kr_markets/cross_us10y.parquet', 'tnx'),
+                    ('data/us_stocks/prices/^TNX.parquet', 'tnx'),
+                ):
+                    pq = PROJECT_ROOT / rel_p
+                    if not pq.exists():
+                        continue
+                    df = pd.read_parquet(pq)
+                    col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                    _min_bars = int(pget('regime.us.min_vol_bars', 15))
+                    _min_rets = int(pget('regime.us.min_ret_obs', 5))
+                    if not col or len(df) < _min_bars:
+                        continue
+                    s = pd.to_numeric(df[col], errors='coerce').dropna()
+                    if len(s) < _min_bars:
+                        continue
+                    if mode == 'tlt':
+                        rets = s.pct_change().dropna().tail(20)
+                        if len(rets) >= _min_rets:
+                            ann_vol_pct = float(np.std(rets, ddof=1) * math.sqrt(float(pget('common.annualization_factor', 252))) * 100.0)
+                            if ann_vol_pct > 0:
+                                move_val = ann_vol_pct * float(pget('regime.us.tlt_vol_to_move_mult', 6.0))
+                                source = 'tlt_realized_vol_proxy'
+                                break
+                    else:
+                        dy_bps = (s.diff().dropna().tail(20)) * 100.0
+                        dy_bps = dy_bps[dy_bps != 0]
+                        if len(dy_bps) >= _min_rets:
+                            ann_bps_vol = float(np.std(dy_bps, ddof=1) * math.sqrt(float(pget('common.annualization_factor', 252))))
+                            if ann_bps_vol > 0:
+                                move_val = ann_bps_vol
+                                source = 'us10y_realized_bps_vol_proxy'
+                                break
+            except Exception:
+                move_val = None
         if move_val is None or move_val <= 0:
             return (0.0, {'move': None, 'score': 0.0, 'source': 'unavailable', 'detail': 'unavailable'})
-        score = max(-1.0, min(1.0, (90 - move_val) / 40))
+        move_center = float(pget('regime.us.move_center', 90.0))
+        move_scale = float(pget('regime.us.move_scale', 40.0))
+        score = max(-1.0, min(1.0, (move_center - move_val) / move_scale))
         return (score, {'move': round(move_val, 2), 'score': round(score, 3), 'source': source})
 
     def _f7_ted_spread(self) -> Tuple[float, Dict]:
-        """TED Spread proxy: 10Y Treasury - 3M T-Bill (FRED API 참조)."""
-        # yfinance 폐기 — FRED API 우선 참조
-        return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable', 'detail': 'unavailable'})
+        """TED Spread / 단기 신용·유동성 스트레스 프록시 (HY Credit Spread + 10Y-FedFunds Term Spread)."""
+        hy_raw = self.oi.get('fred_hy_spread', self.oi.get('hy_credit_spread'))
+        us10y_raw = self.oi.get('us10y', self.oi.get('US10Y'))
+        ff_raw = self.oi.get('federal_funds_rate', self.oi.get('fedfunds', self.oi.get('FEDFUNDS')))
+        sub_scores = []
+        details = {}
+        try:
+            if hy_raw is not None:
+                hy_val = float(hy_raw)
+                if hy_val > 0:
+                    hy_pct = hy_val / 100.0 if hy_val > float(pget('regime.us.hy_bps_cutoff', 25.0)) else hy_val
+                    hy_center = float(pget('regime.us.hy_spread_center_pct', 4.0))
+                    hy_scale = float(pget('regime.us.hy_spread_scale_pct', 1.5))
+                    sc_hy = max(-1.0, min(1.0, (hy_center - hy_pct) / hy_scale))
+                    sub_scores.append(sc_hy)
+                    details['hy_spread_pct'] = round(hy_pct, 3)
+            if us10y_raw is not None and ff_raw is not None:
+                u10 = float(us10y_raw)
+                ff = float(ff_raw)
+                if u10 > 0 and ff >= 0:
+                    term_sp = u10 - ff
+                    sc_term = max(-1.0, min(1.0, term_sp / 1.0))
+                    sub_scores.append(sc_term)
+                    details['term_spread_10y_ff'] = round(term_sp, 3)
+        except (TypeError, ValueError):
+            pass
+        if not sub_scores:
+            return (0.0, {'ted_spread': None, 'score': 0.0, 'source': 'unavailable', 'detail': 'unavailable'})
+        score = sum(sub_scores) / len(sub_scores)
+        proxy_val = details.get('term_spread_10y_ff', details.get('hy_spread_pct'))
+        return (score, {'ted_spread': proxy_val, **details, 'score': round(score, 3), 'source': 'fred_hy_and_term_spread_proxy'})
 
     def detect(self) -> Dict:
         """

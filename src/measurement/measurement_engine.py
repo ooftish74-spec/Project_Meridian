@@ -691,7 +691,7 @@ class MeasurementEngine:
                 s['cost_basis'] += cost_krw
                 if unp_krw > 0 or ret_pct > 0:
                     s['wins'] += 1
-                stream_pos_lists[sid].append({
+                pos_rec_me = {
                     **h,
                     'ticker': t_sym,
                     'stream_id': sid,
@@ -704,7 +704,20 @@ class MeasurementEngine:
                     'pnl_pct': ret_pct,
                     'return_pct': ret_pct,
                     'entry_date': str(h.get('entry_date') or l_entry.get('entry_date') or '')[:10],
-                })
+                }
+                stream_pos_lists[sid].append(pos_rec_me)
+                if sid in ('S3_A', 'S3_B', 'S3_C'):
+                    if 'S3' not in stream_stats:
+                        stream_stats['S3'] = {'count': 0, 'market_value': 0.0, 'unrealized_pnl': 0.0, 'cost_basis': 0.0, 'wins': 0}
+                        stream_pos_lists['S3'] = []
+                    s_parent = stream_stats['S3']
+                    s_parent['count'] += 1
+                    s_parent['market_value'] += mkt_val_krw
+                    s_parent['unrealized_pnl'] += unp_krw
+                    s_parent['cost_basis'] += cost_krw
+                    if unp_krw > 0 or ret_pct > 0:
+                        s_parent['wins'] += 1
+                    stream_pos_lists['S3'].append({**pos_rec_me, 'stream_id': 'S3'})
 
         realized_by_stream = {}
         wins_by_stream = {}
@@ -715,25 +728,28 @@ class MeasurementEngine:
             sid = _infer_canonical_stream(t.get('ticker', ''), t.get('stream_id', t.get('stream', '')), ledger_map)
             if not sid or sid in _INVALID_STREAM_IDS:
                 continue
-            if sid not in realized_by_stream:
-                realized_by_stream[sid] = 0.0
-                wins_by_stream[sid] = 0
-                trades_by_stream[sid] = 0
-                gross_profit_by_stream[sid] = 0.0
-                gross_loss_by_stream[sid] = 0.0
+            target_sids = [sid, 'S3'] if sid in ('S3_A', 'S3_B', 'S3_C') else [sid]
+            for _tsid in target_sids:
+                if _tsid not in realized_by_stream:
+                    realized_by_stream[_tsid] = 0.0
+                    wins_by_stream[_tsid] = 0
+                    trades_by_stream[_tsid] = 0
+                    gross_profit_by_stream[_tsid] = 0.0
+                    gross_loss_by_stream[_tsid] = 0.0
             action = t.get('action', '').upper()
             if action == 'SELL':
                 entry = t.get('entry_price', t.get('avg_price', 0))
                 if entry is None or entry <= 0:
                     continue
                 pnl = float(t.get('realized_pnl', 0) or 0)
-                realized_by_stream[sid] += pnl
-                trades_by_stream[sid] += 1
-                if pnl > 0:
-                    wins_by_stream[sid] += 1
-                    gross_profit_by_stream[sid] += pnl
-                elif pnl < 0:
-                    gross_loss_by_stream[sid] += abs(pnl)
+                for _tsid in target_sids:
+                    realized_by_stream[_tsid] += pnl
+                    trades_by_stream[_tsid] += 1
+                    if pnl > 0:
+                        wins_by_stream[_tsid] += 1
+                        gross_profit_by_stream[_tsid] += pnl
+                    elif pnl < 0:
+                        gross_loss_by_stream[_tsid] += abs(pnl)
         result = {}
         core_streams = cfg.get('dashboard.core_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10_MEGA_TREND'])
         all_streams = set(

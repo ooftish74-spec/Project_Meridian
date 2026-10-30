@@ -135,6 +135,15 @@ class SelfLearning:
         ic_values = {}
 
         # 1. Feature IC 수집: measurement_results['feature_ic'] + results/ic_report.json['features']
+        _feat_alias_map = {
+            'rsi_14': 'rsi_ic', 'rsi': 'rsi_ic',
+            'bb_position': 'bb_ic', 'bb': 'bb_ic',
+            'macd_signal': 'macd_ic', 'macd_hist': 'macd_ic', 'macd': 'macd_ic',
+            'volume_spike': 'volume_ic', 'volume_ratio_20d': 'volume_ic', 'volume': 'volume_ic',
+            'sig20_mom_qual': 'momentum_ic', 'return_20d': 'momentum_ic', 'momentum': 'momentum_ic',
+            'roe_2yr_avg': 'quality_ic', 'quality': 'quality_ic',
+            'sector_momentum': 'sector_ic', 'sector': 'sector_ic',
+        }
         feature_ic = dict(measurement_results.get('feature_ic', {}) or {})
         ic_report_path = res_dir / 'ic_report.json'
         if ic_report_path.exists():
@@ -144,7 +153,7 @@ class SelfLearning:
                     rep_feats = ic_rep.get('features', ic_rep.get('feature_ic', {}))
                     if isinstance(rep_feats, dict):
                         for fk, fv in rep_feats.items():
-                            norm_k = fk if fk in self.IC_PARAM_MAP else (f"{fk}_ic" if f"{fk}_ic" in self.IC_PARAM_MAP else fk)
+                            norm_k = _feat_alias_map.get(fk) or (fk if fk in self.IC_PARAM_MAP else (f"{fk}_ic" if f"{fk}_ic" in self.IC_PARAM_MAP else fk))
                             if isinstance(fv, dict):
                                 val = fv.get('ic', fv.get('value', fv.get('mean_ic')))
                                 std_v = fv.get('std', fv.get('ic_std', 0.0))
@@ -154,11 +163,24 @@ class SelfLearning:
                             elif isinstance(fv, (int, float)):
                                 if norm_k not in feature_ic:
                                     feature_ic[norm_k] = float(fv)
+                    elif isinstance(rep_feats, list):
+                        for item in rep_feats:
+                            if not isinstance(item, dict):
+                                continue
+                            fk = str(item.get('feature', '') or '')
+                            if not fk:
+                                continue
+                            norm_k = _feat_alias_map.get(fk) or (fk if fk in self.IC_PARAM_MAP else (f"{fk}_ic" if f"{fk}_ic" in self.IC_PARAM_MAP else fk))
+                            val = item.get('ic', item.get('value', item.get('mean_ic')))
+                            std_v = item.get('std', item.get('ic_std', 0.0))
+                            if val is not None and norm_k not in feature_ic:
+                                feature_ic[norm_k] = float(val)
+                                feature_ic[f"{norm_k}_std"] = float(std_v or 0.0)
             except Exception as e:
                 logger.debug(f"  SelfLearning: ic_report.json 로드 실패: {e}")
 
         for feature_key, raw_ic_val in list(feature_ic.items()):
-            norm_key = feature_key if feature_key in self.IC_PARAM_MAP else (f"{feature_key}_ic" if f"{feature_key}_ic" in self.IC_PARAM_MAP else feature_key)
+            norm_key = _feat_alias_map.get(feature_key) or (feature_key if feature_key in self.IC_PARAM_MAP else (f"{feature_key}_ic" if f"{feature_key}_ic" in self.IC_PARAM_MAP else feature_key))
             if norm_key in self.IC_PARAM_MAP:
                 if isinstance(raw_ic_val, dict):
                     ic_val = float(raw_ic_val.get('ic', raw_ic_val.get('value', 0.0)) or 0.0)
@@ -209,19 +231,47 @@ class SelfLearning:
                                 base_s[k_f] = v_f
                         merged_streams[sk] = base_s
 
+        import math as _math_sl
         from config.dynamic_config import DynamicConfig
         cfg = DynamicConfig()
         active_streams = list(cfg.get('system.active_streams', ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S10']))
-        for extra_s in ('S1', 'S2', 'S3', 'S4'):
-            if extra_s not in active_streams:
-                active_streams.append(extra_s)
-        for sid in active_streams:
+        canonical_bases = []
+        for sid in active_streams + ['S1', 'S2', 'S3', 'S4']:
             short_sid = str(sid).split('_')[0]
+            if short_sid not in canonical_bases:
+                canonical_bases.append(short_sid)
+
+        for short_sid in canonical_bases:
             sharpe_key = f'{short_sid.lower()}_sharpe'
-            s_info = merged_streams.get(sid) or merged_streams.get(short_sid) or {}
-            sharpe = s_info.get('sharpe')
-            if sharpe is not None:
-                sh_val = float(sharpe)
+            sub_keys = [
+                k for k, v in merged_streams.items()
+                if str(k).startswith(f'{short_sid}_') and isinstance(v, dict) and v.get('sharpe') is not None
+            ]
+            sh_val = None
+            if sub_keys:
+                tot_mv = sum(max(0.0, float(merged_streams[k].get('market_value') or 0.0)) for k in sub_keys)
+                mv_denom = max(1.0, tot_mv)
+                min_cap_w = float(pget('self_learning.substream_min_cap_weight', 0.05))
+                min_psr_w = float(pget('self_learning.substream_min_psr_weight', 0.1))
+                w_sum = 0.0
+                sh_w_sum = 0.0
+                for k in sub_keys:
+                    sv = merged_streams[k]
+                    sr_k = float(sv['sharpe'])
+                    mv_k = max(0.0, float(sv.get('market_value') or 0.0))
+                    psr_raw = sv.get('psr')
+                    psr_k = float(psr_raw) if psr_raw is not None else (0.5 * (1.0 + _math_sl.tanh(sr_k / 2.0)))
+                    cap_w = (mv_k / mv_denom) + min_cap_w if tot_mv > 0.0 else 1.0
+                    w_k = cap_w * max(min_psr_w, psr_k)
+                    w_sum += w_k
+                    sh_w_sum += w_k * sr_k
+                if w_sum > 0.0:
+                    sh_val = sh_w_sum / w_sum
+            if sh_val is None:
+                s_info = merged_streams.get(short_sid) or {}
+                if s_info.get('sharpe') is not None:
+                    sh_val = float(s_info['sharpe'])
+            if sh_val is not None:
                 ic_values[sharpe_key] = {
                     'value': sh_val,
                     'abs_value': abs(sh_val),
@@ -334,22 +384,42 @@ class SelfLearning:
         return clipped_values
 
     def _adjust_stream_weight(self, param_key: str, current_val: float, sharpe: float, ic_std: float=0.0) -> float:
-        """스트림 배분 조정 (Sharpe 기반, 적응형 학습률).
+        """스트림 배분 조정 (Sharpe 기반 + Empirical-Bayes 사전비중 수축).
 
         Sharpe > 1.0: 가중치 적극 증가
         Sharpe > 0:   가중치 소폭 증가
         Sharpe < 0:   가중치 감소
+        경계선(lo/hi)에 고착된 상태에서 Sharpe 부호가 반전되면 Empirical-Bayes 타깃 비중으로 신속 수축.
         """
+        import math as _math_adj
         adaptive_lr = self._compute_adaptive_lr(param_key, sharpe, ic_std)
-        if sharpe > float(cfg.get('self_learning.sharpe_strong_bull', 1.0)):
-            factor = 1 + adaptive_lr * float(pget('self_learning.sharpe_strong_factor', 0.5))
-        elif sharpe > 0:
-            factor = 1 + adaptive_lr * float(pget('self_learning.sharpe_mild_factor', 0.2))
-        elif sharpe > float(pget('self_learning.sharpe_mild_bear', -0.5)):
-            factor = 1 - adaptive_lr * float(pget('self_learning.sharpe_mild_bear_factor', 0.2))
+        strong_bull = float(cfg.get('self_learning.sharpe_strong_bull', 1.0))
+        mild_bear = float(pget('self_learning.sharpe_mild_bear', -0.5))
+        if sharpe > strong_bull:
+            factor = 1.0 + adaptive_lr * float(pget('self_learning.sharpe_strong_factor', 0.5))
+        elif sharpe > 0.0:
+            factor = 1.0 + adaptive_lr * float(pget('self_learning.sharpe_mild_factor', 0.2))
+        elif sharpe > mild_bear:
+            factor = 1.0 - adaptive_lr * float(pget('self_learning.sharpe_mild_bear_factor', 0.2))
         else:
-            factor = 1 - adaptive_lr * float(pget('self_learning.sharpe_strong_bear_factor', 0.5))
-        return current_val * factor
+            factor = 1.0 - adaptive_lr * float(pget('self_learning.sharpe_strong_bear_factor', 0.5))
+        step_val = current_val * factor
+        prior_map = {
+            'allocator.s1_base_weight': float(pget('allocator.s1_prior_weight', 0.25)),
+            'allocator.s2_base_weight': float(pget('allocator.s2_prior_weight', 0.30)),
+            'allocator.s3_base_weight': float(pget('allocator.s3_prior_weight', 0.25)),
+            'allocator.s4_base_weight': float(pget('allocator.s4_prior_weight', 0.20)),
+        }
+        if param_key in prior_map:
+            w_prior = prior_map[param_key]
+            w_eb = w_prior * (1.0 + 0.5 * _math_adj.tanh(sharpe / 2.0))
+            lo, hi = self.SAFETY_BOUNDS.get(param_key, (0.05, 0.50))
+            _eps = float(pget('self_learning.boundary_eps', 1e-06))
+            _bull_cut = float(pget('self_learning.boundary_bull_sharpe', 0.5))
+            boundary_trapped = (current_val <= lo + _eps and sharpe > _bull_cut) or (current_val >= hi - _eps and sharpe < mild_bear)
+            eb_lambda = float(pget('self_learning.eb_boundary_escape_rate', 0.65)) if boundary_trapped else float(pget('self_learning.eb_shrinkage_rate', 0.25))
+            return (1.0 - eb_lambda) * step_val + eb_lambda * w_eb
+        return step_val
 
     def update(self, measurement_results: Dict) -> Dict:
         """전체 자가학습 사이클: 측정 → 판정 → 적용.
@@ -401,7 +471,12 @@ class SelfLearning:
             def _mutate_overrides(cur):
                 base = cur if isinstance(cur, dict) else {}
                 for change in changes:
-                    base[change['param']] = change['new_value']
+                    p_name = change['param']
+                    base[p_name] = change['new_value']
+                    if p_name == 'allocator.s3_base_weight' and float(change.get('ic_value', 0.0)) > 1.0:
+                        old_sc = float(base.get('sizer.stream_scale.S3', 1.0) or 1.0)
+                        if old_sc < 1.0:
+                            base['sizer.stream_scale.S3'] = round(min(1.0, old_sc + float(pget('self_learning.stream_scale_recovery_step', 0.2))), 4)
                 base['_last_updated'] = datetime.now().isoformat()
                 base['_updated_by'] = 'self_learning'
                 return base

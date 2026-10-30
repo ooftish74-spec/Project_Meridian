@@ -1339,19 +1339,24 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
                     _sm_bl = json.loads(_sm_bl_path.read_text(encoding='utf-8'))
                     _raw_bl = _sm_bl.get('raw_data', {}) if isinstance(_sm_bl, dict) else {}
                     _met_bl = _sm_bl.get('metrics', {}) if isinstance(_sm_bl, dict) else {}
+                    _all_sk_bl = set(list(_raw_bl.keys()) + list(_met_bl.keys()))
+                    _has_s3_subs_bl = any(
+                        str(_sk).startswith('S3_') and float(((_raw_bl.get(_sk) or {}) if isinstance(_raw_bl.get(_sk), dict) else {}).get('market_value') or ((_met_bl.get(_sk) or {}) if isinstance(_met_bl.get(_sk), dict) else {}).get('market_value') or 0.0) > 0
+                        for _sk in _all_sk_bl
+                    )
                     _tot_mv_bl = sum(
                         float((_raw_bl.get(_sk, {}) or {}).get('market_value') or (_met_bl.get(_sk, {}) or {}).get('market_value') or 0.0)
-                        for _sk in set(list(_raw_bl.keys()) + list(_met_bl.keys()))
-                        if _sk != 'S_RECON' and isinstance(_raw_bl.get(_sk, _met_bl.get(_sk)), dict)
+                        for _sk in _all_sk_bl
+                        if _sk != 'S_RECON' and not (_has_s3_subs_bl and _sk == 'S3') and isinstance(_raw_bl.get(_sk, _met_bl.get(_sk)), dict)
                     )
-                    for _sk in sorted(set(list(_raw_bl.keys()) + list(_met_bl.keys()))):
+                    for _sk in sorted(_all_sk_bl):
                         if _sk == 'S_RECON' or not _sk.startswith('S'):
                             continue
                         _r_entry = _raw_bl.get(_sk) if isinstance(_raw_bl.get(_sk), dict) else {}
                         _m_entry = _met_bl.get(_sk) if isinstance(_met_bl.get(_sk), dict) else {}
                         _mv = float(_r_entry.get('market_value') or _m_entry.get('market_value') or 0.0)
                         if _tot_mv_bl > 0 and _mv > 0:
-                            current_weights[_sk] = round(_mv / _tot_mv_bl, 4)
+                            current_weights[_sk] = round(min(1.0, _mv / _tot_mv_bl), 4)
                         _sh = _r_entry.get('sharpe') if _r_entry.get('sharpe') is not None else _m_entry.get('sharpe')
                         if _sh is not None:
                             realized_sharpes[_sk] = float(_sh)

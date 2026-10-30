@@ -197,10 +197,14 @@ class BayesianBlackLittermanMetaUpgrader:
                 try:
                     sm_data = json.loads(sm_path.read_text(encoding='utf-8'))
                     raw_d = sm_data.get('raw_data', {}) if isinstance(sm_data, dict) else {}
+                    has_s3_subs = any(
+                        str(k).startswith('S3_') and isinstance(v, dict) and float(v.get('market_value', 0) or 0) > 0
+                        for k, v in raw_d.items()
+                    )
                     tot_mv = sum(
                         float(v.get('market_value', 0) or 0)
                         for k, v in raw_d.items()
-                        if isinstance(v, dict) and k != 'S_RECON'
+                        if isinstance(v, dict) and k != 'S_RECON' and not (has_s3_subs and k == 'S3')
                     )
                     for sid, s_info in raw_d.items():
                         if not isinstance(s_info, dict) or sid == 'S_RECON':
@@ -208,7 +212,7 @@ class BayesianBlackLittermanMetaUpgrader:
                         mv = float(s_info.get('market_value', 0) or 0)
                         sh = s_info.get('sharpe')
                         if tot_mv > 0 and mv > 0:
-                            weights_or_post[sid] = round(mv / tot_mv, 4)
+                            weights_or_post[sid] = round(min(1.0, mv / tot_mv), 4)
                         if sh is not None:
                             sharpes_or_unc[sid] = float(sh)
                 except Exception as e:

@@ -109,13 +109,14 @@ def safe_json_read(path: Path, default: Any=None, max_age_sec: Optional[int]=Non
             pass
     return default if default is not None else {}
 
-def safe_parquet_write(df: pd.DataFrame, path: Path, backup: bool=False) -> bool:
+def safe_parquet_write(df: pd.DataFrame, path: Path, backup: bool=False, index: Optional[bool]=None) -> bool:
     """원자적 Parquet 파일 쓰기 (DataFrame).
 
     Args:
         df: 저장할 pandas DataFrame
         path: 대상 파일 경로 (.parquet)
         backup: True이면 기존 파일을 .bak으로 보관
+        index: None이면 DatetimeIndex(또는 이름 있는 인덱스)일 때 True, RangeIndex일 때 False 자동 판별
 
     Returns:
         성공 여부
@@ -126,7 +127,11 @@ def safe_parquet_write(df: pd.DataFrame, path: Path, backup: bool=False) -> bool
         fd, tmp_path = tempfile.mkstemp(suffix='.tmp', prefix=f'.{path.name}.', dir=str(path.parent))
         os.close(fd)
         
-        df.to_parquet(tmp_path, index=False)
+        keep_index = index if index is not None else (
+            isinstance(df.index, pd.DatetimeIndex)
+            or (df.index.name is not None and df.index.name not in df.columns)
+        )
+        df.to_parquet(tmp_path, index=keep_index)
         
         with open(tmp_path, 'r+b') as f:
             f.flush()
