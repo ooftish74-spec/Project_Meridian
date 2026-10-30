@@ -903,6 +903,174 @@ def test_unsettled_us_sale_nav_identity_and_s14_surge_inverse_unwind_closed_form
     assert ddg_m["from_initial_dd_pct"] == pytest.approx(expected_dd_4, rel=1e-9)
 
 
+def test_holistic_institutional_fusion_bridgewater_citadel_medallion_closed_form():
+    """Verify the 4-in-1 Holistic Institutional Fusion (Options A, B, C, D) against closed-form mathematical oracles:
+    1) Option A (Bridgewater All-Weather 2D Matrix):
+       - Bilinear probability simplex sum == 1.0.
+       - Closed-form quadrant probabilities & category affinities in Stagflation vs Reflation.
+       - S3CrossAssetSleeve vetoes cyclical copper (CPER) in Stagflation while boosting gold (GLD) & oil (USO).
+    2) Option B (Citadel GQS Kalman Filter Dynamic Beta & Ornstein-Uhlenbeck Half-Life):
+       - Exact OU parameter recovery (phi, kappa, half_life, ou_quality) on deterministic mean-reverting series.
+       - Diverging series (phi >= 0) yields is_stationary=False, half_life=inf, ou_quality=0.0.
+       - 2D Kalman filter converges to true cointegrating slope beta.
+    3) Option C (Renaissance Medallion Cross-Market Lead-Lag & Trend-Orthogonalized OU Reversion):
+       - Exact closed-form match for z_lead_lag, z_ou_reversion, eb_shrinkage, and prob_adj.
+       - Zero-conflict trend orthogonalization: |trend_strength| >= 1.0 forces z_ou_reversion == 0.0.
+       - Exact identity preservation at neutral inputs (prob_adj == 0.0).
+    """
+    import math
+    import numpy as np
+    from src.intelligence.us_market_regime import compute_all_weather_quadrants
+    from src.streams.s3_active_macro.cross_asset_sleeve import S3CrossAssetSleeve
+    from src.intelligence.stat_arb_engine import StatArbEngine
+    from src.streams.s2_ml_alpha.ml_stream import S2MLAlphaStream as MLAlphaStream
+
+    # ── 1. Option A: Bridgewater All-Weather 2D Growth × Inflation Matrix ──
+    aw_stag = compute_all_weather_quadrants(growth_score=-0.8, inflation_score=0.8)
+    p_g_stag = 1.0 / (1.0 + math.exp(-2.0 * (-0.8)))
+    p_i_stag = 1.0 / (1.0 + math.exp(-2.0 * 0.8))
+    q_probs = aw_stag["quadrant_probs"]
+    assert sum(q_probs.values()) == pytest.approx(1.0, abs=1e-3)
+    assert aw_stag["growth_prob"] == pytest.approx(round(p_g_stag, 4), rel=1e-9)
+    assert aw_stag["inflation_prob"] == pytest.approx(round(p_i_stag, 4), rel=1e-9)
+    assert aw_stag["dominant_quadrant"] == "stagflation"
+    # Hand-computed copper vs gold affinity in Stagflation
+    exp_copper_stag = (
+        p_g_stag * (1.0 - p_i_stag) * 1.05
+        + p_g_stag * p_i_stag * 1.35
+        + (1.0 - p_g_stag) * p_i_stag * 0.20
+        + (1.0 - p_g_stag) * (1.0 - p_i_stag) * 0.10
+    )
+    exp_gold_stag = (
+        p_g_stag * (1.0 - p_i_stag) * 0.80
+        + p_g_stag * p_i_stag * 1.15
+        + (1.0 - p_g_stag) * p_i_stag * 1.40
+        + (1.0 - p_g_stag) * (1.0 - p_i_stag) * 1.20
+    )
+    assert aw_stag["category_affinities"]["copper"] == pytest.approx(round(exp_copper_stag, 4), rel=1e-9)
+    assert aw_stag["category_affinities"]["gold"] == pytest.approx(round(exp_gold_stag, 4), rel=1e-9)
+    assert aw_stag["category_affinities"]["copper"] < 0.55
+    assert aw_stag["category_affinities"]["gold"] > 1.25
+
+    # Reflation check (Growth > 0, Inflation > 0): Copper affinity matches exact closed-form (> 1.10)
+    aw_ref = compute_all_weather_quadrants(growth_score=0.8, inflation_score=0.8)
+    p_g_ref = 1.0 / (1.0 + math.exp(-2.0 * 0.8))
+    p_i_ref = 1.0 / (1.0 + math.exp(-2.0 * 0.8))
+    exp_copper_ref = (
+        p_g_ref * (1.0 - p_i_ref) * 1.05
+        + p_g_ref * p_i_ref * 1.35
+        + (1.0 - p_g_ref) * p_i_ref * 0.20
+        + (1.0 - p_g_ref) * (1.0 - p_i_ref) * 0.10
+    )
+    assert aw_ref["dominant_quadrant"] == "reflation"
+    assert aw_ref["category_affinities"]["copper"] == pytest.approx(round(exp_copper_ref, 4), rel=1e-9)
+    assert aw_ref["category_affinities"]["copper"] > 1.10
+
+    # S3CrossAssetSleeve vetoes CPER in Stagflation even when CPER 5d return is +3.0%
+    sleeve = S3CrossAssetSleeve()
+    sigs_stag = sleeve.generate_track_c_signals(
+        "bear",
+        {
+            "spy_return_5d": -0.04,
+            "cper_return_5d": 0.03,
+            "gld_return_5d": 0.03,
+            "uso_return_5d": 0.03,
+            "growth_score": -0.8,
+            "inflation_score": 0.8,
+            "signal_cache": {"geopolitical_oil_supply_z": 1.5, "global_macro_stress_z": 1.5},
+        },
+    )
+    stag_tickers = {s["ticker"] for s in sigs_stag}
+    assert "CPER" not in stag_tickers
+    assert "GLD" in stag_tickers
+    assert all(s.get("all_weather_quadrant") == "stagflation" for s in sigs_stag)
+
+    # ── 2. Option B: Citadel GQS Kalman Filter Dynamic Beta & OU Half-Life ──
+    # Exact geometric AR(1) / discrete OU recursion: s_t = 0.80 * s_{t-1} -> Δs_t = -0.20 * s_{t-1}
+    s_base = np.array([(0.80 ** k) for k in range(40)], dtype=float)
+    ou_res = StatArbEngine.estimate_ou_half_life(s_base)
+    assert ou_res["is_stationary"] is True
+    assert ou_res["phi"] == pytest.approx(-0.20, rel=1e-6)
+    exp_kappa = -math.log(1.0 - 0.20)
+    exp_hl = math.log(2.0) / exp_kappa
+    exp_q = math.exp(-0.5 * ((exp_hl - 10.0) / 25.0) ** 2)
+    assert ou_res["kappa"] == pytest.approx(round(exp_kappa, 6), rel=1e-5)
+    assert ou_res["half_life"] == pytest.approx(round(exp_hl, 4), rel=1e-4)
+    assert ou_res["ou_quality"] == pytest.approx(round(exp_q, 4), rel=1e-4)
+
+    # Diverging spread (phi > 0) -> non-stationary, half_life=inf, ou_quality=0.0
+    s_div = np.array([1.05 ** k for k in range(30)], dtype=float)
+    ou_div = StatArbEngine.estimate_ou_half_life(s_div)
+    assert ou_div["is_stationary"] is False
+    assert math.isinf(ou_div["half_life"])
+    assert ou_div["ou_quality"] == 0.0
+
+    # Kalman filter converges to true cointegrating slope beta = 1.50
+    x_series = np.linspace(10.0, 20.0, 60)
+    y_series = 2.0 + 1.50 * x_series + 0.01 * np.sin(np.arange(60, dtype=float))
+    kf_res = StatArbEngine.estimate_kalman_hedge_ratio(y_series, x_series)
+    assert kf_res["beta"] == pytest.approx(1.50, abs=1e-2)
+    assert len(kf_res["spread"]) == 60
+
+    # ── 3. Option C: Renaissance Medallion Cross-Market Lead-Lag & OU Reversion ──
+    # Neutral identity check
+    neutral_stock = {
+        "ticker": "005930",
+        "daily_vol_20d": 0.02,
+        "features": {
+            "sp500_overnight_return": 0.0,
+            "overnight_return": 0.0,
+            "intraday_return": 0.0,
+            "bb_position": 0.50,
+            "trend_strength": 0.0,
+        },
+    }
+    med_zero = MLAlphaStream.compute_medallion_lead_lag_overlay(neutral_stock, {})
+    assert med_zero["z_lead_lag"] == 0.0
+    assert med_zero["z_ou_reversion"] == 0.0
+    assert med_zero["eb_shrinkage"] == 0.0
+    assert med_zero["prob_adj"] == 0.0
+
+    # Closed-form check with positive US lead-lag + oversold BB in non-trending state
+    active_stock = {
+        "ticker": "271560",
+        "daily_vol_20d": 0.02,  # sigma_d = 2.0%
+        "features": {
+            "sp500_overnight_return": 1.50,
+            "overnight_return": 0.25,
+            "intraday_return": 0.50,
+            "bb_position": 0.20,
+            "trend_strength": 0.25,
+        },
+    }
+    med_act = MLAlphaStream.compute_medallion_lead_lag_overlay(active_stock, {})
+    exp_z_ll = (0.60 * 1.50 - 0.40 * 0.25 + 0.30 * 0.50) / 2.0  # (0.90 - 0.10 + 0.15) / 2.0 = 0.475
+    exp_z_ou = -(2.0 * (0.20 - 0.50)) * (1.0 - 0.25)             # 0.60 * 0.75 = 0.45
+    exp_u = 0.60 * exp_z_ll + 0.40 * exp_z_ou                    # 0.285 + 0.18 = 0.465
+    exp_eb = (exp_u * exp_u) / (exp_u * exp_u + 1.0)
+    exp_adj = 0.04 * exp_eb * math.tanh(exp_u)
+    assert med_act["z_lead_lag"] == pytest.approx(round(exp_z_ll, 4), rel=1e-9)
+    assert med_act["z_ou_reversion"] == pytest.approx(round(exp_z_ou, 4), rel=1e-9)
+    assert med_act["eb_shrinkage"] == pytest.approx(round(exp_eb, 4), rel=1e-9)
+    assert med_act["prob_adj"] == pytest.approx(round(exp_adj, 6), rel=1e-9)
+
+    # Zero-conflict trend orthogonalization: |trend_strength| >= 1.0 forces z_ou_reversion == 0.0
+    trending_stock = {
+        "ticker": "086280",
+        "daily_vol_20d": 0.02,
+        "features": {
+            "sp500_overnight_return": 0.0,
+            "overnight_return": 0.0,
+            "intraday_return": 0.0,
+            "bb_position": 0.95,  # high BB in strong uptrend must NOT trigger mean-reversion short/dampening
+            "trend_strength": 1.20,
+        },
+    }
+    med_trend = MLAlphaStream.compute_medallion_lead_lag_overlay(trending_stock, {})
+    assert med_trend["z_ou_reversion"] == 0.0
+    assert med_trend["prob_adj"] == 0.0
+
+
 
 
 

@@ -175,6 +175,33 @@ class S3CrossAssetSleeve:
             _z_tp_tc = float(sc_tc.get('us_term_premium_z', _mf_tc.get('us_term_premium_z', 0.0)) or 0.0)
             _z_gm_tc = float(sc_tc.get('global_macro_stress_z', _mf_tc.get('global_macro_stress_z', 0.0)) or 0.0)
             _cat_tc = str(meta.get('category', '')).lower()
+
+            # ★ [Bridgewater All-Weather 2D Growth × Inflation Matrix Gate]
+            import math as _math_tc
+            from src.intelligence.us_market_regime import compute_all_weather_quadrants
+            if isinstance(market_data.get('all_weather'), dict) and 'category_affinities' in market_data['all_weather']:
+                _aw_res = market_data['all_weather']
+            else:
+                _g_spy_mult = 15.0
+                _g_reg_shift = -0.35 if regime in ('bear', 'crash') else (0.15 if regime == 'bull' else 0.0)
+                _g_stress_w = 0.35
+                _default_g = spy_return * _g_spy_mult + _g_reg_shift - max(0.0, _z_gm_tc) * _g_stress_w
+                _w_oil_aw = 0.55
+                _w_tp_aw = 0.45
+                _default_i = _w_oil_aw * _math_tc.tanh(_z_oil_tc) + _w_tp_aw * _math_tc.tanh(_z_tp_tc)
+                _aw_g = float(market_data.get('growth_score', _default_g) or 0.0)
+                _aw_i = float(market_data.get('inflation_score', _default_i) or 0.0)
+                _aw_res = compute_all_weather_quadrants(_aw_g, _aw_i)
+            _aw_aff = float(_aw_res.get('category_affinities', {}).get(_cat_tc, 1.0) or 1.0)
+            _aw_quad = str(_aw_res.get('dominant_quadrant', 'goldilocks'))
+            _aw_cyclical_veto = 0.55
+            if _cat_tc == 'copper' and _aw_aff < _aw_cyclical_veto:
+                logger.info(
+                    f"  🛑 [S3 Track C Bridgewater All-Weather Veto] {ticker}: "
+                    f"Quadrant={_aw_quad} (Affinity={_aw_aff:.3f} < {_aw_cyclical_veto:.2f}) — 성장 수축 국면 경기민감 구리 매수 차단"
+                )
+                continue
+
             _cat_macro_z = 0.0
             if _cat_tc == 'oil':
                 _cat_macro_z = _z_oil_tc
@@ -184,11 +211,12 @@ class S3CrossAssetSleeve:
                 _cat_macro_z = max(_z_tp_tc, _z_gm_tc)
             elif _cat_tc == 'treasury':
                 _cat_macro_z = -_z_tp_tc
+            _eff_macro_z = max(0.0, _cat_macro_z) + max(0.0, _aw_aff - 1.0)
             _min_friction_spread = spread_threshold * 0.70  # hardcode-ok: minimum round-trip friction hurdle (35 bps)
-            _eff_spread_thresh = max(_min_friction_spread, spread_threshold / (1.0 + max(0.0, _cat_macro_z)))
+            _eff_spread_thresh = max(_min_friction_spread, spread_threshold / (1.0 + _eff_macro_z))
 
             _caut_min_ret = 0.01
-            _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else (_caut_min_ret / (1.0 + max(0.0, _cat_macro_z)))
+            _ftq_min_ret = 0.0 if regime in ['bear', 'crash'] else (_caut_min_ret / (1.0 + _eff_macro_z))
             _ftq_regime_ok = (
                 (regime in ['bear', 'crash'])
                 if is_inv_hedge
@@ -198,12 +226,11 @@ class S3CrossAssetSleeve:
             is_momentum_outperformance = spread >= _eff_spread_thresh and (asset_ret >= _ftq_min_ret if not is_inv_hedge else asset_ret > 0.0)
 
             if is_flight_to_quality or is_momentum_outperformance:
-                import math as _math_tc
                 _base_conf = min(1.0, min_confidence + abs(spread) * 2.0)
-                confidence = min(1.0, _base_conf + (1.0 - _base_conf) * _math_tc.tanh(max(0.0, _cat_macro_z) / 2.0))
+                confidence = min(1.0, _base_conf + (1.0 - _base_conf) * _math_tc.tanh(_eff_macro_z / 2.0))
                 reason = (
                     f"🛡️ [Alpha 4: Track C Cross-Asset] {meta['name']} ({ticker}) 롱 진입 | "
-                    f"Ret5d={asset_ret:+.2%} vs SPY={spy_return:+.2%} (Spread={spread:+.2%}, Regime={regime})"
+                    f"Ret5d={asset_ret:+.2%} vs SPY={spy_return:+.2%} (Spread={spread:+.2%}, Regime={regime}, AW={_aw_quad}:{_aw_aff:.2f})"
                 )
                 logger.info(f"  {reason}")
 
@@ -227,6 +254,8 @@ class S3CrossAssetSleeve:
                     'expected_return_pct': round(_tp_pct, 2),
                     'strategy': 's3_cross_asset_momentum',
                     'category': meta['category'],
+                    'all_weather_quadrant': _aw_quad,
+                    'all_weather_affinity': round(_aw_aff, 4),
                     'market': 'US',
                     'tax_drag_pct': 0.00, # 통합증거금 가상환전 0원
                     'reason': reason

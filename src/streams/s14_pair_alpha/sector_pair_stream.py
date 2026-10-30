@@ -78,6 +78,63 @@ class S14SectorPairStream(BaseStream):
             logger.debug(f"[_extract_returns_and_volatility] {ticker} 계산 예외: {e}")
         return 0.0, 0.0
 
+    def _compute_citadel_pair_metrics(self, ticker_y: str, ticker_x: str, market: str = 'US', window: int = 60) -> Dict[str, Any]:
+        """Citadel GQS Kalman Filter Dynamic Beta (β_t) & Ornstein-Uhlenbeck Half-Life (τ_{1/2}) estimation."""
+        _default_hl = 10.0
+        _default_res = {
+            'kalman_beta': 1.0,
+            'ou_half_life': _default_hl,
+            'ou_quality': 1.0,
+            'is_stationary': True,
+        }
+        if not ticker_y or not ticker_x:
+            return _default_res
+        try:
+            def _load_closes(tk: str) -> Optional[np.ndarray]:
+                if market.upper() == 'US':
+                    p = _PROJECT_ROOT / f"data/us_stocks/prices/{tk}.parquet"
+                else:
+                    p = _PROJECT_ROOT / f"data/kr_markets/kr_{tk}.parquet"
+                    if not p.exists():
+                        p = _PROJECT_ROOT / f"data/kr_markets/{tk}.parquet"
+                if not p.exists():
+                    return None
+                df = pd.read_parquet(p)
+                c_col = 'close' if 'close' in df.columns else ('Close' if 'Close' in df.columns else None)
+                if df.empty or not c_col:
+                    return None
+                vals = pd.to_numeric(df[c_col], errors='coerce').dropna().values
+                return vals[-window:] if len(vals) >= window else vals
+
+            cy = _load_closes(str(ticker_y))
+            cx = _load_closes(str(ticker_x))
+            _min_bars = 15
+            if cy is None or cx is None:
+                return _default_res
+            n = min(len(cy), len(cx))
+            if n < _min_bars:
+                return _default_res
+            cy_n = np.asarray(cy[-n:], dtype=float)
+            cx_n = np.asarray(cx[-n:], dtype=float)
+            if np.any(cy_n <= 0.0) or np.any(cx_n <= 0.0):
+                return _default_res
+            log_y = np.log(cy_n)
+            log_x = np.log(cx_n)
+            kf = self.stat_arb_engine.estimate_kalman_hedge_ratio(log_y, log_x)
+            ou = self.stat_arb_engine.estimate_ou_half_life(kf['spread'])
+            _beta_min = 0.25
+            _beta_max = 2.50
+            k_beta = max(_beta_min, min(_beta_max, abs(float(kf['beta']))))
+            return {
+                'kalman_beta': round(k_beta, 4),
+                'ou_half_life': float(ou['half_life']),
+                'ou_quality': float(ou['ou_quality']),
+                'is_stationary': bool(ou['is_stationary']),
+            }
+        except Exception as e:
+            logger.debug(f"[_compute_citadel_pair_metrics] {ticker_y}-{ticker_x} 예외: {e}")
+            return _default_res
+
     def compute_market_ker(self, market_or_prices: Any = 'US') -> float:
         """시장 대표 지수 또는 가격 시계열의 Kaufman Efficiency Ratio (KER) 산출."""
         if isinstance(market_or_prices, (list, np.ndarray, pd.Series)):
@@ -230,6 +287,7 @@ class S14SectorPairStream(BaseStream):
                         _parity_scale = round(_inv_l / max(_inv_l, _inv_p), 4)
                     else:
                         _parity_scale = float(order.get('pair_vol_parity_scale', 1.0) or 1.0)
+                    _cit_us = self._compute_citadel_pair_metrics(ticker_to_trade, _partner_tk, market='US')
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_us, 4)
                     try:
                         _bar_us = _dqe_s14.compute_dynamic_exit_barriers(ticker_to_trade)
@@ -244,6 +302,9 @@ class S14SectorPairStream(BaseStream):
                         'pair_id': _matched_pid,
                         'pair_partner': _partner_tk,
                         'pair_vol_parity_scale': _parity_scale,
+                        'kalman_beta': _cit_us['kalman_beta'],
+                        'ou_half_life': _cit_us['ou_half_life'],
+                        'citadel_ou_quality': _cit_us['ou_quality'],
                         'name': f"US Pair {order['sector'].upper()} ({leg_label})",
                         'direction': direction_to_trade,
                         'action': action_to_trade,
@@ -326,6 +387,7 @@ class S14SectorPairStream(BaseStream):
                         _parity_scale_kr = round(_inv_l_kr / max(_inv_l_kr, _inv_p_kr), 4)
                     else:
                         _parity_scale_kr = float(order.get('pair_vol_parity_scale', 1.0) or 1.0)
+                    _cit_kr = self._compute_citadel_pair_metrics(str(trade_ticker), str(partner_tk), market='KR')
                     dynamic_size = round(order.get('target_weight', 0.10) * noise_kr, 4)
                     try:
                         _bar_kr = _dqe_kr.compute_dynamic_exit_barriers(trade_ticker)
@@ -340,6 +402,9 @@ class S14SectorPairStream(BaseStream):
                         'pair_id': order.get('pair_id', ''),
                         'pair_partner': partner_tk,
                         'pair_vol_parity_scale': _parity_scale_kr,
+                        'kalman_beta': _cit_kr['kalman_beta'],
+                        'ou_half_life': _cit_kr['ou_half_life'],
+                        'citadel_ou_quality': _cit_kr['ou_quality'],
                         'name': f"KR Pair {order['sector'].upper()} ({leg_label})",
                         'direction': trade_dir,
                         'action': 'buy',

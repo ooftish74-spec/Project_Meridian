@@ -1243,8 +1243,12 @@ class S2MLAlphaStream(BaseStream):
                 meta_confidence = max(0.1, min(1.0, meta_confidence))
                 _prior_half = 0.5
                 up_prob = _prior_half + meta_confidence * (up_prob - _prior_half)
+                _med_res = self.compute_medallion_lead_lag_overlay(stock, market_data)
+                up_prob = max(0.0, min(1.0, up_prob + _med_res['prob_adj']))
                 ev = self._dynamic_ev(stock, up_prob)
                 stock['meta_confidence'] = round(meta_confidence, 4)
+                stock['medallion_ll_adj'] = round(_med_res['prob_adj'], 4)
+                stock['medallion_eb_shrinkage'] = _med_res['eb_shrinkage']
                 stock['up_prob'] = round(up_prob, 4)
                 stock['expected_value'] = round(ev, 4)
                 stock['conformal_lower'] = conf_lower
@@ -1260,6 +1264,49 @@ class S2MLAlphaStream(BaseStream):
         fb_count = len(scored) - ml_count
         logger.info(f'  S2: ML={ml_count}건, Fallback={fb_count}건, 총 {len(scored)}건')
         return scored
+
+    @staticmethod
+    def compute_medallion_lead_lag_overlay(stock: Dict, market_data: Optional[Dict] = None) -> Dict[str, float]:
+        """Renaissance Medallion Cross-Market Lead-Lag Residual & Trend-Orthogonalized OU Reversion with EB Shrinkage."""
+        features = stock.get('features', {}) if isinstance(stock.get('features'), dict) else {}
+        md = market_data if isinstance(market_data, dict) else {}
+        us_ret_pct = float(features.get('sp500_overnight_return', md.get('sp500_return', 0.0)) or 0.0)
+        gap_ret_pct = float(features.get('overnight_return', 0.0) or 0.0)
+        intra_ret_pct = float(features.get('intraday_return', 0.0) or 0.0)
+
+        _vol_floor = 0.50
+        _def_atr = 1.50
+        dvol_raw = float(stock.get('daily_vol_20d', 0.0) or 0.0) * 100.0
+        atr_raw = float(features.get('atr_pct', 0.0) or 0.0)
+        base_vol = dvol_raw if dvol_raw > 0.0 else (atr_raw if atr_raw > 0.0 else _def_atr)
+        sigma_d = max(_vol_floor, base_vol)
+
+        _beta_ll = 0.60
+        _gamma_gap = 0.40
+        _gamma_intra = 0.30
+        z_ll = (_beta_ll * us_ret_pct - _gamma_gap * gap_ret_pct + _gamma_intra * intra_ret_pct) / sigma_d
+
+        _half_bb = 0.50
+        bb_pos = float(features['bb_position']) if features.get('bb_position') is not None else _half_bb
+        z_bb = 2.0 * (bb_pos - _half_bb)
+        trend_str = float(features.get('trend_strength', 0.0) or 0.0)
+        trend_damp = 1.0 - min(1.0, abs(trend_str))
+        z_ou = -z_bb * trend_damp
+
+        _w_ll = 0.60
+        _w_ou = 0.40
+        u_comp = _w_ll * z_ll + _w_ou * z_ou
+        u_sq = u_comp * u_comp
+        eb_lambda = u_sq / (u_sq + 1.0)
+        _delta_max = 0.04
+        prob_adj = _delta_max * eb_lambda * math.tanh(u_comp)
+
+        return {
+            'z_lead_lag': round(z_ll, 4),
+            'z_ou_reversion': round(z_ou, 4),
+            'eb_shrinkage': round(eb_lambda, 4),
+            'prob_adj': round(prob_adj, 6),
+        }
 
     def _filter_ensemble_disagreement(self, scored: List[Dict]) -> List[Dict]:
         """앙상블 모델 간 불일치가 큰 종목 제거.

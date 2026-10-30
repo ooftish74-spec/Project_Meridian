@@ -59,6 +59,53 @@ def vix_tier(vix: float) -> str:
         return 'high'
     return 'extreme'
 
+
+_AW_CATEGORY_VECTORS: Dict[str, Tuple[float, float, float, float]] = {
+    # (goldilocks, reflation, stagflation, deflation)
+    'copper': (1.05, 1.35, 0.20, 0.10),
+    'oil': (0.85, 1.30, 1.15, 0.45),
+    'gold': (0.80, 1.15, 1.40, 1.20),
+    'treasury': (0.90, 0.55, 0.65, 1.40),
+    'dollar': (0.80, 0.90, 1.25, 1.30),
+    'inverse_hedge': (0.20, 0.40, 1.30, 1.40),
+}
+_AW_QUADRANTS: Tuple[str, str, str, str] = ('goldilocks', 'reflation', 'stagflation', 'deflation')
+
+
+def compute_all_weather_quadrants(growth_score: float, inflation_score: float) -> Dict:
+    """Bridgewater All-Weather 2D (ΔGrowth × ΔInflation) 4-Quadrant Probability Simplex & Asset Affinities."""
+    g_clamped = max(-1.0, min(1.0, float(growth_score)))
+    i_clamped = max(-1.0, min(1.0, float(inflation_score)))
+    p_g = 1.0 / (1.0 + math.exp(-2.0 * g_clamped))
+    p_i = 1.0 / (1.0 + math.exp(-2.0 * i_clamped))
+
+    probs = {
+        'goldilocks': p_g * (1.0 - p_i),
+        'reflation': p_g * p_i,
+        'stagflation': (1.0 - p_g) * p_i,
+        'deflation': (1.0 - p_g) * (1.0 - p_i),
+    }
+    dominant_q = max(_AW_QUADRANTS, key=lambda q: probs[q])
+    affinities: Dict[str, float] = {}
+    for cat, vec in _AW_CATEGORY_VECTORS.items():
+        aff = (
+            probs['goldilocks'] * vec[0]
+            + probs['reflation'] * vec[1]
+            + probs['stagflation'] * vec[2]
+            + probs['deflation'] * vec[3]
+        )
+        affinities[cat] = round(float(aff), 4)
+
+    return {
+        'growth_score': round(g_clamped, 4),
+        'inflation_score': round(i_clamped, 4),
+        'growth_prob': round(p_g, 4),
+        'inflation_prob': round(p_i, 4),
+        'quadrant_probs': {q: round(float(probs[q]), 4) for q in _AW_QUADRANTS},
+        'dominant_quadrant': dominant_q,
+        'category_affinities': affinities,
+    }
+
 class USMarketRegimeEngine:
     """
     S&P500 / 나스닥 전용 레짐 감지 엔진.
@@ -442,7 +489,35 @@ class USMarketRegimeEngine:
         confidence = min(0.95, base_conf + score_bonus)
         tier = vix_tier(vix_val)
         regime_kr_compat = 'caution' if regime == 'neutral' else regime
-        result = {'date': date.today().isoformat(), 'regime': regime, 'regime_kr_compat': regime_kr_compat, 'confidence': round(confidence, 3), 'tier': tier, 'score': round(total_score, 4), 'vix': vix_val, 'components': components, 'generated_at': datetime.now().isoformat()}
+        _f7_avail = f7_det.get('detail') != 'unavailable' and f7_det.get('source') != 'unavailable'
+        _f6_avail = f6_det.get('detail') != 'unavailable' and f6_det.get('source') != 'unavailable'
+        _w_f1_g = 0.65
+        _w_f7_g = 0.35
+        _growth_score = (f1_score * _w_f1_g + f7_score * _w_f7_g) if _f7_avail else f1_score
+        _mf_oi = self.oi.get('macro_features') if isinstance(self.oi.get('macro_features'), dict) else {}
+        _z_oil = float(self.oi.get('geopolitical_oil_supply_z', _mf_oi.get('geopolitical_oil_supply_z', 0.0)) or 0.0)
+        _z_tp = float(self.oi.get('us_term_premium_z', _mf_oi.get('us_term_premium_z', 0.0)) or 0.0)
+        _w_oil_i = 0.45
+        _w_tp_i = 0.35
+        _w_move_i = 0.20
+        _inflation_score = (
+            _w_oil_i * math.tanh(_z_oil)
+            + _w_tp_i * math.tanh(_z_tp)
+            - (_w_move_i * f6_score if _f6_avail else 0.0)
+        )
+        _all_weather = compute_all_weather_quadrants(_growth_score, _inflation_score)
+        result = {
+            'date': date.today().isoformat(),
+            'regime': regime,
+            'regime_kr_compat': regime_kr_compat,
+            'confidence': round(confidence, 3),
+            'tier': tier,
+            'score': round(total_score, 4),
+            'vix': vix_val,
+            'all_weather': _all_weather,
+            'components': components,
+            'generated_at': datetime.now().isoformat(),
+        }
         atomic_write_json(OUT_FILE, result, ensure_ascii=False, indent=2)
         logger.info(f"  🌐 US Regime: {regime.upper()} (conf={confidence:.0%}, score={total_score:+.3f}, VIX={vix_val:.1f}/{tier})")
         return result
