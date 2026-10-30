@@ -26,14 +26,30 @@ def test_categorize_asset():
 
 
 def test_get_dividend_schedule():
-    sched_xlk = get_dividend_schedule("XLK", "USD", "Technology Select Sector SPDR Fund", 189.60)
-    assert len(sched_xlk) == 2
-    assert sched_xlk[0]["ex_date"] == "2026-09-21"
+    # Non-distributing inverse ETP returns empty list (zero fabricated 1.5% fallback)
+    assert get_dividend_schedule("114800", "KRW", "KODEX 인버스", 1177) == []
 
-    sched_kodex = get_dividend_schedule("069500", "KRW", "KODEX 200", 35000)
-    assert len(sched_kodex) == 2
-    assert sched_kodex[0]["status"] == "실제 수령"
-    assert sched_kodex[1]["status"] == "지급 예정"
+    # Verified statutory KSD & US schedules
+    sched_kia = get_dividend_schedule("KRX:000270", "KRW", "기아", 105600)
+    assert len(sched_kia) == 1
+    assert sched_kia[0]["dps"] == pytest.approx(6800.0, rel=1e-9)
+
+    sched_aapl = get_dividend_schedule("AAPL", "USD", "애플", 345.24)
+    assert len(sched_aapl) == 4
+    assert sched_aapl[0]["ex_date"] == "2026-11-09"
+    assert sched_aapl[0]["dps"] == pytest.approx(0.27, rel=1e-9)
+
+    # Historical account entitlement extraction from KIS ledger rows
+    ledger_rows = [
+        {"거래일자": "2026-08-25", "거래구분": "매수(BUY)", "종목코드": "NVDA", "체결수량": "8"},
+        {"거래일자": "2026-10-15", "거래구분": "매도(SELL)", "종목코드": "NVDA", "체결수량": "8"},
+        {"거래일자": "2026-10-27", "거래구분": "매수(BUY)", "종목코드": "069500", "체결수량": "2"},
+        {"거래일자": "2026-10-29", "거래구분": "매도(SELL)", "종목코드": "069500", "체결수량": "2"},
+    ]
+    ent = report_mod.extract_account_dividend_entitlements(ledger_rows, "2026-10-30")
+    assert len(ent) == 2
+    assert ent[0]["ticker"] == "NVDA" and ent[0]["status"] == "실제 수령" and ent[0]["hist_qty"] == 8
+    assert ent[1]["ticker"] == "KRX:069500" and ent[1]["status"] == "지급 예정" and ent[1]["hist_qty"] == 2 and ent[1]["locked_qty"] is True
 
 
 def test_load_recent_closed_trades(tmp_path, monkeypatch):
