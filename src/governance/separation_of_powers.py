@@ -88,6 +88,10 @@ _QUARTILE_PCT = 25.0
 _IMAP_PORT = 993
 _IMAP_RECENT_LIMIT = 30
 _MAX_REPLY_LINE_LEN = 120
+_PROB_MIN = 0.01
+_PROB_MAX = 0.99
+_MAX_PRIOR_SHIFT = 0.20
+_DAEMON_POLL_COOLDOWN_SEC = 45.0
 
 
 class DataLibrarian:
@@ -1664,6 +1668,56 @@ class CIODocketEmailService:
         except Exception as e:
             return {'checked': False, 'decisions_applied': [], 'reason': str(e)}
 
+    _last_daemon_poll_ts: float = 0.0
+
+    @classmethod
+    def maybe_poll_gmail_in_daemon(cls, results_dir: Optional[Any] = None) -> None:
+        """실시간 트레이딩 데몬 루프 내에서 45초 주기로 미결재 안건 존재 시에만 Gmail 답장 폴링 실행."""
+        import time as _t_mod
+        now_ts = _t_mod.time()
+        if now_ts - cls._last_daemon_poll_ts < _DAEMON_POLL_COOLDOWN_SEC:
+            return
+        cls._last_daemon_poll_ts = now_ts
+        try:
+            cls.poll_gmail_for_cio_replies(results_dir=results_dir)
+        except Exception:
+            pass
+
+    @staticmethod
+    def apply_prior_shift_calibration_to_scored(
+        scored: List[Dict[str, Any]],
+        results_dir: Optional[Any] = None,
+    ) -> List[Dict[str, Any]]:
+        """CIO 결재 승인('APPROVE_PILOT') 시 S2 ML 출력 확률에 레짐 기저율 영점 보정(Prior-Shift Calibration, 0.5x PILOT) 적용."""
+        if not scored:
+            return scored
+        try:
+            res_path = Path(results_dir) if results_dir is not None else (Path(__file__).resolve().parent.parent.parent / 'results')
+            ov_file = res_path / 'dynamic_overrides.json'
+            wf_file = res_path / 'walk_forward_daily.json'
+            if not ov_file.exists() or not wf_file.exists():
+                return scored
+            ov = json.loads(ov_file.read_text(encoding='utf-8'))
+            params = (ov.get('parameters') if isinstance(ov, dict) else None) or {}
+            if not params.get('ml.enable_prior_shift_calibration'):
+                return scored
+            scale = float(params.get('ml.prior_shift_pilot_scale') or _PILOT_MULT)
+            wf_raw = json.loads(wf_file.read_text(encoding='utf-8'))
+            wf_latest = wf_raw[-1] if isinstance(wf_raw, list) and wf_raw and isinstance(wf_raw[-1], dict) else (wf_raw if isinstance(wf_raw, dict) else {})
+            bias = float(wf_latest.get('prob_calibration_bias') or 0.0)
+            shift = max(-_MAX_PRIOR_SHIFT, min(_MAX_PRIOR_SHIFT, scale * bias))
+            if abs(shift) <= _EPS:
+                return scored
+            for item in scored:
+                if isinstance(item, dict) and 'up_prob' in item:
+                    raw_p = float(item['up_prob'])
+                    item['up_prob_uncalibrated'] = raw_p
+                    item['up_prob'] = round(max(_PROB_MIN, min(_PROB_MAX, raw_p - shift)), 4)
+                    item['prior_shift_applied'] = round(-shift, 4)
+        except Exception:
+            pass
+        return scored
+
 
 def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[str, Any]:
     """Evening Phase 자동 배선용 삼권분립(전 부서 + 독립기관 + CIO 결재 상정안) 일일 통합 감사 실행기."""
@@ -1788,6 +1842,18 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
         execution_report=exec_report,
         gravekeeper_report=gravekeeper_summary,
     )
+    decisions_file = res_path / 'cio_docket_decisions.json'
+    decisions_data = _safe_load(decisions_file)
+    dockets_hist = (decisions_data.get('dockets') if isinstance(decisions_data, dict) else None) or {}
+    for it in (cio_docket.get('docket_items') or []):
+        if isinstance(it, dict):
+            did = str(it.get('docket_id') or '')
+            if did in dockets_hist and isinstance(dockets_hist[did], dict):
+                st = dockets_hist[did].get('status')
+                if st:
+                    it['cio_decision_status'] = st
+                if dockets_hist[did].get('decided_at'):
+                    it['cio_decided_at'] = dockets_hist[did]['decided_at']
     docket_md = CIODocketBuilder.format_docket_markdown(cio_docket)
     email_md = CIODocketBuilder.format_docket_email_markdown(cio_docket)
     cio_docket['formatted_text'] = docket_md

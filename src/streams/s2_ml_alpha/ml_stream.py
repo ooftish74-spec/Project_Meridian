@@ -348,6 +348,11 @@ class S2MLAlphaStream(BaseStream):
             log_error_rate_limited(__name__, f"🚨 [Silent Bypass 감지] 치명적 예외 발생: {e}", exc_info=True)
             logger.debug(f'  S2: IC 모니터링 실패 (무시): {e}')
         scored = self._filter_ensemble_disagreement(scored)
+        try:
+            from src.governance.separation_of_powers import CIODocketEmailService
+            scored = CIODocketEmailService.apply_prior_shift_calibration_to_scored(scored)
+        except Exception:
+            pass
         signal_cache_ref = market_data.get('signal_cache', {})
         _p11_vix = signal_cache_ref.get('vix', pget('s2.vix_fallback_default', 18.0))
         _p11_vkospi = signal_cache_ref.get('vkospi', _p11_vix)

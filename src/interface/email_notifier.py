@@ -91,6 +91,69 @@ class MeridianEmail:
             logger.error(f'이메일 전송 실패: {e}')
             return False
 
+    @staticmethod
+    def _simple_markdown_to_html(md_text: str) -> str:
+        """markdown 패키지 미설치 환경(EC2 venv 등)을 위한 내장 Markdown -> HTML 변환기."""
+        import html as _html
+        import re as _re
+
+        def _inline(t: str) -> str:
+            s = _html.escape(t)
+            s = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
+            s = _re.sub(r'`([^`]+)`', r'<code>\1</code>', s)
+            return s
+
+        out: list[str] = []
+        in_list = False
+        for raw in md_text.splitlines():
+            line = raw.strip()
+            if line.startswith('<!--') and line.endswith('-->'):
+                out.append(line)
+                continue
+            if not line:
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                continue
+            if line.startswith('### '):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append(f"<h3>{_inline(line[4:])}</h3>")
+            elif line.startswith('## '):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append(f"<h2>{_inline(line[3:])}</h2>")
+            elif line.startswith('# '):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append(f"<h1>{_inline(line[2:])}</h1>")
+            elif line.startswith('---'):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append('<hr/>')
+            elif line.startswith('> '):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append(f"<blockquote>{_inline(line[2:])}</blockquote>")
+            elif line.startswith('- '):
+                if not in_list:
+                    out.append('<ul>')
+                    in_list = True
+                out.append(f"<li>{_inline(line[2:])}</li>")
+            else:
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                out.append(f"<p>{_inline(line)}</p>")
+        if in_list:
+            out.append('</ul>')
+        return '\n'.join(out)
+
     def send_html_report(self, markdown_content: str, subject: str='Project Meridian Daily Report', extra_headers: dict | None=None):
         """Markdown을 HTML로 변환하여 이메일 본문으로 전송합니다."""
         if not self.enabled:
@@ -99,9 +162,8 @@ class MeridianEmail:
         try:
             import markdown
             html_body = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])
-        except ImportError as e:
-            logger.error('markdown 패키지가 설치되지 않았습니다. pip install Markdown', exc_info=True)
-            return False
+        except ImportError:
+            html_body = self._simple_markdown_to_html(markdown_content)
         html_content = f'\n        <html>\n        <head>\n        <style>\n            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; color: #1f2937; padding: 24px; max-width: 860px; margin: 0 auto; }}\n            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 14px; }}\n            th, td {{ padding: 10px 14px; border: 1px solid #d1d5db; text-align: left; vertical-align: top; }}\n            th {{ background-color: #f3f4f6; font-weight: bold; color: #111827; }}\n            h1 {{ color: #111827; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }}\n            h2 {{ color: #1e3a8a; margin-top: 28px; }}\n            h3 {{ color: #1f2937; margin-top: 20px; }}\n            blockquote {{ background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 16px; margin: 16px 0; color: #1e40af; }}\n            code {{ background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}\n            hr {{ border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0; }}\n        </style>\n        </head>\n        <body>\n        {html_body}\n        </body>\n        </html>\n        '
         msg = MIMEMultipart('alternative')
         msg['From'] = self.sender_email

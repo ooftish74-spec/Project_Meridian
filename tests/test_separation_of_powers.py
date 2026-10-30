@@ -302,3 +302,20 @@ def test_cio_docket_email_markdown_and_reply_execution(tmp_path):
     assert ov["parameters"]["ml.enable_prior_shift_calibration"] is True
     assert ov["parameters"]["ml.prior_shift_pilot_scale"] == pytest.approx(0.50, rel=1e-9)
 
+    # 4. Verify Prior-Shift Calibration applies exact 0.5x shift (0.65 - 0.50 * 0.2088 = 0.5456)
+    (tmp_path / "walk_forward_daily.json").write_text(
+        json.dumps([{"date": "2026-10-30", "prob_calibration_bias": 0.2088}]),
+        encoding="utf-8",
+    )
+    scored = [{"ticker": "005930", "up_prob": 0.65}]
+    scored_cal = CIODocketEmailService.apply_prior_shift_calibration_to_scored(scored, results_dir=tmp_path)
+    assert scored_cal[0]["up_prob_uncalibrated"] == pytest.approx(0.65, rel=1e-9)
+    assert scored_cal[0]["up_prob"] == pytest.approx(0.5456, rel=1e-9)
+    assert scored_cal[0]["prior_shift_applied"] == pytest.approx(-0.1044, rel=1e-9)
+
+    from src.interface.email_notifier import MeridianEmail
+    html_fallback = MeridianEmail._simple_markdown_to_html("# 제목\n> **승인** `코드`")
+    assert "<h1>제목</h1>" in html_fallback
+    assert "<blockquote><strong>승인</strong> <code>코드</code></blockquote>" in html_fallback
+
+

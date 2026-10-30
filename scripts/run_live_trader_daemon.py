@@ -170,6 +170,11 @@ def main():
 
             # Record heartbeat and check connection mode
             main._health_guard.record_heartbeat()
+            try:
+                from src.governance.separation_of_powers import CIODocketEmailService
+                CIODocketEmailService.maybe_poll_gmail_in_daemon(results_dir)
+            except Exception:
+                pass
 
             if not hasattr(main, '_daily_executed'):
                 main._daily_executed = set()
