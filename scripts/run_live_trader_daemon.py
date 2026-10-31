@@ -140,7 +140,7 @@ def main():
             t_mins = now.hour * 60 + now.minute
 
             # 주말(토=5, 일=6) 및 KRX/US 영업일 판별
-            from src.utils.market_calendar import get_us_market_open_time, is_kr_ticker
+            from src.utils.market_calendar import get_us_market_open_time, is_kr_ticker, is_us_trading_day
             is_kr_trading = cal.is_trading_day(today_str)
             is_kr_session = is_kr_trading and ((now.hour == 8 and now.minute >= 30) or (9 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30))
 
@@ -149,7 +149,7 @@ def main():
             _us_close_h_chk = 5 if _us_open_h_chk == 22 else 6
             is_us_evening = (now.weekday() in (0, 1, 2, 3, 4)) and (now.hour >= 18)
             is_us_morning = (now.weekday() in (1, 2, 3, 4, 5)) and (now.hour < _us_close_h_chk)
-            is_us_session = is_us_evening or is_us_morning
+            is_us_session = (is_us_evening or is_us_morning) and is_us_trading_day()
 
             from scripts.daily_pipeline import run_pipeline
             from src.regime.online_bayesian_filter import OnlineBayesianParticleFilter

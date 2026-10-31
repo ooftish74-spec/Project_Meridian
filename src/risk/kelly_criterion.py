@@ -160,8 +160,8 @@ class KellyCriterion:
         if self._signal_cache is None:
             self._load_data()
         if self._signal_cache:
-            vix_data = self._signal_cache.get('VIX', {})
-            current_vix = float(vix_data.get('close', 0.0)) if isinstance(vix_data, dict) else float(vix_data or 0.0)
+            vix_data = self._signal_cache.get('VIX') if 'VIX' in self._signal_cache else self._signal_cache.get('vix', {})
+            current_vix = float(vix_data.get('close', vix_data.get('value', 0.0)) or 0.0) if isinstance(vix_data, dict) else float(vix_data or 0.0)
             if current_vix > 0.0:
                 excess_vix = max(0.0, current_vix - _KELLY_VIX_REF)
                 bayesian_penalty = max(_KELLY_MIN_PENALTY, math.exp(-excess_vix / _KELLY_VIX_TAU))
@@ -216,7 +216,7 @@ class KellyCriterion:
             'fraction': fraction,
         }
 
-    def calculate_all(self, regime: str='caution') -> Dict:
+    def calculate_all(self, regime: str='caution', current_dd_pct: Optional[float]=None) -> Dict:
         """모든 스트림의 Kelly 비율 일괄 계산.
 
         Returns:
@@ -234,7 +234,7 @@ class KellyCriterion:
         total_weight = 0
         weighted_kelly = 0
         for stream_id in self.STREAMS:
-            result = self.calculate_stream_kelly(stream_id, regime)
+            result = self.calculate_stream_kelly(stream_id, regime, current_dd_pct=current_dd_pct)
             results[stream_id] = result
             if result['sufficient_data'] and result['max_position_pct'] > 0:
                 w = min(result['n_trades'], 100) / 100
@@ -245,7 +245,7 @@ class KellyCriterion:
         self._save_results(output)
         return output
 
-    def get_position_size(self, stream_id: str, capital: float, regime: str='caution') -> float:
+    def get_position_size(self, stream_id: str, capital: float, regime: str='caution', current_dd_pct: Optional[float]=None) -> float:
         """특정 스트림의 최적 포지션 금액 반환.
 
         Args:
@@ -256,7 +256,7 @@ class KellyCriterion:
         Returns:
             최적 포지션 금액 (원)
         """
-        result = self.calculate_stream_kelly(stream_id, regime)
+        result = self.calculate_stream_kelly(stream_id, regime, current_dd_pct=current_dd_pct)
         return capital * result['max_position_pct']
 
     def _load_data(self):
@@ -287,29 +287,34 @@ class KellyCriterion:
         stats = {'win_rate': 0, 'avg_win': 0, 'avg_loss': 0, 'n_trades': 0}
         if self._stream_metrics:
             metrics = self._stream_metrics.get('metrics', {})
-            stream_data = (
+            raw_s = (self._stream_metrics.get('raw_data') or {}).get(stream_id, {}) or {}
+            perf_s = (
                 metrics.get('stream_performance', {}).get(stream_id, {})
                 or metrics.get('stream_summary', {}).get(stream_id, {})
                 or self._stream_metrics.get('stream_performance', {}).get(stream_id, {})
                 or self._stream_metrics.get('stream_summary', {}).get(stream_id, {})
-                or (self._stream_metrics.get('raw_data') or {}).get(stream_id, {})
+                or {}
             )
+            stream_data = {**raw_s, **perf_s} if (raw_s or perf_s) else {}
             if stream_data:
                 raw_wr = float(stream_data.get('win_rate', 0) or 0)
                 stats['win_rate'] = raw_wr / 100.0 if raw_wr > 1.0 else raw_wr
                 stats['n_trades'] = int(
                     stream_data.get('total_trades')
+                    or stream_data.get('trade_count')
                     or (int(stream_data.get('n_buys', 0) or 0) + int(stream_data.get('n_sells', 0) or 0))
                     or stream_data.get('n_days', 0)
                     or 0
                 )
-                avg_win_pct = stream_data.get('avg_win_pct', 0)
-                avg_loss_pct = stream_data.get('avg_loss_pct', 0)
+                avg_win_pct = stream_data.get('avg_win_pct', stream_data.get('avg_win', 0))
+                avg_loss_pct = stream_data.get('avg_loss_pct', stream_data.get('avg_loss', 0))
                 if avg_win_pct:
                     stats['avg_win'] = abs(avg_win_pct) / 100.0
                 if avg_loss_pct:
                     stats['avg_loss'] = abs(avg_loss_pct) / 100.0
                 d_rets = stream_data.get('daily_returns')
+                if isinstance(d_rets, list):
+                    stats['daily_returns'] = list(d_rets)
                 if isinstance(d_rets, list) and d_rets and (stats['avg_win'] == 0 or stats['avg_loss'] == 0):
                     pos_r = [float(r) for r in d_rets if float(r or 0.0) > 0.0]
                     neg_r = [abs(float(r)) for r in d_rets if float(r or 0.0) < 0.0]
@@ -320,18 +325,20 @@ class KellyCriterion:
                     if stats['avg_loss'] == 0 and neg_r:
                         stats['avg_loss'] = sum(neg_r) / len(neg_r)
         if self._measurement_data:
-            quant = self._measurement_data.get('quant_metrics') or self._measurement_data.get('official') or {}
-            if stats['n_trades'] == 0:
+            per_stream_map = ((self._measurement_data.get('official') or {}).get('per_stream') or {})
+            sleeves_map = ((self._measurement_data.get('views') or {}).get('sleeves') or {})
+            quant = per_stream_map.get(stream_id) or sleeves_map.get(stream_id) or {}
+            if stats['n_trades'] == 0 and quant:
                 raw_wr = float(quant.get('win_rate', quant.get('realized_win_rate', 0)) or 0)
                 stats['win_rate'] = raw_wr / 100.0 if raw_wr > 1.0 else raw_wr
                 stats['n_trades'] = int(quant.get('total_trades', quant.get('realized_trades', 0)) or 0)
-            if stats['avg_win'] == 0:
-                avg_w = quant.get('avg_win_pct', 0)
-                avg_l = quant.get('avg_loss_pct', 0)
+            if stats['avg_win'] == 0 and quant:
+                avg_w = quant.get('avg_win_pct', quant.get('avg_win', 0))
+                avg_l = quant.get('avg_loss_pct', quant.get('avg_loss', 0))
                 if avg_w:
-                    stats['avg_win'] = abs(avg_w) / 100.0
+                    stats['avg_win'] = abs(float(avg_w)) / 100.0 if abs(float(avg_w)) > 1.0 else abs(float(avg_w))
                 if avg_l:
-                    stats['avg_loss'] = abs(avg_l) / 100.0
+                    stats['avg_loss'] = abs(float(avg_l)) / 100.0 if abs(float(avg_l)) > 1.0 else abs(float(avg_l))
         return stats
 
     def _save_results(self, output: Dict):

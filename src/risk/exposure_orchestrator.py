@@ -386,9 +386,14 @@ class ExposureOrchestrator:
             from src.utils.metric_parser import parse_vix
             sentiment['vix'] = parse_vix(cache, 20.0)
             from src.utils.metric_parser import parse_metric
-            sentiment['fear_greed'] = parse_metric(cache, 'fng', 50.0)
+            sentiment['fear_greed'] = parse_metric(cache, 'fear_greed_index', parse_metric(cache, 'fng', 50.0))
             sentiment['vkospi'] = parse_metric(cache, 'vkospi', 20.0)
             sentiment['kospi_ma20_dist'] = parse_metric(cache, 'kospi_ma20_dist', 0.0)
+            if sentiment['kospi_ma20_dist'] == 0.0 and cache.get('kospi') and cache.get('kospi_ma20'):
+                _k_c = float(cache['kospi'])
+                _k_m = float(cache['kospi_ma20'])
+                if _k_m > 0:
+                    sentiment['kospi_ma20_dist'] = round((_k_c / _k_m - 1.0) * 100.0, 2)
             sentiment['ois'] = parse_metric(cache, 'ois', 50.0)
             sentiment['options_skew'] = parse_metric(cache, 'options_skew', 0.0)
             sentiment['crash_type'] = cache.get('crash_type', 'unknown')
@@ -400,7 +405,8 @@ class ExposureOrchestrator:
             state_file = _RESULTS / 'pipeline_state.json'
             if state_file.exists():
                 state = json.loads(state_file.read_text())
-                sentiment['regime'] = state.get('regime', 'caution')
+                _raw_reg = state.get('kr_regime') or (state.get('operating_regime') or {}).get('overall') or state.get('regime', 'caution')
+                sentiment['regime'] = 'caution' if str(_raw_reg).lower() == 'neutral' else str(_raw_reg).lower()
             else:
                 cache = json.loads((_RESULTS / 'signal_cache.json').read_text())
                 us_regime = cache.get('us_regime', '')
@@ -549,7 +555,7 @@ class ExposureOrchestrator:
             result = self._build_hedge_result(action, inst['ticker'], hedge_amount, diff, target_beta, long_exposure, hedge_amount, current_hedge_amount, regime, reason=f"어태커 넷숏 β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M")
             result['name'] = inst['name']
             result['mode'] = 'attacker_net_short'
-            result['equity_sell_amount'] = final_equity_sell if hedge_amount < available_cash + long_exposure else 0.0
+            result['equity_sell_amount'] = round(final_equity_sell)
             logger.warning(f"  🚨 [어태커 넷숏] β={target_beta:.2f} → {inst['name']} ₩{hedge_amount / 1000000.0:.1f}M ({action})")
             return result
         hedge_needed = long_exposure * max(0.0, portfolio_beta - target_beta)
@@ -814,7 +820,14 @@ class ExposureOrchestrator:
         """
         try:
             snapshots = sp.get('daily_snapshots', [])
+            if not snapshots and sp.get('is_live_ssot') and (_RESULTS / 'shadow_portfolio.json').exists():
+                _sh_sp = json.loads((_RESULTS / 'shadow_portfolio.json').read_text())
+                snapshots = _sh_sp.get('daily_snapshots', [])
             if not snapshots:
+                _nav_cur = float(sp.get('nav') or sp.get('total_nav') or 0.0)
+                _hwm_cur = float(sp.get('hwm') or 0.0)
+                if _nav_cur > 0 and _hwm_cur > 0:
+                    return round((_nav_cur - _hwm_cur) / _hwm_cur * 100.0, 2)
                 return 0.0
             navs = []
             for snap in snapshots:

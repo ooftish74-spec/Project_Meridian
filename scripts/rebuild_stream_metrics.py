@@ -824,9 +824,9 @@ def compute_stream_metrics(results_dir: Path = None):
                 regimes.append('caution')
 
         # Live holding mark-to-market time-series reconstruction:
-        # When active open holdings exist, prefer mark-to-market holding daily returns to prevent
-        # realization-bias inversion (where early stop-outs are closed while winners are held open).
-        if pos_list:
+        # Only fall back to mark-to-market holding daily returns when realized trade series has < 2 days,
+        # preventing erasure of realized loss/win history (e.g. S3 realized sells).
+        if len(daily_returns) < 2 and pos_list:
             reconstructed = _reconstruct_holding_daily_returns(pos_list, _ROOT)
             if len(reconstructed) >= 2:
                 daily_returns = list(reconstructed)

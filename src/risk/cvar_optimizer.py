@@ -157,9 +157,6 @@ class CVaROptimizer:
         for i in range(len(weights)):
             perturbed = list(weights)
             perturbed[i] += epsilon
-            # 재정규화
-            total = sum(perturbed)
-            perturbed = [w / total for w in perturbed]
 
             result = self.compute_cvar(returns, perturbed)
             delta = (result.get('cvar_pct', 0) - base_cvar) / epsilon

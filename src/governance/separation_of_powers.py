@@ -867,7 +867,9 @@ class PnLCoroner:
             pnl_pct = float(raw_pnl_pct or 0.0) / _PCT_SCALE
             exp_ret = float(pos.get('expected_return_pct', 0.0) or 0.0) / _PCT_SCALE
             beta = float(pos.get('beta', 1.0) or 1.0)
-            vol = float(pos.get('daily_vol', _POS_VOL_FALLBACK) or _POS_VOL_FALLBACK)
+            base_vol = float(pos.get('daily_vol', _POS_VOL_FALLBACK) or _POS_VOL_FALLBACK)
+            hold_days = float(pos.get('holding_days') or pos.get('days_held') or 1.0)
+            vol = base_vol * math.sqrt(max(1.0, hold_days))
             res = cls.autopsy_realized_return(
                 realized_return=pnl_pct,
                 expected_model_return=exp_ret,
@@ -1830,11 +1832,12 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
                 'n_days': n_d,
                 'sharpe': sh,
                 'mdd': mdd,
-                'reason': st_eval.get('reason', ''),
+                'reason': st_eval.get('transition_reason', st_eval.get('reason', '')),
                 'multiplier_cap': st_eval.get('recommended_multiplier_cap', _PILOT_MULT),
             }
         if len(s_rets) >= _MIN_OBS:
-            vg._graveyard_returns[str(sid)] = np.asarray(s_rets, dtype=float).ravel()
+            if st_eval.get('next_stage') == 'RETIRED_TO_SHADOW' or str(sid) in retired_map:
+                vg._graveyard_returns[str(sid)] = np.asarray(s_rets, dtype=float).ravel()
             decay_audits[str(sid)] = RegimeAndDecaySentinel.detect_alpha_decay_and_crowding(s_rets)
             if len(port_rets) >= _MIN_OBS:
                 ortho = AdversarialFalsifier.compute_orthogonal_residual_metrics(s_rets, port_rets)
@@ -1871,7 +1874,7 @@ def run_daily_constitutional_audit(results_dir: Optional[Any] = None) -> Dict[st
     port_view = (me_data.get('views') or {}).get('portfolio') if isinstance(me_data.get('views'), dict) else {}
     port_view = port_view if isinstance(port_view, dict) else {}
     p_ret = float(port_view.get('daily_return_pct') or 0.0) / _PCT_SCALE
-    b_ret = float(port_view.get('benchmark_return_pct') or 0.0) / _PCT_SCALE
+    b_ret = float(port_view.get('daily_benchmark_return_pct', port_view.get('benchmark_return_pct')) or 0.0) / _PCT_SCALE
     p_beta = float(official.get('portfolio_beta') or 1.0)
     ann_vol_pct = float(official.get('annualized_vol_pct') or 0.0)
     daily_vol = (ann_vol_pct / _PCT_SCALE) / math.sqrt(_ANNUALIZATION) if ann_vol_pct > 0.0 else _DEFAULT_PORTFOLIO_VOL

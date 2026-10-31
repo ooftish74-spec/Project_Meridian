@@ -818,7 +818,7 @@ class KISTraderAdapter:
             ord_dvsn = '06'   # 명시적 장후 시간외
         elif str(order.order_type).lower() in ('01', 'market'):
             ord_dvsn = '01'
-        elif str(order.order_type).lower() in ('00', 'limit'):
+        elif str(order.order_type).lower() in ('00', 'limit') and tif not in ('IOC', 'FOK', 'PREMARKET_CLOSE'):
             ord_dvsn = '00'
 
         if ord_dvsn in ('01', '05', '06', '13', '14'):
@@ -1499,6 +1499,23 @@ class KISTraderAdapter:
                 logger.debug(f"  ⏳ 부분 체결: {order.filled_quantity}/{order.quantity}")
             elif status in ('canceled', 'error', 'rejected'):
                 order.status = status
+                _rem_cancel = max(0, int(order.quantity or 0) - int(order.filled_quantity or 0))
+                if order.side == 'buy' and _rem_cancel > 0 and getattr(self, 'account', None):
+                    _unit_px = float(getattr(order, '_deducted_unit_px', 0.0) or 0.0)
+                    if _unit_px > 0.0:
+                        _fx_r = float(getattr(order, '_deducted_fx_rate', 1.0) or 1.0)
+                        _is_us_d = bool(getattr(order, '_deducted_is_us', False))
+                        _refund_usd = _rem_cancel * _unit_px
+                        _refund_krw = (_refund_usd * _fx_r) if _is_us_d else _refund_usd
+                        self.account.cash = float(self.account.cash) + _refund_krw
+                        if _is_us_d:
+                            if hasattr(self, 'us_cash_usd'):
+                                self.us_cash_usd = float(getattr(self, 'us_cash_usd', 0.0)) + _refund_usd
+                            if hasattr(self, 'direct_usd_cash'):
+                                self.direct_usd_cash = float(getattr(self, 'direct_usd_cash', 0.0)) + _refund_usd
+                            if hasattr(self, 'us_buying_power_usd'):
+                                self.us_buying_power_usd = float(getattr(self, 'us_buying_power_usd', 0.0)) + _refund_usd
+                        setattr(order, '_deducted_unit_px', 0.0)
                 return order
             time.sleep(check_interval)
         logger.warning(f"  ⏰ 체결 타임아웃 ({timeout_sec}초): {order.ticker}")

@@ -406,22 +406,39 @@ class PortfolioOptimizer:
             target_weights = scaled_weights
         result['target_weights'] = target_weights
         expected_alphas = {}
+        stream_vols = {}
+        stream_is_bps = {}
         _eb_prior_n = 10.0
         _days_per_year = 252.0
         for sid in self.STREAMS:
             sm = stream_metrics.get(sid, {}) if isinstance(stream_metrics.get(sid), dict) else {}
             alpha_annual_pct = sm.get('alpha', None)
+            d_rets = [float(r) for r in (sm.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
             if alpha_annual_pct is not None and float(alpha_annual_pct) != 0.0:
                 expected_alphas[sid] = max(0.0, float(alpha_annual_pct) / 100.0 / _days_per_year)
+            elif d_rets:
+                n_r = len(d_rets)
+                eb_w = n_r / (n_r + _eb_prior_n)
+                expected_alphas[sid] = max(0.0, (sum(d_rets) / n_r) * eb_w)
             else:
-                d_rets = [float(r) for r in (sm.get('daily_returns') or []) if r is not None and math.isfinite(float(r))]
-                if d_rets:
-                    n_r = len(d_rets)
-                    eb_w = n_r / (n_r + _eb_prior_n)
-                    expected_alphas[sid] = max(0.0, (sum(d_rets) / n_r) * eb_w)
-                else:
-                    expected_alphas[sid] = 0.0
-        tx_check = self._tx_filter.should_rebalance(current_weights, target_weights, portfolio_value, expected_alphas)
+                expected_alphas[sid] = 0.0
+            if sm.get('daily_vol') is not None and float(sm.get('daily_vol') or 0.0) > 0.0:
+                stream_vols[sid] = float(sm['daily_vol'])
+            elif len(d_rets) >= 2:
+                _m_r = sum(d_rets) / len(d_rets)
+                _v_r = sum((x - _m_r) ** 2 for x in d_rets) / (len(d_rets) - 1)
+                if _v_r > 0.0:
+                    stream_vols[sid] = math.sqrt(_v_r)
+            if sm.get('mean_is_bps') is not None:
+                stream_is_bps[sid] = float(sm['mean_is_bps'])
+        tx_check = self._tx_filter.should_rebalance(
+            current_weights,
+            target_weights,
+            portfolio_value,
+            expected_alphas,
+            stream_vols=stream_vols or None,
+            stream_is_bps=stream_is_bps or None,
+        )
         result['tx_check'] = {'should_rebalance': tx_check['should_rebalance'], 'trade_cost': tx_check['trade_cost'], 'turnover': tx_check['turnover'], 'n_trades': tx_check['n_trades'], 'expected_profit': tx_check.get('expected_profit', 0), 'dynamic_override': tx_check.get('dynamic_override', False)}
         if limit_reached and (not tx_check.get('dynamic_override', False)):
             result['action'] = 'skip'
@@ -530,7 +547,7 @@ class PortfolioOptimizer:
             try:
                 _proxy_map = {  # hardcode-ok: L0 stream benchmark proxy tickers for CVaR fallback
                     'S0': '069500', 'S1': '069500', 'S2': '229200', 'S3': '069500',
-                    'S5': 'QQQ', 'S10': 'SPY', 'S10_MEGA_TREND': '069500',
+                    'S10': 'SPY', 'S10_MEGA_TREND': '069500',
                     'S11': 'SOXX', 'S11_HIGHBETA_SNIPER': '069500',
                     'S12': '069500', 'S12_DERIVATIVE_SQUEEZE': '069500',
                     'S13': 'SPY', 'S13_JAPAN_ALPHA': 'SPY', 'S14_PAIR_ALPHA': 'QQQ',
@@ -637,13 +654,20 @@ class PortfolioOptimizer:
             f = _RESULTS / 'stream_metrics.json'
             if f.exists():
                 metrics = json.loads(f.read_text())
-                if isinstance(metrics, dict) and isinstance(metrics.get('raw_data'), dict):
-                    for _sid, _rv in metrics['raw_data'].items():
-                        if isinstance(_rv, dict) and _rv.get('daily_returns'):
-                            if not isinstance(metrics.get(_sid), dict):
-                                metrics[_sid] = dict(_rv)
-                            elif not metrics[_sid].get('daily_returns'):
-                                metrics[_sid]['daily_returns'] = _rv['daily_returns']
+                if isinstance(metrics, dict):
+                    perf_map = ((metrics.get('metrics') or {}).get('stream_performance') or {}) if isinstance(metrics.get('metrics'), dict) else {}
+                    for _sid, _pv in perf_map.items():
+                        if isinstance(_pv, dict):
+                            metrics[_sid] = {**_pv, **(metrics.get(_sid) if isinstance(metrics.get(_sid), dict) else {})}
+                    if isinstance(metrics.get('raw_data'), dict):
+                        for _sid, _rv in metrics['raw_data'].items():
+                            if isinstance(_rv, dict):
+                                if not isinstance(metrics.get(_sid), dict):
+                                    metrics[_sid] = dict(_rv)
+                                else:
+                                    for _k, _v in _rv.items():
+                                        if _k not in metrics[_sid] or not metrics[_sid][_k]:
+                                            metrics[_sid][_k] = _v
         except Exception as _e4:
             logger.critical(f"  [portfolio_optimizer] stream_metrics 로드: {_e4}", exc_info=True)
         try:
@@ -737,12 +761,23 @@ class PortfolioOptimizer:
             me_file = _RESULTS / 'measurement_engine.json'
             if me_file.exists():
                 me_data = json.loads(me_file.read_text())
-                sleeve = me_data.get('views', {}).get('sleeve', {})
+                views_d = me_data.get('views') or {}
+                sleeve = views_d.get('sleeves') or views_d.get('sleeve') or {}
                 for sid, sv in sleeve.items():
-                    ic = sv.get('ic')
-                    if ic is not None:
-                        ic_values.append(float(ic))
-                overall_ic = me_data.get('ic', {}).get('ic')
+                    if isinstance(sv, dict):
+                        ic = sv.get('ic')
+                        if ic is not None:
+                            ic_values.append(float(ic))
+                raw_ic_top = me_data.get('ic')
+                overall_ic = (
+                    raw_ic_top.get('ic')
+                    if isinstance(raw_ic_top, dict)
+                    else (
+                        raw_ic_top
+                        if isinstance(raw_ic_top, (int, float))
+                        else (me_data.get('official') or {}).get('ic')
+                    )
+                )
                 if overall_ic is not None:
                     ic_values.append(float(overall_ic))
         except Exception as e:
@@ -758,8 +793,9 @@ class PortfolioOptimizer:
         excess_cash = 0
         deploy_to = []
         if portfolio_data:
-            cash = portfolio_data.get('cash', 0)
-            nav = portfolio_data.get('virtual_nav', cash)
+            acct_d = portfolio_data.get('account') if isinstance(portfolio_data.get('account'), dict) else {}
+            cash = float(portfolio_data.get('cash') or acct_d.get('cash') or 0)
+            nav = float(portfolio_data.get('virtual_nav') or portfolio_data.get('nav') or acct_d.get('total_equity') or cash)
             cash_ratio = cash / max(nav, 1) if nav > 0 else 1.0
             regime = self._detect_regime()
             _DEFAULT_CASH_TARGETS = {'bull': 0.12, 'caution': 0.18, 'bear': 0.25, 'crash': 0.35}

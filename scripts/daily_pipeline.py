@@ -208,7 +208,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         try:
             from src.utils.market_calendar import is_us_trading_day
             _us_date_str = today.isoformat()
-            if not is_us_trading_day(_us_date_str):
+            if not is_us_trading_day():
                 logger.info(f"  ⏭ KRX 및 US 동시 휴장일({_us_date_str}) → {phase} 스킵")
                 return {'status': 'skipped_holiday', 'date': _us_date_str, 'phase': phase}
         except Exception as _us_cal_e:
@@ -634,6 +634,7 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         # Kill Switch가 매수를 차단해도 포지션 청산/동기화/상태 저장을 위해 중단하지 않음
         _can_buy = _kill_switch_result.get('can_buy', True)
         if not _can_buy:
+            orch._exit_only_reason = 'pipeline_kill_switch'
             logger.warning("  ⛔ Kill Switch 매수 차단 활성화 (신규 진입 차단, 포지션 청산 및 상태 갱신만 수행)")
 
         # ★ [SSoT Hardening] KIS API 실계좌 보유 포지션 (SOXX 11주 등) 사전 원자적 동기화 (Exit Manager 전 실행)

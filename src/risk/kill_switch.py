@@ -54,6 +54,7 @@ except Exception:  # registry layer unavailable → call-site fallbacks (== pre-
         return fallback
 _RESULTS = Path(__file__).resolve().parent.parent.parent / 'results'
 _STATE_FILE = _RESULTS / 'kill_switch_state.json'
+_KS_EXP_CLIP = 20.0
 
 class KillSwitch:
     """긴급 매매 중단 킬스위치 (측정/판정 완전 분리).
@@ -211,6 +212,7 @@ class KillSwitch:
                     try:
                         prev_dt = datetime.strptime(_dr_dates[-2], '%Y-%m-%d')
                         curr_dt = datetime.strptime(_dr_dates[-1], '%Y-%m-%d')
+                        prev_snap_date, curr_snap_date = prev_dt, curr_dt
                         gap_calendar_days = (curr_dt - prev_dt).days
                     except (FileNotFoundError, json.JSONDecodeError):
                         return daily_returns
@@ -427,7 +429,8 @@ class KillSwitch:
                 return out
             acct = d.get('account') or {}
             fx = float(acct.get('fx_rate') or 0)
-            usd_cash = float(acct.get('d0_usd_deposit') or acct.get('us_cash_usd') or acct.get('cash_usd') or 0)
+            _net_d0_usd = max(0.0, float(acct.get('d0_usd_deposit') or 0.0) - float(acct.get('pledged_margin_usd') or 0.0))
+            usd_cash = float(acct.get('us_cash_usd') or acct.get('cash_usd') or _net_d0_usd or 0)
             if usd_cash > 0 and fx <= 0:
                 out['reason'] = 'no_fx_for_usd_cash'
                 return out
@@ -483,11 +486,11 @@ class KillSwitch:
             if _me.exists():
                 _d = _fj.loads(_me.read_text())
                 _off = _d.get('official', {})
-                forward['ic'] = _off.get('ic', 0)
-                forward['da'] = _off.get('direction_accuracy', 0)
+                forward['ic'] = float(_off.get('ic') or 0.0)
+                forward['da'] = float(_off.get('da') or _off.get('direction_accuracy') or 0.0)
                 _views = _d.get('views', {})
                 _risk = _views.get('risk', {})
-                forward['bench_alpha_5d'] = _risk.get('recent_alpha_5d', 0)
+                forward['bench_alpha_5d'] = float(_risk.get('recent_alpha_5d') or 0.0)
             if forward['bench_alpha_5d'] == 0:
                 _is_live_fwd = (cfg.get('execution.current_mode', cfg.get('execution.mode', 'live')) == 'live') if cfg else True
                 _sp = _RESULTS / ('kis_portfolio.json' if _is_live_fwd else 'shadow_portfolio.json')
@@ -495,7 +498,7 @@ class KillSwitch:
                     _d = _fj.loads(_sp.read_text())
                     _records = _d.get('daily_records', [])[-5:]
                     if _records:
-                        _alphas = [r.get('alpha_pct', 0) for r in _records]
+                        _alphas = [float(r.get('alpha_pct', 0) or 0) / 100.0 for r in _records]
                         forward['bench_alpha_5d'] = sum(_alphas) / len(_alphas)
         except Exception as e:
             logger.critical(f"  [KillSwitch] 전방 지표 수집 실패 (중립값 사용): {e}", exc_info=True)
@@ -608,8 +611,10 @@ class KillSwitch:
         avg_conf = forward.get('signal_avg_confidence', 0)
         scores['signal_quality'] = min(1.0, max(0.0, (avg_conf - 0.4) * 2.0))
         import math
-        alpha = forward.get('bench_alpha_5d', 0)
-        scores['alpha'] = 1.0 / (1.0 + math.exp(-alpha * 100.0))
+        alpha = float(forward.get('bench_alpha_5d', 0) or 0.0)
+        alpha_dec = alpha / 100.0 if abs(alpha) > 1.0 else alpha
+        _exp_arg = max(-_KS_EXP_CLIP, min(_KS_EXP_CLIP, -alpha_dec * 100.0))
+        scores['alpha'] = 1.0 / (1.0 + math.exp(_exp_arg))
         sentiment = forward.get('news_sentiment', 0)
         scores['news'] = min(1.0, max(0.0, sentiment + 0.5))
         ois = forward.get('ois_score', pget('kill_switch.ois_missing_default', 50.0))
@@ -762,10 +767,13 @@ class KillSwitch:
                 _dr = _sp.get('daily_returns', [])
                 if not _dr:
                     _snaps = _sp.get('daily_snapshots', [])
+                    if not _snaps and _is_live_chk and (_RESULTS / 'shadow_portfolio.json').exists():
+                        _sh_fb = _json2.loads((_RESULTS / 'shadow_portfolio.json').read_text())
+                        _snaps = _sh_fb.get('daily_snapshots', [])
                     for _snap in _snaps:
-                        _ret = _snap.get('daily_return_pct', 0)
+                        _ret = _snap.get('daily_return_pct')
                         if _ret is not None:
-                            _dr.append(_ret / 100.0 if abs(_ret) > 1 else _ret)
+                            _dr.append(float(_ret) / 100.0)
                 portfolio['daily_returns'] = _dr
         except Exception as _e4:
             logger.critical(f"  [kill_switch] Kill Switch 상태 저장 2: {_e4}", exc_info=True)

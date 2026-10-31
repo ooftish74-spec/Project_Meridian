@@ -182,7 +182,7 @@ def _check_data_gates(signal_cache: dict, phase_name: str, cfg=None) -> str:
         return cfg.get(k, d) if cfg else d
 
     # ── Gate 1: Freshness ────────────────────────────────────────────────
-    _generated_at_raw = signal_cache.get('_generated_at')
+    _generated_at_raw = signal_cache.get('_generated_at') or signal_cache.get('timestamp')
     if _generated_at_raw:
         try:
             _gen_dt    = datetime.fromisoformat(str(_generated_at_raw))
@@ -1646,7 +1646,10 @@ def _update_signal_cache(updates: dict):
             except Exception:
                 pass
 
-        existing['last_overnight_update'] = datetime.now().isoformat()
+        _now_iso = datetime.now().isoformat()
+        existing['last_overnight_update'] = _now_iso
+        existing['timestamp'] = _now_iso
+        existing['_generated_at'] = _now_iso
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_json(cache_file, existing, indent=2)
     except Exception as e:

@@ -694,7 +694,11 @@ class StreamOrchestrator:
 
         # ── Step 1: Kill Switch 확인 ──
         logger.info("  📋 Step 1: Kill Switch 확인")
-        self._exit_only_reason = None
+        self._exit_only_reason = getattr(self, '_exit_only_reason', None)
+        if self._exit_only_reason:
+            if market_data is None:
+                market_data = {}
+            market_data['exit_only'] = True
         _exit_only_flag = _ROOT / 'results' / 'EXIT_ONLY.flag'
         if _exit_only_flag.exists():
             try:
@@ -2264,7 +2268,9 @@ class StreamOrchestrator:
                     logger.debug(f"  [S_YIELD] KIS API 시세 조회 생략: {_ep}")
                 
             if not price or price <= 0:
-                kofr_pos = next((p for p in portfolio.get('positions', []) if isinstance(p, dict) and p.get('ticker') == yield_ticker), None)
+                _pos_raw = portfolio.get('positions') or {}
+                _pos_iter = _pos_raw.values() if isinstance(_pos_raw, dict) else _pos_raw
+                kofr_pos = next((p for p in _pos_iter if isinstance(p, dict) and p.get('ticker') == yield_ticker), None)
                 if kofr_pos and kofr_pos.get('avg_price', 0) > 0:
                     price = float(kofr_pos['avg_price'])
                     logger.info(f"    [S_YIELD] KOFR 시세 누락 → 보유 평단가({price:,.0f}원)로 추정")

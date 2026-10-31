@@ -558,3 +558,90 @@ class TestDataNogoPersistence:
         assert 'load_active_data_nogo' in dp
         assert 'from scripts.go_nogo import GoNoGoEngine' not in sp
         assert 'run_live_diagnostics' in sp
+
+    def test_kill_switch_crosscheck_nav_deduplicates_unsettled_usd_margin(self, tmp_path, monkeypatch):
+        import src.risk.kill_switch as ks_mod
+        from src.risk.kill_switch import KillSwitch
+        monkeypatch.setattr(ks_mod, '_RESULTS', tmp_path)
+        portfolio = {
+            'updated_at': ks_mod.now_kst().isoformat(),
+            'nav': 18091169.0,
+            'account': {
+                'total_equity': 18100249.0,
+                'fx_rate': 1335.3,
+                'd2_settlement_cash_krw': 999031.0,
+                'us_cash_usd': 1241.00,
+                'd0_usd_deposit': 3301.74,
+                'pledged_margin_usd': 2060.74,
+                'positions': {
+                    'SOXX': {'eval_krw': 15444110.0},
+                },
+            },
+        }
+        (tmp_path / 'kis_portfolio.json').write_text(json.dumps(portfolio), encoding='utf-8')
+        ks = object.__new__(KillSwitch)
+        res = ks._crosscheck_nav(18091169.0)
+        # Expected component sum: 999031 + 1241.0 * 1335.3 + 15444110 = 18100248.3 (gap = 0.050% <= 10%)
+        assert res['consistent'] is True
+        assert res['components_nav'] == pytest.approx(18100248.0, abs=2.0)
+
+    def test_kelly_criterion_merges_raw_data_and_isolates_cold_start_streams(self):
+        from src.risk.kelly_criterion import KellyCriterion
+        kc = object.__new__(KellyCriterion)
+        kc._stream_metrics = {
+            'raw_data': {
+                'S1': {'daily_returns': [0.01, -0.005, 0.015, 0.02, -0.002], 'trade_count': 25},
+                'S4': {'daily_returns': [], 'trade_count': 0},
+            },
+            'stream_performance': {
+                'S1': {'win_rate': 68.0, 'avg_win': 2.5, 'avg_loss': -1.1, 'trade_count': 25, 'ic': 0.14},
+                'S4': {'win_rate': 0.0, 'avg_win': 0.0, 'avg_loss': 0.0, 'trade_count': 0, 'ic': 0.0},
+            },
+        }
+        kc._measurement_data = {
+            'official': {
+                'realized_trades': 147,
+                'da': 0.5625,
+                'ic': 0.0442,
+                'per_stream': {
+                    'S1': {'n_days': 25, 'da': 0.68, 'ic': 0.14},
+                    'S4': {'n_days': 0, 'da': None, 'ic': None},
+                },
+            },
+            'views': {'sleeves': {}},
+        }
+        s1_stats = kc._get_stream_stats('S1')
+        assert s1_stats['n_trades'] == 25
+        assert s1_stats['win_rate'] == pytest.approx(0.68, rel=1e-9)
+        assert len(s1_stats['daily_returns']) == 5
+
+        s4_stats = kc._get_stream_stats('S4')
+        assert s4_stats['n_trades'] == 0
+        assert s4_stats['daily_returns'] == []
+
+    def test_cvar_optimizer_marginal_cvar_preserves_directional_derivative(self):
+        from src.risk.cvar_optimizer import CVaROptimizer
+        opt = CVaROptimizer()
+        stream_rets = [
+            [-0.04, -0.03, -0.02, 0.01, 0.02] * 4,
+            [-0.01, -0.005, 0.0, 0.005, 0.01] * 4,
+        ]
+        weights = [0.5, 0.5]
+        mc = opt.marginal_cvar(stream_rets, weights)
+        comp = opt.component_cvar(stream_rets, weights)
+        # Euler's homogeneous function theorem: sum(w_i * marginal_cvar_i) == total_cvar (-0.025)
+        assert mc[0] == pytest.approx(-0.04, rel=1e-6)
+        assert mc[1] == pytest.approx(-0.01, rel=1e-6)
+        assert comp['total_cvar'] == pytest.approx(-0.025, rel=1e-6)
+
+    def test_pnl_coroner_autopsy_positions_scales_vol_by_sqrt_holding_days(self):
+        from src.governance.separation_of_powers import PnLCoroner
+        # 16 holding days, daily_vol = 0.02 -> 16-day vol = 0.02 * sqrt(16) = 0.08.
+        # Realized return = -8.0% (-0.08), market_return = 0.0 -> |z| = |-0.08| / 0.08 = 1.0 < 3.0 (normal)
+        res = PnLCoroner.autopsy_positions(
+            positions=[{'ticker': '005930', 'pnl_pct': -8.0, 'daily_vol': 0.02, 'holding_days': 16}],
+            market_return=0.0,
+        )
+        assert res['n_anomalies'] == 0
+        assert res['position_anomalies'] == []
+

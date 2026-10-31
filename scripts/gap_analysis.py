@@ -122,21 +122,8 @@ class GapAnalyzer:
 
     def _load_data(self):
         """shadow_portfolio.json, kis_portfolio.json, signal_cache.json, stream_metrics.json 로드."""
-        raw_trades: List[Dict] = []
-        sp_file = _RESULTS / 'shadow_portfolio.json'
-        if sp_file.exists():
-            try:
-                sp = json.loads(sp_file.read_text(encoding='utf-8'))
-                raw_trades = sp.get('trade_history', [])
-            except Exception as e:
-                logger.warning(f"  shadow_portfolio 로드 실패: {e}")
-
-        try:
-            self.trades = self._pair_trades(raw_trades)
-        except Exception as e:
-            logger.warning(f"  _pair_trades 실패: {e}")
-
-        # signal_cache
+        self._regime_by_date: Dict[str, str] = {}
+        # signal_cache (먼저 로드하여 _pair_trades 내 _infer_regime 폴백에 활용)
         sc_file = _RESULTS / 'signal_cache.json'
         if sc_file.exists():
             try:
@@ -151,6 +138,26 @@ class GapAnalyzer:
                 self.stream_metrics = json.loads(sm_file.read_text(encoding='utf-8'))
             except Exception as e:
                 logger.debug(f"  stream_metrics 로드 실패: {e}")
+
+        raw_trades: List[Dict] = []
+        sp_file = _RESULTS / 'shadow_portfolio.json'
+        if sp_file.exists():
+            try:
+                sp = json.loads(sp_file.read_text(encoding='utf-8'))
+                raw_trades = sp.get('trade_history', [])
+                for _rec in (sp.get('daily_records') or []) + (sp.get('daily_snapshots') or []):
+                    if isinstance(_rec, dict):
+                        _dt = str(_rec.get('date') or '')[:10]
+                        _rg = _rec.get('kr_regime') or _rec.get('regime')
+                        if _dt and _rg and str(_rg) != 'unknown':
+                            self._regime_by_date[_dt] = str(_rg)
+            except Exception as e:
+                logger.warning(f"  shadow_portfolio 로드 실패: {e}")
+
+        try:
+            self.trades = self._pair_trades(raw_trades)
+        except Exception as e:
+            logger.warning(f"  _pair_trades 실패: {e}")
 
     def _pair_trades(self, raw_trades: List[Dict]) -> List[Dict]:
         """BUY/SELL 매칭하여 완결된 거래 페어로 변환.
@@ -197,7 +204,7 @@ class GapAnalyzer:
                     'reason': buy.get('reason', ''),
                     'regime': self._infer_regime(buy.get('date', '')),
                     'sector': self._infer_sector(ticker),
-                    'market_cap_tier': self._infer_cap_tier(ticker),
+                    'market_cap_tier': self._infer_cap_tier(ticker, buy_price),
                     'realized': True,
                 })
 
@@ -285,7 +292,7 @@ class GapAnalyzer:
                 'regime': self._infer_regime(
                     pos.get('entry_date', '')),
                 'sector': self._infer_sector(ticker),
-                'market_cap_tier': self._infer_cap_tier(ticker),
+                'market_cap_tier': self._infer_cap_tier(ticker, avg_p),
                 'realized': False,
             })
 
@@ -716,9 +723,16 @@ class GapAnalyzer:
             return 0.0
 
     def _infer_regime(self, date_str: str) -> str:
-        """날짜 기반 레짐 추론 (signal_cache kr_regime 사용)."""
-        # 단순화: signal_cache의 현재 레짐 사용
-        return self.signal_cache.get('kr_regime', 'unknown')
+        """날짜 기반 레짐 추론 (히스토리 우선 → signal_cache 폴백)."""
+        dt_key = str(date_str or '')[:10]
+        hist_map = getattr(self, '_regime_by_date', {}) or {}
+        if dt_key and dt_key in hist_map:
+            return hist_map[dt_key]
+        return str(
+            self.signal_cache.get('kr_regime')
+            or self.signal_cache.get('regime')
+            or 'unknown'
+        )
 
     def _infer_sector(self, ticker: str) -> str:
         """티커 기반 섹터 추론.
@@ -741,22 +755,33 @@ class GapAnalyzer:
         sector = etf_prefixes.get(prefix, 'Individual')
         return sector
 
-    def _infer_cap_tier(self, ticker: str) -> str:
+    def _infer_cap_tier(self, ticker: str, buy_price: float = 0.0) -> str:
         """시가총액 구간 추론.
 
         간단한 휴리스틱: 주가 기반 (정확한 시총 데이터 미사용).
         """
-        # shadow_portfolio에서 buy_price로 간접 추론
-        for t in self.trades:
-            if t['ticker'] == ticker:
-                price = t.get('buy_price', 0)
-                if price >= 500_000:
-                    return 'large_cap'
-                elif price >= 50_000:
-                    return 'mid_cap'
-                else:
-                    return 'small_cap'
-        return 'unknown'
+        price = float(buy_price or 0.0)
+        if price <= 0.0:
+            for t in self.trades:
+                if t['ticker'] == ticker:
+                    price = float(t.get('buy_price', 0) or 0.0)
+                    if price > 0.0:
+                        break
+        if price <= 0.0:
+            return 'unknown'
+        is_kr = str(ticker).isdigit()
+        if is_kr:
+            if price >= 500_000:
+                return 'large_cap'
+            elif price >= 50_000:
+                return 'mid_cap'
+            return 'small_cap'
+        else:
+            if price >= 200:
+                return 'large_cap'
+            elif price >= 30:
+                return 'mid_cap'
+            return 'small_cap'
 
     def _save(self, result: Dict):
         """결과를 results/gap_analysis.json에 저장."""

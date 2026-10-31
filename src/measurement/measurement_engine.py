@@ -175,8 +175,9 @@ class MeasurementEngine:
                 self._beta_tracker = BetaTracker()
                 _bt = self._beta_tracker
             _date_str = target_date if target_date else datetime.now().strftime('%Y-%m-%d')
-            _p_ret = float(portfolio.get('daily_return_pct', 0.0))
-            _b_ret = float(portfolio.get('benchmark_return_pct', 0.0))
+            _d_rets_bt = getattr(self, '_daily_returns', []) or []
+            _p_ret = float(portfolio.get('daily_return_pct', _d_rets_bt[-1] * 100.0 if _d_rets_bt else 0.0))
+            _b_ret = float(portfolio.get('daily_benchmark_return_pct', portfolio.get('benchmark_return_pct', 0.0)))
             _regime = str(sp.get('regime', sp.get('current_regime', 'unknown')))
             _beta_rec = _bt.record(_date_str, _p_ret, _b_ret, _regime)
             _b60 = _beta_rec.get('beta_60d')
@@ -222,7 +223,7 @@ class MeasurementEngine:
         _default = {'wr_5d': None, 'ic_5d': None, 'n_trades_5d': 0, 'penalty_triggered': False, 'lookback_days': lookback}
         try:
             from datetime import date as _date, timedelta
-            trades = sp.get('trades', [])
+            trades = self._fifo_enrich_and_remap_trades(sp) if hasattr(self, '_fifo_enrich_and_remap_trades') else (sp.get('trade_history') or sp.get('trades') or [])
             s2_exits = [t for t in trades if str(t.get('stream_id', t.get('sleeve', ''))).upper().startswith('S2') and t.get('action', '').upper() in ('SELL', 'CLOSE', 'EXIT') and (t.get('realized_pnl') is not None)]
             from datetime import datetime as _dt
             base_date = _dt.strptime(target_date, '%Y-%m-%d').date() if target_date else _date.today()
@@ -379,8 +380,11 @@ class MeasurementEngine:
                     except Exception:
                         _base_close = float(_bdf.iloc[0]['종가'])
                 _last_close = float(_bdf.iloc[-1]['종가'])
+                _prev_close = float(_bdf.iloc[-2]['종가'])
                 if _base_close > 0:
                     bench_pct = round((_last_close / _base_close - 1) * 100, 4)
+                if _prev_close > 0:
+                    _daily_bench_pct = round((_last_close / _prev_close - 1) * 100, 4)
         except Exception as e:  # ★ Track E: 네트워크 예외(requests.ConnectionError 등)가 compute() 전체를 중단시키던 버그
             logger.warning(f"  벤치마크(pykrx) 조회 실패 → cumulative_bench_pct 폴백: {type(e).__name__}: {e}")
         if bench_pct == 0:
@@ -504,7 +508,10 @@ class MeasurementEngine:
         real_days = (date.today() - _get_launch_date()).days
         if total_days < real_days:
             total_days = real_days
-        return {'da': round(da, 4), 'da_correct': correct, 'da_total': total_signals, 'da_held': da_held, 'da_realized': da_realized, 'rolling_da': round(rolling_da, 4), 'rolling_da_n': rolling_total, 'rolling_da_window': rolling_window, 'alpha_pct': round(alpha_pct, 3), 'jensen_alpha_pct': round(_jensen_alpha, 3), 'cumulative_return_pct': round(cumulative_return_pct, 3), 'benchmark_return_pct': round(bench_pct, 3), 'nav': virtual_nav, 'total_days': total_days, 'ic': ic_val, 'ic_p_value': ic_p, 'ic_n': ic_n, 'ic_method': ic_method, 'realized_pnl_krw': round(realized_pnl), 'realized_win_rate': round(realized_wins / max(realized_total, 1), 3), 'realized_trades': realized_total, 'selection_alpha': round(_selection_alpha, 3), 'selection_return': round(_selection_return, 3), 'allocation_effect': round(_allocation_effect, 3), 'nav_alpha': round(_nav_alpha, 3), 'avg_invest_pct': round(_avg_invest_pct, 4), 'risk_free_rate': _rf_annual, 'da_min_positions': _min_pos_for_da, 'da_valid_days': len(_valid_records)}
+        _d_rets_pv = getattr(self, '_daily_returns', []) or []
+        _daily_ret_pct = round(float(_d_rets_pv[-1]) * 100.0, 4) if _d_rets_pv else float((records[-1].get('daily_return_pct') if records else 0.0) or 0.0)
+        _daily_b_pct = locals().get('_daily_bench_pct', 0.0)
+        return {'da': round(da, 4), 'da_correct': correct, 'da_total': total_signals, 'da_held': da_held, 'da_realized': da_realized, 'rolling_da': round(rolling_da, 4), 'rolling_da_n': rolling_total, 'rolling_da_window': rolling_window, 'alpha_pct': round(alpha_pct, 3), 'jensen_alpha_pct': round(_jensen_alpha, 3), 'cumulative_return_pct': round(cumulative_return_pct, 3), 'benchmark_return_pct': round(bench_pct, 3), 'daily_return_pct': _daily_ret_pct, 'daily_benchmark_return_pct': _daily_b_pct, 'nav': virtual_nav, 'total_days': total_days, 'ic': ic_val, 'ic_p_value': ic_p, 'ic_n': ic_n, 'ic_method': ic_method, 'realized_pnl_krw': round(realized_pnl), 'realized_win_rate': round(realized_wins / max(realized_total, 1), 3), 'realized_trades': realized_total, 'selection_alpha': round(_selection_alpha, 3), 'selection_return': round(_selection_return, 3), 'allocation_effect': round(_allocation_effect, 3), 'nav_alpha': round(_nav_alpha, 3), 'avg_invest_pct': round(_avg_invest_pct, 4), 'risk_free_rate': _rf_annual, 'da_min_positions': _min_pos_for_da, 'da_valid_days': len(_valid_records)}
 
     def _compute_risk_view(self, sp: dict) -> dict:
         """Risk View: Sharpe, Drawdown, Volatility.
@@ -769,11 +776,9 @@ class MeasurementEngine:
             if n_trades == 0 and stats.get('count', 0) > 0:
                 n_trades = stats.get('count', 0)
                 n_wins = stats.get('wins', 0)
-            rets = []
-            if stream_pos_lists.get(sid):
+            rets = list(raw_data.get(sid, {}).get('daily_returns', []) or [])
+            if len(rets) < 2 and stream_pos_lists.get(sid):
                 rets = _reconstruct_holding_daily_returns(stream_pos_lists[sid], PROJECT_ROOT)
-            if len(rets) < 2:
-                rets = list(raw_data.get(sid, {}).get('daily_returns', []) or [])
             if not rets and ext_daily_rets.get(sid):
                 rets = list(ext_daily_rets[sid])
             n_days = len(rets)
@@ -895,8 +900,9 @@ class MeasurementEngine:
             da = None
             da_correct = 0
             da_total = 0
-            stream_sells = [t for t in trade_history if t.get('action', '').upper() == 'SELL' and t.get('stream_id', t.get('stream', '')) == sid]
-            stream_buys = [t for t in trade_history if t.get('action', '').upper() == 'BUY' and t.get('stream_id', t.get('stream', '')) == sid]
+            _target_sids = {'S3', 'S3_A', 'S3_B'} if sid == 'S3' else {sid}
+            stream_sells = [t for t in trade_history if t.get('action', '').upper() == 'SELL' and t.get('stream_id', t.get('stream', '')) in _target_sids]
+            stream_buys = [t for t in trade_history if t.get('action', '').upper() == 'BUY' and t.get('stream_id', t.get('stream', '')) in _target_sids]
             buy_conf_by_ticker = {}
             for t in stream_buys:
                 tk = t.get('ticker', '')
