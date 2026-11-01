@@ -28,6 +28,7 @@ VOICE_HOST_MALE = "ko-KR-InJoonNeural"
 VOICE_STRATEGIST_FEMALE = "ko-KR-SunHiNeural"
 
 NOTEBOOKLM_DRIVE_FOLDER_ID = "1js5GQffVhIn5Ikq27wO-3jj69FwoUiV8"
+NOTEBOOKLM_MASTER_DOC_ID = "1xbvEntUKxFILGpd8blDvGictf13G8Ouwx8_qjQghbFE"
 SERVICE_ACCOUNT_PATHS = (
     "/home/ubuntu/Project-A/config/gsheet_service_account.json",
     "/Users/sunghohong/.gemini/antigravity/playground/shimmering-interstellar/Project-A/config/gsheet_service_account.json",
@@ -1385,6 +1386,17 @@ def sync_brief_to_google_drive_notebooklm(
             timeout=15,
         )
         files = resp.json().get("files", []) if resp.status_code == 200 else []
+        seen_ids = {f.get("id") for f in files if f.get("id")}
+        if NOTEBOOKLM_MASTER_DOC_ID and NOTEBOOKLM_MASTER_DOC_ID not in seen_ids:
+            files.insert(
+                0,
+                {
+                    "id": NOTEBOOKLM_MASTER_DOC_ID,
+                    "name": "Meridian Daily Brief",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "webViewLink": f"https://docs.google.com/document/d/{NOTEBOOKLM_MASTER_DOC_ID}/edit",
+                },
+            )
         updated_files: list[dict[str, str]] = []
 
         for f in files:
