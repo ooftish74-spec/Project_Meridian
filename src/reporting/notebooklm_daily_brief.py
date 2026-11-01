@@ -1198,6 +1198,153 @@ def render_daily_brief_pdf(
     return out_path
 
 
+def upsert_brief_history_db(
+    db_path: str | Path,
+    snap: dict[str, Any],
+    brief_md: str,
+    dialogue_txt: str,
+) -> list[dict[str, Any]]:
+    """일별 스냅샷과 브리프 원문을 시계열 JSONL 데이터베이스(brief_history_db.jsonl)에 멱등(Idempotent) 누적합니다."""
+    import json
+
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    by_date: dict[str, dict[str, Any]] = {}
+    if path.exists():
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                d_key = str(rec.get("date") or "")
+                if d_key:
+                    by_date[d_key] = rec
+            except Exception:
+                continue
+
+    date_str = str(snap.get("date") or datetime.now().strftime("%Y-%m-%d"))
+    by_date[date_str] = {
+        "date": date_str,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S KST"),
+        "snapshot": snap,
+        "brief_md": brief_md,
+        "dialogue_txt": dialogue_txt,
+    }
+
+    sorted_entries = [by_date[k] for k in sorted(by_date.keys(), reverse=True)]
+    tmp_db = path.with_suffix(".jsonl.tmp")
+    tmp_db.write_text(
+        "\n".join(json.dumps(item, ensure_ascii=False) for item in sorted_entries) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(tmp_db, path)
+    logger.info(f"✅ [Master DB] 시계열 DB 누적 완료: 총 {len(sorted_entries)}일 기록 ({path})")
+    return sorted_entries
+
+
+def build_master_db_markdown(entries: list[dict[str, Any]]) -> str:
+    """NotebookLM 심층 질의응답 및 시계열 재분석을 위한 3단 구조 누적 마스터 DB 문서를 생성합니다."""
+    if not entries:
+        return "# [Project Meridian] NotebookLM Master Database (Empty)\n"
+
+    latest = entries[0]
+    latest_date = latest.get("date", "")
+    total_days = len(entries)
+
+    rows_2a: list[str] = []
+    rows_2b: list[str] = []
+    rows_2c: list[str] = []
+
+    for rec in entries:
+        d_str = rec.get("date", "N/A")
+        sn = rec.get("snapshot", {})
+        rg = sn.get("regimes", {})
+        us = sn.get("us", {})
+        kr = sn.get("kr", {})
+        cn = sn.get("cn", {})
+        jp = sn.get("jp", {})
+        eu = sn.get("eu", {})
+        cm = sn.get("commodities", {})
+        pf = sn.get("portfolio", {})
+
+        rows_2a.append(
+            f"| **{d_str}** | `{str(rg.get('global', '')).upper()}/{str(rg.get('kr', '')).upper()}` (OIS `{_fmt_num(rg.get('ois'), 1)}`) "
+            f"| `{_fmt_num(us.get('sp500'))}` (`{_fmt_chg(us.get('sp500_chg_1d'))}`) / `{_fmt_num(us.get('nasdaq'))}` (`{_fmt_chg(us.get('nasdaq_chg_1d'))}`) "
+            f"| `{_fmt_num(us.get('sox'))}` (`{_fmt_chg(us.get('sox_chg_1d'))}`) / VIX `{_fmt_num(us.get('vix'))}` "
+            f"| 항셍 `{_fmt_num(cn.get('hangseng'))}` (`{_fmt_chg(cn.get('hangseng_chg_1d'))}`) / 닛케이 `{_fmt_num(jp.get('nikkei'))}` (`{_fmt_chg(jp.get('nikkei_chg_1d'))}`) "
+            f"| 코스피 `{_fmt_num(kr.get('kospi'))}` (`{_fmt_chg(kr.get('kospi_chg_1d'))}`) / 코스닥 `{_fmt_num(kr.get('kosdaq'))}` |"
+        )
+
+        rows_2b.append(
+            f"| **{d_str}** | 미10Y `{_fmt_num(us.get('us10y'))}%` / 10-2Y `{_fmt_num(us.get('yc_10y_2y'), 3)}%p` "
+            f"| DXY `{_fmt_num(us.get('dxy'))}` / EUR `{_fmt_num(eu.get('eurusd'), 4)}` "
+            f"| KRW `{_fmt_num(kr.get('usdkrw'), 1)}` / JPY `{_fmt_num(jp.get('usdjpy'), 2)}` "
+            f"| GEX `{_fmt_num(us.get('gex'), 0)}` / PCR `{_fmt_num(us.get('pcr'))}` / Skew `{_fmt_num(us.get('skew_z'))}σ` "
+            f"| 야간선물 `{_fmt_num(kr.get('night_fut'))}` (`{_fmt_chg(kr.get('night_fut_chg_1d'))}`) / EWY `{_fmt_chg(kr.get('ewy_chg_1d'))}` |"
+        )
+
+        rows_2c.append(
+            f"| **{d_str}** | WTI `${_fmt_num(cm.get('wti'))}` (`{_fmt_chg(cm.get('wti_chg_1d'))}`) / GSCPI `{_fmt_num(cm.get('gscpi_z'))}σ` "
+            f"| 금 `${_fmt_num(cm.get('gold'), 1)}` (`{_fmt_chg(cm.get('gold_chg_1d'))}`) / 은 `${_fmt_num(cm.get('silver'))}` "
+            f"| 구리 `${_fmt_num(cm.get('copper'), 3)}` / 금·구리 `{_fmt_num(cm.get('gold_copper_ratio'), 1)}배` "
+            f"| G `{_fmt_num(rg.get('global_stress_z'))}` / KR `{_fmt_num(kr.get('kr_stress_z'))}` / CN `{_fmt_num(cn.get('cn_stress_z'))}` / EU `{_fmt_num(eu.get('eu_bank_stress_z'))}` "
+            f"| `₩{_fmt_num(pf.get('nav_krw'), 0)}` (`{pf.get('holding_count', 0)}종목`) |"
+        )
+
+    parts: list[str] = [
+        f"# [Part 1] 최신일 ({latest_date}) 데일리 인텔리전스 브리프 & 2인 대담",
+        f"> **NotebookLM 마스터 지식베이스 안내**: 본 문서는 최신일(`{latest_date}`) 브리프(Part 1)와 누적 `{total_days}일` 시계열 정형 데이터베이스(Part 2), 그리고 과거 일자별 브리프 아카이브(Part 3)가 통합된 단일 마스터 DB입니다.",
+        "",
+        latest.get("brief_md", "").strip(),
+        "",
+        "---",
+        "",
+        latest.get("dialogue_txt", "").strip(),
+        "",
+        "---",
+        "",
+        f"# [Part 2] NotebookLM 시계열 정형 데이터베이스 (누적 {total_days}일 Master Time-Series DB)",
+        "- **질의 활용 가이드**: NotebookLM에서 날짜 간 지수·금리·환율·원자재·레짐·옵션 수급 변화를 비교하거나 특정 조건(예: WTI 급등일, SOX 급락일, OIS 약세일)을 필터링해 재분석할 때 아래 3개 시계열 마스터 테이블이 직접 참조됩니다.",
+        "",
+        "### 표 2-A. 글로벌 레짐 & 5대 권역 주가지수 시계열 DB",
+        "| 일자 (Date) | 글로벌/KR 레짐 (OIS) | 미국 S&P 500 / NASDAQ | 미국 SOX 반도체 / VIX | 중국 항셍 / 일본 닛케이 | 한국 코스피 / 코스닥 |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        "\n".join(rows_2a),
+        "",
+        "### 표 2-B. 금리 · 환율 · 미 옵션 미시구조 · 한국장 선행지표 시계열 DB",
+        "| 일자 (Date) | 미 10Y 금리 / 장단기차 | 달러(DXY) / 유로(EUR) | 원/달러 / 엔/달러 환율 | 미국 옵션 GEX / PCR / Skew | 한국 야간선물 / EWY |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        "\n".join(rows_2b),
+        "",
+        "### 표 2-C. 국제 원자재 · 에너지 · 권역별 스트레스 Z · 실계좌 NAV 시계열 DB",
+        "| 일자 (Date) | WTI 원유 / 공급망(GSCPI) | 국제 금(Gold) / 은(Silver) | 구리(Copper) / 금·구리 비율 | 매크로 Stress Z (G/KR/CN/EU) | 실계좌 체결NAV / 보유종목 |",
+        "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        "\n".join(rows_2c),
+    ]
+
+    _has_archive = len(entries) > 1  # hardcode-ok: archive existence check
+    if _has_archive:
+        parts.extend([
+            "",
+            "---",
+            "",
+            f"# [Part 3] 과거 일자별 데일리 브리프 누적 아카이브 ({len(entries) - 1}일분)",
+        ])
+        for past in entries[1:]:
+            p_date = past.get("date", "")
+            parts.extend([
+                "",
+                f"## [Archive: {p_date}] 데일리 브리프 기록",
+                past.get("brief_md", "").strip(),
+                "",
+                "---",
+            ])
+
+    return "\n".join(parts).strip() + "\n"
+
+
 
 def sync_brief_to_google_drive_notebooklm(
     markdown_text: str,

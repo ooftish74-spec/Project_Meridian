@@ -31,6 +31,7 @@ except ImportError:
     pass
 
 from src.reporting.notebooklm_daily_brief import (
+    build_master_db_markdown,
     build_notebooklm_brief_markdown,
     build_two_host_dialogue_script,
     extract_daily_brief_snapshot,
@@ -38,6 +39,7 @@ from src.reporting.notebooklm_daily_brief import (
     render_daily_brief_pdf,
     sync_brief_to_google_drive_notebooklm,
     synthesize_two_host_audio_mp3,
+    upsert_brief_history_db,
 )
 
 logging.basicConfig(
@@ -90,19 +92,25 @@ def generate_daily_brief(
 
     md_path = out_dir / f"Meridian_Daily_Brief_{date_str}.md"
     dlg_path = out_dir / f"Meridian_Daily_Brief_Dialogue_{date_str}.txt"
-    pdf_path = out_dir / f"Meridian_Daily_Brief_{date_str}.pdf"
+    db_jsonl_path = out_dir / "brief_history_db.jsonl"
+    master_md_path = out_dir / "Meridian_Daily_Brief_Master_DB.md"
+    master_pdf_path = out_dir / "Meridian_Daily_Brief_Master_DB.pdf"
     mp3_path = out_dir / f"Meridian_Daily_Brief_{date_str}.mp3"
 
     full_source_md = brief_md + "\n---\n\n" + dialogue_txt
     md_path.write_text(full_source_md, encoding="utf-8")
     dlg_path.write_text(dialogue_txt, encoding="utf-8")
 
+    db_entries = upsert_brief_history_db(db_jsonl_path, snap, brief_md, dialogue_txt)
+    master_db_md = build_master_db_markdown(db_entries)
+    master_md_path.write_text(master_db_md, encoding="utf-8")
+
     pdf_ok = False
     try:
-        render_daily_brief_pdf(full_source_md, pdf_path, report_date=date_str)
-        pdf_ok = pdf_path.exists() and pdf_path.stat().st_size > 0
+        render_daily_brief_pdf(master_db_md, master_pdf_path, report_date=date_str)
+        pdf_ok = master_pdf_path.exists() and master_pdf_path.stat().st_size > 0
     except Exception as pdf_err:
-        logger.error(f"❌ [Daily Brief PDF] PDF 생성 실패: {pdf_err}", exc_info=True)
+        logger.error(f"❌ [Daily Brief Master DB PDF] PDF 생성 실패: {pdf_err}", exc_info=True)
 
     audio_ok = False
     if not skip_audio:
@@ -114,19 +122,19 @@ def generate_daily_brief(
 
     drive_sync = {"synced": False}
     if not skip_notify:
-        drive_sync = sync_brief_to_google_drive_notebooklm(full_source_md, report_date=date_str)
+        drive_sync = sync_brief_to_google_drive_notebooklm(master_db_md, report_date=date_str)
 
-        # 1. Send Email with HTML body + MP3 & PDF attachments
+        # 1. Send Email with HTML body + MP3 & Master DB PDF attachments
         try:
             from src.interface.email_notifier import MeridianEmail
 
             emailer = MeridianEmail()
-            attachments = [str(pdf_path)] if pdf_ok else [str(md_path)]
+            attachments = [str(master_pdf_path)] if pdf_ok else [str(md_path)]
             if audio_ok:
                 attachments.insert(0, str(mp3_path))
             subj = (
                 f"[Meridian Daily Brief] {date_str} 글로벌 5대권역 매크로 · 상품/에너지 · "
-                f"미 증시 · 한국 증시 09:00 전망 (오디오 & PDF 첨부)"
+                f"미 증시 · 한국 증시 09:00 전망 (오디오 & 누적 마스터 DB PDF 첨부)"
             )
             emailer.send_html_report(
                 markdown_content=full_source_md,
@@ -136,7 +144,7 @@ def generate_daily_brief(
         except Exception as em_err:
             logger.warning(f"  ⚠️ [Email] 데일리 브리프 이메일 전송 실패: {em_err}")
 
-        # 2. Send Telegram Summary + Playable Audio + PDF Document
+        # 2. Send Telegram Summary + Playable Audio + Master DB PDF Document
         try:
             from src.interface.telegram_notifier import MeridianTelegram
 
@@ -155,7 +163,7 @@ def generate_daily_brief(
                 f"• 상품/에너지: WTI ${cm['wti'] or 0:.2f}({cm['wti_chg_1d'] or 0:+.2f}%) | 금 ${cm['gold'] or 0:,.1f} | 구리 ${cm['copper'] or 0:.2f}\n"
                 f"• 한국장 선행: 야간선물 {kr['night_fut_chg_1d'] or 0:+.2f}% | EWY {kr['ewy_chg_1d'] or 0:+.2f}%\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🎧 아래 첨부된 2인 대담 오디오(.mp3)와 Daily Brief 리포트(.pdf)를 확인하세요."
+                f"🎧 아래 첨부된 2인 대담 오디오(.mp3)와 누적 시계열 마스터 DB(.pdf)를 확인하세요."
             )
             tg._send(tg_summary)
             if audio_ok:
@@ -165,17 +173,18 @@ def generate_daily_brief(
                     performer="Project Meridian AI (민준 & 서연)",
                     caption=f"🎧 {date_str} 09:00 KST 글로벌 매크로 & 한국증시 2인 대담 오디오 브리프",
                 )
-            doc_to_send = str(pdf_path) if pdf_ok else str(md_path)
+            doc_to_send = str(master_pdf_path) if pdf_ok else str(md_path)
             tg.send_document(
                 doc_to_send,
-                caption=f"📄 {date_str} Project Meridian Daily Brief 리포트 (.pdf)",
+                caption=f"📄 {date_str} Project Meridian 누적 마스터 DB 리포트 (Meridian_Daily_Brief_Master_DB.pdf)",
             )
         except Exception as tg_err:
             logger.warning(f"  ⚠️ [Telegram] 데일리 브리프 텔레그램 전송 실패: {tg_err}")
 
     return {
         "date": date_str,
-        "pdf_path": str(pdf_path) if pdf_ok else None,
+        "db_days": len(db_entries),
+        "pdf_path": str(master_pdf_path) if pdf_ok else None,
         "md_path": str(md_path),
         "dialogue_path": str(dlg_path),
         "mp3_path": str(mp3_path) if audio_ok else None,

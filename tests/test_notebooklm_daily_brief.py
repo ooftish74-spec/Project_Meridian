@@ -186,6 +186,15 @@ def test_end_to_end_generate_daily_brief_hermetic(tmp_path, monkeypatch):
 
     monkeypatch.setattr(brief_mod, "_synthesize_turn_bytes", _fake_synth_turn)
 
+    out_d1 = generate_daily_brief(
+        results_dir=res_dir,
+        output_dir=res_dir / "daily_brief",
+        skip_audio=True,
+        skip_notify=True,
+        report_date="2026-10-31",
+    )
+    assert out_d1["db_days"] == 1
+
     out = generate_daily_brief(
         results_dir=res_dir,
         output_dir=res_dir / "daily_brief",
@@ -193,10 +202,16 @@ def test_end_to_end_generate_daily_brief_hermetic(tmp_path, monkeypatch):
         skip_notify=True,
         report_date="2026-11-01",
     )
+    assert out["db_days"] == 2
     assert out["pdf_ok"] is True
     assert out["audio_ok"] is True
+    assert Path(out["pdf_path"]).name == "Meridian_Daily_Brief_Master_DB.pdf"
     assert Path(out["pdf_path"]).exists()
     assert Path(out["pdf_path"]).read_bytes().startswith(b"%PDF-")
+    master_md_text = (res_dir / "daily_brief" / "Meridian_Daily_Brief_Master_DB.md").read_text(encoding="utf-8")
+    assert "[Part 1] 최신일 (2026-11-01)" in master_md_text
+    assert "[Part 2] NotebookLM 시계열 정형 데이터베이스 (누적 2일 Master Time-Series DB)" in master_md_text
+    assert "[Archive: 2026-10-31]" in master_md_text
     assert Path(out["md_path"]).exists()
     assert Path(out["mp3_path"]).exists()
     mp3_bytes = Path(out["mp3_path"]).read_bytes()
