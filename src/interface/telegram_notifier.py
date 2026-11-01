@@ -307,6 +307,28 @@ class MeridianTelegram:
             logger.warning(f"  텔레그램 문서 전송 실패: {e}")
             return False
 
+    def send_audio(self, audio_path: str, title: str='', performer: str='Project Meridian AI', caption: str='') -> bool:
+        """MP3 등 오디오 브리핑 파일 전송 (인앱 오디오 플레이어 지원)."""
+        if not self.enabled:
+            logger.info(f"[TG-Meridian] 오디오 전송 (비활성): {audio_path}")
+            return False
+        try:
+            import requests
+            url = f'https://api.telegram.org/bot{self._token}/sendAudio'
+            with open(audio_path, 'rb') as f:
+                files = {'audio': f}
+                data = {'chat_id': self._chat_id, 'caption': caption}
+                if title:
+                    data['title'] = title
+                if performer:
+                    data['performer'] = performer
+                response = requests.post(url, data=data, files=files, timeout=60)
+                response.raise_for_status()
+                return True
+        except Exception as e:
+            logger.warning(f"  텔레그램 오디오 전송 실패: {e}")
+            return False
+
 class MeridianCommandHandler:
     """텔레그램 명령어 처리."""
 

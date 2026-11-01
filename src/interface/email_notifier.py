@@ -105,11 +105,33 @@ class MeridianEmail:
 
         out: list[str] = []
         in_list = False
+        in_table = False
+        table_header_done = False
         for raw in md_text.splitlines():
             line = raw.strip()
             if line.startswith('<!--') and line.endswith('-->'):
                 out.append(line)
                 continue
+            if line.startswith('|') and line.endswith('|'):
+                if in_list:
+                    out.append('</ul>')
+                    in_list = False
+                cells = [c.strip() for c in line.strip('|').split('|')]
+                if all(set(c) <= {'-', ':', ' '} for c in cells if c):
+                    continue
+                if not in_table:
+                    out.append('<table>')
+                    in_table = True
+                    table_header_done = False
+                tag = 'th' if not table_header_done else 'td'
+                row_html = ''.join(f'<{tag}>{_inline(c)}</{tag}>' for c in cells)
+                out.append(f'<tr>{row_html}</tr>')
+                table_header_done = True
+                continue
+            elif in_table:
+                out.append('</table>')
+                in_table = False
+                table_header_done = False
             if not line:
                 if in_list:
                     out.append('</ul>')
@@ -152,10 +174,12 @@ class MeridianEmail:
                 out.append(f"<p>{_inline(line)}</p>")
         if in_list:
             out.append('</ul>')
+        if in_table:
+            out.append('</table>')
         return '\n'.join(out)
 
-    def send_html_report(self, markdown_content: str, subject: str='Project Meridian Daily Report', extra_headers: dict | None=None):
-        """Markdown을 HTML로 변환하여 이메일 본문으로 전송합니다."""
+    def send_html_report(self, markdown_content: str, subject: str='Project Meridian Daily Report', extra_headers: dict | None=None, attachments: list[str] | None=None):
+        """Markdown을 HTML로 변환하여 이메일 본문으로 전송합니다 (선택적 첨부파일 지원)."""
         if not self.enabled:
             logger.warning('이메일 설정이 누락되어 전송할 수 없습니다 (.env의 SENDER_EMAIL 등 확인).')
             return False
@@ -165,7 +189,27 @@ class MeridianEmail:
         except ImportError:
             html_body = self._simple_markdown_to_html(markdown_content)
         html_content = f'\n        <html>\n        <head>\n        <style>\n            body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.7; color: #1f2937; padding: 24px; max-width: 860px; margin: 0 auto; }}\n            table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; font-size: 14px; }}\n            th, td {{ padding: 10px 14px; border: 1px solid #d1d5db; text-align: left; vertical-align: top; }}\n            th {{ background-color: #f3f4f6; font-weight: bold; color: #111827; }}\n            h1 {{ color: #111827; border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; }}\n            h2 {{ color: #1e3a8a; margin-top: 28px; }}\n            h3 {{ color: #1f2937; margin-top: 20px; }}\n            blockquote {{ background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 12px 16px; margin: 16px 0; color: #1e40af; }}\n            code {{ background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}\n            hr {{ border: 0; border-top: 1px solid #e5e7eb; margin: 24px 0; }}\n        </style>\n        </head>\n        <body>\n        {html_body}\n        </body>\n        </html>\n        '
-        msg = MIMEMultipart('alternative')
+        alt_part = MIMEMultipart('alternative')
+        alt_part.attach(MIMEText(markdown_content, 'plain', 'utf-8'))
+        alt_part.attach(MIMEText(html_content, 'html', 'utf-8'))
+        if attachments:
+            msg = MIMEMultipart('mixed')
+            msg.attach(alt_part)
+            for file_path in attachments:
+                if not file_path or not os.path.exists(file_path):
+                    continue
+                try:
+                    with open(file_path, 'rb') as f_att:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(f_att.read())
+                        encoders.encode_base64(part)
+                        fname = os.path.basename(file_path)
+                        part.add_header('Content-Disposition', 'attachment', filename=fname)
+                        msg.attach(part)
+                except Exception as att_err:
+                    logger.warning(f'첨부파일 추가 실패 ({file_path}): {att_err}')
+        else:
+            msg = alt_part
         msg['From'] = self.sender_email
         msg['To'] = self.receiver_email
         msg['Reply-To'] = self.sender_email
@@ -174,8 +218,6 @@ class MeridianEmail:
             for hk, hv in extra_headers.items():
                 if hk and hv:
                     msg[str(hk)] = str(hv)
-        msg.attach(MIMEText(markdown_content, 'plain', 'utf-8'))
-        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
         try:
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
             server.starttls()

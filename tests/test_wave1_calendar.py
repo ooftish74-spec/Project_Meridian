@@ -275,7 +275,7 @@ TRADING_TIMERS = {'meridian_morning', 'meridian_premarket_calibration', 'meridia
                   'meridian_aftermarket', 'meridian_us_premarket', 'meridian_us_regular'}
 DATA_TIMERS = {'meridian_night_futures', 'meridian_token_refresh', 'meridian_collect', 'meridian_evening',
                'meridian_weekly_retrain', 'meridian_weekly_validate', 'meridian_automated_audit',
-               'meridian_frontier_lab'}
+               'meridian_frontier_lab', 'meridian_daily_brief'}
 
 
 def _render(tmp_path: Path):

@@ -460,6 +460,34 @@ Persistent=true
 WantedBy=timers.target
 TIMER_EOF
 
+# 4.8 Daily NotebookLM Macro & Market Brief + 2-Host Audio Timer (Runs daily at 09:00 KST — 100% Read-Only & OS-Level Low Priority)
+install_unit "$SERVICE_DIR/meridian_daily_brief.service" << SERVICE_EOF
+[Unit]
+Description=Meridian 09:00 KST Daily NotebookLM Macro Brief & 2-Host Audio Generator (Read-Only Reporting)
+After=network.target
+
+[Service]
+Type=oneshot
+User=$USER
+WorkingDirectory=$MERIDIAN_ROOT
+EnvironmentFile=/home/ubuntu/Project_Meridian/.env
+Nice=15
+IOSchedulingClass=idle
+ExecStart=$MERIDIAN_ROOT/venv/bin/python3 scripts/generate_daily_notebooklm_brief.py
+SERVICE_EOF
+
+install_unit "$SERVICE_DIR/meridian_daily_brief.timer" << TIMER_EOF
+[Unit]
+Description=Timer for Meridian 09:00 KST Daily NotebookLM Macro Brief & Audio
+
+[Timer]
+OnCalendar=*-*-* 09:00:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER_EOF
+
 
 install_unit "$SERVICE_DIR/meridian_telegram.service" << SERVICE_EOF
 [Unit]
@@ -527,7 +555,7 @@ else
 fi
 
 # Timers: enable (idempotent) + start only if inactive. Active timers are never restarted (see header §3).
-TIMERS="meridian_token_refresh meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_closing meridian_aftermarket meridian_evening meridian_us_premarket meridian_us_regular meridian_weekly_retrain meridian_weekly_validate meridian_frontier_lab"
+TIMERS="meridian_token_refresh meridian_night_futures meridian_collect meridian_morning meridian_premarket_calibration meridian_daily_brief meridian_closing meridian_aftermarket meridian_evening meridian_us_premarket meridian_us_regular meridian_weekly_retrain meridian_weekly_validate meridian_frontier_lab"
 for t in $TIMERS; do
     if [ -f "$SERVICE_DIR/$t.timer" ]; then
         sudo systemctl enable "$t.timer" > /dev/null
