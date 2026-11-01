@@ -16,7 +16,6 @@ Project Meridian — NotebookLM Daily Macro & Market Brief + 2-Host Audio Engine
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from datetime import datetime
@@ -929,6 +928,275 @@ def synthesize_two_host_audio_mp3(
 ) -> Path:
     """동기 컨텍스트에서 2인 대담 MP3를 합성합니다."""
     return asyncio.run(synthesize_two_host_audio_mp3_async(dialogue, output_mp3_path))
+
+
+def _md_inline_to_rl_xml(text: str) -> str:
+    """Markdown 인라인 문법(**bold**, `code`)을 ReportLab Paragraph 호환 XML 태그로 변환합니다."""
+    import html
+    import re
+
+    escaped = html.escape(str(text), quote=False)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+    escaped = re.sub(r"`([^`]+)`", r'<font color="#0f4c81"><b>\1</b></font>', escaped)
+    return escaped
+
+
+def render_daily_brief_pdf(
+    markdown_text: str,
+    output_pdf_path: str | Path,
+    report_date: str = "",
+) -> Path:
+    """Markdown 데일리 브리프(표·본문·대담 스크립트)를 한글 폰트(NanumGothic)가 적용된 고품질 A4 PDF로 렌더링합니다."""
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.pdfmetrics import registerFontFamily
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import (
+        HRFlowable,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+
+    out_path = Path(output_pdf_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    font_dir = project_root / "assets" / "fonts"
+    reg_font = font_dir / "NanumGothic-Regular.ttf"
+    bold_font = font_dir / "NanumGothic-Bold.ttf"
+
+    font_name = "Helvetica"
+    bold_font_name = "Helvetica-Bold"
+    if reg_font.exists():
+        pdfmetrics.registerFont(TTFont("NanumGothic", str(reg_font)))
+        font_name = "NanumGothic"
+        if bold_font.exists():
+            pdfmetrics.registerFont(TTFont("NanumGothic-Bold", str(bold_font)))
+            bold_font_name = "NanumGothic-Bold"
+        else:
+            bold_font_name = "NanumGothic"
+        registerFontFamily(
+            "NanumGothic",
+            normal=font_name,
+            bold=bold_font_name,
+            italic=font_name,
+            boldItalic=bold_font_name,
+        )
+
+    base_styles = getSampleStyleSheet()
+    st_h1 = ParagraphStyle(
+        name="BriefH1",
+        parent=base_styles["Heading1"],
+        fontName=bold_font_name,
+        fontSize=15,
+        leading=20,
+        textColor=colors.HexColor("#0f172a"),
+        spaceBefore=6,
+        spaceAfter=8,
+    )
+    st_h2 = ParagraphStyle(
+        name="BriefH2",
+        parent=base_styles["Heading2"],
+        fontName=bold_font_name,
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor("#1e3a8a"),
+        spaceBefore=12,
+        spaceAfter=6,
+    )
+    st_h3 = ParagraphStyle(
+        name="BriefH3",
+        parent=base_styles["Heading3"],
+        fontName=bold_font_name,
+        fontSize=10.5,
+        leading=14,
+        textColor=colors.HexColor("#1e293b"),
+        spaceBefore=8,
+        spaceAfter=4,
+    )
+    st_body = ParagraphStyle(
+        name="BriefBody",
+        parent=base_styles["BodyText"],
+        fontName=font_name,
+        fontSize=9.2,
+        leading=13.8,
+        textColor=colors.HexColor("#1e293b"),
+        alignment=TA_LEFT,
+        spaceBefore=2,
+        spaceAfter=3,
+    )
+    st_bullet = ParagraphStyle(
+        name="BriefBullet",
+        parent=st_body,
+        leftIndent=12,
+        firstLineIndent=-8,
+        spaceBefore=2,
+        spaceAfter=3,
+    )
+    st_subbullet = ParagraphStyle(
+        name="BriefSubBullet",
+        parent=st_body,
+        leftIndent=24,
+        firstLineIndent=-8,
+        spaceBefore=1.5,
+        spaceAfter=2,
+    )
+    st_quote = ParagraphStyle(
+        name="BriefQuote",
+        parent=st_body,
+        fontSize=8.8,
+        leading=13,
+        leftIndent=10,
+        rightIndent=10,
+        backColor=colors.HexColor("#f1f5f9"),
+        borderPadding=6,
+        textColor=colors.HexColor("#334155"),
+        spaceBefore=4,
+        spaceAfter=6,
+    )
+    st_th = ParagraphStyle(
+        name="BriefTH",
+        parent=st_body,
+        fontName=bold_font_name,
+        fontSize=8.3,
+        leading=11,
+        textColor=colors.white,
+    )
+    st_td = ParagraphStyle(
+        name="BriefTD",
+        parent=st_body,
+        fontName=font_name,
+        fontSize=8.1,
+        leading=11,
+        textColor=colors.HexColor("#0f172a"),
+    )
+
+    page_w = A4[0] - 56.0  # 28pt left/right margins -> ~539pt usable width
+    story: list[Any] = []
+    lines = markdown_text.splitlines()
+    idx = 0
+    n_lines = len(lines)
+
+    while idx < n_lines:
+        raw_line = lines[idx]
+        stripped = raw_line.strip()
+
+        if not stripped:
+            idx += 1
+            continue
+
+        # Markdown Table Block
+        if stripped.startswith("|") and stripped.endswith("|"):
+            table_lines: list[str] = []
+            while idx < n_lines and lines[idx].strip().startswith("|") and lines[idx].strip().endswith("|"):
+                table_lines.append(lines[idx].strip())
+                idx += 1
+
+            parsed_rows: list[list[str]] = []
+            for r_i, tline in enumerate(table_lines):
+                cells = [c.strip() for c in tline.strip("|").split("|")]
+                is_sep = r_i == 1 and all(set(c) <= {":", "-", " "} for c in cells if c)
+                if is_sep:
+                    continue
+                parsed_rows.append(cells)
+
+            if parsed_rows:
+                n_cols = max(len(r) for r in parsed_rows)
+                _is_5col = n_cols == 5  # hardcode-ok: 5-column table layout check
+                if _is_5col:
+                    col_widths = [page_w * 0.14, page_w * 0.21, page_w * 0.14, page_w * 0.12, page_w * 0.39]
+                else:
+                    col_widths = [page_w / float(n_cols)] * n_cols
+
+                rl_table_data: list[list[Any]] = []
+                for r_idx, row_cells in enumerate(parsed_rows):
+                    padded = (row_cells + [""] * n_cols)[:n_cols]
+                    cell_style = st_th if r_idx == 0 else st_td
+                    rl_table_data.append([Paragraph(_md_inline_to_rl_xml(c), cell_style) for c in padded])
+
+                tbl = Table(rl_table_data, colWidths=col_widths, repeatRows=1)
+                tbl.setStyle(
+                    TableStyle(
+                        [
+                            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+                            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+                            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                            ("TOPPADDING", (0, 0), (-1, -1), 4),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                        ]
+                    )
+                )
+                story.append(Spacer(1, 4))
+                story.append(tbl)
+                story.append(Spacer(1, 6))
+            continue
+
+        if stripped == "---":
+            story.append(Spacer(1, 4))
+            story.append(HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#cbd5e1")))
+            story.append(Spacer(1, 4))
+            idx += 1
+            continue
+
+        if stripped.startswith("# "):
+            story.append(Paragraph(_md_inline_to_rl_xml(stripped[2:].strip()), st_h1))
+            idx += 1
+            continue
+
+        if stripped.startswith("## "):
+            story.append(Paragraph(_md_inline_to_rl_xml(stripped[3:].strip()), st_h2))
+            idx += 1
+            continue
+
+        if stripped.startswith("### "):
+            story.append(Paragraph(_md_inline_to_rl_xml(stripped[4:].strip()), st_h3))
+            idx += 1
+            continue
+
+        if stripped.startswith("> "):
+            story.append(Paragraph(_md_inline_to_rl_xml(stripped[2:].strip()), st_quote))
+            idx += 1
+            continue
+
+        if raw_line.startswith("  - "):
+            story.append(Paragraph("◦ " + _md_inline_to_rl_xml(stripped[2:].strip()), st_subbullet))
+            idx += 1
+            continue
+
+        if stripped.startswith("- "):
+            story.append(Paragraph("• " + _md_inline_to_rl_xml(stripped[2:].strip()), st_bullet))
+            idx += 1
+            continue
+
+        story.append(Paragraph(_md_inline_to_rl_xml(stripped), st_body))
+        idx += 1
+
+    tmp_pdf = out_path.with_suffix(".pdf.tmp")
+    doc = SimpleDocTemplate(
+        str(tmp_pdf),
+        pagesize=A4,
+        leftMargin=28,
+        rightMargin=28,
+        topMargin=32,
+        bottomMargin=32,
+        title=f"Project Meridian Daily Brief ({report_date})",
+        author="Project Meridian AI Quantitative Strategy Group",
+    )
+    doc.build(story)
+    os.replace(tmp_pdf, out_path)
+    logger.info(f"✅ [Daily Brief PDF] 생성 완료: {out_path} ({out_path.stat().st_size / 1024:.1f} KB)")
+    return out_path
+
 
 
 def sync_brief_to_google_drive_notebooklm(

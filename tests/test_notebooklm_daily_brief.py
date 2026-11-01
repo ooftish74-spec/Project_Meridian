@@ -193,7 +193,10 @@ def test_end_to_end_generate_daily_brief_hermetic(tmp_path, monkeypatch):
         skip_notify=True,
         report_date="2026-11-01",
     )
+    assert out["pdf_ok"] is True
     assert out["audio_ok"] is True
+    assert Path(out["pdf_path"]).exists()
+    assert Path(out["pdf_path"]).read_bytes().startswith(b"%PDF-")
     assert Path(out["md_path"]).exists()
     assert Path(out["mp3_path"]).exists()
     mp3_bytes = Path(out["mp3_path"]).read_bytes()
