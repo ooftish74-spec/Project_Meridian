@@ -427,4 +427,24 @@ def test_cross_market_inverse_routing_and_dynamic_stream_performance(monkeypatch
     assert [o['ticker'] for o in orders] == ['SQQQ', 'SOXS']
 
 
+def test_krx_aftermarket_blocks_regular_order_apbk0918_guard(monkeypatch):
+    import src.utils.market_calendar as mc
+
+    monkeypatch.setattr(mc, "is_ticker_tradable_now", lambda tk: (True, 'aftermarket'))
+    adapter = KISTraderAdapter.__new__(KISTraderAdapter)
+    adapter.mode = 'live'
+    order = Order(
+        order_id='ORD_LATE_KRX',
+        ticker='015760',
+        side='buy',
+        quantity=1,
+        price=21000.0,
+        order_type='limit',
+    )
+    res = adapter._api_order(order)
+    assert res.status == 'skipped_market_closed'
+    assert 'aftermarket' in (res.notes or '')
+
+
+
 

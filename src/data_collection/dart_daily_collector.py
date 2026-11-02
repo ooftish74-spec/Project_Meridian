@@ -482,6 +482,11 @@ class DARTDailyCollector:
         signal_path = ticker_dir / 'daily_signal.csv'
         if signal_path.exists():
             signals = pd.read_csv(signal_path, index_col=0, parse_dates=True)
+            if not signals.empty:
+                signals.index = pd.to_datetime(signals.index, errors='coerce')
+                signals = signals[signals.index.notna()]
+            else:
+                signals = pd.DataFrame()
         else:
             signals = pd.DataFrame()
         today = datetime.now().strftime('%Y-%m-%d')

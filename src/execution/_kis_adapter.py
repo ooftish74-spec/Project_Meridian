@@ -555,6 +555,22 @@ class KISTraderAdapter:
                 order.notes = f"Market closed for {order.ticker} (session={session_type})"
                 return order
 
+            if not is_us and session_type in ('premarket', 'aftermarket'):
+                _ot_lower = str(order.order_type or '').strip().lower()
+                _notes_upper = str(order.notes or '').upper()
+                _is_kr_ext_order = (
+                    _ot_lower in ('05', '06', 'premarket_close', 'aftermarket_close')
+                    or 'TIF=PREMARKET_CLOSE' in _notes_upper
+                    or 'TIF=AFTERMARKET_CLOSE' in _notes_upper
+                )
+                if not _is_kr_ext_order:
+                    logger.info(
+                        f"  ⏸️ [KRX Session Gate] {order.ticker} 정규장 외 시간(session={session_type}) 일반 주문 차단 (APBK0918 방어) ➔ 주문 스킵"
+                    )
+                    order.status = 'skipped_market_closed'
+                    order.notes = f"KRX regular session closed for {order.ticker} (session={session_type})"
+                    return order
+
             # 미국 주식 단가 미지정(price <= 0) 또는 프리/애프터마켓 시장가 주문 시 방화벽 검사 전에 실시간 호가로 즉시 확정
             if is_us and (order.price <= 0 or session_type in ('premarket', 'aftermarket')):
                 if session_type in ('premarket', 'aftermarket') and order.order_type == 'market':

@@ -29,6 +29,12 @@
 
 set -euo pipefail
 
+# ★ Split-Brain Host Isolation Guard (macOS vs AWS EC2 Production SSOT)
+if [ "$(uname -s)" = "Darwin" ] && [ "${MERIDIAN_ALLOW_LOCAL_PIPELINE:-0}" != "1" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🛡️ [Split-Brain Guard] Local MacBook pipeline execution blocked (phase=${1:-all}). AWS EC2 (54.116.149.149) is the sole Production SSOT Server."
+    exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 VENV="${PROJECT_ROOT}/venv"
