@@ -2222,38 +2222,17 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as e:
             logger.error(f"  Feature Audit 실패: {e}", exc_info=True)
 
-    # 리포트 및 이메일 발송 스케줄 스마트 라우팅
-    _send_email = False
+    # 리포트 마크다운 로컬 아카이브 생성 (레거시 Daily Report 이메일 자동 발송 비활성화)
+    # 이메일 브리핑은 09:00 신규 Morning Brief(generate_daily_notebooklm_brief.py) 및
+    # 금요일 정기 / 수시 긴급 CIO 결재 상정안(separation_of_powers.py)으로 일원화.
     if phase in ('all', 'evening'):
-        _send_email = True
-    elif phase == 'morning' and not is_krx_open:
-        _send_email = True  # 휴장일엔 8시(morning) 발송
-    elif phase == 'market' and is_krx_open:
-        # 개장일엔 9시 5분(market) ETF 체결 후 1회만 발송 (데몬 5초 루프 중복 발송 방지)
-        _today_str = today.strftime('%Y%m%d')
-        _email_lock_file = _PROJECT_ROOT / 'logs' / f'market_email_{_today_str}.lock'
-        if not _email_lock_file.exists() and now.hour == 9 and 0 <= now.minute <= 15:
-            _send_email = True
-            try:
-                _email_lock_file.write_text(now.isoformat())
-            except Exception:
-                pass
-
-    if _send_email:
         try:
             from src.interface.report_generator import ReportGenerator
-            from src.interface.email_notifier import MeridianEmail
             gen = ReportGenerator()
-            report_md = gen.generate_daily()
-            logger.info("  ✅ 일일 리포트 생성")
-
-            # 이메일 HTML 발송 연동
-            email = MeridianEmail()
-            if email.enabled:
-                if email.send_html_report(report_md):
-                    logger.info("  ✅ 일일 리포트 이메일 발송 완료")
+            gen.generate_daily()
+            logger.info("  ✅ 일일 리포트 마크다운 아카이브 생성 완료 (레거시 이메일 발송 생략)")
         except Exception as e:
-            logger.error(f"  리포트 생성/발송 실패: {e}", exc_info=True)
+            logger.error(f"  리포트 생성 실패: {e}", exc_info=True)
 
     # ★ Gap Analysis — 예측 vs 실현 격차 진단 (#6)
     if phase in ('all', 'evening'):
@@ -2310,37 +2289,21 @@ def run_pipeline(phase: str = 'all', force: bool = False) -> None:
         except Exception as e:
             logger.error(f"  ML 재학습 체크 실패: {e}", exc_info=True)
 
-    # ★ Ultimate Quant Report 생성 및 텔레그램 연동 (PDF Report)
+    # ★ Ultimate Quant Report PDF 아카이브 생성 (레거시 이메일/텔레그램 자동 발송 비활성화)
     if phase in ('all', 'evening'):
         try:
             from scripts.generate_ultimate_report import UltimateMeridianReport
-            from src.interface.telegram_notifier import MeridianTelegram
-            
-            logger.info("  📊 Ultimate Quant Report 생성 중...")
+
+            logger.info("  📊 Ultimate Quant Report PDF 아카이브 생성 중...")
             report_gen = UltimateMeridianReport()
-            report_path = report_gen.generate()
-            
+            report_path = report_gen.generate(send_email=False)
+
             if report_path:
-                logger.info(f"  ✅ 리포트 생성 완료: {report_path}")
-                notifier = MeridianTelegram()
-                if notifier.enabled:
-                    caption_text = f"📈 Ultimate Quant Report ({today.strftime('%Y-%m-%d')})"
-                    
-                    if error_collector.errors:
-                        err_summary = "\n🚨 [Pipeline Errors]\n" + "\n".join(error_collector.errors[:5])
-                        if len(error_collector.errors) > 5:
-                            err_summary += f"\n...and {len(error_collector.errors)-5} more errors."
-                        caption_text += err_summary
-                        
-                    notifier.send_document(
-                        document_path=str(report_path),
-                        caption=caption_text
-                    )
-                    logger.info("  ✅ 텔레그램 리포트 발송 완료")
+                logger.info(f"  ✅ 리포트 PDF 아카이브 생성 완료 (레거시 발송 생략): {report_path}")
             else:
                 logger.warning("  ⚠️ 리포트 생성 실패")
         except Exception as e:
-            logger.error(f"  🚨 리포트 생성 및 발송 실패: {e}", exc_info=True)
+            logger.error(f"  🚨 리포트 생성 실패: {e}", exc_info=True)
 
     # 이벤트 레저 — 파이프라인 종료
     try:

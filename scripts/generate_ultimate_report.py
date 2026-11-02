@@ -477,7 +477,7 @@ class UltimateMeridianReport:
             'content': signal_attribution_text
         })
 
-    def generate(self):
+    def generate(self, send_email: bool = False):
         logger.info("🔭 Assembling Ultimate Report Chapters...")
         self.build_executive_summary()
         self.build_chapter_1()
@@ -498,16 +498,17 @@ class UltimateMeridianReport:
         
         logger.info(f"✅ Ultimate PDF Generated: {report_path}")
         
-        email = MeridianEmail()
-        if email.enabled:
-            email.send_report(
-                pdf_path=report_path,
-                subject=f"🚀 [Meridian] 메리디안 퀀트 리포트 발송 ({self.date_str})",
-                body="메리디안 퀀트 리포트(한글판)가 성공적으로 생성되었습니다.\n\n"
-                     "본 리포트는 글로벌 거시 경제 인텔리전스와 프로젝트 메리디안의 "
-                     "트레이딩 스트림 및 리스크 모델을 통합하여 분석한 내용을 담고 있습니다.\n\n"
-                     "자세한 내용은 첨부된 PDF 파일을 확인해 주시기 바랍니다."
-            )
+        if send_email:
+            email = MeridianEmail()
+            if email.enabled:
+                email.send_report(
+                    pdf_path=report_path,
+                    subject=f"🚀 [Meridian] 메리디안 퀀트 리포트 발송 ({self.date_str})",
+                    body="메리디안 퀀트 리포트(한글판)가 성공적으로 생성되었습니다.\n\n"
+                         "본 리포트는 글로벌 거시 경제 인텔리전스와 프로젝트 메리디안의 "
+                         "트레이딩 스트림 및 리스크 모델을 통합하여 분석한 내용을 담고 있습니다.\n\n"
+                         "자세한 내용은 첨부된 PDF 파일을 확인해 주시기 바랍니다."
+                )
         return report_path
 
 if __name__ == '__main__':
